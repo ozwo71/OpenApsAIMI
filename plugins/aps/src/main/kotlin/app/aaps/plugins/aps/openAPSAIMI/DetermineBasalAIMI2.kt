@@ -90,8 +90,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastHourTIRabove170: Double = 0.0
     private var lastHourTIRabove120: Double = 0.0
     private var bg = 0.0
-    private var targetBg = 110.0f
-    private var normalBgThreshold = 120.0f
+    private var targetBg = 90.0f
+    private var normalBgThreshold = 110.0f
     private var delta = 0.0f
     private var shortAvgDelta = 0.0f
     private var longAvgDelta = 0.0f
@@ -1404,7 +1404,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog = consoleLog,
             consoleError = consoleError
         )
-
+        val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
+        val calendarInstance = Calendar.getInstance()
+        this.hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
+        val dayOfWeek = calendarInstance[Calendar.DAY_OF_WEEK]
         val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
         this.bg = glucose_status.glucose
         val getlastBolusSMB = persistenceLayer.getNewestBolusOfType(BS.Type.SMB)
@@ -1423,17 +1426,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
 // Ajustement de DinMaxIob selon bg et delta
-        if (DinMaxIob > maxIob) {
-            if (bg > 149 && delta > 3 && !honeymoon) {
-                DinMaxIob = (maxIob + 1).toFloat()
-            } else {
-                DinMaxIob = maxIob.toFloat()
-            }
-        }
-        this.maxIob = DinMaxIob.toDouble()
+//         if (DinMaxIob > maxIob) {
+//             if (bg > 149 && delta > 3 && !honeymoon) {
+//                 DinMaxIob = (maxIob + 1).toFloat()
+//             } else {
+//                 DinMaxIob = maxIob.toFloat()
+//             }
+//         }
+        if (DinMaxIob > maxIob && hourOfDay in 0..6 && autodrive) DinMaxIob = maxIob.toFloat()
+        this.maxIob = if (autodrive) DinMaxIob.toDouble() else maxIob
+        val DynMaxSmb = (bg / 200) * (bg / 100) + (delta / 2)
         val enableUAM = profile.enableUAM
         this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
-        this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
+        this.maxSMBHB = if (autodrive) DynMaxSmb else preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
         this.maxSMB = if (bg > 120 && !honeymoon || bg > 180 && honeymoon) maxSMBHB else maxSMB
         this.tir1DAYabove = tirCalculator.averageTIR(tirCalculator.calculate(1, 65.0, 180.0))?.abovePct()!!
         val tir1DAYIR = tirCalculator.averageTIR(tirCalculator.calculate(1, 65.0, 180.0))?.inRangePct()!!
@@ -1452,9 +1457,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.enablebasal = preferences.get(BooleanKey.OApsAIMIEnableBasal)
         //this.now = System.currentTimeMillis()
         automateDeletionIfBadDay(tir1DAYIR.toInt())
-        val calendarInstance = Calendar.getInstance()
-        this.hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
-        val dayOfWeek = calendarInstance[Calendar.DAY_OF_WEEK]
+
         this.weekend = if (dayOfWeek == Calendar.SUNDAY || dayOfWeek == Calendar.SATURDAY) 1 else 0
         var lastCarbTimestamp = mealData.lastCarbTime
         if (lastCarbTimestamp.toInt() == 0) {
@@ -2311,7 +2314,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "15 january 2024"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "25 january 2024"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
