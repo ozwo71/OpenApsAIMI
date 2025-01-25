@@ -1619,8 +1619,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         // TODO eliminate
-        val max_iob = profile.max_iob // maximum amount of non-bolus IOB OpenAPS will ever deliver
-        this.maxIob = max_iob
+        //val max_iob = profile.max_iob // maximum amount of non-bolus IOB OpenAPS will ever deliver
+        val max_iob = maxIob
+        //this.maxIob = max_iob
         // if min and max are set, then set target to their average
         var target_bg = (profile.min_bg + profile.max_bg) / 2
         var min_bg = profile.min_bg
