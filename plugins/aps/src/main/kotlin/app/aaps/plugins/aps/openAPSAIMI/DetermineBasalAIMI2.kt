@@ -1535,27 +1535,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (isLunchModeCondition()){
             val pbolusLunch: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
                 rT.units = pbolusLunch
-                rT.reason.append("Microbolusing 1/2 Meal Mode ${pbolusLunch}U. ")
+                rT.reason.append("Microbolusing 1/2 Lunch Mode ${pbolusLunch}U. ")
             return rT
         }
         if (isLunch2ModeCondition()){
             val pbolusLunch2: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
             this.maxSMB = pbolusLunch2
             rT.units = pbolusLunch2
-            rT.reason.append("Microbolusing 2/2 Meal Mode ${pbolusLunch2}U. ")
+            rT.reason.append("Microbolusing 2/2 Lunch Mode ${pbolusLunch2}U. ")
             return rT
         }
         if (isDinnerModeCondition()){
             val pbolusDinner: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
             rT.units = pbolusDinner
-            rT.reason.append("Microbolusing 1/2 Meal Mode ${pbolusDinner}U. ")
+            rT.reason.append("Microbolusing 1/2 Dinner Mode ${pbolusDinner}U. ")
             return rT
         }
         if (isDinner2ModeCondition()){
             val pbolusDinner2: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
             this.maxSMB = pbolusDinner2
             rT.units = pbolusDinner2
-            rT.reason.append("Microbolusing 2/2 Meal Mode ${pbolusDinner2}U. ")
+            rT.reason.append("Microbolusing 2/2 Dinner Mode ${pbolusDinner2}U. ")
             return rT
         }
         if (isHighCarbModeCondition()){
@@ -2315,7 +2315,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "25 january 2024"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "26 january 2024"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
