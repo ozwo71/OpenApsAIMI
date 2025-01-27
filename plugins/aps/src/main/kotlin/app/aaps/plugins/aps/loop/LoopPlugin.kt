@@ -151,8 +151,29 @@ class LoopPlugin @Inject constructor(
             // Skip db change of ending previous TT
             .debounce(10L, TimeUnit.SECONDS)
             .subscribe({ invoke("EventTempTargetChange", true) }, fabricPrivacy::logException)
+        // Démarrage du déclenchement périodique
+        startPeriodicLoop()
     }
+    private fun startPeriodicLoop() {
+        // On récupère la valeur ApsMaxSmbFrequency en minutes
+        val freqMinutes = preferences.get(IntKey.ApsMaxSmbFrequency).toLong()
+        // On convertit en millisecondes
+        val freqMs = T.mins(freqMinutes).msecs()
 
+        // Définition du Runnable qui relancera votre loop, puis se replanifiera
+        val periodicRunnable = object : Runnable {
+            override fun run() {
+                // On relance le loop
+                invoke("PeriodicApsMaxSmbFrequency", true)
+
+                // On reprogramme le prochain run dans freqMs
+                handler?.postDelayed(this, freqMs)
+            }
+        }
+
+        // On lance la première fois maintenant
+        handler?.postDelayed(periodicRunnable, freqMs)
+    }
     private fun createNotificationChannel() {
         val mNotificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         @SuppressLint("WrongConstant") val channel = NotificationChannel(
