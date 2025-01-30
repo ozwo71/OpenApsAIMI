@@ -247,6 +247,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         }
 
         val glucose = bg ?: glucoseStatusProvider.glucoseStatusData?.glucose ?: return Pair("GLUC", null)
+        val delta = glucoseStatusProvider.glucoseStatusData?.delta
         // Round down to 30 min and use it as a key for caching
         // Add BG to key as it affects calculation
         val key = timestamp - timestamp % T.mins(30).msecs() + glucose.toLong()
@@ -348,7 +349,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             sensitivity = 2 * profileUtil.fromMgdlToUnits(isfMgdl!!, profileFunction.getUnits())
         }
         // Apply smoothing with interpolation
-        sensitivity = smoothSensitivityChange(sensitivity, glucose)
+        sensitivity = smoothSensitivityChange(sensitivity, glucose, delta)
         sensitivity = if (glucose < 100) profileUtil.fromMgdlToUnits(isfMgdl!!, profileFunction.getUnits()) else sensitivity
         sensitivity = if (sensitivity > 300.0) 300.0 else sensitivity
 
@@ -361,15 +362,38 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         return Pair("CALC", sensitivity)
     }
     // Modified smoothSensitivityChange function using interpolate logic
-    private fun smoothSensitivityChange(sensitivity: Double, glucose: Double?): Double {
-        if (glucose == null) return sensitivity
+    // private fun smoothSensitivityChange(sensitivity: Double, glucose: Double?): Double {
+    //     if (glucose == null) return sensitivity
+    //
+    //     // Interpolation based on glucose levels
+    //     val interpolatedISF = interpolate(glucose)
+    //
+    //     // Weighted combination of current sensitivity and interpolated ISF for smoother transitions
+    //     val smoothingFactor = 0.1
+    //     return (sensitivity * (1 - smoothingFactor)) + (interpolatedISF * smoothingFactor)
+    // }
+    private fun smoothSensitivityChange(
+        rawSensitivity: Double,
+        glucose: Double?,
+        delta: Double?
+    ): Double {
+        if (glucose == null) return rawSensitivity
 
-        // Interpolation based on glucose levels
+        // 1) On récupère une valeur d’ISF interpolée selon BG
         val interpolatedISF = interpolate(glucose)
 
-        // Weighted combination of current sensitivity and interpolated ISF for smoother transitions
+        // 2) On fusionne la sensibilité brute et l’interpolée pour lisser
         val smoothingFactor = 0.1
-        return (sensitivity * (1 - smoothingFactor)) + (interpolatedISF * smoothingFactor)
+        var newISF = rawSensitivity * (1.0 - smoothingFactor) + interpolatedISF * smoothingFactor
+
+        // 3) Si la glycémie est > 160 mg/dL et qu’on monte encore (delta > 0.5 mg/dL/5min par ex.),
+        //    on VEUT réduire l’ISF (→ plus de “résistance”), donc on force un multiplicateur < 1
+        if (glucose > 120 && (delta ?: 0.0) > 5) {
+            // Ex: on multiplie par 0.8 pour baisser l’ISF (adapter selon le besoin)
+            newISF *= 0.6
+        }
+
+        return newISF
     }
 
     fun interpolate(xdata: Double): Double {
@@ -564,6 +588,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val tddLast24H = tddCalculator.calculateDaily(-24, 0)
             val tddLast8to4H = tdd24HrsPerHour * 4
             val bg = glucoseStatusProvider.glucoseStatusData?.glucose
+            val delta = glucoseStatus?.delta
             val dynISFadjust: Double = (preferences.get(IntKey.OApsAIMIDynISFAdjustment).toDouble() / 100.0)
             val dynISFadjusthyper: Double = (preferences.get(IntKey.OApsAIMIDynISFAdjustmentHyper).toDouble() / 100.0)
             val mealTimeDynISFAdjFactor: Double = (preferences.get(IntKey.OApsAIMImealAdjISFFact).toDouble() / 100.0)
@@ -621,7 +646,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 variableSensitivity = 2 * profileUtil.fromMgdlToUnits(isfMgdl!!, profileFunction.getUnits())
             }
             // Apply smoothing with interpolation
-            variableSensitivity = smoothSensitivityChange(variableSensitivity, bg)
+            variableSensitivity = smoothSensitivityChange(variableSensitivity, bg, delta)
             variableSensitivity = if (bg!! < 100) profileUtil.fromMgdlToUnits(isfMgdl!!, profileFunction.getUnits()) else variableSensitivity
             variableSensitivity = if (variableSensitivity > 300) 300.0 else variableSensitivity
             // Compare insulin consumption of last 24h with last 7 days average
