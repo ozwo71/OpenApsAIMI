@@ -336,7 +336,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         }
         // Apply smoothing with interpolation
         sensitivity = smoothSensitivityChange(sensitivity, glucose, delta)
-        sensitivity = if (glucose < 100) profileUtil.fromMgdlToUnits(isfMgdl!!, profileFunction.getUnits()) else sensitivity
+        sensitivity = if (glucose < 120) profileUtil.fromMgdlToUnits(isfMgdl!!, profileFunction.getUnits()) else sensitivity
         sensitivity = if (sensitivity > 300.0) 300.0 else sensitivity
 
         if (dynIsfCache.size() > 1000) {
@@ -522,7 +522,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val insulinDivisor = when {
             insulin.peak > 65 -> 55 // rapid peak: 75
             insulin.peak > 50 -> 65 // ultra rapid peak: 55
-            else              -> 75 // lyumjev peak: 45
+            else              -> 45 // lyumjev peak: 45
         }
 
         var autosensResult = AutosensResult()
@@ -619,7 +619,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             }
             // Apply smoothing with interpolation
             variableSensitivity = smoothSensitivityChange(variableSensitivity, bg, delta)
-            variableSensitivity = if (bg!! < 100) profileUtil.fromMgdlToUnits(isfMgdl!!, profileFunction.getUnits()) else variableSensitivity
+            variableSensitivity = if (bg!! < 120) profileUtil.fromMgdlToUnits(isfMgdl!!, profileFunction.getUnits()) else variableSensitivity
             variableSensitivity = if (variableSensitivity > 300) 300.0 else variableSensitivity
             // Compare insulin consumption of last 24h with last 7 days average
             val tddRatio = if (preferences.get(BooleanKey.ApsDynIsfAdjustSensitivity)) tdd24Hrs / tdd2Days else 1.0
