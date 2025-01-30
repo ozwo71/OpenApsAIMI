@@ -1479,8 +1479,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.tags120to180minAgo = parseNotes(120, 180)
         this.tags180to240minAgo = parseNotes(180, 240)
         this.delta = glucose_status.delta.toFloat()
-        this.shortAvgDelta = glucose_status.delta.toFloat()
-        this.longAvgDelta = glucose_status.delta.toFloat()
+        this.shortAvgDelta = glucose_status.shortAvgDelta.toFloat()
+        this.longAvgDelta = glucose_status.longAvgDelta.toFloat()
         val therapy = Therapy(persistenceLayer).also {
             it.updateStatesBasedOnTherapyEvents()
         }
