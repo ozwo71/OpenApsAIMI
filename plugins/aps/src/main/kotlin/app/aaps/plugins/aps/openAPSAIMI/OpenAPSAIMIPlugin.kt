@@ -449,7 +449,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         }
 
         // Appliquer des pondérations supplémentaires si nécessaire
-        newVal = if (xdata > 100) {
+        newVal = if (xdata > 120) {
             newVal * higherISFrangeWeight
         } else {
             newVal * lowerISFrangeWeight
