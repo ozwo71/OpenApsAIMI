@@ -354,8 +354,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val polyX = arrayOf(50.0, 60.0, 80.0, 90.0, 100.0, 110.0, 150.0, 180.0, 200.0, 220.0, 240.0, 260.0, 280.0, 300.0)
         val polyY = arrayOf(-0.5, -0.5, -0.3, -0.2, 0.0, 0.0, 0.5, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3) // Ajout de 300.0 et 1.0
         // Constants for ISF adjustment weights
-        val higherISFrangeWeight: Double = 1.3 // Facteur pour les glycémies supérieures à 100 mg/dL
-        val lowerISFrangeWeight: Double = 0.9 // Facteur pour les glycémies inférieures à 100 mg/dL
+        val higherISFrangeWeight: Double = 0.8 // Facteur pour les glycémies supérieures à 100 mg/dL
+        val lowerISFrangeWeight: Double = 1.3 // Facteur pour les glycémies inférieures à 100 mg/dL
 
         val polymax = polyX.size - 1
         var step = polyX[0]
