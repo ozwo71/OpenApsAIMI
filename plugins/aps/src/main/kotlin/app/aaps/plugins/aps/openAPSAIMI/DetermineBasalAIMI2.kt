@@ -555,11 +555,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
 
-    private fun shouldApplyIntervalAdjustment(intervalSMBhighBG: Int, intervalSMBsnack: Int, intervalSMBmeal: Int,intervalSMBbfast: Int, intervalSMBlunch: Int, intervalSMBdinner: Int, intervalSMBsleep: Int, intervalSMBhc: Int): Boolean {
+    private fun shouldApplyIntervalAdjustment(
+        intervalSMBsnack: Int, intervalSMBmeal: Int, intervalSMBbfast: Int,
+        intervalSMBlunch: Int, intervalSMBdinner: Int, intervalSMBsleep: Int,
+        intervalSMBhc: Int, intervalSMBhighBG: Int
+    ): Boolean {
         val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-        return (lastsmbtime < intervalSMBsnack && snackTime) || (lastsmbtime < intervalSMBmeal && mealTime) || (lastsmbtime < intervalSMBbfast && bfastTime) || (lastsmbtime < intervalSMBlunch && lunchTime) || (lastsmbtime < intervalSMBdinner && dinnerTime) ||
-            (lastsmbtime < intervalSMBsleep && sleepTime) || (lastsmbtime < intervalSMBhc && highCarbTime) || (!honeymoon && lastsmbtime < intervalSMBhighBG && bg > 120) || (honeymoon && lastsmbtime < intervalSMBhighBG && bg > 180)
+
+        return (lastsmbtime < intervalSMBsnack && snackTime)
+            || (lastsmbtime < intervalSMBmeal && mealTime)
+            || (lastsmbtime < intervalSMBbfast && bfastTime)
+            || (lastsmbtime < intervalSMBlunch && lunchTime)
+            || (lastsmbtime < intervalSMBdinner && dinnerTime)
+            || (lastsmbtime < intervalSMBsleep && sleepTime)
+            || (lastsmbtime < intervalSMBhc && highCarbTime)
+            || (!honeymoon && lastsmbtime < intervalSMBhighBG && bg > 120)
+            || (honeymoon && lastsmbtime < intervalSMBhighBG && bg > 180)
     }
+
 
     private fun shouldApplySafetyAdjustment(): Boolean {
         val safetysmb = recentSteps180Minutes > 1500 && bg < 120
