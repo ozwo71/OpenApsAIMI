@@ -138,7 +138,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var dinnerruntime: Long = 0
     private var highCarbrunTime: Long = 0
     private var snackrunTime: Long = 0
-    private var intervalsmb = preferences.get(IntKey.ApsMaxSmbFrequency)
+    private var intervalsmb = 1
     private var peakintermediaire = 0.0
 
     private fun Double.toFixed2(): String = DecimalFormat("0.00#").format(round(this, 2))
@@ -2507,7 +2507,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 bg > 180 && delta in -5.0..1.0                                                                                        -> profile_current_basal * basalAdjustmentFactor
                 eventualBG < 80 && !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime                -> 0.0
                 eventualBG > 180 && !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !sportTime && delta > 3 -> calculateBasalRate(basal, profile_current_basal, basalAdjustmentFactor)
-                !enablebasal && eventualBG > 120 && !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !sportTime && bg > 170 && delta in -2.0..8.0 -> profile_current_basal * basalAdjustmentFactor
+                !enablebasal && eventualBG > 120 && !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !sportTime && bg > 170 && delta in -2.0..8.0 -> calculateBasalRate(basal, profile_current_basal, basalAdjustmentFactor)
                 // Conditions spécifiques basées sur les temps de repas
                 snackTime && snackrunTime in 0..30                 -> calculateBasalRate(basal, profile_current_basal, 4.0)
                 mealTime && mealruntime in 0..30                   -> calculateBasalRate(basal, profile_current_basal, 10.0)
