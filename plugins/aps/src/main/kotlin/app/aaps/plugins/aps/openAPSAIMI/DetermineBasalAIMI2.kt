@@ -138,7 +138,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var dinnerruntime: Long = 0
     private var highCarbrunTime: Long = 0
     private var snackrunTime: Long = 0
-    private var intervalsmb = 5
+    private var intervalsmb = preferences.get(IntKey.ApsMaxSmbFrequency)
     private var peakintermediaire = 0.0
 
     private fun Double.toFixed2(): String = DecimalFormat("0.00#").format(round(this, 2))
@@ -580,7 +580,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (result < 0.0f) {
             result = 0.0f
         }
-        if (iob < 0 && bg > 100 && delta >= 0 && result == 0.0f) {
+        if (iob < 0 && bg > 100 && delta >= 2 && result == 0.0f) {
             result = 0.1f
         }
         return result
@@ -815,11 +815,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
 
                 // Règles business (agressivité, etc.)
-                if (delta > 10 && bg > 120) {
+                if (delta > 5 && bg > 120) {
                     val provisionalSMB = maxSMB.toFloat() * (delta / 30)
                     finalRefinedSMB = max(finalRefinedSMB, min(provisionalSMB, maxSMB.toFloat() / 1.5f))
                 }
-                if (finalRefinedSMB > 0.5 && bg < 120 && delta < 8) {
+                if (finalRefinedSMB > 0.5 && bg < 120 && delta < 5) {
                     finalRefinedSMB /= 2
                 }
 
@@ -867,7 +867,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val iterationFactor = 1.0f / (1 + iterationCount / 100)
 
         val trendFactor = when {
-            delta > 10 || shortAvgDelta > 5 || longAvgDelta > 5 -> 0.5f
+            delta > 8 || shortAvgDelta > 4 || longAvgDelta > 3 -> 0.5f
             delta < 5 && shortAvgDelta < 3 && longAvgDelta < 3 -> 1.5f
             else -> 1.0f
         }
@@ -884,7 +884,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // Initialiser les facteurs
         var deltaFactor = if (bg > 100) delta / 10 else 1.0f // Ajuster selon les besoins
-        var bgFactor = if (bg > 120) 1.2 else if (bg < 100) 0.7 else 1.0
+        var bgFactor = if (bg > 120) 1.2 else if (bg < 110) 0.7 else 1.0
         var tirFactor = if (bg > 100) 1.0 + lastHourTIRabove120 * 0.05 else 1.0 // Exemple: 5% d'augmentation pour chaque unité de lastHourTIRabove170
 
         // Modifier les facteurs si honeymoon est vrai
@@ -2505,9 +2505,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 honeymoon && iob < 0.4 && bg in 90.0..100.0 && delta in 0.0..5.0 && !sportTime                                        -> profile_current_basal
                 enablebasal && iob < 0.8 && bg in 120.0..130.0 && delta in 0.0..6.0 && !sportTime                                                    -> profile_current_basal * basalAdjustmentFactor
                 bg > 180 && delta in -5.0..1.0                                                                                        -> profile_current_basal * basalAdjustmentFactor
-                eventualBG < 65 && !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime                -> 0.0
+                eventualBG < 80 && !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime                -> 0.0
                 eventualBG > 180 && !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !sportTime && delta > 3 -> calculateBasalRate(basal, profile_current_basal, basalAdjustmentFactor)
-
+                eventualBG > 120 && !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !sportTime && bg > 170 && delta in -2.0..8.0 -> calculateBasalRate(basal, profile_current_basal, basalAdjustmentFactor)
                 // Conditions spécifiques basées sur les temps de repas
                 snackTime && snackrunTime in 0..30                 -> calculateBasalRate(basal, profile_current_basal, 4.0)
                 mealTime && mealruntime in 0..30                   -> calculateBasalRate(basal, profile_current_basal, 10.0)
