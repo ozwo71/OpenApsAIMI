@@ -849,6 +849,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         // 7) Si pas convergé globalement, fallback
+        // if (!globalConvergenceReached) {
+        //     if (daysOfData >= 4) {
+        //         // On refine (une dernière fois) avec bestNetwork sur la dernière entrée
+        //         val doubleInput = lastEnhancedInput?.toDoubleArray()
+        //         finalRefinedSMB = bestNetwork?.let {
+        //             AimiNeuralNetwork.refineSMB(predictedSMB, it, doubleInput)
+        //         } ?: predictedSMB
+        //     } else {
+        //         // Mix 40/60
+        //         finalRefinedSMB = (predictedSMB * 0.4f) + (finalRefinedSMB * 0.6f)
+        //     }
+        // }
+        //
+        // return if (globalConvergenceReached) finalRefinedSMB else predictedSMB
+        // 7) Si pas convergé globalement, fallback
         if (!globalConvergenceReached) {
             if (daysOfData >= 4) {
                 // On refine (une dernière fois) avec bestNetwork sur la dernière entrée
@@ -862,7 +877,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
 
-        return if (globalConvergenceReached) finalRefinedSMB else predictedSMB
+// ------------------------
+// (5) Encadrer la sortie (clamp minimum)
+        val minSMB = 0.05f
+        if (finalRefinedSMB < minSMB) {
+            finalRefinedSMB = minSMB
+        }
+
+// (6) Moyenne partielle entre predictedSMB et finalRefinedSMB
+        val alpha = 0.7f // Ajuste ce coefficient selon la pondération voulue
+        val blendedSMB = alpha * finalRefinedSMB + (1 - alpha) * predictedSMB
+
+// Au final, on renvoie la valeur "blendée"
+        return blendedSMB
+
     }
 
     /**
