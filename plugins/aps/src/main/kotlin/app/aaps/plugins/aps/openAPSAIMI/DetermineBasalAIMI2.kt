@@ -646,9 +646,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         profile: OapsProfileAimi
     ): Float {
         // 1) Configuration générale
-        val minutesToConsider = 15000.0
+        val minutesToConsider = 5760.0
         val linesToConsider = (minutesToConsider / 5).toInt()
-        val maxIterations = 10000.0
+        val maxIterations = 1000.0
         val maxGlobalIterations = 5
         var globalConvergenceReached = false
         var differenceWithinRange = false
