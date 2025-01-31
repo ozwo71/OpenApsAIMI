@@ -747,7 +747,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             batchSize = 32,
             weightDecay = 0.01,
 
-            epochs = 30000,
+            epochs = 1000,
             useBatchNorm = false, // ajustez si vous voulez la batch norm
             useDropout = false,   // idem pour le dropout
             dropoutRate = 0.3,
