@@ -633,9 +633,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         profile: OapsProfileAimi
     ): Float {
         // 1) Configuration générale
-        val minutesToConsider = 15000.0
+        val minutesToConsider = 5760.0
         val linesToConsider = (minutesToConsider / 5).toInt()
-        val maxIterations = 10000.0
+        val maxIterations = 1000.0
         val maxGlobalIterations = 5
         var globalConvergenceReached = false
         var differenceWithinRange = false
@@ -734,7 +734,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             batchSize = 32,
             weightDecay = 0.01,
 
-            epochs = 30000,
+            epochs = 1000,
             useBatchNorm = false, // ajustez si vous voulez la batch norm
             useDropout = false,   // idem pour le dropout
             dropoutRate = 0.3,
@@ -835,7 +835,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             globalIterationCount++
         }
 
-        // 7) Si pas convergé globalement, fallback
+    //     // 7) Si pas convergé globalement, fallback
+    //     if (!globalConvergenceReached) {
+    //         if (daysOfData >= 4) {
+    //             // On refine (une dernière fois) avec bestNetwork sur la dernière entrée
+    //             val doubleInput = lastEnhancedInput?.toDoubleArray()
+    //             finalRefinedSMB = bestNetwork?.let {
+    //                 AimiNeuralNetwork.refineSMB(predictedSMB, it, doubleInput)
+    //             } ?: predictedSMB
+    //         } else {
+    //             // Mix 40/60
+    //             finalRefinedSMB = (predictedSMB * 0.4f) + (finalRefinedSMB * 0.6f)
+    //         }
+    //     }
+    //
+    //     return if (globalConvergenceReached) finalRefinedSMB else predictedSMB
+    // }
         if (!globalConvergenceReached) {
             if (daysOfData >= 4) {
                 // On refine (une dernière fois) avec bestNetwork sur la dernière entrée
@@ -849,7 +864,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
 
-        return if (globalConvergenceReached) finalRefinedSMB else predictedSMB
+// ------------------------
+// (5) Encadrer la sortie (clamp minimum)
+        val minSMB = 0.05f
+        if (finalRefinedSMB < minSMB) {
+            finalRefinedSMB = minSMB
+        }
+
+// (6) Moyenne partielle entre predictedSMB et finalRefinedSMB
+        val alpha = 0.7f // Ajuste ce coefficient selon la pondération voulue
+        val blendedSMB = alpha * finalRefinedSMB + (1 - alpha) * predictedSMB
+
+// Au final, on renvoie la valeur "blendée"
+        return blendedSMB
+
     }
 
     /**
