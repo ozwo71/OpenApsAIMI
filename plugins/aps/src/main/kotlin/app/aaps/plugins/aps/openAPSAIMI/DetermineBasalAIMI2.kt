@@ -2114,7 +2114,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             historicActivity = profile.historicActivity,
             profile,
             recentSteps15Minutes,
-            averageBeatsPerMinute.toInt()
+            averageBeatsPerMinute.toInt(),
+            bg,
+            delta.toDouble()
         )
         if (glucose_status.delta <= 4.0) {
 
