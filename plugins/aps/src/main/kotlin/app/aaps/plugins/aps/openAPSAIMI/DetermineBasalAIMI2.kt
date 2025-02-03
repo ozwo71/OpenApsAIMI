@@ -1352,9 +1352,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     // 1️⃣ **Hyperglycémie > 180-200 mg/dL → Accélération de la correction**
     if (bg > 200 && delta > 4) {
-        dynamicPeakTime *= 0.6 // Réduction de 40% pour agir plus vite
+        dynamicPeakTime *= 0.5
     } else if (bg > 180 && delta > 3) {
-        dynamicPeakTime *= 0.75 // Réduction de 25%
+        dynamicPeakTime *= 0.7
     }
 
     // 2️⃣ **Ajustement basé sur l'IOB (currentActivity)**
@@ -1456,6 +1456,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog = consoleLog,
             consoleError = consoleError
         )
+        val tp = calculateDynamicPeakTime(
+            currentActivity = profile.currentActivity,
+            futureActivity = profile.futureActivity,
+            sensorLagActivity = profile.sensorLagActivity,
+            historicActivity = profile.historicActivity,
+            profile,
+            recentSteps15Minutes,
+            averageBeatsPerMinute.toInt(),
+            bg,
+            delta.toDouble()
+        )
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
         val calendarInstance = Calendar.getInstance()
         this.hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
@@ -1472,25 +1483,44 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 // Tarciso Dynamic Max IOB
         var DinMaxIob = ((bg / 100.0) * (bg / 55.0) + (delta / 2.0)).toFloat()
 
-// Si DinMaxIob est inférieur à 1.0, on le règle à 1.0
-        if (DinMaxIob < 1.0) {
-            DinMaxIob = 1.0F
+// Calcul initial avec un ajustement dynamique basé sur bg et delta
+        DinMaxIob = ((bg / 100.0) * (bg / 55.0) + (delta / 2.0)).toFloat()
+
+// Sécurisation : imposer une borne minimale et une borne maximale
+        DinMaxIob = DinMaxIob.coerceAtLeast(1.0f).coerceAtMost(maxIob.toFloat() * 1.5f)
+
+// Réduction de l'augmentation si on est la nuit (0h-6h)
+        if (hourOfDay in 0..6) {
+            DinMaxIob = DinMaxIob.coerceAtMost(maxIob.toFloat())
         }
 
-// Ajustement de DinMaxIob selon bg et delta
-//         if (DinMaxIob > maxIob) {
-//             if (bg > 149 && delta > 3 && !honeymoon) {
-//                 DinMaxIob = (maxIob + 1).toFloat()
-//             } else {
-//                 DinMaxIob = maxIob.toFloat()
-//             }
-//         }
-        if (DinMaxIob > maxIob && hourOfDay in 0..6 && autodrive) DinMaxIob = maxIob.toFloat()
         this.maxIob = if (autodrive) DinMaxIob.toDouble() else maxIob
-        val DynMaxSmb = (bg / 200) * (bg / 100) + (delta / 2)
-        val enableUAM = profile.enableUAM
         this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
-        this.maxSMBHB = if (autodrive) DynMaxSmb else preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
+        this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
+        // Calcul initial avec ajustement basé sur la glycémie et le delta
+        var DynMaxSmb = ((bg / 200) * (bg / 100) + (delta / 2)).toFloat()
+
+// ⚠ Sécurisation : bornes min/max pour éviter des valeurs extrêmes
+        DynMaxSmb = DynMaxSmb.coerceAtLeast(0.1f).coerceAtMost(maxSMBHB.toFloat() * 1.5f)
+
+// ⚠ Ajustement si delta est négatif (la glycémie baisse) pour éviter un SMB trop fort
+        if (delta < 0) {
+            DynMaxSmb *= 0.75f // Réduction de 25% si la glycémie baisse
+        }
+
+// ⚠ Réduction nocturne pour éviter une surcorrection pendant le sommeil (0h - 6h)
+        if (hourOfDay in 0..6) {
+            DynMaxSmb *= 0.8f
+        }
+
+// ⚠ Alignement avec `maxSMB` et `profile.peakTime`
+        DynMaxSmb = DynMaxSmb.coerceAtMost(maxSMBHB.toFloat() * (tp / 60.0).toFloat())
+
+
+        //val DynMaxSmb = (bg / 200) * (bg / 100) + (delta / 2)
+        val enableUAM = profile.enableUAM
+
+        this.maxSMBHB = if (autodrive) DynMaxSmb.toDouble() else preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
         this.maxSMB = if (bg > 120 && !honeymoon || bg > 180 && honeymoon) maxSMBHB else maxSMB
         this.tir1DAYabove = tirCalculator.averageTIR(tirCalculator.calculate(1, 65.0, 180.0))?.abovePct()!!
         val tir1DAYIR = tirCalculator.averageTIR(tirCalculator.calculate(1, 65.0, 180.0))?.inRangePct()!!
@@ -2030,6 +2060,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 } else if (bg > 180 && delta > 3 && iob < preferences.get(DoubleKey.ApsSmbMaxIob)) {
                     this.predictedSMB *= 1.3f // Augmente de 30% si montée modérée
                 }
+
                 basal =
                     when {
                         (honeymoon && bg < 170) -> basalaimi * 0.65
@@ -2107,17 +2138,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val actTarget = deltaGross / sens * factors.toFloat()
         var actMissing = 0.0
         var deltaScore: Double = 0.5
-        val tp = calculateDynamicPeakTime(
-            currentActivity = profile.currentActivity,
-            futureActivity = profile.futureActivity,
-            sensorLagActivity = profile.sensorLagActivity,
-            historicActivity = profile.historicActivity,
-            profile,
-            recentSteps15Minutes,
-            averageBeatsPerMinute.toInt(),
-            bg,
-            delta.toDouble()
-        )
+
         if (glucose_status.delta <= 4.0) {
 
             actMissing = round((actCurr * smbToGive - Math.max(actFuture, 0.0)) / 5, 4)
