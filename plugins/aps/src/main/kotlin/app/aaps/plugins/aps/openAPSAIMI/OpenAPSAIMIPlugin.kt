@@ -466,7 +466,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         if (glucose == null) return rawSensitivity
 
         // 1) On récupère une valeur d’ISF interpolée selon BG
-        val interpolatedISF = interpolate(glucose)
+        val interpolatedISF = interpolate(glucose,delta)
 
         // 2) On fusionne la sensibilité brute et l’interpolée pour lisser
         val smoothingFactor = 0.1
@@ -488,79 +488,72 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // 5️⃣ Limites de sécurité pour éviter des valeurs absurdes
         return newISF.coerceIn(10.0, 300.0) // L'ISF est toujours entre 15 et 300
     }
-    
-    fun interpolate(xdata: Double): Double {
-    // 🔹 Points de référence pour l'interpolation (ISF ajusté selon la glycémie)
-    val polyX = arrayOf(50.0, 60.0, 80.0, 100.0, 110.0, 120.0, 150.0, 180.0, 200.0, 220.0, 240.0, 260.0, 280.0, 300.0)
-    val polyY = arrayOf(-0.5, -0.4, -0.2, 0.0, 0.1, 0.2, 0.6, 0.8, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5)
 
-    // 🔹 Facteurs de pondération ajustés pour améliorer l'adaptation de l'ISF
-    val higherISFrangeWeight: Double = 0.4  // Réduction plus marquée dès BG > 100 mg/dL
-    val lowerISFrangeWeight: Double = 1.3  // Augmentation plus marquée pour BG < 100 mg/dL
+    fun interpolate(xdata: Double, delta: Double?): Double {
+        // 🔹 Points de référence pour l'interpolation (ISF ajusté selon la glycémie)
+        val polyX = arrayOf(50.0, 60.0, 80.0, 100.0, 110.0, 120.0, 140.0, 160.0, 180.0, 200.0, 220.0, 240.0, 260.0, 280.0, 300.0)
+        val polyY = arrayOf(1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15)
 
-    val polymax = polyX.size - 1
-    var step = polyX[0]
-    var sVal = polyY[0]
-    var stepT = polyX[polymax]
-    var sValold = polyY[polymax]
+        val polymax = polyX.size - 1
+        var newVal = 1.0
+        var lowVal = polyY[0]
+        var topVal = polyY[polymax]
+        var lowX = polyX[0]
+        var topX = polyX[polymax]
+        var lowLabl = lowX
 
-    var newVal = 1.0
-    var lowVal = 1.0
-    val topVal: Double
-    val lowX: Double
-    val topX: Double
-    val myX: Double
-    var lowLabl = step
-
-    // 🔹 Extrapolation en arrière (pour les valeurs < 50 mg/dL)
-    if (xdata < step) {
-        stepT = polyX[1]
-        sValold = polyY[1]
-        lowVal = sVal
-        topVal = sValold
-        lowX = step
-        topX = stepT
-        myX = xdata
-        newVal = lowVal + (topVal - lowVal) / (topX - lowX) * (myX - lowX)
-    }
-    // 🔹 Extrapolation en avant (pour les valeurs > 300 mg/dL)
-    else if (xdata > stepT) {
-        step = polyX[polymax - 1]
-        sVal = polyY[polymax - 1]
-        lowVal = sVal
-        topVal = sValold
-        lowX = step
-        topX = stepT
-        myX = xdata
-        newVal = lowVal + (topVal - lowVal) / (topX - lowX) * (myX - lowX)
-        newVal = min(newVal, 1.5)  // 🔹 Limitation de l'effet maximum pour éviter des ISF trop élevés
-    }
-    // 🔹 Interpolation normale
-    else {
-        for (i in 0..polymax) {
-            step = polyX[i]
-            sVal = polyY[i]
-            if (step == xdata) {
-                newVal = sVal
-                break
-            } else if (step > xdata) {
-                topVal = sVal
-                lowX = lowLabl
-                myX = xdata
-                topX = step
-                newVal = lowVal + (topVal - lowVal) / (topX - lowX) * (myX - lowX)
-                break
-            }
-            lowVal = sVal
-            lowLabl = step
+        // 🔹 Extrapolation pour les glycémies < 50 mg/dL
+        if (xdata < lowX) {
+            val stepT = polyX[1]
+            val sValold = polyY[1]
+            newVal = lowVal + (sValold - lowVal) / (stepT - lowX) * (xdata - lowX)
         }
+        // 🔹 Extrapolation pour les glycémies > 300 mg/dL
+        else if (xdata > topX) {
+            val step = polyX[polymax - 1]
+            val sVal = polyY[polymax - 1]
+            newVal = sVal + (topVal - sVal) / (topX - step) * (xdata - step)
+            newVal = min(newVal, 0.15) // 🔹 Limitation max (réduction ISF maximale)
+        }
+        // 🔹 Interpolation normale
+        else {
+            for (i in 0..polymax) {
+                val step = polyX[i]
+                val sVal = polyY[i]
+                if (step == xdata) {
+                    newVal = sVal
+                    break
+                } else if (step > xdata) {
+                    topVal = sVal
+                    lowX = lowLabl
+                    topX = step
+                    newVal = lowVal + (topVal - lowVal) / (topX - lowX) * (xdata - lowX)
+                    break
+                }
+                lowVal = sVal
+                lowLabl = step
+            }
+        }
+
+        // 🔹 Facteur dynamique basé sur le delta
+        val deltaFactor = when {
+            delta == null -> 1.0
+            delta > 10 -> 0.3   // 🔹 Réduction TRÈS agressive si delta > 10 mg/dL/5min
+            delta > 5  -> 0.5   // 🔹 Réduction forte si delta > 5 mg/dL/5min
+            delta > 2  -> 0.8   // 🔹 Réduction modérée si delta > 2 mg/dL/5min
+            delta < -10 -> 1.6  // 🔹 Augmentation TRÈS forte si delta < -10 mg/dL/5min
+            delta < -5  -> 1.3  // 🔹 Augmentation forte si delta < -5 mg/dL/5min
+            delta < -2  -> 1.1  // 🔹 Augmentation modérée si delta < -2 mg/dL/5min
+            else -> 1.0
+        }
+
+        // 🔹 Application de la correction dynamique
+        newVal *= deltaFactor
+
+        // 🔹 Sécurisation des bornes ISF
+        return newVal.coerceIn(0.15, 1.5)
     }
 
-    // 🔹 Application des pondérations supplémentaires pour ajuster la sensibilité ISF
-    newVal *= if (xdata > 100) higherISFrangeWeight else lowerISFrangeWeight
-
-    return newVal
-    }
 
     override fun invoke(initiator: String, tempBasalFallback: Boolean) {
         aapsLogger.debug(LTag.APS, "invoke from $initiator tempBasalFallback: $tempBasalFallback")
