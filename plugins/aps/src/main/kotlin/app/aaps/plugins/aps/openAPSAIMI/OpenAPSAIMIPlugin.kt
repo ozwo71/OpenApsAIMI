@@ -435,11 +435,21 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // Apply ISF correction with delta factor
         sensitivity *= deltaCorrectionFactor
         // 🔹 Apply smoothing function to avoid abrupt changes in ISF
-        sensitivity = smoothSensitivityChange(sensitivity, glucose, delta)
+        //sensitivity = smoothSensitivityChange(sensitivity, glucose, delta)
+        val smoothedISF = smoothSensitivityChange(sensitivity, glucose, delta)
+        aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $sensitivity, après lissage : $smoothedISF")
+        sensitivity = smoothedISF
 
         // 🔹 Prevent ISF from being too low in case of large drops
-        sensitivity = maxOf(sensitivity, 10.0)
-
+        if (sensitivity < 10.0) {
+            aapsLogger.warn(LTag.APS, "ISF trop bas ! Ajusté à 10.0 au lieu de $sensitivity")
+            sensitivity = 10.0
+        }
+        if (sensitivity > 300.0){
+            aapsLogger.warn(LTag.APS, "ISF trop haut ! Ajusté à 300.0 au lieu de $sensitivity")
+            sensitivity = 300.0
+        }
+        aapsLogger.debug(LTag.APS, "🔍 TDD ajusté : $tdd")
         // Cache calculated ISF
         if (dynIsfCache.size() > 1000) dynIsfCache.clear()
         dynIsfCache.put(key, sensitivity)
@@ -839,10 +849,22 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 // Application de la correction
             variableSensitivity *= deltaCorrectionFactor
             // 🔹 5) Lissage de l'ISF pour éviter les variations brusques
-            variableSensitivity = smoothSensitivityChange(variableSensitivity, bg, delta)
+            //variableSensitivity = smoothSensitivityChange(variableSensitivity, bg, delta)
+            val smoothedISF = smoothSensitivityChange(variableSensitivity, bg, delta)
+            aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $variableSensitivity, après lissage : $smoothedISF")
+            variableSensitivity = smoothedISF
 
 // 🔹 6) Bornes minimales et maximales pour éviter des valeurs extrêmes
             variableSensitivity = variableSensitivity.coerceIn(10.0, 300.0)
+            // 🔹 Prevent ISF from being too low in case of large drops
+            if (variableSensitivity < 10.0) {
+                aapsLogger.warn(LTag.APS, "ISF trop bas ! Ajusté à 10.0 au lieu de $variableSensitivity")
+                variableSensitivity = 10.0
+            }
+            if (variableSensitivity > 300.0){
+                aapsLogger.warn(LTag.APS, "ISF trop haut ! Ajusté à 300.0 au lieu de $variableSensitivity")
+                variableSensitivity = 300.0
+            }
 
 // 🔹 Création du résultat final
             autosensResult = AutosensResult(
