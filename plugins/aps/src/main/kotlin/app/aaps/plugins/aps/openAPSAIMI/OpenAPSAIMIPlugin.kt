@@ -465,7 +465,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     ): Double {
         if (glucose == null) return rawSensitivity
 
-        // 1) On récupère une valeur d’ISF interpolée selon BG
+        // 1) On récupère une valeur d’ISF interpolée selon BG et delta
         val interpolatedISF = interpolate(glucose,delta)
 
         // 2) On fusionne la sensibilité brute et l’interpolée pour lisser
