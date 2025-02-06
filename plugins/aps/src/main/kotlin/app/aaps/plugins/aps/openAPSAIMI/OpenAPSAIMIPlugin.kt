@@ -270,7 +270,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val tddLast4H = tdd2DaysPerHour * 4
 
         var tddDaily = tddCalculator.averageTDD(tddCalculator.calculate(1, allowMissingDays = false))?.data?.totalAmount ?: 0.0
-        if (tddDaily == 0.0 || tddDaily < tdd7P / 2) tddDaily = tdd7P
+        //if (tddDaily == 0.0 || tddDaily < tdd7P / 2) tddDaily = tdd7P
+        val minTDD = 10.0 // À ajuster selon les besoins
+        if (tddDaily == 0.0 || tddDaily < tdd7P / 2) tddDaily = maxOf(tdd7P, minTDD)
         if (tddDaily > tdd7P && tddDaily > 1.1 * tdd7P) {
             tddDaily = 1.1 * tdd7P
             aapsLogger.info(LTag.APS, "TDD for 1 day limited to 10% increase. New TDDDaily: $tddDaily")
@@ -376,7 +378,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         //    on VEUT réduire l’ISF (→ plus de “résistance”), donc on force un multiplicateur < 1
         if (glucose > 120 && (delta ?: 0.0) > 5) {
             // Ex: on multiplie par 0.8 pour baisser l’ISF (adapter selon le besoin)
-            newISF *= 0.6
+            val reductionFactor = delta?.let { 1.0 - min(0.6, (it.toDouble() / 10.0)) } ?: 1.0
+            newISF *= reductionFactor
         }
 
         return newISF
@@ -549,7 +552,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val tddLast4H = tdd2DaysPerHour * 4
 
             var tddDaily = tddCalculator.averageTDD(tddCalculator.calculate(1, allowMissingDays = false))?.data?.totalAmount ?: 0.0
-            if (tddDaily == 0.0 || tddDaily < tdd7P / 2) tddDaily = tdd7P
+            val minTDD = 10.0 // À ajuster selon les besoins
+            if (tddDaily == 0.0 || tddDaily < tdd7P / 2) tddDaily = maxOf(tdd7P, minTDD)
+
+            //if (tddDaily == 0.0 || tddDaily < tdd7P / 2) tddDaily = tdd7P
             if (tddDaily > tdd7P && tddDaily > 1.1 * tdd7P) {
                 tddDaily = 1.1 * tdd7P
                 aapsLogger.info(LTag.APS, "TDD for 1 day limited to 10% increase. New TDDDaily: $tddDaily")
