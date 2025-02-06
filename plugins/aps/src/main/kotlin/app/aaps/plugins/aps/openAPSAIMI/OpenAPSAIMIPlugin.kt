@@ -376,11 +376,19 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         // 3) Si la glycémie est > 160 mg/dL et qu’on monte encore (delta > 0.5 mg/dL/5min par ex.),
         //    on VEUT réduire l’ISF (→ plus de “résistance”), donc on force un multiplicateur < 1
-        if (glucose > 120 && (delta ?: 0.0) > 5) {
-            // Ex: on multiplie par 0.8 pour baisser l’ISF (adapter selon le besoin)
-            val reductionFactor = delta?.let { 1.0 - min(0.6, (it.toDouble() / 10.0)) } ?: 1.0
-            newISF *= reductionFactor
+        // if (glucose > 120 && (delta ?: 0.0) > 5) {
+        //     // Ex: on multiplie par 0.8 pour baisser l’ISF (adapter selon le besoin)
+        //     val reductionFactor = delta?.let { 1.0 - min(0.6, (it.toDouble() / 10.0)) } ?: 1.0
+        //     newISF *= reductionFactor
+        // }
+        val deltaCorrectionFactor = when {
+            delta == null -> 1.0
+            delta > 0 -> 1.0 - min(0.6, delta / 20.0) // Réduction max de 30% si delta > 20
+            delta < 0 -> 1.0 + min(0.6, -delta / 20.0) // Augmentation max de 30% si delta < -20
+            else -> 1.0
         }
+        // Application de la correction
+        newISF *= deltaCorrectionFactor
 
         return newISF
     }
