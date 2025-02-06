@@ -495,7 +495,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     val polyY = arrayOf(-0.5, -0.4, -0.2, 0.0, 0.1, 0.2, 0.6, 0.8, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5)
 
     // 🔹 Facteurs de pondération ajustés pour améliorer l'adaptation de l'ISF
-    val higherISFrangeWeight: Double = 0.7  // Réduction plus marquée dès BG > 100 mg/dL
+    val higherISFrangeWeight: Double = 0.4  // Réduction plus marquée dès BG > 100 mg/dL
     val lowerISFrangeWeight: Double = 1.3  // Augmentation plus marquée pour BG < 100 mg/dL
 
     val polymax = polyX.size - 1
