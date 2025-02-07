@@ -540,9 +540,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // 🔹 Facteur dynamique basé sur le delta
         val deltaFactor = when {
             delta == null -> 1.0
-            delta > 10 -> 0.3   // 🔹 Réduction TRÈS agressive si delta > 10 mg/dL/5min
-            delta > 5  -> 0.5   // 🔹 Réduction forte si delta > 5 mg/dL/5min
-            delta > 2  -> 0.8   // 🔹 Réduction modérée si delta > 2 mg/dL/5min
+            delta > 10 -> 0.1   // 🔹 Réduction TRÈS agressive si delta > 10 mg/dL/5min
+            delta > 5  -> 0.4   // 🔹 Réduction forte si delta > 5 mg/dL/5min
+            delta > 2  -> 0.7   // 🔹 Réduction modérée si delta > 2 mg/dL/5min
             delta < -10 -> 1.6  // 🔹 Augmentation TRÈS forte si delta < -10 mg/dL/5min
             delta < -5  -> 1.3  // 🔹 Augmentation forte si delta < -5 mg/dL/5min
             delta < -2  -> 1.1  // 🔹 Augmentation modérée si delta < -2 mg/dL/5min
@@ -553,7 +553,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         newVal *= deltaFactor
 
         // 🔹 Sécurisation des bornes ISF
-        return newVal.coerceIn(0.15, 1.5)
+        return newVal.coerceIn(0.1, 1.5)
     }
 
 
