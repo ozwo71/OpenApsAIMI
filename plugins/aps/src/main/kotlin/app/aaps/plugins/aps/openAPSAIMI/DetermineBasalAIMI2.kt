@@ -1501,7 +1501,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         var DynMaxSmb = ((bg / 200) * (bg / 100) + (delta / 2)).toFloat()
 
 // ⚠ Sécurisation : bornes min/max pour éviter des valeurs extrêmes
-        DynMaxSmb = DynMaxSmb.coerceAtLeast(0.1f).coerceAtMost(maxSMBHB.toFloat() * 1.5f)
+        DynMaxSmb = DynMaxSmb.coerceAtLeast(0.1f).coerceAtMost(maxSMBHB.toFloat() * 2.5f)
 
 // ⚠ Ajustement si delta est négatif (la glycémie baisse) pour éviter un SMB trop fort
         if (delta < 0) {
@@ -1509,8 +1509,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
 // ⚠ Réduction nocturne pour éviter une surcorrection pendant le sommeil (0h - 6h)
-        if (hourOfDay in 0..6) {
-            DynMaxSmb *= 0.8f
+        if (hourOfDay in 0..8) {
+            DynMaxSmb *= 0.6f
         }
 
 // ⚠ Alignement avec `maxSMB` et `profile.peakTime`
@@ -2395,7 +2395,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "06 Feb 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "07 Feb 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
