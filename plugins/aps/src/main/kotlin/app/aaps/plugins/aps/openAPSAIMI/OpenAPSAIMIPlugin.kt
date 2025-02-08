@@ -472,10 +472,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         if (glucose == null) return rawSensitivity
 
         // 1) On récupère une valeur d’ISF interpolée selon BG et delta
-        val interpolatedISF = interpolate(glucose,delta)
+        val interpolatedISF = rawSensitivity//interpolate(glucose,delta)
 
         // 2) On fusionne la sensibilité brute et l’interpolée pour lisser
-        val smoothingFactor = 0.4
+        val smoothingFactor = 0.2
         var newISF = rawSensitivity * (1.0 - smoothingFactor) + interpolatedISF * smoothingFactor
 
         // 3️⃣ Correction basée sur la variation rapide de la glycémie
