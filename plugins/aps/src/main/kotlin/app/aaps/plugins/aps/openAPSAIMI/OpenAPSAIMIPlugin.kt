@@ -430,22 +430,22 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         // 🔹 New dynamic ISF adjustment based on delta trend
         val deltaCorrectionFactor = when {
-            delta == null -> 1.0
-            delta > 10 -> 0.5  // Réduction plus forte si delta > 10 mg/dL en 5 min
-            delta > 5 -> 0.7  // Réduction modérée si delta > 5 mg/dL
-            delta < -10 -> 1.4 // Augmentation plus forte si delta < -10 mg/dL
-            delta < -5 -> 1.2 // Augmentation modérée si delta < -5 mg/dL
-            else -> 1.0
+            delta == null             -> 1.0
+            delta > 10 && bg!! > 120    -> 0.5  // Réduction plus forte si delta > 10 mg/dL en 5 min
+            delta > 5 && bg!! > 120 -> 0.7  // Réduction modérée si delta > 5 mg/dL
+            delta < -10               -> 1.4 // Augmentation plus forte si delta < -10 mg/dL
+            delta < -5                -> 1.2 // Augmentation modérée si delta < -5 mg/dL
+            else                      -> 1.0
         }
 
         
         // 🔹 Apply smoothing function to avoid abrupt changes in ISF
         //sensitivity = smoothSensitivityChange(sensitivity, glucose, delta)
-        val smoothedISF = smoothSensitivityChange(sensitivity, glucose, delta)
-        aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $sensitivity, après lissage : $smoothedISF")
-        sensitivity = smoothedISF
+        // val smoothedISF = smoothSensitivityChange(sensitivity, glucose, delta)
+        // aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $sensitivity, après lissage : $smoothedISF")
+        // sensitivity = smoothedISF
         // Apply ISF correction with delta factor
-        //sensitivity *= deltaCorrectionFactor
+        sensitivity *= deltaCorrectionFactor
 
         // 🔹 Prevent ISF from being too low in case of large drops
         if (sensitivity < 10.0) {
@@ -480,12 +480,12 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         // 3️⃣ Correction basée sur la variation rapide de la glycémie
         val deltaCorrectionFactor = when {
-            delta == null -> 1.0
-            delta > 10 -> 0.4  // Réduction plus forte si delta > 10 mg/dL en 5 min
-            delta > 5 -> 0.7  // Réduction modérée si delta > 5 mg/dL
-            delta < -10 -> 1.4 // Augmentation plus forte si delta < -10 mg/dL
-            delta < -5 -> 1.2 // Augmentation modérée si delta < -5 mg/dL
-            else -> 1.0
+            delta == null             -> 1.0
+            delta > 10 && glucose!! > 120    -> 0.5  // Réduction plus forte si delta > 10 mg/dL en 5 min
+            delta > 5 && glucose!! > 120 -> 0.7  // Réduction modérée si delta > 5 mg/dL
+            delta < -10               -> 1.4 // Augmentation plus forte si delta < -10 mg/dL
+            delta < -5                -> 1.2 // Augmentation modérée si delta < -5 mg/dL
+            else                      -> 1.0
         }
 
         // 4️⃣ Application de la correction et sécurisation des bornes
@@ -839,22 +839,22 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
 // 🔹 Ajustement dynamique basé sur la tendance glycémique
             val deltaCorrectionFactor = when {
-                delta == null -> 1.0
-                delta > 10 -> 0.5  // Réduction plus forte si delta > 10 mg/dL en 5 min
-                delta > 5 -> 0.7  // Réduction modérée si delta > 5 mg/dL
-                delta < -10 -> 1.4 // Augmentation plus forte si delta < -10 mg/dL
-                delta < -5 -> 1.2 // Augmentation modérée si delta < -5 mg/dL
-                else -> 1.0
+                delta == null             -> 1.0
+                delta > 10 && bg!! > 120    -> 0.5  // Réduction plus forte si delta > 10 mg/dL en 5 min
+                delta > 5 && bg!! > 120 -> 0.7  // Réduction modérée si delta > 5 mg/dL
+                delta < -10               -> 1.4 // Augmentation plus forte si delta < -10 mg/dL
+                delta < -5                -> 1.2 // Augmentation modérée si delta < -5 mg/dL
+                else                      -> 1.0
             }
 
 
             // 🔹 5) Lissage de l'ISF pour éviter les variations brusques
             //variableSensitivity = smoothSensitivityChange(variableSensitivity, bg, delta)
-            val smoothedISF = smoothSensitivityChange(variableSensitivity, bg, delta)
-            aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $variableSensitivity, après lissage : $smoothedISF")
-            variableSensitivity = smoothedISF
+            //val smoothedISF = smoothSensitivityChange(variableSensitivity, bg, delta)
+            //aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $variableSensitivity, après lissage : $smoothedISF")
+            //variableSensitivity = smoothedISF
             // Application de la correction
-            //variableSensitivity *= deltaCorrectionFactor
+            variableSensitivity *= deltaCorrectionFactor
 
 // 🔹 6) Bornes minimales et maximales pour éviter des valeurs extrêmes
             variableSensitivity = variableSensitivity.coerceIn(10.0, 300.0)
