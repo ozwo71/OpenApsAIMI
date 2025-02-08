@@ -952,12 +952,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // Interpolation pour factorAdjustment, avec une intensité plus forte au-dessus de 180
         var factorAdjustment = when {
-            bg < 180 -> interpolateFactor(bg.toFloat(), 70f, 180f, 0.1f, 0.3f)  // Pour les valeurs entre 70 et 180 mg/dL
-            else -> interpolateFactor(bg.toFloat(), 180f, 250f, 0.3f, 0.5f)      // Intensité plus forte au-dessus de 180 mg/dL
+            bg < 180 -> interpolateFactor(bg.toFloat(), 70f, 130f, 0.1f, 0.3f)  // Pour les valeurs entre 70 et 180 mg/dL
+            else -> interpolateFactor(bg.toFloat(), 130f, 250f, 0.4f, 0.8f)      // Intensité plus forte au-dessus de 180 mg/dL
         }
         if (honeymoon) factorAdjustment = when {
-            bg < 180 -> interpolateFactor(bg.toFloat(), 70f, 180f, 0.05f, 0.2f)
-            else -> interpolateFactor(bg.toFloat(), 180f, 250f, 0.2f, 0.3f)      // Valeurs plus basses pour la phase de honeymoon
+            bg < 180 -> interpolateFactor(bg.toFloat(), 70f, 160f, 0.05f, 0.2f)
+            else -> interpolateFactor(bg.toFloat(), 160f, 250f, 0.2f, 0.3f)      // Valeurs plus basses pour la phase de honeymoon
         }
 
         // Vérification de delta pour éviter les NaN
@@ -968,7 +968,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val bgAdjustment = 1.0f + (deltaAdjustment - 1) * factorAdjustment
 
         // Interpolation pour scalingFactor
-        val scalingFactor = interpolateFactor(bg.toFloat(), targetBg, 120f, 1.0f, 0.5f).coerceAtLeast(0.1f) // Empêche le scalingFactor d'être trop faible
+        val scalingFactor = interpolateFactor(bg.toFloat(), targetBg, 110f, 09f, 0.5f).coerceAtLeast(0.1f) // Empêche le scalingFactor d'être trop faible
 
         val maxIncreaseFactor = 1.7f
         val maxDecreaseFactor = 0.5f // Limite la diminution à 30% de la valeur d'origine
@@ -1226,8 +1226,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun interpolate(xdata: Double): Double {
         // Définir les points de référence pour l'interpolation, à partir de 80 mg/dL
-        val polyX = arrayOf(80.0, 90.0, 100.0, 110.0, 150.0, 180.0, 200.0, 220.0, 240.0, 260.0, 280.0, 300.0)
-        val polyY = arrayOf(0.0, 1.0, 2.0, 3.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 10.0, 10.0) // Ajustement des valeurs pour la basale
+        val polyX = arrayOf(80.0, 90.0, 100.0, 110.0, 130.0, 160.0, 200.0, 220.0, 240.0, 260.0, 280.0, 300.0)
+        val polyY = arrayOf(0.5, 1.0, 2.0, 3.0, 5.0, 7.0, 9.0, 10.0, 10.0, 10.0, 10.0, 10.0) // Ajustement des valeurs pour la basale
 
         // Constants for basal adjustment weights
         val higherBasalRangeWeight: Double = 1.5 // Facteur pour les glycémies supérieures à 100 mg/dL
@@ -1249,7 +1249,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // État d'hypoglycémie (pour les valeurs < 80)
         if (xdata < 80) {
-            newVal = 0.0 // Multiplicateur fixe pour l'hypoglycémie
+            newVal = 0.5 // Multiplicateur fixe pour l'hypoglycémie
         }
         // Extrapolation en avant (pour les valeurs > 300)
         else if (stepT < xdata) {
@@ -1304,7 +1304,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         currentBasalRate: Float // Le taux de basal actuel
     ): Float {
         // Poids pour le lissage. Plus la valeur est proche de 1, plus l'influence du jour le plus récent est grande.
-        val weightRecent = 0.7f
+        val weightRecent = 0.6f
         val weightPrevious = 1.0f - weightRecent
 
         // Calculer la TDD moyenne pondérée
@@ -1351,10 +1351,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     val activityRatio = futureActivity / (currentActivity + 0.0001)
 
     // 1️⃣ **Hyperglycémie > 180-200 mg/dL → Accélération de la correction**
-    if (bg > 200 && delta > 4) {
+    if (bg > 140 && delta > 4) {
         dynamicPeakTime *= 0.5
     } else if (bg > 180 && delta > 3) {
-        dynamicPeakTime *= 0.7
+        dynamicPeakTime *= 0.3
     }
 
     // 2️⃣ **Ajustement basé sur l'IOB (currentActivity)**
@@ -1719,7 +1719,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             !profile.temptargetSet && recentSteps5Minutes >= 0 && (recentSteps30Minutes >= 500 || recentSteps180Minutes > 1500) && recentSteps10Minutes > 0 -> {
                 this.targetBg = 130.0f
             }
-            !profile.temptargetSet && eventualBG >= 160 && delta > 5 -> {
+            !profile.temptargetSet && eventualBG >= 130 && delta > 3 -> {
                 var baseTarget = if (honeymoon) 110.0 else 80.0
                 var hyperTarget = max(baseTarget, profile.target_bg - (bg - profile.target_bg) / 3).toInt()
                 hyperTarget = (hyperTarget * min(circadianSensitivity, 1.0)).toInt()
@@ -1734,7 +1734,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 sensitivityRatio = round(sensitivityRatio, 2)
                 consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
             }
-            !profile.temptargetSet && circadianSmb > 0.1 && eventualBG < 100 -> {
+            !profile.temptargetSet && circadianSmb > 0.1 && eventualBG < 110 -> {
                 val baseHypoTarget = if (honeymoon) 130.0 else 120.0
                 val hypoTarget = baseHypoTarget * max(1.0, circadianSensitivity)
                 this.targetBg = min(hypoTarget.toFloat(), 166.0f)
@@ -2395,7 +2395,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "07 Feb 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "08 Feb 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
