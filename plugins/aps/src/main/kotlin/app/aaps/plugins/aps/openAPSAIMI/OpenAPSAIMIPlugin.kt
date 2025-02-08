@@ -371,8 +371,12 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val minTDD = 10.0
         val tdd7P: Double = preferences.get(DoubleKey.OApsAIMITDD7)
         val tdd7D = tddCalculator.averageTDD(tddCalculator.calculate(7, allowMissingDays = false))
-        if (tdd7D != null && tdd7D.data.totalAmount > tdd7P && tdd7D.data.totalAmount > 1.1 * tdd7P) {
-            tdd7D.data.totalAmount = 1.1 * tdd7P
+        if (tdd7D != null && tdd7D.data.totalAmount > tdd7P && tdd7D.data.totalAmount > 1.3 * tdd7P) {
+            tdd7D.data.totalAmount = 1.2 * tdd7P
+        }
+        if (tdd7D != null && tdd7D.data.totalAmount < tdd7P * 0.9) {
+    tdd7D.data.totalAmount = tdd7P * 0.9
+    aapsLogger.info(LTag.APS, "TDD for 7 days was too low. Adjusted to 90% of TDD7P: ${tdd7D.data.totalAmount}")
         }
 
         var tdd2Days = tddCalculator.averageTDD(tddCalculator.calculate(2, allowMissingDays = false))?.data?.totalAmount ?: 0.0
@@ -471,7 +475,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val interpolatedISF = interpolate(glucose,delta)
 
         // 2) On fusionne la sensibilité brute et l’interpolée pour lisser
-        val smoothingFactor = 0.1
+        val smoothingFactor = 0.4
         var newISF = rawSensitivity * (1.0 - smoothingFactor) + interpolatedISF * smoothingFactor
 
         // 3️⃣ Correction basée sur la variation rapide de la glycémie
@@ -746,10 +750,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
 // Récupération et ajustement du TDD sur 7 jours
             var tdd7D = tddCalculator.averageTDD(tddCalculator.calculate(7, allowMissingDays = false))
-            if (tdd7D != null && tdd7D.data.totalAmount > tdd7P && tdd7D.data.totalAmount > 1.1 * tdd7P) {
-                tdd7D.data.totalAmount = 1.1 * tdd7P
+            if (tdd7D != null && tdd7D.data.totalAmount > tdd7P && tdd7D.data.totalAmount > 1.3 * tdd7P) {
+                tdd7D.data.totalAmount = 1.2 * tdd7P
                 aapsLogger.info(LTag.APS, "TDD for 7 days limited to 10% increase. New TDD7D: ${tdd7D.data.totalAmount}")
             }
+            if (tdd7D != null && tdd7D.data.totalAmount < tdd7P * 0.9) {
+    tdd7D.data.totalAmount = tdd7P * 0.9
+    aapsLogger.info(LTag.APS, "TDD for 7 days was too low. Adjusted to 90% of TDD7P: ${tdd7D.data.totalAmount}")
+}
 
 // Calcul du TDD sur 2 jours
             var tdd2Days = tddCalculator.averageTDD(tddCalculator.calculate(2, allowMissingDays = false))?.data?.totalAmount ?: 0.0
