@@ -441,9 +441,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         
         // 🔹 Apply smoothing function to avoid abrupt changes in ISF
         //sensitivity = smoothSensitivityChange(sensitivity, glucose, delta)
-        // val smoothedISF = smoothSensitivityChange(sensitivity, glucose, delta)
-        // aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $sensitivity, après lissage : $smoothedISF")
-        // sensitivity = smoothedISF
+        val smoothedISF = smoothSensitivityChange(sensitivity, glucose, delta)
+        aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $sensitivity, après lissage : $smoothedISF")
+        sensitivity = smoothedISF
         // Apply ISF correction with delta factor
         sensitivity *= deltaCorrectionFactor
 
@@ -472,7 +472,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         if (glucose == null) return rawSensitivity
 
         // 1) On récupère une valeur d’ISF interpolée selon BG et delta
-        val interpolatedISF = rawSensitivity//interpolate(glucose,delta)
+        val interpolatedISF = interpolate(glucose,delta)
 
         // 2) On fusionne la sensibilité brute et l’interpolée pour lisser
         val smoothingFactor = 0.2
@@ -850,9 +850,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
             // 🔹 5) Lissage de l'ISF pour éviter les variations brusques
             //variableSensitivity = smoothSensitivityChange(variableSensitivity, bg, delta)
-            //val smoothedISF = smoothSensitivityChange(variableSensitivity, bg, delta)
-            //aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $variableSensitivity, après lissage : $smoothedISF")
-            //variableSensitivity = smoothedISF
+            val smoothedISF = smoothSensitivityChange(variableSensitivity, bg, delta)
+            aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $variableSensitivity, après lissage : $smoothedISF")
+            variableSensitivity = smoothedISF
             // Application de la correction
             variableSensitivity *= deltaCorrectionFactor
 
