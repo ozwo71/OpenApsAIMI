@@ -1989,7 +1989,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             } else {
                 max(
                     profile.sens.toFloat() / 3.0f, // Réduction plus forte en honeymoon
-                    sens.toFloat() * calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
+                    sens.toFloat() //* calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
                 )
             }
         } else {
@@ -2000,11 +2000,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 // 🔹 Si BG > 120, on applique une réduction progressive plus forte
                 max(
                     profile.sens.toFloat() / 5.0f,  // 🔥 Réduction plus agressive (divisé par 5)
-                    sens.toFloat() * calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
+                    sens.toFloat() //* calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
                 )
             } else {
                 // 🔹 Plage intermédiaire (100-120) avec ajustement plus doux
-                sens.toFloat() * calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
+                sens.toFloat() //* calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
             }
         }
 
@@ -2012,12 +2012,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (recentSteps5Minutes > 100 && recentSteps10Minutes > 200 && bg < 130 && delta < 10
             || recentSteps180Minutes > 1500 && bg < 130 && delta < 10) {
 
-            this.variableSensitivity *= 1.2f * calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat() // Réduction du facteur d’augmentation
+            this.variableSensitivity *= 1.3f //* calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat() // Réduction du facteur d’augmentation
         }
 
 // 🔹 Réduction du boost si l’activité est modérée pour éviter une ISF excessive
         if (recentSteps30Minutes > 500 && recentSteps5Minutes in 1..99 && bg < 130 && delta < 10) {
-            this.variableSensitivity *= 1.1f * calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
+            this.variableSensitivity *= 1.2f //* calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
         }
 
 // 🔹 Sécurisation des bornes minimales et maximales
