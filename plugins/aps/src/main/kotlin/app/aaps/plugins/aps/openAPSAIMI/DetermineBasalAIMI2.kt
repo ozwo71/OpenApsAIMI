@@ -923,19 +923,51 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun calculateGFactor(delta: Float, lastHourTIRabove120: Double, bg: Float): Double {
         val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
 
-        // Initialiser les facteurs
-        var deltaFactor = if (bg > 100) delta / 10 else 1.0f // Ajuster selon les besoins
-        var bgFactor = if (bg > 120) 1.2 else if (bg < 110) 0.7 else 1.0
-        var tirFactor = if (bg > 100) 1.0 + lastHourTIRabove120 * 0.05 else 1.0 // Exemple: 5% d'augmentation pour chaque unité de lastHourTIRabove170
-
-        // Modifier les facteurs si honeymoon est vrai
-        if (honeymoon) {
-            deltaFactor = if (bg > 130) delta / 10 else 1.0f // Ajuster selon les besoins pour honeymoon
-            bgFactor = if (bg > 150) 1.2 else if (bg < 130) 0.7 else 1.0
-            tirFactor = if (bg > 140) 1.0 + lastHourTIRabove120 * 0.05 else 1.0 // Ajuster pour honeymoon
+        // 🔹 Facteurs initiaux (ajustés dynamiquement)
+        var deltaFactor = when {
+            bg > 140 && delta > 5 -> 2.0 // Réaction forte si la glycémie monte rapidement et est élevée
+            bg > 120 && delta > 2 -> 1.5 // Réaction modérée
+            delta > 1  -> 1.2 // Réaction légère
+            bg < 120 && delta < 0 -> 0.6
+            else -> 1.0 // Pas de variation significative
         }
 
-        // Combinez les facteurs pour obtenir un ajustement global
+        var bgFactor = when {
+            bg > 140 -> 1.8 // Réduction forte si glycémie > 150 mg/dL
+            bg > 120 -> 1.4 // Réduction modérée si > 120 mg/dL
+            bg > 100 -> 1.0 // Neutre entre 100 et 120
+            bg < 80  -> 0.5 // Augmente l'ISF si la glycémie est sous la cible
+            else -> 0.9 // Légère augmentation de l'ISF
+        }
+
+        var tirFactor = when {
+            lastHourTIRabove120 > 0.5 && bg > 120 -> 1.2 + lastHourTIRabove120 * 0.15 // Augmente si tendance à rester haut
+            bg < 100 -> 0.8 // Augmente l'ISF si retour à une glycémie basse
+            else -> 1.0
+        }
+
+        // 🔹 Mode "Honeymoon" (ajustements spécifiques)
+        if (honeymoon) {
+            deltaFactor = when {
+                bg > 140 && delta > 5 -> 2.2
+                bg > 120 && delta > 2 -> 1.7
+                delta > 1 -> 1.3
+                else -> 1.0
+            }
+            bgFactor = when {
+                bg > 150 -> 1.6
+                bg > 130 -> 1.4
+                bg < 100 -> 0.6 // Augmente encore plus l'ISF en honeymoon
+                else -> 0.9
+            }
+            tirFactor = when {
+                lastHourTIRabove120 > 0.5 && bg > 120 -> 1.3 + lastHourTIRabove120 * 0.05
+                bg < 100 -> 0.7 // Encore plus de renforcement de l'ISF
+                else -> 1.0
+            }
+        }
+
+        // 🔹 Combine tous les facteurs
         return deltaFactor * bgFactor * tirFactor
     }
     private fun interpolateFactor(value: Float, start1: Float, end1: Float, start2: Float, end2: Float): Float {
@@ -1953,40 +1985,44 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         this.variableSensitivity = if (honeymoon) {
             if (bg < 150) {
-                profile.sens.toFloat()
+                profile.sens.toFloat() * 1.2f // Légère augmentation pour honeymoon en cas de BG bas
             } else {
                 max(
-                    profile.sens.toFloat() / 2.5f,
+                    profile.sens.toFloat() / 3.0f, // Réduction plus forte en honeymoon
                     sens.toFloat() * calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
                 )
             }
         } else {
             if (bg < 100) {
-                profile.sens.toFloat()
-            } else {
+                // 🔹 Correction : Permettre une légère adaptation de l’ISF même en dessous de 100 mg/dL
+                profile.sens.toFloat() * 1.1f
+            } else if (bg > 120) {
+                // 🔹 Si BG > 120, on applique une réduction progressive plus forte
                 max(
-                    profile.sens.toFloat() / 4.0f,
+                    profile.sens.toFloat() / 5.0f,  // 🔥 Réduction plus agressive (divisé par 5)
                     sens.toFloat() * calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
                 )
+            } else {
+                // 🔹 Plage intermédiaire (100-120) avec ajustement plus doux
+                sens.toFloat() * calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
             }
         }
 
-        if (recentSteps5Minutes > 100 && recentSteps10Minutes > 200 && bg < 130 && delta < 10 || recentSteps180Minutes > 1500 && bg < 130 && delta < 10) {
-            this.variableSensitivity *= 1.5f * calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
+// 🔹 Ajustement basé sur l'activité physique : correction plus fine des valeurs
+        if (recentSteps5Minutes > 100 && recentSteps10Minutes > 200 && bg < 130 && delta < 10
+            || recentSteps180Minutes > 1500 && bg < 130 && delta < 10) {
+
+            this.variableSensitivity *= 1.2f * calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat() // Réduction du facteur d’augmentation
         }
-        if (recentSteps30Minutes > 500 && recentSteps5Minutes >= 0 && recentSteps5Minutes < 100 && bg < 130 && delta < 10) {
-            this.variableSensitivity *= 1.3f * calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
+
+// 🔹 Réduction du boost si l’activité est modérée pour éviter une ISF excessive
+        if (recentSteps30Minutes > 500 && recentSteps5Minutes in 1..99 && bg < 130 && delta < 10) {
+            this.variableSensitivity *= 1.1f * calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
         }
-        if (honeymoon) {
-            if (variableSensitivity < 20) {
-                this.variableSensitivity = profile.sens.toFloat()
-            }
-        } else {
-            if (variableSensitivity < 2) {
-                this.variableSensitivity = profile.sens.toFloat()
-            }
-        }
-        if (variableSensitivity > (3 * profile.sens.toFloat())) this.variableSensitivity = profile.sens.toFloat() * 3
+
+// 🔹 Sécurisation des bornes minimales et maximales
+        this.variableSensitivity = this.variableSensitivity.coerceIn(10.0f, 300.0f)
+
 
         sens = variableSensitivity.toDouble()
         //calculate BG impact: the amount BG "should" be rising or falling based on insulin activity alone
