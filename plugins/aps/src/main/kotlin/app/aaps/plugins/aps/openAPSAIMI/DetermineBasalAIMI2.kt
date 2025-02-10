@@ -167,16 +167,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val scale = 10.0.pow(2.0)
         return (Math.round(value * scale) / scale).toInt()
     }
-
-    // we expect BG to rise or fall at the rate of BGI,
-    // adjusted by the rate at which BG would need to rise /
-    // fall to get eventualBG to target over 2 hours
-    // private fun calculateExpectedDelta(targetBg: Double, eventualBg: Double, bgi: Double): Double {
-    //     // (hours * mins_per_hour) / 5 = how many 5 minute periods in 2h = 24
-    //     val fiveMinBlocks = (2 * 60) / 5
-    //     val targetDelta = targetBg - eventualBg
-    //     return /* expectedDelta */ round(bgi + (targetDelta / fiveMinBlocks), 1)
-    //}
     private fun calculateRate(basal: Double, currentBasal: Double, multiplier: Double, reason: String, currenttemp: CurrentTemp, rT: RT): Double {
         rT.reason.append("${currenttemp.duration}m@${(currenttemp.rate).toFixed2()} $reason")
         return if (basal == 0.0) currentBasal * multiplier else roundBasal(basal * multiplier)
@@ -638,7 +628,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return smbToGive.toFloat()
     }
 
-    private fun neuralnetwork5(
+    /*private fun neuralnetwork5(
         delta: Float,
         shortAvgDelta: Float,
         longAvgDelta: Float,
@@ -738,7 +728,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // Paramétrage du réseau via TrainingConfig
         // Vous pouvez adapter epochs, dropout, etc. selon vos besoins
-        val trainingConfig = TrainingConfig(
+       /* val trainingConfig = TrainingConfig(
             learningRate = 0.001,
             beta1 = 0.9,
             beta2 = 0.999,
@@ -752,6 +742,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             useDropout = false,   // idem pour le dropout
             dropoutRate = 0.3,
             leakyReluAlpha = 0.01
+        )*/
+        val adjustedLearningRate = if (epochs > 500) 0.0005 else 0.001  // Réduction du learning rate après 500 epochs
+
+        val trainingConfig = TrainingConfig(
+        learningRate = adjustedLearningRate,
+        beta1 = 0.9,
+        beta2 = 0.999,
+        epsilon = 1e-8,
+        patience = 10,
+        batchSize = 32,
+        weightDecay = 0.01,
+    
+        epochs = if (bestFoldValLoss < 0.01) 500 else 1000, // Réduit les epochs si la loss est faible
+        useBatchNorm = false,
+        useDropout = true,  // Ajout du dropout si nécessaire
+        dropoutRate = 0.3,
+        leakyReluAlpha = 0.01
         )
 
         // 5) Répéter "maxGlobalIterations" fois si besoin
@@ -832,6 +839,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     val provisionalSMB = maxSMB.toFloat() * (delta / 30)
                     finalRefinedSMB = max(finalRefinedSMB, min(provisionalSMB, maxSMB.toFloat() / 1.5f))
                 }
+                // Vérifier si le modèle produit un meilleur résultat
+                if (finalRefinedSMB > predictedSMB && bg > 150 && delta > 5) {
+                    return finalRefinedSMB
+                } else {
+                    return predictedSMB
+                }
                 if (finalRefinedSMB > 0.5 && bg < 120 && delta < 5) {
                     finalRefinedSMB /= 2
                 }
@@ -847,23 +860,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             globalIterationCount++
         }
-
-        // 7) Si pas convergé globalement, fallback
-        // if (!globalConvergenceReached) {
-        //     if (daysOfData >= 4) {
-        //         // On refine (une dernière fois) avec bestNetwork sur la dernière entrée
-        //         val doubleInput = lastEnhancedInput?.toDoubleArray()
-        //         finalRefinedSMB = bestNetwork?.let {
-        //             AimiNeuralNetwork.refineSMB(predictedSMB, it, doubleInput)
-        //         } ?: predictedSMB
-        //     } else {
-        //         // Mix 40/60
-        //         finalRefinedSMB = (predictedSMB * 0.4f) + (finalRefinedSMB * 0.6f)
-        //     }
-        // }
-        //
-        // return if (globalConvergenceReached) finalRefinedSMB else predictedSMB
-        // 7) Si pas convergé globalement, fallback
         if (!globalConvergenceReached) {
             if (daysOfData >= 4) {
                 // On refine (une dernière fois) avec bestNetwork sur la dernière entrée
@@ -891,11 +887,163 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 // Au final, on renvoie la valeur "blendée"
         return blendedSMB
 
+    }*/
+    private fun neuralnetwork5(
+    delta: Float,
+    shortAvgDelta: Float,
+    longAvgDelta: Float,
+    predictedSMB: Float,
+    profile: OapsProfileAimi
+): Float {
+    // 1) Configuration générale
+    val minutesToConsider = 5760.0
+    val linesToConsider = (minutesToConsider / 5).toInt()
+    val maxIterations = 1000.0
+    val maxGlobalIterations = 5
+    var globalConvergenceReached = false
+    var differenceWithinRange = false
+
+    // Valeur initiale de SMB calculée ailleurs (votre logique existante)
+    var finalRefinedSMB: Float = calculateSMBFromModel()
+
+    // 2) Lecture du CSV
+    val allLines = csvfile.readLines()
+    println("CSV file path: ${csvfile.absolutePath}")
+
+    if (allLines.isEmpty()) {
+        println("CSV file is empty.")
+        return predictedSMB
     }
 
-    /**
-     * Exemple de calcul de seuil dynamique pour la convergence
-     */
+    val headerLine = allLines.first()
+    val headers = headerLine.split(",").map { it.trim() }
+    val requiredColumns = listOf(
+        "bg", "iob", "cob", "delta", "shortAvgDelta", "longAvgDelta",
+        "tdd7DaysPerHour", "tdd2DaysPerHour", "tddPerHour", "tdd24HrsPerHour",
+        "predictedSMB", "smbGiven"
+    )
+
+    if (!requiredColumns.all { headers.contains(it) }) {
+        println("CSV file is missing required columns.")
+        return predictedSMB
+    }
+
+    // 3) Préparation des données
+    val colIndices = requiredColumns.map { headers.indexOf(it) }
+    val targetColIndex = headers.indexOf("smbGiven")
+
+    val inputs = mutableListOf<FloatArray>()
+    val targets = mutableListOf<DoubleArray>()
+    var lastEnhancedInput: FloatArray? = null
+
+    for (line in allLines.drop(1)) {
+        val cols = line.split(",").map { it.trim() }
+        val rawInput = colIndices.mapNotNull { idx -> cols.getOrNull(idx)?.toFloatOrNull() }.toFloatArray()
+
+        val trendIndicator = calculateTrendIndicator(
+            delta, shortAvgDelta, longAvgDelta,
+            bg.toFloat(), iob, variableSensitivity, cob, normalBgThreshold,
+            recentSteps180Minutes, averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(),
+            profile.insulinDivisor.toFloat(), recentSteps5Minutes, recentSteps10Minutes
+        )
+
+        val enhancedInput = rawInput.copyOf(rawInput.size + 1)
+        enhancedInput[rawInput.size] = trendIndicator.toFloat()
+        lastEnhancedInput = enhancedInput
+
+        val targetValue = cols.getOrNull(targetColIndex)?.toDoubleOrNull()
+        if (targetValue != null) {
+            inputs.add(enhancedInput)
+            targets.add(doubleArrayOf(targetValue))
+        }
+    }
+
+    if (inputs.isEmpty() || targets.isEmpty()) {
+        println("Insufficient data for training.")
+        return predictedSMB
+    }
+
+    // 4) Cross-validation (k-fold)
+    val maxK = 10
+    val adjustedK = minOf(maxK, inputs.size)
+    val foldSize = maxOf(1, inputs.size / adjustedK)
+
+    var bestNetwork: AimiNeuralNetwork? = null
+    var bestFoldValLoss = Double.MAX_VALUE
+
+    // 5) Training Config avec learning rate dynamique
+    val adjustedLearningRate = if (bestFoldValLoss < 0.01) 0.0005 else 0.001
+    val epochs = if (bestFoldValLoss < 0.01) 500 else 1000
+
+    val trainingConfig = TrainingConfig(
+        learningRate = adjustedLearningRate,
+        beta1 = 0.9,
+        beta2 = 0.999,
+        epsilon = 1e-8,
+        patience = 10,
+        batchSize = 32,
+        weightDecay = 0.01,
+        epochs = epochs,
+        useBatchNorm = false,
+        useDropout = true,
+        dropoutRate = 0.3,
+        leakyReluAlpha = 0.01
+    )
+
+    // 6) Entraînement & validation
+    for (k in 0 until adjustedK) {
+        val validationInputs = inputs.subList(k * foldSize, minOf((k + 1) * foldSize, inputs.size))
+        val validationTargets = targets.subList(k * foldSize, minOf((k + 1) * foldSize, targets.size))
+
+        val trainingInputs = inputs.minus(validationInputs)
+        val trainingTargets = targets.minus(validationTargets)
+
+        if (validationInputs.isEmpty()) continue
+
+        val neuralNetwork = AimiNeuralNetwork(
+            inputSize = inputs.first().size,
+            hiddenSize = 5,
+            outputSize = 1,
+            config = trainingConfig,
+            regularizationLambda = 0.01
+        )
+
+        neuralNetwork.trainWithValidation(trainingInputs, trainingTargets, validationInputs, validationTargets)
+        val foldValLoss = neuralNetwork.validate(validationInputs, validationTargets)
+
+        if (foldValLoss < bestFoldValLoss) {
+            bestFoldValLoss = foldValLoss
+            bestNetwork = neuralNetwork
+        }
+    }
+
+    // 7) Optimisation finale
+    var iterationCount = 0
+    do {
+        val dynamicThreshold = calculateDynamicThreshold(iterationCount, delta, shortAvgDelta, longAvgDelta)
+        val refinedSMB = bestNetwork?.let {
+            AimiNeuralNetwork.refineSMB(finalRefinedSMB, it, lastEnhancedInput?.toDoubleArray() ?: DoubleArray(0))
+        } ?: finalRefinedSMB
+
+        if (abs(finalRefinedSMB - refinedSMB) <= dynamicThreshold) {
+            finalRefinedSMB = max(0.05f, refinedSMB) // Clamp SMB minimum
+            break
+        }
+        iterationCount++
+    } while (iterationCount < maxIterations)
+
+    // 8) Condition spéciale sur finalRefinedSMB
+    if (finalRefinedSMB > predictedSMB && bg > 150 && delta > 5) {
+        println("Modèle prédictif plus élevé, ajustement retenu.")
+        return finalRefinedSMB
+    }
+
+    // 9) Lissage entre predictedSMB et finalRefinedSMB
+    val alpha = 0.7f
+    val blendedSMB = alpha * finalRefinedSMB + (1 - alpha) * predictedSMB
+    return blendedSMB
+}
+
     private fun calculateDynamicThreshold(
         iterationCount: Int,
         delta: Float,
@@ -2444,7 +2592,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "09 Feb 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "10 Feb 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
