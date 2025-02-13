@@ -1899,8 +1899,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             !profile.temptargetSet && recentSteps5Minutes >= 0 && (recentSteps30Minutes >= 500 || recentSteps180Minutes > 1500) && recentSteps10Minutes > 0 -> {
                 this.targetBg = 130.0f
             }
-            !profile.temptargetSet && eventualBG >= 130 && delta > 3 -> {
-                var baseTarget = if (honeymoon) 110.0 else 80.0
+            !profile.temptargetSet && eventualBG >= 120 && delta > 3 -> {
+                var baseTarget = if (honeymoon) 110.0 else 70.0
                 var hyperTarget = max(baseTarget, profile.target_bg - (bg - profile.target_bg) / 3).toInt()
                 hyperTarget = (hyperTarget * min(circadianSensitivity, 1.0)).toInt()
                 hyperTarget = max(hyperTarget, baseTarget.toInt())
