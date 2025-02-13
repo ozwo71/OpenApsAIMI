@@ -397,7 +397,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         variableSensitivity: Float,
         targetBg: Float,
         delta: Float,
-        shortAvgDelta: Float
+        shortAvgDelta: Float,
+        autodrive: Boolean
     ): Boolean {
         // Récupération de la valeur de pbolusMeal depuis les préférences
         val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
@@ -407,7 +408,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             variableSensitivity == 10.0f &&
             targetBg in 70.0f..80.0f &&
             delta >= 15 &&
-            shortAvgDelta >= 15
+            shortAvgDelta >= 15 &&
+            autodrive
     }
 
     private fun isMealModeCondition(): Boolean {
@@ -1797,7 +1799,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                  rT.reason.append("Microbolusing Meal Mode ${pbolusM}U. ")
              return rT
          }
-        if (isMealModeCondition2(variableSensitivity,targetBg,delta,shortAvgDelta)){
+        if (isMealModeCondition2(variableSensitivity,targetBg,delta,shortAvgDelta,autodrive)){
             val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
             rT.units = pbolusM
             rT.reason.append("Microbolusing Meal Mode ${pbolusM}U. ")
