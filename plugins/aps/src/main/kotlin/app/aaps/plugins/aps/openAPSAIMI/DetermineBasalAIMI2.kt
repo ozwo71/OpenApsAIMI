@@ -1609,8 +1609,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
-    // 🔥 **Limiter le peakTime à des valeurs réalistes (10-120 min)**
-    return dynamicPeakTime.coerceIn(10.0, 120.0)
+    // 🔥 **Limiter le peakTime à des valeurs réalistes (35-120 min)**
+    return dynamicPeakTime.coerceIn(35.0, 120.0)
 }
 
 
