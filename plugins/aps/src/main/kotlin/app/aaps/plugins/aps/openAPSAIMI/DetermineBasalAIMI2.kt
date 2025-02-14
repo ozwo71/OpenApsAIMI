@@ -1805,7 +1805,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
          }
         if (isMealModeCondition2(variableSensitivity,targetBg,delta,shortAvgDelta,autodrive) && !mealTime && !highCarbTime && !lunchTime && !bfastTime && !dinnerTime && !snackTime){
             val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
-            rT.units = if (delta > 20) pbolusM + 1 else pbolusM
+            rT.units = pbolusM
             rT.reason.append("Microbolusing Meal Mode ${pbolusM}U. ")
             return rT
         }
