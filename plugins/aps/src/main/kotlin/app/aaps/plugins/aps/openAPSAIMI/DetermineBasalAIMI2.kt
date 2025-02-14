@@ -405,10 +405,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // Vérification de toutes les conditions
         return lastBolusSMBUnit != pbolusM.toFloat() &&
-            variableSensitivity == 10.0f &&
-            targetBg in 70.0f..80.0f &&
-            delta >= 14 &&
-            shortAvgDelta >= 14 &&
+            variableSensitivity in 5.0f..10f &&
+            targetBg in 70.0f..85.0f &&
+            delta >= 13 &&
+            shortAvgDelta >= 13 &&
             autodrive
     }
 
