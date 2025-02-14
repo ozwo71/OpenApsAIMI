@@ -1548,12 +1548,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     var dynamicPeakTime = profile.peakTime
     val activityRatio = futureActivity / (currentActivity + 0.0001)
 
-    // 1️⃣ **Hyperglycémie > 180-200 mg/dL → Accélération de la correction**
-    if (bg > 140 && delta > 4) {
-        dynamicPeakTime *= 0.5
-    } else if (bg > 180 && delta > 3) {
-        dynamicPeakTime *= 0.3
-    }
+       // Calcul d'un facteur de correction hyperglycémique de façon continue
+       val hyperCorrectionFactor = when {
+           bg <= 130 || delta <= 4 -> 1.0
+           bg in 130.0..240.0 -> {
+               // Le multiplicateur passe de 0.6 à 0.3 quand bg évolue de 130 à 240
+               0.6 - (bg - 130) * (0.6 - 0.3) / (240 - 130)
+           }
+           else -> 0.3
+       }
+       dynamicPeakTime *= hyperCorrectionFactor
 
     // 2️⃣ **Ajustement basé sur l'IOB (currentActivity)**
     if (currentActivity > 0.1) {
@@ -1605,7 +1609,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
-    // 🔥 **Limiter le peakTime à des valeurs réalistes (10-160 min)**
+    // 🔥 **Limiter le peakTime à des valeurs réalistes (10-120 min)**
     return dynamicPeakTime.coerceIn(10.0, 120.0)
 }
 
