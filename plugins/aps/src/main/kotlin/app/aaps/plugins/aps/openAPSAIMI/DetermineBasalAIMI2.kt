@@ -407,8 +407,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return lastBolusSMBUnit != pbolusM.toFloat() &&
             variableSensitivity == 10.0f &&
             targetBg in 70.0f..80.0f &&
-            delta >= 15 &&
-            shortAvgDelta >= 15 &&
+            delta >= 14 &&
+            shortAvgDelta >= 14 &&
             autodrive
     }
 
@@ -2616,7 +2616,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "13 Feb 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "14 Feb 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
