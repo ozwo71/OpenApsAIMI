@@ -288,16 +288,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         var sensitivity = if (glucose != null) Round.roundTo(1800 / (tdd * ln(glucose / 75.0 + 1)), 0.1) else isfMgdl
 
         // 🔹 ISF correction limits to avoid extreme values
-        if (sensitivity!! < 10.0) sensitivity = 10.0
+        if (sensitivity!! < 5.0) sensitivity = 5.0
         if (sensitivity > 300.0) sensitivity = 300.0
 
         // 🔹 New dynamic ISF adjustment based on delta trend
         val deltaCorrectionFactor = when {
             delta == null             -> 1.0
-            delta > 10 && bg!! > 120    -> 0.5  // Réduction plus forte si delta > 10 mg/dL en 5 min
-            delta > 5 && bg!! > 120 -> 0.7  // Réduction modérée si delta > 5 mg/dL
-            delta < -10               -> 1.4 // Augmentation plus forte si delta < -10 mg/dL
-            delta < -5                -> 1.2 // Augmentation modérée si delta < -5 mg/dL
+            delta > 8 && bg!! > 120    -> 0.5  // Réduction plus forte si delta > 10 mg/dL en 5 min
+            delta > 4 && bg!! > 120 -> 0.7  // Réduction modérée si delta > 5 mg/dL
+            delta < -6               -> 1.4 // Augmentation plus forte si delta < -10 mg/dL
+            delta < -3                -> 1.2 // Augmentation modérée si delta < -5 mg/dL
             else                      -> 1.0
         }
 
@@ -695,7 +695,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
 // 🔹 Vérification des bornes minimales et maximales
             variableSensitivity = when {
-                variableSensitivity!! < 10.0 -> 10.0
+                variableSensitivity!! < 5.0 -> 5.0
                 variableSensitivity > 300.0 -> 300.0
                 else -> variableSensitivity
             }
@@ -703,10 +703,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 // 🔹 Ajustement dynamique basé sur la tendance glycémique
             val deltaCorrectionFactor = when {
                 delta == null             -> 1.0
-                delta > 10 && bg!! > 120    -> 0.5  // Réduction plus forte si delta > 10 mg/dL en 5 min
-                delta > 5 && bg!! > 120 -> 0.7  // Réduction modérée si delta > 5 mg/dL
-                delta < -10               -> 1.4 // Augmentation plus forte si delta < -10 mg/dL
-                delta < -5                -> 1.2 // Augmentation modérée si delta < -5 mg/dL
+                delta > 8 && bg!! > 120    -> 0.5  // Réduction plus forte si delta > 10 mg/dL en 5 min
+                delta > 4 && bg!! > 120 -> 0.7  // Réduction modérée si delta > 5 mg/dL
+                delta < -776               -> 1.4 // Augmentation plus forte si delta < -10 mg/dL
+                delta < -3                -> 1.2 // Augmentation modérée si delta < -5 mg/dL
                 else                      -> 1.0
             }
 
