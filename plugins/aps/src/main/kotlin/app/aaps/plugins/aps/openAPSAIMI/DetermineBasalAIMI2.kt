@@ -398,7 +398,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         targetBg: Float,
         delta: Float,
         shortAvgDelta: Float,
-        autodrive: Boolean
+        autodrive: Boolean,
+        slopeFromMinDeviation: Double
     ): Boolean {
         // Récupération de la valeur de pbolusMeal depuis les préférences
         val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
@@ -407,9 +408,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return lastBolusSMBUnit != pbolusM.toFloat() &&
             variableSensitivity in 5.0f..10f &&
             targetBg in 70.0f..85.0f &&
-            delta >= 13 &&
-            shortAvgDelta >= 13 &&
-            autodrive
+            delta >= 12 &&
+            shortAvgDelta >= 12 &&
+            autodrive &&
+            slopeFromMinDeviation >= 1.5
     }
 
     private fun isMealModeCondition(): Boolean {
@@ -454,8 +456,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
     private fun isCriticalSafetyCondition(mealData: MealData): Pair<Boolean, String> {
         val conditionsTrue = mutableListOf<String>()
-        val slopedeviation = mealData.slopeFromMaxDeviation <= -1.5 && mealData.slopeFromMinDeviation > 0.3
-        if (slopedeviation) conditionsTrue.add("slopedeviation")
+        //val slopedeviation = mealData.slopeFromMaxDeviation <= -1.5 && mealData.slopeFromMinDeviation < 0.3
+        //if (slopedeviation) conditionsTrue.add("slopedeviation")
         val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
         val nosmbHM = iob > 0.7 && honeymoon && delta <= 10.0 && !mealTime && !bfastTime && !lunchTime && !dinnerTime && eventualBG < 130
         if (nosmbHM) conditionsTrue.add("nosmbHM")
@@ -497,7 +499,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (nosmbhoneymoon) conditionsTrue.add("nosmbhoneymoon")
         val bg90 = bg < 90
         if (bg90) conditionsTrue.add("bg90")
-        val result = belowTargetAndDropping || belowTargetAndStableButNoCob || nosmbHM || slopedeviation || honeysmb ||
+        val result = belowTargetAndDropping || belowTargetAndStableButNoCob || nosmbHM || honeysmb ||
             droppingFast || droppingFastAtHigh || droppingVeryFast || prediction || interval || targetinterval || bg90 || negdelta ||
             fasting || nosmb || isNewCalibration || belowMinThreshold || acceleratingDown || decceleratingdown || nosmbhoneymoon
 
@@ -547,10 +549,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 result = 0.0f
                 this.intervalsmb = 10
             }
-            mealData.slopeFromMaxDeviation in -0.5..0.1 && mealData.slopeFromMinDeviation in 0.1..0.4 && bg in 100.0..140.0 -> {
-                result /= 2
-                this.intervalsmb = 10
-            }
+            // mealData.slopeFromMaxDeviation in -0.5..0.1 && mealData.slopeFromMinDeviation in 0.1..0.4 && bg in 100.0..140.0 -> {
+            //     result /= 2
+            //     this.intervalsmb = 10
+            // }
         }
 
         if (shouldApplyStepAdjustment()) result = 0.0f
@@ -646,266 +648,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return smbToGive.toFloat()
     }
 
-    /*private fun neuralnetwork5(
-        delta: Float,
-        shortAvgDelta: Float,
-        longAvgDelta: Float,
-        predictedSMB: Float,
-        profile: OapsProfileAimi
-    ): Float {
-        // 1) Configuration générale
-        val minutesToConsider = 5760.0
-        val linesToConsider = (minutesToConsider / 5).toInt()
-        val maxIterations = 1000.0
-        val maxGlobalIterations = 5
-        var globalConvergenceReached = false
-        var differenceWithinRange = false
-
-        // Valeur initiale de SMB calculée ailleurs (votre logique existante)
-        var finalRefinedSMB: Float = calculateSMBFromModel()
-
-        // 2) Lecture du CSV
-        val allLines = csvfile.readLines()
-        println("CSV file path: ${csvfile.absolutePath}")
-
-        val linesPerDay = (24 * 60) / 5
-        val totalLines = allLines.size - 1
-        val daysOfData = totalLines / linesPerDay
-
-        // Vérifications
-        if (allLines.isEmpty()) {
-            println("CSV file is empty.")
-            return predictedSMB
-        }
-
-        val headerLine = allLines.first()
-        val headers = headerLine.split(",").map { it.trim() }
-        //if (!listOf("bg", "iob", "cob", "delta", "shortAvgDelta", "longAvgDelta", "predictedSMB", "smbGiven")
-        if (!listOf("bg", "iob", "cob", "delta", "shortAvgDelta", "longAvgDelta", "tdd7DaysPerHour", "tdd2DaysPerHour", "tddPerHour", "tdd24HrsPerHour", "predictedSMB", "smbGiven")
-                .all { headers.contains(it) }
-        ) {
-            println("CSV file is missing required columns.")
-            return predictedSMB
-        }
-
-        // On limite le CSV si trop de lignes
-        val relevantLines = if (allLines.size > linesToConsider) {
-            allLines.takeLast(linesToConsider + 1)
-        } else {
-            allLines
-        }
-
-        // 3) Préparation des données (inputs + targets)
-        //val colIndices = listOf("bg", "iob", "cob", "delta", "shortAvgDelta", "longAvgDelta", "predictedSMB")
-            val colIndices = listOf("bg", "iob", "cob", "delta", "shortAvgDelta", "longAvgDelta", "tdd7DaysPerHour", "tdd2DaysPerHour", "tddPerHour", "tdd24HrsPerHour", "predictedSMB", "smbGiven")
-            .map { headers.indexOf(it) }
-        val targetColIndex = headers.indexOf("smbGiven")
-
-        val inputs = mutableListOf<FloatArray>()
-        val targets = mutableListOf<DoubleArray>()
-
-        var lastEnhancedInput: FloatArray? = null
-
-        for (line in relevantLines.drop(1)) {
-            val cols = line.split(",").map { it.trim() }
-            val rawInput = colIndices.mapNotNull { idx -> cols.getOrNull(idx)?.toFloatOrNull() }.toFloatArray()
-
-            // Calcul d'un indicateur "trendIndicator"
-            val trendIndicator = calculateTrendIndicator(
-                delta, shortAvgDelta, longAvgDelta,
-                bg.toFloat(), iob, variableSensitivity, cob, normalBgThreshold,
-                recentSteps180Minutes, averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(),
-                profile.insulinDivisor.toFloat(), recentSteps5Minutes, recentSteps10Minutes
-            )
-
-            val enhancedInput = rawInput.copyOf(rawInput.size + 1)
-            enhancedInput[rawInput.size] = trendIndicator.toFloat()
-            lastEnhancedInput = enhancedInput
-
-            val targetValue = cols.getOrNull(targetColIndex)?.toDoubleOrNull()
-            if (enhancedInput.isNotEmpty() && targetValue != null) {
-                inputs.add(enhancedInput)
-                targets.add(doubleArrayOf(targetValue))
-            }
-        }
-
-        if (inputs.isEmpty() || targets.isEmpty()) {
-            println("Insufficient data for training.")
-            return predictedSMB
-        }
-
-        // 4) Cross-validation (k-fold)
-        val maxK = 10
-        val adjustedK = minOf(maxK, inputs.size)
-        val foldSize = maxOf(1, inputs.size / adjustedK)
-        println("Using $adjustedK folds for cross-validation. Fold size: $foldSize")
-
-        // On va stocker le "meilleur" réseau du k-fold
-        var bestNetwork: AimiNeuralNetwork? = null
-        var bestFoldValLoss = Double.MAX_VALUE
-
-        // Paramétrage du réseau via TrainingConfig
-        // Vous pouvez adapter epochs, dropout, etc. selon vos besoins
-       /* val trainingConfig = TrainingConfig(
-            learningRate = 0.001,
-            beta1 = 0.9,
-            beta2 = 0.999,
-            epsilon = 1e-8,
-            patience = 10,
-            batchSize = 32,
-            weightDecay = 0.01,
-
-            epochs = 1000,
-            useBatchNorm = false, // ajustez si vous voulez la batch norm
-            useDropout = false,   // idem pour le dropout
-            dropoutRate = 0.3,
-            leakyReluAlpha = 0.01
-        )*/
-        val adjustedLearningRate = if (epochs > 500) 0.0005 else 0.001  // Réduction du learning rate après 500 epochs
-
-        val trainingConfig = TrainingConfig(
-        learningRate = adjustedLearningRate,
-        beta1 = 0.9,
-        beta2 = 0.999,
-        epsilon = 1e-8,
-        patience = 10,
-        batchSize = 32,
-        weightDecay = 0.01,
-    
-        epochs = if (bestFoldValLoss < 0.01) 500 else 1000, // Réduit les epochs si la loss est faible
-        useBatchNorm = false,
-        useDropout = true,  // Ajout du dropout si nécessaire
-        dropoutRate = 0.3,
-        leakyReluAlpha = 0.01
-        )
-
-        // 5) Répéter "maxGlobalIterations" fois si besoin
-        var globalIterationCount = 0
-        while (globalIterationCount < maxGlobalIterations && !globalConvergenceReached) {
-
-            for (k in 0 until adjustedK) {
-                val validationInputs = inputs.subList(k * foldSize, minOf((k + 1) * foldSize, inputs.size))
-                val validationTargets = targets.subList(k * foldSize, minOf((k + 1) * foldSize, targets.size))
-
-                val trainingInputs = inputs.minus(validationInputs)
-                val trainingTargets = targets.minus(validationTargets)
-
-                if (validationInputs.isEmpty() || validationTargets.isEmpty()) {
-                    println("Empty validation fold at iteration $k. Skipping.")
-                    continue
-                }
-
-                // Création du réseau
-                val neuralNetwork = AimiNeuralNetwork(
-                    inputSize = inputs.first().size,
-                    hiddenSize = 5,
-                    outputSize = 1,
-                    config = trainingConfig,        // on injecte la config
-                    regularizationLambda = 0.01
-                )
-
-                // Entraînement + validation
-                neuralNetwork.trainWithValidation(
-                    trainInputs = trainingInputs,
-                    trainTargets = trainingTargets,
-                    valInputs = validationInputs,
-                    valTargets = validationTargets
-                )
-
-                // Calcul de la loss finale sur ce fold
-                val foldValLoss = neuralNetwork.validate(validationInputs, validationTargets)
-                println("Fold $k => Validation Loss = $foldValLoss")
-
-                // Si on veut garder le meilleur NN (valLoss la plus faible)
-                if (foldValLoss < bestFoldValLoss) {
-                    bestFoldValLoss = foldValLoss
-                    bestNetwork = neuralNetwork
-                }
-            }
-
-            // 6) Phase d'optimisation => On refine finalRefinedSMB avec le "bestNetwork"
-            var iterationCount = 0
-
-            do {
-                var totalDifference = 0.0f
-                val dynamicDifferenceThreshold = calculateDynamicThreshold(iterationCount, delta, shortAvgDelta, longAvgDelta)
-
-                for (enhancedInput in inputs) {
-                    val doubleInput = enhancedInput.toDoubleArray()
-                    val predictedRefineSMB = finalRefinedSMB
-
-                    val refinedSMB = bestNetwork?.let {
-                        AimiNeuralNetwork.refineSMB(predictedRefineSMB, it, doubleInput)
-                    } ?: predictedRefineSMB
-
-                    val difference = abs(predictedRefineSMB - refinedSMB)
-                    totalDifference += difference
-
-                    // Tolerance adaptative
-                    val increasedToleranceFactor = if (iterationCount > maxIterations / 2) 1.5f else 1.0f
-                    val adaptiveThreshold = dynamicDifferenceThreshold * increasedToleranceFactor
-
-                    if (difference <= adaptiveThreshold) {
-                        finalRefinedSMB = if (refinedSMB > 0.0f) refinedSMB else 0.0f
-                        differenceWithinRange = true
-                        break
-                    }
-                }
-
-                // Règles business (agressivité, etc.)
-                if (delta > 5 && bg > 120) {
-                    val provisionalSMB = maxSMB.toFloat() * (delta / 30)
-                    finalRefinedSMB = max(finalRefinedSMB, min(provisionalSMB, maxSMB.toFloat() / 1.5f))
-                }
-                // Vérifier si le modèle produit un meilleur résultat
-                if (finalRefinedSMB > predictedSMB && bg > 150 && delta > 5) {
-                    return finalRefinedSMB
-                } else {
-                    return predictedSMB
-                }
-                if (finalRefinedSMB > 0.5 && bg < 120 && delta < 5) {
-                    finalRefinedSMB /= 2
-                }
-
-                println("Iteration $iterationCount complete. Total difference: $totalDifference")
-
-                iterationCount++
-                if (differenceWithinRange || iterationCount >= maxIterations) {
-                    globalConvergenceReached = true
-                    break
-                }
-            } while (true)
-
-            globalIterationCount++
-        }
-        if (!globalConvergenceReached) {
-            if (daysOfData >= 4) {
-                // On refine (une dernière fois) avec bestNetwork sur la dernière entrée
-                val doubleInput = lastEnhancedInput?.toDoubleArray()
-                finalRefinedSMB = bestNetwork?.let {
-                    AimiNeuralNetwork.refineSMB(predictedSMB, it, doubleInput)
-                } ?: predictedSMB
-            } else {
-                // Mix 40/60
-                finalRefinedSMB = (predictedSMB * 0.4f) + (finalRefinedSMB * 0.6f)
-            }
-        }
-
-// ------------------------
-// (5) Encadrer la sortie (clamp minimum)
-        val minSMB = 0.05f
-        if (finalRefinedSMB < minSMB) {
-            finalRefinedSMB = minSMB
-        }
-
-// (6) Moyenne partielle entre predictedSMB et finalRefinedSMB
-        val alpha = 0.7f // Ajuste ce coefficient selon la pondération voulue
-        val blendedSMB = alpha * finalRefinedSMB + (1 - alpha) * predictedSMB
-
-// Au final, on renvoie la valeur "blendée"
-        return blendedSMB
-
-    }*/
     private fun neuralnetwork5(
     delta: Float,
     shortAvgDelta: Float,
@@ -914,12 +656,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     profile: OapsProfileAimi
 ): Float {
     // 1) Configuration générale
-    val minutesToConsider = 5760.0
-    val linesToConsider = (minutesToConsider / 5).toInt()
+    //val minutesToConsider = 5760.0
+    //val linesToConsider = (minutesToConsider / 5).toInt()
     val maxIterations = 1000.0
-    val maxGlobalIterations = 5
-    var globalConvergenceReached = false
-    var differenceWithinRange = false
+    //val maxGlobalIterations = 5
+    //var globalConvergenceReached = false
+    //var differenceWithinRange = false
 
     // Valeur initiale de SMB calculée ailleurs (votre logique existante)
     var finalRefinedSMB: Float = calculateSMBFromModel()
@@ -1803,7 +1545,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                  rT.reason.append("Microbolusing Meal Mode ${pbolusM}U. ")
              return rT
          }
-        if (isMealModeCondition2(variableSensitivity,targetBg,delta,shortAvgDelta,autodrive) && !mealTime && !highCarbTime && !lunchTime && !bfastTime && !dinnerTime && !snackTime){
+        if (isMealModeCondition2(variableSensitivity, targetBg, delta, shortAvgDelta, autodrive, mealData.slopeFromMinDeviation) && !mealTime && !highCarbTime && !lunchTime && !bfastTime && !dinnerTime && !snackTime){
             val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
             rT.units = pbolusM
             rT.reason.append("Microbolusing Meal Mode ${pbolusM}U. ")
@@ -2620,7 +2362,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "14 Feb 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "15 Feb 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
@@ -2803,7 +2545,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rate = when {
                 // Cas d'hypoglycémie : le taux basal est nul si la glycémie est inférieure à 80.
                 bg < 90 -> 0.0
-                !enablebasal && (timenow in 11..13 || timenow in 18..21) && iob < 0.8 && recentSteps5Minutes < 100 && delta > -1 -> profile_current_basal * 1.5
+                !enablebasal && bg > 90 && slopeFromMinDeviation in 0.0..0.4 && delta > 1 && shortAvgDelta >= 1 -> profile_current_basal
+                !enablebasal && bg > 90 && slopeFromMinDeviation in 0.4..20.0 && delta > 1 && shortAvgDelta >= 1 -> calculateBasalRate(basal, profile_current_basal, 10.0)
+                !enablebasal && (timenow in 11..13 || timenow in 18..21) && iob < 0.8 && recentSteps5Minutes < 100 && delta > -1 && slopeFromMinDeviation > 0.3 -> profile_current_basal * 1.5
                 !enablebasal && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !snackTime && timenow > sixAMHour && recentSteps5Minutes > 100 -> 0.0
                 !enablebasal && timenow <= sixAMHour && delta > 0 -> profile_current_basal
                 !enablebasal && recentSteps5Minutes == 0 && delta  > 0 && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !snackTime -> profile_current_basal
@@ -2844,11 +2588,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
                 // Nouveaux cas basés sur les déviations de mealData
                 honeymoon && mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 && bg > 110 && delta > 0                          -> profile_current_basal * basalAdjustmentFactor
-                honeymoon && mealData.slopeFromMaxDeviation in 0.0..0.2 && mealData.slopeFromMinDeviation in 0.0..0.2 && bg in 120.0..150.0 && delta > 0 -> profile_current_basal * basalAdjustmentFactor
+                honeymoon && mealData.slopeFromMaxDeviation in 0.0..0.2 && mealData.slopeFromMinDeviation in 0.0..0.5 && bg in 120.0..150.0 && delta > 0 -> profile_current_basal * basalAdjustmentFactor
                 honeymoon && mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 && bg in 100.0..120.0 && delta > 0                 -> profile_current_basal * basalAdjustmentFactor
-                enablebasal && !honeymoon && mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 && bg > 80 && delta > 0                          -> profile_current_basal * basalAdjustmentFactor
-                enablebasal && !honeymoon && mealData.slopeFromMaxDeviation in 0.0..0.2 && mealData.slopeFromMinDeviation in 0.0..0.2 && bg in 80.0..100.0 && delta > 0 -> profile_current_basal * basalAdjustmentFactor
-                enablebasal && !honeymoon && mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 && bg in 80.0..100.0 && delta > 0                 -> profile_current_basal * basalAdjustmentFactor
+                enablebasal && !honeymoon && mealData.slopeFromMinDeviation > 0 && bg > 80 && delta > 0                          -> profile_current_basal * basalAdjustmentFactor
+                //enablebasal && !honeymoon && mealData.slopeFromMaxDeviation in 0.0..0.2 && mealData.slopeFromMinDeviation in 0.0..0.2 && bg in 80.0..100.0 && delta > 0 -> profile_current_basal * basalAdjustmentFactor
+                //enablebasal && !honeymoon && mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 && bg in 80.0..100.0 && delta > 0                 -> profile_current_basal * basalAdjustmentFactor
 
                 else -> 0.0
             }
