@@ -316,7 +316,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         // 🔹 Prevent ISF from being too low in case of large drops
         if (sensitivity < 5.0) {
-            aapsLogger.warn(LTag.APS, "ISF trop bas ! Ajusté à 10.0 au lieu de $sensitivity")
+            aapsLogger.warn(LTag.APS, "ISF trop bas ! Ajusté à 5.0 au lieu de $sensitivity")
             sensitivity = 5.0
         }
         if (sensitivity > 300.0){
@@ -620,7 +620,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             variableSensitivity = variableSensitivity.coerceIn(10.0, 300.0)
             // 🔹 Prevent ISF from being too low in case of large drops
             if (variableSensitivity < 5.0) {
-                aapsLogger.warn(LTag.APS, "ISF trop bas ! Ajusté à 10.0 au lieu de $variableSensitivity")
+                aapsLogger.warn(LTag.APS, "ISF trop bas ! Ajusté à 5.0 au lieu de $variableSensitivity")
                 variableSensitivity = 5.0
             }
             if (variableSensitivity > 300.0){
