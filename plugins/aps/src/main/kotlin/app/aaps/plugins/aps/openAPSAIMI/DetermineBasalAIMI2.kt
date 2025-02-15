@@ -399,19 +399,31 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         delta: Float,
         shortAvgDelta: Float,
         autodrive: Boolean,
-        slopeFromMinDeviation: Double
+        slopeFromMinDeviation: Double,
+        now: Long
     ): Boolean {
         // Récupération de la valeur de pbolusMeal depuis les préférences
-        val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
+        val pbolusM: Float = preferences.get(DoubleKey.OApsAIMIMealPrebolus).toFloat()
+        // Récupérer le dernier bolus SMB
+        val getlastBolusSMB = persistenceLayer.getNewestBolusOfType(BS.Type.SMB)
+        val lastBolusSMBTime = getlastBolusSMB?.timestamp ?: 0L
+        this.lastBolusSMBUnit = getlastBolusSMB?.amount?.toFloat() ?: 0.0F
+        val diff = abs(now - lastBolusSMBTime)
+        this.lastsmbtime = (diff / (60 * 1000)).toInt()
+
+        // Vérifier si un bolus de pbolusM a déjà été administré dans la dernière heure
+        val alreadyReceivedPbolusM = (lastsmbtime <= 60) && (lastBolusSMBUnit == pbolusM)
+
 
         // Vérification de toutes les conditions
-        return lastBolusSMBUnit != pbolusM.toFloat() &&
-            variableSensitivity in 5.0f..10f &&
+        return variableSensitivity in 5.0f..10f &&
             targetBg in 70.0f..85.0f &&
             delta >= 12 &&
             shortAvgDelta >= 12 &&
             autodrive &&
-            slopeFromMinDeviation >= 1.5
+            slopeFromMinDeviation >= 1.5 &&
+            lastBolusSMBUnit != pbolusM.toFloat() &&
+            !alreadyReceivedPbolusM
     }
 
     private fun isMealModeCondition(): Boolean {
@@ -1545,7 +1557,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                  rT.reason.append("Microbolusing Meal Mode ${pbolusM}U. ")
              return rT
          }
-        if (isMealModeCondition2(variableSensitivity, targetBg, delta, shortAvgDelta, autodrive, mealData.slopeFromMinDeviation) && !mealTime && !highCarbTime && !lunchTime && !bfastTime && !dinnerTime && !snackTime){
+        if (isMealModeCondition2(variableSensitivity, targetBg, delta, shortAvgDelta, autodrive, mealData.slopeFromMinDeviation,now) && !mealTime && !highCarbTime && !lunchTime && !bfastTime && !dinnerTime && !snackTime){
             val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
             rT.units = pbolusM
             rT.reason.append("Microbolusing Meal Mode ${pbolusM}U. ")
