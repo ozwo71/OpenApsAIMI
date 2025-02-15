@@ -633,12 +633,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         profile: OapsProfileAimi
     ): Float {
         // 1) Configuration générale
-        val minutesToConsider = 15000.0
-        val linesToConsider = (minutesToConsider / 5).toInt()
-        val maxIterations = 10000.0
-        val maxGlobalIterations = 5
-        var globalConvergenceReached = false
-        var differenceWithinRange = false
+        //val minutesToConsider = 5760.0
+        //val linesToConsider = (minutesToConsider / 5).toInt()
+        val maxIterations = 1000.0
+        //val maxGlobalIterations = 5
+        //var globalConvergenceReached = false
+        //var differenceWithinRange = false
 
         // Valeur initiale de SMB calculée ailleurs (votre logique existante)
         var finalRefinedSMB: Float = calculateSMBFromModel()
@@ -647,11 +647,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val allLines = csvfile.readLines()
         println("CSV file path: ${csvfile.absolutePath}")
 
-        val linesPerDay = (24 * 60) / 5
-        val totalLines = allLines.size - 1
-        val daysOfData = totalLines / linesPerDay
-
-        // Vérifications
         if (allLines.isEmpty()) {
             println("CSV file is empty.")
             return predictedSMB
@@ -659,37 +654,29 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         val headerLine = allLines.first()
         val headers = headerLine.split(",").map { it.trim() }
-        //if (!listOf("bg", "iob", "cob", "delta", "shortAvgDelta", "longAvgDelta", "predictedSMB", "smbGiven")
-        if (!listOf("bg", "iob", "cob", "delta", "shortAvgDelta", "longAvgDelta", "tdd7DaysPerHour", "tdd2DaysPerHour", "tddPerHour", "tdd24HrsPerHour", "predictedSMB", "smbGiven")
-                .all { headers.contains(it) }
-        ) {
+        val requiredColumns = listOf(
+            "bg", "iob", "cob", "delta", "shortAvgDelta", "longAvgDelta",
+            "tdd7DaysPerHour", "tdd2DaysPerHour", "tddPerHour", "tdd24HrsPerHour",
+            "predictedSMB", "smbGiven"
+        )
+
+        if (!requiredColumns.all { headers.contains(it) }) {
             println("CSV file is missing required columns.")
             return predictedSMB
         }
 
-        // On limite le CSV si trop de lignes
-        val relevantLines = if (allLines.size > linesToConsider) {
-            allLines.takeLast(linesToConsider + 1)
-        } else {
-            allLines
-        }
-
-        // 3) Préparation des données (inputs + targets)
-        //val colIndices = listOf("bg", "iob", "cob", "delta", "shortAvgDelta", "longAvgDelta", "predictedSMB")
-        val colIndices = listOf("bg", "iob", "cob", "delta", "shortAvgDelta", "longAvgDelta", "tdd7DaysPerHour", "tdd2DaysPerHour", "tddPerHour", "tdd24HrsPerHour", "predictedSMB", "smbGiven")
-            .map { headers.indexOf(it) }
+        // 3) Préparation des données
+        val colIndices = requiredColumns.map { headers.indexOf(it) }
         val targetColIndex = headers.indexOf("smbGiven")
 
         val inputs = mutableListOf<FloatArray>()
         val targets = mutableListOf<DoubleArray>()
-
         var lastEnhancedInput: FloatArray? = null
 
-        for (line in relevantLines.drop(1)) {
+        for (line in allLines.drop(1)) {
             val cols = line.split(",").map { it.trim() }
             val rawInput = colIndices.mapNotNull { idx -> cols.getOrNull(idx)?.toFloatOrNull() }.toFloatArray()
 
-            // Calcul d'un indicateur "trendIndicator"
             val trendIndicator = calculateTrendIndicator(
                 delta, shortAvgDelta, longAvgDelta,
                 bg.toFloat(), iob, variableSensitivity, cob, normalBgThreshold,
@@ -702,7 +689,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             lastEnhancedInput = enhancedInput
 
             val targetValue = cols.getOrNull(targetColIndex)?.toDoubleOrNull()
-            if (enhancedInput.isNotEmpty() && targetValue != null) {
+            if (targetValue != null) {
                 inputs.add(enhancedInput)
                 targets.add(doubleArrayOf(targetValue))
             }
@@ -717,139 +704,81 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val maxK = 10
         val adjustedK = minOf(maxK, inputs.size)
         val foldSize = maxOf(1, inputs.size / adjustedK)
-        println("Using $adjustedK folds for cross-validation. Fold size: $foldSize")
 
-        // On va stocker le "meilleur" réseau du k-fold
         var bestNetwork: AimiNeuralNetwork? = null
         var bestFoldValLoss = Double.MAX_VALUE
 
-        // Paramétrage du réseau via TrainingConfig
-        // Vous pouvez adapter epochs, dropout, etc. selon vos besoins
+        // 5) Training Config avec learning rate dynamique
+        val adjustedLearningRate = if (bestFoldValLoss < 0.01) 0.0005 else 0.001
+        val epochs = if (bestFoldValLoss < 0.01) 500 else 1000
+
         val trainingConfig = TrainingConfig(
-            learningRate = 0.001,
+            learningRate = adjustedLearningRate,
             beta1 = 0.9,
             beta2 = 0.999,
             epsilon = 1e-8,
             patience = 10,
             batchSize = 32,
             weightDecay = 0.01,
-
-            epochs = 30000,
-            useBatchNorm = false, // ajustez si vous voulez la batch norm
-            useDropout = false,   // idem pour le dropout
+            epochs = epochs,
+            useBatchNorm = false,
+            useDropout = true,
             dropoutRate = 0.3,
             leakyReluAlpha = 0.01
         )
 
-        // 5) Répéter "maxGlobalIterations" fois si besoin
-        var globalIterationCount = 0
-        while (globalIterationCount < maxGlobalIterations && !globalConvergenceReached) {
+        // 6) Entraînement & validation
+        for (k in 0 until adjustedK) {
+            val validationInputs = inputs.subList(k * foldSize, minOf((k + 1) * foldSize, inputs.size))
+            val validationTargets = targets.subList(k * foldSize, minOf((k + 1) * foldSize, targets.size))
 
-            for (k in 0 until adjustedK) {
-                val validationInputs = inputs.subList(k * foldSize, minOf((k + 1) * foldSize, inputs.size))
-                val validationTargets = targets.subList(k * foldSize, minOf((k + 1) * foldSize, targets.size))
+            val trainingInputs = inputs.minus(validationInputs)
+            val trainingTargets = targets.minus(validationTargets)
 
-                val trainingInputs = inputs.minus(validationInputs)
-                val trainingTargets = targets.minus(validationTargets)
+            if (validationInputs.isEmpty()) continue
 
-                if (validationInputs.isEmpty() || validationTargets.isEmpty()) {
-                    println("Empty validation fold at iteration $k. Skipping.")
-                    continue
-                }
+            val neuralNetwork = AimiNeuralNetwork(
+                inputSize = inputs.first().size,
+                hiddenSize = 5,
+                outputSize = 1,
+                config = trainingConfig,
+                regularizationLambda = 0.01
+            )
 
-                // Création du réseau
-                val neuralNetwork = AimiNeuralNetwork(
-                    inputSize = inputs.first().size,
-                    hiddenSize = 5,
-                    outputSize = 1,
-                    config = trainingConfig,        // on injecte la config
-                    regularizationLambda = 0.01
-                )
+            neuralNetwork.trainWithValidation(trainingInputs, trainingTargets, validationInputs, validationTargets)
+            val foldValLoss = neuralNetwork.validate(validationInputs, validationTargets)
 
-                // Entraînement + validation
-                neuralNetwork.trainWithValidation(
-                    trainInputs = trainingInputs,
-                    trainTargets = trainingTargets,
-                    valInputs = validationInputs,
-                    valTargets = validationTargets
-                )
-
-                // Calcul de la loss finale sur ce fold
-                val foldValLoss = neuralNetwork.validate(validationInputs, validationTargets)
-                println("Fold $k => Validation Loss = $foldValLoss")
-
-                // Si on veut garder le meilleur NN (valLoss la plus faible)
-                if (foldValLoss < bestFoldValLoss) {
-                    bestFoldValLoss = foldValLoss
-                    bestNetwork = neuralNetwork
-                }
-            }
-
-            // 6) Phase d'optimisation => On refine finalRefinedSMB avec le "bestNetwork"
-            var iterationCount = 0
-
-            do {
-                var totalDifference = 0.0f
-                val dynamicDifferenceThreshold = calculateDynamicThreshold(iterationCount, delta, shortAvgDelta, longAvgDelta)
-
-                for (enhancedInput in inputs) {
-                    val doubleInput = enhancedInput.toDoubleArray()
-                    val predictedRefineSMB = finalRefinedSMB
-
-                    val refinedSMB = bestNetwork?.let {
-                        AimiNeuralNetwork.refineSMB(predictedRefineSMB, it, doubleInput)
-                    } ?: predictedRefineSMB
-
-                    val difference = abs(predictedRefineSMB - refinedSMB)
-                    totalDifference += difference
-
-                    // Tolerance adaptative
-                    val increasedToleranceFactor = if (iterationCount > maxIterations / 2) 1.5f else 1.0f
-                    val adaptiveThreshold = dynamicDifferenceThreshold * increasedToleranceFactor
-
-                    if (difference <= adaptiveThreshold) {
-                        finalRefinedSMB = if (refinedSMB > 0.0f) refinedSMB else 0.0f
-                        differenceWithinRange = true
-                        break
-                    }
-                }
-
-                // Règles business (agressivité, etc.)
-                if (delta > 10 && bg > 120) {
-                    val provisionalSMB = maxSMB.toFloat() * (delta / 30)
-                    finalRefinedSMB = max(finalRefinedSMB, min(provisionalSMB, maxSMB.toFloat() / 1.5f))
-                }
-                if (finalRefinedSMB > 0.5 && bg < 120 && delta < 8) {
-                    finalRefinedSMB /= 2
-                }
-
-                println("Iteration $iterationCount complete. Total difference: $totalDifference")
-
-                iterationCount++
-                if (differenceWithinRange || iterationCount >= maxIterations) {
-                    globalConvergenceReached = true
-                    break
-                }
-            } while (true)
-
-            globalIterationCount++
-        }
-
-        // 7) Si pas convergé globalement, fallback
-        if (!globalConvergenceReached) {
-            if (daysOfData >= 4) {
-                // On refine (une dernière fois) avec bestNetwork sur la dernière entrée
-                val doubleInput = lastEnhancedInput?.toDoubleArray()
-                finalRefinedSMB = bestNetwork?.let {
-                    AimiNeuralNetwork.refineSMB(predictedSMB, it, doubleInput)
-                } ?: predictedSMB
-            } else {
-                // Mix 40/60
-                finalRefinedSMB = (predictedSMB * 0.4f) + (finalRefinedSMB * 0.6f)
+            if (foldValLoss < bestFoldValLoss) {
+                bestFoldValLoss = foldValLoss
+                bestNetwork = neuralNetwork
             }
         }
 
-        return if (globalConvergenceReached) finalRefinedSMB else predictedSMB
+        // 7) Optimisation finale
+        var iterationCount = 0
+        do {
+            val dynamicThreshold = calculateDynamicThreshold(iterationCount, delta, shortAvgDelta, longAvgDelta)
+            val refinedSMB = bestNetwork?.let {
+                AimiNeuralNetwork.refineSMB(finalRefinedSMB, it, lastEnhancedInput?.toDoubleArray() ?: DoubleArray(0))
+            } ?: finalRefinedSMB
+
+            if (abs(finalRefinedSMB - refinedSMB) <= dynamicThreshold) {
+                finalRefinedSMB = max(0.05f, refinedSMB) // Clamp SMB minimum
+                break
+            }
+            iterationCount++
+        } while (iterationCount < maxIterations)
+
+        // 8) Condition spéciale sur finalRefinedSMB
+        if (finalRefinedSMB > predictedSMB && bg > 150 && delta > 5) {
+            println("Modèle prédictif plus élevé, ajustement retenu.")
+            return finalRefinedSMB
+        }
+
+        // 9) Lissage entre predictedSMB et finalRefinedSMB
+        val alpha = 0.7f
+        val blendedSMB = alpha * finalRefinedSMB + (1 - alpha) * predictedSMB
+        return blendedSMB
     }
 
     /**
@@ -1633,8 +1562,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             !profile.temptargetSet && recentSteps5Minutes >= 0 && (recentSteps30Minutes >= 500 || recentSteps180Minutes > 1500) && recentSteps10Minutes > 0 -> {
                 this.targetBg = 130.0f
             }
-            !profile.temptargetSet && eventualBG >= 160 && delta > 5 -> {
-                var baseTarget = if (honeymoon) 110.0 else 80.0
+            !profile.temptargetSet && eventualBG >= 120 && delta > 3 -> {
+                var baseTarget = if (honeymoon) 110.0 else 70.0
                 var hyperTarget = max(baseTarget, profile.target_bg - (bg - profile.target_bg) / 3).toInt()
                 hyperTarget = (hyperTarget * min(circadianSensitivity, 1.0)).toInt()
                 hyperTarget = max(hyperTarget, baseTarget.toInt())
@@ -1648,7 +1577,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 sensitivityRatio = round(sensitivityRatio, 2)
                 consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
             }
-            !profile.temptargetSet && circadianSmb > 0.1 && eventualBG < 100 -> {
+            !profile.temptargetSet && circadianSmb > 0.1 && eventualBG < 110 -> {
                 val baseHypoTarget = if (honeymoon) 130.0 else 120.0
                 val hypoTarget = baseHypoTarget * max(1.0, circadianSensitivity)
                 this.targetBg = min(hypoTarget.toFloat(), 166.0f)
@@ -1660,6 +1589,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 sensitivityRatio = round(sensitivityRatio, 2)
                 consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
             }
+            !profile.temptargetSet && bg < 110 && delta < 1 -> {
+                val baseHypoTarget = if (honeymoon) 130.0 else 110.0
+                val hypoTarget = baseHypoTarget * max(1.0, circadianSensitivity)
+                this.targetBg = min(hypoTarget.toFloat(), 166.0f)
+                target_bg = targetBg.toDouble()
+                val c = (halfBasalTarget - normalTarget).toDouble()
+                sensitivityRatio = c / (c + target_bg - normalTarget)
+                // limit sensitivityRatio to profile.autosens_max (1.2x by default)
+                sensitivityRatio = min(sensitivityRatio, profile.autosens_max)
+                sensitivityRatio = round(sensitivityRatio, 2)
+                consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
+            }
+
             else -> {
                 val defaultTarget = profile.target_bg
                 this.targetBg = defaultTarget.toFloat()
