@@ -2491,7 +2491,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             rate = when {
                 // Cas d'hypoglycémie : le taux basal est nul si la glycémie est inférieure à 80.
-                bg < 80 -> 0.0
+                bg < 90 -> 0.0
+                !enablebasal && bg > 90 && slopeFromMinDeviation in 0.0..0.4 && delta > 1 && shortAvgDelta >= 1 -> profile_current_basal
+                !enablebasal && bg > 90 && slopeFromMinDeviation in 0.4..20.0 && delta > 1 && shortAvgDelta >= 1 -> calculateBasalRate(basal, profile_current_basal, 10.0)
+                !enablebasal && (timenow in 11..13 || timenow in 18..21) && iob < 0.8 && recentSteps5Minutes < 100 && delta > -1 && slopeFromMinDeviation > 0.3 -> profile_current_basal * 1.5
                 !enablebasal && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !snackTime && timenow > sixAMHour && recentSteps5Minutes > 100 -> 0.0
                 !enablebasal && timenow <= sixAMHour && delta > 0 -> profile_current_basal
                 !enablebasal && recentSteps5Minutes == 0 && delta  > 0 && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !snackTime -> profile_current_basal
@@ -2499,10 +2502,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 enablebasal && !honeymoon && iob < 0.6 && bg in 90.0..120.0 && delta in 0.0..6.0 && !sportTime                                       -> profile_current_basal * basalAdjustmentFactor
                 honeymoon && iob < 0.4 && bg in 90.0..100.0 && delta in 0.0..5.0 && !sportTime                                        -> profile_current_basal
                 enablebasal && iob < 0.8 && bg in 120.0..130.0 && delta in 0.0..6.0 && !sportTime                                                    -> profile_current_basal * basalAdjustmentFactor
-                bg > 180 && delta in -5.0..4.0                                                                                        -> profile_current_basal * basalAdjustmentFactor
-                eventualBG < 65 && !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime                -> 0.0
+                bg > 180 && delta in -5.0..1.0                                                                                        -> profile_current_basal * basalAdjustmentFactor
+                eventualBG < 80 && !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime                -> 0.0
                 eventualBG > 180 && !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !sportTime && delta > 3 -> calculateBasalRate(basal, profile_current_basal, basalAdjustmentFactor)
-
+                !enablebasal && eventualBG > 110 && !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !sportTime && bg > 150 && delta in -2.0..15.0 -> calculateBasalRate(basal, profile_current_basal, basalAdjustmentFactor)
                 // Conditions spécifiques basées sur les temps de repas
                 snackTime && snackrunTime in 0..30                 -> calculateBasalRate(basal, profile_current_basal, 4.0)
                 mealTime && mealruntime in 0..30                   -> calculateBasalRate(basal, profile_current_basal, 10.0)
@@ -2532,11 +2535,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
                 // Nouveaux cas basés sur les déviations de mealData
                 honeymoon && mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 && bg > 110 && delta > 0                          -> profile_current_basal * basalAdjustmentFactor
-                honeymoon && mealData.slopeFromMaxDeviation in 0.0..0.2 && mealData.slopeFromMinDeviation in 0.0..0.2 && bg in 120.0..150.0 && delta > 0 -> profile_current_basal * basalAdjustmentFactor
+                honeymoon && mealData.slopeFromMaxDeviation in 0.0..0.2 && mealData.slopeFromMinDeviation in 0.0..0.5 && bg in 120.0..150.0 && delta > 0 -> profile_current_basal * basalAdjustmentFactor
                 honeymoon && mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 && bg in 100.0..120.0 && delta > 0                 -> profile_current_basal * basalAdjustmentFactor
-                enablebasal && !honeymoon && mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 && bg > 80 && delta > 0                          -> profile_current_basal * basalAdjustmentFactor
-                enablebasal && !honeymoon && mealData.slopeFromMaxDeviation in 0.0..0.2 && mealData.slopeFromMinDeviation in 0.0..0.2 && bg in 80.0..100.0 && delta > 0 -> profile_current_basal * basalAdjustmentFactor
-                enablebasal && !honeymoon && mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 && bg in 80.0..100.0 && delta > 0                 -> profile_current_basal * basalAdjustmentFactor
+                enablebasal && !honeymoon && mealData.slopeFromMinDeviation > 0 && bg > 80 && delta > 0                          -> profile_current_basal * basalAdjustmentFactor
+                //enablebasal && !honeymoon && mealData.slopeFromMaxDeviation in 0.0..0.2 && mealData.slopeFromMinDeviation in 0.0..0.2 && bg in 80.0..100.0 && delta > 0 -> profile_current_basal * basalAdjustmentFactor
+                //enablebasal && !honeymoon && mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 && bg in 80.0..100.0 && delta > 0                 -> profile_current_basal * basalAdjustmentFactor
 
                 else -> 0.0
             }
