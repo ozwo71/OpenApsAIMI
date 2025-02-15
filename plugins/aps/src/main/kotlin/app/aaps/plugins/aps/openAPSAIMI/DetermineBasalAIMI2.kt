@@ -1821,40 +1821,43 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         this.variableSensitivity = if (honeymoon) {
             if (bg < 150) {
-                profile.sens.toFloat()
+                profile.sens.toFloat() * 1.2f // Légère augmentation pour honeymoon en cas de BG bas
             } else {
                 max(
-                    profile.sens.toFloat() / 2.5f,
-                    sens.toFloat() * calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
+                    profile.sens.toFloat() / 3.0f, // Réduction plus forte en honeymoon
+                    sens.toFloat() //* calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
                 )
             }
         } else {
             if (bg < 100) {
-                profile.sens.toFloat()
-            } else {
+                // 🔹 Correction : Permettre une légère adaptation de l’ISF même en dessous de 100 mg/dL
+                profile.sens.toFloat() * 1.1f
+            } else if (bg > 120) {
+                // 🔹 Si BG > 120, on applique une réduction progressive plus forte
                 max(
-                    profile.sens.toFloat() / 4.0f,
-                    sens.toFloat() * calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
+                    profile.sens.toFloat() / 5.0f,  // 🔥 Réduction plus agressive (divisé par 5)
+                    sens.toFloat() //* calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
                 )
+            } else {
+                // 🔹 Plage intermédiaire (100-120) avec ajustement plus doux
+                sens.toFloat() //* calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
             }
         }
 
-        if (recentSteps5Minutes > 100 && recentSteps10Minutes > 200 && bg < 130 && delta < 10 || recentSteps180Minutes > 1500 && bg < 130 && delta < 10) {
-            this.variableSensitivity *= 1.5f * calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
+        // 🔹 Ajustement basé sur l'activité physique : correction plus fine des valeurs
+        if (recentSteps5Minutes > 100 && recentSteps10Minutes > 200 && bg < 130 && delta < 10
+            || recentSteps180Minutes > 1500 && bg < 130 && delta < 10) {
+
+            this.variableSensitivity *= 1.3f //* calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat() // Réduction du facteur d’augmentation
         }
-        if (recentSteps30Minutes > 500 && recentSteps5Minutes >= 0 && recentSteps5Minutes < 100 && bg < 130 && delta < 10) {
-            this.variableSensitivity *= 1.3f * calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
+
+// 🔹 Réduction du boost si l’activité est modérée pour éviter une ISF excessive
+        if (recentSteps30Minutes > 500 && recentSteps5Minutes in 1..99 && bg < 130 && delta < 10) {
+            this.variableSensitivity *= 1.2f //* calculateGFactor(delta, lastHourTIRabove120, bg.toFloat()).toFloat()
         }
-        if (honeymoon) {
-            if (variableSensitivity < 20) {
-                this.variableSensitivity = profile.sens.toFloat()
-            }
-        } else {
-            if (variableSensitivity < 2) {
-                this.variableSensitivity = profile.sens.toFloat()
-            }
-        }
-        if (variableSensitivity > (3 * profile.sens.toFloat())) this.variableSensitivity = profile.sens.toFloat() * 3
+
+// 🔹 Sécurisation des bornes minimales et maximales
+        this.variableSensitivity = this.variableSensitivity.coerceIn(5.0f, 300.0f)
 
         sens = variableSensitivity.toDouble()
         //calculate BG impact: the amount BG "should" be rising or falling based on insulin activity alone
