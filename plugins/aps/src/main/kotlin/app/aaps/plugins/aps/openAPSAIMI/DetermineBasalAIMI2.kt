@@ -1114,8 +1114,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun interpolate(xdata: Double): Double {
         // Définir les points de référence pour l'interpolation, à partir de 80 mg/dL
-        val polyX = arrayOf(80.0, 90.0, 100.0, 110.0, 150.0, 180.0, 200.0, 220.0, 240.0, 260.0, 280.0, 300.0)
-        val polyY = arrayOf(0.0, 1.0, 2.0, 3.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 10.0, 10.0) // Ajustement des valeurs pour la basale
+        val polyX = arrayOf(80.0, 90.0, 100.0, 110.0, 130.0, 160.0, 200.0, 220.0, 240.0, 260.0, 280.0, 300.0)
+        val polyY = arrayOf(0.5, 1.0, 2.0, 3.0, 5.0, 7.0, 9.0, 10.0, 10.0, 10.0, 10.0, 10.0) // Ajustement des valeurs pour la basale
 
         // Constants for basal adjustment weights
         val higherBasalRangeWeight: Double = 1.5 // Facteur pour les glycémies supérieures à 100 mg/dL
@@ -1137,7 +1137,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // État d'hypoglycémie (pour les valeurs < 80)
         if (xdata < 80) {
-            newVal = 0.0 // Multiplicateur fixe pour l'hypoglycémie
+            newVal = 0.5 // Multiplicateur fixe pour l'hypoglycémie
         }
         // Extrapolation en avant (pour les valeurs > 300)
         else if (stepT < xdata) {
@@ -1192,7 +1192,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         currentBasalRate: Float // Le taux de basal actuel
     ): Float {
         // Poids pour le lissage. Plus la valeur est proche de 1, plus l'influence du jour le plus récent est grande.
-        val weightRecent = 0.7f
+        val weightRecent = 0.6f
         val weightPrevious = 1.0f - weightRecent
 
         // Calculer la TDD moyenne pondérée
@@ -1230,52 +1230,67 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         sensorLagActivity: Double,
         historicActivity: Double,
         profile: OapsProfileAimi,
-        stepCount: Int? = null, // Ajout du nombre de pas
-        heartRate: Int? = null  // Ajout du rythme cardiaque
+        stepCount: Int? = null, // Nombre de pas
+        heartRate: Int? = null, // Rythme cardiaque
+        bg: Double,             // Glycémie actuelle
+        delta: Double           // Variation glycémique
     ): Double {
         var dynamicPeakTime = profile.peakTime
         val activityRatio = futureActivity / (currentActivity + 0.0001)
 
-        // Ajustement basé sur l'IOB (currentActivity)
+        // Calcul d'un facteur de correction hyperglycémique de façon continue
+        val hyperCorrectionFactor = when {
+            bg <= 130 || delta <= 4 -> 1.0
+            bg in 130.0..240.0 -> {
+                // Le multiplicateur passe de 0.6 à 0.3 quand bg évolue de 130 à 240
+                0.6 - (bg - 130) * (0.6 - 0.3) / (240 - 130)
+            }
+            else -> 0.3
+        }
+        dynamicPeakTime *= hyperCorrectionFactor
+
+        // 2️⃣ **Ajustement basé sur l'IOB (currentActivity)**
         if (currentActivity > 0.1) {
-            dynamicPeakTime += currentActivity * 25 + 10 // Ajuster le peakTime proportionnellement à l'activité courante avec un minimum fixe
+            dynamicPeakTime += currentActivity * 20 + 5 // Ajuster proportionnellement à l'activité
         }
 
-        // Ajustement basé sur le ratio d'activité
+        // 3️⃣ **Ajustement basé sur le ratio d'activité**
         dynamicPeakTime *= when {
             activityRatio > 1.5 -> 0.5 + (activityRatio - 1.5) * 0.05
             activityRatio < 0.5 -> 1.5 + (0.5 - activityRatio) * 0.05
             else -> 1.0
         }
 
-        // Ajustement basé sur le nombre de pas
+        // 4️⃣ **Ajustement basé sur le nombre de pas**
         stepCount?.let {
-            if (it > 500) { // Seuil de 500 pas pour déclencher un ajustement
-                dynamicPeakTime += it * 0.01 // Ajuster proportionnellement au nombre de pas
+            if (it > 500) {
+                dynamicPeakTime += it * 0.015 // Ajustement proportionnel plus agressif
+            } else if (it < 100) {
+                dynamicPeakTime *= 0.9 // Réduction du peakTime si peu de mouvement
             }
         }
 
-        // Ajustement basé sur le rythme cardiaque
+        // 5️⃣ **Ajustement basé sur le rythme cardiaque**
         heartRate?.let {
-            if (it > 100) { // Seuil de 100 bpm pour un rythme cardiaque élevé
-                dynamicPeakTime *= 1.1 // Augmenter le peakTime de 10 % si la fréquence cardiaque est élevée
-            } else if (it < 60) { // Fréquence cardiaque basse, potentiellement au repos
-                dynamicPeakTime *= 0.9 // Réduire le peakTime de 10 % si la personne est probablement au repos
+            if (it > 110) {
+                dynamicPeakTime *= 1.15 // Augmenter le peakTime de 15% si FC élevée
+            } else if (it < 55) {
+                dynamicPeakTime *= 0.85 // Réduire le peakTime de 15% si FC basse
             }
         }
 
-        // Ajustement basé sur la corrélation entre les variables (stepCount et heartRate)
+        // 6️⃣ **Corrélation entre pas et rythme cardiaque**
         if (stepCount != null && heartRate != null) {
             if (stepCount > 1000 && heartRate > 110) {
-                dynamicPeakTime *= 1.2 // Augmenter le peakTime de 20 % si à la fois le nombre de pas et le rythme cardiaque sont élevés
+                dynamicPeakTime *= 1.2 // Augmenter peakTime si activité intense
             } else if (stepCount < 200 && heartRate < 50) {
-                dynamicPeakTime *= 0.8 // Réduire le peakTime de 20 % si à la fois le nombre de pas et le rythme cardiaque sont faibles
+                dynamicPeakTime *= 0.75 // Réduction plus forte si repos total
             }
         }
 
         this.peakintermediaire = dynamicPeakTime
 
-        // Ajustement basé sur le retard capteur (sensor lag) et historique
+        // 7️⃣ **Ajustement basé sur le retard capteur (sensor lag) et historique**
         if (dynamicPeakTime > 40) {
             if (sensorLagActivity > historicActivity) {
                 dynamicPeakTime *= 0.85
@@ -1284,12 +1299,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
 
-        // Limiter le peakTime à des valeurs réalistes (par exemple, 10 à 160 minutes)
-        return dynamicPeakTime.coerceIn(10.0, 160.0)
+        // 🔥 **Limiter le peakTime à des valeurs réalistes (35-120 min)**
+        return dynamicPeakTime.coerceIn(35.0, 120.0)
     }
-
-
-
 
     private fun parseNotes(startMinAgo: Int, endMinAgo: Int): String {
         val olderTimeStamp = now - endMinAgo * 60 * 1000
@@ -1995,7 +2007,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             historicActivity = profile.historicActivity,
             profile,
             recentSteps15Minutes,
-            averageBeatsPerMinute.toInt()
+            averageBeatsPerMinute.toInt(),
+            bg,
+            delta.toDouble()
         )
         if (glucose_status.delta <= 4.0) {
 
