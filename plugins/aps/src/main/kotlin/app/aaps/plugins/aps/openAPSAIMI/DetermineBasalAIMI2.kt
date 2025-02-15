@@ -1952,7 +1952,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
 // 🔹 Sécurisation des bornes minimales et maximales
-        this.variableSensitivity = this.variableSensitivity.coerceIn(10.0f, 300.0f)
+        this.variableSensitivity = this.variableSensitivity.coerceIn(5.0f, 300.0f)
 
 
         sens = variableSensitivity.toDouble()
