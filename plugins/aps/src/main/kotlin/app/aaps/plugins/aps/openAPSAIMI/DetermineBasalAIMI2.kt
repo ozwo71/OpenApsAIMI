@@ -2374,7 +2374,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "15 Feb 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "16 Feb 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
@@ -2556,9 +2556,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             rate = when {
                 // Cas d'hypoglycémie : le taux basal est nul si la glycémie est inférieure à 80.
-                bg < 90 -> 0.0
+                !enablebasal && bg in 80.0..90.0 && slopeFromMinDeviation <= 0 && delta in -1.0..2.0 -> profile_current_basal * 0.2
+                !enablebasal && bg in 90.0..100.0 && slopeFromMinDeviation <=0 && delta in -1.0..2.0 -> profile_current_basal * 0.5
                 !enablebasal && bg > 90 && slopeFromMinDeviation in 0.0..0.4 && delta > 1 && shortAvgDelta >= 1 -> profile_current_basal
-                !enablebasal && bg > 120 && slopeFromMinDeviation in 0.4..20.0 && delta > 1 && shortAvgDelta >= 1 -> calculateBasalRate(basal, profile_current_basal, delta.toDouble())
+                !enablebasal && bg > 120 && slopeFromMinDeviation in 0.4..20.0 && delta > 1 && shortAvgDelta >= 1 -> calculateBasalRate(basalaimi.toDouble(), profile_current_basal, delta.toDouble())
                 !enablebasal && (timenow in 11..13 || timenow in 18..21) && iob < 0.8 && recentSteps5Minutes < 100 && delta > -1 && slopeFromMinDeviation > 0.3 -> profile_current_basal * 1.5
                 !enablebasal && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !snackTime && timenow > sixAMHour && recentSteps5Minutes > 100 -> 0.0
                 !enablebasal && timenow <= sixAMHour && delta > 0 -> profile_current_basal
@@ -2569,30 +2570,30 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 enablebasal && iob < 0.8 && bg in 120.0..130.0 && delta in 0.0..6.0 && !sportTime                                                    -> profile_current_basal * basalAdjustmentFactor
                 bg > 180 && delta in -5.0..1.0                                                                                        -> profile_current_basal * basalAdjustmentFactor
                 eventualBG < 80 && !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime                -> 0.0
-                eventualBG > 180 && !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !sportTime && delta > 3 -> calculateBasalRate(basal, profile_current_basal, basalAdjustmentFactor)
-                !enablebasal && eventualBG > 110 && !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !sportTime && bg > 150 && delta in -2.0..15.0 -> calculateBasalRate(basal, profile_current_basal, basalAdjustmentFactor)
+                eventualBG > 180 && !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !sportTime && delta > 3 -> calculateBasalRate(basalaimi.toDouble(), profile_current_basal, basalAdjustmentFactor)
+                !enablebasal && eventualBG > 110 && !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !sportTime && bg > 150 && delta in -2.0..15.0 -> calculateBasalRate(basalaimi.toDouble(), profile_current_basal, basalAdjustmentFactor)
                 // Conditions spécifiques basées sur les temps de repas
-                snackTime && snackrunTime in 0..30                 -> calculateBasalRate(basal, profile_current_basal, 4.0)
-                mealTime && mealruntime in 0..30                   -> calculateBasalRate(basal, profile_current_basal, 10.0)
-                bfastTime && bfastruntime in 0..30                 -> calculateBasalRate(basal, profile_current_basal, 10.0)
-                bfastTime && bfastruntime in 30..60 && delta > 0   -> calculateBasalRate(basal, profile_current_basal, delta.toDouble())
-                lunchTime && lunchruntime in 0..30                 -> calculateBasalRate(basal, profile_current_basal, 10.0)
-                lunchTime && lunchruntime in 30..60 && delta > 0   -> calculateBasalRate(basal, profile_current_basal, delta.toDouble())
-                dinnerTime && dinnerruntime in 0..30               -> calculateBasalRate(basal, profile_current_basal, 10.0)
-                dinnerTime && dinnerruntime in 30..60 && delta > 0 -> calculateBasalRate(basal, profile_current_basal, delta.toDouble())
-                highCarbTime && highCarbrunTime in 0..60           -> calculateBasalRate(basal, profile_current_basal, 10.0)
+                snackTime && snackrunTime in 0..30                 -> calculateBasalRate(basalaimi.toDouble(), profile_current_basal, 4.0)
+                mealTime && mealruntime in 0..30                   -> calculateBasalRate(basalaimi.toDouble(), profile_current_basal, 10.0)
+                bfastTime && bfastruntime in 0..30                 -> calculateBasalRate(basalaimi.toDouble(), profile_current_basal, 10.0)
+                bfastTime && bfastruntime in 30..60 && delta > 0   -> calculateBasalRate(basalaimi.toDouble(), profile_current_basal, delta.toDouble())
+                lunchTime && lunchruntime in 0..30                 -> calculateBasalRate(basalaimi.toDouble(), profile_current_basal, 10.0)
+                lunchTime && lunchruntime in 30..60 && delta > 0   -> calculateBasalRate(basalaimi.toDouble(), profile_current_basal, delta.toDouble())
+                dinnerTime && dinnerruntime in 0..30               -> calculateBasalRate(basalaimi.toDouble(), profile_current_basal, 10.0)
+                dinnerTime && dinnerruntime in 30..60 && delta > 0 -> calculateBasalRate(basalaimi.toDouble(), profile_current_basal, delta.toDouble())
+                highCarbTime && highCarbrunTime in 0..60           -> calculateBasalRate(basalaimi.toDouble(), profile_current_basal, 10.0)
 
                 // Conditions pour ajustement basale sur haute glycémie et non-lune de miel
-                bg > 180 && !honeymoon && delta > 0 -> calculateBasalRate(basal, profile_current_basal, basalAdjustmentFactor)
+                bg > 180 && !honeymoon && delta > 0 -> calculateBasalRate(basalaimi.toDouble(), profile_current_basal, basalAdjustmentFactor)
 
                 // Conditions pour lune de miel
                 honeymoon && bg in 140.0..169.0 && delta > 0                       -> profile_current_basal
-                honeymoon && bg > 170 && delta > 0                                 -> calculateBasalRate(basal, profile_current_basal, basalAdjustmentFactor)
+                honeymoon && bg > 170 && delta > 0                                 -> calculateBasalRate(basalaimi.toDouble(), profile_current_basal, basalAdjustmentFactor)
                 honeymoon && delta > 2 && bg in 90.0..119.0                        -> profile_current_basal
                 honeymoon && delta > 0 && bg > 110 && eventualBG > 120 && bg < 160 -> profile_current_basal * basalAdjustmentFactor
 
                 // Conditions pendant la grossesse
-                pregnancyEnable && delta > 0 && bg > 110 && !honeymoon -> calculateBasalRate(basal, profile_current_basal, basalAdjustmentFactor)
+                pregnancyEnable && delta > 0 && bg > 110 && !honeymoon -> calculateBasalRate(basalaimi.toDouble(), profile_current_basal, basalAdjustmentFactor)
 
                 // Conditions locales spéciales basées sur mealData
                 localconditionResult && delta > 1 && bg > 90                                        -> profile_current_basal * basalAdjustmentFactor
