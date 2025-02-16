@@ -2673,7 +2673,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
 // On part du taux basal courant comme valeur de base
             var rate = profile_current_basal
-
+            if (bg < 80) {
+                rate = 0.0  // ou appliquer un très faible taux basal
+                return setTempBasal(rate, 30, profile, rT, currenttemp)
+            }
 // Première partie : cas où le mode basal adaptatif n'est PAS activé
             if (!enablebasal) {
                 when {
