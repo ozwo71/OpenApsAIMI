@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.os.Environment
 import app.aaps.core.data.model.BS
 import app.aaps.core.data.model.UE
+import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.CurrentTemp
@@ -393,6 +394,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         return result
     }
+    private fun hasReceivedPbolusMInLastHour(pbolusM: Double): Boolean {
+        // Récupère tous les bolus de la dernière heure
+        val bolusesLastHour = persistenceLayer
+            .getBolusesFromTime(dateUtil.now() - T.hours(1).msecs(), true)
+            .blockingGet()
+        // Vérifie si un bolus a exactement le montant pbolusM
+        return bolusesLastHour.any { it.amount == pbolusM }
+    }
     private fun isMealModeCondition2(
         variableSensitivity: Float,
         targetBg: Float,
@@ -400,30 +409,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         shortAvgDelta: Float,
         autodrive: Boolean,
         slopeFromMinDeviation: Double,
-        now: Long
+        bg: Float
     ): Boolean {
         // Récupération de la valeur de pbolusMeal depuis les préférences
-        val pbolusM: Float = preferences.get(DoubleKey.OApsAIMIMealPrebolus).toFloat()
-        // Récupérer le dernier bolus SMB
-        val getlastBolusSMB = persistenceLayer.getNewestBolusOfType(BS.Type.SMB)
-        val lastBolusSMBTime = getlastBolusSMB?.timestamp ?: 0L
-        this.lastBolusSMBUnit = getlastBolusSMB?.amount?.toFloat() ?: 0.0F
-        val diff = abs(now - lastBolusSMBTime)
-        this.lastsmbtime = (diff / (60 * 1000)).toInt()
+        val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
 
-        // Vérifier si un bolus de pbolusM a déjà été administré dans la dernière heure
-        val alreadyReceivedPbolusM = (lastsmbtime <= 60) && (lastBolusSMBUnit == pbolusM)
+        // Si un bolus de pbolusM a déjà été administré dans la dernière heure, on ne le ré-administrera pas
+        if (hasReceivedPbolusMInLastHour(pbolusM)) {
+            return false
+        }
 
-
-        // Vérification de toutes les conditions
         return variableSensitivity in 5.0f..10f &&
             targetBg in 70.0f..85.0f &&
             delta >= 12 &&
             shortAvgDelta >= 12 &&
             autodrive &&
             slopeFromMinDeviation >= 1.5 &&
-            lastBolusSMBUnit != pbolusM.toFloat() &&
-            !alreadyReceivedPbolusM
+            bg > 120
     }
 
     private fun isMealModeCondition(): Boolean {
@@ -1603,7 +1605,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                  rT.reason.append("Microbolusing Meal Mode ${pbolusM}U. ")
              return rT
          }
-        if (isMealModeCondition2(variableSensitivity, targetBg, delta, shortAvgDelta, autodrive, mealData.slopeFromMinDeviation,now) && !mealTime && !highCarbTime && !lunchTime && !bfastTime && !dinnerTime && !snackTime){
+        if (isMealModeCondition2(variableSensitivity, targetBg, delta, shortAvgDelta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat()) && !mealTime && !highCarbTime && !lunchTime && !bfastTime && !dinnerTime && !snackTime){
             val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
             rT.units = pbolusM
             rT.reason.append("Microbolusing Meal Mode ${pbolusM}U. ")
