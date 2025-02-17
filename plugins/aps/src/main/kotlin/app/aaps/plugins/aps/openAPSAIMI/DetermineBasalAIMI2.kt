@@ -2422,7 +2422,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "16 Feb 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "17 Feb 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
@@ -2675,7 +2675,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
 // On part du taux basal courant comme valeur de base
             var rate = profile_current_basal
-            if (bg < 80 || bg < 120 && delta < 0 && iob > 0.5) {
+            if (bg < 80 || bg in 80.0..120.0 && delta in -1.0..1.0 && iob > 0.5) {
                 rate = 0.0  // ou appliquer un très faible taux basal
                 return setTempBasal(rate, 30, profile, rT, currenttemp)
             }
