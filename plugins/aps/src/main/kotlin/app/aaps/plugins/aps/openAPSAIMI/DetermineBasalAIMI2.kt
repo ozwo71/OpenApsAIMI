@@ -2422,7 +2422,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "17 Feb 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "18 Feb 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
@@ -2667,7 +2667,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val (localconditionResult, _) = isCriticalSafetyCondition(mealData)
 
 // Calcul du facteur d'ajustement en fonction de la glycémie
-// (ici, on utilise notre fonction simplifiée d'interpolation)
+// (ici, on utilise la fonction simplifiée d'interpolation)
             val basalAdjustmentFactor = interpolatebasal(bg)
 
 // Calcul du taux basal final lissé à partir du TDD récent
@@ -2675,17 +2675,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
 // On part du taux basal courant comme valeur de base
             var rate = profile_current_basal
-            if (bg < 80 || bg in 80.0..120.0 && delta in -1.0..1.0 && iob > 0.5) {
-                rate = 0.0  // ou appliquer un très faible taux basal
+            // CONDITION DE SÉCURITÉ : En présence d'une tendance à la baisse et d'un IOB protecteur, couper la basale
+            if (bg < 110 && mealData.slopeFromMaxDeviation < 0 && iob > 0.1) {
+                rate = 0.0
                 return setTempBasal(rate, 30, profile, rT, currenttemp)
             }
-// Première partie : cas où le mode basal adaptatif n'est PAS activé
+// Cas où enablebasal est désactivé
             if (!enablebasal) {
                 when {
-                    bg in 80.0..90.0 && slopeFromMinDeviation <= 0 && delta in -1.0..2.0 ->
+                    // Pour 80-90 mg/dL : si la tendance est négative ET IOB élevé, couper l'insuline
+                    bg in 80.0..90.0 && slopeFromMaxDeviation < 0 && iob > 0.1 ->
+                        rate = 0.0
+                    // Sinon, appliquer un faible basal (uniquement si la tendance n'est pas négative)
+                    bg in 80.0..90.0 && slopeFromMinDeviation >= 0 && slopeFromMaxDeviation >=0 && delta in -1.0..2.0 ->
                         rate = profile_current_basal * 0.2
 
-                    bg in 90.0..100.0 && slopeFromMinDeviation <= 0 && delta in -1.0..2.0 ->
+                    // Pour 90-100 mg/dL : même principe
+                    bg in 90.0..100.0 && slopeFromMinDeviation < 0 && iob > 0.1 ->
+                        rate = 0.0
+                    bg in 90.0..100.0 && slopeFromMinDeviation >= 0 && delta in -1.0..2.0 ->
                         rate = profile_current_basal * 0.5
 
                     bg > 90 && slopeFromMinDeviation in 0.0..0.4 && delta > 1 && shortAvgDelta >= 1 ->
@@ -2709,7 +2717,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         rate = profile_current_basal
 
                     else -> {
-                        // En l'absence de condition particulière, on garde le taux basal lissé
+                        // Par défaut, on garde le taux basal final lissé
                         rate = finalBasalRate
                     }
                 }
@@ -2717,108 +2725,106 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 // Deuxième partie : cas où le mode basal adaptatif est activé (enablebasal == true)
             else {
                 when {
+                    // 1. Ajustement standard en mode enablebasal (sans événement majeur)
                     !honeymoon && iob < 0.6 && bg in 90.0..120.0 && delta in 0.0..6.0 && !sportTime ->
                         rate = profile_current_basal * basalAdjustmentFactor
 
+                    // 2. Mode honeymoon : dans la plage basse, pas d'ajustement
                     honeymoon && iob < 0.4 && bg in 90.0..100.0 && delta in 0.0..5.0 && !sportTime ->
                         rate = profile_current_basal
 
+                    // 3. Pour une légère élévation (120-130 mg/dL)
                     enablebasal && iob < 0.8 && bg in 120.0..130.0 && delta in 0.0..6.0 && !sportTime ->
                         rate = profile_current_basal * basalAdjustmentFactor
 
+                    // 4. Haute glycémie modérée : BG > 180 avec une légère dégradation de la pente
                     bg > 180 && delta in -5.0..1.0 ->
                         rate = profile_current_basal * basalAdjustmentFactor
 
-                    eventualBG < 80 && !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime ->
+                    // 5. Sécurité hypo : si la prévision (eventualBG) est inférieure à 80, couper la basale
+                    eventualBG < 80 &&
+                        !snackTime && !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime ->
                         rate = 0.0
 
-                    eventualBG > 180 && !snackTime && !mealTime && !lunchTime && !dinnerTime &&
+                    // 6. Correction en cas d'hyperglycémie forte
+                    eventualBG > 180 &&
+                        !snackTime && !mealTime && !lunchTime && !dinnerTime &&
                         !highCarbTime && !bfastTime && !sportTime && delta > 3 ->
                         rate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, basalAdjustmentFactor)
 
-                    !enablebasal && eventualBG > 110 && !snackTime && !mealTime && !lunchTime &&
-                        !dinnerTime && !highCarbTime && !bfastTime && !sportTime && bg > 150 && delta in -2.0..15.0 ->
+                    // 7. Cas particuliers (basé sur eventualBG > 110 et BG > 150)
+                    !enablebasal && eventualBG > 110 &&
+                        !snackTime && !mealTime && !lunchTime && !dinnerTime &&
+                        !highCarbTime && !bfastTime && !sportTime && bg > 150 && delta in -2.0..15.0 ->
                         rate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, basalAdjustmentFactor)
 
-                    // Conditions spécifiques pour les repas
+                    // 8. Conditions spécifiques liées aux repas
                     snackTime && snackrunTime in 0..30 ->
                         rate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, 4.0)
-
                     mealTime && mealruntime in 0..30 ->
                         rate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, 10.0)
-
                     bfastTime && bfastruntime in 0..30 ->
                         rate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, 10.0)
-
                     bfastTime && bfastruntime in 30..60 && delta > 0 ->
                         rate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, delta.toDouble())
-
                     lunchTime && lunchruntime in 0..30 ->
                         rate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, 10.0)
-
                     lunchTime && lunchruntime in 30..60 && delta > 0 ->
                         rate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, delta.toDouble())
-
                     dinnerTime && dinnerruntime in 0..30 ->
                         rate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, 10.0)
-
                     dinnerTime && dinnerruntime in 30..60 && delta > 0 ->
                         rate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, delta.toDouble())
-
                     highCarbTime && highCarbrunTime in 0..60 ->
                         rate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, 10.0)
 
-                    // Cas de haute glycémie (hors honeymoon)
+                    // 9. Correction pour forte hyperglycémie (hors mode honeymoon)
                     bg > 180 && !honeymoon && delta > 0 ->
                         rate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, basalAdjustmentFactor)
 
-                    // Conditions pour le mode honeymoon
+                    // 10. Cas spécifiques pour le mode honeymoon
                     honeymoon && bg in 140.0..169.0 && delta > 0 ->
                         rate = profile_current_basal
-
                     honeymoon && bg > 170 && delta > 0 ->
                         rate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, basalAdjustmentFactor)
-
                     honeymoon && delta > 2 && bg in 90.0..119.0 ->
                         rate = profile_current_basal
-
                     honeymoon && delta > 0 && bg > 110 && eventualBG > 120 && bg < 160 ->
                         rate = profile_current_basal * basalAdjustmentFactor
 
-                    // Cas de grossesse
+                    // 11. Cas de grossesse
                     pregnancyEnable && delta > 0 && bg > 110 && !honeymoon ->
                         rate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, basalAdjustmentFactor)
 
-                    // Conditions locales basées sur mealData
+                    // 12. Ajustements basés sur les données locales (mealData)
                     localconditionResult && delta > 1 && bg > 90 ->
                         rate = profile_current_basal * basalAdjustmentFactor
-
                     enablebasal && bg > 100 && !conditionResult && eventualBG > 100 &&
                         delta in 0.0..4.0 && !sportTime ->
                         rate = profile_current_basal * basalAdjustmentFactor
 
-                    // Nouveaux cas basés sur les déviations de mealData
+                    // 13. Cas basés sur les déviations issues de mealData (mode honeymoon)
                     honeymoon && mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 &&
                         bg > 110 && delta > 0 ->
                         rate = profile_current_basal * basalAdjustmentFactor
-
                     honeymoon && mealData.slopeFromMaxDeviation in 0.0..0.2 && mealData.slopeFromMinDeviation in 0.0..0.5 &&
                         bg in 120.0..150.0 && delta > 0 ->
                         rate = profile_current_basal * basalAdjustmentFactor
-
                     honeymoon && mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 &&
                         bg in 100.0..120.0 && delta > 0 ->
                         rate = profile_current_basal * basalAdjustmentFactor
 
+                    // 14. Cas basés sur mealData pour les non-honeymoon
                     enablebasal && !honeymoon && mealData.slopeFromMinDeviation > 0 && bg > 80 && delta > 0 ->
                         rate = profile_current_basal * basalAdjustmentFactor
 
+                    // 15. Par défaut : appliquer le taux basal final lissé
                     else -> {
-                        // Par défaut, on applique le taux basal final lissé
                         rate = finalBasalRate
-                    }
                 }
             }
+
+        }
 
 // Application finale
             rate.let {
