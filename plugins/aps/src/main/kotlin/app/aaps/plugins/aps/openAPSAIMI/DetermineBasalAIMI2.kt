@@ -141,6 +141,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var snackrunTime: Long = 0
     private var intervalsmb = 1
     private var peakintermediaire = 0.0
+    private var insulinPeakTime = 0.0
 
     private fun Double.toFixed2(): String = DecimalFormat("0.00#").format(round(this, 2))
 
@@ -2400,7 +2401,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // set minPredBGs starting when currently-dosed insulin activity will peak
             // look ahead 60m (regardless of insulin type) so as to be less aggressive on slower insulins
             // add 30m to allow for insulin delivery (SMBs or temps)
-            val insulinPeakTime = tp
+            this.insulinPeakTime = tp
             val insulinPeak5m = (insulinPeakTime / 60.0) * 12.0
             //console.error(insulinPeakTime, insulinPeak5m, profile.insulinPeakTime, profile.curve);
 
@@ -2758,22 +2759,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (!enablebasal) {
                 when {
                     // Pour 80-90 mg/dL : si la tendance est négative ET IOB élevé, couper l'insuline
-                    bg in 80.0..90.0 && slopeFromMaxDeviation < 0 && iob > 0.1 ->
+                    bg in 80.0..90.0 && slopeFromMaxDeviation < 0 && iob > 0.1 && !sportTime ->
                         rate = 0.0
                     // Sinon, appliquer un faible basal (uniquement si la tendance n'est pas négative)
-                    bg in 80.0..90.0 && slopeFromMinDeviation >= 0 && slopeFromMaxDeviation >=0 && delta in -1.0..2.0 ->
+                    bg in 80.0..90.0 && slopeFromMinDeviation >= 0 && slopeFromMaxDeviation >=0 && delta in -1.0..2.0 && !sportTime ->
                         rate = profile_current_basal * 0.2
-
+                    sportTime && bg > 170 && delta > 2 ->
+                        rate = profile_current_basal
                     // Pour 90-100 mg/dL : même principe
-                    bg in 90.0..100.0 && slopeFromMinDeviation < 0 && iob > 0.1 ->
+                    bg in 90.0..100.0 && slopeFromMinDeviation < 0 && iob > 0.1 && !sportTime ->
                         rate = 0.0
-                    bg in 90.0..100.0 && slopeFromMinDeviation >= 0 && delta in -1.0..2.0 ->
+                    bg in 90.0..100.0 && slopeFromMinDeviation >= 0 && delta in -1.0..2.0 && !sportTime ->
                         rate = profile_current_basal * 0.5
 
-                    bg > 90 && slopeFromMinDeviation in 0.0..0.4 && delta > 1 && shortAvgDelta >= 1 ->
+                    bg > 90 && slopeFromMinDeviation in 0.0..0.4 && delta > 1 && shortAvgDelta >= 1  && !sportTime->
                         rate = profile_current_basal
 
-                    bg > 120 && slopeFromMinDeviation in 0.4..20.0 && delta > 1 && shortAvgDelta >= 1 ->
+                    bg > 120 && slopeFromMinDeviation in 0.4..20.0 && delta > 1 && shortAvgDelta >= 1  && !sportTime->
                         rate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, delta.toDouble())
 
                     (timenow in 11..13 || timenow in 18..21) && iob < 0.8 && recentSteps5Minutes < 100 && delta > -1 && slopeFromMinDeviation > 0.3 ->
@@ -2787,7 +2789,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         rate = profile_current_basal
 
                     recentSteps5Minutes == 0 && delta > 0 &&
-                        !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !snackTime ->
+                        !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !snackTime  && slopeFromMinDeviation > 0.2->
                         rate = profile_current_basal
 
                     else -> {
