@@ -1125,58 +1125,132 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
-    private fun predictFutureBg(
-        bg: Float,
-        iob: Float,
-        variableSensitivity: Float,
-        cob: Float,
-        ci: Float,
+    // private fun predictFutureBg(
+    //     bg: Float,
+    //     iob: Float,
+    //     variableSensitivity: Float,
+    //     cob: Float,
+    //     ci: Float,
+    //     mealTime: Boolean,
+    //     bfastTime: Boolean,
+    //     lunchTime: Boolean,
+    //     dinnerTime: Boolean,
+    //     highcarbTime: Boolean,
+    //     snackTime: Boolean,
+    //     profile: OapsProfileAimi
+    // ): Float {
+    //     val (averageCarbAbsorptionTime, carbTypeFactor, estimatedCob) = when {
+    //         highcarbTime -> Triple(3.5f, 0.75f, 100f) // Repas riche en glucides
+    //         snackTime -> Triple(1.5f, 1.25f, 15f) // Snack
+    //         mealTime -> Triple(2.5f, 1.0f, 55f) // Repas normal
+    //         bfastTime -> Triple(3.5f, 1.0f, 55f) // Petit-déjeuner
+    //         lunchTime -> Triple(2.5f, 1.0f, 70f) // Déjeuner
+    //         dinnerTime -> Triple(2.5f, 1.0f, 70f) // Dîner
+    //         else -> Triple(2.5f, 1.0f, 70f) // Valeur par défaut si aucun type de repas spécifié
+    //     }
+    //
+    //     // Augmenter l'absorption s'il fait nuit (le soir l'insuline agit souvent plus lentement)
+    //     val currentHour = LocalTime.now().hour
+    //     val absorptionTimeInMinutes = when {
+    //         currentHour in 18..23 -> averageCarbAbsorptionTime * 90
+    //         currentHour in 0..5 -> averageCarbAbsorptionTime * 50 // Diminuer l'absorption entre minuit et 5h du matin
+    //         else -> averageCarbAbsorptionTime * 60
+    //     }
+    //
+    //     val insulinEffect = calculateInsulinEffect(
+    //         bg, iob, variableSensitivity, cob, normalBgThreshold, recentSteps180Minutes,
+    //         averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(), profile.insulinDivisor.toFloat()
+    //     )
+    //
+    //     val carbEffect = if (absorptionTimeInMinutes != 0f && ci > 0f) {
+    //         (estimatedCob / absorptionTimeInMinutes) * ci * carbTypeFactor
+    //     } else {
+    //         0f
+    //     }
+    //     val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
+    //     var futureBg = bg - insulinEffect + carbEffect
+    //     if (!honeymoon && futureBg < 39f) {
+    //         futureBg = 39f
+    //     } else if (honeymoon && futureBg < 50f) {
+    //         futureBg = 50f
+    //     }
+    //
+    //     return futureBg
+    // }
+    private fun predictEventualBG(
+        bg: Float,                     // Glycémie actuelle
+        iob: Float,                    // Insuline active (IOB)
+        variableSensitivity: Float,    // Sensibilité insulinique
+        ci: Float,                     // Quantité de glucides ingérée
+        minDelta: Float,               // Delta minimal instantané (ex. dernière variation)
+        minAvgDelta: Float,            // Moyenne instantanée (court terme) des deltas
+        longAvgDelta: Float,           // Moyenne à plus long terme des deltas
         mealTime: Boolean,
         bfastTime: Boolean,
         lunchTime: Boolean,
         dinnerTime: Boolean,
-        highcarbTime: Boolean,
+        highCarbTime: Boolean,
         snackTime: Boolean,
-        profile: OapsProfileAimi
+        honeymoon: Boolean
     ): Float {
+        // 1. Détermination des paramètres glucidiques en fonction du contexte (type de repas)
         val (averageCarbAbsorptionTime, carbTypeFactor, estimatedCob) = when {
-            highcarbTime -> Triple(3.5f, 0.75f, 100f) // Repas riche en glucides
-            snackTime -> Triple(1.5f, 1.25f, 15f) // Snack
-            mealTime -> Triple(2.5f, 1.0f, 55f) // Repas normal
-            bfastTime -> Triple(3.5f, 1.0f, 55f) // Petit-déjeuner
-            lunchTime -> Triple(2.5f, 1.0f, 70f) // Déjeuner
-            dinnerTime -> Triple(2.5f, 1.0f, 70f) // Dîner
-            else -> Triple(2.5f, 1.0f, 70f) // Valeur par défaut si aucun type de repas spécifié
+            highCarbTime -> Triple(3.5f, 0.75f, 100f) // Repas riche en glucides
+            snackTime    -> Triple(1.5f, 1.25f, 15f)   // Snack
+            mealTime     -> Triple(2.5f, 1.0f, 55f)     // Repas standard
+            bfastTime    -> Triple(3.5f, 1.0f, 55f)     // Petit-déjeuner
+            lunchTime    -> Triple(2.5f, 1.0f, 70f)     // Déjeuner
+            dinnerTime   -> Triple(2.5f, 1.0f, 70f)     // Dîner
+            else         -> Triple(2.5f, 1.0f, 70f)     // Valeur par défaut
         }
 
-        // Augmenter l'absorption s'il fait nuit (le soir l'insuline agit souvent plus lentement)
+        // 2. Calcul du temps d'absorption (en minutes) en fonction de l'heure actuelle
         val currentHour = LocalTime.now().hour
         val absorptionTimeInMinutes = when {
-            currentHour in 18..23 -> averageCarbAbsorptionTime * 90
-            currentHour in 0..5 -> averageCarbAbsorptionTime * 50 // Diminuer l'absorption entre minuit et 5h du matin
-            else -> averageCarbAbsorptionTime * 60
+            currentHour in 18..23 -> averageCarbAbsorptionTime * 90  // Soir
+            currentHour in 0..5   -> averageCarbAbsorptionTime * 50  // Nuit
+            else                  -> averageCarbAbsorptionTime * 60  // Jour
         }
 
-        val insulinEffect = calculateInsulinEffect(
-            bg, iob, variableSensitivity, cob, normalBgThreshold, recentSteps180Minutes,
-            averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(), profile.insulinDivisor.toFloat()
-        )
+        // 3. Calcul de l'effet insuline (modèle simplifié)
+        val insulinEffect = iob * variableSensitivity
 
-        val carbEffect = if (absorptionTimeInMinutes != 0f && ci > 0f) {
+        // 4. Calcul de l'effet glucidique : en fonction des glucides estimés et du temps d'absorption
+        val carbEffect = if (absorptionTimeInMinutes > 0 && ci > 0f) {
             (estimatedCob / absorptionTimeInMinutes) * ci * carbTypeFactor
         } else {
             0f
         }
-        val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-        var futureBg = bg - insulinEffect + carbEffect
-        if (!honeymoon && futureBg < 39f) {
-            futureBg = 39f
-        } else if (honeymoon && futureBg < 50f) {
-            futureBg = 50f
+
+        // 5. Calcul de la déviation basée sur la tendance
+        //    On utilise minDelta et, si nécessaire, on remplace par minAvgDelta ou longAvgDelta pour limiter l'effet négatif excessif.
+        var deviation = (30f / 5f) * (minDelta - bg)
+        if (deviation < 0) {
+            deviation = (30f / 5f) * (minAvgDelta - bg)
+            if (deviation < 0) {
+                deviation = (30f / 5f) * (longAvgDelta - bg)
+            }
         }
 
-        return futureBg
+        // 6. Calcul de la prédiction naïve basée sur l'effet insuline
+        val naiveEventualBG = round((bg - insulinEffect).toDouble(), 0)
+
+        // 7. Combinaison des effets pour obtenir la glycémie prédite :
+        //    glycémie actuelle - effet insuline + effet glucidique + déviation (tendance)
+        val predictedBG = naiveEventualBG + carbEffect + deviation
+
+        // 8. Application d'un seuil minimal de sécurité :
+        //    - En mode non-honeymoon, ne pas prédire en dessous de 39 mg/dL
+        //    - En mode honeymoon, ne pas prédire en dessous de 50 mg/dL
+        val finalPredictedBG = when {
+            !honeymoon && predictedBG < 39f -> 39f
+            honeymoon && predictedBG < 50f   -> 50f
+            else                              -> predictedBG
+        }
+
+        return finalPredictedBG as Float
     }
+
     private fun interpolatebasal(bg: Double): Double {
         val clampedBG = bg.coerceIn(40.0, 300.0)
         return when {
@@ -1855,7 +1929,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         var sens = profile.variable_sens
         this.variableSensitivity = sens.toFloat()
         consoleError.add("CR:${profile.carb_ratio}")
-        this.predictedBg = predictFutureBg(bg.toFloat(), iob, variableSensitivity, cob, ci,mealTime,bfastTime,lunchTime,dinnerTime,highCarbTime,snackTime,profile)
+        this.predictedBg = predictEventualBG(bg.toFloat(), iob, variableSensitivity, ci, minDelta.toFloat(), shortAvgDelta, longAvgDelta, mealTime, bfastTime, lunchTime, dinnerTime, highCarbTime, snackTime, honeymoon )
         //val insulinEffect = calculateInsulinEffect(bg.toFloat(),iob,variableSensitivity,cob,normalBgThreshold,recentSteps180Minutes,averageBeatsPerMinute.toFloat(),averageBeatsPerMinute10.toFloat(),profile.insulinDivisor.toFloat())
 
         val now = System.currentTimeMillis()
