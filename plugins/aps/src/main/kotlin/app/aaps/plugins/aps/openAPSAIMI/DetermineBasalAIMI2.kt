@@ -2835,6 +2835,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 // Cas où enablebasal est désactivé
             if (!enablebasal) {
                 when {
+                    bg < 80 ->
+                    rate = 0.0
                     // Pour 80-90 mg/dL : si la tendance est négative ET IOB élevé, couper l'insuline
                     bg in 80.0..90.0 && slopeFromMaxDeviation < 0 && iob > 0.1 && !sportTime ->
                         rate = 0.0
@@ -2878,6 +2880,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 // Deuxième partie : cas où le mode basal adaptatif est activé (enablebasal == true)
             else {
                 when {
+                    bg < 80 ->
+                    rate = 0.0
                     // 1. Ajustement standard en mode enablebasal (sans événement majeur)
                     !honeymoon && iob < 0.6 && bg in 90.0..120.0 && delta in 0.0..6.0 && !sportTime ->
                         rate = profile_current_basal * basalAdjustmentFactor
