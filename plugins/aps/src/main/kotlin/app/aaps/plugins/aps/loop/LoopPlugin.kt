@@ -35,6 +35,7 @@ import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
+import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -118,7 +119,8 @@ class LoopPlugin @Inject constructor(
     private val runningConfiguration: RunningConfiguration,
     private val uiInteraction: UiInteraction,
     private val instantiator: Instantiator,
-    private val processedDeviceStatusData: ProcessedDeviceStatusData
+    private val processedDeviceStatusData: ProcessedDeviceStatusData,
+    private val glucoseStatusProvider: GlucoseStatusProvider
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.LOOP)
@@ -188,12 +190,12 @@ class LoopPlugin @Inject constructor(
             val currentBG = glucoseStatusProvider.glucoseStatusData?.glucose
 
             // 3) Condition : autodrive activé ET glycémie disponible >= 120
-            if (autodrive && currentBG != null && currentBG >= 120.0) {
+            if (autodrive && currentBG != null && currentBG >= 130.0) {
                 aapsLogger.debug(LTag.APS, "OApsAIMIautoDrive=$autodrive; BG=$currentBG => on lance le loop.")
                 invoke("PeriodicApsMaxSmbFrequency", true)
             } else {
                 // Sinon, on logge qu'on ne fait rien
-                aapsLogger.debug(LTag.APS, "Pas de loop : autodrive=$autodrive; BG=$currentBG (<120 ?).")
+                aapsLogger.debug(LTag.APS, "Pas de loop : autodrive=$autodrive; BG=$currentBG (<130 ?).")
             }
 
             // Replanifie le prochain cycle
