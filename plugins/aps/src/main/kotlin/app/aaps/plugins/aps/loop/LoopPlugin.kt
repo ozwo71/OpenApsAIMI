@@ -154,7 +154,7 @@ class LoopPlugin @Inject constructor(
         // Démarrage du déclenchement périodique
         startPeriodicLoop()
     }
-    private fun startPeriodicLoop() {
+    /*private fun startPeriodicLoop() {
         // On récupère la valeur ApsMaxSmbFrequency en minutes
         val freqMinutes = preferences.get(IntKey.ApsMaxSmbFrequency).toLong()
         // On convertit en millisecondes
@@ -173,7 +173,37 @@ class LoopPlugin @Inject constructor(
 
         // On lance la première fois maintenant
         handler?.postDelayed(periodicRunnable, freqMs)
+    }*/
+    private fun startPeriodicLoop() {
+    // Récupère l'intervalle (en minutes) pour la planification
+    val freqMinutes = preferences.get(IntKey.ApsMaxSmbFrequency).toLong()
+    val freqMs = T.mins(freqMinutes).msecs()
+
+    val periodicRunnable = object : Runnable {
+        override fun run() {
+            // 1) Vérifie l'option autodrive
+            val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
+
+            // 2) Récupère la glycémie (ajustez le code si la variable/méthode diffère)
+            val currentBG = glucoseStatusProvider.glucoseStatusData?.glucose
+
+            // 3) Condition : autodrive activé ET glycémie disponible >= 120
+            if (autodrive && currentBG != null && currentBG >= 120.0) {
+                aapsLogger.debug(LTag.APS, "OApsAIMIautoDrive=$autodrive; BG=$currentBG => on lance le loop.")
+                invoke("PeriodicApsMaxSmbFrequency", true)
+            } else {
+                // Sinon, on logge qu'on ne fait rien
+                aapsLogger.debug(LTag.APS, "Pas de loop : autodrive=$autodrive; BG=$currentBG (<120 ?).")
+            }
+
+            // Replanifie le prochain cycle
+            handler?.postDelayed(this, freqMs)
+        }
     }
+
+    // Lance la première exécution
+    handler?.postDelayed(periodicRunnable, freqMs)
+}
     private fun createNotificationChannel() {
         val mNotificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         @SuppressLint("WrongConstant") val channel = NotificationChannel(
