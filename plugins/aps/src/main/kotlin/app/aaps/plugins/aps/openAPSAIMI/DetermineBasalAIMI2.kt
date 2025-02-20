@@ -15,6 +15,7 @@ import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.core.interfaces.aps.Predictions
 import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.stats.TddCalculator
@@ -56,6 +57,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var tirCalculator: TirCalculator
     @Inject lateinit var dateUtil: DateUtil
     @Inject lateinit var profileFunction: ProfileFunction
+    @Inject lateinit var iobCobCalculator: IobCobCalculator
     private val consoleError = mutableListOf<String>()
     private val consoleLog = mutableListOf<String>()
     private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
@@ -1450,25 +1452,64 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 4. Clamp du résultat final pour éviter des valeurs trop extrêmes (ex. entre 0 et 8 U/h)
         return finalBasal.coerceIn(0.0, 8.0)
     }
-    // private fun calculateSmoothBasalRate(
-    //     tdd2Days: Float, // Total Daily Dose (TDD) pour le jour le plus récent
-    //     tdd7Days: Float, // TDD pour le jour précédent
-    //     currentBasalRate: Float // Le taux de basal actuel
-    // ): Float {
-    //     // Poids pour le lissage. Plus la valeur est proche de 1, plus l'influence du jour le plus récent est grande.
-    //     val weightRecent = 0.6f
-    //     val weightPrevious = 1.0f - weightRecent
-    //
-    //     // Calculer la TDD moyenne pondérée
-    //     val weightedTdd = (tdd2Days * weightRecent) + (tdd7Days * weightPrevious)
-    //
-    //     // Ajuster la basale en fonction de la TDD moyenne pondérée
-    //     // Cette formule peut être ajustée en fonction de la logique souhaitée
-    //     val adjustedBasalRate = currentBasalRate * (weightedTdd / tdd2Days)
-    //
-    //     // Retourner la nouvelle basale lissée
-    //     return adjustedBasalRate
-    // }
+    /**
+     * Analyse l'historique récent des glycémies pour déterminer si la montée est :
+     * - "none" : pas de montée significative
+     * - "slow" : montée régulière mais lente
+     * - "rapid" : montée rapide
+     *
+     * Paramètres :
+     * @param periodMinutes         Période d'analyse (en minutes)
+     * @param globalRiseThreshold   Hausse globale minimale (mg/dL) pour considérer qu'il y a montée
+     * @param rapidDeltaThreshold   Seuil moyen de delta (mg/dL par intervalle) pour qualifier la montée de rapide
+     * @param minPositiveDeltas     Nombre minimum d'intervalles avec delta positif requis
+     *
+     * @return "none", "slow" ou "rapid"
+     */
+    fun determineRiseNature(
+        periodMinutes: Int = 20,          // Période d'analyse en minutes
+        globalRiseThreshold: Float = 10f,   // Augmentation globale minimale pour considérer une montée
+        minPositiveDeltas: Int = 4          // Nombre minimum d'intervalles positifs requis
+    ): String {
+        val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return "none"
+        if (data.isEmpty()) return "none"
+
+        val nowTimestamp = data[0].timestamp
+        val periodMillis = periodMinutes * 60 * 1000L
+
+        // Filtrer les lectures dans la période d'analyse
+        val recentReadings = data.filter { nowTimestamp - it.timestamp <= periodMillis }
+        if (recentReadings.size < 2) return "none"
+
+        // Trier par ordre croissant (du plus ancien au plus récent)
+        val sortedReadings = recentReadings.sortedBy { it.timestamp }
+
+        // Calculer l'augmentation globale
+        val globalRise = sortedReadings.last().recalculated - sortedReadings.first().recalculated
+        if (globalRise < globalRiseThreshold) return "none"
+
+        // Calculer les deltas entre lectures successives
+        val deltas = sortedReadings.zipWithNext().map { (prev, next) ->
+            next.recalculated - prev.recalculated
+        }
+        // Compter le nombre d'intervalles avec une augmentation
+        val positiveCount = deltas.count { it > 0 }
+        if (positiveCount < minPositiveDeltas) return "none"
+
+        // Calcul de la moyenne des deltas
+        val avgDelta = if (deltas.isNotEmpty()) deltas.average().toFloat() else 0f
+
+        // Selon vos critères :
+        // Si le delta moyen est >= 10 mg/dL par intervalle (5 minutes), c'est une montée rapide.
+        // Si le delta moyen est compris entre 2 et 4 mg/dL, c'est une montée lente.
+        return when {
+            avgDelta >= 10f -> "rapid"
+            avgDelta in 1f..4f -> "slow"
+            else -> "none"
+        }
+    }
+
+
     private fun determineNoteBasedOnBg(bg: Double): String {
         return when {
             bg > 170 -> "more aggressive"
@@ -1623,6 +1664,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bg,
             delta.toDouble()
         )
+        val riseType = determineRiseNature(periodMinutes = 20, globalRiseThreshold = 10f, minPositiveDeltas = 4)
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
         val calendarInstance = Calendar.getInstance()
         this.hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
@@ -2629,6 +2671,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine(String.format("║ %-${columnWidth}s │ %s", "Long Δ", String.format("%.1f", longAvgDelta)))
             appendLine(String.format("║ %-${columnWidth}s │ %s", "slopeFromMaxDeviation", String.format("%.1f", mealData.slopeFromMaxDeviation)))
             appendLine(String.format("║ %-${columnWidth}s │ %s", "slopeFromMinDeviation", String.format("%.1f", mealData.slopeFromMinDeviation)))
+            appendLine(String.format("║ %-${columnWidth}s │ %s", "Rise Type", String.format("%.1f", riseType)))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
@@ -2828,10 +2871,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 // On part du taux basal courant comme valeur de base
             var rate = profile_current_basal
             // CONDITION DE SÉCURITÉ : En présence d'une tendance à la baisse et d'un IOB protecteur, couper la basale
-            if (bg < 110 && mealData.slopeFromMaxDeviation < 0) {
+            if (bg < 110 && mealData.slopeFromMaxDeviation < 0 && bg > 80) {
                 rate = 0.0
                 return setTempBasal(rate, 30, profile, rT, currenttemp)
             }
+            if (bg > 100 && riseType == "slow" && delta > 0) {
+                rate = profile_current_basal * 5
+                return setTempBasal(rate, 30, profile, rT, currenttemp)
+            }else if (bg > 100 && riseType == "rapid" && delta >= 10){
+                rate = basalaimi.toDouble() * delta
+                return setTempBasal(rate, 30, profile, rT, currenttemp)
+            }
+
 // Cas où enablebasal est désactivé
             if (!enablebasal) {
                 when {
