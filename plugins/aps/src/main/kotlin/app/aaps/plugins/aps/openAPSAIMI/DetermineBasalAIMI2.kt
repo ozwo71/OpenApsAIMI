@@ -1466,48 +1466,108 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      *
      * @return "none", "slow" ou "rapid"
      */
+    // fun determineRiseNature(
+    //     periodMinutes: Int = 20,          // Période d'analyse en minutes
+    //     globalRiseThreshold: Float = 10f,   // Augmentation globale minimale pour considérer une montée
+    //     minPositiveDeltas: Int = 4          // Nombre minimum d'intervalles positifs requis
+    // ): String {
+    //     val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return "none"
+    //     if (data.isEmpty()) return "none"
+    //
+    //     val nowTimestamp = data[0].timestamp
+    //     val periodMillis = periodMinutes * 60 * 1000L
+    //
+    //     // Filtrer les lectures dans la période d'analyse
+    //     val recentReadings = data.filter { nowTimestamp - it.timestamp <= periodMillis }
+    //     if (recentReadings.size < 2) return "none"
+    //
+    //     // Trier par ordre croissant (du plus ancien au plus récent)
+    //     val sortedReadings = recentReadings.sortedBy { it.timestamp }
+    //
+    //     // Calculer l'augmentation globale
+    //     val globalRise = sortedReadings.last().recalculated - sortedReadings.first().recalculated
+    //     if (globalRise < globalRiseThreshold) return "none"
+    //
+    //     // Calculer les deltas entre lectures successives
+    //     val deltas = sortedReadings.zipWithNext().map { (prev, next) ->
+    //         next.recalculated - prev.recalculated
+    //     }
+    //     // Compter le nombre d'intervalles avec une augmentation
+    //     val positiveCount = deltas.count { it > 0 }
+    //     if (positiveCount < minPositiveDeltas) return "none"
+    //
+    //     // Calcul de la moyenne des deltas
+    //     val avgDelta = if (deltas.isNotEmpty()) deltas.average().toFloat() else 0f
+    //
+    //     // Selon vos critères :
+    //     // Si le delta moyen est >= 10 mg/dL par intervalle (5 minutes), c'est une montée rapide.
+    //     // Si le delta moyen est compris entre 2 et 4 mg/dL, c'est une montée lente.
+    //     return when {
+    //         avgDelta >= 10f -> "rapid"
+    //         avgDelta in 1f..4f -> "slow"
+    //         else -> "none"
+    //     }
+    // }
     fun determineRiseNature(
-        periodMinutes: Int = 20,          // Période d'analyse en minutes
-        globalRiseThreshold: Float = 10f,   // Augmentation globale minimale pour considérer une montée
-        minPositiveDeltas: Int = 4          // Nombre minimum d'intervalles positifs requis
+        periodMinutes: Int = 20,           // Période d'analyse (ici 20 minutes)
+        globalRiseThreshold: Float = 10f,    // Hausse globale minimale (mg/dL) pour considérer une montée
+        rapidDeltaThreshold: Float = 10f,    // Si le delta moyen >= 10 mg/dL par intervalle, c'est "rapid"
+        slowDeltaLowerThreshold: Float = 2f, // Si le delta moyen est entre 2 et 4 mg/dL, c'est "slow"
+        slowDeltaUpperThreshold: Float = 4f,
+        minPositiveDeltas: Int = 4           // Nombre minimum d'intervalles positifs requis
     ): String {
-        val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return "none"
-        if (data.isEmpty()) return "none"
+        try {
+            // Récupérer l'historique via la copie des données CGM
+            val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return "none"
+            if (data.isEmpty()) return "none"
 
-        val nowTimestamp = data[0].timestamp
-        val periodMillis = periodMinutes * 60 * 1000L
+            // On considère que data[0] est la lecture la plus récente
+            val nowTimestamp = data[0].timestamp
+            val periodMillis = periodMinutes * 60 * 1000L
 
-        // Filtrer les lectures dans la période d'analyse
-        val recentReadings = data.filter { nowTimestamp - it.timestamp <= periodMillis }
-        if (recentReadings.size < 2) return "none"
+            // Filtrer les lectures dans la période d'analyse
+            val recentReadings = data.filter { nowTimestamp - it.timestamp <= periodMillis }
+            if (recentReadings.size < 2) return "none"
 
-        // Trier par ordre croissant (du plus ancien au plus récent)
-        val sortedReadings = recentReadings.sortedBy { it.timestamp }
+            // Trier par ordre croissant de timestamp (du plus ancien au plus récent)
+            val sortedReadings = recentReadings.sortedBy { it.timestamp }
 
-        // Calculer l'augmentation globale
-        val globalRise = sortedReadings.last().recalculated - sortedReadings.first().recalculated
-        if (globalRise < globalRiseThreshold) return "none"
+            // Calculer l'augmentation globale
+            val globalRise = sortedReadings.last().recalculated - sortedReadings.first().recalculated
+            if (globalRise < globalRiseThreshold) {
+                //aapsLogger.debug(LTag.GLUCOSE, "Global rise too low: $globalRise < $globalRiseThreshold")
+                return "none Global rise too low: $globalRise < $globalRiseThreshold"
+            }
 
-        // Calculer les deltas entre lectures successives
-        val deltas = sortedReadings.zipWithNext().map { (prev, next) ->
-            next.recalculated - prev.recalculated
-        }
-        // Compter le nombre d'intervalles avec une augmentation
-        val positiveCount = deltas.count { it > 0 }
-        if (positiveCount < minPositiveDeltas) return "none"
+            // Calculer les deltas entre lectures successives
+            val deltas = sortedReadings.zipWithNext().map { (prev, next) ->
+                next.recalculated - prev.recalculated
+            }
+            val positiveCount = deltas.count { it > 0 }
+            if (positiveCount < minPositiveDeltas) {
+                //aapsLogger.debug(LTag.GLUCOSE, "Not enough positive deltas: $positiveCount < $minPositiveDeltas")
+                return "none Not enough positive deltas: $positiveCount < $minPositiveDeltas"
+            }
 
-        // Calcul de la moyenne des deltas
-        val avgDelta = if (deltas.isNotEmpty()) deltas.average().toFloat() else 0f
+            // Calcul de la moyenne des deltas
+            val avgDelta = if (deltas.isNotEmpty()) deltas.average().toFloat() else 0f
+            //aapsLogger.debug(LTag.GLUCOSE, "Avg delta over period: $avgDelta mg/dL/interval")
 
-        // Selon vos critères :
-        // Si le delta moyen est >= 10 mg/dL par intervalle (5 minutes), c'est une montée rapide.
-        // Si le delta moyen est compris entre 2 et 4 mg/dL, c'est une montée lente.
-        return when {
-            avgDelta >= 10f -> "rapid"
-            avgDelta in 1f..4f -> "slow"
-            else -> "none"
+            // Décision selon vos critères :
+            // Si avgDelta >= 10 mg/dL par intervalle => montée rapide ("rapid")
+            // Si avgDelta est entre 2 et 4 mg/dL par intervalle => montée lente ("slow")
+            return when {
+                avgDelta >= rapidDeltaThreshold -> "rapid"
+                avgDelta in slowDeltaLowerThreshold..slowDeltaUpperThreshold -> "slow"
+                else -> "none"
+            }
+        } catch (ex: Exception) {
+            //aapsLogger.error(LTag.GLUCOSE, "Erreur dans determineRiseNature: ${ex.message}")
+            return "none Erreur dans determineRiseNature ${ex.message}"
         }
     }
+
+
 
 
     private fun determineNoteBasedOnBg(bg: Double): String {
