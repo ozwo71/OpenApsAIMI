@@ -1704,7 +1704,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.delta = glucose_status.delta.toFloat()
         this.shortAvgDelta = glucose_status.shortAvgDelta.toFloat()
         this.longAvgDelta = glucose_status.longAvgDelta.toFloat()
-        val bgacceleration = glucose_status.bgAcceleration
+        val bgAcceleration = glucose_status.bgAcceleration ?: 0f
         val therapy = Therapy(persistenceLayer).also {
             it.updateStatesBasedOnTherapyEvents()
         }
@@ -2616,7 +2616,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine(String.format("║ %-${columnWidth}s │ %s", "Long Δ", String.format("%.1f", longAvgDelta)))
             appendLine(String.format("║ %-${columnWidth}s │ %s", "slopeFromMaxDeviation", String.format("%.1f", mealData.slopeFromMaxDeviation)))
             appendLine(String.format("║ %-${columnWidth}s │ %s", "slopeFromMinDeviation", String.format("%.1f", mealData.slopeFromMinDeviation)))
-            appendLine(String.format("║ %-${columnWidth}s │ %s", "bgacceleration", String.format("%.1f", bgacceleration)))
+            appendLine(String.format("║ %-${columnWidth}s │ %s", "bgAcceleration", String.format("%.1f", bgAcceleration)))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
