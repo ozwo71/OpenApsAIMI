@@ -1519,7 +1519,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         try {
             // Récupérer l'historique via la copie des données CGM
             val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return "none"
-            if (data.isEmpty()) return "none"
+            if (data.isEmpty() || data.size < 4) return "none"
 
             // On considère que data[0] est la lecture la plus récente
             val nowTimestamp = data[0].timestamp
