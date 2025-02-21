@@ -2752,7 +2752,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 // On part du taux basal courant comme valeur de base
             var rate = profile_current_basal
             // CONDITION DE SÉCURITÉ : En présence d'une tendance à la baisse et d'un IOB protecteur, couper la basale
-            if (bg < 110 && mealData.slopeFromMaxDeviation < 0 && bg > 80 && bgAcceleration.toFloat() <= 0.0f) {
+            if (bg < 110 && mealData.slopeFromMaxDeviation < 0) {
                 rate = 0.0
                 return setTempBasal(rate, 30, profile, rT, currenttemp)
             }
