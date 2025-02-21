@@ -1743,7 +1743,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                  rT.reason.append("Microbolusing Meal Mode ${pbolusM}U. ")
              return rT
          }
-        if (isMealModeCondition2(variableSensitivity, targetBg, delta, shortAvgDelta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat()) && !mealTime && !highCarbTime && !lunchTime && !bfastTime && !dinnerTime && !snackTime){
+        if (isMealModeCondition2(variableSensitivity, targetBg, delta, shortAvgDelta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat()) && !mealTime && !highCarbTime && !lunchTime && !bfastTime && !dinnerTime && !snackTime && bgAcceleration.toFloat() >= 2.0f){
             val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
             rT.units = pbolusM
             rT.reason.append("Microbolusing Meal Mode ${pbolusM}U. ")
