@@ -2752,7 +2752,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 // On part du taux basal courant comme valeur de base
             var rate = profile_current_basal
             // CONDITION DE SÉCURITÉ : En présence d'une tendance à la baisse et d'un IOB protecteur, couper la basale
-            if (bg < 110 && mealData.slopeFromMaxDeviation < 0) {
+            if (bg < 110 && mealData.slopeFromMaxDeviation <= 0) {
                 rate = 0.0
                 return setTempBasal(rate, 30, profile, rT, currenttemp)
             }
@@ -2770,7 +2770,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     bg < 80 ->
                     rate = 0.0
                     // Pour 80-90 mg/dL : si la tendance est négative ET IOB élevé, couper l'insuline
-                    bg in 80.0..90.0 && slopeFromMaxDeviation < 0 && iob > 0.1 && !sportTime ->
+                    bg in 80.0..90.0 && slopeFromMaxDeviation <= 0 && iob > 0.1 && !sportTime ->
                         rate = 0.0
                     // Sinon, appliquer un faible basal (uniquement si la tendance n'est pas négative)
                     bg in 80.0..90.0 && slopeFromMinDeviation >= 0.3 && slopeFromMaxDeviation >=0 && delta in -1.0..2.0 && !sportTime && bgAcceleration.toFloat() > 0.0f ->
@@ -2778,7 +2778,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     sportTime && bg > 170 && delta > 2 && bgAcceleration.toFloat() > 0.0f->
                         rate = profile_current_basal
                     // Pour 90-100 mg/dL : même principe
-                    bg in 90.0..100.0 && slopeFromMinDeviation < 0.3 && iob > 0.1 && !sportTime && bgAcceleration.toFloat() > 0.0f ->
+                    bg in 90.0..100.0 && slopeFromMinDeviation <= 0.3 && iob > 0.1 && !sportTime && bgAcceleration.toFloat() > 0.0f ->
                         rate = 0.0
                     bg in 90.0..100.0 && slopeFromMinDeviation >= 0.3 && delta in -1.0..2.0 && !sportTime && bgAcceleration.toFloat() > 0.0f ->
                         rate = profile_current_basal * 0.5
