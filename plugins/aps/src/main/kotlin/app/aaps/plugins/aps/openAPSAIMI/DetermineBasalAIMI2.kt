@@ -2561,7 +2561,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "20 Feb 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "21 Feb 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
@@ -2773,17 +2773,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     bg in 80.0..90.0 && slopeFromMaxDeviation < 0 && iob > 0.1 && !sportTime ->
                         rate = 0.0
                     // Sinon, appliquer un faible basal (uniquement si la tendance n'est pas négative)
-                    bg in 80.0..90.0 && slopeFromMinDeviation >= 0 && slopeFromMaxDeviation >=0 && delta in -1.0..2.0 && !sportTime && bgAcceleration.toFloat() > 0.0f ->
+                    bg in 80.0..90.0 && slopeFromMinDeviation >= 0.3 && slopeFromMaxDeviation >=0 && delta in -1.0..2.0 && !sportTime && bgAcceleration.toFloat() > 0.0f ->
                         rate = profile_current_basal * 0.2
                     sportTime && bg > 170 && delta > 2 && bgAcceleration.toFloat() > 0.0f->
                         rate = profile_current_basal
                     // Pour 90-100 mg/dL : même principe
-                    bg in 90.0..100.0 && slopeFromMinDeviation < 0 && iob > 0.1 && !sportTime && bgAcceleration.toFloat() > 0.0f ->
+                    bg in 90.0..100.0 && slopeFromMinDeviation < 0.3 && iob > 0.1 && !sportTime && bgAcceleration.toFloat() > 0.0f ->
                         rate = 0.0
-                    bg in 90.0..100.0 && slopeFromMinDeviation >= 0 && delta in -1.0..2.0 && !sportTime && bgAcceleration.toFloat() > 0.0f ->
+                    bg in 90.0..100.0 && slopeFromMinDeviation >= 0.3 && delta in -1.0..2.0 && !sportTime && bgAcceleration.toFloat() > 0.0f ->
                         rate = profile_current_basal * 0.5
 
-                    bg > 90 && slopeFromMinDeviation in 0.0..0.4 && delta > 1 && shortAvgDelta >= 1  && !sportTime && bgAcceleration.toFloat() > 0.0f ->
+                    bg > 90 && slopeFromMinDeviation in 0.3..0.5 && delta > 1 && shortAvgDelta >= 1  && !sportTime && bgAcceleration.toFloat() > 0.0f ->
                         rate = profile_current_basal
 
                     bg > 120 && slopeFromMinDeviation in 0.4..20.0 && delta > 1 && shortAvgDelta >= 1  && !sportTime && bgAcceleration.toFloat() > 1.0f->
@@ -2807,7 +2807,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         rate = profile_current_basal
 
                     recentSteps5Minutes == 0 && delta > 0 &&
-                        !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !snackTime  && slopeFromMinDeviation > 0.2 && bgAcceleration.toFloat() > 0.0f->
+                        !mealTime && !lunchTime && !dinnerTime && !highCarbTime && !bfastTime && !snackTime  && slopeFromMinDeviation > 0.3 && bgAcceleration.toFloat() > 0.0f->
                         rate = profile_current_basal
                     snackTime && snackrunTime in 0..30 ->
                         rate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, 4.0)
