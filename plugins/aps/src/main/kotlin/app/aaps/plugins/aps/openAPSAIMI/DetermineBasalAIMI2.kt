@@ -2776,10 +2776,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
                 // allow SMBIntervals between 1 and 10 minutes
                 //val SMBInterval = min(10, max(1, profile.SMBInterval))
-                val SMBInterval = min(20, max(1, intervalsmb))
+                val SMBInterval = min(20, max(1, calculateSMBInterval()))
                 val nextBolusMins = round(SMBInterval - lastBolusAge, 0)
                 val nextBolusSeconds = round((SMBInterval - lastBolusAge) * 60, 0) % 60
-                if (lastBolusAge > calculateSMBInterval()) {
+                if (lastBolusAge > SMBInterval) {
                     if (microBolus > 0) {
                         rT.units = microBolus
                         rT.reason.append("Microbolusing ${microBolus}U. ")
