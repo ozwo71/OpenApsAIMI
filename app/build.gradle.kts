@@ -32,7 +32,7 @@ fun generateGitBuild(): String {
         }
         val commitObject = stdout.toString().trim()
         stringBuilder.append(commitObject)
-    } catch (ignored: Exception) {
+    } catch (_: Exception) {
         stringBuilder.append("NoGitSystemAvailable")
     }
     return stringBuilder.toString()
@@ -48,7 +48,7 @@ fun generateGitRemote(): String {
         }
         val commitObject = stdout.toString().trim()
         stringBuilder.append(commitObject)
-    } catch (ignored: Exception) {
+    } catch (_: Exception) {
         stringBuilder.append("NoGitSystemAvailable")
     }
     return stringBuilder.toString()
@@ -71,7 +71,7 @@ fun gitAvailable(): Boolean {
         }
         val commitObject = stdout.toString().trim()
         stringBuilder.append(commitObject)
-    } catch (ignored: Exception) {
+    } catch (_: Exception) {
         return false // NoGitSystemAvailable
     }
     return stringBuilder.toString().isNotEmpty()
@@ -92,7 +92,7 @@ fun allCommitted(): Boolean {
             .replace(Regex("""(?m)^\s*(\?\?)\s*.*?\s*$"""), "")
 
         stringBuilder.append(cleanedList.trim())
-    } catch (ignored: Exception) {
+    } catch (_: Exception) {
         return false // NoGitSystemAvailable
     }
     return stringBuilder.toString().isEmpty()
@@ -275,6 +275,8 @@ dependencies {
     ksp(libs.com.google.dagger.compiler)
 
     api(libs.com.uber.rxdogtag2.rxdogtag)
+    // Remote config
+    api(libs.com.google.firebase.config)
 }
 
 // -----------------------------------------------------------------------------
