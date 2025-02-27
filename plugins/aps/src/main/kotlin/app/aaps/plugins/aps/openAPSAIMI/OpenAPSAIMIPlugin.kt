@@ -215,6 +215,52 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         preferenceFragment.findPreference<AdaptiveIntPreference>(IntKey.ApsUamMaxMinutesOfBasalToLimitSmb.key)?.isVisible = smbEnabled && uamEnabled
     }
     private val dynIsfCache = LongSparseArray<Double>()
+    // Exemple de fonction pour prédire le delta futur à partir d'un historique récent
+    private fun predictedDelta(deltaHistory: List<Double>): Double {
+        if (deltaHistory.isEmpty()) return 0.0
+        // Par exemple, on peut utiliser une moyenne pondérée avec des poids croissants pour donner plus d'importance aux valeurs récentes
+        val weights = (1..deltaHistory.size).map { it.toDouble() }
+        val weightedSum = deltaHistory.zip(weights).sumOf { it.first * it.second }
+        return weightedSum / weights.sum()
+    }
+
+    // Fonction pour calculer un facteur de correction dynamique en se basant sur le delta actuel et prédit
+    private fun dynamicDeltaCorrectionFactor(currentDelta: Double?, bg: Double?, predictedDelta: Double?): Double {
+        if (currentDelta == null || bg == null || predictedDelta == null) return 1.0
+        // Combiner le delta actuel et la prédiction (par exemple, moyenne simple)
+        val combinedDelta = (currentDelta + predictedDelta) / 2.0
+        // Pour anticiper la montée, on applique un ajustement continu :
+        return if (combinedDelta > 0) {
+            // Réduction de la sensibilité : pour combinedDelta = 8, on vise un facteur proche de 0.5
+            val factor = 1.0 - (combinedDelta / 16.0) // Ajustable selon vos observations
+            factor.coerceAtLeast(0.5)
+        } else {
+            // Augmentation de la sensibilité : pour combinedDelta = -6, on vise un facteur proche de 1.4
+            val factor = 1.0 - (combinedDelta / 15.0) // Ajustable aussi
+            factor.coerceAtMost(1.4)
+        }
+    }
+    private fun getRecentDeltas(): List<Double> {
+        val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
+        if (data.isEmpty()) return emptyList()
+
+        val now = data.first()
+        val nowDate = now.timestamp
+        val recentDeltas = mutableListOf<Double>()
+
+        // On collecte les deltas sur une fenêtre pertinente (par exemple, entre 2.5 et 7.5 minutes)
+        for (i in 1 until data.size) {
+            if (data[i].value > 39 && !data[i].filledGap) {
+                val minutesAgo = ((nowDate - data[i].timestamp) / (1000.0 * 60))
+                // On choisit ici un intervalle où les données sont suffisamment récentes
+                if (minutesAgo in 2.5..7.5) {
+                    val delta = (now.recalculated - data[i].recalculated) / minutesAgo * 5
+                    recentDeltas.add(delta)
+                }
+            }
+        }
+        return recentDeltas
+    }
     @Synchronized
     private fun calculateVariableIsf(timestamp: Long, bg: Double?): Pair<String, Double?> {
         if (!preferences.get(BooleanKey.ApsUseDynamicSensitivity)) return Pair("OFF", null)
@@ -264,28 +310,28 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val tddLast8to4H = tdd24HrsPerHour * 4
 
         // Dynamic ISF adjustments
-        val dynISFadjust: Double = preferences.get(IntKey.OApsAIMIDynISFAdjustment).toDouble() / 100.0
-        val dynISFadjusthyper: Double = preferences.get(IntKey.OApsAIMIDynISFAdjustmentHyper).toDouble() / 100.0
-
-        // Meal-time adjustments
-        val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
-        val timeAdjustments = mapOf(
-            therapy.sleepTime to preferences.get(IntKey.OApsAIMIsleepAdjISFFact).toDouble() / 100.0,
-            therapy.snackTime to preferences.get(IntKey.OApsAIMISnackAdjISFFact).toDouble() / 100.0,
-            therapy.highCarbTime to preferences.get(IntKey.OApsAIMIHighCarbAdjISFFact).toDouble() / 100.0,
-            therapy.mealTime to preferences.get(IntKey.OApsAIMImealAdjISFFact).toDouble() / 100.0,
-            therapy.bfastTime to preferences.get(IntKey.OApsAIMIBFAdjISFFact).toDouble() / 100.0,
-            therapy.lunchTime to preferences.get(IntKey.OApsAIMILunchAdjISFFact).toDouble() / 100.0,
-            therapy.dinnerTime to preferences.get(IntKey.OApsAIMIDinnerAdjISFFact).toDouble() / 100.0
-        )
-
-        val tddWeightedFromLast8H = ((0.3 * tdd2DaysPerHour) + (1.2 * tddLast4H) + (0.5 * tddLast8to4H)) * 3
-        var tdd = (tddWeightedFromLast8H * 0.60) + (tdd2Days * 0.10) + (tddDaily * 0.30)
-
-        timeAdjustments.forEach { (condition, factor) ->
-            if (condition) tdd *= factor
-        }
-        if (glucose > 120) tdd *= dynISFadjusthyper else tdd *= dynISFadjust
+        // val dynISFadjust: Double = preferences.get(IntKey.OApsAIMIDynISFAdjustment).toDouble() / 100.0
+        // val dynISFadjusthyper: Double = preferences.get(IntKey.OApsAIMIDynISFAdjustmentHyper).toDouble() / 100.0
+        //
+        // // Meal-time adjustments
+        // val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
+        // val timeAdjustments = mapOf(
+        //     therapy.sleepTime to preferences.get(IntKey.OApsAIMIsleepAdjISFFact).toDouble() / 100.0,
+        //     therapy.snackTime to preferences.get(IntKey.OApsAIMISnackAdjISFFact).toDouble() / 100.0,
+        //     therapy.highCarbTime to preferences.get(IntKey.OApsAIMIHighCarbAdjISFFact).toDouble() / 100.0,
+        //     therapy.mealTime to preferences.get(IntKey.OApsAIMImealAdjISFFact).toDouble() / 100.0,
+        //     therapy.bfastTime to preferences.get(IntKey.OApsAIMIBFAdjISFFact).toDouble() / 100.0,
+        //     therapy.lunchTime to preferences.get(IntKey.OApsAIMILunchAdjISFFact).toDouble() / 100.0,
+        //     therapy.dinnerTime to preferences.get(IntKey.OApsAIMIDinnerAdjISFFact).toDouble() / 100.0
+        // )
+        //
+         val tddWeightedFromLast8H = ((0.3 * tdd2DaysPerHour) + (1.2 * tddLast4H) + (0.5 * tddLast8to4H)) * 3
+         var tdd = (tddWeightedFromLast8H * 0.60) + (tdd2Days * 0.10) + (tddDaily * 0.30)
+        //
+        // timeAdjustments.forEach { (condition, factor) ->
+        //     if (condition) tdd *= factor
+        // }
+        // if (glucose > 120) tdd *= dynISFadjusthyper else tdd *= dynISFadjust
 
         val isfMgdl = profileFunction.getProfile()?.getProfileIsfMgdl()
 
@@ -296,14 +342,33 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         if (sensitivity > 300.0) sensitivity = 300.0
 
         // 🔹 New dynamic ISF adjustment based on delta trend
-        val deltaCorrectionFactor = when {
-            delta == null             -> 1.0
-            delta > 8 && bg!! > 120    -> 0.5  // Réduction plus forte si delta > 10 mg/dL en 5 min
-            delta > 4 && bg!! > 120 -> 0.7  // Réduction modérée si delta > 5 mg/dL
-            delta < -6               -> 1.4 // Augmentation plus forte si delta < -10 mg/dL
-            delta < -3                -> 1.2 // Augmentation modérée si delta < -5 mg/dL
-            else                      -> 1.0
+        // val deltaCorrectionFactor = when {
+        //     delta == null             -> 1.0
+        //     delta > 8 && bg!! > 120    -> 0.5  // Réduction plus forte si delta > 10 mg/dL en 5 min
+        //     delta > 4 && bg!! > 120 -> 0.7  // Réduction modérée si delta > 5 mg/dL
+        //     delta < -6               -> 1.4 // Augmentation plus forte si delta < -10 mg/dL
+        //     delta < -3                -> 1.2 // Augmentation modérée si delta < -5 mg/dL
+        //     else                      -> 1.0
+        // }
+//historique récent des deltas sous forme de liste :
+        val recentDeltas = getRecentDeltas()
+        val predicted = predictedDelta(recentDeltas)
+
+// Combiner le delta actuel et le delta prédit pour obtenir un "delta combiné"
+        val combinedDelta = if (delta != null) (delta + predicted) / 2.0 else predicted
+
+// Calcul d'un facteur d'ajustement continu basé sur ce delta combiné
+        val dynamicDeltaCorrectionFactor = if (combinedDelta > 0) {
+            // Réduction de la sensibilité pour une montée anticipée
+            val factor = 1.0 - (combinedDelta / 16.0)  // Ajustable selon vos observations
+            factor.coerceAtLeast(0.5)
+        } else {
+            // Augmentation de la sensibilité pour une baisse anticipée
+            val factor = 1.0 - (combinedDelta / 15.0)
+            factor.coerceAtMost(1.4)
         }
+
+
 
 
         // 🔹 Apply smoothing function to avoid abrupt changes in ISF
@@ -312,7 +377,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $sensitivity, après lissage : $smoothedISF")
         sensitivity = smoothedISF
         // Apply ISF correction with delta factor
-        sensitivity *= deltaCorrectionFactor
+        //sensitivity *= deltaCorrectionFactor
+        sensitivity *= dynamicDeltaCorrectionFactor
 
         // 🔹 Prevent ISF from being too low in case of large drops
         if (sensitivity < 5.0) {
@@ -546,8 +612,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val delta = glucoseStatus?.delta
 
 // Ajustements dynamiques du facteur de sensibilité
-            val dynISFadjust: Double = preferences.get(IntKey.OApsAIMIDynISFAdjustment).toDouble() / 100.0
-            val dynISFadjusthyper: Double = preferences.get(IntKey.OApsAIMIDynISFAdjustmentHyper).toDouble() / 100.0
+//             val dynISFadjust: Double = preferences.get(IntKey.OApsAIMIDynISFAdjustment).toDouble() / 100.0
+//             val dynISFadjusthyper: Double = preferences.get(IntKey.OApsAIMIDynISFAdjustmentHyper).toDouble() / 100.0
 
 // Ajustements liés aux repas et aux activités
             val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
@@ -566,25 +632,25 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             var tdd = (tddWeightedFromLast8H * 0.20) + (tdd2Days * 0.50) + (tddDaily * 0.30)
 
 // Application des ajustements en fonction du contexte actuel
-            timeAdjustments.forEach { (condition, factor) ->
-                if (condition) tdd *= factor
-            }
+//             timeAdjustments.forEach { (condition, factor) ->
+//                 if (condition) tdd *= factor
+//             }
 
-            if (bg != null) {
-                tdd = when {
-                    therapy.sportTime    -> tdd * 1.1
-                    therapy.sleepTime    -> tdd * preferences.get(IntKey.OApsAIMIsleepAdjISFFact).toDouble() / 100.0
-                    therapy.lowCarbTime  -> tdd * 1.1
-                    therapy.snackTime    -> tdd * preferences.get(IntKey.OApsAIMISnackAdjISFFact).toDouble() / 100.0
-                    therapy.highCarbTime -> tdd * preferences.get(IntKey.OApsAIMIHighCarbAdjISFFact).toDouble() / 100.0
-                    therapy.mealTime     -> tdd * preferences.get(IntKey.OApsAIMImealAdjISFFact).toDouble() / 100.0
-                    therapy.bfastTime    -> tdd * preferences.get(IntKey.OApsAIMIBFAdjISFFact).toDouble() / 100.0
-                    therapy.lunchTime    -> tdd * preferences.get(IntKey.OApsAIMILunchAdjISFFact).toDouble() / 100.0
-                    therapy.dinnerTime   -> tdd * preferences.get(IntKey.OApsAIMIDinnerAdjISFFact).toDouble() / 100.0
-                    bg > 120            -> tdd * dynISFadjusthyper
-                    else                -> tdd * dynISFadjust
-                }
-            }
+            // if (bg != null) {
+            //     tdd = when {
+            //         therapy.sportTime    -> tdd * 1.1
+            //         therapy.sleepTime    -> tdd * preferences.get(IntKey.OApsAIMIsleepAdjISFFact).toDouble() / 100.0
+            //         therapy.lowCarbTime  -> tdd * 1.1
+            //         therapy.snackTime    -> tdd * preferences.get(IntKey.OApsAIMISnackAdjISFFact).toDouble() / 100.0
+            //         therapy.highCarbTime -> tdd * preferences.get(IntKey.OApsAIMIHighCarbAdjISFFact).toDouble() / 100.0
+            //         therapy.mealTime     -> tdd * preferences.get(IntKey.OApsAIMImealAdjISFFact).toDouble() / 100.0
+            //         therapy.bfastTime    -> tdd * preferences.get(IntKey.OApsAIMIBFAdjISFFact).toDouble() / 100.0
+            //         therapy.lunchTime    -> tdd * preferences.get(IntKey.OApsAIMILunchAdjISFFact).toDouble() / 100.0
+            //         therapy.dinnerTime   -> tdd * preferences.get(IntKey.OApsAIMIDinnerAdjISFFact).toDouble() / 100.0
+            //         bg > 120            -> tdd * dynISFadjusthyper
+            //         else                -> tdd * dynISFadjust
+            //     }
+            // }
 
 // Calcul de la sensibilité insulinique
             val isfMgdl = profileFunction.getProfile()?.getProfileIsfMgdl()
@@ -598,13 +664,30 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             }
 
 // 🔹 Ajustement dynamique basé sur la tendance glycémique
-            val deltaCorrectionFactor = when {
-                delta == null             -> 1.0
-                delta > 8 && bg!! > 120    -> 0.5  // Réduction plus forte si delta > 10 mg/dL en 5 min
-                delta > 4 && bg!! > 120 -> 0.7  // Réduction modérée si delta > 5 mg/dL
-                delta < -776               -> 1.4 // Augmentation plus forte si delta < -10 mg/dL
-                delta < -3                -> 1.2 // Augmentation modérée si delta < -5 mg/dL
-                else                      -> 1.0
+//             val deltaCorrectionFactor = when {
+//                 delta == null             -> 1.0
+//                 delta > 8 && bg!! > 120    -> 0.5  // Réduction plus forte si delta > 10 mg/dL en 5 min
+//                 delta > 4 && bg!! > 120 -> 0.7  // Réduction modérée si delta > 5 mg/dL
+//                 delta < -776               -> 1.4 // Augmentation plus forte si delta < -10 mg/dL
+//                 delta < -3                -> 1.2 // Augmentation modérée si delta < -5 mg/dL
+//                 else                      -> 1.0
+//             }
+//historique récent des deltas sous forme de liste :
+            val recentDeltas = getRecentDeltas()
+            val predicted = predictedDelta(recentDeltas)
+
+// Combiner le delta actuel et le delta prédit pour obtenir un "delta combiné"
+            val combinedDelta = if (delta != null) (delta + predicted) / 2.0 else predicted
+
+// Calcul d'un facteur d'ajustement continu basé sur ce delta combiné
+            val dynamicDeltaCorrectionFactor = if (combinedDelta > 0) {
+                // Réduction de la sensibilité pour une montée anticipée
+                val factor = 1.0 - (combinedDelta / 16.0)  // Ajustable selon vos observations
+                factor.coerceAtLeast(0.5)
+            } else {
+                // Augmentation de la sensibilité pour une baisse anticipée
+                val factor = 1.0 - (combinedDelta / 15.0)
+                factor.coerceAtMost(1.4)
             }
 
 
@@ -614,7 +697,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $variableSensitivity, après lissage : $smoothedISF")
             variableSensitivity = smoothedISF
             // Application de la correction
-            variableSensitivity *= deltaCorrectionFactor
+            //variableSensitivity *= deltaCorrectionFactor
+            variableSensitivity *= dynamicDeltaCorrectionFactor
 
 // 🔹 6) Bornes minimales et maximales pour éviter des valeurs extrêmes
             variableSensitivity = variableSensitivity.coerceIn(10.0, 300.0)
