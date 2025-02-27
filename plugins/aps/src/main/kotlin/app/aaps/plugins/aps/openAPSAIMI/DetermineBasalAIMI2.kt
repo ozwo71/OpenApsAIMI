@@ -948,7 +948,78 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun interpolateFactor(value: Float, start1: Float, end1: Float, start2: Float, end2: Float): Float {
         return start2 + (value - start1) * (end2 - start2) / (end1 - start1)
     }
+    // Méthode pour récupérer les deltas récents (entre 2.5 et 7.5 minutes par exemple)
+    private fun getRecentDeltas(): List<Double> {
+        val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
+        if (data.isEmpty()) return emptyList()
 
+        val nowTimestamp = data.first().timestamp
+        val recentDeltas = mutableListOf<Double>()
+
+        for (i in 1 until data.size) {
+            if (data[i].value > 39 && !data[i].filledGap) {
+                val minutesAgo = ((nowTimestamp - data[i].timestamp) / (1000.0 * 60)).toFloat()
+                if (minutesAgo in 2.5f..7.5f) {
+                    val delta = (data.first().recalculated - data[i].recalculated) / minutesAgo * 5f
+                    recentDeltas.add(delta)
+                }
+            }
+        }
+        return recentDeltas
+    }
+
+    // Calcul d'un delta prédit à partir d'une moyenne pondérée
+    private fun predictedDelta(deltaHistory: List<Double>): Double {
+        if (deltaHistory.isEmpty()) return 0.0
+        // Par exemple, on peut utiliser une moyenne pondérée avec des poids croissants pour donner plus d'importance aux valeurs récentes
+        val weights = (1..deltaHistory.size).map { it.toDouble() }
+        val weightedSum = deltaHistory.zip(weights).sumOf { it.first * it.second }
+        return weightedSum / weights.sum()
+    }
+
+    // private fun adjustFactorsBasedOnBgAndHypo(
+    //     morningFactor: Float,
+    //     afternoonFactor: Float,
+    //     eveningFactor: Float
+    // ): Triple<Float, Float, Float> {
+    //     val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
+    //     val hypoAdjustment = if (bg < 120 || (iob > 3 * maxSMB)) 0.8f else 1.0f
+    //
+    //     // Interpolation pour factorAdjustment, avec une intensité plus forte au-dessus de 180
+    //     var factorAdjustment = when {
+    //         bg < 180 -> interpolateFactor(bg.toFloat(), 70f, 130f, 0.1f, 0.3f)  // Pour les valeurs entre 70 et 180 mg/dL
+    //         else -> interpolateFactor(bg.toFloat(), 130f, 250f, 0.4f, 0.8f)      // Intensité plus forte au-dessus de 180 mg/dL
+    //     }
+    //     if (honeymoon) factorAdjustment = when {
+    //         bg < 180 -> interpolateFactor(bg.toFloat(), 70f, 160f, 0.05f, 0.2f)
+    //         else -> interpolateFactor(bg.toFloat(), 160f, 250f, 0.2f, 0.3f)      // Valeurs plus basses pour la phase de honeymoon
+    //     }
+    //
+    //     // Vérification de delta pour éviter les NaN
+    //     val safeDelta = if (delta <= 0) 0.0001f else delta  // Empêche delta d'être 0 ou négatif
+    //
+    //     // Interpolation pour bgAdjustment
+    //     val deltaAdjustment = ln(safeDelta + 1).coerceAtLeast(0f) // S'assurer que ln(safeDelta + 1) est positif
+    //     val bgAdjustment = 1.0f + (deltaAdjustment - 1) * factorAdjustment
+    //
+    //     // Interpolation pour scalingFactor
+    //     val scalingFactor = interpolateFactor(bg.toFloat(), targetBg, 110f, 09f, 0.5f).coerceAtLeast(0.1f) // Empêche le scalingFactor d'être trop faible
+    //
+    //     val maxIncreaseFactor = 1.7f
+    //     val maxDecreaseFactor = 0.5f // Limite la diminution à 30% de la valeur d'origine
+    //
+    //     val adjustFactor = { factor: Float ->
+    //         val adjustedFactor = factor * bgAdjustment * hypoAdjustment * scalingFactor
+    //         adjustedFactor.coerceIn((factor * maxDecreaseFactor), (factor * maxIncreaseFactor))
+    //     }
+    //
+    //     // Retourne les valeurs en s'assurant qu'elles ne sont pas NaN
+    //     return Triple(
+    //         adjustFactor(morningFactor).takeIf { !it.isNaN() } ?: morningFactor,
+    //         adjustFactor(afternoonFactor).takeIf { !it.isNaN() } ?: afternoonFactor,
+    //         adjustFactor(eveningFactor).takeIf { !it.isNaN() } ?: eveningFactor
+    //     )
+    // }
     private fun adjustFactorsBasedOnBgAndHypo(
         morningFactor: Float,
         afternoonFactor: Float,
@@ -957,41 +1028,56 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
         val hypoAdjustment = if (bg < 120 || (iob > 3 * maxSMB)) 0.8f else 1.0f
 
-        // Interpolation pour factorAdjustment, avec une intensité plus forte au-dessus de 180
+        // Interpolation de base pour factorAdjustment selon la glycémie (bg)
         var factorAdjustment = when {
-            bg < 180 -> interpolateFactor(bg.toFloat(), 70f, 130f, 0.1f, 0.3f)  // Pour les valeurs entre 70 et 180 mg/dL
-            else -> interpolateFactor(bg.toFloat(), 130f, 250f, 0.4f, 0.8f)      // Intensité plus forte au-dessus de 180 mg/dL
+            bg < 180 -> interpolateFactor(bg.toFloat(), 70f, 130f, 0.1f, 0.3f)
+            else -> interpolateFactor(bg.toFloat(), 130f, 250f, 0.4f, 0.8f)
         }
         if (honeymoon) factorAdjustment = when {
             bg < 180 -> interpolateFactor(bg.toFloat(), 70f, 160f, 0.05f, 0.2f)
-            else -> interpolateFactor(bg.toFloat(), 160f, 250f, 0.2f, 0.3f)      // Valeurs plus basses pour la phase de honeymoon
+            else -> interpolateFactor(bg.toFloat(), 160f, 250f, 0.2f, 0.3f)
         }
 
-        // Vérification de delta pour éviter les NaN
-        val safeDelta = if (delta <= 0) 0.0001f else delta  // Empêche delta d'être 0 ou négatif
+        // Récupération des deltas récents et calcul du delta prédit
+        val recentDeltas = getRecentDeltas()
+        val predicted = predictedDelta(recentDeltas)
+        // Calcul du delta combiné : on combine le delta mesuré et le delta prédit
+        val combinedDelta = (delta + predicted) / 2.0f
 
-        // Interpolation pour bgAdjustment
-        val deltaAdjustment = ln(safeDelta + 1).coerceAtLeast(0f) // S'assurer que ln(safeDelta + 1) est positif
-        val bgAdjustment = 1.0f + (deltaAdjustment - 1) * factorAdjustment
+        // On s'assure que combinedDelta est positif pour le calcul logarithmique
+        val safeCombinedDelta = if (combinedDelta <= 0) 0.0001f else combinedDelta
+        val deltaAdjustment = ln(safeCombinedDelta.toDouble() + 1).coerceAtLeast(0.0)
+        var bgAdjustment = 1.0f + (deltaAdjustment - 1) * factorAdjustment
 
-        // Interpolation pour scalingFactor
-        val scalingFactor = interpolateFactor(bg.toFloat(), targetBg, 110f, 09f, 0.5f).coerceAtLeast(0.1f) // Empêche le scalingFactor d'être trop faible
+        // Calcul d'un facteur dynamique basé sur le delta combiné
+        val dynamicCorrection = when {
+            combinedDelta > 4f -> 0.8f   // Si la tendance monte rapidement, on réduit plus agressivement
+            combinedDelta < -3f -> 1.2f  // Si la tendance baisse, on augmente le facteur
+            else -> 1.0f
+        }
+
+        // On applique ce facteur sur bgAdjustment pour intégrer l'anticipation
+        bgAdjustment *= dynamicCorrection
+
+        // Interpolation pour scalingFactor basée sur la cible (targetBg)
+        val scalingFactor = interpolateFactor(bg.toFloat(), targetBg, 110f, 09f, 0.5f).coerceAtLeast(0.1f)
 
         val maxIncreaseFactor = 1.7f
-        val maxDecreaseFactor = 0.5f // Limite la diminution à 30% de la valeur d'origine
+        val maxDecreaseFactor = 0.5f
 
         val adjustFactor = { factor: Float ->
             val adjustedFactor = factor * bgAdjustment * hypoAdjustment * scalingFactor
-            adjustedFactor.coerceIn((factor * maxDecreaseFactor), (factor * maxIncreaseFactor))
+            adjustedFactor.coerceIn(((factor * maxDecreaseFactor).toDouble()), ((factor * maxIncreaseFactor).toDouble()))
         }
 
-        // Retourne les valeurs en s'assurant qu'elles ne sont pas NaN
         return Triple(
             adjustFactor(morningFactor).takeIf { !it.isNaN() } ?: morningFactor,
             adjustFactor(afternoonFactor).takeIf { !it.isNaN() } ?: afternoonFactor,
             adjustFactor(eveningFactor).takeIf { !it.isNaN() } ?: eveningFactor
-        )
+        ) as Triple<Float, Float, Float>
     }
+
+
 
     private fun calculateAdjustedDelayFactor(
         bg: Float,
