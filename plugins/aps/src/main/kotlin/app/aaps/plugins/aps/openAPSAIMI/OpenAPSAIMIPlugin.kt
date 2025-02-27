@@ -221,21 +221,38 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     }
 
     // Fonction pour calculer un facteur de correction dynamique en se basant sur le delta actuel et prédit
-    private fun dynamicDeltaCorrectionFactor(currentDelta: Double?, bg: Double?, predictedDelta: Double?): Double {
-        if (currentDelta == null || bg == null || predictedDelta == null) return 1.0
-        // Combiner le delta actuel et la prédiction (par exemple, moyenne simple)
-        val combinedDelta = (currentDelta + predictedDelta) / 2.0
-        // Pour anticiper la montée, on applique un ajustement continu :
-        return if (combinedDelta > 0) {
-            // Réduction de la sensibilité : pour combinedDelta = 8, on vise un facteur proche de 0.5
-            val factor = 1.0 - (combinedDelta / 16.0) // Ajustable selon vos observations
-            factor.coerceAtLeast(0.5)
-        } else {
-            // Augmentation de la sensibilité : pour combinedDelta = -6, on vise un facteur proche de 1.4
-            val factor = 1.0 - (combinedDelta / 15.0) // Ajustable aussi
+    // private fun dynamicDeltaCorrectionFactor(currentDelta: Double?, bg: Double?, predictedDelta: Double?): Double {
+    //     if (currentDelta == null || bg == null || predictedDelta == null) return 1.0
+    //     // Combiner le delta actuel et la prédiction (par exemple, moyenne simple)
+    //     val combinedDelta = (currentDelta + predictedDelta) / 2.0
+    //     // Pour anticiper la montée, on applique un ajustement continu :
+    //     return if (combinedDelta > 0) {
+    //         // Réduction de la sensibilité : pour combinedDelta = 8, on vise un facteur proche de 0.5
+    //         val factor = 1.0 - (combinedDelta / 16.0) // Ajustable selon vos observations
+    //         factor.coerceAtLeast(0.5)
+    //     } else {
+    //         // Augmentation de la sensibilité : pour combinedDelta = -6, on vise un facteur proche de 1.4
+    //         val factor = 1.0 - (combinedDelta / 15.0) // Ajustable aussi
+    //         factor.coerceAtMost(1.4)
+    //     }
+    // }
+    fun dynamicDeltaCorrectionFactor(delta: Double?, bg: Double?): Double {
+        if (delta == null || bg == null) return 1.0
+        return if (delta > 0 && bg > 120) {
+            // Ici, on utilise une décroissance exponentielle avec un coefficient ajusté.
+            // On calcule un facteur qui diminue rapidement avec le delta,
+            // et on impose un plancher de 0.125 pour permettre une réduction jusqu'à 5 si l'ISF de base est 40.
+            val factor = Math.exp(-0.3 * delta)
+            factor.coerceAtLeast(5.0 / 40.0)  // Minimum de 0.125
+        } else if (delta < 0) {
+            // Pour un delta négatif, on peut augmenter la sensibilité de façon dynamique
+            val factor = Math.exp(0.15 * Math.abs(delta))
             factor.coerceAtMost(1.4)
+        } else {
+            1.0
         }
     }
+
     private fun getRecentDeltas(): List<Double> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
         if (data.isEmpty()) return emptyList()
