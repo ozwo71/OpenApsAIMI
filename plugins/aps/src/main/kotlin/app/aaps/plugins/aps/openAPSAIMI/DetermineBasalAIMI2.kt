@@ -1049,13 +1049,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val deltaAdjustment = ln(safeCombinedDelta.toDouble() + 1).coerceAtLeast(0.0)
         var bgAdjustment = 1.0f + (deltaAdjustment - 1) * factorAdjustment
 
-        // Calcul d'un facteur dynamique basé sur le delta combiné
         val dynamicCorrection = when {
-            combinedDelta > 4f -> 0.8f   // Si la tendance monte rapidement, on réduit plus agressivement
-            combinedDelta < -3f -> 1.2f  // Si la tendance baisse, on augmente le facteur
+            combinedDelta > 8f  -> 1.8f   // Très forte montée, on augmente très agressivement
+            combinedDelta > 6f  -> 1.6f   // Montée forte
+            combinedDelta > 4f  -> 1.5f   // Montée modérée à forte
+            combinedDelta > 2f  -> 1.3f   // Montée légère
+            combinedDelta in -2f..2f -> 1.0f  // Stable
+            combinedDelta < -2f && combinedDelta >= -4f -> 0.8f  // Baisse légère
+            combinedDelta < -4f && combinedDelta >= -6f -> 0.6f  // Baisse modérée
+            combinedDelta < -6f -> 0.4f   // Baisse forte, on diminue considérablement pour éviter l'hypo
             else -> 1.0f
         }
-
         // On applique ce facteur sur bgAdjustment pour intégrer l'anticipation
         bgAdjustment *= dynamicCorrection
 
