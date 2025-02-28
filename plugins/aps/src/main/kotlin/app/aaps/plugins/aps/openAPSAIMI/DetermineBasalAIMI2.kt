@@ -1027,27 +1027,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ): Triple<Float, Float, Float> {
         val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
         val hypoAdjustment = if (bg < 120 || (iob > 3 * maxSMB)) 0.8f else 1.0f
-
-        // Interpolation de base pour factorAdjustment selon la glycémie (bg)
-        var factorAdjustment = when {
-            bg < 180 -> interpolateFactor(bg.toFloat(), 70f, 130f, 0.1f, 0.3f)
-            else -> interpolateFactor(bg.toFloat(), 130f, 250f, 0.4f, 0.8f)
-        }
-        if (honeymoon) factorAdjustment = when {
-            bg < 180 -> interpolateFactor(bg.toFloat(), 70f, 160f, 0.05f, 0.2f)
-            else -> interpolateFactor(bg.toFloat(), 160f, 250f, 0.2f, 0.3f)
-        }
-
         // Récupération des deltas récents et calcul du delta prédit
         val recentDeltas = getRecentDeltas()
         val predicted = predictedDelta(recentDeltas)
         // Calcul du delta combiné : on combine le delta mesuré et le delta prédit
         val combinedDelta = (delta + predicted) / 2.0f
-
         // On s'assure que combinedDelta est positif pour le calcul logarithmique
         val safeCombinedDelta = if (combinedDelta <= 0) 0.0001f else combinedDelta
         val deltaAdjustment = ln(safeCombinedDelta.toDouble() + 1).coerceAtLeast(0.0)
+
+
+        // Interpolation de base pour factorAdjustment selon la glycémie (bg)
+        var factorAdjustment = when {
+            bg < 130 -> interpolateFactor(bg.toFloat(), 70f, 130f, 0.1f, 0.3f)
+            else -> interpolateFactor(bg.toFloat(), 130f, 250f, 0.65f, 1.8f)
+        }
+        if (honeymoon) factorAdjustment = when {
+            bg < 180 -> interpolateFactor(bg.toFloat(), 70f, 160f, 0.2f, 0.4f)
+            else -> interpolateFactor(bg.toFloat(), 160f, 250f, 0.4f, 0.65f)
+        }
         var bgAdjustment = 1.0f + (deltaAdjustment - 1) * factorAdjustment
+        bgAdjustment *= 1.2f
 
         val dynamicCorrection = when {
             combinedDelta > 8f  -> 1.8f   // Très forte montée, on augmente très agressivement
@@ -1063,14 +1063,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // On applique ce facteur sur bgAdjustment pour intégrer l'anticipation
         bgAdjustment *= dynamicCorrection
 
-        // Interpolation pour scalingFactor basée sur la cible (targetBg)
-        val scalingFactor = interpolateFactor(bg.toFloat(), targetBg, 110f, 09f, 0.5f).coerceAtLeast(0.1f)
+        // // Interpolation pour scalingFactor basée sur la cible (targetBg)
+        // val scalingFactor = interpolateFactor(bg.toFloat(), targetBg, 110f, 09f, 0.5f).coerceAtLeast(0.1f)
 
         val maxIncreaseFactor = 1.7f
         val maxDecreaseFactor = 0.5f
 
         val adjustFactor = { factor: Float ->
-            val adjustedFactor = factor * bgAdjustment * hypoAdjustment * scalingFactor
+            val adjustedFactor = factor * bgAdjustment * hypoAdjustment //* scalingFactor
             adjustedFactor.coerceIn(((factor * maxDecreaseFactor).toDouble()), ((factor * maxIncreaseFactor).toDouble()))
         }
 
@@ -2354,17 +2354,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
         this.predictedSMB = modelcal
+        val recentDeltas = getRecentDeltas()
+        val predicted = predictedDelta(recentDeltas)
+        // Calcul du delta combiné : on combine le delta mesuré et le delta prédit
+        val combinedDelta = (delta + predicted) / 2.0f
         if (preferences.get(BooleanKey.OApsAIMIMLtraining) && csvfile.exists()){
             val allLines = csvfile.readLines()
             val minutesToConsider = 2500.0
             val linesToConsider = (minutesToConsider / 5).toInt()
             if (allLines.size > linesToConsider) {
-                val refinedSMB = neuralnetwork5(delta, shortAvgDelta, longAvgDelta, predictedSMB, profile)
+                val refinedSMB = neuralnetwork5(combinedDelta.toFloat(), shortAvgDelta, longAvgDelta, predictedSMB, profile)
                 this.predictedSMB = refinedSMB
                 if (bg > 200 && delta > 4 && iob < preferences.get(DoubleKey.ApsSmbMaxIob) ) {
-                    this.predictedSMB *= 1.5f // Augmente de 50% si montée très rapide
+                    this.predictedSMB *= 1.7f // Augmente de 70% si montée très rapide
                 } else if (bg > 180 && delta > 3 && iob < preferences.get(DoubleKey.ApsSmbMaxIob)) {
-                    this.predictedSMB *= 1.3f // Augmente de 30% si montée modérée
+                    this.predictedSMB *= 1.5f // Augmente de 50% si montée modérée
                 }
 
                 basal =
