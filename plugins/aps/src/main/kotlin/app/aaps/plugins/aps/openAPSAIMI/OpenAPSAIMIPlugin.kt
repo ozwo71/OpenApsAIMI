@@ -220,22 +220,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         return weightedSum / weights.sum()
     }
 
-    // private fun dynamicDeltaCorrectionFactor(delta: Double?, bg: Double?): Double {
-    //     if (delta == null || bg == null) return 1.0
-    //     return if (delta > 0 && bg > 120) {
-    //         // Ici, on utilise une décroissance exponentielle avec un coefficient ajusté.
-    //         // On calcule un facteur qui diminue rapidement avec le delta,
-    //         // et on impose un plancher de 0.125 pour permettre une réduction jusqu'à 5 si l'ISF de base est 40.
-    //         val factor = Math.exp(-0.3 * delta)
-    //         factor.coerceAtLeast(5.0 / 40.0)  // Minimum de 0.125
-    //     } else if (delta < 0) {
-    //         // Pour un delta négatif, on peut augmenter la sensibilité de façon dynamique
-    //         val factor = Math.exp(0.15 * Math.abs(delta))
-    //         factor.coerceAtMost(1.4)
-    //     } else {
-    //         1.0
-    //     }
-    // }
     private fun dynamicDeltaCorrectionFactor(delta: Double?, predicted: Double?, bg: Double?): Double {
         if (delta == null || predicted == null || bg == null) return 1.0
         // Calcul de la moyenne du delta actuel et du delta prédit
@@ -260,12 +244,12 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val nowDate = now.timestamp
         val recentDeltas = mutableListOf<Double>()
 
-        // On collecte les deltas sur une fenêtre pertinente (par exemple, entre 2.5 et 7.5 minutes)
+        // collecte des deltas sur une fenêtre pertinente (entre 2.5 et 7.5 minutes)
         for (i in 1 until data.size) {
             if (data[i].value > 39 && !data[i].filledGap) {
                 val minutesAgo = ((nowDate - data[i].timestamp) / (1000.0 * 60))
                 // On choisit ici un intervalle où les données sont suffisamment récentes
-                if (minutesAgo in 2.5..7.5) {
+                if (minutesAgo in 1.0..15.0) {
                     val delta = (now.recalculated - data[i].recalculated) / minutesAgo * 5
                     recentDeltas.add(delta)
                 }
@@ -321,29 +305,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val tdd24HrsPerHour = tdd24Hrs / 24
         val tddLast8to4H = tdd24HrsPerHour * 4
 
-        // Dynamic ISF adjustments
-        // val dynISFadjust: Double = preferences.get(IntKey.OApsAIMIDynISFAdjustment).toDouble() / 100.0
-        // val dynISFadjusthyper: Double = preferences.get(IntKey.OApsAIMIDynISFAdjustmentHyper).toDouble() / 100.0
-        //
-        // // Meal-time adjustments
-        // val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
-        // val timeAdjustments = mapOf(
-        //     therapy.sleepTime to preferences.get(IntKey.OApsAIMIsleepAdjISFFact).toDouble() / 100.0,
-        //     therapy.snackTime to preferences.get(IntKey.OApsAIMISnackAdjISFFact).toDouble() / 100.0,
-        //     therapy.highCarbTime to preferences.get(IntKey.OApsAIMIHighCarbAdjISFFact).toDouble() / 100.0,
-        //     therapy.mealTime to preferences.get(IntKey.OApsAIMImealAdjISFFact).toDouble() / 100.0,
-        //     therapy.bfastTime to preferences.get(IntKey.OApsAIMIBFAdjISFFact).toDouble() / 100.0,
-        //     therapy.lunchTime to preferences.get(IntKey.OApsAIMILunchAdjISFFact).toDouble() / 100.0,
-        //     therapy.dinnerTime to preferences.get(IntKey.OApsAIMIDinnerAdjISFFact).toDouble() / 100.0
-        // )
-        //
         val tddWeightedFromLast8H = ((0.3 * tdd2DaysPerHour) + (1.2 * tddLast4H) + (0.5 * tddLast8to4H)) * 3
         var tdd = (tddWeightedFromLast8H * 0.60) + (tdd2Days * 0.10) + (tddDaily * 0.30)
-        //
-        // timeAdjustments.forEach { (condition, factor) ->
-        //     if (condition) tdd *= factor
-        // }
-        // if (glucose > 120) tdd *= dynISFadjusthyper else tdd *= dynISFadjust
 
         val isfMgdl = profileFunction.getProfile()?.getProfileIsfMgdl()
 
@@ -353,22 +316,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         if (sensitivity!! < 5.0) sensitivity = 5.0
         if (sensitivity > 300.0) sensitivity = 300.0
 
-        // 🔹 New dynamic ISF adjustment based on delta trend
-        // val deltaCorrectionFactor = when {
-        //     delta == null             -> 1.0
-        //     delta > 8 && bg!! > 120    -> 0.5  // Réduction plus forte si delta > 10 mg/dL en 5 min
-        //     delta > 4 && bg!! > 120 -> 0.7  // Réduction modérée si delta > 5 mg/dL
-        //     delta < -6               -> 1.4 // Augmentation plus forte si delta < -10 mg/dL
-        //     delta < -3                -> 1.2 // Augmentation modérée si delta < -5 mg/dL
-        //     else                      -> 1.0
-        // }
 //historique récent des deltas sous forme de liste :
         val recentDeltas = getRecentDeltas()
         val predicted = predictedDelta(recentDeltas)
         val dynamicFactor = dynamicDeltaCorrectionFactor(delta,predicted, bg)
         // 🔹 Apply smoothing function to avoid abrupt changes in ISF
         //sensitivity = smoothSensitivityChange(sensitivity, glucose, delta)
-        val smoothedISF = smoothSensitivityChange(sensitivity, glucose, delta)
+        val smoothedISF = smoothSensitivityChange(sensitivity, glucose, predicted)
         aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $sensitivity, après lissage : $smoothedISF")
         sensitivity = smoothedISF
         // Apply ISF correction with delta factor
@@ -397,10 +351,12 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         glucose: Double?,
         delta: Double?
     ): Double {
+        val recentDeltas = getRecentDeltas()
+        val predicted = predictedDelta(recentDeltas)
         if (glucose == null) return rawSensitivity
 
-        // 1) On récupère une valeur d’ISF interpolée selon BG et delta
-        val interpolatedISF = interpolate(glucose,delta)
+        // 1) récupère une valeur d’ISF interpolée selon BG et delta
+        val interpolatedISF = interpolate(glucose,predicted)
 
         // 2) On fusionne la sensibilité brute et l’interpolée pour lisser
         val smoothingFactor = 0.2
@@ -672,7 +628,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
             // 🔹 5) Lissage de l'ISF pour éviter les variations brusques
             //variableSensitivity = smoothSensitivityChange(variableSensitivity, bg, delta)
-            val smoothedISF = smoothSensitivityChange(variableSensitivity, bg, delta)
+            val smoothedISF = smoothSensitivityChange(variableSensitivity, bg, predicted)
             aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $variableSensitivity, après lissage : $smoothedISF")
             variableSensitivity = smoothedISF
             // Application de la correction

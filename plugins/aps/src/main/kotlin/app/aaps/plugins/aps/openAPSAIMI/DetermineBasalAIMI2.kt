@@ -959,7 +959,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         for (i in 1 until data.size) {
             if (data[i].value > 39 && !data[i].filledGap) {
                 val minutesAgo = ((nowTimestamp - data[i].timestamp) / (1000.0 * 60)).toFloat()
-                if (minutesAgo in 2.5f..7.5f) {
+                if (minutesAgo in 1.0f..15.0f) {
                     val delta = (data.first().recalculated - data[i].recalculated) / minutesAgo * 5f
                     recentDeltas.add(delta)
                 }
@@ -977,49 +977,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return weightedSum / weights.sum()
     }
 
-    // private fun adjustFactorsBasedOnBgAndHypo(
-    //     morningFactor: Float,
-    //     afternoonFactor: Float,
-    //     eveningFactor: Float
-    // ): Triple<Float, Float, Float> {
-    //     val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-    //     val hypoAdjustment = if (bg < 120 || (iob > 3 * maxSMB)) 0.8f else 1.0f
-    //
-    //     // Interpolation pour factorAdjustment, avec une intensité plus forte au-dessus de 180
-    //     var factorAdjustment = when {
-    //         bg < 180 -> interpolateFactor(bg.toFloat(), 70f, 130f, 0.1f, 0.3f)  // Pour les valeurs entre 70 et 180 mg/dL
-    //         else -> interpolateFactor(bg.toFloat(), 130f, 250f, 0.4f, 0.8f)      // Intensité plus forte au-dessus de 180 mg/dL
-    //     }
-    //     if (honeymoon) factorAdjustment = when {
-    //         bg < 180 -> interpolateFactor(bg.toFloat(), 70f, 160f, 0.05f, 0.2f)
-    //         else -> interpolateFactor(bg.toFloat(), 160f, 250f, 0.2f, 0.3f)      // Valeurs plus basses pour la phase de honeymoon
-    //     }
-    //
-    //     // Vérification de delta pour éviter les NaN
-    //     val safeDelta = if (delta <= 0) 0.0001f else delta  // Empêche delta d'être 0 ou négatif
-    //
-    //     // Interpolation pour bgAdjustment
-    //     val deltaAdjustment = ln(safeDelta + 1).coerceAtLeast(0f) // S'assurer que ln(safeDelta + 1) est positif
-    //     val bgAdjustment = 1.0f + (deltaAdjustment - 1) * factorAdjustment
-    //
-    //     // Interpolation pour scalingFactor
-    //     val scalingFactor = interpolateFactor(bg.toFloat(), targetBg, 110f, 09f, 0.5f).coerceAtLeast(0.1f) // Empêche le scalingFactor d'être trop faible
-    //
-    //     val maxIncreaseFactor = 1.7f
-    //     val maxDecreaseFactor = 0.5f // Limite la diminution à 30% de la valeur d'origine
-    //
-    //     val adjustFactor = { factor: Float ->
-    //         val adjustedFactor = factor * bgAdjustment * hypoAdjustment * scalingFactor
-    //         adjustedFactor.coerceIn((factor * maxDecreaseFactor), (factor * maxIncreaseFactor))
-    //     }
-    //
-    //     // Retourne les valeurs en s'assurant qu'elles ne sont pas NaN
-    //     return Triple(
-    //         adjustFactor(morningFactor).takeIf { !it.isNaN() } ?: morningFactor,
-    //         adjustFactor(afternoonFactor).takeIf { !it.isNaN() } ?: afternoonFactor,
-    //         adjustFactor(eveningFactor).takeIf { !it.isNaN() } ?: eveningFactor
-    //     )
-    // }
     private fun adjustFactorsBasedOnBgAndHypo(
         morningFactor: Float,
         afternoonFactor: Float,
@@ -1030,9 +987,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Récupération des deltas récents et calcul du delta prédit
         val recentDeltas = getRecentDeltas()
         val predicted = predictedDelta(recentDeltas)
-        // Calcul du delta combiné : on combine le delta mesuré et le delta prédit
+        // Calcul du delta combiné : combine le delta mesuré et le delta prédit
         val combinedDelta = (delta + predicted) / 2.0f
-        // On s'assure que combinedDelta est positif pour le calcul logarithmique
+        // s'assurer que combinedDelta est positif pour le calcul logarithmique
         val safeCombinedDelta = if (combinedDelta <= 0) 0.0001f else combinedDelta
         val deltaAdjustment = ln(safeCombinedDelta.toDouble() + 1).coerceAtLeast(0.0)
 
@@ -2706,7 +2663,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "28 Feb 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "01 Mars 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
