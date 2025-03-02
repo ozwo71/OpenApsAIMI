@@ -997,7 +997,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Interpolation de base pour factorAdjustment selon la glycémie (bg)
         var factorAdjustment = when {
             bg < 130 -> interpolateFactor(bg.toFloat(), 70f, 130f, 0.1f, 0.3f)
-            else -> interpolateFactor(bg.toFloat(), 130f, 250f, 0.65f, 1.8f)
+            else -> interpolateFactor(bg.toFloat(), 120f, 250f, 0.65f, 2.5f)
         }
         if (honeymoon) factorAdjustment = when {
             bg < 180 -> interpolateFactor(bg.toFloat(), 70f, 160f, 0.2f, 0.4f)
@@ -1007,8 +1007,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         bgAdjustment *= 1.2f
 
         val dynamicCorrection = when {
-            combinedDelta > 8f  -> 1.8f   // Très forte montée, on augmente très agressivement
-            combinedDelta > 6f  -> 1.6f   // Montée forte
+            combinedDelta > 8f  -> 2.5f   // Très forte montée, on augmente très agressivement
+            combinedDelta > 6f  -> 1.8f   // Montée forte
             combinedDelta > 4f  -> 1.5f   // Montée modérée à forte
             combinedDelta > 2f  -> 1.3f   // Montée légère
             combinedDelta in -2f..2f -> 1.0f  // Stable
@@ -1023,8 +1023,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // // Interpolation pour scalingFactor basée sur la cible (targetBg)
         // val scalingFactor = interpolateFactor(bg.toFloat(), targetBg, 110f, 09f, 0.5f).coerceAtLeast(0.1f)
 
-        val maxIncreaseFactor = 1.7f
-        val maxDecreaseFactor = 0.5f
+        val maxIncreaseFactor = 12.5f
+        val maxDecreaseFactor = 0.2f
 
         val adjustFactor = { factor: Float ->
             val adjustedFactor = factor * bgAdjustment * hypoAdjustment //* scalingFactor
@@ -2340,7 +2340,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append("ML Decision data training","ML decision has no enough data to refine the decision")
         }
 
-        var smbToGive = if (bg > 160  && delta > 8 && predictedSMB == 0.0f) modelcal else predictedSMB
+        var smbToGive = if (bg > 120  && delta > 8 && predictedSMB == 0.0f) modelcal else predictedSMB
         smbToGive = if (honeymoon && bg < 170) smbToGive * 0.8f else smbToGive
 
         val morningfactor: Double = preferences.get(DoubleKey.OApsAIMIMorningFactor) / 100.0
@@ -2663,7 +2663,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "01 Mars 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "02 Mars 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
