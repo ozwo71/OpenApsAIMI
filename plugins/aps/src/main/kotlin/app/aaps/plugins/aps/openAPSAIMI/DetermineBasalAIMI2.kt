@@ -983,7 +983,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         eveningFactor: Float
     ): Triple<Float, Float, Float> {
         val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-        val hypoAdjustment = if (bg < 120 || (iob > 3 * maxSMB)) 0.8f else 1.0f
+        val hypoAdjustment = if (bg < 120 || (iob > 3 * maxSMB)) 0.5f else 1.0f
         // Récupération des deltas récents et calcul du delta prédit
         val recentDeltas = getRecentDeltas()
         val predicted = predictedDelta(recentDeltas)
@@ -2663,7 +2663,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "02 Mars 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "04 Mars 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
