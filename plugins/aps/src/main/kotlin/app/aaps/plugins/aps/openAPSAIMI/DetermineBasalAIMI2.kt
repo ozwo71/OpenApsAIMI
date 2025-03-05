@@ -983,7 +983,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         eveningFactor: Float
     ): Triple<Float, Float, Float> {
         val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-        val hypoAdjustment = if (bg < 120 || (iob > 3 * maxSMB)) 0.5f else 1.0f
+        val hypoAdjustment = if (bg < 120 || (iob > 3 * maxSMB)) 0.4f else 0.8f
         // Récupération des deltas récents et calcul du delta prédit
         val recentDeltas = getRecentDeltas()
         val predicted = predictedDelta(recentDeltas)
@@ -1007,10 +1007,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         bgAdjustment *= 1.2f
 
         val dynamicCorrection = when {
-            combinedDelta > 8f  -> 2.5f   // Très forte montée, on augmente très agressivement
-            combinedDelta > 6f  -> 1.8f   // Montée forte
-            combinedDelta > 4f  -> 1.5f   // Montée modérée à forte
-            combinedDelta > 2f  -> 1.3f   // Montée légère
+            combinedDelta > 15f  -> 2.5f   // Très forte montée, on augmente très agressivement
+            combinedDelta > 10f  -> 1.8f   // Montée forte
+            combinedDelta > 6f  -> 1.5f   // Montée modérée à forte
+            combinedDelta > 2f  -> 0.8f   // Montée légère
             combinedDelta in -2f..2f -> 1.0f  // Stable
             combinedDelta < -2f && combinedDelta >= -4f -> 0.8f  // Baisse légère
             combinedDelta < -4f && combinedDelta >= -6f -> 0.6f  // Baisse modérée
@@ -2663,7 +2663,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "04 Mars 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "05 Mars 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
