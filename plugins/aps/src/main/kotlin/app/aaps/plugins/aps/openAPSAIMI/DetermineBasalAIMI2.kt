@@ -996,11 +996,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // Interpolation de base pour factorAdjustment selon la glycémie (bg)
         var factorAdjustment = when {
-            bg < 130 -> interpolateFactor(bg.toFloat(), 70f, 130f, 0.1f, 0.3f)
+            bg < 120 -> interpolateFactor(bg.toFloat(), 70f, 120f, 0.1f, 0.3f)
             else -> interpolateFactor(bg.toFloat(), 120f, 280f, 0.75f, 2.5f)
         }
         if (honeymoon) factorAdjustment = when {
-            bg < 180 -> interpolateFactor(bg.toFloat(), 70f, 160f, 0.2f, 0.4f)
+            bg < 160 -> interpolateFactor(bg.toFloat(), 70f, 160f, 0.2f, 0.4f)
             else -> interpolateFactor(bg.toFloat(), 160f, 250f, 0.4f, 0.65f)
         }
         var bgAdjustment = 1.0f + (deltaAdjustment - 1) * factorAdjustment
