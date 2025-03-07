@@ -416,7 +416,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ): Boolean {
         // Récupération de la valeur de pbolusMeal depuis les préférences
         val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
-
+        // Récupération des deltas récents et calcul du delta prédit
+        val recentDeltas = getRecentDeltas()
+        val predicted = predictedDelta(recentDeltas)
+        // Calcul du delta combiné : combine le delta mesuré et le delta prédit
+        val combinedDelta = (delta + predicted) / 2.0f
         // Si un bolus de pbolusM a déjà été administré dans la dernière heure, on ne le ré-administrera pas
         if (hasReceivedPbolusMInLastHour(pbolusM)) {
             return false
@@ -424,8 +428,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         return variableSensitivity in 5.0f..10f &&
             targetBg in 70.0f..85.0f &&
-            delta >= 12 &&
-            shortAvgDelta >= 12 &&
+            combinedDelta >= 4 &&
             autodrive &&
             slopeFromMinDeviation >= 1.5 &&
             bg > 120
@@ -1009,7 +1012,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val dynamicCorrection = when {
             combinedDelta > 11f  -> 2.5f   // Très forte montée, on augmente très agressivement
             combinedDelta > 8f  -> 2.0f   // Montée forte
-            combinedDelta > 5f  -> 1.5f   // Montée modérée à forte
+            combinedDelta > 4f  -> 1.5f   // Montée modérée à forte
             combinedDelta > 2f  -> 0.8f   // Montée légère
             combinedDelta in -2f..2f -> 1.0f  // Stable
             combinedDelta < -2f && combinedDelta >= -4f -> 0.8f  // Baisse légère
@@ -1649,8 +1652,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     return dynamicPeakTime.coerceIn(35.0, 120.0)
 }
 
-
-
+    fun detectMealOnset(delta: Float, predictedDelta: Float, acceleration: Float): Boolean {
+        val combinedDelta = (delta + predictedDelta) / 2.0f
+        return combinedDelta > 4.0f && acceleration > 1.0f
+    }
 
     private fun parseNotes(startMinAgo: Int, endMinAgo: Int): String {
         val olderTimeStamp = now - endMinAgo * 60 * 1000
@@ -1694,6 +1699,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog = consoleLog,
             consoleError = consoleError
         )
+
+        val recentDeltas = getRecentDeltas()
+        val predicted = predictedDelta(recentDeltas)
+        // Calcul du delta combiné : on combine le delta mesuré et le delta prédit
+        val combinedDelta = (delta + predicted) / 2.0f
         val tp = calculateDynamicPeakTime(
             currentActivity = profile.currentActivity,
             futureActivity = profile.futureActivity,
@@ -1703,7 +1713,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             recentSteps15Minutes,
             averageBeatsPerMinute.toInt(),
             bg,
-            delta.toDouble()
+            combinedDelta.toDouble()
         )
 
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
@@ -2311,10 +2321,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
         this.predictedSMB = modelcal
-        val recentDeltas = getRecentDeltas()
-        val predicted = predictedDelta(recentDeltas)
-        // Calcul du delta combiné : on combine le delta mesuré et le delta prédit
-        val combinedDelta = (delta + predicted) / 2.0f
+
         if (preferences.get(BooleanKey.OApsAIMIMLtraining) && csvfile.exists()){
             val allLines = csvfile.readLines()
             val minutesToConsider = 2500.0
@@ -2663,7 +2670,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "06 Mars 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "07 Mars 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
@@ -2842,15 +2849,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
 
 // Calcul du facteur d'ajustement en fonction de la glycémie
-// (ici, on utilise la fonction simplifiée d'interpolation)
+// (ici, j'utilise la fonction simplifiée d'interpolation)
             val basalAdjustmentFactor = interpolatebasal(bg)
 
 // Calcul du taux basal final lissé à partir du TDD récent
             val finalBasalRate = computeFinalBasal(bg, tdd7P.toFloat(), tdd7Days.toFloat(), basalaimi)
 
-// On part du taux basal courant comme valeur de base
+// Taux basal courant comme valeur de base
             rate = profile_current_basal
-
+            if (detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime) {
+                rT.reason.append("Détection précoce de repas: activation d'une basale maximale pendant 30 minutes. ")
+                val forcedBasal = profile_current_basal * 10  // Exemple, ajuster le facteur selon le profil
+                return setTempBasal(forcedBasal, 30, profile, rT, currenttemp)
+            }
             // 🔴 Sécurité : Arrêt de la basale en cas de tendance baissière ou IOB trop élevé
             if (bg < 110 && mealData.slopeFromMaxDeviation <= 0 || iob > maxIob) {
                 return setTempBasal(0.0, 30, profile, rT, currenttemp)
