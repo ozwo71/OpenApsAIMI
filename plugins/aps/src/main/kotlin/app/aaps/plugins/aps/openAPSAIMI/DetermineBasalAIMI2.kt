@@ -1730,16 +1730,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.lastsmbtime = (diff / (60 * 1000)).toInt()
         this.maxIob = preferences.get(DoubleKey.ApsSmbMaxIob)
 // Tarciso Dynamic Max IOB
-        var DinMaxIob = ((bg / 100.0) * (bg / 55.0) + (delta / 2.0)).toFloat()
+        var DinMaxIob = ((bg / 100.0) * (bg / 55.0) + (combinedDelta / 2.0)).toFloat()
 
 // Calcul initial avec un ajustement dynamique basé sur bg et delta
-        DinMaxIob = ((bg / 100.0) * (bg / 55.0) + (delta / 2.0)).toFloat()
+        DinMaxIob = ((bg / 100.0) * (bg / 55.0) + (combinedDelta / 2.0)).toFloat()
 
 // Sécurisation : imposer une borne minimale et une borne maximale
         DinMaxIob = DinMaxIob.coerceAtLeast(1.0f).coerceAtMost(maxIob.toFloat() * 1.5f)
 
 // Réduction de l'augmentation si on est la nuit (0h-6h)
-        if (hourOfDay in 0..6) {
+        if (hourOfDay in 0..8) {
             DinMaxIob = DinMaxIob.coerceAtMost(maxIob.toFloat())
         }
 
@@ -1747,13 +1747,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
         this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
         // Calcul initial avec ajustement basé sur la glycémie et le delta
-        var DynMaxSmb = ((bg / 200) * (bg / 100) + (delta / 2)).toFloat()
+        var DynMaxSmb = ((bg / 200) * (bg / 100) + (combinedDelta / 2)).toFloat()
 
 // ⚠ Sécurisation : bornes min/max pour éviter des valeurs extrêmes
         DynMaxSmb = DynMaxSmb.coerceAtLeast(0.1f).coerceAtMost(maxSMBHB.toFloat() * 2.5f)
 
 // ⚠ Ajustement si delta est négatif (la glycémie baisse) pour éviter un SMB trop fort
-        if (delta < 0) {
+        if (combinedDelta < 0) {
             DynMaxSmb *= 0.75f // Réduction de 25% si la glycémie baisse
         }
 
