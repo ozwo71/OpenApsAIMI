@@ -172,68 +172,80 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     // -- Fonction de sécurité qui combine plusieurs indicateurs pour ajuster la dose d'insuline --
     fun safetyAdjustment(
-        currentBG: Float,          // BG actuel en mg/dL
-        predictedBG: Float,        // BG prédit à court terme en mg/dL
-        bgHistory: List<Float>,    // Historique des BG sur, par exemple, les 30 dernières minutes
-        combinedDelta: Float,      // Valeur combinée (delta actuel + prédiction sur 15 min)
-        iob: Float,                // Insuline active (U)
-        maxIob: Float,             // Seuil maximal d'IOB (U)
-        tdd24Hrs: Float,            //dose totale sur 24h glissante
-        tddPerHour: Float,         // Dose totale délivrée par heure (U/h)
-        tirInRange: Float,         // Pourcentage de temps en cible (0-100)
-        targetBG: Float            // BG cible (mg/dL)
+        currentBG: Float,
+        predictedBG: Float,
+        bgHistory: List<Float>,
+        combinedDelta: Float,
+        iob: Float,
+        maxIob: Float,
+        tdd24Hrs: Float,
+        tddPerHour: Float,
+        tirInhypo: Float,
+        targetBG: Float
     ): SafetyDecision {
         val windowMinutes = 30f
         val dropPerHour = calculateDropPerHour(bgHistory, windowMinutes)
-        val maxAllowedDropPerHour = 20f
+        val maxAllowedDropPerHour = 20f  // Ajustez si besoin
 
         val reasonBuilder = StringBuilder()
         var stopBasal = false
         var bolusFactor = 1.0
 
-        // 1. Contrôle de la chute (drop) sur la fenêtre glissante
+        // 1. Contrôle de la chute
         if (dropPerHour >= maxAllowedDropPerHour) {
-            stopBasal = true
-            reasonBuilder.append("BG drop élevé: ${dropPerHour} mg/dL/h dépasse le seuil de ${maxAllowedDropPerHour}; ")
+            // Option A : on arrête complètement la basale
+            // stopBasal = true
+            // reasonBuilder.append("BG drop élevé: $dropPerHour mg/dL/h; ")
+
+            // Option B : on réduit fortement le bolusFactor sans stopper la basale
+            bolusFactor *= 0.3
+            reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction du bolus; ")
         }
 
-        // 2. Utilisation du combinedDelta :
-        // Si combinedDelta < 4 mg/dL, cela peut indiquer un plateau ou une remontée insuffisante
-        if (combinedDelta < 4f) {
-            bolusFactor *= 0.5
-            reasonBuilder.append("combinedDelta faible ($combinedDelta mg/dL), réduction de la dose; ")
+        // 2. Palier sur le combinedDelta
+        when {
+            combinedDelta < 2f -> {
+                bolusFactor *= 0.6
+                reasonBuilder.append("combinedDelta très faible ($combinedDelta), réduction x0.6; ")
+            }
+            combinedDelta < 4f -> {
+                bolusFactor *= 0.8
+                reasonBuilder.append("combinedDelta modéré ($combinedDelta), réduction x0.8; ")
+            }
+            else -> {
+                reasonBuilder.append("combinedDelta élevé ($combinedDelta), pas de réduction; ")
+            }
         }
 
-        // 3. Zone de plateau en cas de BG élevé :
-        // Si le BG est > 180 mg/dL mais que le combinedDelta reste faible, c'est un plateau
-        if (currentBG > 180f && combinedDelta < 4f) {
-            bolusFactor *= 0.5
-            reasonBuilder.append("Plateau détecté (BG: $currentBG mg/dL, combinedDelta: $combinedDelta), réduction supplémentaire; ")
-        }
-
-        // 4. Contrôle de l'IOB
-        if (iob >= maxIob * 0.75f) {
-            bolusFactor *= 0.5
-            reasonBuilder.append("IOB élevé ($iob U), réduction de la dose; ")
-        }
-
-        // 5. Contrôle du TDD par heure (si la dose déjà délivrée par heure est élevée)
-        val tddThreshold = tdd24Hrs / 24  // Exemple, à ajuster selon le profil
-        if (tddPerHour > tddThreshold) {
+        // 3. Plateau si BG élevé + combinedDelta très faible
+        if (currentBG > 180f && combinedDelta < 2f) {
             bolusFactor *= 0.8
-            reasonBuilder.append("TDD par heure élevé ($tddPerHour U/h), réduction de la dose; ")
+            reasonBuilder.append("Plateau BG>180 & combinedDelta<2 => réduction x0.8; ")
         }
 
-        // 6. Contrôle du TIR : si le TIR est très bon (ex. ≥ 90%)
-        if (tirInRange >= 90f) {
-            bolusFactor = 0.3
-            reasonBuilder.append("TIR élevé ($tirInRange%), réduction de l'injection; ")
+        // 4. Contrôle IOB
+        if (iob >= maxIob * 0.85f) {
+            bolusFactor *= 0.8
+            reasonBuilder.append("IOB élevé ($iob U), réduction x0.8; ")
         }
 
-        // 7. Vérification par rapport à la cible : si le BG prédit est proche de la cible
+        // 5. Contrôle du TDD par heure
+        val tddThreshold = tdd24Hrs / 24f
+        if (tddPerHour > tddThreshold) {
+            bolusFactor *= 0.9
+            reasonBuilder.append("TDD/h élevé ($tddPerHour U/h), réduction x0.9; ")
+        }
+
+        // 6. TIR élevé
+        if (tirInhypo >= 10f) {
+            bolusFactor *= 0.6
+            reasonBuilder.append("TIR élevé ($tirInhypo%), réduction x0.7; ")
+        }
+
+        // 7. BG prédit proche de la cible
         if (predictedBG < targetBG + 10) {
-            bolusFactor = 0.0
-            reasonBuilder.append("BG prédit ($predictedBG mg/dL) proche de la cible ($targetBG mg/dL), annulation; ")
+            bolusFactor *= 0.5
+            reasonBuilder.append("BG prédit ($predictedBG) proche de la cible ($targetBG), réduction x0.5; ")
         }
 
         return SafetyDecision(
@@ -242,6 +254,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             reason = reasonBuilder.toString()
         )
     }
+
 
     // -- Méthode pour obtenir l'historique récent de BG, similaire à getRecentDeltas() --
     private fun getRecentBGs(): List<Float> {
@@ -2931,7 +2944,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 maxIob = maxIob.toFloat(),
                 tdd24Hrs = tdd24Hrs,
                 tddPerHour = tddPerHour,
-                tirInRange = currentTIRRange.toFloat(),   // ou la valeur correspondante
+                tirInhypo = currentTIRLow.toFloat(),
                 targetBG = targetBg
             )
             rT.reason.append(safetyDecision.reason)
