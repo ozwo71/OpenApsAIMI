@@ -156,6 +156,112 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     //         value
     //     }
     // }
+// -- Classe représentant la décision de sécurité --
+    data class SafetyDecision(
+        val stopBasal: Boolean,      // true => arrête la basale (ou force une basale à 0)
+        val bolusFactor: Double,     // Facteur multiplicateur appliqué à la dose SMB (1.0 = dose complète, 0.0 = annulation)
+        val reason: String           // Log résumant les critères ayant conduit à la décision
+    )
+
+    // -- Calcul de la chute de BG par heure sur une fenêtre donnée (en minutes) --
+    fun calculateDropPerHour(bgHistory: List<Float>, windowMinutes: Float): Float {
+        if (bgHistory.isEmpty()) return 0f
+        val drop = bgHistory.first() - bgHistory.last()  // positif si baisse
+        return drop * (60f / windowMinutes)
+    }
+
+    // -- Fonction de sécurité qui combine plusieurs indicateurs pour ajuster la dose d'insuline --
+    fun safetyAdjustment(
+        currentBG: Float,          // BG actuel en mg/dL
+        predictedBG: Float,        // BG prédit à court terme en mg/dL
+        bgHistory: List<Float>,    // Historique des BG sur, par exemple, les 30 dernières minutes
+        combinedDelta: Float,      // Valeur combinée (delta actuel + prédiction sur 15 min)
+        iob: Float,                // Insuline active (U)
+        maxIob: Float,             // Seuil maximal d'IOB (U)
+        tdd24Hrs: Float,            //dose totale sur 24h glissante
+        tddPerHour: Float,         // Dose totale délivrée par heure (U/h)
+        tirInRange: Float,         // Pourcentage de temps en cible (0-100)
+        targetBG: Float            // BG cible (mg/dL)
+    ): SafetyDecision {
+        val windowMinutes = 30f
+        val dropPerHour = calculateDropPerHour(bgHistory, windowMinutes)
+        val maxAllowedDropPerHour = 20f
+
+        val reasonBuilder = StringBuilder()
+        var stopBasal = false
+        var bolusFactor = 1.0
+
+        // 1. Contrôle de la chute (drop) sur la fenêtre glissante
+        if (dropPerHour >= maxAllowedDropPerHour) {
+            stopBasal = true
+            reasonBuilder.append("BG drop élevé: ${dropPerHour} mg/dL/h dépasse le seuil de ${maxAllowedDropPerHour}; ")
+        }
+
+        // 2. Utilisation du combinedDelta :
+        // Si combinedDelta < 4 mg/dL, cela peut indiquer un plateau ou une remontée insuffisante
+        if (combinedDelta < 4f) {
+            bolusFactor *= 0.5
+            reasonBuilder.append("combinedDelta faible ($combinedDelta mg/dL), réduction de la dose; ")
+        }
+
+        // 3. Zone de plateau en cas de BG élevé :
+        // Si le BG est > 180 mg/dL mais que le combinedDelta reste faible, c'est un plateau
+        if (currentBG > 180f && combinedDelta < 4f) {
+            bolusFactor *= 0.5
+            reasonBuilder.append("Plateau détecté (BG: $currentBG mg/dL, combinedDelta: $combinedDelta), réduction supplémentaire; ")
+        }
+
+        // 4. Contrôle de l'IOB
+        if (iob >= maxIob * 0.75f) {
+            bolusFactor *= 0.5
+            reasonBuilder.append("IOB élevé ($iob U), réduction de la dose; ")
+        }
+
+        // 5. Contrôle du TDD par heure (si la dose déjà délivrée par heure est élevée)
+        val tddThreshold = tdd24Hrs / 24  // Exemple, à ajuster selon le profil
+        if (tddPerHour > tddThreshold) {
+            bolusFactor *= 0.8
+            reasonBuilder.append("TDD par heure élevé ($tddPerHour U/h), réduction de la dose; ")
+        }
+
+        // 6. Contrôle du TIR : si le TIR est très bon (ex. ≥ 90%)
+        if (tirInRange >= 90f) {
+            bolusFactor = 0.3
+            reasonBuilder.append("TIR élevé ($tirInRange%), réduction de l'injection; ")
+        }
+
+        // 7. Vérification par rapport à la cible : si le BG prédit est proche de la cible
+        if (predictedBG < targetBG + 10) {
+            bolusFactor = 0.0
+            reasonBuilder.append("BG prédit ($predictedBG mg/dL) proche de la cible ($targetBG mg/dL), annulation; ")
+        }
+
+        return SafetyDecision(
+            stopBasal = stopBasal,
+            bolusFactor = bolusFactor,
+            reason = reasonBuilder.toString()
+        )
+    }
+
+    // -- Méthode pour obtenir l'historique récent de BG, similaire à getRecentDeltas() --
+    private fun getRecentBGs(): List<Float> {
+        val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
+        if (data.isEmpty()) return emptyList()
+
+        val nowTimestamp = data.first().timestamp
+        val recentBGs = mutableListOf<Float>()
+
+        for (i in 1 until data.size) {
+            if (data[i].value > 39 && !data[i].filledGap) {
+                val minutesAgo = ((nowTimestamp - data[i].timestamp) / (1000.0 * 60)).toFloat()
+                if (minutesAgo in 1.0f..30.0f) {
+                    // Utilisation de la valeur recalculée comme BG
+                    recentBGs.add(data[i].recalculated.toFloat())
+                }
+            }
+        }
+        return recentBGs
+    }
 
     // Rounds value to 'digits' decimal places
     // different for negative numbers fun round(value: Double, digits: Int): Double = BigDecimal(value).setScale(digits, RoundingMode.HALF_EVEN).toDouble()
@@ -2815,6 +2921,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         } else {
             var insulinReq = smbToGive.toDouble()
+            val recentBGValues: List<Float> = getRecentBGs()
+            val safetyDecision = safetyAdjustment(
+                currentBG = bg.toFloat(),
+                predictedBG = predictedBg,
+                bgHistory = recentBGValues,
+                combinedDelta = combinedDelta.toFloat(),
+                iob = iob,
+                maxIob = maxIob.toFloat(),
+                tdd24Hrs = tdd24Hrs,
+                tddPerHour = tddPerHour,
+                tirInRange = currentTIRRange.toFloat(),   // ou la valeur correspondante
+                targetBG = targetBg
+            )
+            rT.reason.append(safetyDecision.reason)
+
+            // Ajustement de la dose SMB proposée en fonction du bolusFactor calculé
+            insulinReq = insulinReq * safetyDecision.bolusFactor
             insulinReq = round(insulinReq, 3)
             rT.insulinReq = insulinReq
             //console.error(iob_data.lastBolusTime);
@@ -2857,6 +2980,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
 // Taux basal courant comme valeur de base
             rate = profile_current_basal
+            if (safetyDecision.stopBasal) {
+                return setTempBasal(0.0, 30, profile, rT, currenttemp)
+            }
             if (detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime) {
                 rT.reason.append("Détection précoce de repas: activation d'une basale maximale pendant 30 minutes. ")
                 val forcedBasal = profile_current_basal * 10  // Exemple, ajuster le facteur selon le profil
