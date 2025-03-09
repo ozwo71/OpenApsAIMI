@@ -249,7 +249,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             if (data[i].value > 39 && !data[i].filledGap) {
                 val minutesAgo = ((nowDate - data[i].timestamp) / (1000.0 * 60))
                 // On choisit ici un intervalle où les données sont suffisamment récentes
-                if (minutesAgo in 1.0..15.0) {
+                if (minutesAgo in 0.0..10.0) {
                     val delta = (now.recalculated - data[i].recalculated) / minutesAgo * 5
                     recentDeltas.add(delta)
                 }
@@ -365,10 +365,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // 3️⃣ Correction basée sur la variation rapide de la glycémie
         val deltaCorrectionFactor = when {
             delta == null             -> 1.0
-            delta > 10 && glucose!! > 120    -> 0.5  // Réduction plus forte si delta > 10 mg/dL en 5 min
-            delta > 5 && glucose!! > 120 -> 0.7  // Réduction modérée si delta > 5 mg/dL
-            delta < -10               -> 1.4 // Augmentation plus forte si delta < -10 mg/dL
-            delta < -5                -> 1.2 // Augmentation modérée si delta < -5 mg/dL
+            predicted > 10 && glucose!! > 120    -> 0.5  // Réduction plus forte si delta > 10 mg/dL en 5 min
+            predicted > 5 && glucose!! > 120 -> 0.7  // Réduction modérée si delta > 5 mg/dL
+            predicted < -10               -> 1.4 // Augmentation plus forte si delta < -10 mg/dL
+            predicted < -5                -> 1.2 // Augmentation modérée si delta < -5 mg/dL
             else                      -> 1.0
         }
 
