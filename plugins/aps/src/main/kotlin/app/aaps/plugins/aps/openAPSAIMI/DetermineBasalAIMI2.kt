@@ -624,9 +624,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (droppingVeryFast) conditionsTrue.add("droppingVeryFast")
         val prediction = eventualBG < targetBg && bg < 135 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
         if (prediction) conditionsTrue.add("prediction")
-        val interval = eventualBG < targetBg && delta > 10 && iob >= maxSMB/2 && lastsmbtime < 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+        val interval = eventualBG < targetBg && delta > 10 && iob >= maxSMB/2 && lastsmbtime < 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime && !snackTime
         if (interval) conditionsTrue.add("interval")
-        val targetinterval = targetBg >= 120 && delta > 0 && iob >= maxSMB/2 && lastsmbtime < 12 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+        val targetinterval = targetBg >= 120 && delta > 0 && iob >= maxSMB/2 && lastsmbtime < 12 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime && !snackTime
         if (targetinterval) conditionsTrue.add("targetinterval")
         //val stablebg = delta>-3 && delta<3 && shortAvgDelta>-3 && shortAvgDelta<3 && longAvgDelta>-3 && longAvgDelta<3 && bg < 120 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
         //if (stablebg) conditionsTrue.add("stablebg")
@@ -672,8 +672,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val intervalHC = preferences.get(IntKey.OApsAIMIHCinterval)
         val intervalHighBG = preferences.get(IntKey.OApsAIMIHighBGinterval)
 
-        // Par défaut, on part d'un intervalle de base (par exemple 10 minutes)
-        var interval = 10
+        // Par défaut, on part d'un intervalle de base (par exemple 5 minutes)
+        var interval = 5
 
         // Si une des conditions d'intervalle est satisfaite, annuler l'intervalle (0 minute)
         if (shouldApplyIntervalAdjustment(
@@ -2789,7 +2789,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "09 Mars 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "10 Mars 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
