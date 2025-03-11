@@ -185,7 +185,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ): SafetyDecision {
         val windowMinutes = 30f
         val dropPerHour = calculateDropPerHour(bgHistory, windowMinutes)
-        val maxAllowedDropPerHour = 20f  // Ajustez si besoin
+        val maxAllowedDropPerHour = 25f  // Ajustez si besoin
 
         val reasonBuilder = StringBuilder()
         var stopBasal = false
@@ -194,7 +194,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 1. Contrôle de la chute
         if (dropPerHour >= maxAllowedDropPerHour) {
             // Option A : on arrête complètement la basale
-            // stopBasal = true
+            stopBasal = true
             // reasonBuilder.append("BG drop élevé: $dropPerHour mg/dL/h; ")
 
             // Option B : on réduit fortement le bolusFactor sans stopper la basale
@@ -204,11 +204,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 2. Palier sur le combinedDelta
         when {
-            combinedDelta < 2f -> {
+            combinedDelta < 1f -> {
                 bolusFactor *= 0.6
                 reasonBuilder.append("combinedDelta très faible ($combinedDelta), réduction x0.6; ")
             }
-            combinedDelta < 4f -> {
+            combinedDelta < 2f -> {
                 bolusFactor *= 0.8
                 reasonBuilder.append("combinedDelta modéré ($combinedDelta), réduction x0.8; ")
             }
@@ -218,14 +218,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         // 3. Plateau si BG élevé + combinedDelta très faible
-        if (currentBG > 180f && combinedDelta < 2f) {
+        if (currentBG > 160f && combinedDelta < 1f) {
             bolusFactor *= 0.8
             reasonBuilder.append("Plateau BG>180 & combinedDelta<2 => réduction x0.8; ")
         }
 
         // 4. Contrôle IOB
         if (iob >= maxIob * 0.85f) {
-            bolusFactor *= 0.8
+            bolusFactor *= 0.85
             reasonBuilder.append("IOB élevé ($iob U), réduction x0.8; ")
         }
 
@@ -237,7 +237,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         // 6. TIR élevé
-        if (tirInhypo >= 10f) {
+        if (tirInhypo >= 8f) {
             bolusFactor *= 0.6
             reasonBuilder.append("TIR élevé ($tirInhypo%), réduction x0.7; ")
         }
@@ -2789,7 +2789,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "10 Mars 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "11 Mars 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
@@ -2836,10 +2836,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine(String.format("║ %-${screenWidth}s ║", "Glucose Data"))
             appendLine("╠${"═".repeat(screenWidth)}╣")
             appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Current BG", String.format("%.1f", bg)))
+            appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "predictedBg", String.format("%.1f", predictedBg)))
             appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Target BG", String.format("%.1f", targetBg)))
             appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Prediction", String.format("%.1f", predictedBg)))
             appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Eventual BG", String.format("%.1f", eventualBG)))
             appendLine(String.format("║ %-${columnWidth}s │ %s", "Delta", String.format("%.1f", delta)))
+            appendLine(String.format("║ %-${columnWidth}s │ %s", "combinedDelta", String.format("%.1f", combinedDelta)))
             appendLine(String.format("║ %-${columnWidth}s │ %s", "Short Δ", String.format("%.1f", shortAvgDelta)))
             appendLine(String.format("║ %-${columnWidth}s │ %s", "Long Δ", String.format("%.1f", longAvgDelta)))
             appendLine(String.format("║ %-${columnWidth}s │ %s", "slopeFromMaxDeviation", String.format("%.1f", mealData.slopeFromMaxDeviation)))
