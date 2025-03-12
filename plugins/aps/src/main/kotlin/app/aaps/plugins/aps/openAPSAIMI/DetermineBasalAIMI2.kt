@@ -183,7 +183,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         tirInhypo: Float,
         targetBG: Float
     ): SafetyDecision {
-        val windowMinutes = 30f
+        val windowMinutes = 60f
         val dropPerHour = calculateDropPerHour(bgHistory, windowMinutes)
         val maxAllowedDropPerHour = 25f  // Ajustez si besoin
 
