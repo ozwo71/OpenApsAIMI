@@ -166,7 +166,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // -- Calcul de la chute de BG par heure sur une fenêtre donnée (en minutes) --
     fun calculateDropPerHour(bgHistory: List<Float>, windowMinutes: Float): Float {
         if (bgHistory.isEmpty()) return 0f
-        val drop = bgHistory.first() - bgHistory.last()  // positif si baisse
+        val drop = bgHistory.last() - bgHistory.first()  // positif si baisse
         return drop * (60f / windowMinutes)
     }
 
@@ -183,7 +183,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         tirInhypo: Float,
         targetBG: Float
     ): SafetyDecision {
-        val windowMinutes = 60f
+        val windowMinutes = 30f
         val dropPerHour = calculateDropPerHour(bgHistory, windowMinutes)
         val maxAllowedDropPerHour = 25f  // Ajustez si besoin
 
