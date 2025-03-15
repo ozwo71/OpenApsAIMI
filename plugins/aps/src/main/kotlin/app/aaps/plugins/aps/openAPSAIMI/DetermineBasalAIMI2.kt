@@ -844,26 +844,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     predictedSMB: Float,
     profile: OapsProfileAimi
 ): Float {
-    // 1) Configuration générale
-    //val minutesToConsider = 5760.0
-    //val linesToConsider = (minutesToConsider / 5).toInt()
     val maxIterations = 1000.0
-    //val maxGlobalIterations = 5
-    //var globalConvergenceReached = false
-    //var differenceWithinRange = false
-
     // Valeur initiale de SMB calculée ailleurs (votre logique existante)
     var finalRefinedSMB: Float = calculateSMBFromModel()
-
     // 2) Lecture du CSV
     val allLines = csvfile.readLines()
     println("CSV file path: ${csvfile.absolutePath}")
-
     if (allLines.isEmpty()) {
         println("CSV file is empty.")
         return predictedSMB
     }
-
     val headerLine = allLines.first()
     val headers = headerLine.split(",").map { it.trim() }
     val requiredColumns = listOf(
@@ -871,31 +861,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         "tdd7DaysPerHour", "tdd2DaysPerHour", "tddPerHour", "tdd24HrsPerHour",
         "predictedSMB", "smbGiven"
     )
-
     if (!requiredColumns.all { headers.contains(it) }) {
         println("CSV file is missing required columns.")
         return predictedSMB
     }
-
     // 3) Préparation des données
     val colIndices = requiredColumns.map { headers.indexOf(it) }
     val targetColIndex = headers.indexOf("smbGiven")
-
     val inputs = mutableListOf<FloatArray>()
     val targets = mutableListOf<DoubleArray>()
     var lastEnhancedInput: FloatArray? = null
-
     for (line in allLines.drop(1)) {
         val cols = line.split(",").map { it.trim() }
         val rawInput = colIndices.mapNotNull { idx -> cols.getOrNull(idx)?.toFloatOrNull() }.toFloatArray()
-
         val trendIndicator = calculateTrendIndicator(
             delta, shortAvgDelta, longAvgDelta,
             bg.toFloat(), iob, variableSensitivity, cob, normalBgThreshold,
             recentSteps180Minutes, averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(),
             profile.insulinDivisor.toFloat(), recentSteps5Minutes, recentSteps10Minutes
         )
-
         val enhancedInput = rawInput.copyOf(rawInput.size + 1)
         enhancedInput[rawInput.size] = trendIndicator.toFloat()
         lastEnhancedInput = enhancedInput
@@ -906,24 +890,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             targets.add(doubleArrayOf(targetValue))
         }
     }
-
     if (inputs.isEmpty() || targets.isEmpty()) {
         println("Insufficient data for training.")
         return predictedSMB
     }
-
     // 4) Cross-validation (k-fold)
     val maxK = 10
     val adjustedK = minOf(maxK, inputs.size)
     val foldSize = maxOf(1, inputs.size / adjustedK)
-
     var bestNetwork: AimiNeuralNetwork? = null
     var bestFoldValLoss = Double.MAX_VALUE
-
     // 5) Training Config avec learning rate dynamique
     val adjustedLearningRate = if (bestFoldValLoss < 0.01) 0.0005 else 0.001
     val epochs = if (bestFoldValLoss < 0.01) 500 else 1000
-
     val trainingConfig = TrainingConfig(
         learningRate = adjustedLearningRate,
         beta1 = 0.9,
@@ -938,17 +917,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         dropoutRate = 0.3,
         leakyReluAlpha = 0.01
     )
-
     // 6) Entraînement & validation
     for (k in 0 until adjustedK) {
         val validationInputs = inputs.subList(k * foldSize, minOf((k + 1) * foldSize, inputs.size))
         val validationTargets = targets.subList(k * foldSize, minOf((k + 1) * foldSize, targets.size))
-
         val trainingInputs = inputs.minus(validationInputs)
         val trainingTargets = targets.minus(validationTargets)
-
         if (validationInputs.isEmpty()) continue
-
         val neuralNetwork = AimiNeuralNetwork(
             inputSize = inputs.first().size,
             hiddenSize = 5,
@@ -965,7 +940,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bestNetwork = neuralNetwork
         }
     }
-
     // 7) Optimisation finale
     var iterationCount = 0
     do {
@@ -986,7 +960,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         println("Modèle prédictif plus élevé, ajustement retenu.")
         return finalRefinedSMB
     }
-
     // 9) Lissage entre predictedSMB et finalRefinedSMB
     val alpha = 0.7f
     val blendedSMB = alpha * finalRefinedSMB + (1 - alpha) * predictedSMB
@@ -1000,16 +973,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         longAvgDelta: Float
     ): Float {
         val baseThreshold = 2.5f
-
         // Réduit le seuil au fur et à mesure des itérations pour exiger une convergence plus fine
         val iterationFactor = 1.0f / (1 + iterationCount / 100)
-
         val trendFactor = when {
             delta > 8 || shortAvgDelta > 4 || longAvgDelta > 3 -> 0.5f
             delta < 5 && shortAvgDelta < 3 && longAvgDelta < 3 -> 1.5f
             else -> 1.0f
         }
-
         return baseThreshold * iterationFactor * trendFactor
     }
 
@@ -1019,7 +989,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun calculateGFactor(delta: Float, lastHourTIRabove120: Double, bg: Float): Double {
         val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-
         // 🔹 Facteurs initiaux (ajustés dynamiquement)
         var deltaFactor = when {
             bg > 140 && delta > 5 -> 2.0 // Réaction forte si la glycémie monte rapidement et est élevée
@@ -1028,7 +997,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bg < 120 && delta < 0 -> 0.6
             else -> 1.0 // Pas de variation significative
         }
-
         var bgFactor = when {
             bg > 140 -> 1.8 // Réduction forte si glycémie > 150 mg/dL
             bg > 120 -> 1.4 // Réduction modérée si > 120 mg/dL
@@ -1036,13 +1004,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bg < 80  -> 0.5 // Augmente l'ISF si la glycémie est sous la cible
             else -> 0.9 // Légère augmentation de l'ISF
         }
-
         var tirFactor = when {
             lastHourTIRabove120 > 0.5 && bg > 120 -> 1.2 + lastHourTIRabove120 * 0.15 // Augmente si tendance à rester haut
             bg < 100 -> 0.8 // Augmente l'ISF si retour à une glycémie basse
             else -> 1.0
         }
-
         // 🔹 Mode "Honeymoon" (ajustements spécifiques)
         if (honeymoon) {
             deltaFactor = when {
@@ -1074,6 +1040,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun getRecentDeltas(): List<Double> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
         if (data.isEmpty()) return emptyList()
+        val intervalMinutes = if (bg < 130) 20f else 10f
 
         val nowTimestamp = data.first().timestamp
         val recentDeltas = mutableListOf<Double>()
@@ -1081,7 +1048,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         for (i in 1 until data.size) {
             if (data[i].value > 39 && !data[i].filledGap) {
                 val minutesAgo = ((nowTimestamp - data[i].timestamp) / (1000.0 * 60)).toFloat()
-                if (minutesAgo in 0.0f..13.0f) {
+
+                if (minutesAgo in 0.0f..intervalMinutes) {
                     val delta = (data.first().recalculated - data[i].recalculated) / minutesAgo * 5f
                     recentDeltas.add(delta)
                 }
