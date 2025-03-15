@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI
 import android.annotation.SuppressLint
 import android.os.Environment
 import app.aaps.core.data.model.BS
+import app.aaps.core.data.model.TE
 import app.aaps.core.data.model.UE
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.aps.APSResult
@@ -16,6 +17,7 @@ import app.aaps.core.interfaces.aps.Predictions
 import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.IobCobCalculator
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.stats.TddCalculator
@@ -37,6 +39,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
@@ -58,6 +61,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var dateUtil: DateUtil
     @Inject lateinit var profileFunction: ProfileFunction
     @Inject lateinit var iobCobCalculator: IobCobCalculator
+    @Inject lateinit var activePlugin: ActivePlugin
     private val consoleError = mutableListOf<String>()
     private val consoleLog = mutableListOf<String>()
     private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
@@ -297,7 +301,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         currentHour: Int,
         recentSteps5Minutes: Int,
         currentHR: Float,
-        averageHR60: Float
+        averageHR60: Float,
+        pumpAgeDays: Float
     ): Double {
         // 1. Conversion du DIA de base en minutes
         var diaMinutes = baseDIAHours * 60f  // Pour 9h, 9*60 = 540 min
@@ -328,6 +333,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 5. Ajustement en fonction de l'IOB
         diaMinutes = adjustDIAForIOB(diaMinutes, iob)
+        // Si le site est utilisé depuis 2 jours ou plus, augmenter le DIA de 10% par jour supplémentaire.
+        if (pumpAgeDays >= 2f) {
+            val extraDays = pumpAgeDays - 2f
+            val ageMultiplier = 1 + 0.5f * extraDays  // par exemple, 3 jours => 1 + 0.5*1 = 1.5
+            diaMinutes *= ageMultiplier
+        }
 
         // 6. Contrainte de la plage finale : entre 180 min (3h) et 720 min (12h)
         diaMinutes = diaMinutes.coerceIn(180f, 720f)
@@ -1394,105 +1405,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
-
-    // private fun predictFutureBg(
-    //     bg: Float,
-    //     iob: Float,
-    //     variableSensitivity: Float,
-    //     mealTime: Boolean,
-    //     bfastTime: Boolean,
-    //     lunchTime: Boolean,
-    //     dinnerTime: Boolean,
-    //     highcarbTime: Boolean,
-    //     snackTime: Boolean
-    // ): Float {
-    //     val (averageCarbAbsorptionTime, carbTypeFactor, estimatedCob) = when {
-    //         highcarbTime -> Triple(3.5f, 0.75f, 100f) // Repas riche en glucides
-    //         snackTime -> Triple(1.5f, 1.25f, 15f) // Snack
-    //         mealTime -> Triple(2.5f, 1.0f, 55f) // Repas normal
-    //         bfastTime -> Triple(3.5f, 1.0f, 55f) // Petit-déjeuner
-    //         lunchTime -> Triple(2.5f, 1.0f, 70f) // Déjeuner
-    //         dinnerTime -> Triple(2.5f, 1.0f, 70f) // Dîner
-    //         else -> Triple(2.5f, 1.0f, 70f) // Valeur par défaut si aucun type de repas spécifié
-    //     }
-    //     val insulinEffect = calculateInsulinEffect(
-    //         bg, iob, variableSensitivity, cob, normalBgThreshold, recentSteps180Minutes,
-    //         averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(), insulinPeakTime.toFloat()
-    //     )
-    //
-    //
-    //     val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-    //     var futureBg = bg - insulinEffect
-    //     if (!honeymoon && futureBg < 39f) {
-    //         futureBg = 39f
-    //     } else if (honeymoon && futureBg < 50f) {
-    //         futureBg = 50f
-    //     }
-    //
-    //     return futureBg
-    // }
-    // private fun predictEventualBG(
-    //     bg: Float,                     // Glycémie actuelle
-    //     iob: Float,                    // Insuline active (IOB)
-    //     variableSensitivity: Float,    // Sensibilité insulinique
-    //     minDelta: Float,               // Delta minimal instantané (ex. dernière variation)
-    //     minAvgDelta: Float,            // Moyenne instantanée (court terme) des deltas
-    //     longAvgDelta: Float,           // Moyenne à plus long terme des deltas
-    //     mealTime: Boolean,
-    //     bfastTime: Boolean,
-    //     lunchTime: Boolean,
-    //     dinnerTime: Boolean,
-    //     highCarbTime: Boolean,
-    //     snackTime: Boolean,
-    //     honeymoon: Boolean
-    // ): Float {
-    //     // 1. Détermination des paramètres glucidiques en fonction du contexte (type de repas)
-    //     val (averageCarbAbsorptionTime, carbTypeFactor, estimatedCob) = when {
-    //         highCarbTime -> Triple(3.5f, 0.75f, 100f) // Repas riche en glucides
-    //         snackTime    -> Triple(1.5f, 1.25f, 15f)   // Snack
-    //         mealTime     -> Triple(2.5f, 1.0f, 55f)     // Repas standard
-    //         bfastTime    -> Triple(3.5f, 1.0f, 55f)     // Petit-déjeuner
-    //         lunchTime    -> Triple(2.5f, 1.0f, 70f)     // Déjeuner
-    //         dinnerTime   -> Triple(2.5f, 1.0f, 70f)     // Dîner
-    //         else         -> Triple(2.5f, 1.0f, 70f)     // Valeur par défaut
-    //     }
-    //
-    //     // 2. Calcul du temps d'absorption (en minutes) en fonction de l'heure actuelle
-    //     val currentHour = LocalTime.now().hour
-    //
-    //     // 3. Calcul de l'effet insuline (modèle simplifié)
-    //     val insulinEffect = iob * variableSensitivity
-    //
-    //
-    //     // 5. Calcul de la déviation basée sur la tendance
-    //     //    On utilise minDelta et, si nécessaire, on remplace par minAvgDelta ou longAvgDelta pour limiter l'effet négatif excessif.
-    //     var deviation = (30f / 5f) * (minDelta - bg)
-    //     if (deviation < 0) {
-    //         deviation = (30f / 5f) * (minAvgDelta - bg)
-    //         if (deviation < 0) {
-    //             deviation = (30f / 5f) * (longAvgDelta - bg)
-    //         }
-    //     }
-    //
-    //     // 6. Calcul de la prédiction naïve basée sur l'effet insuline
-    //     val naiveEventualBG = round((bg - insulinEffect).toDouble(), 0)
-    //     val predictedfuturBG = predictFutureBg(bg,iob,variableSensitivity,mealTime,bfastTime,lunchTime,dinnerTime,highCarbTime,snackTime)
-    //     val maxpred = max(naiveEventualBG.toFloat(),predictedfuturBG)
-    //     // 7. Combinaison des effets pour obtenir la glycémie prédite :
-    //     //    glycémie actuelle - effet insuline + effet glucidique + déviation (tendance)
-    //     val predictedBG = maxpred + deviation
-    //
-    //     // 8. Application d'un seuil minimal de sécurité :
-    //     //    - En mode non-honeymoon, ne pas prédire en dessous de 39 mg/dL
-    //     //    - En mode honeymoon, ne pas prédire en dessous de 50 mg/dL
-    //     val finalPredictedBG = when {
-    //         !honeymoon && predictedBG < 39f -> 39f
-    //         honeymoon && predictedBG < 50f   -> 50f
-    //         else                              -> predictedBG
-    //     }
-    //
-    //     return finalPredictedBG as Float
-    // }
     private fun predictFutureBg(
         bg: Float,
         iob: Float,
@@ -1865,6 +1777,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog = consoleLog,
             consoleError = consoleError
         )
+        // On définit fromTime pour couvrir une longue période (par exemple, les 7 derniers jours)
+        val fromTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(7)
+// Récupération des événements de changement de cannule
+        val siteChanges = persistenceLayer.getTherapyEventDataFromTime(fromTime, TE.Type.CANNULA_CHANGE, true)
+
+// Calcul de l'âge du site en jours
+        val pumpAgeDays: Float = if (siteChanges.isNotEmpty()) {
+            // On suppose que la liste est triée par ordre décroissant (le plus récent en premier)
+            val latestChangeTimestamp = siteChanges.first().timestamp
+            ((System.currentTimeMillis() - latestChangeTimestamp).toFloat() / (1000 * 60 * 60 * 24))
+        } else {
+            // Si aucun changement n'est enregistré, vous pouvez définir une valeur par défaut
+            0f
+        }
 
         val recentDeltas = getRecentDeltas()
         val predicted = predictedDelta(recentDeltas)
@@ -2576,7 +2502,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             currentHour = currentHour,
             recentSteps5Minutes = recentSteps5Minutes,
             currentHR = averageBeatsPerMinute.toFloat(),
-            averageHR60 = averageBeatsPerMinute60.toFloat()
+            averageHR60 = averageBeatsPerMinute60.toFloat(),
+            pumpAgeDays = pumpAgeDays
         )
         consoleLog.add("DIA ajusté (en minutes) : $adjustedDIAInMinutes")
         val actCurr = profile.sensorLagActivity
