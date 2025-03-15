@@ -1081,7 +1081,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         for (i in 1 until data.size) {
             if (data[i].value > 39 && !data[i].filledGap) {
                 val minutesAgo = ((nowTimestamp - data[i].timestamp) / (1000.0 * 60)).toFloat()
-                if (minutesAgo in 0.0f..15.0f) {
+                if (minutesAgo in 0.0f..13.0f) {
                     val delta = (data.first().recalculated - data[i].recalculated) / minutesAgo * 5f
                     recentDeltas.add(delta)
                 }
@@ -2789,7 +2789,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "12 Mars 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "15 Mars 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
