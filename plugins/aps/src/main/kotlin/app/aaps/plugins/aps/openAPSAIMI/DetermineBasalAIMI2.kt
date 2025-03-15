@@ -256,30 +256,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
     /**
      * Calcule le DIA ajusté en minutes en fonction de plusieurs paramètres :
-     * - l'heure de la journée,
-     * - l'activité physique (mesurée par le nombre de pas récents),
-     * - la fréquence cardiaque actuelle comparée à la moyenne sur 60 minutes.
+     * - baseDIAHours : le DIA de base en heures (par exemple, 9.0 pour 9 heures)
+     * - currentHour : l'heure actuelle (0 à 23)
+     * - recentSteps5Minutes : nombre de pas sur les 5 dernières minutes
+     * - currentHR : fréquence cardiaque actuelle (bpm)
+     * - averageHR60 : fréquence cardiaque moyenne sur les 60 dernières minutes (bpm)
      *
-     * La logique est la suivante :
-     * 1. On convertit le DIA de base (en heures) en minutes.
-     * 2. On ajuste selon l'heure :
-     *    - Le matin (6h-10h) : réduction de 20% (facteur 0.8),
-     *    - Le soir/nuit (22h-23h et 0h-5h) : augmentation de 20% (facteur 1.2).
-     * 3. On ajuste en fonction de l'activité physique :
-     *    - Si recentSteps5Minutes > 200 et que la fréquence cardiaque actuelle est supérieure à la moyenne sur 60 minutes,
-     *      on réduit le DIA de 50% (facteur 0.5) car cela correspond à une activité physique.
-     *    - Si recentSteps5Minutes == 0 et que la fréquence cardiaque est supérieure à la moyenne, on suppose une situation de stress
-     *      (sans activité) et on augmente le DIA de 50% (facteur 1.5).
-     * 4. Si la fréquence cardiaque est très élevée (supérieure à 130 bpm), on réduit de 40% (facteur 0.6) pour refléter une circulation
-     *    améliorée et une absorption plus rapide.
-     * 5. On contraint le résultat final à une plage raisonnable (entre 180 minutes et 720 minutes, soit 3 à 12 heures).
-     *
-     * @param baseDIAHours Le DIA de base en heures, provenant du profil.
-     * @param currentHour L'heure actuelle (0 à 23).
-     * @param recentSteps5Minutes Nombre de pas enregistrés sur les 5 dernières minutes.
-     * @param currentHR La fréquence cardiaque actuelle (bpm).
-     * @param averageHR60 La fréquence cardiaque moyenne sur les 60 dernières minutes (bpm).
-     * @return Le DIA ajusté en minutes.
+     * La logique appliquée :
+     * 1. Conversion du DIA de base en minutes.
+     * 2. Ajustement selon l'heure de la journée :
+     *    - Matin (6-10h) : réduction de 20% (×0.8),
+     *    - Soir/Nuit (22-23h et 0-5h) : augmentation de 20% (×1.2).
+     * 3. Ajustement en fonction de l'activité physique :
+     *    - Si recentSteps5Minutes > 200 et que currentHR > averageHR60, on réduit le DIA de 30% (×0.7).
+     *    - Si recentSteps5Minutes == 0 et que currentHR > averageHR60, on augmente le DIA de 30% (×1.3).
+     * 4. Ajustement selon la fréquence cardiaque absolue :
+     *    - Si currentHR > 130 bpm, on réduit le DIA de 30% (×0.7).
+     * 5. Le résultat final est contraint entre 180 minutes (3h) et 720 minutes (12h).
      */
     fun calculateAdjustedDIA(
         baseDIAHours: Float,
@@ -289,41 +282,37 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         averageHR60: Float
     ): Double {
         // 1. Conversion du DIA de base en minutes
-        var diaMinutes = baseDIAHours * 60f
+        var diaMinutes = baseDIAHours * 60f  // Pour 9h, 9*60 = 540 min
 
         // 2. Ajustement selon l'heure de la journée
         if (currentHour in 6..10) {
-            // Le matin, l'action est généralement plus rapide
+            // Le matin : absorption plus rapide, on réduit le DIA de 20%
             diaMinutes *= 0.8f
         } else if (currentHour in 22..23 || currentHour in 0..5) {
-            // Le soir/nuit, l'absorption est souvent plus lente
+            // Soir/Nuit : absorption plus lente, on augmente le DIA de 20%
             diaMinutes *= 1.2f
         }
 
         // 3. Ajustement en fonction de l'activité physique
-        // Si l'utilisateur effectue de l'exercice (plus de 200 pas en 5 min) et que le HR actuel est supérieur à la moyenne sur 60 min,
-        // on suppose une absorption plus rapide => réduire le DIA.
         if (recentSteps5Minutes > 200 && currentHR > averageHR60) {
-            diaMinutes *= 0.5f
-        }
-        // Si aucun pas n'est détecté (0 pas) mais que le HR est élevé par rapport à la moyenne,
-        // cela peut indiquer un stress ou une autre situation (sans exercice) qui ralentit l'absorption => augmenter le DIA.
-        else if (recentSteps5Minutes == 0 && currentHR > averageHR60) {
-            diaMinutes *= 1.5f
+            // Exercice : absorption accélérée, réduire le DIA de 30%
+            diaMinutes *= 0.7f
+        } else if (recentSteps5Minutes == 0 && currentHR > averageHR60) {
+            // Aucune activité mais HR élevée (stress) : absorption potentiellement plus lente, augmenter le DIA de 30%
+            diaMinutes *= 1.3f
         }
 
-        // 4. Ajustement en fonction du niveau de fréquence cardiaque absolu
-        // Une fréquence cardiaque très élevée (supérieure à 130 bpm) indique une circulation rapide et donc une absorption accélérée.
+        // 4. Ajustement en fonction du niveau absolu de fréquence cardiaque
         if (currentHR > 130f) {
-            diaMinutes *= 0.6f
+            // HR très élevée : circulation rapide, réduire le DIA de 30%
+            diaMinutes *= 0.7f
         }
 
-        // 5. Contrainte de la plage finale : entre 180 minutes (3 heures) et 720 minutes (12 heures)
+        // 5. Contraindre le résultat final à une plage raisonnable (entre 180 min et 720 min)
         diaMinutes = diaMinutes.coerceIn(180f, 720f)
 
         return diaMinutes.toDouble()
     }
-
 
     // -- Méthode pour obtenir l'historique récent de BG, similaire à getRecentDeltas() --
     private fun getRecentBGs(): List<Float> {
