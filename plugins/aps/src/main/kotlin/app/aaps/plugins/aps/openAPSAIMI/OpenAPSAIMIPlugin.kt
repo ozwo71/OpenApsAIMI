@@ -688,7 +688,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             currentActivity = Round.roundTo(currentActivity, 0.0001)
             var tdd4D = tddCalculator.averageTDD(tddCalculator.calculate(4, allowMissingDays = false))
             val oapsProfile = OapsProfileAimi(
-                dia = 0.0, // not used
+                dia = profile.dia, // not used
                 min_5m_carbimpact = 0.0, // not used
                 max_iob = constraintsChecker.getMaxIOBAllowed().also { inputConstraints.copyReasons(it) }.value(),
                 max_daily_basal = profile.getMaxDailyBasal(),
