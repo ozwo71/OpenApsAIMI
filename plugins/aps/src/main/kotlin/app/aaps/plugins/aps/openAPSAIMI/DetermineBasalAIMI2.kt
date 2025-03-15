@@ -254,6 +254,75 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             reason = reasonBuilder.toString()
         )
     }
+    /**
+     * Calcule le DIA ajusté en minutes en fonction de plusieurs paramètres :
+     * - l'heure de la journée,
+     * - l'activité physique (mesurée par le nombre de pas récents),
+     * - la fréquence cardiaque actuelle comparée à la moyenne sur 60 minutes.
+     *
+     * La logique est la suivante :
+     * 1. On convertit le DIA de base (en heures) en minutes.
+     * 2. On ajuste selon l'heure :
+     *    - Le matin (6h-10h) : réduction de 20% (facteur 0.8),
+     *    - Le soir/nuit (22h-23h et 0h-5h) : augmentation de 20% (facteur 1.2).
+     * 3. On ajuste en fonction de l'activité physique :
+     *    - Si recentSteps5Minutes > 200 et que la fréquence cardiaque actuelle est supérieure à la moyenne sur 60 minutes,
+     *      on réduit le DIA de 50% (facteur 0.5) car cela correspond à une activité physique.
+     *    - Si recentSteps5Minutes == 0 et que la fréquence cardiaque est supérieure à la moyenne, on suppose une situation de stress
+     *      (sans activité) et on augmente le DIA de 50% (facteur 1.5).
+     * 4. Si la fréquence cardiaque est très élevée (supérieure à 130 bpm), on réduit de 40% (facteur 0.6) pour refléter une circulation
+     *    améliorée et une absorption plus rapide.
+     * 5. On contraint le résultat final à une plage raisonnable (entre 180 minutes et 720 minutes, soit 3 à 12 heures).
+     *
+     * @param baseDIAHours Le DIA de base en heures, provenant du profil.
+     * @param currentHour L'heure actuelle (0 à 23).
+     * @param recentSteps5Minutes Nombre de pas enregistrés sur les 5 dernières minutes.
+     * @param currentHR La fréquence cardiaque actuelle (bpm).
+     * @param averageHR60 La fréquence cardiaque moyenne sur les 60 dernières minutes (bpm).
+     * @return Le DIA ajusté en minutes.
+     */
+    fun calculateAdjustedDIA(
+        baseDIAHours: Float,
+        currentHour: Int,
+        recentSteps5Minutes: Int,
+        currentHR: Float,
+        averageHR60: Float
+    ): Double {
+        // 1. Conversion du DIA de base en minutes
+        var diaMinutes = baseDIAHours * 60f
+
+        // 2. Ajustement selon l'heure de la journée
+        if (currentHour in 6..10) {
+            // Le matin, l'action est généralement plus rapide
+            diaMinutes *= 0.8f
+        } else if (currentHour in 22..23 || currentHour in 0..5) {
+            // Le soir/nuit, l'absorption est souvent plus lente
+            diaMinutes *= 1.2f
+        }
+
+        // 3. Ajustement en fonction de l'activité physique
+        // Si l'utilisateur effectue de l'exercice (plus de 200 pas en 5 min) et que le HR actuel est supérieur à la moyenne sur 60 min,
+        // on suppose une absorption plus rapide => réduire le DIA.
+        if (recentSteps5Minutes > 200 && currentHR > averageHR60) {
+            diaMinutes *= 0.5f
+        }
+        // Si aucun pas n'est détecté (0 pas) mais que le HR est élevé par rapport à la moyenne,
+        // cela peut indiquer un stress ou une autre situation (sans exercice) qui ralentit l'absorption => augmenter le DIA.
+        else if (recentSteps5Minutes == 0 && currentHR > averageHR60) {
+            diaMinutes *= 1.5f
+        }
+
+        // 4. Ajustement en fonction du niveau de fréquence cardiaque absolu
+        // Une fréquence cardiaque très élevée (supérieure à 130 bpm) indique une circulation rapide et donc une absorption accélérée.
+        if (currentHR > 130f) {
+            diaMinutes *= 0.6f
+        }
+
+        // 5. Contrainte de la plage finale : entre 180 minutes (3 heures) et 720 minutes (12 heures)
+        diaMinutes = diaMinutes.coerceIn(180f, 720f)
+
+        return diaMinutes.toDouble()
+    }
 
 
     // -- Méthode pour obtenir l'historique récent de BG, similaire à getRecentDeltas() --
@@ -2490,11 +2559,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bg > 120 && delta > 7 && !honeymoon -> hyperfactor
             else -> 1.0
         }
-
-
+        val currentHour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
+        // Calcul du DIA ajusté en minutes
+        val adjustedDIAInMinutes = calculateAdjustedDIA(
+            baseDIAHours = profile.dia.toFloat(),
+            currentHour = currentHour,
+            recentSteps5Minutes = recentSteps5Minutes,
+            currentHR = averageBeatsPerMinute.toFloat(),
+            averageHR60 = averageBeatsPerMinute60.toFloat()
+        )
+        consoleLog.add("DIA ajusté (en minutes) : $adjustedDIAInMinutes")
         val actCurr = profile.sensorLagActivity
         val actFuture = profile.futureActivity
-        val td = profile.dia * 60
+        val td = adjustedDIAInMinutes
         val deltaGross = round((glucose_status.delta + actCurr * sens).coerceIn(0.0, 35.0), 1)
         val actTarget = deltaGross / sens * factors.toFloat()
         var actMissing = 0.0
@@ -2797,6 +2874,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine(String.format("║ %-${columnWidth}s │ %s", "After IOB Adjustment", String.format("%.1f", peakintermediaire)))
             appendLine(String.format("║ %-${columnWidth}s │ %s", "Activity Ratio", String.format("%.1f", profile.futureActivity / (profile.currentActivity + 0.0001))))
             appendLine(String.format("║ %-${columnWidth}s │ %s", "Final Peak Time after coerceIn", String.format("%.1f", tp)))
+            appendLine(String.format("║ %-${columnWidth}s │ %s", "Adjusted Dia H", String.format("%.1f", adjustedDIAInMinutes/60)))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
