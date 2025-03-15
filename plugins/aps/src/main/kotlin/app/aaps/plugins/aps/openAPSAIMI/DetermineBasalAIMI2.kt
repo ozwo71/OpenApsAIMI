@@ -255,6 +255,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
     }
     /**
+     * Ajuste le DIA (en minutes) en fonction du niveau d'IOB.
+     *
+     * @param diaMinutes Le DIA courant (en minutes) après les autres ajustements.
+     * @param currentIOB La quantité actuelle d'insuline active (U).
+     * @param threshold Le seuil d'IOB à partir duquel on commence à augmenter le DIA (par défaut 7 U).
+     * @return Le DIA ajusté en minutes tenant compte de l'impact de l'IOB.
+     */
+    fun adjustDIAForIOB(diaMinutes: Float, currentIOB: Float, threshold: Float = 5f): Float {
+        // Si l'IOB est inférieur ou égal au seuil, pas d'ajustement.
+        if (currentIOB <= threshold) return diaMinutes
+
+        // Calculer l'excès d'IOB
+        val excess = currentIOB - threshold
+        // Pour chaque unité au-dessus du seuil, augmenter le DIA de 5 %.
+        val multiplier = 1 + 0.05f * excess
+        return diaMinutes * multiplier
+    }
+    /**
      * Calcule le DIA ajusté en minutes en fonction de plusieurs paramètres :
      * - baseDIAHours : le DIA de base en heures (par exemple, 9.0 pour 9 heures)
      * - currentHour : l'heure actuelle (0 à 23)
@@ -308,7 +326,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             diaMinutes *= 0.7f
         }
 
-        // 5. Contraindre le résultat final à une plage raisonnable (entre 180 min et 720 min)
+        // 5. Ajustement en fonction de l'IOB
+        diaMinutes = adjustDIAForIOB(diaMinutes, iob)
+
+        // 6. Contrainte de la plage finale : entre 180 min (3h) et 720 min (12h)
         diaMinutes = diaMinutes.coerceIn(180f, 720f)
 
         return diaMinutes.toDouble()
