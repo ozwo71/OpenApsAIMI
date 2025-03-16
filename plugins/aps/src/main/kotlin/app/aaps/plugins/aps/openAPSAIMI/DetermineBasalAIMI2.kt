@@ -1785,7 +1785,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 // Calcul de l'âge du site en jours
         val pumpAgeDays: Float = if (siteChanges.isNotEmpty()) {
             // On suppose que la liste est triée par ordre décroissant (le plus récent en premier)
-            val latestChangeTimestamp = siteChanges.first().timestamp
+            val latestChangeTimestamp = siteChanges.last().timestamp
             ((System.currentTimeMillis() - latestChangeTimestamp).toFloat() / (1000 * 60 * 60 * 24))
         } else {
             // Si aucun changement n'est enregistré, vous pouvez définir une valeur par défaut
@@ -2771,7 +2771,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "15 Mars 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "16 Mars 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
