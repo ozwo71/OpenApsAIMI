@@ -1187,6 +1187,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         bgAdjustment *= 1.2f
 
         val dynamicCorrection = when {
+            hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22 -> 1.0f
             combinedDelta > 11f  -> 2.5f   // Très forte montée, on augmente très agressivement
             combinedDelta > 8f  -> 2.0f   // Montée forte
             combinedDelta > 4f  -> 1.5f   // Montée modérée à forte
@@ -1831,7 +1832,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         DinMaxIob = DinMaxIob.coerceAtLeast(1.0f).coerceAtMost(maxIob.toFloat() * 1.5f)
 
 // Réduction de l'augmentation si on est la nuit (0h-6h)
-        if (hourOfDay in 0..8) {
+        if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) {
             DinMaxIob = DinMaxIob.coerceAtMost(maxIob.toFloat())
         }
 
@@ -1850,7 +1851,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
 // ⚠ Réduction nocturne pour éviter une surcorrection pendant le sommeil (0h - 6h)
-        if (hourOfDay in 0..8) {
+        if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) {
             DynMaxSmb *= 0.6f
         }
 
