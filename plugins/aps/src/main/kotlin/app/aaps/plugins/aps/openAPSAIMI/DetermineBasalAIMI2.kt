@@ -2068,8 +2068,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             !profile.temptargetSet && recentSteps5Minutes >= 0 && (recentSteps30Minutes >= 500 || recentSteps180Minutes > 1500) && recentSteps10Minutes > 0 -> {
                 this.targetBg = 130.0f
             }
-            !profile.temptargetSet && eventualBG >= 120 && delta > 3 -> {
-                var baseTarget = if (honeymoon) 110.0 else 70.0
+            !profile.temptargetSet && predictedBg >= 120 && combinedDelta > 3 -> {
+                var baseTarget = if (honeymoon) 110.0 else 79.0
+                if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22){
+                    baseTarget = 90.0
+                }
                 var hyperTarget = max(baseTarget, profile.target_bg - (bg - profile.target_bg) / 3).toInt()
                 hyperTarget = (hyperTarget * min(circadianSensitivity, 1.0)).toInt()
                 hyperTarget = max(hyperTarget, baseTarget.toInt())
@@ -2083,19 +2086,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 sensitivityRatio = round(sensitivityRatio, 2)
                 consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
             }
-            !profile.temptargetSet && circadianSmb > 0.1 && eventualBG < 110 -> {
-                val baseHypoTarget = if (honeymoon) 130.0 else 120.0
-                val hypoTarget = baseHypoTarget * max(1.0, circadianSensitivity)
-                this.targetBg = min(hypoTarget.toFloat(), 166.0f)
-                target_bg = targetBg.toDouble()
-                val c = (halfBasalTarget - normalTarget).toDouble()
-                sensitivityRatio = c / (c + target_bg - normalTarget)
-                // limit sensitivityRatio to profile.autosens_max (1.2x by default)
-                sensitivityRatio = min(sensitivityRatio, profile.autosens_max)
-                sensitivityRatio = round(sensitivityRatio, 2)
-                consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
-            }
-            !profile.temptargetSet && bg < 110 && delta < 1 -> {
+            !profile.temptargetSet && combinedDelta <= 0 && predictedBg < 120 -> {
                 val baseHypoTarget = if (honeymoon) 130.0 else 110.0
                 val hypoTarget = baseHypoTarget * max(1.0, circadianSensitivity)
                 this.targetBg = min(hypoTarget.toFloat(), 166.0f)
@@ -2107,6 +2098,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 sensitivityRatio = round(sensitivityRatio, 2)
                 consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
             }
+            // !profile.temptargetSet && bg < 110 && delta < 1 -> {
+            //     val baseHypoTarget = if (honeymoon) 130.0 else 110.0
+            //     val hypoTarget = baseHypoTarget * max(1.0, circadianSensitivity)
+            //     this.targetBg = min(hypoTarget.toFloat(), 166.0f)
+            //     target_bg = targetBg.toDouble()
+            //     val c = (halfBasalTarget - normalTarget).toDouble()
+            //     sensitivityRatio = c / (c + target_bg - normalTarget)
+            //     // limit sensitivityRatio to profile.autosens_max (1.2x by default)
+            //     sensitivityRatio = min(sensitivityRatio, profile.autosens_max)
+            //     sensitivityRatio = round(sensitivityRatio, 2)
+            //     consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
+            // }
 
             else -> {
                 val defaultTarget = profile.target_bg
@@ -2772,7 +2775,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "16 Mars 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "17 Mars 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
