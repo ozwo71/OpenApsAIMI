@@ -1176,8 +1176,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // Interpolation de base pour factorAdjustment selon la glycémie (bg)
         var factorAdjustment = when {
-            bg < 120 -> interpolateFactor(bg.toFloat(), 70f, 120f, 0.1f, 0.3f)
-            else -> interpolateFactor(bg.toFloat(), 120f, 280f, 0.75f, 2.5f)
+            bg < 110 -> interpolateFactor(bg.toFloat(), 70f, 110f, 0.1f, 0.3f)
+            else -> interpolateFactor(bg.toFloat(), 110f, 280f, 0.75f, 2.5f)
         }
         if (honeymoon) factorAdjustment = when {
             bg < 160 -> interpolateFactor(bg.toFloat(), 70f, 160f, 0.2f, 0.4f)
@@ -1191,10 +1191,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             combinedDelta > 11f  -> 2.5f   // Très forte montée, on augmente très agressivement
             combinedDelta > 8f  -> 2.0f   // Montée forte
             combinedDelta > 4f  -> 1.5f   // Montée modérée à forte
-            combinedDelta > 2f  -> 0.8f   // Montée légère
-            combinedDelta in -2f..2f -> 1.0f  // Stable
-            combinedDelta < -2f && combinedDelta >= -4f -> 0.8f  // Baisse légère
-            combinedDelta < -4f && combinedDelta >= -6f -> 0.6f  // Baisse modérée
+            combinedDelta > 2f  -> 1.0f   // Montée légère
+            combinedDelta in -2f..2f -> 0.8f  // Stable
+            combinedDelta < -2f && combinedDelta >= -4f -> 0.7f  // Baisse légère
+            combinedDelta < -4f && combinedDelta >= -6f -> 0.5f  // Baisse modérée
             combinedDelta < -6f -> 0.4f   // Baisse forte, on diminue considérablement pour éviter l'hypo
             else -> 1.0f
         }
@@ -2069,7 +2069,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 this.targetBg = 130.0f
             }
             !profile.temptargetSet && predictedBg >= 120 && combinedDelta > 3 -> {
-                var baseTarget = if (honeymoon) 110.0 else 79.0
+                var baseTarget = if (honeymoon) 110.0 else 70.0
                 if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22){
                     baseTarget = 90.0
                 }
@@ -2775,7 +2775,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "17 Mars 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "19 Mars 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
