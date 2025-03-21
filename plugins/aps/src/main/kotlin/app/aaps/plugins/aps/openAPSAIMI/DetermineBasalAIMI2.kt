@@ -148,6 +148,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var intervalsmb = 1
     private var peakintermediaire = 0.0
     private var insulinPeakTime = 0.0
+    private var lastZeroBasalTime: Long = 0L
+    private var zeroBasalAccumulatedMinutes: Int = 0
+    private val MAX_ZERO_BASAL_DURATION = 60  // Durée maximale autorisée en minutes à 0 basal
 
     private fun Double.toFixed2(): String = DecimalFormat("0.00#").format(round(this, 2))
 
@@ -185,7 +188,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         tdd24Hrs: Float,
         tddPerHour: Float,
         tirInhypo: Float,
-        targetBG: Float
+        targetBG: Float,
+        zeroBasalDurationMinutes: Int  // Nouvel argument indiquant combien de minutes consécutives la basale est restée à 0
     ): SafetyDecision {
         val windowMinutes = 30f
         val dropPerHour = calculateDropPerHour(bgHistory, windowMinutes)
@@ -250,6 +254,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (predictedBG < targetBG + 10) {
             bolusFactor *= 0.5
             reasonBuilder.append("BG prédit ($predictedBG) proche de la cible ($targetBG), réduction x0.5; ")
+        }
+        // ---- Intégration du suivi de durée zéro basal ----
+        // Si nous avons déjà trop longtemps de basal à 0, on ne souhaite pas stopper la basale.
+        // Par exemple, si la durée cumulée dépasse 60 minutes, on force l'arrêt de la réduction (i.e. on ne stoppe pas la basale)
+        if (zeroBasalDurationMinutes >= MAX_ZERO_BASAL_DURATION) {
+            // On annule la demande de stopper la basale et on force le bolusFactor à 1 (aucune réduction)
+            stopBasal = false
+            bolusFactor = 1.0
+            reasonBuilder.append("Zero basal duration ($zeroBasalDurationMinutes min) dépassé, forçant basal minimal; ")
         }
 
         return SafetyDecision(
@@ -372,6 +385,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (value.isNaN()) return Double.NaN
         val scale = 10.0.pow(digits.toDouble())
         return Math.round(value * scale) / scale
+    }
+
+
+    /**
+     * Met à jour la durée cumulée pendant laquelle la basale reste à zéro.
+     *
+     * @param currentBasalRate Le taux basal actuel (en U/h).
+     */
+    fun updateZeroBasalDuration(currentBasalRate: Double) {
+        val now = System.currentTimeMillis()
+        if (currentBasalRate <= 0.0) {
+            // Si on est en zéro basal, on initialise lastZeroBasalTime si nécessaire
+            if (lastZeroBasalTime == 0L) {
+                lastZeroBasalTime = now
+            }
+            // Calcul du temps écoulé depuis que la basale est à zéro
+            this.zeroBasalAccumulatedMinutes = ((now - lastZeroBasalTime) / 60000).toInt()
+        } else {
+            // Si le taux basal n'est pas zéro, on réinitialise le compteur
+            lastZeroBasalTime = now
+            this.zeroBasalAccumulatedMinutes = 0
+        }
     }
 
     private fun Double.withoutZeros(): String = DecimalFormat("0.##").format(this)
@@ -2775,7 +2810,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "19 Mars 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "21 Mars 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
@@ -2925,6 +2960,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } else {
             var insulinReq = smbToGive.toDouble()
             val recentBGValues: List<Float> = getRecentBGs()
+            updateZeroBasalDuration(currentBasalRate = profile_current_basal)
             val safetyDecision = safetyAdjustment(
                 currentBG = bg.toFloat(),
                 predictedBG = predictedBg,
@@ -2935,7 +2971,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 tdd24Hrs = tdd24Hrs,
                 tddPerHour = tddPerHour,
                 tirInhypo = currentTIRLow.toFloat(),
-                targetBG = targetBg
+                targetBG = targetBg,
+                zeroBasalDurationMinutes = zeroBasalAccumulatedMinutes
             )
             rT.reason.append(safetyDecision.reason)
 
