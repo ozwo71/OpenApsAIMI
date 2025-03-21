@@ -322,7 +322,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val dynamicFactor = dynamicDeltaCorrectionFactor(delta,predicted, bg)
         // 🔹 Apply smoothing function to avoid abrupt changes in ISF
         //sensitivity = smoothSensitivityChange(sensitivity, glucose, delta)
-        val smoothedISF = smoothSensitivityChange(sensitivity, glucose, predicted)
+        val smoothedISF = smoothSensitivityChange(sensitivity, glucose, delta)
         aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $sensitivity, après lissage : $smoothedISF")
         sensitivity = smoothedISF
         // Apply ISF correction with delta factor
@@ -628,7 +628,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
             // 🔹 5) Lissage de l'ISF pour éviter les variations brusques
             //variableSensitivity = smoothSensitivityChange(variableSensitivity, bg, delta)
-            val smoothedISF = smoothSensitivityChange(variableSensitivity, bg, predicted)
+            val smoothedISF = smoothSensitivityChange(variableSensitivity, bg, delta)
             aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $variableSensitivity, après lissage : $smoothedISF")
             variableSensitivity = smoothedISF
             // Application de la correction
