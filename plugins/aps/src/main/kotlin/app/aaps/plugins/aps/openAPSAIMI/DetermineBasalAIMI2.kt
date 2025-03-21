@@ -156,7 +156,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun Double.toFixed2(): String = DecimalFormat("0.00#").format(round(this, 2))
 
     private fun roundBasal(value: Double): Double = value
-    fun getZeroBasalDuration(persistenceLayer: PersistenceLayer, lookBackHours: Int = 3): Int {
+    fun getZeroBasalDuration(persistenceLayer: PersistenceLayer, lookBackHours: Int): Int {
         val now = System.currentTimeMillis()
         // Définir la période de recherche (par exemple, les 12 dernières heures)
         val fromTime = now - lookBackHours * 60 * 60 * 1000L
@@ -2817,7 +2817,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
 
          val (conditionResult, conditionsTrue) = isCriticalSafetyCondition(mealData)
-        this.zeroBasalAccumulatedMinutes = getZeroBasalDuration(persistenceLayer)
+        this.zeroBasalAccumulatedMinutes = getZeroBasalDuration(persistenceLayer,2)
         val screenWidth = preferences.get(IntKey.OApsAIMIlogsize)// Largeur d'écran par défaut en caractères si non spécifié
         val columnWidth = (screenWidth / 2) - 2 // Calcul de la largeur des colonnes en fonction de la largeur de l'écran
 
@@ -2867,7 +2867,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine(String.format("║ %-${columnWidth}s │ %s", "Final Peak Time after coerceIn", String.format("%.1f", tp)))
             appendLine(String.format("║ %-${columnWidth}s │ %s", "Adjusted Dia H", String.format("%.1f", adjustedDIAInMinutes/60)))
             appendLine(String.format("║ %-${columnWidth}s │ %s", "pumpAgeDays", String.format("%.1f", pumpAgeDays)))
-            appendLine(String.format("║ %-${columnWidth}s │ %s", "zeroBasalAccumulatedMinutes", String.format("%.1f", zeroBasalAccumulatedMinutes)))
+            appendLine(String.format("║ %-${columnWidth}s │ %s", "zeroBasalAccumulatedMinutes", String.format("%.1f", zeroBasalAccumulatedMinutes.toDouble())))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
