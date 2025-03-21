@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI
 import android.annotation.SuppressLint
 import android.os.Environment
 import app.aaps.core.data.model.BS
+import app.aaps.core.data.model.TB
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.model.UE
 import app.aaps.core.data.time.T
@@ -155,14 +156,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun Double.toFixed2(): String = DecimalFormat("0.00#").format(round(this, 2))
 
     private fun roundBasal(value: Double): Double = value
+    fun getZeroBasalDuration(persistenceLayer: PersistenceLayer, lookBackHours: Int = 3): Int {
+        val now = System.currentTimeMillis()
+        // Définir la période de recherche (par exemple, les 12 dernières heures)
+        val fromTime = now - lookBackHours * 60 * 60 * 1000L
 
-    // private fun convertGlucoseToCurrentUnit(value: Double): Double {
-    //     return if (profileFunction.getUnits() == GlucoseUnit.MMOL) {
-    //         value * MGDL_TO_MMOL
-    //     } else {
-    //         value
-    //     }
-    // }
+        // Récupérer la liste des événements de basale temporaire à partir de "fromTime"
+        // Ici, on utilise blockingGet() pour simplifier l'exemple.
+        val tempBasals: List<TB> = persistenceLayer.getTemporaryBasalsStartingFromTime(fromTime, ascending = false)
+            .blockingGet()
+
+        // Filtrer les événements dont le taux basal est proche de zéro (ici, on considère <= 0.05 U/h comme zéro)
+        val zeroBasals = tempBasals.filter { it.rate <= 0.05 }
+        if (zeroBasals.isEmpty()) {
+            return 0
+        }
+
+        // Trouver l'événement le plus récent (avec le plus grand timestamp)
+        val lastZeroBasal = zeroBasals.maxByOrNull { it.timestamp } ?: return 0
+
+        // Calculer la durée écoulée (en minutes) depuis le timestamp de cet événement jusqu'à maintenant
+        return ((now - lastZeroBasal.timestamp) / 60000L).toInt()
+    }
 // -- Classe représentant la décision de sécurité --
     data class SafetyDecision(
         val stopBasal: Boolean,      // true => arrête la basale (ou force une basale à 0)
@@ -388,26 +403,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
 
-    /**
-     * Met à jour la durée cumulée pendant laquelle la basale reste à zéro.
-     *
-     * @param currentBasalRate Le taux basal actuel (en U/h).
-     */
-    fun updateZeroBasalDuration(currentBasalRate: Double) {
-        val now = System.currentTimeMillis()
-        if (currentBasalRate <= 0.0) {
-            // Si on est en zéro basal, on initialise lastZeroBasalTime si nécessaire
-            if (lastZeroBasalTime == 0L) {
-                lastZeroBasalTime = now
-            }
-            // Calcul du temps écoulé depuis que la basale est à zéro
-            this.zeroBasalAccumulatedMinutes = ((now - lastZeroBasalTime) / 60000).toInt()
-        } else {
-            // Si le taux basal n'est pas zéro, on réinitialise le compteur
-            lastZeroBasalTime = now
-            this.zeroBasalAccumulatedMinutes = 0
-        }
-    }
+    // /**
+    //  * Met à jour la durée cumulée pendant laquelle la basale reste à zéro.
+    //  *
+    //  * @param currentBasalRate Le taux basal actuel (en U/h).
+    //  */
+    // fun updateZeroBasalDuration(currentBasalRate: Double) {
+    //     val now = System.currentTimeMillis()
+    //     if (currentBasalRate <= 0.0) {
+    //         // Si on est en zéro basal, on initialise lastZeroBasalTime si nécessaire
+    //         if (lastZeroBasalTime == 0L) {
+    //             lastZeroBasalTime = now
+    //         }
+    //         // Calcul du temps écoulé depuis que la basale est à zéro
+    //         this.zeroBasalAccumulatedMinutes = ((now - lastZeroBasalTime) / 60000).toInt()
+    //     } else {
+    //         // Si le taux basal n'est pas zéro, on réinitialise le compteur
+    //         lastZeroBasalTime = now
+    //         this.zeroBasalAccumulatedMinutes = 0
+    //     }
+    // }
 
     private fun Double.withoutZeros(): String = DecimalFormat("0.##").format(this)
     fun round(value: Double): Int {
@@ -2802,7 +2817,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
 
          val (conditionResult, conditionsTrue) = isCriticalSafetyCondition(mealData)
-
+        this.zeroBasalAccumulatedMinutes = getZeroBasalDuration(persistenceLayer)
         val screenWidth = preferences.get(IntKey.OApsAIMIlogsize)// Largeur d'écran par défaut en caractères si non spécifié
         val columnWidth = (screenWidth / 2) - 2 // Calcul de la largeur des colonnes en fonction de la largeur de l'écran
 
@@ -2852,6 +2867,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine(String.format("║ %-${columnWidth}s │ %s", "Final Peak Time after coerceIn", String.format("%.1f", tp)))
             appendLine(String.format("║ %-${columnWidth}s │ %s", "Adjusted Dia H", String.format("%.1f", adjustedDIAInMinutes/60)))
             appendLine(String.format("║ %-${columnWidth}s │ %s", "pumpAgeDays", String.format("%.1f", pumpAgeDays)))
+            appendLine(String.format("║ %-${columnWidth}s │ %s", "zeroBasalAccumulatedMinutes", String.format("%.1f", zeroBasalAccumulatedMinutes)))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
@@ -2960,7 +2976,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } else {
             var insulinReq = smbToGive.toDouble()
             val recentBGValues: List<Float> = getRecentBGs()
-            updateZeroBasalDuration(currentBasalRate = profile_current_basal)
+            //updateZeroBasalDuration(profile_current_basal)
+
             val safetyDecision = safetyAdjustment(
                 currentBG = bg.toFloat(),
                 predictedBG = predictedBg,
