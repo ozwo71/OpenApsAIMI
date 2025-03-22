@@ -685,7 +685,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return false
         }
 
-        return variableSensitivity in 5.0f..10f &&
+        return variableSensitivity in 5.0f..15f &&
             targetBg in 70.0f..85.0f &&
             combinedDelta >= 4 &&
             autodrive &&
