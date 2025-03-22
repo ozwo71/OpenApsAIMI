@@ -182,7 +182,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     data class SafetyDecision(
         val stopBasal: Boolean,      // true => arrête la basale (ou force une basale à 0)
         val bolusFactor: Double,     // Facteur multiplicateur appliqué à la dose SMB (1.0 = dose complète, 0.0 = annulation)
-        val reason: String           // Log résumant les critères ayant conduit à la décision
+        val reason: String,           // Log résumant les critères ayant conduit à la décision
+        val basalLS: Boolean
     )
 
     // -- Calcul de la chute de BG par heure sur une fenêtre donnée (en minutes) --
@@ -212,6 +213,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         val reasonBuilder = StringBuilder()
         var stopBasal = false
+        var basalLS = false
         var bolusFactor = 1.0
 
         // 1. Contrôle de la chute
@@ -276,6 +278,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (zeroBasalDurationMinutes >= MAX_ZERO_BASAL_DURATION) {
             // On annule la demande de stopper la basale et on force le bolusFactor à 1 (aucune réduction)
             stopBasal = false
+            basalLS = true
             bolusFactor = 1.0
             reasonBuilder.append("Zero basal duration ($zeroBasalDurationMinutes min) dépassé, forçant basal minimal; ")
         }
@@ -283,7 +286,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return SafetyDecision(
             stopBasal = stopBasal,
             bolusFactor = bolusFactor,
-            reason = reasonBuilder.toString()
+            reason = reasonBuilder.toString(),
+            basalLS = basalLS
         )
     }
     /**
@@ -3111,6 +3115,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rate = profile_current_basal
             if (safetyDecision.stopBasal) {
                 return setTempBasal(0.0, 30, profile, rT, currenttemp)
+            }
+            if (safetyDecision.basalLS && combinedDelta in -1.0..3.0 && predictedBg > 100 && iob > 0.1){
+                return setTempBasal(profile_current_basal, 30, profile, rT, currenttemp)
             }
             if (detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime) {
                 rT.reason.append("Détection précoce de repas: activation d'une basale maximale pendant 30 minutes. ")
