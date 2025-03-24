@@ -678,7 +678,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         bg: Float
     ): Boolean {
         // Récupération de la valeur de pbolusMeal depuis les préférences
-        val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
+        val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+        val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
+        val autodriveminDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
+        val autodriveISF: Int = preferences.get(IntKey.OApsAIMIautodriveISF)
+        val autodriveTarget: Int = preferences.get(IntKey.OApsAIMIAutodriveTarget)
+        val autodriveBG: Int = preferences.get(IntKey.OApsAIMIAutodriveBG)
         // Récupération des deltas récents et calcul du delta prédit
         val recentDeltas = getRecentDeltas()
         val predicted = predictedDelta(recentDeltas)
@@ -689,12 +694,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return false
         }
 
-        return variableSensitivity in 5.0f..15f &&
-            targetBg in 70.0f..85.0f &&
-            combinedDelta >= 4 &&
+        return variableSensitivity <= autodriveISF &&
+            targetBg <= autodriveTarget &&
+            combinedDelta >= autodriveDelta &&
             autodrive &&
-            slopeFromMinDeviation >= 1.5 &&
-            bg > 120
+            slopeFromMinDeviation >= autodriveminDeviation &&
+            bg >= autodriveBG
     }
 
     private fun isMealModeCondition(): Boolean {
@@ -2901,7 +2906,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "22 Mars 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "24 Mars 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
