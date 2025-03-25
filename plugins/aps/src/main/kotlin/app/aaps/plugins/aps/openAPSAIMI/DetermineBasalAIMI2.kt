@@ -668,7 +668,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Vérifie si un bolus a exactement le montant pbolusM
         return bolusesLastHour.any { it.amount == pbolusM }
     }
-    private fun isMealModeCondition2(
+    private fun isAutodriveModeCondition(
         variableSensitivity: Float,
         targetBg: Float,
         delta: Float,
@@ -2075,8 +2075,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                  rT.reason.append("Microbolusing Meal Mode ${pbolusM}U. ")
              return rT
          }
-        if (isMealModeCondition2(variableSensitivity, targetBg, delta, shortAvgDelta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat()) && !mealTime && !highCarbTime && !lunchTime && !bfastTime && !dinnerTime && !snackTime && !sportTime && !snackTime && !lowCarbTime && bgAcceleration.toFloat() >= 2.0f){
-            val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
+        if (isAutodriveModeCondition(variableSensitivity, targetBg, delta, shortAvgDelta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat()) && !mealTime && !highCarbTime && !lunchTime && !bfastTime && !dinnerTime && !snackTime && !sportTime && !snackTime && !lowCarbTime && bgAcceleration.toFloat() >= 2.0f){
+            val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
             rT.units = pbolusM
             rT.reason.append("Microbolusing Meal Mode ${pbolusM}U. ")
             return rT
@@ -2906,7 +2906,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "24 Mars 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "25 Mars 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
