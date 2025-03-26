@@ -2906,7 +2906,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "25 Mars 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "26 Mars 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
@@ -3130,7 +3130,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 return setTempBasal(forcedBasal, 30, profile, rT, currenttemp)
             }
             // 🔴 Sécurité : Arrêt de la basale en cas de tendance baissière ou IOB trop élevé
-            if (bg < 110 && mealData.slopeFromMaxDeviation <= 0 || iob > maxIob) {
+            if (predictedBg < 100 && mealData.slopeFromMaxDeviation <= 0 || iob > maxIob) {
                 return setTempBasal(0.0, 30, profile, rT, currenttemp)
             }
 
