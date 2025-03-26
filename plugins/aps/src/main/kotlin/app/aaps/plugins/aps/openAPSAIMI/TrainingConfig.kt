@@ -8,7 +8,7 @@ data class TrainingConfig(
     var patience: Int = 10,
     var batchSize: Int = 32,
     var weightDecay: Double = 0.01,
-    var epochs: Int = 30000,
+    var epochs: Int = 1000,
     var useBatchNorm: Boolean = true,
     var useDropout: Boolean = true,
     var dropoutRate: Double = 0.5,

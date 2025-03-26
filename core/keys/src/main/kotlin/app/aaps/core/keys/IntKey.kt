@@ -16,9 +16,9 @@ enum class IntKey(
     override val engineeringModeOnly: Boolean = false
 ) : IntPreferenceKey {
 
-    OverviewCarbsButtonIncrement1("carbs_button_increment_1", 5, -50, 50, defaultedBySM = true),
-    OverviewCarbsButtonIncrement2("carbs_button_increment_2", 10, -50, 50, defaultedBySM = true),
-    OverviewCarbsButtonIncrement3("carbs_button_increment_3", 20, -50, 50, defaultedBySM = true),
+    OverviewCarbsButtonIncrement1("carbs_button_increment_1", 5, -50, 50, defaultedBySM = true, dependency = BooleanKey.OverviewShowCarbsButton),
+    OverviewCarbsButtonIncrement2("carbs_button_increment_2", 10, -50, 50, defaultedBySM = true, dependency = BooleanKey.OverviewShowCarbsButton),
+    OverviewCarbsButtonIncrement3("carbs_button_increment_3", 20, -50, 50, defaultedBySM = true, dependency = BooleanKey.OverviewShowCarbsButton),
     OverviewEatingSoonDuration("eatingsoon_duration", 45, 15, 120, defaultedBySM = true, hideParentScreenIfHidden = true),
     OverviewActivityDuration("activity_duration", 90, 15, 600, defaultedBySM = true),
     OverviewHypoDuration("hypo_duration", 60, 15, 180, defaultedBySM = true),
@@ -86,5 +86,8 @@ enum class IntKey(
     OApsAIMISleepinterval("key_oaps_aimi_sleep_interval", 3, 1, 20, defaultedBySM = true),
     OApsAIMIHighCarbAdjISFFact("key_oaps_aimi_highcarbAdjFact",50,1,500),
     OApsAIMISnackAdjISFFact("key_oaps_aimi_snackAdjFact",50,1,500),
+    OApsAIMIautodriveISF("key_oaps_aimi_autodriveISF",5,1,500),
+    OApsAIMIAutodriveTarget("key_oaps_aimi_autodriveTarget",70,1,100),
+    OApsAIMIAutodriveBG("key_oaps_aimi_autodriveBG",90,1,130),
     OApsAIMIlogsize("key_oaps_aimi_logsize",25,1,50)
 }

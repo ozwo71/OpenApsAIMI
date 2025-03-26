@@ -365,8 +365,8 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
         if (!isProtectionCheckActive) {
             isProtectionCheckActive = true
             protectionCheck.queryProtection(this, ProtectionCheck.Protection.APPLICATION, UIRunnable { isProtectionCheckActive = false },
-                                            UIRunnable { OKDialog.show(this, "", rh.gs(R.string.authorizationfailed)) { isProtectionCheckActive = false; finish() } },
-                                            UIRunnable { OKDialog.show(this, "", rh.gs(R.string.authorizationfailed)) { isProtectionCheckActive = false; finish() } }
+                                            UIRunnable { OKDialog.show(this, "", rh.gs(R.string.authorizationfailed), true) { isProtectionCheckActive = false; finish() } },
+                                            UIRunnable { OKDialog.show(this, "", rh.gs(R.string.authorizationfailed), true) { isProtectionCheckActive = false; finish() } }
             )
         }
     }
@@ -455,6 +455,7 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
         }
         return super.dispatchTouchEvent(event)
     }
+
     override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
         menuOpen = true
         if (binding.mainDrawerLayout.isDrawerOpen(GravityCompat.START)) {
