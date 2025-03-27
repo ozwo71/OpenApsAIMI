@@ -49,6 +49,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 @Singleton
 class DetermineBasalaimiSMB2 @Inject constructor(
@@ -961,296 +962,164 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return smbToGive.toFloat()
     }
 
-//     private fun neuralnetwork5(
-//     delta: Float,
-//     shortAvgDelta: Float,
-//     longAvgDelta: Float,
-//     predictedSMB: Float,
-//     profile: OapsProfileAimi
-// ): Float {
-//     val maxIterations = 1000.0
-//     // Valeur initiale de SMB calculée ailleurs (votre logique existante)
-//     var finalRefinedSMB: Float = calculateSMBFromModel()
-//     // 2) Lecture du CSV
-//     val allLines = csvfile.readLines()
-//     println("CSV file path: ${csvfile.absolutePath}")
-//     if (allLines.isEmpty()) {
-//         println("CSV file is empty.")
-//         return predictedSMB
-//     }
-//     val headerLine = allLines.first()
-//     val headers = headerLine.split(",").map { it.trim() }
-//     val requiredColumns = listOf(
-//         "bg", "iob", "cob", "delta", "shortAvgDelta", "longAvgDelta",
-//         "tdd7DaysPerHour", "tdd2DaysPerHour", "tddPerHour", "tdd24HrsPerHour",
-//         "predictedSMB", "smbGiven"
-//     )
-//     if (!requiredColumns.all { headers.contains(it) }) {
-//         println("CSV file is missing required columns.")
-//         return predictedSMB
-//     }
-//     // 3) Préparation des données
-//     val colIndices = requiredColumns.map { headers.indexOf(it) }
-//     val targetColIndex = headers.indexOf("smbGiven")
-//     val inputs = mutableListOf<FloatArray>()
-//     val targets = mutableListOf<DoubleArray>()
-//     var lastEnhancedInput: FloatArray? = null
-//     for (line in allLines.drop(1)) {
-//         val cols = line.split(",").map { it.trim() }
-//         val rawInput = colIndices.mapNotNull { idx -> cols.getOrNull(idx)?.toFloatOrNull() }.toFloatArray()
-//         val trendIndicator = calculateTrendIndicator(
-//             delta, shortAvgDelta, longAvgDelta,
-//             bg.toFloat(), iob, variableSensitivity, cob, normalBgThreshold,
-//             recentSteps180Minutes, averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(),
-//             profile.insulinDivisor.toFloat(), recentSteps5Minutes, recentSteps10Minutes
-//         )
-//         val enhancedInput = rawInput.copyOf(rawInput.size + 1)
-//         enhancedInput[rawInput.size] = trendIndicator.toFloat()
-//         lastEnhancedInput = enhancedInput
-//
-//         val targetValue = cols.getOrNull(targetColIndex)?.toDoubleOrNull()
-//         if (targetValue != null) {
-//             inputs.add(enhancedInput)
-//             targets.add(doubleArrayOf(targetValue))
-//         }
-//     }
-//     if (inputs.isEmpty() || targets.isEmpty()) {
-//         println("Insufficient data for training.")
-//         return predictedSMB
-//     }
-//     // 4) Cross-validation (k-fold)
-//     val maxK = 10
-//     val adjustedK = minOf(maxK, inputs.size)
-//     val foldSize = maxOf(1, inputs.size / adjustedK)
-//     var bestNetwork: AimiNeuralNetwork? = null
-//     var bestFoldValLoss = Double.MAX_VALUE
-//     // 5) Training Config avec learning rate dynamique
-//     val adjustedLearningRate = if (bestFoldValLoss < 0.01) 0.0005 else 0.001
-//     val epochs = if (bestFoldValLoss < 0.01) 500 else 1000
-//     val trainingConfig = TrainingConfig(
-//         learningRate = adjustedLearningRate,
-//         beta1 = 0.9,
-//         beta2 = 0.999,
-//         epsilon = 1e-8,
-//         patience = 10,
-//         batchSize = 32,
-//         weightDecay = 0.01,
-//         epochs = epochs,
-//         useBatchNorm = false,
-//         useDropout = true,
-//         dropoutRate = 0.3,
-//         leakyReluAlpha = 0.01
-//     )
-//     // 6) Entraînement & validation
-//     for (k in 0 until adjustedK) {
-//         val validationInputs = inputs.subList(k * foldSize, minOf((k + 1) * foldSize, inputs.size))
-//         val validationTargets = targets.subList(k * foldSize, minOf((k + 1) * foldSize, targets.size))
-//         val trainingInputs = inputs.minus(validationInputs)
-//         val trainingTargets = targets.minus(validationTargets)
-//         if (validationInputs.isEmpty()) continue
-//         val neuralNetwork = AimiNeuralNetwork(
-//             inputSize = inputs.first().size,
-//             hiddenSize = 5,
-//             outputSize = 1,
-//             config = trainingConfig,
-//             regularizationLambda = 0.01
-//         )
-//
-//         neuralNetwork.trainWithValidation(trainingInputs, trainingTargets, validationInputs, validationTargets)
-//         val foldValLoss = neuralNetwork.validate(validationInputs, validationTargets)
-//
-//         if (foldValLoss < bestFoldValLoss) {
-//             bestFoldValLoss = foldValLoss
-//             bestNetwork = neuralNetwork
-//         }
-//     }
-//     // 7) Optimisation finale
-//     var iterationCount = 0
-//     do {
-//         val dynamicThreshold = calculateDynamicThreshold(iterationCount, delta, shortAvgDelta, longAvgDelta)
-//         val refinedSMB = bestNetwork?.let {
-//             AimiNeuralNetwork.refineSMB(finalRefinedSMB, it, lastEnhancedInput?.toDoubleArray() ?: DoubleArray(0))
-//         } ?: finalRefinedSMB
-//
-//         if (abs(finalRefinedSMB - refinedSMB) <= dynamicThreshold) {
-//             finalRefinedSMB = max(0.05f, refinedSMB) // Clamp SMB minimum
-//             break
-//         }
-//         iterationCount++
-//     } while (iterationCount < maxIterations)
-//
-//     // 8) Condition spéciale sur finalRefinedSMB
-//     if (finalRefinedSMB > predictedSMB && bg > 150 && delta > 5) {
-//         println("Modèle prédictif plus élevé, ajustement retenu.")
-//         return finalRefinedSMB
-//     }
-//     // 9) Lissage entre predictedSMB et finalRefinedSMB
-//     val alpha = 0.7f
-//     val blendedSMB = alpha * finalRefinedSMB + (1 - alpha) * predictedSMB
-//     return blendedSMB
-// }
-private fun neuralnetwork5(
-    delta: Float,
-    shortAvgDelta: Float,
-    longAvgDelta: Float,
-    predictedSMB: Float,
-    profile: OapsProfileAimi
-): Float {
-    val maxIterations = 1000.0
-    var finalRefinedSMB: Float = calculateSMBFromModel()
+    private fun neuralnetwork5(
+        delta: Float,
+        shortAvgDelta: Float,
+        longAvgDelta: Float,
+        predictedSMB: Float,
+        profile: OapsProfileAimi
+    ): Float {
+        val maxIterations = 50.0  // Réduit pour éviter les boucles trop longues
+        var finalRefinedSMB: Float = calculateSMBFromModel()
 
-    val allLines = csvfile.readLines()
-    println("CSV file path: \${csvfile.absolutePath}")
-    if (allLines.isEmpty()) {
-        println("CSV file is empty.")
-        return predictedSMB
-    }
-
-    val headerLine = allLines.first()
-    val headers = headerLine.split(",").map { it.trim() }
-    val requiredColumns = listOf(
-        "bg", "iob", "cob", "delta", "shortAvgDelta", "longAvgDelta",
-        "tdd7DaysPerHour", "tdd2DaysPerHour", "tddPerHour", "tdd24HrsPerHour",
-        "predictedSMB", "smbGiven"
-    )
-    if (!requiredColumns.all { headers.contains(it) }) {
-        println("CSV file is missing required columns.")
-        return predictedSMB
-    }
-
-    val colIndices = requiredColumns.map { headers.indexOf(it) }
-    val targetColIndex = headers.indexOf("smbGiven")
-    val rawInputs = mutableListOf<FloatArray>()
-    val targets = mutableListOf<DoubleArray>()
-    var lastEnhancedInput: FloatArray? = null
-
-    for (line in allLines.drop(1)) {
-        val cols = line.split(",").map { it.trim() }
-        val rawInput = colIndices.mapNotNull { idx -> cols.getOrNull(idx)?.toFloatOrNull() }.toFloatArray()
-
-        val trendIndicator = calculateTrendIndicator(
-            delta, shortAvgDelta, longAvgDelta,
-            bg.toFloat(), iob, variableSensitivity, cob, normalBgThreshold,
-            recentSteps180Minutes, averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(),
-            profile.insulinDivisor.toFloat(), recentSteps5Minutes, recentSteps10Minutes
-        )
-
-        val enhancedInput = rawInput.copyOf(rawInput.size + 1)
-        enhancedInput[rawInput.size] = trendIndicator.toFloat()
-        lastEnhancedInput = enhancedInput
-
-        val targetValue = cols.getOrNull(targetColIndex)?.toDoubleOrNull()
-        if (targetValue != null) {
-            rawInputs.add(enhancedInput)
-            targets.add(doubleArrayOf(targetValue))
+        val allLines = csvfile.readLines()
+        println("CSV file path: \${csvfile.absolutePath}")
+        if (allLines.isEmpty()) {
+            println("CSV file is empty.")
+            return predictedSMB
         }
-    }
 
-    if (rawInputs.isEmpty() || targets.isEmpty()) {
-        println("Insufficient data for training.")
-        return predictedSMB
-    }
-
-    // Normalisation des entrées
-    val bestNetworkForNorm = AimiNeuralNetwork(
-        inputSize = rawInputs.first().size,
-        hiddenSize = 5,
-        outputSize = 1
-    )
-    val inputs = bestNetworkForNorm.zScoreNormalization(rawInputs)
-
-    // Cross-validation (k-fold)
-    val maxK = 10
-    val adjustedK = minOf(maxK, inputs.size)
-    val foldSize = maxOf(1, inputs.size / adjustedK)
-    var bestNetwork: AimiNeuralNetwork? = null
-    var bestFoldValLoss = Double.MAX_VALUE
-
-    for (k in 0 until adjustedK) {
-        val validationInputs = inputs.subList(k * foldSize, minOf((k + 1) * foldSize, inputs.size))
-        val validationTargets = targets.subList(k * foldSize, minOf((k + 1) * foldSize, targets.size))
-        val trainingInputs = inputs.minus(validationInputs)
-        val trainingTargets = targets.minus(validationTargets)
-        if (validationInputs.isEmpty()) continue
-
-        val tempNetwork = AimiNeuralNetwork(
-            inputSize = inputs.first().size,
-            hiddenSize = 5,
-            outputSize = 1,
-            config = TrainingConfig(
-                learningRate = 0.001,
-                epochs = 1000
-            ),
-            regularizationLambda = 0.01
+        val headerLine = allLines.first()
+        val headers = headerLine.split(",").map { it.trim() }
+        val requiredColumns = listOf(
+            "bg", "iob", "cob", "delta", "shortAvgDelta", "longAvgDelta",
+            "tdd7DaysPerHour", "tdd2DaysPerHour", "tddPerHour", "tdd24HrsPerHour",
+            "predictedSMB", "smbGiven"
         )
-
-        tempNetwork.trainWithValidation(trainingInputs, trainingTargets, validationInputs, validationTargets)
-        val foldValLoss = tempNetwork.validate(validationInputs, validationTargets)
-
-        if (foldValLoss < bestFoldValLoss) {
-            bestFoldValLoss = foldValLoss
-            bestNetwork = tempNetwork
+        if (!requiredColumns.all { headers.contains(it) }) {
+            println("CSV file is missing required columns.")
+            return predictedSMB
         }
-    }
 
-    // Ajustement dynamique
-    val adjustedLearningRate = if (bestFoldValLoss < 0.01) 0.0005 else 0.001
-    val epochs = if (bestFoldValLoss < 0.01) 500 else 1000
+        val colIndices = requiredColumns.map { headers.indexOf(it) }
+        val targetColIndex = headers.indexOf("smbGiven")
+        val inputs = mutableListOf<FloatArray>()
+        val targets = mutableListOf<DoubleArray>()
+        var lastEnhancedInput: FloatArray? = null
 
-    // Réentraînement final sur 100% des données avec la meilleure config
-    if (bestNetwork != null) {
-        println("Réentraînement final avec les meilleurs hyperparamètres sur toutes les données...")
-        val finalNetwork = AimiNeuralNetwork(
-            inputSize = inputs.first().size,
-            hiddenSize = 5,
-            outputSize = 1,
-            config = TrainingConfig(
-                learningRate = adjustedLearningRate,
-                beta1 = 0.9,
-                beta2 = 0.999,
-                epsilon = 1e-8,
-                patience = 10,
-                batchSize = 32,
-                weightDecay = 0.01,
-                epochs = epochs,
-                useBatchNorm = false,
-                useDropout = true,
-                dropoutRate = 0.3,
-                leakyReluAlpha = 0.01
-            ),
-            regularizationLambda = 0.01
-        )
-        finalNetwork.copyWeightsFrom(bestNetwork)
-        finalNetwork.train(inputs, targets)
-        bestNetwork = finalNetwork
-    }
+        for (line in allLines.drop(1)) {
+            val cols = line.split(",").map { it.trim() }
+            val rawInput = colIndices.mapNotNull { idx -> cols.getOrNull(idx)?.toFloatOrNull() }.toFloatArray()
 
-    // Optimisation finale
-    var iterationCount = 0
-    do {
-        val dynamicThreshold = calculateDynamicThreshold(iterationCount, delta, shortAvgDelta, longAvgDelta)
-        val refinedSMB = bestNetwork?.let {
-            AimiNeuralNetwork.refineSMB(finalRefinedSMB, it, lastEnhancedInput?.toDoubleArray() ?: DoubleArray(0))
-        } ?: finalRefinedSMB
+            val trendIndicator = calculateTrendIndicator(
+                delta, shortAvgDelta, longAvgDelta,
+                bg.toFloat(), iob, variableSensitivity, cob, normalBgThreshold,
+                recentSteps180Minutes, averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(),
+                profile.insulinDivisor.toFloat(), recentSteps5Minutes, recentSteps10Minutes
+            )
 
-        if (abs(finalRefinedSMB - refinedSMB) <= dynamicThreshold) {
-            finalRefinedSMB = max(0.05f, refinedSMB)
-            break
+            val enhancedInput = rawInput.copyOf(rawInput.size + 1)
+            enhancedInput[rawInput.size] = trendIndicator.toFloat()
+            lastEnhancedInput = enhancedInput
+
+            val targetValue = cols.getOrNull(targetColIndex)?.toDoubleOrNull()
+            if (targetValue != null) {
+                inputs.add(enhancedInput)
+                targets.add(doubleArrayOf(targetValue))
+            }
         }
-        iterationCount++
-    } while (iterationCount < maxIterations)
 
-    // Condition spéciale
-    if (finalRefinedSMB > predictedSMB && bg > 150 && delta > 5) {
-        println("Modèle prédictif plus élevé, ajustement retenu.")
-        return finalRefinedSMB
+        if (inputs.isEmpty() || targets.isEmpty()) {
+            println("Insufficient data for training.")
+            return predictedSMB
+        }
+
+        val maxK = 10
+        val adjustedK = minOf(maxK, inputs.size)
+        val foldSize = maxOf(1, inputs.size / adjustedK)
+        var bestNetwork: AimiNeuralNetwork? = null
+        var bestFoldValLoss = Double.MAX_VALUE
+
+        for (k in 0 until adjustedK) {
+            val validationInputs = inputs.subList(k * foldSize, minOf((k + 1) * foldSize, inputs.size))
+            val validationTargets = targets.subList(k * foldSize, minOf((k + 1) * foldSize, targets.size))
+            val trainingInputs = inputs.minus(validationInputs)
+            val trainingTargets = targets.minus(validationTargets)
+            if (validationInputs.isEmpty()) continue
+
+            val tempNetwork = AimiNeuralNetwork(
+                inputSize = inputs.first().size,
+                hiddenSize = 5,
+                outputSize = 1,
+                config = TrainingConfig(
+                    learningRate = 0.001,
+                    epochs = 200
+                ),
+                regularizationLambda = 0.01
+            )
+
+            tempNetwork.trainWithValidation(trainingInputs, trainingTargets, validationInputs, validationTargets)
+            val foldValLoss = tempNetwork.validate(validationInputs, validationTargets)
+
+            if (foldValLoss < bestFoldValLoss) {
+                bestFoldValLoss = foldValLoss
+                bestNetwork = tempNetwork
+            }
+        }
+
+        val adjustedLearningRate = if (bestFoldValLoss < 0.01) 0.0005 else 0.001
+        val epochs = if (bestFoldValLoss < 0.01) 100 else 200
+
+        if (bestNetwork != null) {
+            println("Réentraînement final avec les meilleurs hyperparamètres sur toutes les données...")
+            val finalNetwork = AimiNeuralNetwork(
+                inputSize = inputs.first().size,
+                hiddenSize = 5,
+                outputSize = 1,
+                config = TrainingConfig(
+                    learningRate = adjustedLearningRate,
+                    beta1 = 0.9,
+                    beta2 = 0.999,
+                    epsilon = 1e-8,
+                    patience = 10,
+                    batchSize = 32,
+                    weightDecay = 0.01,
+                    epochs = epochs,
+                    useBatchNorm = false,
+                    useDropout = true,
+                    dropoutRate = 0.3,
+                    leakyReluAlpha = 0.01
+                ),
+                regularizationLambda = 0.01
+            )
+            finalNetwork.copyWeightsFrom(bestNetwork)
+            finalNetwork.trainWithValidation(inputs, targets, inputs, targets)
+            bestNetwork = finalNetwork
+        }
+
+        // --- Normalisation légère sur lastEnhancedInput ---
+        fun normalize(input: FloatArray): FloatArray {
+            val mean = input.average().toFloat()
+            val std = input.map { (it - mean) * (it - mean) }.average().let { sqrt(it).toFloat().coerceAtLeast(1e-8f) }
+            return input.map { (it - mean) / std }.toFloatArray()
+        }
+
+        var iterationCount = 0
+        do {
+            val dynamicThreshold = calculateDynamicThreshold(iterationCount, delta, shortAvgDelta, longAvgDelta)
+            val normalizedInput = lastEnhancedInput?.let { normalize(it) }?.toDoubleArray() ?: DoubleArray(0)
+            val refinedSMB = bestNetwork?.let {
+                AimiNeuralNetwork.refineSMB(finalRefinedSMB, it, normalizedInput)
+            } ?: finalRefinedSMB
+
+            println("→ Iteration $iterationCount | SMB=$finalRefinedSMB → $refinedSMB | Δ=${abs(finalRefinedSMB - refinedSMB)} | threshold=$dynamicThreshold")
+
+            if (abs(finalRefinedSMB - refinedSMB) <= dynamicThreshold) {
+                finalRefinedSMB = max(0.05f, refinedSMB)
+                break
+            }
+            iterationCount++
+        } while (iterationCount < maxIterations)
+
+        if (finalRefinedSMB > predictedSMB && bg > 150 && delta > 5) {
+            println("Modèle prédictif plus élevé, ajustement retenu.")
+            return finalRefinedSMB
+        }
+
+        val alpha = 0.7f
+        val blendedSMB = alpha * finalRefinedSMB + (1 - alpha) * predictedSMB
+        return blendedSMB
     }
-
-    // Lissage
-    val alpha = 0.7f
-    val blendedSMB = alpha * finalRefinedSMB + (1 - alpha) * predictedSMB
-    return blendedSMB
-}
 
     private fun calculateDynamicThreshold(
         iterationCount: Int,
@@ -1602,109 +1471,6 @@ private fun neuralnetwork5(
         }
     }
 
-    private fun predictFutureBg(
-        bg: Float,
-        iob: Float,
-        variableSensitivity: Float,
-        mealTime: Boolean,
-        bfastTime: Boolean,
-        lunchTime: Boolean,
-        dinnerTime: Boolean,
-        highcarbTime: Boolean,
-        snackTime: Boolean
-    ): Float {
-        // Les paramètres glucidiques sont définis selon le contexte, même s'ils ne sont pas utilisés ici.
-        val (averageCarbAbsorptionTime, carbTypeFactor, estimatedCob) = when {
-            highcarbTime -> Triple(3.5f, 0.75f, 100f) // Repas riche en glucides
-            snackTime    -> Triple(1.5f, 1.25f, 15f)   // Snack
-            mealTime     -> Triple(2.5f, 1.0f, 55f)     // Repas normal
-            bfastTime    -> Triple(3.5f, 1.0f, 55f)     // Petit-déjeuner
-            lunchTime    -> Triple(2.5f, 1.0f, 70f)     // Déjeuner
-            dinnerTime   -> Triple(2.5f, 1.0f, 70f)     // Dîner
-            else         -> Triple(2.5f, 1.0f, 70f)     // Valeur par défaut
-        }
-
-        // Ici, on suppose que calculateInsulinEffect() est déjà calibré (même s'il utilise encore 'cob', etc.)
-        val insulinEffect = calculateInsulinEffect(
-            bg, iob, variableSensitivity, cob, normalBgThreshold, recentSteps180Minutes,
-            averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(), insulinPeakTime.toFloat()
-        )
-
-        val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-        var futureBg = bg - insulinEffect
-
-        // Sécurité : on ne prédit pas en dessous d'un certain seuil
-        if (!honeymoon && futureBg < 39f) {
-            futureBg = 39f
-        } else if (honeymoon && futureBg < 50f) {
-            futureBg = 50f
-        }
-
-        return futureBg
-    }
-
-    // private fun predictEventualBG(
-    //     bg: Float,                     // Glycémie actuelle
-    //     iob: Float,                    // Insuline active (IOB)
-    //     variableSensitivity: Float,    // Sensibilité insulinique
-    //     minDelta: Float,               // Delta instantané (mg/dL par intervalle)
-    //     minAvgDelta: Float,            // Delta moyen court terme
-    //     longAvgDelta: Float,           // Delta moyen long terme
-    //     mealTime: Boolean,
-    //     bfastTime: Boolean,
-    //     lunchTime: Boolean,
-    //     dinnerTime: Boolean,
-    //     highCarbTime: Boolean,
-    //     snackTime: Boolean,
-    //     honeymoon: Boolean
-    // ): Float {
-    //     // 1. Détermination des paramètres glucidiques en fonction du contexte (pour cohérence)
-    //     val (averageCarbAbsorptionTime, carbTypeFactor, estimatedCob) = when {
-    //         highCarbTime -> Triple(3.5f, 0.75f, 100f)
-    //         snackTime    -> Triple(1.5f, 1.25f, 15f)
-    //         mealTime     -> Triple(2.5f, 1.0f, 55f)
-    //         bfastTime    -> Triple(3.5f, 1.0f, 55f)
-    //         lunchTime    -> Triple(2.5f, 1.0f, 70f)
-    //         dinnerTime   -> Triple(2.5f, 1.0f, 70f)
-    //         else         -> Triple(2.5f, 1.0f, 70f)
-    //     }
-    //
-    //     // 2. (Optionnel) On pourrait calculer ici un temps d'absorption en fonction de l'heure, mais il n'est pas utilisé
-    //     val currentHour = LocalTime.now().hour
-    //
-    //     // 3. Calcul de l'effet insuline (modèle simplifié)
-    //     val insulinEffect = iob * variableSensitivity
-    //
-    //     // 4. Calcul de la déviation basée sur la tendance
-    //     // L'idée est de prévoir l'effet sur 30 minutes (soit 6 intervalles de 5 minutes)
-    //     // On multiplie directement le delta par 6, sans soustraire bg qui était trop pénalisant.
-    //     var deviation = (30f / 5f) * minDelta  // 6 * minDelta
-    //     if (deviation < 0) {
-    //         deviation = (30f / 5f) * minAvgDelta
-    //         if (deviation < 0) {
-    //             deviation = (30f / 5f) * longAvgDelta
-    //         }
-    //     }
-    //
-    //     // 5. Calcul de la prédiction naïve basée sur l'effet insuline
-    //     val naiveEventualBG = round((bg - insulinEffect).toDouble(), 0).toFloat()
-    //     // 6. Appel de predictFutureBg qui applique son propre modèle
-    //     val predictedFutureBG = predictFutureBg(bg, iob, variableSensitivity, mealTime, bfastTime, lunchTime, dinnerTime, highCarbTime, snackTime)
-    //     // On prend la valeur maximale entre les deux prédictions pour éviter d'être trop pessimiste.
-    //     val maxPred = max(naiveEventualBG, predictedFutureBG)
-    //
-    //     // 7. Combinaison : on ajoute le décalage (déviation) à la meilleure estimation
-    //     val predictedBG = maxPred + deviation
-    //
-    //     // 8. Application d'un seuil minimal de sécurité
-    //     val finalPredictedBG = when {
-    //         !honeymoon && predictedBG < 39f -> 39f
-    //         honeymoon && predictedBG < 50f   -> 50f
-    //         else                              -> predictedBG
-    //     }
-    //
-    //     return finalPredictedBG
-    // }
     private fun predictEventualBG(
         bg: Float,                     // Glycémie actuelle (mg/dL)
         iob: Float,                    // Insuline active (IOB)
@@ -1732,50 +1498,71 @@ private fun neuralnetwork5(
         }
 
         // 2. Détermination du facteur d'absorption en fonction de l'heure de la journée
-        // Ces valeurs sont indicatives et peuvent être ajustées.
         val currentHour = LocalTime.now().hour
         val absorptionFactor = when (currentHour) {
-            in 6..10 -> 1.3f   // Matin : absorption un peu plus lente (dû au pic de cortisol)
-            in 11..15 -> 0.8f  // Midi : absorption plus rapide
-            in 16..23 -> 1.2f  // Après-midi/soir : absorption plus lente (ou à ajuster selon le contexte)
-            else -> 1.0f       // Nuit : absorption standard
+            in 6..10 -> 1.3f
+            in 11..15 -> 0.8f
+            in 16..23 -> 1.2f
+            else -> 1.0f
         }
 
         // 3. Calcul de l'effet insuline
         val insulinEffect = iob * variableSensitivity
 
-        // 4. Calcul de la déviation basée sur la tendance sur 30 minutes (6 intervalles de 5 minutes)
-        var deviation = (30f / 5f) * minDelta  // 6 * minDelta
-        deviation *= absorptionFactor
+        // 4. Calcul de la déviation basée sur la tendance sur 30 minutes
+        var deviation = (30f / 5f) * minDelta
+        deviation *= absorptionFactor * carbTypeFactor
         if (deviation < 0) {
-            deviation = (30f / 5f) * minAvgDelta
-            deviation *= absorptionFactor
+            deviation = (30f / 5f) * minAvgDelta * absorptionFactor * carbTypeFactor
             if (deviation < 0) {
-                deviation = (30f / 5f) * longAvgDelta
-                deviation *= absorptionFactor
+                deviation = (30f / 5f) * longAvgDelta * absorptionFactor * carbTypeFactor
             }
         }
 
-        // 5. Calcul de la prédiction naïve basée sur l'effet insuline
-        val naiveEventualBG = round((bg - insulinEffect).toDouble(), 0).toFloat()
+        // 5. Prédiction alternative basée sur un modèle dédié qui prend aussi le contexte alimentaire
+        val predictedFutureBG = predictFutureBg(
+            bg, iob, variableSensitivity,
+            averageCarbAbsorptionTime, carbTypeFactor, estimatedCob,
+            honeymoon
+        )
 
-        // 6. Prédiction alternative basée sur un modèle dédié (déjà implémenté)
-        val predictedFutureBG = predictFutureBg(bg, iob, variableSensitivity, mealTime, bfastTime, lunchTime, dinnerTime, highCarbTime, snackTime)
+        // 6. Combinaison finale : effet insuline + tendance + impact COB
+        val predictedBG = predictedFutureBG + deviation + (estimatedCob * 0.05f)
 
-        // On prend la valeur maximale entre les deux prédictions pour éviter une estimation trop pessimiste
-        val maxPred = max(naiveEventualBG, predictedFutureBG)
-
-        // 7. Combinaison finale : ajouter la déviation à la meilleure prédiction
-        val predictedBG = maxPred + deviation
-
-        // 8. Application d'un seuil minimal de sécurité
+        // 7. Seuil minimal de sécurité
         val finalPredictedBG = when {
             !honeymoon && predictedBG < 39f -> 39f
-            honeymoon && predictedBG < 50f   -> 50f
-            else                              -> predictedBG
+            honeymoon && predictedBG < 50f -> 50f
+            else -> predictedBG
         }
 
         return finalPredictedBG
+    }
+
+    private fun predictFutureBg(
+        bg: Float,
+        iob: Float,
+        variableSensitivity: Float,
+        averageCarbAbsorptionTime: Float,
+        carbTypeFactor: Float,
+        estimatedCob: Float,
+        honeymoon: Boolean
+    ): Float {
+        // Prise en compte de l'effet insuline
+        val insulinEffect = iob * variableSensitivity
+
+        // Prise en compte d'une absorption glucidique estimée (simple modèle linéaire)
+        val carbImpact = (estimatedCob / averageCarbAbsorptionTime) * carbTypeFactor
+
+        var futureBg = bg - insulinEffect + carbImpact
+
+        if (!honeymoon && futureBg < 39f) {
+            futureBg = 39f
+        } else if (honeymoon && futureBg < 50f) {
+            futureBg = 50f
+        }
+
+        return futureBg
     }
 
 
