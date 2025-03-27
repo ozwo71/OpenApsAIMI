@@ -65,15 +65,15 @@ import app.aaps.core.interfaces.rx.events.EventNewNotification
 import app.aaps.core.interfaces.rx.events.EventNewOpenLoopNotification
 import app.aaps.core.interfaces.rx.events.EventTempTargetChange
 import app.aaps.core.interfaces.rx.weardata.EventData
-import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.HardLimits
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.IntKey
-import app.aaps.core.keys.Preferences
+import app.aaps.core.keys.IntNonKey
 import app.aaps.core.keys.StringKey
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.nssdk.interfaces.RunningConfiguration
 import app.aaps.core.objects.constraints.ConstraintObject
 import app.aaps.core.objects.extensions.asAnnouncement
@@ -99,7 +99,6 @@ class LoopPlugin @Inject constructor(
     aapsLogger: AAPSLogger,
     private val aapsSchedulers: AapsSchedulers,
     private val rxBus: RxBus,
-    private val sp: SP,
     private val preferences: Preferences,
     private val config: Config,
     private val constraintChecker: ConstraintsChecker,
@@ -382,13 +381,9 @@ class LoopPlugin @Inject constructor(
                 closedLoopEnabled = constraintChecker.isClosedLoopAllowed()
                 if (closedLoopEnabled?.value() == true) {
                     if (allowNotification) {
-                        if (resultAfterConstraints.isCarbsRequired
-                            && resultAfterConstraints.carbsReq >= sp.getInt(
-                                R.string.key_smb_enable_carbs_suggestions_threshold,
-                                0
-                            ) && carbsSuggestionsSuspendedUntil < System.currentTimeMillis() && !treatmentTimeThreshold(-15)
+                        if (resultAfterConstraints.isCarbsRequired && carbsSuggestionsSuspendedUntil < System.currentTimeMillis() && !treatmentTimeThreshold(-15)
                         ) {
-                            if (preferences.get(BooleanKey.AlertCarbsRequired) && !sp.getBoolean(app.aaps.core.ui.R.string.key_raise_notifications_as_android_notifications, true)
+                            if (preferences.get(BooleanKey.AlertCarbsRequired) && !preferences.get(BooleanKey.AlertUrgentAsAndroidNotification)
                             ) {
                                 val carbReqLocal = Notification(Notification.CARBS_REQUIRED, resultAfterConstraints.carbsRequiredText, Notification.NORMAL)
                                 rxBus.send(EventNewNotification(carbReqLocal))
@@ -403,7 +398,7 @@ class LoopPlugin @Inject constructor(
                                     listValues = listOf()
                                 ).subscribe()
                             }
-                            if (preferences.get(BooleanKey.AlertCarbsRequired) && sp.getBoolean(app.aaps.core.ui.R.string.key_raise_notifications_as_android_notifications, true)
+                            if (preferences.get(BooleanKey.AlertCarbsRequired) && preferences.get(BooleanKey.AlertUrgentAsAndroidNotification)
                             ) {
                                 val intentAction5m = Intent(context, CarbSuggestionReceiver::class.java)
                                 intentAction5m.putExtra("ignoreDuration", 5)
@@ -445,7 +440,7 @@ class LoopPlugin @Inject constructor(
                                 rxBus.send(EventNewOpenLoopNotification())
 
                                 //only send to wear if Native notifications are turned off
-                                if (!sp.getBoolean(app.aaps.core.ui.R.string.key_raise_notifications_as_android_notifications, true)) {
+                                if (!preferences.get(BooleanKey.AlertUrgentAsAndroidNotification)) {
                                     // Send to Wear
                                     sendToWear(resultAfterConstraints.carbsRequiredText)
                                 }
@@ -597,7 +592,7 @@ class LoopPlugin @Inject constructor(
                             lastRun.lastTBREnact = dateUtil.now()
                             lastRun.lastOpenModeAccept = dateUtil.now()
                             scheduleBuildAndStoreDeviceStatus("acceptChangeRequest")
-                            sp.incInt(app.aaps.core.utils.R.string.key_ObjectivesmanualEnacts)
+                            preferences.inc(IntNonKey.ObjectivesManualEnacts)
                         }
                         rxBus.send(EventAcceptOpenLoopChange())
                     }
