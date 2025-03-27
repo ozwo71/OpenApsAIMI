@@ -49,6 +49,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
+import kotlin.text.get
 
 @Singleton
 class DetermineBasalaimiSMB2 @Inject constructor(
@@ -2207,13 +2208,14 @@ private fun neuralnetwork5(
         this.acceleratingDown = if (delta < -2 && delta - longAvgDelta < -2) 1 else 0
         this.decceleratingDown = if (delta < 0 && (delta > shortAvgDelta || delta > longAvgDelta)) 1 else 0
         this.stable = if (delta>-3 && delta<3 && shortAvgDelta>-3 && shortAvgDelta<3 && longAvgDelta>-3 && longAvgDelta<3 && bg < 180) 1 else 0
-         if (isMealModeCondition()){
+        val AutodriveAcceleration = preferences.get(DoubleKey.OApsAIMIAutodriveAcceleration)
+        if (isMealModeCondition()){
              val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
                  rT.units = pbolusM
                  rT.reason.append("Microbolusing Meal Mode ${pbolusM}U. ")
              return rT
          }
-        if (isAutodriveModeCondition(variableSensitivity, targetBg, delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat()) && !mealTime && !highCarbTime && !lunchTime && !bfastTime && !dinnerTime && !snackTime && !sportTime && !snackTime && !lowCarbTime && bgAcceleration.toFloat() >= 2.0f){
+        if (isAutodriveModeCondition(variableSensitivity, targetBg, delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat()) && !mealTime && !highCarbTime && !lunchTime && !bfastTime && !dinnerTime && !snackTime && !sportTime && !snackTime && !lowCarbTime && bgAcceleration.toFloat() >= AutodriveAcceleration){
             val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
             rT.units = pbolusA
             rT.reason.append("Microbolusing Meal Mode ${pbolusA}U. ")

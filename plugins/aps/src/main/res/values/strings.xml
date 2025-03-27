@@ -380,5 +380,7 @@
     <string name="oaps_aimi_AutodriveBG_title">minimum bg to recceive autodrive prebolus</string>
     <string name="oaps_aimi_AutodriveDeviation_summary">Greater than this value, the condition is true to receive the autodrive prebolus</string>
     <string name="oaps_aimi_AutodriveDeviation_title">Autodrive min deviation</string>
+    <string name="oaps_aimi_AutodriveAcceleration_summary">BG acceleration, if the acceleration is greater than this value, the condition for autodrive prebolus is true.</string>
+    <string name="oaps_aimi_AutodriveAcceleration_title">Autordrive BG acceleration condition</string>
 
 </resources>
