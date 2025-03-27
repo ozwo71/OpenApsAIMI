@@ -50,7 +50,6 @@ import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
-import kotlin.text.get
 
 @Singleton
 class DetermineBasalaimiSMB2 @Inject constructor(
@@ -423,13 +422,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun convertBG(value: Double): String =
         profileUtil.fromMgdlToStringInUnits(value).replace("-0.0", "0.0")
 
-    private fun enablesmb(profile: OapsProfileAimi, microBolusAllowed: Boolean, mealData: MealData, target_bg: Double): Boolean {
+    private fun enablesmb(profile: OapsProfileAimi, microBolusAllowed: Boolean, mealData: MealData, targetbg: Double): Boolean {
         // disable SMB when a high temptarget is set
         if (!microBolusAllowed) {
             consoleError.add("SMB disabled (!microBolusAllowed)")
             return false
-        } else if (!profile.allowSMB_with_high_temptarget && profile.temptargetSet && target_bg > 100) {
-            consoleError.add("SMB disabled due to high temptarget of $target_bg")
+        } else if (!profile.allowSMB_with_high_temptarget && profile.temptargetSet && targetbg > 100) {
+            consoleError.add("SMB disabled due to high temptarget of $targetbg")
             return false
         }
 
@@ -453,8 +452,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         // enable SMB/UAM (if enabled in preferences) if a low temptarget is set
-        if (profile.enableSMB_with_temptarget && (profile.temptargetSet && target_bg < 100)) {
-            consoleError.add("SMB enabled for temptarget of ${convertBG(target_bg)}")
+        if (profile.enableSMB_with_temptarget && (profile.temptargetSet && targetbg < 100)) {
+            consoleError.add("SMB enabled for temptarget of ${convertBG(targetbg)}")
             return true
         }
 
@@ -1251,36 +1250,6 @@ private fun neuralnetwork5(
     return blendedSMB
 }
 
-
-    // --- Normalisation helpers ---
-    data class NormalizationStats(val means: DoubleArray, val stdDevs: DoubleArray)
-
-    fun computeNormalizationStats(data: List<FloatArray>): NormalizationStats {
-        val dim = data.first().size
-        val means = DoubleArray(dim)
-        val stdDevs = DoubleArray(dim)
-
-        data.forEach { row ->
-            for (i in 0 until dim) {
-                means[i] += row[i]
-                stdDevs[i] += row[i] * row[i]
-            }
-        }
-
-        for (i in 0 until dim) {
-            means[i] /= data.size
-            stdDevs[i] = sqrt(stdDevs[i] / data.size - means[i].pow(2.0)).coerceAtLeast(1e-8)
-        }
-
-        return NormalizationStats(means, stdDevs)
-    }
-
-    fun normalizeInput(input: FloatArray, stats: NormalizationStats): FloatArray {
-        return FloatArray(input.size) { i ->
-            ((input[i] - stats.means[i]) / stats.stdDevs[i]).toFloat()
-        }
-    }
-
     private fun calculateDynamicThreshold(
         iterationCount: Int,
         delta: Float,
@@ -1631,109 +1600,6 @@ private fun neuralnetwork5(
         }
     }
 
-    private fun predictFutureBg(
-        bg: Float,
-        iob: Float,
-        variableSensitivity: Float,
-        mealTime: Boolean,
-        bfastTime: Boolean,
-        lunchTime: Boolean,
-        dinnerTime: Boolean,
-        highcarbTime: Boolean,
-        snackTime: Boolean
-    ): Float {
-        // Les paramètres glucidiques sont définis selon le contexte, même s'ils ne sont pas utilisés ici.
-        val (averageCarbAbsorptionTime, carbTypeFactor, estimatedCob) = when {
-            highcarbTime -> Triple(3.5f, 0.75f, 100f) // Repas riche en glucides
-            snackTime    -> Triple(1.5f, 1.25f, 15f)   // Snack
-            mealTime     -> Triple(2.5f, 1.0f, 55f)     // Repas normal
-            bfastTime    -> Triple(3.5f, 1.0f, 55f)     // Petit-déjeuner
-            lunchTime    -> Triple(2.5f, 1.0f, 70f)     // Déjeuner
-            dinnerTime   -> Triple(2.5f, 1.0f, 70f)     // Dîner
-            else         -> Triple(2.5f, 1.0f, 70f)     // Valeur par défaut
-        }
-
-        // Ici, on suppose que calculateInsulinEffect() est déjà calibré (même s'il utilise encore 'cob', etc.)
-        val insulinEffect = calculateInsulinEffect(
-            bg, iob, variableSensitivity, cob, normalBgThreshold, recentSteps180Minutes,
-            averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(), insulinPeakTime.toFloat()
-        )
-
-        val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-        var futureBg = bg - insulinEffect
-
-        // Sécurité : on ne prédit pas en dessous d'un certain seuil
-        if (!honeymoon && futureBg < 39f) {
-            futureBg = 39f
-        } else if (honeymoon && futureBg < 50f) {
-            futureBg = 50f
-        }
-
-        return futureBg
-    }
-
-    // private fun predictEventualBG(
-    //     bg: Float,                     // Glycémie actuelle
-    //     iob: Float,                    // Insuline active (IOB)
-    //     variableSensitivity: Float,    // Sensibilité insulinique
-    //     minDelta: Float,               // Delta instantané (mg/dL par intervalle)
-    //     minAvgDelta: Float,            // Delta moyen court terme
-    //     longAvgDelta: Float,           // Delta moyen long terme
-    //     mealTime: Boolean,
-    //     bfastTime: Boolean,
-    //     lunchTime: Boolean,
-    //     dinnerTime: Boolean,
-    //     highCarbTime: Boolean,
-    //     snackTime: Boolean,
-    //     honeymoon: Boolean
-    // ): Float {
-    //     // 1. Détermination des paramètres glucidiques en fonction du contexte (pour cohérence)
-    //     val (averageCarbAbsorptionTime, carbTypeFactor, estimatedCob) = when {
-    //         highCarbTime -> Triple(3.5f, 0.75f, 100f)
-    //         snackTime    -> Triple(1.5f, 1.25f, 15f)
-    //         mealTime     -> Triple(2.5f, 1.0f, 55f)
-    //         bfastTime    -> Triple(3.5f, 1.0f, 55f)
-    //         lunchTime    -> Triple(2.5f, 1.0f, 70f)
-    //         dinnerTime   -> Triple(2.5f, 1.0f, 70f)
-    //         else         -> Triple(2.5f, 1.0f, 70f)
-    //     }
-    //
-    //     // 2. (Optionnel) On pourrait calculer ici un temps d'absorption en fonction de l'heure, mais il n'est pas utilisé
-    //     val currentHour = LocalTime.now().hour
-    //
-    //     // 3. Calcul de l'effet insuline (modèle simplifié)
-    //     val insulinEffect = iob * variableSensitivity
-    //
-    //     // 4. Calcul de la déviation basée sur la tendance
-    //     // L'idée est de prévoir l'effet sur 30 minutes (soit 6 intervalles de 5 minutes)
-    //     // On multiplie directement le delta par 6, sans soustraire bg qui était trop pénalisant.
-    //     var deviation = (30f / 5f) * minDelta  // 6 * minDelta
-    //     if (deviation < 0) {
-    //         deviation = (30f / 5f) * minAvgDelta
-    //         if (deviation < 0) {
-    //             deviation = (30f / 5f) * longAvgDelta
-    //         }
-    //     }
-    //
-    //     // 5. Calcul de la prédiction naïve basée sur l'effet insuline
-    //     val naiveEventualBG = round((bg - insulinEffect).toDouble(), 0).toFloat()
-    //     // 6. Appel de predictFutureBg qui applique son propre modèle
-    //     val predictedFutureBG = predictFutureBg(bg, iob, variableSensitivity, mealTime, bfastTime, lunchTime, dinnerTime, highCarbTime, snackTime)
-    //     // On prend la valeur maximale entre les deux prédictions pour éviter d'être trop pessimiste.
-    //     val maxPred = max(naiveEventualBG, predictedFutureBG)
-    //
-    //     // 7. Combinaison : on ajoute le décalage (déviation) à la meilleure estimation
-    //     val predictedBG = maxPred + deviation
-    //
-    //     // 8. Application d'un seuil minimal de sécurité
-    //     val finalPredictedBG = when {
-    //         !honeymoon && predictedBG < 39f -> 39f
-    //         honeymoon && predictedBG < 50f   -> 50f
-    //         else                              -> predictedBG
-    //     }
-    //
-    //     return finalPredictedBG
-    // }
     private fun predictEventualBG(
         bg: Float,                     // Glycémie actuelle (mg/dL)
         iob: Float,                    // Insuline active (IOB)
@@ -1761,52 +1627,72 @@ private fun neuralnetwork5(
         }
 
         // 2. Détermination du facteur d'absorption en fonction de l'heure de la journée
-        // Ces valeurs sont indicatives et peuvent être ajustées.
         val currentHour = LocalTime.now().hour
         val absorptionFactor = when (currentHour) {
-            in 6..10 -> 1.3f   // Matin : absorption un peu plus lente (dû au pic de cortisol)
-            in 11..15 -> 0.8f  // Midi : absorption plus rapide
-            in 16..23 -> 1.2f  // Après-midi/soir : absorption plus lente (ou à ajuster selon le contexte)
-            else -> 1.0f       // Nuit : absorption standard
+            in 6..10 -> 1.3f
+            in 11..15 -> 0.8f
+            in 16..23 -> 1.2f
+            else -> 1.0f
         }
 
         // 3. Calcul de l'effet insuline
         val insulinEffect = iob * variableSensitivity
 
-        // 4. Calcul de la déviation basée sur la tendance sur 30 minutes (6 intervalles de 5 minutes)
-        var deviation = (30f / 5f) * minDelta  // 6 * minDelta
-        deviation *= absorptionFactor
+        // 4. Calcul de la déviation basée sur la tendance sur 30 minutes
+        var deviation = (30f / 5f) * minDelta
+        deviation *= absorptionFactor * carbTypeFactor
         if (deviation < 0) {
-            deviation = (30f / 5f) * minAvgDelta
-            deviation *= absorptionFactor
+            deviation = (30f / 5f) * minAvgDelta * absorptionFactor * carbTypeFactor
             if (deviation < 0) {
-                deviation = (30f / 5f) * longAvgDelta
-                deviation *= absorptionFactor
+                deviation = (30f / 5f) * longAvgDelta * absorptionFactor * carbTypeFactor
             }
         }
 
-        // 5. Calcul de la prédiction naïve basée sur l'effet insuline
-        val naiveEventualBG = round((bg - insulinEffect).toDouble(), 0).toFloat()
+        // 5. Prédiction alternative basée sur un modèle dédié qui prend aussi le contexte alimentaire
+        val predictedFutureBG = predictFutureBg(
+            bg, iob, variableSensitivity,
+            averageCarbAbsorptionTime, carbTypeFactor, estimatedCob,
+            honeymoon
+        )
 
-        // 6. Prédiction alternative basée sur un modèle dédié (déjà implémenté)
-        val predictedFutureBG = predictFutureBg(bg, iob, variableSensitivity, mealTime, bfastTime, lunchTime, dinnerTime, highCarbTime, snackTime)
+        // 6. Combinaison finale : effet insuline + tendance + impact COB
+        val predictedBG = predictedFutureBG + deviation + (estimatedCob * 0.05f)
 
-        // On prend la valeur maximale entre les deux prédictions pour éviter une estimation trop pessimiste
-        val maxPred = max(naiveEventualBG, predictedFutureBG)
-
-        // 7. Combinaison finale : ajouter la déviation à la meilleure prédiction
-        val predictedBG = maxPred + deviation
-
-        // 8. Application d'un seuil minimal de sécurité
+        // 7. Seuil minimal de sécurité
         val finalPredictedBG = when {
             !honeymoon && predictedBG < 39f -> 39f
-            honeymoon && predictedBG < 50f   -> 50f
-            else                              -> predictedBG
+            honeymoon && predictedBG < 50f -> 50f
+            else -> predictedBG
         }
 
         return finalPredictedBG
     }
 
+    private fun predictFutureBg(
+        bg: Float,
+        iob: Float,
+        variableSensitivity: Float,
+        averageCarbAbsorptionTime: Float,
+        carbTypeFactor: Float,
+        estimatedCob: Float,
+        honeymoon: Boolean
+    ): Float {
+        // Prise en compte de l'effet insuline
+        val insulinEffect = iob * variableSensitivity
+
+        // Prise en compte d'une absorption glucidique estimée (simple modèle linéaire)
+        val carbImpact = (estimatedCob / averageCarbAbsorptionTime) * carbTypeFactor
+
+        var futureBg = bg - insulinEffect + carbImpact
+
+        if (!honeymoon && futureBg < 39f) {
+            futureBg = 39f
+        } else if (honeymoon && futureBg < 50f) {
+            futureBg = 50f
+        }
+
+        return futureBg
+    }
 
     private fun interpolatebasal(bg: Double): Double {
         val clampedBG = bg.coerceIn(80.0, 300.0)
@@ -2062,7 +1948,7 @@ private fun neuralnetwork5(
         return notes
     }
 
-    @SuppressLint("NewApi") fun determine_basal(
+    @SuppressLint("NewApi", "DefaultLocale") fun determine_basal(
         glucose_status: GlucoseStatus, currenttemp: CurrentTemp, iob_data_array: Array<IobTotal>, profile: OapsProfileAimi, autosens_data: AutosensResult, mealData: MealData,
         microBolusAllowed: Boolean, currentTime: Long, flatBGsDetected: Boolean, dynIsfMode: Boolean
     ): RT {
@@ -2871,13 +2757,13 @@ private fun neuralnetwork5(
         var remainingCATimeMin = 2.0
         remainingCATimeMin = remainingCATimeMin / sensitivityRatio
         var remainingCATime = remainingCATimeMin
-        val totalCI = Math.max(0.0, ci / 5 * 60 * remainingCATime / 2)
+        val totalCI = max(0.0, ci / 5 * 60 * remainingCATime / 2)
         // totalCI (mg/dL) / CSF (mg/dL/g) = total carbs absorbed (g)
         val totalCA = totalCI / csf
         val remainingCarbsCap: Int // default to 90
         remainingCarbsCap = min(90, profile.remainingCarbsCap)
         var remainingCarbs = max(0.0, mealData.mealCOB - totalCA)
-        remainingCarbs = Math.min(remainingCarbsCap.toDouble(), remainingCarbs)
+        remainingCarbs = min(remainingCarbsCap.toDouble(), remainingCarbs)
         val remainingCIpeak = remainingCarbs * csf * 5 / 60 / (remainingCATime / 2)
         val slopeFromMaxDeviation = mealData.slopeFromMaxDeviation
         val slopeFromMinDeviation = mealData.slopeFromMinDeviation
@@ -2967,10 +2853,10 @@ private fun neuralnetwork5(
             //console.error(predBGI, predCI, predUCI);
             // truncate all BG predictions at 4 hours
             if (IOBpredBGs.size < 24) IOBpredBGs.add(IOBpredBG)
-            if (UAMpredBGs.size < 24) UAMpredBGs.add(UAMpredBG!!)
+            if (UAMpredBGs.size < 24) UAMpredBGs.add(UAMpredBG)
             if (ZTpredBGs.size < 24) ZTpredBGs.add(ZTpredBG)
             // calculate minGuardBGs without a wait from COB, UAM, IOB predBGs
-            if (UAMpredBG!! < minUAMGuardBG) minUAMGuardBG = round(UAMpredBG!!).toDouble()
+            if (UAMpredBG < minUAMGuardBG) minUAMGuardBG = round(UAMpredBG).toDouble()
             if (IOBpredBG < minIOBGuardBG) minIOBGuardBG = IOBpredBG
             if (ZTpredBG < minZTGuardBG) minZTGuardBG = round(ZTpredBG, 0)
 
@@ -2984,7 +2870,7 @@ private fun neuralnetwork5(
             // wait 90m before setting minIOBPredBG
             if (IOBpredBGs.size > insulinPeak5m && (IOBpredBG < minIOBPredBG)) minIOBPredBG = round(IOBpredBG, 0)
             if (IOBpredBG > maxIOBPredBG) maxIOBPredBG = IOBpredBG
-            if (enableUAM && UAMpredBGs.size > 6 && (UAMpredBG!! < minUAMPredBG)) minUAMPredBG = round(UAMpredBG!!, 0)
+            if (enableUAM && UAMpredBGs.size > 6 && (UAMpredBG < minUAMPredBG)) minUAMPredBG = round(UAMpredBG, 0)
         }
 
         rT.predBGs = Predictions()
@@ -3262,10 +3148,10 @@ private fun neuralnetwork5(
 
                 // allow SMBIntervals between 1 and 10 minutes
                 //val SMBInterval = min(10, max(1, profile.SMBInterval))
-                val SMBInterval = min(20, max(1, calculateSMBInterval()))
-                val nextBolusMins = round(SMBInterval - lastBolusAge, 0)
-                val nextBolusSeconds = round((SMBInterval - lastBolusAge) * 60, 0) % 60
-                if (lastBolusAge > SMBInterval) {
+                val smbInterval = min(20, max(1, calculateSMBInterval()))
+                val nextBolusMins = round(smbInterval - lastBolusAge, 0)
+                val nextBolusSeconds = round((smbInterval - lastBolusAge) * 60, 0) % 60
+                if (lastBolusAge > smbInterval) {
                     if (microBolus > 0) {
                         rT.units = microBolus
                         rT.reason.append("Microbolusing ${microBolus}U. ")
