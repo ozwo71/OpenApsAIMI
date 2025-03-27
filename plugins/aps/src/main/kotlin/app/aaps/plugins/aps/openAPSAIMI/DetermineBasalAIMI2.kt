@@ -1261,7 +1261,7 @@ private fun neuralnetwork5(
     predictedSMB: Float,
     profile: OapsProfileAimi
 ): Float {
-    val maxIterations = 1000.0
+    val maxIterations = 50.0  // Réduit pour éviter les boucles trop longues
     var finalRefinedSMB: Float = calculateSMBFromModel()
 
     val allLines = csvfile.readLines()
@@ -1285,7 +1285,7 @@ private fun neuralnetwork5(
 
     val colIndices = requiredColumns.map { headers.indexOf(it) }
     val targetColIndex = headers.indexOf("smbGiven")
-    val rawInputs = mutableListOf<FloatArray>()
+    val inputs = mutableListOf<FloatArray>()
     val targets = mutableListOf<DoubleArray>()
     var lastEnhancedInput: FloatArray? = null
 
@@ -1306,21 +1306,16 @@ private fun neuralnetwork5(
 
         val targetValue = cols.getOrNull(targetColIndex)?.toDoubleOrNull()
         if (targetValue != null) {
-            rawInputs.add(enhancedInput)
+            inputs.add(enhancedInput)
             targets.add(doubleArrayOf(targetValue))
         }
     }
 
-    if (rawInputs.isEmpty() || targets.isEmpty()) {
+    if (inputs.isEmpty() || targets.isEmpty()) {
         println("Insufficient data for training.")
         return predictedSMB
     }
 
-    // Normalisation des entrées
-    val stats = computeNormalizationStats(rawInputs)
-    val inputs = rawInputs.map { normalizeInput(it, stats) }
-
-    // Cross-validation (k-fold)
     val maxK = 10
     val adjustedK = minOf(maxK, inputs.size)
     val foldSize = maxOf(1, inputs.size / adjustedK)
@@ -1340,7 +1335,7 @@ private fun neuralnetwork5(
             outputSize = 1,
             config = TrainingConfig(
                 learningRate = 0.001,
-                epochs = 1000
+                epochs = 200
             ),
             regularizationLambda = 0.01
         )
@@ -1354,11 +1349,9 @@ private fun neuralnetwork5(
         }
     }
 
-    // Ajustement dynamique
     val adjustedLearningRate = if (bestFoldValLoss < 0.01) 0.0005 else 0.001
-    val epochs = if (bestFoldValLoss < 0.01) 500 else 1000
+    val epochs = if (bestFoldValLoss < 0.01) 100 else 200
 
-    // Réentraînement final sur 100% des données avec la meilleure config
     if (bestNetwork != null) {
         println("Réentraînement final avec les meilleurs hyperparamètres sur toutes les données...")
         val finalNetwork = AimiNeuralNetwork(
@@ -1382,19 +1375,18 @@ private fun neuralnetwork5(
             regularizationLambda = 0.01
         )
         finalNetwork.copyWeightsFrom(bestNetwork)
-        finalNetwork.train(inputs, targets)
+        finalNetwork.trainWithValidation(inputs, targets, inputs, targets)
         bestNetwork = finalNetwork
     }
 
-    // Optimisation finale avec normalisation de lastEnhancedInput
     var iterationCount = 0
     do {
         val dynamicThreshold = calculateDynamicThreshold(iterationCount, delta, shortAvgDelta, longAvgDelta)
-        val normalizedLastInput = lastEnhancedInput?.let { normalizeInput(it, stats) }?.toDoubleArray() ?: DoubleArray(0)
-
         val refinedSMB = bestNetwork?.let {
-            AimiNeuralNetwork.refineSMB(finalRefinedSMB, it, normalizedLastInput)
+            AimiNeuralNetwork.refineSMB(finalRefinedSMB, it, lastEnhancedInput?.toDoubleArray() ?: DoubleArray(0))
         } ?: finalRefinedSMB
+
+        println("→ Iteration $iterationCount | SMB=$finalRefinedSMB → $refinedSMB | Δ=${abs(finalRefinedSMB - refinedSMB)} | threshold=$dynamicThreshold")
 
         if (abs(finalRefinedSMB - refinedSMB) <= dynamicThreshold) {
             finalRefinedSMB = max(0.05f, refinedSMB)
@@ -1403,13 +1395,11 @@ private fun neuralnetwork5(
         iterationCount++
     } while (iterationCount < maxIterations)
 
-    // Condition spéciale
     if (finalRefinedSMB > predictedSMB && bg > 150 && delta > 5) {
         println("Modèle prédictif plus élevé, ajustement retenu.")
         return finalRefinedSMB
     }
 
-    // Lissage
     val alpha = 0.7f
     val blendedSMB = alpha * finalRefinedSMB + (1 - alpha) * predictedSMB
     return blendedSMB
