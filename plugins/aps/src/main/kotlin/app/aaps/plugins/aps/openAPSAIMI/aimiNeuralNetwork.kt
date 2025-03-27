@@ -326,4 +326,59 @@ class AimiNeuralNetwork(
             }
         }
     }
+    fun train(trainInputs: List<FloatArray>, trainTargets: List<DoubleArray>) {
+        if (trainInputs.isEmpty()) {
+            println("No training data - aborting.")
+            return
+        }
+
+        trainingLossHistory.clear()
+        adamStep = 0
+
+        val totalEpochs = if (config.epochs <= 0) 1000 else config.epochs
+        val batchSize = if (config.batchSize <= 0) 32 else config.batchSize
+
+        for (epoch in 1..totalEpochs) {
+            val indices = trainInputs.indices.shuffled()
+            var totalLoss = 0.0
+
+            indices.chunked(batchSize).forEach { batchIdx ->
+                batchIdx.forEach { idx ->
+                    val input = trainInputs[idx]
+                    val target = trainTargets[idx]
+                    val (gradIH, gradHO) = backpropagation(input, target)
+
+                    adamUpdate(weightsInputHidden, gradIH, mInputHidden, vInputHidden)
+                    adamUpdate(weightsHiddenOutput, gradHO, mHiddenOutput, vHiddenOutput)
+
+                    val out = forwardPass(input, inferenceMode = false).second
+                    totalLoss += mseLoss(out, target)
+                }
+            }
+
+            val avgLoss = totalLoss / trainInputs.size
+            trainingLossHistory.add(avgLoss)
+            println("Epoch $epoch/$totalEpochs - loss=$avgLoss")
+        }
+    }
+
+    fun copyWeightsFrom(other: AimiNeuralNetwork) {
+        for (i in weightsInputHidden.indices) {
+            for (j in weightsInputHidden[i].indices) {
+                weightsInputHidden[i][j] = other.weightsInputHidden[i][j]
+            }
+        }
+        for (i in biasHidden.indices) {
+            biasHidden[i] = other.biasHidden[i]
+        }
+        for (i in weightsHiddenOutput.indices) {
+            for (j in weightsHiddenOutput[i].indices) {
+                weightsHiddenOutput[i][j] = other.weightsHiddenOutput[i][j]
+            }
+        }
+        for (i in biasOutput.indices) {
+            biasOutput[i] = other.biasOutput[i]
+        }
+    }
+
 }
