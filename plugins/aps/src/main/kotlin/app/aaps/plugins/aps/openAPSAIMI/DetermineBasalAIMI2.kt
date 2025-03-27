@@ -2907,7 +2907,7 @@ private fun neuralnetwork5(
         //fin predictions
         ////////////////////////////////////////////
         //estimation des glucides nécessaires si risque hypo
-        val thresholdBG: Double = 70.0
+        val thresholdBG = 70.0
         val carbsRequired = estimateRequiredCarbs(bg, targetBg.toDouble(), slopeFromDeviations, iob.toDouble(), csf,sens, cob.toDouble())
         val minutesAboveThreshold = calculateMinutesAboveThreshold(bg, slopeFromDeviations, thresholdBG)
         if (carbsRequired >= profile.carbsReqThreshold && minutesAboveThreshold <= 45 && !lunchTime && !dinnerTime && !bfastTime && !highCarbTime && !mealTime) {
