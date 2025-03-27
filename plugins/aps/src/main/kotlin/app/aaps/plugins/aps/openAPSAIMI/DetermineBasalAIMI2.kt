@@ -149,7 +149,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var intervalsmb = 1
     private var peakintermediaire = 0.0
     private var insulinPeakTime = 0.0
-    private var lastZeroBasalTime: Long = 0L
     private var zeroBasalAccumulatedMinutes: Int = 0
     private val MAX_ZERO_BASAL_DURATION = 60  // Durée maximale autorisée en minutes à 0 basal
 
@@ -406,28 +405,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return Math.round(value * scale) / scale
     }
 
-
-    // /**
-    //  * Met à jour la durée cumulée pendant laquelle la basale reste à zéro.
-    //  *
-    //  * @param currentBasalRate Le taux basal actuel (en U/h).
-    //  */
-    // fun updateZeroBasalDuration(currentBasalRate: Double) {
-    //     val now = System.currentTimeMillis()
-    //     if (currentBasalRate <= 0.0) {
-    //         // Si on est en zéro basal, on initialise lastZeroBasalTime si nécessaire
-    //         if (lastZeroBasalTime == 0L) {
-    //             lastZeroBasalTime = now
-    //         }
-    //         // Calcul du temps écoulé depuis que la basale est à zéro
-    //         this.zeroBasalAccumulatedMinutes = ((now - lastZeroBasalTime) / 60000).toInt()
-    //     } else {
-    //         // Si le taux basal n'est pas zéro, on réinitialise le compteur
-    //         lastZeroBasalTime = now
-    //         this.zeroBasalAccumulatedMinutes = 0
-    //     }
-    // }
-
     private fun Double.withoutZeros(): String = DecimalFormat("0.##").format(this)
     fun round(value: Double): Int {
         if (value.isNaN()) return 0
@@ -660,25 +637,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         return result
     }
-    private fun hasReceivedPbolusMInLastHour(pbolusM: Double): Boolean {
+    private fun hasReceivedPbolusMInLastHour(pbolusA: Double): Boolean {
         // Récupère tous les bolus de la dernière heure
         val bolusesLastHour = persistenceLayer
             .getBolusesFromTime(dateUtil.now() - T.hours(1).msecs(), true)
             .blockingGet()
-        // Vérifie si un bolus a exactement le montant pbolusM
-        return bolusesLastHour.any { it.amount == pbolusM }
+        // Vérifie si un bolus a exactement le montant pbolusA
+        return bolusesLastHour.any { it.amount == pbolusA }
     }
     private fun isAutodriveModeCondition(
         variableSensitivity: Float,
         targetBg: Float,
         delta: Float,
-        shortAvgDelta: Float,
         autodrive: Boolean,
         slopeFromMinDeviation: Double,
         bg: Float
     ): Boolean {
         // Récupération de la valeur de pbolusMeal depuis les préférences
-        val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+        val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
         val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
         val autodriveminDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
         val autodriveISF: Int = preferences.get(IntKey.OApsAIMIautodriveISF)
@@ -689,8 +665,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val predicted = predictedDelta(recentDeltas)
         // Calcul du delta combiné : combine le delta mesuré et le delta prédit
         val combinedDelta = (delta + predicted) / 2.0f
-        // Si un bolus de pbolusM a déjà été administré dans la dernière heure, on ne le ré-administrera pas
-        if (hasReceivedPbolusMInLastHour(pbolusM)) {
+        // Si un bolus de pbolusA a déjà été administré dans la dernière heure, on ne le ré-administrera pas
+        if (hasReceivedPbolusMInLastHour(pbolusA)) {
             return false
         }
 
@@ -986,7 +962,135 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return smbToGive.toFloat()
     }
 
-    private fun neuralnetwork5(
+//     private fun neuralnetwork5(
+//     delta: Float,
+//     shortAvgDelta: Float,
+//     longAvgDelta: Float,
+//     predictedSMB: Float,
+//     profile: OapsProfileAimi
+// ): Float {
+//     val maxIterations = 1000.0
+//     // Valeur initiale de SMB calculée ailleurs (votre logique existante)
+//     var finalRefinedSMB: Float = calculateSMBFromModel()
+//     // 2) Lecture du CSV
+//     val allLines = csvfile.readLines()
+//     println("CSV file path: ${csvfile.absolutePath}")
+//     if (allLines.isEmpty()) {
+//         println("CSV file is empty.")
+//         return predictedSMB
+//     }
+//     val headerLine = allLines.first()
+//     val headers = headerLine.split(",").map { it.trim() }
+//     val requiredColumns = listOf(
+//         "bg", "iob", "cob", "delta", "shortAvgDelta", "longAvgDelta",
+//         "tdd7DaysPerHour", "tdd2DaysPerHour", "tddPerHour", "tdd24HrsPerHour",
+//         "predictedSMB", "smbGiven"
+//     )
+//     if (!requiredColumns.all { headers.contains(it) }) {
+//         println("CSV file is missing required columns.")
+//         return predictedSMB
+//     }
+//     // 3) Préparation des données
+//     val colIndices = requiredColumns.map { headers.indexOf(it) }
+//     val targetColIndex = headers.indexOf("smbGiven")
+//     val inputs = mutableListOf<FloatArray>()
+//     val targets = mutableListOf<DoubleArray>()
+//     var lastEnhancedInput: FloatArray? = null
+//     for (line in allLines.drop(1)) {
+//         val cols = line.split(",").map { it.trim() }
+//         val rawInput = colIndices.mapNotNull { idx -> cols.getOrNull(idx)?.toFloatOrNull() }.toFloatArray()
+//         val trendIndicator = calculateTrendIndicator(
+//             delta, shortAvgDelta, longAvgDelta,
+//             bg.toFloat(), iob, variableSensitivity, cob, normalBgThreshold,
+//             recentSteps180Minutes, averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(),
+//             profile.insulinDivisor.toFloat(), recentSteps5Minutes, recentSteps10Minutes
+//         )
+//         val enhancedInput = rawInput.copyOf(rawInput.size + 1)
+//         enhancedInput[rawInput.size] = trendIndicator.toFloat()
+//         lastEnhancedInput = enhancedInput
+//
+//         val targetValue = cols.getOrNull(targetColIndex)?.toDoubleOrNull()
+//         if (targetValue != null) {
+//             inputs.add(enhancedInput)
+//             targets.add(doubleArrayOf(targetValue))
+//         }
+//     }
+//     if (inputs.isEmpty() || targets.isEmpty()) {
+//         println("Insufficient data for training.")
+//         return predictedSMB
+//     }
+//     // 4) Cross-validation (k-fold)
+//     val maxK = 10
+//     val adjustedK = minOf(maxK, inputs.size)
+//     val foldSize = maxOf(1, inputs.size / adjustedK)
+//     var bestNetwork: AimiNeuralNetwork? = null
+//     var bestFoldValLoss = Double.MAX_VALUE
+//     // 5) Training Config avec learning rate dynamique
+//     val adjustedLearningRate = if (bestFoldValLoss < 0.01) 0.0005 else 0.001
+//     val epochs = if (bestFoldValLoss < 0.01) 500 else 1000
+//     val trainingConfig = TrainingConfig(
+//         learningRate = adjustedLearningRate,
+//         beta1 = 0.9,
+//         beta2 = 0.999,
+//         epsilon = 1e-8,
+//         patience = 10,
+//         batchSize = 32,
+//         weightDecay = 0.01,
+//         epochs = epochs,
+//         useBatchNorm = false,
+//         useDropout = true,
+//         dropoutRate = 0.3,
+//         leakyReluAlpha = 0.01
+//     )
+//     // 6) Entraînement & validation
+//     for (k in 0 until adjustedK) {
+//         val validationInputs = inputs.subList(k * foldSize, minOf((k + 1) * foldSize, inputs.size))
+//         val validationTargets = targets.subList(k * foldSize, minOf((k + 1) * foldSize, targets.size))
+//         val trainingInputs = inputs.minus(validationInputs)
+//         val trainingTargets = targets.minus(validationTargets)
+//         if (validationInputs.isEmpty()) continue
+//         val neuralNetwork = AimiNeuralNetwork(
+//             inputSize = inputs.first().size,
+//             hiddenSize = 5,
+//             outputSize = 1,
+//             config = trainingConfig,
+//             regularizationLambda = 0.01
+//         )
+//
+//         neuralNetwork.trainWithValidation(trainingInputs, trainingTargets, validationInputs, validationTargets)
+//         val foldValLoss = neuralNetwork.validate(validationInputs, validationTargets)
+//
+//         if (foldValLoss < bestFoldValLoss) {
+//             bestFoldValLoss = foldValLoss
+//             bestNetwork = neuralNetwork
+//         }
+//     }
+//     // 7) Optimisation finale
+//     var iterationCount = 0
+//     do {
+//         val dynamicThreshold = calculateDynamicThreshold(iterationCount, delta, shortAvgDelta, longAvgDelta)
+//         val refinedSMB = bestNetwork?.let {
+//             AimiNeuralNetwork.refineSMB(finalRefinedSMB, it, lastEnhancedInput?.toDoubleArray() ?: DoubleArray(0))
+//         } ?: finalRefinedSMB
+//
+//         if (abs(finalRefinedSMB - refinedSMB) <= dynamicThreshold) {
+//             finalRefinedSMB = max(0.05f, refinedSMB) // Clamp SMB minimum
+//             break
+//         }
+//         iterationCount++
+//     } while (iterationCount < maxIterations)
+//
+//     // 8) Condition spéciale sur finalRefinedSMB
+//     if (finalRefinedSMB > predictedSMB && bg > 150 && delta > 5) {
+//         println("Modèle prédictif plus élevé, ajustement retenu.")
+//         return finalRefinedSMB
+//     }
+//     // 9) Lissage entre predictedSMB et finalRefinedSMB
+//     val alpha = 0.7f
+//     val blendedSMB = alpha * finalRefinedSMB + (1 - alpha) * predictedSMB
+//     return blendedSMB
+// }
+private fun neuralnetwork5(
     delta: Float,
     shortAvgDelta: Float,
     longAvgDelta: Float,
@@ -994,15 +1098,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     profile: OapsProfileAimi
 ): Float {
     val maxIterations = 1000.0
-    // Valeur initiale de SMB calculée ailleurs (votre logique existante)
     var finalRefinedSMB: Float = calculateSMBFromModel()
-    // 2) Lecture du CSV
+
     val allLines = csvfile.readLines()
-    println("CSV file path: ${csvfile.absolutePath}")
+    println("CSV file path: \${csvfile.absolutePath}")
     if (allLines.isEmpty()) {
         println("CSV file is empty.")
         return predictedSMB
     }
+
     val headerLine = allLines.first()
     val headers = headerLine.split(",").map { it.trim() }
     val requiredColumns = listOf(
@@ -1014,82 +1118,115 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         println("CSV file is missing required columns.")
         return predictedSMB
     }
-    // 3) Préparation des données
+
     val colIndices = requiredColumns.map { headers.indexOf(it) }
     val targetColIndex = headers.indexOf("smbGiven")
-    val inputs = mutableListOf<FloatArray>()
+    val rawInputs = mutableListOf<FloatArray>()
     val targets = mutableListOf<DoubleArray>()
     var lastEnhancedInput: FloatArray? = null
+
     for (line in allLines.drop(1)) {
         val cols = line.split(",").map { it.trim() }
         val rawInput = colIndices.mapNotNull { idx -> cols.getOrNull(idx)?.toFloatOrNull() }.toFloatArray()
+
         val trendIndicator = calculateTrendIndicator(
             delta, shortAvgDelta, longAvgDelta,
             bg.toFloat(), iob, variableSensitivity, cob, normalBgThreshold,
             recentSteps180Minutes, averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(),
             profile.insulinDivisor.toFloat(), recentSteps5Minutes, recentSteps10Minutes
         )
+
         val enhancedInput = rawInput.copyOf(rawInput.size + 1)
         enhancedInput[rawInput.size] = trendIndicator.toFloat()
         lastEnhancedInput = enhancedInput
 
         val targetValue = cols.getOrNull(targetColIndex)?.toDoubleOrNull()
         if (targetValue != null) {
-            inputs.add(enhancedInput)
+            rawInputs.add(enhancedInput)
             targets.add(doubleArrayOf(targetValue))
         }
     }
-    if (inputs.isEmpty() || targets.isEmpty()) {
+
+    if (rawInputs.isEmpty() || targets.isEmpty()) {
         println("Insufficient data for training.")
         return predictedSMB
     }
-    // 4) Cross-validation (k-fold)
+
+    // Normalisation des entrées
+    val bestNetworkForNorm = AimiNeuralNetwork(
+        inputSize = rawInputs.first().size,
+        hiddenSize = 5,
+        outputSize = 1
+    )
+    val inputs = bestNetworkForNorm.zScoreNormalization(rawInputs)
+
+    // Cross-validation (k-fold)
     val maxK = 10
     val adjustedK = minOf(maxK, inputs.size)
     val foldSize = maxOf(1, inputs.size / adjustedK)
     var bestNetwork: AimiNeuralNetwork? = null
     var bestFoldValLoss = Double.MAX_VALUE
-    // 5) Training Config avec learning rate dynamique
-    val adjustedLearningRate = if (bestFoldValLoss < 0.01) 0.0005 else 0.001
-    val epochs = if (bestFoldValLoss < 0.01) 500 else 1000
-    val trainingConfig = TrainingConfig(
-        learningRate = adjustedLearningRate,
-        beta1 = 0.9,
-        beta2 = 0.999,
-        epsilon = 1e-8,
-        patience = 10,
-        batchSize = 32,
-        weightDecay = 0.01,
-        epochs = epochs,
-        useBatchNorm = false,
-        useDropout = true,
-        dropoutRate = 0.3,
-        leakyReluAlpha = 0.01
-    )
-    // 6) Entraînement & validation
+
     for (k in 0 until adjustedK) {
         val validationInputs = inputs.subList(k * foldSize, minOf((k + 1) * foldSize, inputs.size))
         val validationTargets = targets.subList(k * foldSize, minOf((k + 1) * foldSize, targets.size))
         val trainingInputs = inputs.minus(validationInputs)
         val trainingTargets = targets.minus(validationTargets)
         if (validationInputs.isEmpty()) continue
-        val neuralNetwork = AimiNeuralNetwork(
+
+        val tempNetwork = AimiNeuralNetwork(
             inputSize = inputs.first().size,
             hiddenSize = 5,
             outputSize = 1,
-            config = trainingConfig,
+            config = TrainingConfig(
+                learningRate = 0.001,
+                epochs = 1000
+            ),
             regularizationLambda = 0.01
         )
 
-        neuralNetwork.trainWithValidation(trainingInputs, trainingTargets, validationInputs, validationTargets)
-        val foldValLoss = neuralNetwork.validate(validationInputs, validationTargets)
+        tempNetwork.trainWithValidation(trainingInputs, trainingTargets, validationInputs, validationTargets)
+        val foldValLoss = tempNetwork.validate(validationInputs, validationTargets)
 
         if (foldValLoss < bestFoldValLoss) {
             bestFoldValLoss = foldValLoss
-            bestNetwork = neuralNetwork
+            bestNetwork = tempNetwork
         }
     }
-    // 7) Optimisation finale
+
+    // Ajustement dynamique
+    val adjustedLearningRate = if (bestFoldValLoss < 0.01) 0.0005 else 0.001
+    val epochs = if (bestFoldValLoss < 0.01) 500 else 1000
+
+    // Réentraînement final sur 100% des données avec la meilleure config
+    if (bestNetwork != null) {
+        println("Réentraînement final avec les meilleurs hyperparamètres sur toutes les données...")
+        val finalNetwork = AimiNeuralNetwork(
+            inputSize = inputs.first().size,
+            hiddenSize = 5,
+            outputSize = 1,
+            config = TrainingConfig(
+                learningRate = adjustedLearningRate,
+                beta1 = 0.9,
+                beta2 = 0.999,
+                epsilon = 1e-8,
+                patience = 10,
+                batchSize = 32,
+                weightDecay = 0.01,
+                epochs = epochs,
+                useBatchNorm = false,
+                useDropout = true,
+                dropoutRate = 0.3,
+                leakyReluAlpha = 0.01
+            ),
+            regularizationLambda = 0.01
+        )
+        finalNetwork.copyWeightsFrom(bestNetwork)
+        finalNetwork.train(inputs, targets)
+        bestNetwork = finalNetwork
+    }
+
+    // Optimisation finale
     var iterationCount = 0
     do {
         val dynamicThreshold = calculateDynamicThreshold(iterationCount, delta, shortAvgDelta, longAvgDelta)
@@ -1098,18 +1235,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } ?: finalRefinedSMB
 
         if (abs(finalRefinedSMB - refinedSMB) <= dynamicThreshold) {
-            finalRefinedSMB = max(0.05f, refinedSMB) // Clamp SMB minimum
+            finalRefinedSMB = max(0.05f, refinedSMB)
             break
         }
         iterationCount++
     } while (iterationCount < maxIterations)
 
-    // 8) Condition spéciale sur finalRefinedSMB
+    // Condition spéciale
     if (finalRefinedSMB > predictedSMB && bg > 150 && delta > 5) {
         println("Modèle prédictif plus élevé, ajustement retenu.")
         return finalRefinedSMB
     }
-    // 9) Lissage entre predictedSMB et finalRefinedSMB
+
+    // Lissage
     val alpha = 0.7f
     val blendedSMB = alpha * finalRefinedSMB + (1 - alpha) * predictedSMB
     return blendedSMB
@@ -2075,10 +2213,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                  rT.reason.append("Microbolusing Meal Mode ${pbolusM}U. ")
              return rT
          }
-        if (isAutodriveModeCondition(variableSensitivity, targetBg, delta, shortAvgDelta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat()) && !mealTime && !highCarbTime && !lunchTime && !bfastTime && !dinnerTime && !snackTime && !sportTime && !snackTime && !lowCarbTime && bgAcceleration.toFloat() >= 2.0f){
-            val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
-            rT.units = pbolusM
-            rT.reason.append("Microbolusing Meal Mode ${pbolusM}U. ")
+        if (isAutodriveModeCondition(variableSensitivity, targetBg, delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat()) && !mealTime && !highCarbTime && !lunchTime && !bfastTime && !dinnerTime && !snackTime && !sportTime && !snackTime && !lowCarbTime && bgAcceleration.toFloat() >= 2.0f){
+            val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+            rT.units = pbolusA
+            rT.reason.append("Microbolusing Meal Mode ${pbolusA}U. ")
             return rT
         }
         if (isbfastModeCondition()){
@@ -2906,7 +3044,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "26 Mars 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "27 Mars 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
