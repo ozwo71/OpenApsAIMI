@@ -639,12 +639,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return result
     }
     private fun hasReceivedPbolusMInLastHour(pbolusA: Double): Boolean {
-        // Récupère tous les bolus de la dernière heure
+        val epsilon = 0.01
+        val oneHourAgo = dateUtil.now() - T.hours(1).msecs()
+
         val bolusesLastHour = persistenceLayer
-            .getBolusesFromTime(dateUtil.now() - T.hours(1).msecs(), true)
+            .getBolusesFromTime(oneHourAgo, true)
             .blockingGet()
-        // Vérifie si un bolus a exactement le montant pbolusA
-        return bolusesLastHour.any { it.amount == pbolusA }
+
+        return bolusesLastHour.any { Math.abs(it.amount - pbolusA) < epsilon }
     }
     private fun isAutodriveModeCondition(
         variableSensitivity: Float,
