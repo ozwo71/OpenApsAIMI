@@ -2131,7 +2131,7 @@ private fun neuralnetwork5(
         if (isAutodriveModeCondition(variableSensitivity, targetBg, delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat()) && !mealTime && !highCarbTime && !lunchTime && !bfastTime && !dinnerTime && !snackTime && !sportTime && !snackTime && !lowCarbTime && bgAcceleration.toFloat() >= AutodriveAcceleration){
             val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
             rT.units = pbolusA
-            rT.reason.append("Microbolusing Meal Mode ${pbolusA}U. ")
+            rT.reason.append("Microbolusing Autodrive Mode ${pbolusA}U. ")
             return rT
         }
         if (isbfastModeCondition()){
