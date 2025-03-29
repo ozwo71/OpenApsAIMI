@@ -226,7 +226,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bolusFactor *= 0.3
             reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction du bolus; ")
         }
-
+        if (delta > 15f) {
+            // Mode "montée rapide" détecté, on override les réductions habituelles
+            bolusFactor = 1.0
+            reasonBuilder.append("Montée rapide détectée (delta ${delta} mg/dL), application du mode d'urgence; ")
+        }
         // 2. Palier sur le combinedDelta
         when {
             combinedDelta < 1f -> {
@@ -238,6 +242,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 reasonBuilder.append("combinedDelta modéré ($combinedDelta), réduction x0.8; ")
             }
             else -> {
+                bolusFactor *= computeDynamicBolusMultiplier(combinedDelta)
                 reasonBuilder.append("combinedDelta élevé ($combinedDelta), pas de réduction; ")
             }
         }
@@ -378,7 +383,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return diaMinutes.toDouble()
     }
 
-    // -- Méthode pour obtenir l'historique récent de BG, similaire à getRecentDeltas() --
+    // -- Méthode pour obtenir l'historique récent de BG, similaire à getRecentBGs() --
     private fun getRecentBGs(): List<Float> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
         if (data.isEmpty()) return emptyList()
@@ -799,7 +804,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val intervalSleep = preferences.get(IntKey.OApsAIMISleepinterval)
         val intervalHC = preferences.get(IntKey.OApsAIMIHCinterval)
         val intervalHighBG = preferences.get(IntKey.OApsAIMIHighBGinterval)
-
+        if (delta > 15f) {
+            return 1
+        }
         // Par défaut, on part d'un intervalle de base (par exemple 5 minutes)
         var interval = 5
 
@@ -965,134 +972,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return smbToGive.toFloat()
     }
 
-//     private fun neuralnetwork5(
-//     delta: Float,
-//     shortAvgDelta: Float,
-//     longAvgDelta: Float,
-//     predictedSMB: Float,
-//     profile: OapsProfileAimi
-// ): Float {
-//     val maxIterations = 1000.0
-//     // Valeur initiale de SMB calculée ailleurs (votre logique existante)
-//     var finalRefinedSMB: Float = calculateSMBFromModel()
-//     // 2) Lecture du CSV
-//     val allLines = csvfile.readLines()
-//     println("CSV file path: ${csvfile.absolutePath}")
-//     if (allLines.isEmpty()) {
-//         println("CSV file is empty.")
-//         return predictedSMB
-//     }
-//     val headerLine = allLines.first()
-//     val headers = headerLine.split(",").map { it.trim() }
-//     val requiredColumns = listOf(
-//         "bg", "iob", "cob", "delta", "shortAvgDelta", "longAvgDelta",
-//         "tdd7DaysPerHour", "tdd2DaysPerHour", "tddPerHour", "tdd24HrsPerHour",
-//         "predictedSMB", "smbGiven"
-//     )
-//     if (!requiredColumns.all { headers.contains(it) }) {
-//         println("CSV file is missing required columns.")
-//         return predictedSMB
-//     }
-//     // 3) Préparation des données
-//     val colIndices = requiredColumns.map { headers.indexOf(it) }
-//     val targetColIndex = headers.indexOf("smbGiven")
-//     val inputs = mutableListOf<FloatArray>()
-//     val targets = mutableListOf<DoubleArray>()
-//     var lastEnhancedInput: FloatArray? = null
-//     for (line in allLines.drop(1)) {
-//         val cols = line.split(",").map { it.trim() }
-//         val rawInput = colIndices.mapNotNull { idx -> cols.getOrNull(idx)?.toFloatOrNull() }.toFloatArray()
-//         val trendIndicator = calculateTrendIndicator(
-//             delta, shortAvgDelta, longAvgDelta,
-//             bg.toFloat(), iob, variableSensitivity, cob, normalBgThreshold,
-//             recentSteps180Minutes, averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(),
-//             profile.insulinDivisor.toFloat(), recentSteps5Minutes, recentSteps10Minutes
-//         )
-//         val enhancedInput = rawInput.copyOf(rawInput.size + 1)
-//         enhancedInput[rawInput.size] = trendIndicator.toFloat()
-//         lastEnhancedInput = enhancedInput
-//
-//         val targetValue = cols.getOrNull(targetColIndex)?.toDoubleOrNull()
-//         if (targetValue != null) {
-//             inputs.add(enhancedInput)
-//             targets.add(doubleArrayOf(targetValue))
-//         }
-//     }
-//     if (inputs.isEmpty() || targets.isEmpty()) {
-//         println("Insufficient data for training.")
-//         return predictedSMB
-//     }
-//     // 4) Cross-validation (k-fold)
-//     val maxK = 10
-//     val adjustedK = minOf(maxK, inputs.size)
-//     val foldSize = maxOf(1, inputs.size / adjustedK)
-//     var bestNetwork: AimiNeuralNetwork? = null
-//     var bestFoldValLoss = Double.MAX_VALUE
-//     // 5) Training Config avec learning rate dynamique
-//     val adjustedLearningRate = if (bestFoldValLoss < 0.01) 0.0005 else 0.001
-//     val epochs = if (bestFoldValLoss < 0.01) 500 else 1000
-//     val trainingConfig = TrainingConfig(
-//         learningRate = adjustedLearningRate,
-//         beta1 = 0.9,
-//         beta2 = 0.999,
-//         epsilon = 1e-8,
-//         patience = 10,
-//         batchSize = 32,
-//         weightDecay = 0.01,
-//         epochs = epochs,
-//         useBatchNorm = false,
-//         useDropout = true,
-//         dropoutRate = 0.3,
-//         leakyReluAlpha = 0.01
-//     )
-//     // 6) Entraînement & validation
-//     for (k in 0 until adjustedK) {
-//         val validationInputs = inputs.subList(k * foldSize, minOf((k + 1) * foldSize, inputs.size))
-//         val validationTargets = targets.subList(k * foldSize, minOf((k + 1) * foldSize, targets.size))
-//         val trainingInputs = inputs.minus(validationInputs)
-//         val trainingTargets = targets.minus(validationTargets)
-//         if (validationInputs.isEmpty()) continue
-//         val neuralNetwork = AimiNeuralNetwork(
-//             inputSize = inputs.first().size,
-//             hiddenSize = 5,
-//             outputSize = 1,
-//             config = trainingConfig,
-//             regularizationLambda = 0.01
-//         )
-//
-//         neuralNetwork.trainWithValidation(trainingInputs, trainingTargets, validationInputs, validationTargets)
-//         val foldValLoss = neuralNetwork.validate(validationInputs, validationTargets)
-//
-//         if (foldValLoss < bestFoldValLoss) {
-//             bestFoldValLoss = foldValLoss
-//             bestNetwork = neuralNetwork
-//         }
-//     }
-//     // 7) Optimisation finale
-//     var iterationCount = 0
-//     do {
-//         val dynamicThreshold = calculateDynamicThreshold(iterationCount, delta, shortAvgDelta, longAvgDelta)
-//         val refinedSMB = bestNetwork?.let {
-//             AimiNeuralNetwork.refineSMB(finalRefinedSMB, it, lastEnhancedInput?.toDoubleArray() ?: DoubleArray(0))
-//         } ?: finalRefinedSMB
-//
-//         if (abs(finalRefinedSMB - refinedSMB) <= dynamicThreshold) {
-//             finalRefinedSMB = max(0.05f, refinedSMB) // Clamp SMB minimum
-//             break
-//         }
-//         iterationCount++
-//     } while (iterationCount < maxIterations)
-//
-//     // 8) Condition spéciale sur finalRefinedSMB
-//     if (finalRefinedSMB > predictedSMB && bg > 150 && delta > 5) {
-//         println("Modèle prédictif plus élevé, ajustement retenu.")
-//         return finalRefinedSMB
-//     }
-//     // 9) Lissage entre predictedSMB et finalRefinedSMB
-//     val alpha = 0.7f
-//     val blendedSMB = alpha * finalRefinedSMB + (1 - alpha) * predictedSMB
-//     return blendedSMB
-// }
 private fun neuralnetwork5(
     delta: Float,
     shortAvgDelta: Float,
@@ -1100,7 +979,11 @@ private fun neuralnetwork5(
     predictedSMB: Float,
     profile: OapsProfileAimi
 ): Float {
-    val maxIterations = 50.0  // Réduit pour éviter les boucles trop longues
+    val recentDeltas = getRecentDeltas()
+    val predicted = predictedDelta(recentDeltas)
+    val combinedDelta = (delta + predicted) / 2.0f
+    // Définir un nombre maximal d'itérations plus bas en cas de montée rapide
+    val maxIterations = if (combinedDelta > 15f) 25 else 50
     var finalRefinedSMB: Float = calculateSMBFromModel()
 
     val allLines = csvfile.readLines()
@@ -1251,14 +1134,22 @@ private fun neuralnetwork5(
     val blendedSMB = alpha * finalRefinedSMB + (1 - alpha) * predictedSMB
     return blendedSMB
 }
-
+    private fun computeDynamicBolusMultiplier(delta: Float): Float {
+        return when {
+            delta > 20f -> 1.2f  // Montée très rapide : augmenter la dose corrective
+            delta > 15f -> 1.1f  // Montée rapide
+            delta > 10f -> 1.0f  // Montée modérée : pas de réduction
+            delta in 5f..10f -> 0.9f // Légère réduction pour des changements moins brusques
+            else -> 0.8f // Pour des variations faibles ou des baisses, appliquer une réduction standard
+        }
+    }
     private fun calculateDynamicThreshold(
         iterationCount: Int,
         delta: Float,
         shortAvgDelta: Float,
         longAvgDelta: Float
     ): Float {
-        val baseThreshold = 2.5f
+        val baseThreshold = if (delta > 15f) 1.5f else 2.5f
         // Réduit le seuil au fur et à mesure des itérations pour exiger une convergence plus fine
         val iterationFactor = 1.0f / (1 + iterationCount / 100)
         val trendFactor = when {
@@ -1326,15 +1217,18 @@ private fun neuralnetwork5(
     private fun getRecentDeltas(): List<Double> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
         if (data.isEmpty()) return emptyList()
-        val intervalMinutes = if (bg < 130) 20f else 10f
+        // Fenêtre standard selon BG
+        val standardWindow = if (bg < 130) 20f else 10f
+        // Fenêtre raccourcie pour détection rapide
+        val rapidRiseWindow = 5f
+        // Si le delta instantané est supérieur à 15 mg/dL, on choisit la fenêtre rapide
+        val intervalMinutes = if (delta > 15) rapidRiseWindow else standardWindow
 
         val nowTimestamp = data.first().timestamp
         val recentDeltas = mutableListOf<Double>()
-
         for (i in 1 until data.size) {
             if (data[i].value > 39 && !data[i].filledGap) {
                 val minutesAgo = ((nowTimestamp - data[i].timestamp) / (1000.0 * 60)).toFloat()
-
                 if (minutesAgo in 0.0f..intervalMinutes) {
                     val delta = (data.first().recalculated - data[i].recalculated) / minutesAgo * 5f
                     recentDeltas.add(delta)
@@ -2961,7 +2855,7 @@ private fun neuralnetwork5(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "28 Mars 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "29 Mars 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
