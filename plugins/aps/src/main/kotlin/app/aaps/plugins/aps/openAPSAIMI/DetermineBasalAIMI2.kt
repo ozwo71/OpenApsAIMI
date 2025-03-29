@@ -638,12 +638,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return result
     }
     private fun hasReceivedPbolusMInLastHour(pbolusA: Double): Boolean {
-        // Récupère tous les bolus de la dernière heure
+        val epsilon = 0.01
+        val oneHourAgo = dateUtil.now() - T.hours(1).msecs()
+
         val bolusesLastHour = persistenceLayer
-            .getBolusesFromTime(dateUtil.now() - T.hours(1).msecs(), true)
+            .getBolusesFromTime(oneHourAgo, true)
             .blockingGet()
-        // Vérifie si un bolus a exactement le montant pbolusM
-        return bolusesLastHour.any { it.amount == pbolusA }
+
+        return bolusesLastHour.any { Math.abs(it.amount - pbolusA) < epsilon }
     }
     private fun isAutodriveModeCondition(
         variableSensitivity: Float,
@@ -2121,7 +2123,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val halfBasalTarget = profile.half_basal_exercise_target
 
         when {
-            !profile.temptargetSet && recentSteps5Minutes >= 0 && (recentSteps30Minutes >= 500 || recentSteps180Minutes > 1500) && recentSteps10Minutes > 0 -> {
+            !profile.temptargetSet && recentSteps5Minutes >= 0 && (recentSteps30Minutes >= 500 || recentSteps180Minutes > 1500) && recentSteps10Minutes > 0 && predictedBg < 140  -> {
                 this.targetBg = 130.0f
             }
             !profile.temptargetSet && predictedBg >= 120 && combinedDelta > 3 -> {
@@ -2831,7 +2833,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "28 Mars 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "29 Mars 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
