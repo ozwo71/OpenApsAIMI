@@ -225,6 +225,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bolusFactor *= 0.3
             reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction du bolus; ")
         }
+        if (delta > 15f) {
+            // Mode "montée rapide" détecté, on override les réductions habituelles
+            bolusFactor = 1.0
+            reasonBuilder.append("Montée rapide détectée (delta ${delta} mg/dL), application du mode d'urgence; ")
+        }
 
         // 2. Palier sur le combinedDelta
         when {
@@ -237,6 +242,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 reasonBuilder.append("combinedDelta modéré ($combinedDelta), réduction x0.8; ")
             }
             else -> {
+                bolusFactor *= computeDynamicBolusMultiplier(combinedDelta)
                 reasonBuilder.append("combinedDelta élevé ($combinedDelta), pas de réduction; ")
             }
         }
@@ -377,7 +383,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return diaMinutes.toDouble()
     }
 
-    // -- Méthode pour obtenir l'historique récent de BG, similaire à getRecentDeltas() --
+    // -- Méthode pour obtenir l'historique récent de BG, similaire à getRecentBG() --
     private fun getRecentBGs(): List<Float> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
         if (data.isEmpty()) return emptyList()
@@ -798,7 +804,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val intervalSleep = preferences.get(IntKey.OApsAIMISleepinterval)
         val intervalHC = preferences.get(IntKey.OApsAIMIHCinterval)
         val intervalHighBG = preferences.get(IntKey.OApsAIMIHighBGinterval)
-
+        if (delta > 15f) {
+            return 1
+        }
         // Par défaut, on part d'un intervalle de base (par exemple 5 minutes)
         var interval = 5
 
@@ -971,7 +979,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         predictedSMB: Float,
         profile: OapsProfileAimi
     ): Float {
-        val maxIterations = 50.0  // Réduit pour éviter les boucles trop longues
+        val recentDeltas = getRecentDeltas()
+        val predicted = predictedDelta(recentDeltas)
+        val combinedDelta = (delta + predicted) / 2.0f
+        // Définir un nombre maximal d'itérations plus bas en cas de montée rapide
+        val maxIterations = if (combinedDelta > 15f) 25 else 50
         var finalRefinedSMB: Float = calculateSMBFromModel()
 
         val allLines = csvfile.readLines()
@@ -1129,7 +1141,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         shortAvgDelta: Float,
         longAvgDelta: Float
     ): Float {
-        val baseThreshold = 2.5f
+        val baseThreshold = if (delta > 15f) 1.5f else 2.5f
         // Réduit le seuil au fur et à mesure des itérations pour exiger une convergence plus fine
         val iterationFactor = 1.0f / (1 + iterationCount / 100)
         val trendFactor = when {
@@ -1197,15 +1209,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun getRecentDeltas(): List<Double> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
         if (data.isEmpty()) return emptyList()
-        val intervalMinutes = if (bg < 130) 20f else 10f
+        // Fenêtre standard selon BG
+        val standardWindow = if (bg < 130) 20f else 10f
+        // Fenêtre raccourcie pour détection rapide
+        val rapidRiseWindow = 5f
+        // Si le delta instantané est supérieur à 15 mg/dL, on choisit la fenêtre rapide
+        val intervalMinutes = if (delta > 15) rapidRiseWindow else standardWindow
 
         val nowTimestamp = data.first().timestamp
         val recentDeltas = mutableListOf<Double>()
-
         for (i in 1 until data.size) {
             if (data[i].value > 39 && !data[i].filledGap) {
                 val minutesAgo = ((nowTimestamp - data[i].timestamp) / (1000.0 * 60)).toFloat()
-
                 if (minutesAgo in 0.0f..intervalMinutes) {
                     val delta = (data.first().recalculated - data[i].recalculated) / minutesAgo * 5f
                     recentDeltas.add(delta)
@@ -1214,7 +1229,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         return recentDeltas
     }
-
+    private fun computeDynamicBolusMultiplier(delta: Float): Float {
+        return when {
+            delta > 20f -> 1.2f  // Montée très rapide : augmenter la dose corrective
+            delta > 15f -> 1.1f  // Montée rapide
+            delta > 10f -> 1.0f  // Montée modérée : pas de réduction
+            delta in 5f..10f -> 0.9f // Légère réduction pour des changements moins brusques
+            else -> 0.8f // Pour des variations faibles ou des baisses, appliquer une réduction standard
+        }
+    }
     // Calcul d'un delta prédit à partir d'une moyenne pondérée
     private fun predictedDelta(deltaHistory: List<Double>): Double {
         if (deltaHistory.isEmpty()) return 0.0
