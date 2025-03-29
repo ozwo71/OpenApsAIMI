@@ -2251,7 +2251,7 @@ private fun neuralnetwork5(
         val halfBasalTarget = profile.half_basal_exercise_target
 
         when {
-            !profile.temptargetSet && recentSteps5Minutes >= 0 && (recentSteps30Minutes >= 500 || recentSteps180Minutes > 1500) && recentSteps10Minutes > 0 -> {
+            !profile.temptargetSet && recentSteps5Minutes >= 0 && (recentSteps30Minutes >= 500 || recentSteps180Minutes > 1500) && recentSteps10Minutes > 0 && predictedBg < 140 -> {
                 this.targetBg = 130.0f
             }
             !profile.temptargetSet && predictedBg >= 120 && combinedDelta > 3 -> {
