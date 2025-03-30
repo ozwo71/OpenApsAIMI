@@ -1908,7 +1908,7 @@ private fun neuralnetwork5(
         DinMaxIob = ((bg / 100.0) * (bg / 55.0) + (combinedDelta / 2.0)).toFloat()
 
 // Sécurisation : imposer une borne minimale et une borne maximale
-        DinMaxIob = DinMaxIob.coerceAtLeast(1.0f).coerceAtMost(maxIob.toFloat() * 1.5f)
+        DinMaxIob = DinMaxIob.coerceAtLeast(1.0f).coerceAtMost(maxIob.toFloat() * 1.3f)
 
 // Réduction de l'augmentation si on est la nuit (0h-6h)
         if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) {
