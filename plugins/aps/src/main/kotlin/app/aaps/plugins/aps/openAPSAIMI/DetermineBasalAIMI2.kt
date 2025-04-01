@@ -71,7 +71,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val modelFile = File(externalDir, "ml/model.tflite")
     private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
     private val csvfile = File(externalDir, "oapsaimiML2_records.csv")
-    private val csvfile2 = File(externalDir, "AAPS/oapsaimi_records.csv")
+    private val csvfile2 = File(externalDir, "oapsaimi_records.csv")
     private val tempFile = File(externalDir, "temp.csv")
     private var predictedSMB = 0.0f
     private var variableSensitivity = 0.0f
