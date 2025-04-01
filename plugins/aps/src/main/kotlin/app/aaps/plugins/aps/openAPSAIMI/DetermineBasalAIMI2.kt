@@ -71,7 +71,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val modelFile = File(externalDir, "ml/model.tflite")
     private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
     private val csvfile = File(externalDir, "oapsaimiML2_records.csv")
-    private val csvfile2 = File(externalDir, "oapsaimi_records.csv")
+    private val csvfile2 = File(externalDir, "oapsaimi2_records.csv")
     private val tempFile = File(externalDir, "temp.csv")
     private var predictedSMB = 0.0f
     private var variableSensitivity = 0.0f
@@ -86,7 +86,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var predictedBg = 0.0f
     private var lastCarbAgeMin: Int = 0
     private var futureCarbs = 0.0f
-    private var enablebasal: Boolean = false
+    //private var enablebasal: Boolean = false
     private var recentNotes: List<UE>? = null
     private var tags0to60minAgo = ""
     private var tags60to120minAgo = ""
@@ -523,7 +523,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
 
         if (!csvfile.exists()) {
-            csvfile.parentFile?.mkdirs() // Crée le dossier s'il n'existe pas
+            csvfile.parentFile?.mkdirs()
             csvfile.createNewFile()
             csvfile.appendText(headerRow)
         }
@@ -597,14 +597,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val usFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm")
         val dateStr = dateUtil.dateAndTimeString(dateUtil.now()).format(usFormatter)
 
-        val headerRow = "dateStr,dateLong,hourOfDay,weekend," +
-            "bg,targetBg,iob,cob,lastCarbAgeMin,futureCarbs,delta,shortAvgDelta,longAvgDelta," +
+        val headerRow = "dateStr,hourOfDay,weekend," +
+            "bg,targetBg,iob,delta,shortAvgDelta,longAvgDelta," +
             "tdd7DaysPerHour,tdd2DaysPerHour,tddPerHour,tdd24HrsPerHour," +
             "recentSteps5Minutes,recentSteps10Minutes,recentSteps15Minutes,recentSteps30Minutes,recentSteps60Minutes,recentSteps180Minutes," +
             "tags0to60minAgo,tags60to120minAgo,tags120to180minAgo,tags180to240minAgo," +
             "predictedSMB,maxIob,maxSMB,smbGiven\n"
         val valuesToRecord = "$dateStr,$hourOfDay,$weekend," +
-            "$bg,$targetBg,$iob,$cob,$lastCarbAgeMin,$futureCarbs,$delta,$shortAvgDelta,$longAvgDelta," +
+            "$bg,$targetBg,$iob,$delta,$shortAvgDelta,$longAvgDelta," +
             "$tdd7DaysPerHour,$tdd2DaysPerHour,$tddPerHour,$tdd24HrsPerHour," +
             "$recentSteps5Minutes,$recentSteps10Minutes,$recentSteps15Minutes,$recentSteps30Minutes,$recentSteps60Minutes,$recentSteps180Minutes," +
             "$tags0to60minAgo,$tags60to120minAgo,$tags120to180minAgo,$tags180to240minAgo," +
