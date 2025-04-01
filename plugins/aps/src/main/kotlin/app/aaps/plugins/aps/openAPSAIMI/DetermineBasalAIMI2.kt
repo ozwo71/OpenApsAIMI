@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
+import android.R.attr.path
 import android.annotation.SuppressLint
 import android.os.Environment
 import app.aaps.core.data.model.BS
@@ -70,6 +71,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val modelFile = File(externalDir, "ml/model.tflite")
     private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
     private val csvfile = File(externalDir, "oapsaimiML2_records.csv")
+    private val csvfile2 = File(externalDir, "AAPS/oapsaimi_records.csv")
     private val tempFile = File(externalDir, "temp.csv")
     private var predictedSMB = 0.0f
     private var variableSensitivity = 0.0f
@@ -590,7 +592,30 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             println("Erreur lors de la gestion des fichiers : ${e.message}")
         }
     }
+    private fun logDataToCsv(predictedSMB: Float, smbToGive: Float) {
 
+        val usFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm")
+        val dateStr = dateUtil.dateAndTimeString(dateUtil.now()).format(usFormatter)
+
+        val headerRow = "dateStr,dateLong,hourOfDay,weekend," +
+            "bg,targetBg,iob,cob,lastCarbAgeMin,futureCarbs,delta,shortAvgDelta,longAvgDelta," +
+            "tdd7DaysPerHour,tdd2DaysPerHour,tddPerHour,tdd24HrsPerHour," +
+            "recentSteps5Minutes,recentSteps10Minutes,recentSteps15Minutes,recentSteps30Minutes,recentSteps60Minutes,recentSteps180Minutes," +
+            "tags0to60minAgo,tags60to120minAgo,tags120to180minAgo,tags180to240minAgo," +
+            "predictedSMB,maxIob,maxSMB,smbGiven\n"
+        val valuesToRecord = "$dateStr,$hourOfDay,$weekend," +
+            "$bg,$targetBg,$iob,$cob,$lastCarbAgeMin,$futureCarbs,$delta,$shortAvgDelta,$longAvgDelta," +
+            "$tdd7DaysPerHour,$tdd2DaysPerHour,$tddPerHour,$tdd24HrsPerHour," +
+            "$recentSteps5Minutes,$recentSteps10Minutes,$recentSteps15Minutes,$recentSteps30Minutes,$recentSteps60Minutes,$recentSteps180Minutes," +
+            "$tags0to60minAgo,$tags60to120minAgo,$tags120to180minAgo,$tags180to240minAgo," +
+            "$predictedSMB,$maxIob,$maxSMB,$smbToGive"
+        if (!csvfile2.exists()) {
+            csvfile2.parentFile?.mkdirs() // Crée le dossier s'il n'existe pas
+            csvfile2.createNewFile()
+            csvfile2.appendText(headerRow)
+        }
+        csvfile2.appendText(valuesToRecord + "\n")
+    }
     private fun automateDeletionIfBadDay(tir1DAYIR: Int) {
         // Vérifier si le TIR est inférieur à 80
         if (tir1DAYIR < 75) {
@@ -2620,6 +2645,7 @@ private fun neuralnetwork5(
         smbToGive = roundToPoint05(smbToGive)
 
         logDataMLToCsv(predictedSMB, smbToGive)
+        logDataToCsv(predictedSMB, smbToGive)
 
         //logDataToCsv(predictedSMB, smbToGive)
         //logDataToCsvHB(predictedSMB, smbToGive)
@@ -2855,7 +2881,7 @@ private fun neuralnetwork5(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "29 Mars 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "01 Avril 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
