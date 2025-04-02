@@ -439,6 +439,14 @@ class AimiNeuralNetwork(
     }
 
     // Loss and regularization
+    private fun hybridLoss(output: DoubleArray, target: DoubleArray): Double {
+        val alpha = 0.5 // Vous pouvez ajuster ce coefficient selon vos besoins
+        val mae = maeLoss(output, target)
+        val mse = output.zip(target).sumOf { (o, t) -> (o - t).pow(2.0) } / output.size
+
+        return alpha * mae + (1 - alpha) * mse
+    }
+
     private fun maeLoss(output: DoubleArray, target: DoubleArray): Double {
         var sumAbs = 0.0
         for (i in output.indices) {
@@ -514,6 +522,68 @@ class AimiNeuralNetwork(
         }
     }
 
+    // fun trainWithValidation(
+    //     trainInputs: List<FloatArray>,
+    //     trainTargets: List<DoubleArray>,
+    //     valInputs: List<FloatArray>,
+    //     valTargets: List<DoubleArray>
+    // ) {
+    //     if (trainInputs.isEmpty()) {
+    //         println("No training data - aborting.")
+    //         return
+    //     }
+    //
+    //     // Reset de l'historique
+    //     trainingLossHistory.clear()
+    //     bestValLoss = Double.MAX_VALUE
+    //     adamStep = 0
+    //
+    //     val totalEpochs = if (config.epochs <= 0) 1000 else config.epochs
+    //     val batchSize = if (config.batchSize <= 0) 32 else config.batchSize
+    //     var epochsWithoutImprovement = 0
+    //
+    //     for (epoch in 1..totalEpochs) {
+    //         val indices = trainInputs.indices.shuffled()
+    //         var totalLoss = 0.0
+    //
+    //         // mini-batch
+    //         indices.chunked(batchSize).forEach { batchIdx ->
+    //             batchIdx.forEach { idx ->
+    //                 val input = trainInputs[idx]
+    //                 val target = trainTargets[idx]
+    //                 val (gradIH, gradHO) = backpropagation(input, target)
+    //
+    //                 // Update input->hidden
+    //                 adamUpdate(weightsInputHidden, gradIH, mInputHidden, vInputHidden)
+    //                 // Update hidden->output
+    //                 adamUpdate(weightsHiddenOutput, gradHO, mHiddenOutput, vHiddenOutput)
+    //
+    //                 // recalc pour la loss
+    //                 val out = forwardPass(input, inferenceMode = false).second
+    //                 totalLoss += maeLoss(out, target)
+    //             }
+    //         }
+    //
+    //         val avgTrainLoss = totalLoss / trainInputs.size
+    //         trainingLossHistory.add(avgTrainLoss)
+    //
+    //         // Validation
+    //         val valLoss = validate(valInputs, valTargets)
+    //         println("Epoch $epoch/$totalEpochs - trainLoss=$avgTrainLoss - valLoss=$valLoss")
+    //
+    //         if (valLoss < bestValLoss) {
+    //             bestValLoss = valLoss
+    //             epochsWithoutImprovement = 0
+    //             // Optionnel : sauvegarder les poids
+    //         } else {
+    //             epochsWithoutImprovement++
+    //             if (epochsWithoutImprovement >= config.patience) {
+    //                 println("Early stopping at epoch $epoch (no improvement).")
+    //                 break
+    //             }
+    //         }
+    //     }
+    // }
     fun trainWithValidation(
         trainInputs: List<FloatArray>,
         trainTargets: List<DoubleArray>,
@@ -552,7 +622,7 @@ class AimiNeuralNetwork(
 
                     // recalc pour la loss
                     val out = forwardPass(input, inferenceMode = false).second
-                    totalLoss += maeLoss(out, target)
+                    totalLoss += hybridLoss(out, target)
                 }
             }
 
@@ -577,13 +647,14 @@ class AimiNeuralNetwork(
         }
     }
 
+
     fun validate(valInputs: List<FloatArray>, valTargets: List<DoubleArray>): Double {
         if (valInputs.isEmpty()) return 0.0
 
         var totalLoss = 0.0
         for (i in valInputs.indices) {
             val out = forwardPass(valInputs[i], inferenceMode = true).second
-            totalLoss += maeLoss(out, valTargets[i])
+            totalLoss += hybridLoss(out, valTargets[i])
         }
         totalLoss += l2Regularization()
         return totalLoss / valInputs.size
