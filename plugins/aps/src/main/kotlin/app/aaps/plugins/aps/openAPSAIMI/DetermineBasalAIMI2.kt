@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
-import android.R.attr.path
 import android.annotation.SuppressLint
 import android.os.Environment
 import app.aaps.core.data.model.BS
@@ -756,7 +755,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         //val slopedeviation = mealData.slopeFromMaxDeviation <= -1.5 && mealData.slopeFromMinDeviation < 0.3
         //if (slopedeviation) conditionsTrue.add("slopedeviation")
         val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-        val nosmbHM = iob > 0.7 && honeymoon && delta <= 10.0 && !mealTime && !bfastTime && !lunchTime && !dinnerTime && eventualBG < 130
+        val nosmbHM = iob > 0.7 && honeymoon && delta <= 10.0 && !mealTime && !bfastTime && !lunchTime && !dinnerTime && predictedBg < 130
         if (nosmbHM) conditionsTrue.add("nosmbHM")
         val honeysmb = honeymoon && delta < 0 && bg < 170
         if (honeysmb) conditionsTrue.add("honeysmb")
@@ -780,7 +779,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (droppingFastAtHigh) conditionsTrue.add("droppingFastAtHigh")
         val droppingVeryFast = delta < -11
         if (droppingVeryFast) conditionsTrue.add("droppingVeryFast")
-        val prediction = eventualBG < targetBg && bg < 135 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+        val prediction = predictedBg < targetBg && bg < 135 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
         if (prediction) conditionsTrue.add("prediction")
         val interval = eventualBG < targetBg && delta > 10 && iob >= maxSMB/2 && lastsmbtime < 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime && !snackTime
         if (interval) conditionsTrue.add("interval")
@@ -952,7 +951,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (result < 0.0f) {
             result = 0.0f
         }
-        if (iob < 0 && bg > 100 && delta >= 2 && result == 0.0f) {
+        if (iob <= 0.1 && bg > 120 && delta >= 2 && result == 0.0f) {
             result = 0.1f
         }
         return result
@@ -2548,7 +2547,7 @@ private fun neuralnetwork5(
             rT.reason.append("ML Decision data training","ML decision has no enough data to refine the decision")
         }
 
-        var smbToGive = if (bg > 120  && delta > 8 && predictedSMB == 0.0f) modelcal else predictedSMB
+        var smbToGive = if (bg > 130  && delta > 2 && predictedSMB == 0.0f) modelcal else predictedSMB
         smbToGive = if (honeymoon && bg < 170) smbToGive * 0.8f else smbToGive
 
         val morningfactor: Double = preferences.get(DoubleKey.OApsAIMIMorningFactor) / 100.0
