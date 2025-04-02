@@ -109,10 +109,18 @@ class AimiNeuralNetwork(
     //----------------------------------------------------------------------------------------------
     // 4) Loss & régularisation
     //----------------------------------------------------------------------------------------------
-    private fun mseLoss(output: DoubleArray, target: DoubleArray): Double {
-        val sumSq = output.indices.sumOf { i -> (output[i] - target[i]).pow(2.0) }
-        return sumSq / output.size
+    //private fun mseLoss(output: DoubleArray, target: DoubleArray): Double {
+    //    val sumSq = output.indices.sumOf { i -> (output[i] - target[i]).pow(2.0) }
+    //    return sumSq / output.size
+    //}
+    private fun maeLoss(output: DoubleArray, target: DoubleArray): Double {
+        var sumAbs = 0.0
+        for (i in output.indices) {
+            sumAbs += kotlin.math.abs(output[i] - target[i])
+        }
+        return sumAbs / output.size
     }
+
 
     private fun l2Regularization(): Double {
         var reg = 0.0
@@ -131,27 +139,57 @@ class AimiNeuralNetwork(
     /**
      * Calcule les gradients sur weightsInputHidden et weightsHiddenOutput
      */
+    // private fun backpropagation(input: FloatArray, target: DoubleArray): Pair<Array<DoubleArray>, Array<DoubleArray>> {
+    //     val (hidden, output) = forwardPass(input, inferenceMode = false)
+    //
+    //     // dL/dOut
+    //     val gradOutput = DoubleArray(outputSize) { i -> 2.0 * (output[i] - target[i]) }
+    //
+    //     // Grad sur la couche hidden->output
+    //     val gradHiddenOutput = Array(hiddenSize) { h ->
+    //         DoubleArray(outputSize) { o ->
+    //             gradOutput[o] * hidden[h]
+    //         }
+    //     }
+    //
+    //     // gradHidden : dérivé LeakyReLU
+    //     val gradHidden = DoubleArray(hiddenSize) { h ->
+    //         val sum = gradOutput.indices.sumOf { o -> gradOutput[o] * weightsHiddenOutput[h][o] }
+    //         // LeakyRelu derivative
+    //         if (hidden[h] >= 0) sum else sum * config.leakyReluAlpha
+    //     }
+    //
+    //     // Grad sur la couche input->hidden
+    //     val gradInputHidden = Array(inputSize) { i ->
+    //         DoubleArray(hiddenSize) { h ->
+    //             gradHidden[h] * input[i]
+    //         }
+    //     }
+    //
+    //     return gradInputHidden to gradHiddenOutput
+    // }
     private fun backpropagation(input: FloatArray, target: DoubleArray): Pair<Array<DoubleArray>, Array<DoubleArray>> {
         val (hidden, output) = forwardPass(input, inferenceMode = false)
 
-        // dL/dOut
-        val gradOutput = DoubleArray(outputSize) { i -> 2.0 * (output[i] - target[i]) }
+        // Calcul du gradient de sortie pour MAE : dérivée de |output - target|
+        val gradOutput = DoubleArray(outputSize) { i ->
+            kotlin.math.sign(output[i] - target[i])
+        }
 
-        // Grad sur la couche hidden->output
+        // Gradient sur la couche hidden->output
         val gradHiddenOutput = Array(hiddenSize) { h ->
             DoubleArray(outputSize) { o ->
                 gradOutput[o] * hidden[h]
             }
         }
 
-        // gradHidden : dérivé LeakyReLU
+        // Calcul du gradient sur la couche cachée avec dérivée de LeakyReLU
         val gradHidden = DoubleArray(hiddenSize) { h ->
             val sum = gradOutput.indices.sumOf { o -> gradOutput[o] * weightsHiddenOutput[h][o] }
-            // LeakyRelu derivative
             if (hidden[h] >= 0) sum else sum * config.leakyReluAlpha
         }
 
-        // Grad sur la couche input->hidden
+        // Gradient sur la couche input->hidden
         val gradInputHidden = Array(inputSize) { i ->
             DoubleArray(hiddenSize) { h ->
                 gradHidden[h] * input[i]
@@ -160,7 +198,6 @@ class AimiNeuralNetwork(
 
         return gradInputHidden to gradHiddenOutput
     }
-
     // Stockage des moments Adam
     private val mInputHidden = Array(inputSize) { DoubleArray(hiddenSize) { 0.0 } }
     private val vInputHidden = Array(inputSize) { DoubleArray(hiddenSize) { 0.0 } }
@@ -238,7 +275,7 @@ class AimiNeuralNetwork(
 
                     // recalc pour la loss
                     val out = forwardPass(input, inferenceMode = false).second
-                    totalLoss += mseLoss(out, target)
+                    totalLoss += maeLoss(out, target)
                 }
             }
 
@@ -272,7 +309,7 @@ class AimiNeuralNetwork(
         var totalLoss = 0.0
         for (i in valInputs.indices) {
             val out = forwardPass(valInputs[i], inferenceMode = true).second
-            totalLoss += mseLoss(out, valTargets[i])
+            totalLoss += maeLoss(out, valTargets[i])
         }
         totalLoss += l2Regularization()
         return totalLoss / valInputs.size
