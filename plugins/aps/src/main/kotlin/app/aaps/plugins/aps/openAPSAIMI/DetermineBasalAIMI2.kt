@@ -528,7 +528,73 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         csvfile.appendText(valuesToRecord + "\n")
     }
+    // private fun createFilteredAndSortedCopy(dateToRemove: String) {
+    //     if (!csvfile.exists()) {
+    //         println("Le fichier original n'existe pas.")
+    //         return
+    //     }
+    //
+    //     try {
+    //         // Lire le fichier original ligne par ligne
+    //         val lines = csvfile.readLines()
+    //         val header = lines.firstOrNull() ?: return
+    //         val dataLines = lines.drop(1)
+    //
+    //         // Liste des lignes valides après filtrage
+    //         val validLines = mutableListOf<String>()
+    //
+    //         // Filtrer les lignes qui ne correspondent pas à la date à supprimer
+    //         dataLines.forEach { line ->
+    //             val lineParts = line.split(",")
+    //             if (lineParts.isNotEmpty()) {
+    //                 val dateStr = lineParts[0].trim()
+    //                 if (!dateStr.startsWith(dateToRemove)) {
+    //                     validLines.add(line)
+    //                 } else {
+    //                     println("Ligne supprimée : $line")
+    //                 }
+    //             }
+    //         }
+    //
+    //         // Trier les lignes par ordre croissant de date (en utilisant les dates en texte)
+    //         validLines.sortBy { it.split(",")[0] }
+    //
+    //         if (!tempFile.exists()) {
+    //             tempFile.createNewFile()
+    //         }
+    //
+    //         // Écrire les lignes filtrées et triées dans le fichier temporaire
+    //         tempFile.writeText(header + "\n")
+    //         validLines.forEach { line ->
+    //             tempFile.appendText(line + "\n")
+    //         }
+    //
+    //         // Obtenir la date et l'heure actuelles pour renommer le fichier original
+    //         val dateFormat = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault())
+    //         val currentDateTime = dateFormat.format(Date())
+    //         val backupFileName = "oapsaimiML2_records_$currentDateTime.csv"
+    //         val backupFile = File(externalDir, backupFileName)
+    //
+    //         // Renommer le fichier original en fichier de sauvegarde
+    //         if (csvfile.renameTo(backupFile)) {
+    //             // Renommer le fichier temporaire en fichier principal
+    //             if (tempFile.renameTo(csvfile)) {
+    //                 println("Le fichier original a été sauvegardé sous '$backupFileName', et 'temp.csv' a été renommé en 'oapsaimiML2_records.csv'.")
+    //             } else {
+    //                 println("Erreur lors du renommage du fichier temporaire 'temp.csv' en 'oapsaimiML2_records.csv'.")
+    //             }
+    //         } else {
+    //             println("Erreur lors du renommage du fichier original en '$backupFileName'.")
+    //         }
+    //
+    //     } catch (e: Exception) {
+    //         println("Erreur lors de la gestion des fichiers : ${e.message}")
+    //     }
+    // }
     private fun createFilteredAndSortedCopy(dateToRemove: String) {
+        val csvfile = File(externalDir, "oapsaimiML2_records.csv")
+        val tempFile = File(externalDir, "temp.csv")
+
         if (!csvfile.exists()) {
             println("Le fichier original n'existe pas.")
             return
@@ -544,7 +610,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val validLines = mutableListOf<String>()
 
             // Filtrer les lignes qui ne correspondent pas à la date à supprimer
-            dataLines.forEach { line ->
+            for (line in dataLines) {
                 val lineParts = line.split(",")
                 if (lineParts.isNotEmpty()) {
                     val dateStr = lineParts[0].trim()
@@ -556,16 +622,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
             }
 
-            // Trier les lignes par ordre croissant de date (en utilisant les dates en texte)
-            validLines.sortBy { it.split(",")[0] }
-
-            if (!tempFile.exists()) {
-                tempFile.createNewFile()
-            }
-
-            // Écrire les lignes filtrées et triées dans le fichier temporaire
+            // Écrire les lignes filtrées dans le fichier temporaire
             tempFile.writeText(header + "\n")
-            validLines.forEach { line ->
+            for (line in validLines) {
                 tempFile.appendText(line + "\n")
             }
 
@@ -615,22 +674,45 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         csvfile2.appendText(valuesToRecord + "\n")
     }
+    // private fun automateDeletionIfBadDay(tir1DAYIR: Int) {
+    //     // Vérifier si le TIR est inférieur à 80
+    //     if (tir1DAYIR < 85) {
+    //         // Vérifier si l'heure actuelle est entre 00:05 et 00:10
+    //         val currentTime = LocalTime.now()
+    //         val start = LocalTime.of(0, 5)
+    //         val end = LocalTime.of(0, 10)
+    //
+    //         if (currentTime.isAfter(start) && currentTime.isBefore(end)) {
+    //             // Calculer la date de la veille au format dd/MM/yyyy
+    //             val yesterday = LocalDate.now().minusDays(1)
+    //             val dateToRemove = yesterday.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+    //
+    //             // Appeler la méthode de suppression
+    //             createFilteredAndSortedCopy(dateToRemove)
+    //             println("Les données pour la date $dateToRemove ont été supprimées car TIR1DAIIR est inférieur à 80.")
+    //         } else {
+    //             println("La suppression ne peut être exécutée qu'entre 00:05 et 00:10.")
+    //         }
+    //     } else {
+    //         println("Aucune suppression nécessaire : tir1DAYIR est supérieur ou égal à 85.")
+    //     }
+    // }
     private fun automateDeletionIfBadDay(tir1DAYIR: Int) {
-        // Vérifier si le TIR est inférieur à 80
+        // Vérifier si le TIR est inférieur à 85
         if (tir1DAYIR < 85) {
             // Vérifier si l'heure actuelle est entre 00:05 et 00:10
             val currentTime = LocalTime.now()
             val start = LocalTime.of(0, 5)
             val end = LocalTime.of(0, 10)
 
-            if (currentTime.isAfter(start) && currentTime.isBefore(end)) {
+            if (currentTime.isAfter(start) || currentTime.equals(end)) {
                 // Calculer la date de la veille au format dd/MM/yyyy
                 val yesterday = LocalDate.now().minusDays(1)
                 val dateToRemove = yesterday.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
 
                 // Appeler la méthode de suppression
                 createFilteredAndSortedCopy(dateToRemove)
-                println("Les données pour la date $dateToRemove ont été supprimées car TIR1DAIIR est inférieur à 80.")
+                println("Les données pour la date $dateToRemove ont été supprimées car TIR1DAIIR est inférieur à 85.")
             } else {
                 println("La suppression ne peut être exécutée qu'entre 00:05 et 00:10.")
             }
@@ -2880,7 +2962,7 @@ private fun neuralnetwork5(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "02 Avril 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "05 Avril 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 

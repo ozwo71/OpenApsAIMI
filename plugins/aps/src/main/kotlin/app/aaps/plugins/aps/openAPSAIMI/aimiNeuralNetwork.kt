@@ -397,50 +397,112 @@ class AimiNeuralNetwork(
     }
 
     // Forward pass
+    // private fun forwardPass(
+    //     input: FloatArray,
+    //     inferenceMode: Boolean = false
+    // ): Pair<DoubleArray, DoubleArray> {
+    //     val hiddenRaw = DoubleArray(hiddenSize) { h ->
+    //         var sum = 0.0
+    //         for (i in input.indices) {
+    //             sum += input[i] * weightsInputHidden[i][h]
+    //         }
+    //         sum + biasHidden[h]
+    //     }
+    //
+    //     val hiddenActivated = hiddenRaw.map { leakyRelu(it) }.toDoubleArray()
+    //
+    //     val hiddenNorm = if (!inferenceMode && config.useBatchNorm) {
+    //         batchNormalization(hiddenActivated)
+    //     } else {
+    //         hiddenActivated
+    //     }
+    //
+    //     val hiddenDropped = if (!inferenceMode && config.useDropout) {
+    //         applyDropout(hiddenNorm, config.dropoutRate)
+    //     } else {
+    //         hiddenNorm
+    //     }
+    //
+    //     val output = DoubleArray(outputSize) { o ->
+    //         var sum = 0.0
+    //         for (h in hiddenDropped.indices) {
+    //             sum += hiddenDropped[h] * weightsHiddenOutput[h][o]
+    //         }
+    //         sum + biasOutput[o]
+    //     }
+    //
+    //     return hiddenDropped to output
+    // }
+    //
+    fun predict(input: FloatArray): DoubleArray {
+         return forwardPass(input, inferenceMode = true).second
+    }
     private fun forwardPass(
         input: FloatArray,
         inferenceMode: Boolean = false
     ): Pair<DoubleArray, DoubleArray> {
-        val hiddenRaw = DoubleArray(hiddenSize) { h ->
+        // Calcul de la couche cachée : somme pondérée + biais
+        val hidden = DoubleArray(hiddenSize)
+        for (h in 0 until hiddenSize) {
             var sum = 0.0
             for (i in input.indices) {
                 sum += input[i] * weightsInputHidden[i][h]
             }
-            sum + biasHidden[h]
+            hidden[h] = sum + biasHidden[h]
         }
 
-        val hiddenActivated = hiddenRaw.map { leakyRelu(it) }.toDoubleArray()
-
-        val hiddenNorm = if (!inferenceMode && config.useBatchNorm) {
-            batchNormalization(hiddenActivated)
-        } else {
-            hiddenActivated
+        // Activation LeakyReLU in place
+        for (h in 0 until hiddenSize) {
+            val v = hidden[h]
+            hidden[h] = if (v >= 0) v else config.leakyReluAlpha * v
         }
 
-        val hiddenDropped = if (!inferenceMode && config.useDropout) {
-            applyDropout(hiddenNorm, config.dropoutRate)
-        } else {
-            hiddenNorm
-        }
-
-        val output = DoubleArray(outputSize) { o ->
+        // Batch normalization (in place) si activée et pas en mode inférence
+        if (!inferenceMode && config.useBatchNorm) {
             var sum = 0.0
-            for (h in hiddenDropped.indices) {
-                sum += hiddenDropped[h] * weightsHiddenOutput[h][o]
+            for (h in 0 until hiddenSize) {
+                sum += hidden[h]
             }
-            sum + biasOutput[o]
+            val mean = sum / hiddenSize
+
+            var sumSq = 0.0
+            for (h in 0 until hiddenSize) {
+                val diff = hidden[h] - mean
+                sumSq += diff * diff
+            }
+            val variance = sumSq / hiddenSize
+            val denom = sqrt(variance + 1e-8)
+            for (h in 0 until hiddenSize) {
+                hidden[h] = (hidden[h] - mean) / denom
+            }
         }
 
-        return hiddenDropped to output
+        // Application du dropout (in place) si activé et pas en mode inférence
+        if (!inferenceMode && config.useDropout) {
+            for (h in 0 until hiddenSize) {
+                if (Random.nextDouble() < config.dropoutRate) {
+                    hidden[h] = 0.0
+                }
+            }
+        }
+
+        // Calcul de la couche de sortie
+        val output = DoubleArray(outputSize)
+        for (o in 0 until outputSize) {
+            var sum = 0.0
+            for (h in 0 until hiddenSize) {
+                sum += hidden[h] * weightsHiddenOutput[h][o]
+            }
+            output[o] = sum + biasOutput[o]
+        }
+
+        return hidden to output
     }
 
-    fun predict(input: FloatArray): DoubleArray {
-        return forwardPass(input, inferenceMode = true).second
-    }
 
     // Loss and regularization
     private fun hybridLoss(output: DoubleArray, target: DoubleArray): Double {
-        val alpha = 0.5 // Vous pouvez ajuster ce coefficient selon vos besoins
+        val alpha = 0.3 // Vous pouvez ajuster ce coefficient selon vos besoins
         val mae = maeLoss(output, target)
         val mse = output.zip(target).sumOf { (o, t) -> (o - t).pow(2.0) } / output.size
 
