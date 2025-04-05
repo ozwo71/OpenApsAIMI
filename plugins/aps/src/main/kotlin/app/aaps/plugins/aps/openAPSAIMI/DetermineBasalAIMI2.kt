@@ -598,51 +598,49 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         try {
-            // Création d'un fichier temporaire dans le même dossier que le CSV original
-            val tempFile = File(csvFile.parentFile, "temp.csv")
+            // Lire toutes les lignes du fichier en mémoire
+            val lines = csvFile.readLines(Charsets.UTF_8)
+            if (lines.isEmpty()) {
+                println("Le fichier CSV est vide.")
+                return
+            }
 
-            // Lecture et écriture en continu avec buffering (UTF-8)
-            csvFile.bufferedReader(Charsets.UTF_8).use { reader ->
-                tempFile.bufferedWriter(Charsets.UTF_8).use { bw ->
-                    // Lire la première ligne (l'en-tête) et l'écrire dans le fichier temporaire
-                    val header = reader.readLine()
-                    if (header == null) {
-                        println("Le fichier CSV est vide.")
-                        return
+            val header = lines.first()
+            // Filtrer les lignes (à partir de la deuxième ligne)
+            val filteredLines = lines.drop(1).filter { line ->
+                val parts = line.split(",")
+                if (parts.isNotEmpty()) {
+                    // Nettoyer la date : suppression des guillemets et espaces parasites
+                    val dateStr = parts[0].replace("\"", "").trim()
+                    if (dateStr.startsWith(dateToRemove)) {
+                        println("Ligne supprimée : $line")
+                        false
+                    } else {
+                        true
                     }
-                    bw.write(header)
-                    bw.newLine()
-
-                    // Traitement de chaque ligne du fichier
-                    reader.forEachLine { line ->
-                        val parts = line.split(",")
-                        if (parts.isNotEmpty()) {
-                            // Nettoyer la date pour retirer d'éventuels guillemets ou espaces parasites
-                            val dateStr = parts[0].replace("\"", "").trim()
-                            if (dateStr.startsWith(dateToRemove)) {
-                                println("Ligne supprimée : $line")
-                            } else {
-                                bw.write(line)
-                                bw.newLine()
-                            }
-                        }
-                    }
+                } else {
+                    true
                 }
             }
 
-            // Création d'un nom de fichier de sauvegarde avec la date et l'heure actuelles
+            // Reconstituer le contenu du fichier filtré
+            val newContent = buildString {
+                append(header).append("\n")
+                filteredLines.forEach { line ->
+                    append(line).append("\n")
+                }
+            }
+
+            // Création d'une sauvegarde de l'original
             val dateFormat = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault())
             val currentDateTime = dateFormat.format(Date())
             val backupFile = File(csvFile.parentFile, "oapsaimiML2_records_$currentDateTime.csv")
-
-            // Sauvegarder le fichier original en le copiant dans un fichier de backup
             csvFile.copyTo(backupFile, overwrite = true)
-            // Remplacer le fichier original par le fichier temporaire filtré
-            tempFile.copyTo(csvFile, overwrite = true)
-            // Optionnellement, supprimer le fichier temporaire
-            tempFile.delete()
 
-            println("Le fichier original a été sauvegardé sous '${backupFile.name}', et le fichier filtré a été copié dans '${csvFile.name}'.")
+            // Écriture du nouveau contenu filtré dans le fichier original
+            csvFile.writeText(newContent, Charsets.UTF_8)
+
+            println("Le fichier original a été sauvegardé sous '${backupFile.name}', et le fichier filtré a été écrit.")
         } catch (e: Exception) {
             println("Erreur lors de la gestion des fichiers : ${e.message}")
         }
