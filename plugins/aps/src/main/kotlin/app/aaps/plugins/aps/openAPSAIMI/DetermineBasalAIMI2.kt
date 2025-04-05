@@ -592,9 +592,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     //     }
     // }
     private fun createFilteredAndSortedCopy(dateToRemove: String) {
-        val csvfile = File(externalDir, "oapsaimiML2_records.csv")
-        val tempFile = File(externalDir, "temp.csv")
-
         if (!csvfile.exists()) {
             println("Le fichier original n'existe pas.")
             return
@@ -610,7 +607,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val validLines = mutableListOf<String>()
 
             // Filtrer les lignes qui ne correspondent pas à la date à supprimer
-            for (line in dataLines) {
+            dataLines.forEach { line ->
                 val lineParts = line.split(",")
                 if (lineParts.isNotEmpty()) {
                     val dateStr = lineParts[0].trim()
@@ -622,9 +619,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
             }
 
-            // Écrire les lignes filtrées dans le fichier temporaire
+            // Assurez-vous que l'ordre des lignes ne change pas
+            // validLines.sortBy { it.split(",")[0] } // Supprimez cette ligne si vous voulez conserver l'ordre original
+
+            if (!tempFile.exists()) {
+                tempFile.createNewFile()
+            }
+
+            // Écrire les lignes filtrées et triées dans le fichier temporaire
             tempFile.writeText(header + "\n")
-            for (line in validLines) {
+            validLines.forEach { line ->
                 tempFile.appendText(line + "\n")
             }
 
@@ -698,26 +702,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     //     }
     // }
     private fun automateDeletionIfBadDay(tir1DAYIR: Int) {
-        // Vérifier si le TIR est inférieur à 85
+        // Vérifier si le TIR est inférieur à 85%
         if (tir1DAYIR < 85) {
             // Vérifier si l'heure actuelle est entre 00:05 et 00:10
             val currentTime = LocalTime.now()
             val start = LocalTime.of(0, 5)
             val end = LocalTime.of(0, 10)
 
-            if (currentTime.isAfter(start) || currentTime.equals(end)) {
+            if (currentTime.isAfter(start) && currentTime.isBefore(end)) {
                 // Calculer la date de la veille au format dd/MM/yyyy
                 val yesterday = LocalDate.now().minusDays(1)
                 val dateToRemove = yesterday.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
 
                 // Appeler la méthode de suppression
                 createFilteredAndSortedCopy(dateToRemove)
-                println("Les données pour la date $dateToRemove ont été supprimées car TIR1DAIIR est inférieur à 85.")
+                println("Les données pour la date $dateToRemove ont été supprimées car TIR1DAIIR est inférieur à 85%.")
             } else {
                 println("La suppression ne peut être exécutée qu'entre 00:05 et 00:10.")
             }
         } else {
-            println("Aucune suppression nécessaire : tir1DAYIR est supérieur ou égal à 85.")
+            println("Aucune suppression nécessaire : tir1DAYIR est supérieur ou égal à 85%.")
         }
     }
 
