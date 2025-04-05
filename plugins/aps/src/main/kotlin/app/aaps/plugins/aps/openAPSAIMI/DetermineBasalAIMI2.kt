@@ -591,69 +591,67 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     //         println("Erreur lors de la gestion des fichiers : ${e.message}")
     //     }
     // }
-    private fun createFilteredAndSortedCopy(dateToRemove: String) {
-        if (!csvfile.exists()) {
+    fun createFilteredAndSortedCopy(csvFile: File, dateToRemove: String) {
+        if (!csvFile.exists()) {
             println("Le fichier original n'existe pas.")
             return
         }
 
         try {
-            // Lire le fichier original ligne par ligne
-            val lines = csvfile.readLines()
-            val header = lines.firstOrNull() ?: return
-            val dataLines = lines.drop(1)
+            // Création d'un fichier temporaire dans le même dossier que le CSV original
+            val tempFile = File(csvFile.parentFile, "temp.csv")
 
-            // Liste des lignes valides après filtrage
-            val validLines = mutableListOf<String>()
+            // Lecture et écriture en continu avec buffering (UTF-8)
+            csvFile.bufferedReader(Charsets.UTF_8).use { reader ->
+                tempFile.bufferedWriter(Charsets.UTF_8).use { bw ->
+                    // Lire la première ligne (l'en-tête) et l'écrire dans le fichier temporaire
+                    val header = reader.readLine()
+                    if (header == null) {
+                        println("Le fichier CSV est vide.")
+                        return
+                    }
+                    bw.write(header)
+                    bw.newLine()
 
-            // Filtrer les lignes qui ne correspondent pas à la date à supprimer
-            dataLines.forEach { line ->
-                val lineParts = line.split(",")
-                if (lineParts.isNotEmpty()) {
-                    val dateStr = lineParts[0].trim()
-                    if (!dateStr.startsWith(dateToRemove)) {
-                        validLines.add(line)
-                    } else {
-                        println("Ligne supprimée : $line")
+                    // Traitement de chaque ligne du fichier
+                    reader.forEachLine { line ->
+                        val parts = line.split(",")
+                        if (parts.isNotEmpty()) {
+                            // Nettoyer la date pour retirer les éventuels guillemets ou espaces parasites
+                            val dateStr = parts[0].replace("\"", "").trim()
+                            if (dateStr.startsWith(dateToRemove)) {
+                                println("Ligne supprimée : $line")
+                            } else {
+                                bw.write(line)
+                                bw.newLine()
+                            }
+                        }
                     }
                 }
             }
 
-            // Assurez-vous que l'ordre des lignes ne change pas
-            // validLines.sortBy { it.split(",")[0] } // Supprimez cette ligne si vous voulez conserver l'ordre original
-
-            if (!tempFile.exists()) {
-                tempFile.createNewFile()
-            }
-
-            // Écrire les lignes filtrées et triées dans le fichier temporaire
-            tempFile.writeText(header + "\n")
-            validLines.forEach { line ->
-                tempFile.appendText(line + "\n")
-            }
-
-            // Obtenir la date et l'heure actuelles pour renommer le fichier original
+            // Création d'un nom de fichier de sauvegarde avec la date et l'heure actuelles
             val dateFormat = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault())
             val currentDateTime = dateFormat.format(Date())
             val backupFileName = "oapsaimiML2_records_$currentDateTime.csv"
-            val backupFile = File(externalDir, backupFileName)
+            val backupFile = File(csvFile.parentFile, backupFileName)
 
             // Renommer le fichier original en fichier de sauvegarde
-            if (csvfile.renameTo(backupFile)) {
-                // Renommer le fichier temporaire en fichier principal
-                if (tempFile.renameTo(csvfile)) {
-                    println("Le fichier original a été sauvegardé sous '$backupFileName', et 'temp.csv' a été renommé en 'oapsaimiML2_records.csv'.")
+            if (csvFile.renameTo(backupFile)) {
+                // Renommer le fichier temporaire pour qu'il devienne le fichier principal
+                if (tempFile.renameTo(csvFile)) {
+                    println("Le fichier original a été sauvegardé sous '$backupFileName', et 'temp.csv' a été renommé en '${csvFile.name}'.")
                 } else {
-                    println("Erreur lors du renommage du fichier temporaire 'temp.csv' en 'oapsaimiML2_records.csv'.")
+                    println("Erreur lors du renommage du fichier temporaire en '${csvFile.name}'.")
                 }
             } else {
                 println("Erreur lors du renommage du fichier original en '$backupFileName'.")
             }
-
         } catch (e: Exception) {
             println("Erreur lors de la gestion des fichiers : ${e.message}")
         }
     }
+
     private fun logDataToCsv(predictedSMB: Float, smbToGive: Float) {
 
         val usFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm")
@@ -715,7 +713,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val dateToRemove = yesterday.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
 
                 // Appeler la méthode de suppression
-                createFilteredAndSortedCopy(dateToRemove)
+                createFilteredAndSortedCopy(csvfile,dateToRemove)
                 println("Les données pour la date $dateToRemove ont été supprimées car TIR1DAIIR est inférieur à 85%.")
             } else {
                 println("La suppression ne peut être exécutée qu'entre 00:05 et 00:10.")
@@ -2102,7 +2100,7 @@ private fun neuralnetwork5(
         val deleteTime = therapy.deleteTime
         if (deleteTime) {
             //removeLastNLines(100)
-            createFilteredAndSortedCopy(deleteEventDate.toString())
+            createFilteredAndSortedCopy(csvfile,deleteEventDate.toString())
         }
         this.sleepTime = therapy.sleepTime
         this.snackTime = therapy.snackTime
