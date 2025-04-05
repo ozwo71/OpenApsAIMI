@@ -617,7 +617,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     reader.forEachLine { line ->
                         val parts = line.split(",")
                         if (parts.isNotEmpty()) {
-                            // Nettoyer la date pour retirer les éventuels guillemets ou espaces parasites
+                            // Nettoyer la date pour retirer d'éventuels guillemets ou espaces parasites
                             val dateStr = parts[0].replace("\"", "").trim()
                             if (dateStr.startsWith(dateToRemove)) {
                                 println("Ligne supprimée : $line")
@@ -633,20 +633,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Création d'un nom de fichier de sauvegarde avec la date et l'heure actuelles
             val dateFormat = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault())
             val currentDateTime = dateFormat.format(Date())
-            val backupFileName = "oapsaimiML2_records_$currentDateTime.csv"
-            val backupFile = File(csvFile.parentFile, backupFileName)
+            val backupFile = File(csvFile.parentFile, "oapsaimiML2_records_$currentDateTime.csv")
 
-            // Renommer le fichier original en fichier de sauvegarde
-            if (csvFile.renameTo(backupFile)) {
-                // Renommer le fichier temporaire pour qu'il devienne le fichier principal
-                if (tempFile.renameTo(csvFile)) {
-                    println("Le fichier original a été sauvegardé sous '$backupFileName', et 'temp.csv' a été renommé en '${csvFile.name}'.")
-                } else {
-                    println("Erreur lors du renommage du fichier temporaire en '${csvFile.name}'.")
-                }
-            } else {
-                println("Erreur lors du renommage du fichier original en '$backupFileName'.")
-            }
+            // Sauvegarder le fichier original en le copiant dans un fichier de backup
+            csvFile.copyTo(backupFile, overwrite = true)
+            // Remplacer le fichier original par le fichier temporaire filtré
+            tempFile.copyTo(csvFile, overwrite = true)
+            // Optionnellement, supprimer le fichier temporaire
+            tempFile.delete()
+
+            println("Le fichier original a été sauvegardé sous '${backupFile.name}', et le fichier filtré a été copié dans '${csvFile.name}'.")
         } catch (e: Exception) {
             println("Erreur lors de la gestion des fichiers : ${e.message}")
         }
