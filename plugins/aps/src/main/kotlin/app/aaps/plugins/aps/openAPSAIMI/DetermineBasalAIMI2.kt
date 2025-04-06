@@ -2160,7 +2160,8 @@ private fun neuralnetwork5(
         val deleteTime = therapy.deleteTime
         if (deleteTime) {
             //removeLastNLines(100)
-            createFilteredAndSortedCopy(csvfile,deleteEventDate.toString())
+            //createFilteredAndSortedCopy(csvfile,deleteEventDate.toString())
+            removeLast200Lines(csvfile)
         }
         this.sleepTime = therapy.sleepTime
         this.snackTime = therapy.snackTime
