@@ -727,6 +727,37 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     //         println("Aucune suppression nécessaire : tir1DAYIR est supérieur ou égal à 85.")
     //     }
     // }
+    fun removeLast200Lines(csvFile: File) {
+        if (!csvFile.exists()) {
+            println("Le fichier original n'existe pas.")
+            return
+        }
+
+        // Lire toutes les lignes du fichier
+        val lines = csvFile.readLines(Charsets.UTF_8)
+
+        if (lines.size <= 200) {
+            println("Le fichier contient moins ou égal à 200 lignes, aucune suppression effectuée.")
+            return
+        }
+
+        // Conserver toutes les lignes sauf les 200 dernières
+        val newLines = lines.dropLast(200)
+
+        // Création d'un nom de sauvegarde avec timestamp
+        val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+        val timestamp = dateFormat.format(Date())
+        val backupFileName = "backup_$timestamp.csv"
+        val backupFile = File(csvFile.parentFile, backupFileName)
+
+        // Sauvegarder le fichier original
+        csvFile.copyTo(backupFile, overwrite = true)
+
+        // Réécrire le fichier original avec les lignes restantes
+        csvFile.writeText(newLines.joinToString("\n"), Charsets.UTF_8)
+
+        println("Les 200 dernières lignes ont été supprimées. Le fichier original a été sauvegardé sous '$backupFileName'.")
+    }
     private fun automateDeletionIfBadDay(tir1DAYIR: Int) {
         // Vérifier si le TIR est inférieur à 85%
         if (tir1DAYIR < 85) {
@@ -741,7 +772,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val dateToRemove = yesterday.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
 
                 // Appeler la méthode de suppression
-                createFilteredAndSortedCopy(csvfile,dateToRemove)
+                //createFilteredAndSortedCopy(csvfile,dateToRemove)
+                removeLast200Lines(csvfile)
                 println("Les données pour la date $dateToRemove ont été supprimées car TIR1DAIIR est inférieur à 85%.")
             } else {
                 println("La suppression ne peut être exécutée qu'entre 00:05 et 00:10.")
