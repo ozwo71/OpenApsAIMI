@@ -592,58 +592,92 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     //     }
     // }
     fun createFilteredAndSortedCopy(csvFile: File, dateToRemove: String) {
+        // Vérifier que le fichier CSV existe
         if (!csvFile.exists()) {
             println("Le fichier original n'existe pas.")
             return
         }
 
-        try {
-            // Lire toutes les lignes du fichier en mémoire
-            val lines = csvFile.readLines(Charsets.UTF_8)
-            if (lines.isEmpty()) {
-                println("Le fichier CSV est vide.")
-                return
-            }
+        // Tenter de parser la date cible (attendue au format "dd/MM/yyyy")
+        val targetDate: Date? = try {
+            SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).parse(dateToRemove)
+        } catch (e: Exception) {
+            println("Erreur de parsing de la date cible : ${e.message}")
+            null
+        }
+        if (targetDate == null) {
+            println("La date cible est invalide.")
+            return
+        }
 
-            val header = lines.first()
-            // Filtrer les lignes (à partir de la deuxième ligne)
-            val filteredLines = lines.drop(1).filter { line ->
-                val parts = line.split(",")
-                if (parts.isNotEmpty()) {
-                    // Nettoyer la date : suppression des guillemets et espaces parasites
-                    val dateStr = parts[0].replace("\"", "").trim()
-                    if (dateStr.startsWith(dateToRemove)) {
+        // Normaliser la date cible dans un format standard (ici "yyyyMMdd")
+        val normalizedTarget = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(targetDate)
+
+        // Liste des formats possibles présents dans le CSV pour la première colonne
+        val dateFormats = listOf(
+            SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()),
+            SimpleDateFormat("d/M/yy HH:mm", Locale.getDefault()),
+            SimpleDateFormat("d/M/yyyy HH:mm", Locale.getDefault())
+        )
+
+        // Lecture de toutes les lignes du fichier en mémoire (UTF-8)
+        val lines = csvFile.readLines(Charsets.UTF_8)
+        if (lines.isEmpty()) {
+            println("Le fichier CSV est vide.")
+            return
+        }
+
+        // La première ligne est l'en-tête
+        val header = lines.first()
+        val filteredLines = mutableListOf<String>()
+
+        // Traiter chaque ligne (à partir de la deuxième)
+        for (line in lines.drop(1)) {
+            val parts = line.split(",")
+            if (parts.isNotEmpty()) {
+                val rawDateStr = parts[0].trim() // Par exemple "01/01/2025 00:18" ou "4/3/25 00:44"
+                var parsedDate: Date? = null
+                // Essayer de parser la date avec chacun des formats disponibles
+                for (format in dateFormats) {
+                    try {
+                        parsedDate = format.parse(rawDateStr)
+                        if (parsedDate != null) break
+                    } catch (e: Exception) {
+                        // En cas d'erreur, on continue avec le format suivant
+                    }
+                }
+                if (parsedDate != null) {
+                    // Normaliser la date de la ligne
+                    val normalizedLineDate = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(parsedDate)
+                    if (normalizedLineDate == normalizedTarget) {
                         println("Ligne supprimée : $line")
-                        false
-                    } else {
-                        true
+                        continue  // Ne pas inclure cette ligne dans le nouveau contenu
                     }
                 } else {
-                    true
+                    // Si la date ne peut pas être parsée, on peut choisir de conserver la ligne
+                    println("Impossible de parser la date pour la ligne : $line")
                 }
             }
-
-            // Reconstituer le contenu du fichier filtré
-            val newContent = buildString {
-                append(header).append("\n")
-                filteredLines.forEach { line ->
-                    append(line).append("\n")
-                }
-            }
-
-            // Création d'une sauvegarde de l'original
-            val dateFormat = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault())
-            val currentDateTime = dateFormat.format(Date())
-            val backupFile = File(csvFile.parentFile, "oapsaimiML2_records_$currentDateTime.csv")
-            csvFile.copyTo(backupFile, overwrite = true)
-
-            // Écriture du nouveau contenu filtré dans le fichier original
-            csvFile.writeText(newContent, Charsets.UTF_8)
-
-            println("Le fichier original a été sauvegardé sous '${backupFile.name}', et le fichier filtré a été écrit.")
-        } catch (e: Exception) {
-            println("Erreur lors de la gestion des fichiers : ${e.message}")
+            filteredLines.add(line)
         }
+
+        // Reconstituer le contenu final : en-tête + lignes filtrées
+        val newContent = buildString {
+            append(header).append("\n")
+            for (line in filteredLines) {
+                append(line).append("\n")
+            }
+        }
+
+        // Créer une sauvegarde du fichier original en y ajoutant un timestamp
+        val backupFileName = "oapsaimiML2_records_${SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())}.csv"
+        val backupFile = File(csvFile.parentFile, backupFileName)
+        csvFile.copyTo(backupFile, overwrite = true)
+
+        // Écraser le fichier original avec le contenu filtré
+        csvFile.writeText(newContent, Charsets.UTF_8)
+
+        println("Fichier mis à jour. Backup créé sous '${backupFile.name}'.")
     }
 
     private fun logDataToCsv(predictedSMB: Float, smbToGive: Float) {
@@ -2958,7 +2992,7 @@ private fun neuralnetwork5(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "05 Avril 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "06 Avril 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
