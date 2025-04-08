@@ -155,6 +155,49 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val MAX_ZERO_BASAL_DURATION = 60  // Durée maximale autorisée en minutes à 0 basal
 
     private fun Double.toFixed2(): String = DecimalFormat("0.00#").format(round(this, 2))
+    /**
+     * Prédit l’évolution de la glycémie sur un horizon donné (en minutes),
+     * avec des pas de 5 minutes.
+     *
+     * @param currentBG La glycémie actuelle (mg/dL)
+     * @param basalCandidate La dose basale candidate (en U/h)
+     * @param horizonMinutes L’horizon de prédiction (ex. 30 minutes)
+     * @param insulinSensitivity La sensibilité insulinique (mg/dL/U)
+     * @return Une liste de glycémies prédites pour chaque pas de 5 minutes.
+     */
+    private fun predictGlycemia(currentBG: Double, basalCandidate: Double, horizonMinutes: Int, insulinSensitivity: Double): List<Double> {
+        val predictions = mutableListOf<Double>()
+        var bgSimulated = currentBG
+        // Supposons un pas de 5 minutes, et une action linéaire de l'insuline
+        val steps = horizonMinutes / 5
+        for (i in 1..steps) {
+            // Par exemple, on soustrait une quantité proportionnelle à la dose basale et à la sensibilité
+            bgSimulated -= insulinSensitivity * basalCandidate * (5.0 / 60.0)
+            predictions.add(bgSimulated)
+        }
+        return predictions
+    }
+    /**
+     * Calcule la fonction de coût, ici la somme des carrés des écarts entre les glycémies prédites et la glycémie cible.
+     *
+     * @param basalCandidate La dose candidate de basal.
+     * @param currentBG La glycémie actuelle.
+     * @param targetBG La glycémie cible.
+     * @param horizonMinutes L’horizon de prédiction (en minutes).
+     * @param insulinSensitivity La sensibilité insulinique.
+     * @return Le coût cumulé.
+     */
+    fun costFunction(
+        basalCandidate: Double, currentBG: Double,
+        targetBG: Double, horizonMinutes: Int,
+        insulinSensitivity: Double, nnPrediction: Double
+    ): Double {
+        val predictions = predictGlycemia(currentBG, basalCandidate, horizonMinutes, insulinSensitivity)
+        val predictionCost = predictions.sumOf { (it - targetBG).pow(2) }
+        val nnPenalty = (basalCandidate - nnPrediction).pow(2)
+        return predictionCost + 0.5 * nnPenalty  // Pondération du terme de pénalité
+    }
+
 
     private fun roundBasal(value: Double): Double = value
     fun getZeroBasalDuration(persistenceLayer: PersistenceLayer, lookBackHours: Int): Int {
@@ -2784,7 +2827,43 @@ private fun neuralnetwork5(
         AimiInsReq = if (AimiInsReq < smbToGive) AimiInsReq else smbToGive.toDouble()
 
         val finalInsulinDose = round(AimiInsReq, 2)
+        // ===== Intégration du module MPC et du correctif PI =====
+// Exemple d’optimisation simple sur la dose basale candidate
 
+// Définition des bornes (par exemple de 0.0 à la basale courante maximale ou une valeur fixée)
+        val doseMin = 0.0
+        val doseMax = maxSMB
+// Paramètres pour le module prédictif
+        val horizon = 30  // horizon en minutes
+        val insulinSensitivity = variableSensitivity.toDouble()  // conversion si nécessaire
+
+// On utilise une recherche itérative simple pour trouver la dose qui minimise le coût
+        var optimalDose = doseMin
+        var bestCost = Double.MAX_VALUE
+        val nSteps = 20  // nombre de pas d’échantillonnage entre doseMin et doseMax
+
+        for (i in 0..nSteps) {
+            val candidate = doseMin + i * (doseMax - doseMin) / nSteps
+            val cost = costFunction(basal, bg.toDouble(), targetBg.toDouble(), horizon, insulinSensitivity, smbToGive.toDouble())
+            if (cost < bestCost) {
+                bestCost = cost
+                optimalDose = candidate
+            }
+        }
+
+// Correction en boucle fermée avec un simple contrôleur PI
+        val error = bg.toDouble() - targetBg.toDouble()  // erreur actuelle
+        val Kp = 0.1  // gain proportionnel (à calibrer)
+        val correction = -Kp * error
+
+        val optimalBasalMPC = optimalDose + correction
+
+// On loggue ces valeurs pour debug
+        consoleLog.add("Module MPC: dose candidate = ${optimalDose}, correction = ${correction}, optimalBasalMPC = ${optimalBasalMPC}")
+
+// On peut maintenant utiliser cette dose pour ajuster la décision.
+        smbToGive = optimalBasalMPC.toFloat()
+// ===== Fin de l’intégration du module MPC =====
         smbToGive = applySafetyPrecautions(mealData,finalInsulinDose.toFloat())
         smbToGive = roundToPoint05(smbToGive)
 
@@ -3025,7 +3104,7 @@ private fun neuralnetwork5(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "06 Avril 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "07 Avril 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
