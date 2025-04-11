@@ -140,6 +140,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     override val algorithm = APSResult.Algorithm.AIMI
     override var lastAPSResult: DetermineBasalResult? = null
     override fun supportsDynamicIsf(): Boolean = preferences.get(BooleanKey.ApsUseDynamicSensitivity)
+    // Dans votre classe principale (ou plugin), vous pouvez déclarer :
+    private val kalmanISFCalculator = KalmanISFCalculator(tddCalculator, preferences, aapsLogger)
 
     @SuppressLint("DefaultLocale")
     override fun getIsfMgdl(profile: Profile, caller: String): Double? {
@@ -155,7 +157,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             start
         )
 
-        return sensitivity.second?.let { it * multiplier }
+        return sensitivity.second?.let { it * multiplier}
     }
 
     override fun getAverageIsfMgdl(timestamp: Long, caller: String): Double? {
@@ -259,6 +261,95 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         return recentDeltas
     }
     @Synchronized
+//     private fun calculateVariableIsf(timestamp: Long, bg: Double?): Pair<String, Double?> {
+//         if (!preferences.get(BooleanKey.ApsUseDynamicSensitivity)) return Pair("OFF", null)
+//
+//         val result = persistenceLayer.getApsResultCloseTo(timestamp)
+//         if (result?.variableSens != null) {
+//             return Pair("DB", result.variableSens)
+//         }
+//
+//         val glucose = bg ?: glucoseStatusProvider.glucoseStatusData?.glucose ?: return Pair("GLUC", null)
+//         val delta = glucoseStatusProvider.glucoseStatusData?.delta
+//
+//         // Cache system to optimize repeated calculations
+//         val key = timestamp - timestamp % T.mins(30).msecs() + glucose.toLong()
+//         val cached = dynIsfCache[key]
+//         if (cached != null && timestamp < dateUtil.now()) {
+//             return Pair("HIT", cached)
+//         }
+//
+//         // Minimum TDD to avoid instability in new installations
+//         val minTDD = 10.0
+//         val tdd7P: Double = preferences.get(DoubleKey.OApsAIMITDD7)
+//         val tdd7D = tddCalculator.averageTDD(tddCalculator.calculate(7, allowMissingDays = false))
+//         if (tdd7D != null && tdd7D.data.totalAmount > tdd7P && tdd7D.data.totalAmount > 1.3 * tdd7P) {
+//             tdd7D.data.totalAmount = 1.2 * tdd7P
+//         }
+//         if (tdd7D != null && tdd7D.data.totalAmount < tdd7P * 0.9) {
+//     tdd7D.data.totalAmount = tdd7P * 0.9
+//     aapsLogger.info(LTag.APS, "TDD for 7 days was too low. Adjusted to 90% of TDD7P: ${tdd7D.data.totalAmount}")
+//         }
+//
+//         var tdd2Days = tddCalculator.averageTDD(tddCalculator.calculate(2, allowMissingDays = false))?.data?.totalAmount ?: 0.0
+//         if (tdd2Days == 0.0 || tdd2Days < tdd7P) tdd2Days = tdd7P
+//
+//         val tdd2DaysPerHour = tdd2Days / 24
+//         val tddLast4H = tdd2DaysPerHour * 4
+//
+//         var tddDaily = tddCalculator.averageTDD(tddCalculator.calculate(1, allowMissingDays = false))?.data?.totalAmount ?: 0.0
+//         if (tddDaily == 0.0 || tddDaily < tdd7P / 2) tddDaily = maxOf(tdd7P, minTDD)
+//         if (tddDaily > tdd7P && tddDaily > 1.1 * tdd7P) {
+//             tddDaily = 1.1 * tdd7P
+//         }
+//
+//         var tdd24Hrs = tddCalculator.calculateDaily(-24, 0)?.totalAmount ?: 0.0
+//         if (tdd24Hrs == 0.0) tdd24Hrs = tdd7P
+//         val tdd24HrsPerHour = tdd24Hrs / 24
+//         val tddLast8to4H = tdd24HrsPerHour * 4
+//
+//         val tddWeightedFromLast8H = ((0.3 * tdd2DaysPerHour) + (1.2 * tddLast4H) + (0.5 * tddLast8to4H)) * 3
+//         var tdd = (tddWeightedFromLast8H * 0.60) + (tdd2Days * 0.10) + (tddDaily * 0.30)
+//
+//         val isfMgdl = profileFunction.getProfile()?.getProfileIsfMgdl()
+//
+//         var sensitivity = if (glucose != null) Round.roundTo(1800 / (tdd * ln(glucose / 75.0 + 1)), 0.1) else isfMgdl
+//
+//         // 🔹 ISF correction limits to avoid extreme values
+//         if (sensitivity!! < 5.0) sensitivity = 5.0
+//         if (sensitivity > 300.0) sensitivity = 300.0
+//
+// //historique récent des deltas sous forme de liste :
+//         val recentDeltas = getRecentDeltas()
+//         val predicted = predictedDelta(recentDeltas)
+//         val dynamicFactor = dynamicDeltaCorrectionFactor(delta,predicted, bg)
+//         // 🔹 Apply smoothing function to avoid abrupt changes in ISF
+//         val calendarInstance = Calendar.getInstance()
+//         val hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
+//         //sensitivity = smoothSensitivityChange(sensitivity, glucose, delta)
+//         val smoothedISF =if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) smoothSensitivityChange(sensitivity, glucose, predicted) else smoothSensitivityChange(sensitivity, glucose, delta)
+//         aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $sensitivity, après lissage : $smoothedISF")
+//         sensitivity = smoothedISF
+//         // Apply ISF correction with delta factor
+//         //sensitivity *= deltaCorrectionFactor
+//         sensitivity *= dynamicFactor
+//
+//         // 🔹 Prevent ISF from being too low in case of large drops
+//         if (sensitivity < 5.0) {
+//             aapsLogger.warn(LTag.APS, "ISF trop bas ! Ajusté à 5.0 au lieu de $sensitivity")
+//             sensitivity = 5.0
+//         }
+//         if (sensitivity > 300.0){
+//             aapsLogger.warn(LTag.APS, "ISF trop haut ! Ajusté à 300.0 au lieu de $sensitivity")
+//             sensitivity = 300.0
+//         }
+//         aapsLogger.debug(LTag.APS, "🔍 TDD ajusté : $tdd")
+//         // Cache calculated ISF
+//         if (dynIsfCache.size() > 1000) dynIsfCache.clear()
+//         dynIsfCache.put(key, sensitivity)
+//
+//         return Pair("CALC", sensitivity)
+//     }
     private fun calculateVariableIsf(timestamp: Long, bg: Double?): Pair<String, Double?> {
         if (!preferences.get(BooleanKey.ApsUseDynamicSensitivity)) return Pair("OFF", null)
 
@@ -268,86 +359,30 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         }
 
         val glucose = bg ?: glucoseStatusProvider.glucoseStatusData?.glucose ?: return Pair("GLUC", null)
-        val delta = glucoseStatusProvider.glucoseStatusData?.delta
-
-        // Cache system to optimize repeated calculations
-        val key = timestamp - timestamp % T.mins(30).msecs() + glucose.toLong()
-        val cached = dynIsfCache[key]
-        if (cached != null && timestamp < dateUtil.now()) {
-            return Pair("HIT", cached)
-        }
-
-        // Minimum TDD to avoid instability in new installations
-        val minTDD = 10.0
-        val tdd7P: Double = preferences.get(DoubleKey.OApsAIMITDD7)
-        val tdd7D = tddCalculator.averageTDD(tddCalculator.calculate(7, allowMissingDays = false))
-        if (tdd7D != null && tdd7D.data.totalAmount > tdd7P && tdd7D.data.totalAmount > 1.3 * tdd7P) {
-            tdd7D.data.totalAmount = 1.2 * tdd7P
-        }
-        if (tdd7D != null && tdd7D.data.totalAmount < tdd7P * 0.9) {
-    tdd7D.data.totalAmount = tdd7P * 0.9
-    aapsLogger.info(LTag.APS, "TDD for 7 days was too low. Adjusted to 90% of TDD7P: ${tdd7D.data.totalAmount}")
-        }
-
-        var tdd2Days = tddCalculator.averageTDD(tddCalculator.calculate(2, allowMissingDays = false))?.data?.totalAmount ?: 0.0
-        if (tdd2Days == 0.0 || tdd2Days < tdd7P) tdd2Days = tdd7P
-
-        val tdd2DaysPerHour = tdd2Days / 24
-        val tddLast4H = tdd2DaysPerHour * 4
-
-        var tddDaily = tddCalculator.averageTDD(tddCalculator.calculate(1, allowMissingDays = false))?.data?.totalAmount ?: 0.0
-        if (tddDaily == 0.0 || tddDaily < tdd7P / 2) tddDaily = maxOf(tdd7P, minTDD)
-        if (tddDaily > tdd7P && tddDaily > 1.1 * tdd7P) {
-            tddDaily = 1.1 * tdd7P
-        }
-
-        var tdd24Hrs = tddCalculator.calculateDaily(-24, 0)?.totalAmount ?: 0.0
-        if (tdd24Hrs == 0.0) tdd24Hrs = tdd7P
-        val tdd24HrsPerHour = tdd24Hrs / 24
-        val tddLast8to4H = tdd24HrsPerHour * 4
-
-        val tddWeightedFromLast8H = ((0.3 * tdd2DaysPerHour) + (1.2 * tddLast4H) + (0.5 * tddLast8to4H)) * 3
-        var tdd = (tddWeightedFromLast8H * 0.60) + (tdd2Days * 0.10) + (tddDaily * 0.30)
-
-        val isfMgdl = profileFunction.getProfile()?.getProfileIsfMgdl()
-
-        var sensitivity = if (glucose != null) Round.roundTo(1800 / (tdd * ln(glucose / 75.0 + 1)), 0.1) else isfMgdl
-
-        // 🔹 ISF correction limits to avoid extreme values
-        if (sensitivity!! < 5.0) sensitivity = 5.0
-        if (sensitivity > 300.0) sensitivity = 300.0
-
-//historique récent des deltas sous forme de liste :
+        val currentDelta = glucoseStatusProvider.glucoseStatusData?.delta
         val recentDeltas = getRecentDeltas()
-        val predicted = predictedDelta(recentDeltas)
-        val dynamicFactor = dynamicDeltaCorrectionFactor(delta,predicted, bg)
-        // 🔹 Apply smoothing function to avoid abrupt changes in ISF
+        val predictedDelta = predictedDelta(recentDeltas)
+        val dynamicFactor = dynamicDeltaCorrectionFactor(currentDelta,predictedDelta, bg)
+        // Calcul adaptatif via filtre Kalman (la classe KalmanISFCalculator doit être instanciée préalablement)
+        var adaptiveISF = kalmanISFCalculator.calculateISF(glucose, currentDelta, predictedDelta)
         val calendarInstance = Calendar.getInstance()
         val hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
-        //sensitivity = smoothSensitivityChange(sensitivity, glucose, delta)
-        val smoothedISF =if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) smoothSensitivityChange(sensitivity, glucose, predicted) else smoothSensitivityChange(sensitivity, glucose, delta)
-        aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $sensitivity, après lissage : $smoothedISF")
-        sensitivity = smoothedISF
-        // Apply ISF correction with delta factor
-        //sensitivity *= deltaCorrectionFactor
-        sensitivity *= dynamicFactor
+        val smoothedISF =if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) smoothSensitivityChange(adaptiveISF, glucose, predictedDelta) else smoothSensitivityChange(adaptiveISF, glucose, currentDelta)
+        aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $adaptiveISF, après lissage : $smoothedISF")
+        aapsLogger.debug(LTag.APS, "Adaptive ISF computed via Kalman: $adaptiveISF for BG: $glucose")
+        adaptiveISF *= dynamicFactor
+        // Imposer une valeur minimale de 5 et maximale de 300
+        val finalISF = adaptiveISF.coerceIn(5.0, 300.0)
+        aapsLogger.debug(LTag.APS, "Final ISF after clamping: $finalISF (min=5, max=300)")
 
-        // 🔹 Prevent ISF from being too low in case of large drops
-        if (sensitivity < 5.0) {
-            aapsLogger.warn(LTag.APS, "ISF trop bas ! Ajusté à 5.0 au lieu de $sensitivity")
-            sensitivity = 5.0
-        }
-        if (sensitivity > 300.0){
-            aapsLogger.warn(LTag.APS, "ISF trop haut ! Ajusté à 300.0 au lieu de $sensitivity")
-            sensitivity = 300.0
-        }
-        aapsLogger.debug(LTag.APS, "🔍 TDD ajusté : $tdd")
-        // Cache calculated ISF
+        // Vous pouvez ensuite mettre en cache cette valeur si nécessaire
+        val key = timestamp - timestamp % T.mins(30).msecs() + glucose.toLong()
         if (dynIsfCache.size() > 1000) dynIsfCache.clear()
-        dynIsfCache.put(key, sensitivity)
+        dynIsfCache.put(key, finalISF)
 
-        return Pair("CALC", sensitivity)
+        return Pair("CALC", finalISF)
     }
+
 
     private fun smoothSensitivityChange(
         rawSensitivity: Double,
@@ -521,90 +556,117 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         var tdd = 0.0
         if (dynIsfMode) {
             val tdd7P: Double = preferences.get(DoubleKey.OApsAIMITDD7)
-
-// Plancher pour éviter des TDD trop faibles au démarrage
-            val minTDD = 10.0
-
-// Récupération et ajustement du TDD sur 7 jours
-            var tdd7D = tddCalculator.averageTDD(tddCalculator.calculate(7, allowMissingDays = false))
-            if (tdd7D != null && tdd7D.data.totalAmount > tdd7P && tdd7D.data.totalAmount > 1.3 * tdd7P) {
-                tdd7D.data.totalAmount = 1.2 * tdd7P
-                aapsLogger.info(LTag.APS, "TDD for 7 days limited to 10% increase. New TDD7D: ${tdd7D.data.totalAmount}")
-            }
-            if (tdd7D != null && tdd7D.data.totalAmount < tdd7P * 0.9) {
-    tdd7D.data.totalAmount = tdd7P * 0.9
-    aapsLogger.info(LTag.APS, "TDD for 7 days was too low. Adjusted to 90% of TDD7P: ${tdd7D.data.totalAmount}")
-}
-
-// Calcul du TDD sur 2 jours
-            var tdd2Days = tddCalculator.averageTDD(tddCalculator.calculate(2, allowMissingDays = false))?.data?.totalAmount ?: 0.0
+//
+// // Plancher pour éviter des TDD trop faibles au démarrage
+//             val minTDD = 10.0
+//
+// // Récupération et ajustement du TDD sur 7 jours
+//             var tdd7D = tddCalculator.averageTDD(tddCalculator.calculate(7, allowMissingDays = false))
+//             if (tdd7D != null && tdd7D.data.totalAmount > tdd7P && tdd7D.data.totalAmount > 1.3 * tdd7P) {
+//                 tdd7D.data.totalAmount = 1.2 * tdd7P
+//                 aapsLogger.info(LTag.APS, "TDD for 7 days limited to 10% increase. New TDD7D: ${tdd7D.data.totalAmount}")
+//             }
+//             if (tdd7D != null && tdd7D.data.totalAmount < tdd7P * 0.9) {
+//     tdd7D.data.totalAmount = tdd7P * 0.9
+//     aapsLogger.info(LTag.APS, "TDD for 7 days was too low. Adjusted to 90% of TDD7P: ${tdd7D.data.totalAmount}")
+// }
+//
+ // Calcul du TDD sur 2 jours
+             var tdd2Days = tddCalculator.averageTDD(tddCalculator.calculate(2, allowMissingDays = false))?.data?.totalAmount ?: 0.0
             if (tdd2Days == 0.0 || tdd2Days < tdd7P) tdd2Days = tdd7P
-
-            val tdd2DaysPerHour = tdd2Days / 24
-            val tddLast4H = tdd2DaysPerHour * 4
-
-// Calcul du TDD sur 1 jour avec une limite minimale pour éviter des instabilités
-            var tddDaily = tddCalculator.averageTDD(tddCalculator.calculate(1, allowMissingDays = false))?.data?.totalAmount ?: 0.0
-            if (tddDaily == 0.0 || tddDaily < tdd7P / 2) tddDaily = maxOf(tdd7P, minTDD)
-
-            if (tddDaily > tdd7P && tddDaily > 1.1 * tdd7P) {
-                tddDaily = 1.1 * tdd7P
-                aapsLogger.info(LTag.APS, "TDD for 1 day limited to 10% increase. New TDDDaily: $tddDaily")
-            }
-
-// Calcul du TDD sur 24 heures
+//
+//             val tdd2DaysPerHour = tdd2Days / 24
+//             val tddLast4H = tdd2DaysPerHour * 4
+//
+// // Calcul du TDD sur 1 jour avec une limite minimale pour éviter des instabilités
+//             var tddDaily = tddCalculator.averageTDD(tddCalculator.calculate(1, allowMissingDays = false))?.data?.totalAmount ?: 0.0
+//             if (tddDaily == 0.0 || tddDaily < tdd7P / 2) tddDaily = maxOf(tdd7P, minTDD)
+//
+//             if (tddDaily > tdd7P && tddDaily > 1.1 * tdd7P) {
+//                 tddDaily = 1.1 * tdd7P
+//                 aapsLogger.info(LTag.APS, "TDD for 1 day limited to 10% increase. New TDDDaily: $tddDaily")
+//             }
+//
+// // Calcul du TDD sur 24 heures
             var tdd24Hrs = tddCalculator.calculateDaily(-24, 0)?.totalAmount ?: 0.0
             if (tdd24Hrs == 0.0) tdd24Hrs = tdd7P
-            val tdd24HrsPerHour = tdd24Hrs / 24
-            val tddLast8to4H = tdd24HrsPerHour * 4
-
-// Gestion du contexte glycémique et insulinique
-            val bg = glucoseStatusProvider.glucoseStatusData?.glucose
-            val delta = glucoseStatus?.delta
-
-
-// Calcul pondéré du TDD récent pour éviter les fluctuations extrêmes
-            val tddWeightedFromLast8H = ((1.2 * tdd2DaysPerHour) + (0.3 * tddLast4H) + (0.5 * tddLast8to4H)) * 3
-            var tdd = (tddWeightedFromLast8H * 0.20) + (tdd2Days * 0.50) + (tddDaily * 0.30)
-
-
-// Calcul de la sensibilité insulinique
-            val isfMgdl = profileFunction.getProfile()?.getProfileIsfMgdl()
-            var variableSensitivity = if (bg != null) Round.roundTo(1800 / (tdd * ln(bg / insulinDivisor + 1)), 0.1) else isfMgdl
-
-// 🔹 Vérification des bornes minimales et maximales
-            variableSensitivity = when {
-                variableSensitivity!! < 5.0 -> 5.0
-                variableSensitivity > 300.0 -> 300.0
-                else -> variableSensitivity
+           //val tdd24HrsPerHour = tdd24Hrs / 24
+           //val tddLast8to4H = tdd24HrsPerHour * 4
+//
+// // Gestion du contexte glycémique et insulinique
+//             val bg = glucoseStatusProvider.glucoseStatusData?.glucose
+//             val delta = glucoseStatus?.delta
+//
+//
+// // Calcul pondéré du TDD récent pour éviter les fluctuations extrêmes
+//             val tddWeightedFromLast8H = ((1.2 * tdd2DaysPerHour) + (0.3 * tddLast4H) + (0.5 * tddLast8to4H)) * 3
+//             var tdd = (tddWeightedFromLast8H * 0.20) + (tdd2Days * 0.50) + (tddDaily * 0.30)
+//
+//
+// // Calcul de la sensibilité insulinique
+//             val isfMgdl = profileFunction.getProfile()?.getProfileIsfMgdl()
+//             var variableSensitivity = if (bg != null) Round.roundTo(1800 / (tdd * ln(bg / insulinDivisor + 1)), 0.1) else isfMgdl
+//
+// // 🔹 Vérification des bornes minimales et maximales
+//             variableSensitivity = when {
+//                 variableSensitivity!! < 5.0 -> 5.0
+//                 variableSensitivity > 300.0 -> 300.0
+//                 else -> variableSensitivity
+//             }
+//
+//             val recentDeltas = getRecentDeltas()
+//             val predicted = predictedDelta(recentDeltas)
+//             val dynamicFactor = dynamicDeltaCorrectionFactor(delta,predicted, bg)
+//             val calendarInstance = Calendar.getInstance()
+//             val hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
+//
+//             // 🔹 5) Lissage de l'ISF pour éviter les variations brusques
+//             //variableSensitivity = smoothSensitivityChange(variableSensitivity, bg, delta)
+//             val smoothedISF =if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) smoothSensitivityChange(variableSensitivity, bg, predicted) else smoothSensitivityChange(variableSensitivity, bg, delta)
+//             aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $variableSensitivity, après lissage : $smoothedISF")
+//             variableSensitivity = smoothedISF
+//             // Application de la correction
+//             //variableSensitivity *= deltaCorrectionFactor
+//             variableSensitivity *= dynamicFactor
+//
+// // 🔹 6) Bornes minimales et maximales pour éviter des valeurs extrêmes
+//             variableSensitivity = variableSensitivity.coerceIn(5.0, 300.0)
+//             // 🔹 Prevent ISF from being too low in case of large drops
+//             if (variableSensitivity < 5.0) {
+//                 aapsLogger.warn(LTag.APS, "ISF trop bas ! Ajusté à 5.0 au lieu de $variableSensitivity")
+//                 variableSensitivity = 5.0
+//             }
+//             if (variableSensitivity > 300.0){
+//                 aapsLogger.warn(LTag.APS, "ISF trop haut ! Ajusté à 300.0 au lieu de $variableSensitivity")
+//                 variableSensitivity = 300.0
+//             }
+            // On récupère la glycémie et le delta actuel
+            val currentBG = glucoseStatusProvider.glucoseStatusData?.glucose
+            if (currentBG == null) {
+                aapsLogger.error(LTag.APS, "Données de glycémie indisponibles, impossibilité de calculer l'ISF adaptatif.")
+                return
             }
-
+            val currentDelta = glucoseStatusProvider.glucoseStatusData?.delta
             val recentDeltas = getRecentDeltas()
-            val predicted = predictedDelta(recentDeltas)
-            val dynamicFactor = dynamicDeltaCorrectionFactor(delta,predicted, bg)
+            val predictedDelta = predictedDelta(recentDeltas)
+
+            // Calcul adaptatif de l'ISF via le filtre de Kalman
+            var variableSensitivity = kalmanISFCalculator.calculateISF(currentBG, currentDelta, predictedDelta)
+            aapsLogger.debug(LTag.APS, "Adaptive ISF computed: $variableSensitivity for BG: $currentBG, currentDelta: $currentDelta, predictedDelta: $predictedDelta")
+
+            // Optionnel : application d'un lissage supplémentaire en fonction de l'heure de la journée
             val calendarInstance = Calendar.getInstance()
             val hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
+            variableSensitivity = if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) {
+                smoothSensitivityChange(variableSensitivity, currentBG, predictedDelta)
+            } else {
+                smoothSensitivityChange(variableSensitivity, currentBG, currentDelta)
+            }
+            aapsLogger.debug(LTag.APS, "Adaptive ISF after additional smoothing: $variableSensitivity")
 
-            // 🔹 5) Lissage de l'ISF pour éviter les variations brusques
-            //variableSensitivity = smoothSensitivityChange(variableSensitivity, bg, delta)
-            val smoothedISF =if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) smoothSensitivityChange(variableSensitivity, bg, predicted) else smoothSensitivityChange(variableSensitivity, bg, delta)
-            aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $variableSensitivity, après lissage : $smoothedISF")
-            variableSensitivity = smoothedISF
-            // Application de la correction
-            //variableSensitivity *= deltaCorrectionFactor
-            variableSensitivity *= dynamicFactor
-
-// 🔹 6) Bornes minimales et maximales pour éviter des valeurs extrêmes
+            // Imposition des bornes pour que l'ISF soit toujours compris entre 5 et 300
             variableSensitivity = variableSensitivity.coerceIn(5.0, 300.0)
-            // 🔹 Prevent ISF from being too low in case of large drops
-            if (variableSensitivity < 5.0) {
-                aapsLogger.warn(LTag.APS, "ISF trop bas ! Ajusté à 5.0 au lieu de $variableSensitivity")
-                variableSensitivity = 5.0
-            }
-            if (variableSensitivity > 300.0){
-                aapsLogger.warn(LTag.APS, "ISF trop haut ! Ajusté à 300.0 au lieu de $variableSensitivity")
-                variableSensitivity = 300.0
-            }
+            aapsLogger.debug(LTag.APS, "Final adaptive ISF after clamping: $variableSensitivity")
 
 // 🔹 Création du résultat final
             autosensResult = AutosensResult(
