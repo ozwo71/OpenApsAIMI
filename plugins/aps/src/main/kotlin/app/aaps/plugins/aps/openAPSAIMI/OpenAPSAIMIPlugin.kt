@@ -227,17 +227,22 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         if (delta == null || predicted == null || bg == null) return 1.0
         // Calcul de la moyenne du delta actuel et du delta prédit
         val combinedDelta = (delta + predicted) / 2.0
-        return if (combinedDelta > 0 && bg > 120) {
-            val factor = Math.exp(-0.3 * combinedDelta)
-            factor.coerceAtLeast(5.0 / 40.0)
-        } else if (combinedDelta < 0) {
-            val factor = Math.exp(0.15 * Math.abs(combinedDelta))
-            factor.coerceAtMost(1.4)
-        } else {
-            1.0
+        return when {
+            // Si BG baisse, on augmente la sensibilité de façon progressive
+            combinedDelta < 0 -> {
+                val factor = Math.exp(0.15 * Math.abs(combinedDelta))
+                factor.coerceAtMost(1.4)
+            }
+            // Si BG monte, n'appliquer une réduction que si combinedDelta est supérieur à un seuil (ici 10 mg/dL/5min)
+            combinedDelta > 4 -> {
+                // Réduction basée sur l'excès au-dessus du seuil
+                val factor = Math.exp(-0.3 * (combinedDelta - 4))
+                factor.coerceAtLeast(5.0 / 40.0)
+            }
+            // Pour des hausses faibles, ne pas appliquer de correction
+            else -> 1.0
         }
     }
-
 
     private fun getRecentDeltas(): List<Double> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
@@ -558,19 +563,19 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val tdd7P: Double = preferences.get(DoubleKey.OApsAIMITDD7)
 //
 // // Plancher pour éviter des TDD trop faibles au démarrage
-//             val minTDD = 10.0
+             val minTDD = 10.0
 //
-// // Récupération et ajustement du TDD sur 7 jours
-//             var tdd7D = tddCalculator.averageTDD(tddCalculator.calculate(7, allowMissingDays = false))
-//             if (tdd7D != null && tdd7D.data.totalAmount > tdd7P && tdd7D.data.totalAmount > 1.3 * tdd7P) {
-//                 tdd7D.data.totalAmount = 1.2 * tdd7P
-//                 aapsLogger.info(LTag.APS, "TDD for 7 days limited to 10% increase. New TDD7D: ${tdd7D.data.totalAmount}")
-//             }
-//             if (tdd7D != null && tdd7D.data.totalAmount < tdd7P * 0.9) {
-//     tdd7D.data.totalAmount = tdd7P * 0.9
-//     aapsLogger.info(LTag.APS, "TDD for 7 days was too low. Adjusted to 90% of TDD7P: ${tdd7D.data.totalAmount}")
-// }
-//
+// Récupération et ajustement du TDD sur 7 jours
+            var tdd7D = tddCalculator.averageTDD(tddCalculator.calculate(7, allowMissingDays = false))
+            if (tdd7D != null && tdd7D.data.totalAmount > tdd7P && tdd7D.data.totalAmount > 1.3 * tdd7P) {
+                tdd7D.data.totalAmount = 1.2 * tdd7P
+                aapsLogger.info(LTag.APS, "TDD for 7 days limited to 10% increase. New TDD7D: ${tdd7D.data.totalAmount}")
+            }
+            if (tdd7D != null && tdd7D.data.totalAmount < tdd7P * 0.9) {
+    tdd7D.data.totalAmount = tdd7P * 0.9
+    aapsLogger.info(LTag.APS, "TDD for 7 days was too low. Adjusted to 90% of TDD7P: ${tdd7D.data.totalAmount}")
+}
+
  // Calcul du TDD sur 2 jours
              var tdd2Days = tddCalculator.averageTDD(tddCalculator.calculate(2, allowMissingDays = false))?.data?.totalAmount ?: 0.0
             if (tdd2Days == 0.0 || tdd2Days < tdd7P) tdd2Days = tdd7P
@@ -578,14 +583,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 //             val tdd2DaysPerHour = tdd2Days / 24
 //             val tddLast4H = tdd2DaysPerHour * 4
 //
-// // Calcul du TDD sur 1 jour avec une limite minimale pour éviter des instabilités
-//             var tddDaily = tddCalculator.averageTDD(tddCalculator.calculate(1, allowMissingDays = false))?.data?.totalAmount ?: 0.0
-//             if (tddDaily == 0.0 || tddDaily < tdd7P / 2) tddDaily = maxOf(tdd7P, minTDD)
-//
-//             if (tddDaily > tdd7P && tddDaily > 1.1 * tdd7P) {
-//                 tddDaily = 1.1 * tdd7P
-//                 aapsLogger.info(LTag.APS, "TDD for 1 day limited to 10% increase. New TDDDaily: $tddDaily")
-//             }
+// Calcul du TDD sur 1 jour avec une limite minimale pour éviter des instabilités
+            var tddDaily = tddCalculator.averageTDD(tddCalculator.calculate(1, allowMissingDays = false))?.data?.totalAmount ?: 0.0
+            if (tddDaily == 0.0 || tddDaily < tdd7P / 2) tddDaily = maxOf(tdd7P, minTDD)
+
+            if (tddDaily > tdd7P && tddDaily > 1.1 * tdd7P) {
+                tddDaily = 1.1 * tdd7P
+                aapsLogger.info(LTag.APS, "TDD for 1 day limited to 10% increase. New TDDDaily: $tddDaily")
+            }
 //
 // // Calcul du TDD sur 24 heures
             var tdd24Hrs = tddCalculator.calculateDaily(-24, 0)?.totalAmount ?: 0.0
