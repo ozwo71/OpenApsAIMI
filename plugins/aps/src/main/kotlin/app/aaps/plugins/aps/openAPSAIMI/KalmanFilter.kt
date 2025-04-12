@@ -56,9 +56,9 @@ class KalmanISFCalculator(
 
     // Augmente la variance de processus pour plus de réactivité
     private val kalmanFilter = KalmanFilter(
-        stateEstimate = 20.0,
+        stateEstimate = 15.0,
         estimationError = 5.0,
-        processVariance = 2.0,      // Augmenté (était 0.5)
+        processVariance = 5.0,      // Augmenté (était 0.5)
         measurementVariance = 2.0
     )
 
@@ -70,14 +70,30 @@ class KalmanISFCalculator(
         return (0.2 * tdd7D) + (0.4 * tdd2Days) + (0.4 * tddDaily)
     }
 
+    // private fun computeRawISF(glucose: Double): Double {
+    //     val effectiveTDD = computeEffectiveTDD()
+    //     val safeTDD = if (effectiveTDD < 1.0) 1.0 else effectiveTDD
+    //     // Facteur additionnel : si la glycémie dépasse 200 mg/dL, on réduit rawISF
+    //     val bgFactor = if (glucose > 200.0) 0.7 else 1.0
+    //     val rawISF = SCALING_FACTOR / (safeTDD * ln(glucose / BASE_CONSTANT + 1)) * bgFactor
+    //     return rawISF.coerceIn(MIN_ISF, MAX_ISF)
+    // }
     private fun computeRawISF(glucose: Double): Double {
         val effectiveTDD = computeEffectiveTDD()
         val safeTDD = if (effectiveTDD < 1.0) 1.0 else effectiveTDD
-        // Facteur additionnel : si la glycémie dépasse 200 mg/dL, on réduit rawISF
-        val bgFactor = if (glucose > 200.0) 0.7 else 1.0
+        // Facteur BG : si glucose > 130, on applique une réduction progressive
+        val bgFactor = if (glucose > 130.0) {
+            // On déduit une réduction linéaire jusqu’à un minimum de 0.5 pour BG >= 250
+            val factor = 1.0 - ((glucose - 130.0) / (200.0 - 130.0)) * 0.5
+            factor.coerceAtLeast(0.5)
+        } else {
+            1.0
+        }
+        // On applique bgFactor à la formule classique
         val rawISF = SCALING_FACTOR / (safeTDD * ln(glucose / BASE_CONSTANT + 1)) * bgFactor
         return rawISF.coerceIn(MIN_ISF, MAX_ISF)
     }
+
 
     fun calculateISF(glucose: Double, currentDelta: Double?, predictedDelta: Double?): Double {
         val rawISF = computeRawISF(glucose)

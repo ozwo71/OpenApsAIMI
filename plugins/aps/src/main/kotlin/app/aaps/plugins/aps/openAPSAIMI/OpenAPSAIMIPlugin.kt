@@ -223,27 +223,53 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         return weightedSum / weights.sum()
     }
 
+    // private fun dynamicDeltaCorrectionFactor(delta: Double?, predicted: Double?, bg: Double?): Double {
+    //     if (delta == null || predicted == null || bg == null) return 1.0
+    //     // Calcul de la moyenne du delta actuel et du delta prédit
+    //     val combinedDelta = (delta + predicted) / 2.0
+    //     return when {
+    //         // Si BG baisse, on augmente la sensibilité de façon progressive
+    //         combinedDelta < 0 -> {
+    //             val factor = Math.exp(0.15 * Math.abs(combinedDelta))
+    //             factor.coerceAtMost(1.4)
+    //         }
+    //         bg > 130 -> 0.5
+    //         // Si BG monte, n'appliquer une réduction que si combinedDelta est supérieur à un seuil (ici 10 mg/dL/5min)
+    //         combinedDelta > 4 -> {
+    //             // Réduction basée sur l'excès au-dessus du seuil
+    //             val factor = Math.exp(-0.3 * (combinedDelta - 4))
+    //             factor.coerceAtLeast(5.0 / 40.0)
+    //         }
+    //         // Pour des hausses faibles, ne pas appliquer de correction
+    //         else -> 1.0
+    //     }
+    // }
     private fun dynamicDeltaCorrectionFactor(delta: Double?, predicted: Double?, bg: Double?): Double {
         if (delta == null || predicted == null || bg == null) return 1.0
-        // Calcul de la moyenne du delta actuel et du delta prédit
         val combinedDelta = (delta + predicted) / 2.0
         return when {
-            // Si BG baisse, on augmente la sensibilité de façon progressive
+            // En cas d'hypoglycémie (delta négatif), on augmente progressivement l'ISF
             combinedDelta < 0 -> {
                 val factor = Math.exp(0.15 * Math.abs(combinedDelta))
                 factor.coerceAtMost(1.4)
             }
-            bg > 140 -> 0.5
-            // Si BG monte, n'appliquer une réduction que si combinedDelta est supérieur à un seuil (ici 10 mg/dL/5min)
-            combinedDelta > 4 -> {
-                // Réduction basée sur l'excès au-dessus du seuil
-                val factor = Math.exp(-0.3 * (combinedDelta - 4))
-                factor.coerceAtLeast(5.0 / 40.0)
+            // En hyperglycémie : si BG est > 130, on applique une réduction progressive
+            bg > 130.0 -> {
+                // On réduit d’un certain pourcentage (ici jusqu’à 30%) en fonction de BG
+                val bgReduction = 1.0 - ((bg - 130.0) / (200.0 - 130.0)) * 0.3
+                // On combine ce facteur avec la réponse exponentielle basée sur combinedDelta si nécessaire
+                if (combinedDelta > 10) {
+                    // Si le delta est important, on accentue la réduction avec une réponse exponentielle
+                    val expFactor = Math.exp(-0.3 * (combinedDelta - 10))
+                    maxOf(expFactor, bgReduction)
+                } else {
+                    bgReduction
+                }
             }
-            // Pour des hausses faibles, ne pas appliquer de correction
             else -> 1.0
         }
     }
+
 
     private fun getRecentDeltas(): List<Double> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
