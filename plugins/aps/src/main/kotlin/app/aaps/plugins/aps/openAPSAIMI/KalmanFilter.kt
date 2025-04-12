@@ -73,7 +73,9 @@ class KalmanISFCalculator(
     private fun computeRawISF(glucose: Double): Double {
         val effectiveTDD = computeEffectiveTDD()
         val safeTDD = if (effectiveTDD < 1.0) 1.0 else effectiveTDD
-        val rawISF = SCALING_FACTOR / (safeTDD * ln(glucose / BASE_CONSTANT + 1))
+        // Facteur additionnel : si la glycémie dépasse 200 mg/dL, on réduit rawISF
+        val bgFactor = if (glucose > 200.0) 0.7 else 1.0
+        val rawISF = SCALING_FACTOR / (safeTDD * ln(glucose / BASE_CONSTANT + 1)) * bgFactor
         return rawISF.coerceIn(MIN_ISF, MAX_ISF)
     }
 
