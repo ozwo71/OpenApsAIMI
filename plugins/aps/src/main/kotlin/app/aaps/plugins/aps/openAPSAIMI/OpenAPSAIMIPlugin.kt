@@ -370,17 +370,17 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val smoothedISF =if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) smoothSensitivityChange(adaptiveISF, glucose, predictedDelta) else smoothSensitivityChange(adaptiveISF, glucose, currentDelta)
         aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $adaptiveISF, après lissage : $smoothedISF")
         aapsLogger.debug(LTag.APS, "Adaptive ISF computed via Kalman: $adaptiveISF for BG: $glucose")
-        adaptiveISF *= dynamicFactor
+        var sensitivity = adaptiveISF * dynamicFactor
         // Imposer une valeur minimale de 5 et maximale de 300
-        val finalISF = adaptiveISF.coerceIn(5.0, 300.0)
-        aapsLogger.debug(LTag.APS, "Final ISF after clamping: $finalISF (min=5, max=300)")
+        sensitivity = sensitivity.coerceIn(5.0, 300.0)
+        aapsLogger.debug(LTag.APS, "Final ISF after clamping: $sensitivity (min=5, max=300)")
 
         // Vous pouvez ensuite mettre en cache cette valeur si nécessaire
         val key = timestamp - timestamp % T.mins(30).msecs() + glucose.toLong()
         if (dynIsfCache.size() > 1000) dynIsfCache.clear()
-        dynIsfCache.put(key, finalISF)
+        dynIsfCache.put(key, sensitivity)
 
-        return Pair("CALC", finalISF)
+        return Pair("CALC", sensitivity)
     }
 
 
