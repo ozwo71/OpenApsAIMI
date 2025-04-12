@@ -580,8 +580,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
              var tdd2Days = tddCalculator.averageTDD(tddCalculator.calculate(2, allowMissingDays = false))?.data?.totalAmount ?: 0.0
             if (tdd2Days == 0.0 || tdd2Days < tdd7P) tdd2Days = tdd7P
 //
-//             val tdd2DaysPerHour = tdd2Days / 24
-//             val tddLast4H = tdd2DaysPerHour * 4
+             val tdd2DaysPerHour = tdd2Days / 24
+             val tddLast4H = tdd2DaysPerHour * 4
 //
 // Calcul du TDD sur 1 jour avec une limite minimale pour éviter des instabilités
             var tddDaily = tddCalculator.averageTDD(tddCalculator.calculate(1, allowMissingDays = false))?.data?.totalAmount ?: 0.0
@@ -595,8 +595,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 // // Calcul du TDD sur 24 heures
             var tdd24Hrs = tddCalculator.calculateDaily(-24, 0)?.totalAmount ?: 0.0
             if (tdd24Hrs == 0.0) tdd24Hrs = tdd7P
-           //val tdd24HrsPerHour = tdd24Hrs / 24
-           //val tddLast8to4H = tdd24HrsPerHour * 4
+           val tdd24HrsPerHour = tdd24Hrs / 24
+           val tddLast8to4H = tdd24HrsPerHour * 4
 //
 // // Gestion du contexte glycémique et insulinique
 //             val bg = glucoseStatusProvider.glucoseStatusData?.glucose
@@ -604,8 +604,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 //
 //
 // // Calcul pondéré du TDD récent pour éviter les fluctuations extrêmes
-//             val tddWeightedFromLast8H = ((1.2 * tdd2DaysPerHour) + (0.3 * tddLast4H) + (0.5 * tddLast8to4H)) * 3
-//             var tdd = (tddWeightedFromLast8H * 0.20) + (tdd2Days * 0.50) + (tddDaily * 0.30)
+             val tddWeightedFromLast8H = ((1.2 * tdd2DaysPerHour) + (0.3 * tddLast4H) + (0.5 * tddLast8to4H)) * 3
+             var tdd = (tddWeightedFromLast8H * 0.20) + (tdd2Days * 0.50) + (tddDaily * 0.30)
 //
 //
 // // Calcul de la sensibilité insulinique
