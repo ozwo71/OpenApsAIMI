@@ -51,69 +51,45 @@ class KalmanISFCalculator(
         private const val MIN_ISF = 5.0
         private const val MAX_ISF = 300.0
         private const val BASE_CONSTANT = 75.0
-        private const val SCALING_FACTOR = 1800.0 // Même facteur que dans la méthode classique
+        private const val SCALING_FACTOR = 1800.0
     }
 
-    // Initialisation du filtre de Kalman
-    // Les valeurs initiales (stateEstimate, estimationError, processVariance, measurementVariance)
-    // seront ensuite affinées pour s'adapter au profil de chaque patient.
+    // Augmente la variance de processus pour plus de réactivité
     private val kalmanFilter = KalmanFilter(
-        stateEstimate = 20.0,     // Valeur initiale approximative (peut être issue du profil)
-        estimationError = 5.0,      // Incertitude initiale sur l'estimation
-        processVariance = 0.5,      // Variance du processus (évolution de l'état)
-        measurementVariance = 2.0   // Variance de la mesure (peut être ajustée dynamiquement)
+        stateEstimate = 20.0,
+        estimationError = 5.0,
+        processVariance = 2.0,      // Augmenté (était 0.5)
+        measurementVariance = 2.0
     )
 
-    /**
-     * Calcule un TDD effectif en combinant plusieurs moyennes sur différentes périodes.
-     * La méthode simplifiée combine des moyennes sur 7 jours, 2 jours et 1 jour.
-     */
     private fun computeEffectiveTDD(): Double {
         val tdd7P = preferences.get(DoubleKey.OApsAIMITDD7)
         val tdd7D = tddCalculator.averageTDD(tddCalculator.calculate(7, allowMissingDays = false))?.data?.totalAmount ?: tdd7P
         val tdd2Days = tddCalculator.averageTDD(tddCalculator.calculate(2, allowMissingDays = false))?.data?.totalAmount ?: tdd7P
         val tddDaily = tddCalculator.averageTDD(tddCalculator.calculate(1, allowMissingDays = false))?.data?.totalAmount ?: tdd7P
-
-        // Combinaison pondérée des différentes périodes
-        return (0.3 * tdd7D) + (0.5 * tdd2Days) + (0.2 * tddDaily)
+        return (0.2 * tdd7D) + (0.4 * tdd2Days) + (0.4 * tddDaily)
     }
 
-    /**
-     * Calcule la mesure brute de l’ISF en fonction de la glycémie et du TDD effectif.
-     * Cette méthode utilise la formule classique.
-     */
     private fun computeRawISF(glucose: Double): Double {
         val effectiveTDD = computeEffectiveTDD()
-        val safeTDD = if (effectiveTDD < 1.0) 1.0 else effectiveTDD // éviter la division par zéro
+        val safeTDD = if (effectiveTDD < 1.0) 1.0 else effectiveTDD
         val rawISF = SCALING_FACTOR / (safeTDD * ln(glucose / BASE_CONSTANT + 1))
         return rawISF.coerceIn(MIN_ISF, MAX_ISF)
     }
 
-    /**
-     * Méthode principale de calcul de l’ISF qui utilise le filtre de Kalman.
-     *
-     * @param glucose      Glycémie actuelle en mg/dL.
-     * @param currentDelta Variation actuelle de la glycémie (optionnel).
-     * @param predictedDelta Variation prédite (optionnel).
-     * @return L’estimation filtrée de l’ISF.
-     */
     fun calculateISF(glucose: Double, currentDelta: Double?, predictedDelta: Double?): Double {
-        // 1. Calcul de la mesure brute selon la méthode classique
         val rawISF = computeRawISF(glucose)
         logger.debug(LTag.APS, "Raw ISF calculé : $rawISF pour BG = $glucose")
 
-        // 2. Ajustement dynamique de la variance de mesure en fonction du delta
-        // Par exemple, en cas de forte variation, on augmente l'incertitude sur la mesure.
+        // Ajuster measurementVariance pour être plus réactif en cas de forte variation
         kalmanFilter.measurementVariance = when {
-            currentDelta != null && abs(currentDelta) > 10 -> 4.0
-            currentDelta != null && abs(currentDelta) > 5 -> 3.0
+            currentDelta != null && abs(currentDelta) > 10 -> 1.0
+            currentDelta != null && abs(currentDelta) > 5 -> 1.5
             else -> 2.0
         }
 
-        // 3. Mise à jour du filtre de Kalman avec la mesure brute
         val filteredISF = kalmanFilter.update(rawISF).coerceIn(MIN_ISF, MAX_ISF)
         logger.debug(LTag.APS, "ISF filtré par Kalman : $filteredISF (variance de mesure = ${kalmanFilter.measurementVariance})")
-
         return filteredISF
     }
 }
