@@ -233,6 +233,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 val factor = Math.exp(0.15 * Math.abs(combinedDelta))
                 factor.coerceAtMost(1.4)
             }
+            bg > 150 -> 0.5
             // Si BG monte, n'appliquer une réduction que si combinedDelta est supérieur à un seuil (ici 10 mg/dL/5min)
             combinedDelta > 4 -> {
                 // Réduction basée sur l'excès au-dessus du seuil
