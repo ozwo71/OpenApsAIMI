@@ -59,8 +59,8 @@ class KalmanISFCalculator(
     private val kalmanFilter = KalmanFilter(
         stateEstimate = 15.0,
         estimationError = 5.0,
-        processVariance = 2.0,
-        measurementVariance = 1.0
+        processVariance = 10.0,
+        measurementVariance = 2.0
     )
 
     private fun computeEffectiveTDD(): Double {
@@ -84,14 +84,23 @@ class KalmanISFCalculator(
         val safeTDD = if (effectiveTDD < 1.0) 1.0 else effectiveTDD
 
         // Apply a progressive reduction in ISF based on increasing glucose levels
-        val bgFactor = when {
-            glucose >= 180.0 -> 0.4  // Maximum reduction at high glucose levels
-            glucose >= 160.0 -> 0.5
-            glucose >= 150.0 -> 0.6
-            glucose >= 140.0 -> 0.7
-            glucose >= 130.0 -> 0.9
-            else -> 1.0
+        // val bgFactor = when {
+        //     glucose >= 180.0 -> 0.3  // Maximum reduction at high glucose levels
+        //     glucose >= 160.0 -> 0.4
+        //     glucose >= 150.0 -> 0.5
+        //     glucose >= 130.0 -> 0.7
+        //     glucose >= 115.0 -> 0.8
+        //     glucose >= 100.0 -> 0.9
+        //     else -> 1.0
+        // }
+        val bgFactor = if (glucose > 100.0) {
+            // Apply exponential decay for faster reduction
+            val factor = Math.exp((glucose - 100.0)/50.0)
+            1.0 / factor.coerceAtLeast(1.0).coerceAtMost(2.0)
+        } else {
+            1.0
         }
+
 
         val rawISF = (SCALING_FACTOR / (safeTDD * ln(glucose / BASE_CONSTANT + 1))) * bgFactor
         return rawISF.coerceIn(MIN_ISF, MAX_ISF)
@@ -114,8 +123,8 @@ class KalmanISFCalculator(
 
         // Set new measurement variance based on combined delta influence
         var newMeasurementVariance = when {
-            deltaInfluence > 15 -> 1.0  // High responsiveness for significant changes
-            deltaInfluence > 8 -> 1.5   // Moderate responsiveness
+            deltaInfluence > 10 -> 0.5  // High responsiveness for significant changes
+            deltaInfluence > 5 -> 1.0   // Moderate responsiveness
             else -> 2.0                // Standard responsiveness
         }
 
