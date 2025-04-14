@@ -876,7 +876,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
         val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
         val autodriveminDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
-        val autodriveISF: Int = preferences.get(IntKey.OApsAIMIautodriveISF)
+        //val autodriveISF: Int = preferences.get(IntKey.OApsAIMIautodriveISF)
         val autodriveTarget: Int = preferences.get(IntKey.OApsAIMIAutodriveTarget)
         val autodriveBG: Int = preferences.get(IntKey.OApsAIMIAutodriveBG)
         // Récupération des deltas récents et calcul du delta prédit
@@ -889,8 +889,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return false
         }
 
-        return variableSensitivity <= autodriveISF &&
-            targetBg <= autodriveTarget &&
+        return targetBg <= autodriveTarget &&
             combinedDelta >= autodriveDelta &&
             autodrive &&
             slopeFromMinDeviation >= autodriveminDeviation &&
