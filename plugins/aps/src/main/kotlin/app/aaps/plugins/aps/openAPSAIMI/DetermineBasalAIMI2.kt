@@ -2231,9 +2231,10 @@ private fun neuralnetwork5(
         this.stable = if (delta>-3 && delta<3 && shortAvgDelta>-3 && shortAvgDelta<3 && longAvgDelta>-3 && longAvgDelta<3 && bg < 180) 1 else 0
         val AutodriveAcceleration = preferences.get(DoubleKey.OApsAIMIAutodriveAcceleration)
         val night = now in 1..7
-        if (!night && !hasReceivedPbolusMInLastHour(1.0) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime) {
-            rT.units = 1.0
-            rT.reason.append("Détection précoce de repas: Microbolusing 1 U. ")
+        val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
+        if (predictedBg > 180 && !night && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime) {
+            rT.units = pbolusAS
+            rT.reason.append("Détection précoce de repas/snack: Microbolusing ${pbolusAS}U. ")
             return rT
         }
         if (isMealModeCondition()){
