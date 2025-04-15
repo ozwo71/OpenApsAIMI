@@ -2231,7 +2231,7 @@ private fun neuralnetwork5(
         //val AutodriveAcceleration = preferences.get(DoubleKey.OApsAIMIAutodriveAcceleration)
         val night = now in 1..7
         val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
-        if (predictedBg > 150 && !night && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime) {
+        if (bg > 110 && predictedBg > 150 && !night && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime) {
             rT.units = pbolusAS
             rT.reason.append("Détection précoce de repas/snack: Microbolusing ${pbolusAS}U. ")
             return rT
@@ -3110,7 +3110,7 @@ private fun neuralnetwork5(
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "14 Avril 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", "15 Avril 2025"))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
