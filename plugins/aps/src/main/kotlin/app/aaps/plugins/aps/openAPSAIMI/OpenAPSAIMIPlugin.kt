@@ -140,6 +140,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     override val algorithm = APSResult.Algorithm.AIMI
     override var lastAPSResult: DetermineBasalResult? = null
     override fun supportsDynamicIsf(): Boolean = preferences.get(BooleanKey.ApsUseDynamicSensitivity)
+
     // Dans votre classe principale (ou plugin), vous pouvez déclarer :
     private val kalmanISFCalculator = KalmanISFCalculator(tddCalculator, preferences, aapsLogger)
 
@@ -157,7 +158,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             start
         )
 
-        return sensitivity.second?.let { it * multiplier}
+        return sensitivity.second?.let { it * multiplier }
     }
 
     override fun getAverageIsfMgdl(timestamp: Long, caller: String): Double? {
@@ -192,6 +193,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val pump = activePlugin.activePump
         return pump.pumpDescription.isTempBasalCapable
     }
+
     override fun preprocessPreferences(preferenceFragment: PreferenceFragmentCompat) {
         super.preprocessPreferences(preferenceFragment)
 
@@ -213,7 +215,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         preferenceFragment.findPreference<SwitchPreference>(BooleanKey.ApsSensitivityRaisesTarget.key)?.isVisible = autoSensOrDynIsfSensEnabled
         preferenceFragment.findPreference<AdaptiveIntPreference>(IntKey.ApsUamMaxMinutesOfBasalToLimitSmb.key)?.isVisible = smbEnabled && uamEnabled
     }
+
     private val dynIsfCache = LongSparseArray<Double>()
+
     // Exemple de fonction pour prédire le delta futur à partir d'un historique récent
     private fun predictedDelta(deltaHistory: List<Double>): Double {
         if (deltaHistory.isEmpty()) return 0.0
@@ -254,7 +258,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 factor.coerceAtMost(1.4)
             }
             // En hyperglycémie : si BG est > 130, on applique une réduction progressive
-            bg > 130.0 -> {
+            bg > 130.0        -> {
                 // On réduit d’un certain pourcentage (ici jusqu’à 30%) en fonction de BG
                 val bgReduction = 1.0 - ((bg - 130.0) / (200.0 - 130.0)) * 0.3
                 // On combine ce facteur avec la réponse exponentielle basée sur combinedDelta si nécessaire
@@ -266,10 +270,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     bgReduction
                 }
             }
-            else -> 1.0
+
+            else              -> 1.0
         }
     }
-
 
     private fun getRecentDeltas(): List<Double> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
@@ -292,6 +296,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         }
         return recentDeltas
     }
+
     @Synchronized
 //     private fun calculateVariableIsf(timestamp: Long, bg: Double?): Pair<String, Double?> {
 //         if (!preferences.get(BooleanKey.ApsUseDynamicSensitivity)) return Pair("OFF", null)
@@ -394,7 +399,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val currentDelta = glucoseStatusProvider.glucoseStatusData?.delta
         val recentDeltas = getRecentDeltas()
         val predictedDelta = predictedDelta(recentDeltas)
-        val dynamicFactor = dynamicDeltaCorrectionFactor(currentDelta,predictedDelta, bg)
+        val dynamicFactor = dynamicDeltaCorrectionFactor(currentDelta, predictedDelta, bg)
         // Calcul adaptatif via filtre Kalman (la classe KalmanISFCalculator doit être instanciée préalablement)
         var adaptiveISF = kalmanISFCalculator.calculateISF(glucose, currentDelta, predictedDelta)
         // val calendarInstance = Calendar.getInstance()
@@ -414,7 +419,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         return Pair("CALC", sensitivity)
     }
-
 
     // private fun smoothSensitivityChange(
     //     rawSensitivity: Double,
@@ -513,7 +517,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     //     return newVal.coerceIn(0.1, 1.5)
     // }
 
-
     override fun invoke(initiator: String, tempBasalFallback: Boolean) {
         aapsLogger.debug(LTag.APS, "invoke from $initiator tempBasalFallback: $tempBasalFallback")
         lastAPSResult = null
@@ -589,7 +592,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val tdd7P: Double = preferences.get(DoubleKey.OApsAIMITDD7)
 //
 // // Plancher pour éviter des TDD trop faibles au démarrage
-             val minTDD = 10.0
+            val minTDD = 10.0
 //
 // Récupération et ajustement du TDD sur 7 jours
             var tdd7D = tddCalculator.averageTDD(tddCalculator.calculate(7, allowMissingDays = false))
@@ -598,16 +601,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 aapsLogger.info(LTag.APS, "TDD for 7 days limited to 10% increase. New TDD7D: ${tdd7D.data.totalAmount}")
             }
             if (tdd7D != null && tdd7D.data.totalAmount < tdd7P * 0.9) {
-    tdd7D.data.totalAmount = tdd7P * 0.9
-    aapsLogger.info(LTag.APS, "TDD for 7 days was too low. Adjusted to 90% of TDD7P: ${tdd7D.data.totalAmount}")
-}
+                tdd7D.data.totalAmount = tdd7P * 0.9
+                aapsLogger.info(LTag.APS, "TDD for 7 days was too low. Adjusted to 90% of TDD7P: ${tdd7D.data.totalAmount}")
+            }
 
- // Calcul du TDD sur 2 jours
-             var tdd2Days = tddCalculator.averageTDD(tddCalculator.calculate(2, allowMissingDays = false))?.data?.totalAmount ?: 0.0
+            // Calcul du TDD sur 2 jours
+            var tdd2Days = tddCalculator.averageTDD(tddCalculator.calculate(2, allowMissingDays = false))?.data?.totalAmount ?: 0.0
             if (tdd2Days == 0.0 || tdd2Days < tdd7P) tdd2Days = tdd7P
 //
-             val tdd2DaysPerHour = tdd2Days / 24
-             val tddLast4H = tdd2DaysPerHour * 4
+            val tdd2DaysPerHour = tdd2Days / 24
+            val tddLast4H = tdd2DaysPerHour * 4
 //
 // Calcul du TDD sur 1 jour avec une limite minimale pour éviter des instabilités
             var tddDaily = tddCalculator.averageTDD(tddCalculator.calculate(1, allowMissingDays = false))?.data?.totalAmount ?: 0.0
@@ -621,8 +624,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 // // Calcul du TDD sur 24 heures
             var tdd24Hrs = tddCalculator.calculateDaily(-24, 0)?.totalAmount ?: 0.0
             if (tdd24Hrs == 0.0) tdd24Hrs = tdd7P
-           val tdd24HrsPerHour = tdd24Hrs / 24
-           val tddLast8to4H = tdd24HrsPerHour * 4
+            val tdd24HrsPerHour = tdd24Hrs / 24
+            val tddLast8to4H = tdd24HrsPerHour * 4
 //
 // // Gestion du contexte glycémique et insulinique
 //             val bg = glucoseStatusProvider.glucoseStatusData?.glucose
@@ -630,8 +633,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 //
 //
 // // Calcul pondéré du TDD récent pour éviter les fluctuations extrêmes
-             val tddWeightedFromLast8H = ((1.2 * tdd2DaysPerHour) + (0.3 * tddLast4H) + (0.5 * tddLast8to4H)) * 3
-             var tdd = (tddWeightedFromLast8H * 0.20) + (tdd2Days * 0.50) + (tddDaily * 0.30)
+            val tddWeightedFromLast8H = ((1.2 * tdd2DaysPerHour) + (0.3 * tddLast4H) + (0.5 * tddLast8to4H)) * 3
+            var tdd = (tddWeightedFromLast8H * 0.20) + (tdd2Days * 0.50) + (tddDaily * 0.30)
 //
 //
 // // Calcul de la sensibilité insulinique
@@ -705,7 +708,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 ratioFromTdd = tdd24Hrs / tdd2Days,
                 ratioFromCarbs = 1.0 // Peut être ajusté si nécessaire
             )
-
 
             val iobArray = iobCobCalculator.calculateIobArrayForSMB(autosensResult, SMBDefaults.exercise_mode, SMBDefaults.half_basal_exercise_target, isTempTarget)
             val mealData = iobCobCalculator.getMealDataWithWaitingForCalculationFinish()
@@ -908,6 +910,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             .store(BooleanKey.ApsUseDynamicSensitivity, preferences)
             .store(IntKey.ApsDynIsfAdjustmentFactor, preferences)
     }
+
     // override fun addPreferenceScreen(preferenceManager: PreferenceManager, parent: PreferenceScreen, context: Context, requiredKey: String?) {
     //     val category = PreferenceCategory(context)
     //     parent.addPreference(category)
@@ -1108,13 +1111,24 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                             )
                         )
                         addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsAlwaysUseShortDeltas, summary = R.string.always_use_short_avg_summary, title = R.string.always_use_short_avg))
-                        addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsMaxDailyMultiplier, dialogMessage = R.string.openapsama_max_daily_safety_multiplier_summary, title = R.string.openapsama_max_daily_safety_multiplier))
                         addPreference(
-                            AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsMaxCurrentBasalMultiplier, dialogMessage = R.string.openapsama_current_basal_safety_multiplier_summary, title = R.string.openapsama_current_basal_safety_multiplier)
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.ApsMaxDailyMultiplier,
+                                dialogMessage = R.string.openapsama_max_daily_safety_multiplier_summary,
+                                title = R.string.openapsama_max_daily_safety_multiplier
+                            )
+                        )
+                        addPreference(
+                            AdaptiveDoublePreference(
+                                ctx = context,
+                                doubleKey = DoubleKey.ApsMaxCurrentBasalMultiplier,
+                                dialogMessage = R.string.openapsama_current_basal_safety_multiplier_summary,
+                                title = R.string.openapsama_current_basal_safety_multiplier
+                            )
                         )
                     })
                 })
-
 
             })
 
@@ -1199,7 +1213,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIMealFactor, dialogMessage = R.string.OApsAIMI_MealFactor_summary, title = R.string.OApsAIMI_MealFactor_title))
                         addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMImealinterval, dialogMessage = R.string.oaps_aimi_meal_interval_summary, title = R.string.oaps_aimi_meal_interval_title))
                     })
-
 
                 })
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
