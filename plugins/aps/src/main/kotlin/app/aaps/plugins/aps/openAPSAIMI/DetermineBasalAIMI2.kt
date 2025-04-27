@@ -3100,13 +3100,12 @@ private fun neuralnetwork5(
         this.zeroBasalAccumulatedMinutes = getZeroBasalDuration(persistenceLayer,2)
         val screenWidth = preferences.get(IntKey.OApsAIMIlogsize)// Largeur d'écran par défaut en caractères si non spécifié
         val columnWidth = (screenWidth / 2) - 2 // Calcul de la largeur des colonnes en fonction de la largeur de l'écran
-
+        ToastUtils.okToast("Autodrive on, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
         val logTemplate = buildString {
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
             appendLine(String.format("║ %-${screenWidth}s ║", "27 Avril 2025"))
-            ToastUtils.okToast("Autodrive on, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
