@@ -2404,19 +2404,6 @@ private fun neuralnetwork5(
                 sensitivityRatio = round(sensitivityRatio, 2)
                 consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
             }
-            // !profile.temptargetSet && bg < 110 && delta < 1 -> {
-            //     val baseHypoTarget = if (honeymoon) 130.0 else 110.0
-            //     val hypoTarget = baseHypoTarget * max(1.0, circadianSensitivity)
-            //     this.targetBg = min(hypoTarget.toFloat(), 166.0f)
-            //     target_bg = targetBg.toDouble()
-            //     val c = (halfBasalTarget - normalTarget).toDouble()
-            //     sensitivityRatio = c / (c + target_bg - normalTarget)
-            //     // limit sensitivityRatio to profile.autosens_max (1.2x by default)
-            //     sensitivityRatio = min(sensitivityRatio, profile.autosens_max)
-            //     sensitivityRatio = round(sensitivityRatio, 2)
-            //     consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
-            // }
-
             else -> {
                 val defaultTarget = profile.target_bg
                 this.targetBg = defaultTarget.toFloat()
@@ -3119,6 +3106,7 @@ private fun neuralnetwork5(
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
             appendLine(String.format("║ %-${screenWidth}s ║", "27 Avril 2025"))
+            ToastUtils.okToast("Autodrive on, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
