@@ -2241,7 +2241,6 @@ private fun neuralnetwork5(
         if (bg > 110 && predictedBg > 150 && !night && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime) {
             rT.units = pbolusAS
             rT.reason.append("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
-            ToastUtils.okToast("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
             return rT
         }
         if (isMealModeCondition()){
@@ -3095,12 +3094,10 @@ private fun neuralnetwork5(
                     .withoutZeros()
             }, Target: ${convertBG(target_bg)}}"
         )
-
          val (conditionResult, conditionsTrue) = isCriticalSafetyCondition(mealData)
         this.zeroBasalAccumulatedMinutes = getZeroBasalDuration(persistenceLayer,2)
         val screenWidth = preferences.get(IntKey.OApsAIMIlogsize)// Largeur d'écran par défaut en caractères si non spécifié
         val columnWidth = (screenWidth / 2) - 2 // Calcul de la largeur des colonnes en fonction de la largeur de l'écran
-        ToastUtils.okToast("Autodrive on, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
         val logTemplate = buildString {
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
@@ -3414,5 +3411,3 @@ private fun neuralnetwork5(
         }
     }
 }
-
-private fun ToastUtils.okToast(string: String) {}
