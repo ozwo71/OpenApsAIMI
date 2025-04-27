@@ -2241,32 +2241,25 @@ private fun neuralnetwork5(
         if (bg > 110 && predictedBg > 150 && !night && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime) {
             rT.units = pbolusAS
             rT.reason.append("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
-            val context = null
-            ToastUtils.infoToast(context, "Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
+            ToastUtils.okToast("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
             return rT
         }
         if (isMealModeCondition()){
              val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
                  rT.units = pbolusM
                  rT.reason.append("Microbolusing Meal Mode ${pbolusM}U.")
-            val context = null
-            ToastUtils.infoToast(context, "Microbolusing Meal Mode ${pbolusM}U.")
              return rT
          }
         if (!night && isAutodriveModeCondition(targetBg, delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat()) && !mealTime && !highCarbTime && !lunchTime && !bfastTime && !dinnerTime && !snackTime && !sportTime && !snackTime && !lowCarbTime && bgAcceleration.toDouble() >= AutodriveAcceleration){
             val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
             rT.units = pbolusA
             rT.reason.append("Microbolusing Autodrive Mode ${pbolusA}U. TargetBg : ${targetBg}, CombinedDelta : ${combinedDelta}, Slopemindeviation : ${mealData.slopeFromMinDeviation}, Acceleration : ${bgAcceleration}. ")
-            val context = null
-            ToastUtils.infoToast(context, "Microbolusing Autodrive Mode ${pbolusAS}U, TargetBg : ${targetBg}, CombinedDelta : ${combinedDelta}, Slopemindeviation : ${mealData.slopeFromMinDeviation}, Acceleration : ${bgAcceleration}.")
             return rT
         }
         if (isbfastModeCondition()){
             val pbolusbfast: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
             rT.units = pbolusbfast
             rT.reason.append("Microbolusing 1/2 Breakfast Mode ${pbolusbfast}U.")
-            val context = null
-            ToastUtils.infoToast(context, "Microbolusing 1/2 Breakfast Mode ${pbolusbfast}U.")
             return rT
         }
         if (isbfast2ModeCondition()){
@@ -2274,16 +2267,12 @@ private fun neuralnetwork5(
             this.maxSMB = pbolusbfast2
             rT.units = pbolusbfast2
             rT.reason.append("Microbolusing 2/2 Breakfast Mode ${pbolusbfast2}U. ")
-            val context = null
-            ToastUtils.infoToast(context, "Microbolusing 2/2 Breakfast Mode ${pbolusbfast2}U.")
-            return rT
+           return rT
         }
         if (isLunchModeCondition()){
             val pbolusLunch: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
                 rT.units = pbolusLunch
                 rT.reason.append("Microbolusing 1/2 Lunch Mode ${pbolusLunch}U.")
-            val context = null
-            ToastUtils.infoToast(context, "Microbolusing 1/2 Lunch Mode ${pbolusLunch}U.")
             return rT
         }
         if (isLunch2ModeCondition()){
@@ -2291,16 +2280,12 @@ private fun neuralnetwork5(
             this.maxSMB = pbolusLunch2
             rT.units = pbolusLunch2
             rT.reason.append("Microbolusing 2/2 Lunch Mode ${pbolusLunch2}U.")
-            val context = null
-            ToastUtils.infoToast(context, "Microbolusing 2/2 Lunch Mode ${pbolusLunch2}U.")
             return rT
         }
         if (isDinnerModeCondition()){
             val pbolusDinner: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
             rT.units = pbolusDinner
             rT.reason.append("Microbolusing 1/2 Dinner Mode ${pbolusDinner}U.")
-            val context = null
-            ToastUtils.infoToast(context, "Microbolusing 1/2 Dinner Mode ${pbolusDinner}U.")
             return rT
         }
         if (isDinner2ModeCondition()){
@@ -2308,24 +2293,18 @@ private fun neuralnetwork5(
             this.maxSMB = pbolusDinner2
             rT.units = pbolusDinner2
             rT.reason.append("Microbolusing 2/2 Dinner Mode ${pbolusDinner2}U.")
-            val context = null
-            ToastUtils.infoToast(context, "Microbolusing 2/2 Dinner Mode ${pbolusDinner2}U.")
             return rT
         }
         if (isHighCarbModeCondition()){
             val pbolusHC: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
             rT.units = pbolusHC
             rT.reason.append("Microbolusing High Carb Mode ${pbolusHC}U.")
-            val context = null
-            ToastUtils.infoToast(context, "Microbolusing High Carb Mode ${pbolusHC}U.")
             return rT
         }
         if (issnackModeCondition()){
             val pbolussnack: Double = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
             rT.units = pbolussnack
             rT.reason.append("Microbolusing snack Mode ${pbolussnack}U.")
-            val context = null
-            ToastUtils.infoToast(context, "Microbolusing snack Mode ${pbolussnack}U.")
             return rT
         }
 
@@ -3448,3 +3427,5 @@ private fun neuralnetwork5(
         }
     }
 }
+
+private fun ToastUtils.okToast(string: String) {}
