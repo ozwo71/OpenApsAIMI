@@ -673,7 +673,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "Reactivity"
-                title = "Reactivity BG < 120"
+                //title = "Reactivity BG < 120"
+                title = rh.gs(R.string.reactivity_preferences)
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIMorningFactor, dialogMessage = R.string.oaps_aimi_morning_factor_summary, title = R.string.oaps_aimi_morning_factor_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAfternoonFactor, dialogMessage = R.string.oaps_aimi_afternoon_factor_summary, title = R.string.oaps_aimi_afternoon_factor_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIEveningFactor, dialogMessage = R.string.oaps_aimi_evening_factor_summary, title = R.string.oaps_aimi_evening_factor_title))
@@ -681,7 +682,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             })
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "high_BG_settings"
-                title = "High BG Preferences (BG > 120)"
+                //title = "High BG Preferences (BG > 120)"
+                title = rh.gs(R.string.high_BG_preferences)
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHyperFactor, dialogMessage = R.string.oaps_aimi_hyper_factor_summary, title = R.string.oaps_aimi_hyper_factor_title))
                 addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIHighBGinterval, dialogMessage = R.string.oaps_aimi_HIGHBG_interval_summary, title = R.string.oaps_aimi_HIGHBG_interval_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHighBGMaxSMB, dialogMessage = R.string.openapsaimi_highBG_maxsmb_summary, title = R.string.openapsaimi_highBG_maxsmb_title))

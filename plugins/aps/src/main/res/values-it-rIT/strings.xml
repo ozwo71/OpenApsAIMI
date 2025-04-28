@@ -241,6 +241,8 @@
     <string name="oaps_aimi_cho_title">CHO media pranzo/cena</string>
     <string name="aimi_preferences">AIMI pannello impostazioni</string>
     <string name="user_preferences">Profilo utente AIMI</string>
+    <string name="reactivity_preferences">Glicemia minore di 120</string>
+    <string name="high_BG_preferences">Glicemia maggiore di 120</string>
     <string name="AAPS_SMB_Settings">Sensibilità - Impostazioni AAPS</string>
     <string name="oaps_aimi_enableMlTraining_title">Abilita addestramento I.A.</string>
     <string name="OApsAIMI_MealFactor_summary">% of insulin required by the ai for the meal mode.</string>
