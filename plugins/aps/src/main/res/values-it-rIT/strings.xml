@@ -275,11 +275,11 @@
     <string name="OApsAIMI_Enable_honeymoon">Modalità bambino per un fabbisogno di insulina inferiore rispetto a quello di un adulto</string>
     <string name="oaps_aimi_HIGHBG_interval_summary">High BG SMB Interval</string>
     <string name="oaps_aimi_HIGHBG_interval_title">High BG SMB Interval</string>
-    <string name="openapsaimi_highBG_maxsmb_summary">Max SMB value quando BG Ã¨ maggiore di 120</string>
+    <string name="openapsaimi_highBG_maxsmb_summary">Max SMB value quando BG è maggiore di 120</string>
     <string name="openapsaimi_highBG_maxsmb_title">Max SMB High BG</string>
     <string name="OApsAIMI_Enable_night_title">Abilita modalità notturna (smb/2)</string>
-    <string name="prebolus_lunch_mode_summary">Prebolo 1/2 modalità pranzo</string>
-    <string name="prebolus2_lunch_mode_summary">Prebolo 2/2 modalità pranzo</string>
+    <string name="prebolus_lunch_mode_summary">Prebolo 1/2 modalità Pranzo</string>
+    <string name="prebolus2_lunch_mode_summary">Prebolo 2/2 modalità Pranzo</string>
     <string name="prebolus_lunch_mode_title">Modalità Pranzo Prebolo 1/2</string>
     <string name="prebolus2_lunch_mode_title">Modalità Pranzo Prebolo 2/2</string>
     <string name="oaps_aimi_LunchAdjFact_summary">Lunch mode Dynisf Factor</string>
