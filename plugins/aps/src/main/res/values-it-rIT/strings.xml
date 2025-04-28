@@ -248,9 +248,9 @@
     <string name="AAPS_SMB_Settings">Sensibilità - Impostazioni AAPS</string>
     <string name="oaps_aimi_enableMlTraining_title">Abilita apprendimento A.I.</string>
     <string name="OApsAIMI_MealFactor_summary">% of insulin required by the ai for the meal mode.</string>
-    <string name="OApsAIMI_MealFactor_title">Meal mode reactivity percentage</string>
-    <string name="oaps_aimi_meal_interval_summary">Interval between SMB for the meal mode.</string>
-    <string name="oaps_aimi_meal_interval_title">SMB interval Meal Mode</string>
+    <string name="OApsAIMI_MealFactor_title">Modalità Pasto Generico percentuale Reattività</string>
+    <string name="oaps_aimi_meal_interval_summary">Intervallo tra gli SMB per la modalità pasto generico.</string>
+    <string name="oaps_aimi_meal_interval_title">SMB intervallo modalità Pasto Generico</string>
     <string name="oaps_aimi_highcarbAdjFact_summary">DynISF adjustment factor for High Carb mode.</string>
     <string name="oaps_aimi_highcarbAdjFact_title">High Carb Mode DynISF factor</string>
     <string name="OApsAIMI_HC_Factor_summary">% of insulin required by the ai for the High Carb mode.</string>
@@ -289,13 +289,13 @@
     <string name="prebolus_Dinner_mode_title">Dinner mode prebolus 1/2</string>
     <string name="prebolus2_Dinner_mode_title">Dinner mode prebolus 2/2</string>
     <string name="OApsAIMI_LunchFactor_summary">Lunch mode reactivity is % of insulin required for one smb.</string>
-    <string name="OApsAIMI_lunchFactor_title">Lunch mode reactivity</string>
+    <string name="OApsAIMI_lunchFactor_title">Reattività</string>
     <string name="oaps_aimi_lunch_interval_summary">Lunch mode interval SMB</string>
     <string name="oaps_aimi_lunch_interval_title">Lunch mode interval SMB</string>
     <string name="oaps_aimi_DinnerAdjFact_summary">Dinner mode Dynisf factor</string>
     <string name="oaps_aimi_DinnerAdjFact_title">Dinner mode Dynisf</string>
     <string name="OApsAIMI_DinnerFactor_summary">Dinner mode reactivity % of insulin required for one SMB.</string>
-    <string name="OApsAIMI_DinnerFactor_title">Dinner mode reactitivy</string>
+    <string name="OApsAIMI_DinnerFactor_title">Reattività</string>
     <string name="oaps_aimi_Dinner_interval_summary">Dinner mode Interval</string>
     <string name="oaps_aimi_Dinner_interval_title">Dinner mode Interval</string>
     <string name="oaps_aimi_enableMlLearningRate_title">Enable Learning Rate variable for better adjustment</string>
@@ -313,7 +313,7 @@
     <string name="oaps_aimi_BFdjFact_summary">DynISF mode breakfast</string>
     <string name="oaps_aimi_BFAdjFact_title">DynISF mode breakfast</string>
     <string name="OApsAIMI_BFFactor_summary">% insulin required for one smb</string>
-    <string name="OApsAIMI_BFFactor_title">Reactivity mode breakfast</string>
+    <string name="OApsAIMI_BFFactor_title">Reattività</string>
     <string name="oaps_aimi_BF_interval_summary">Interval between 2 SMB mode breakfast</string>
     <string name="oaps_aimi_BF_interval_title">SMB Interval Mode Breakfast</string>
     <!--    autoISF -->
