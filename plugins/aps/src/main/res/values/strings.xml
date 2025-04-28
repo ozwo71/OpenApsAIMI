@@ -190,7 +190,7 @@
     <string name="openapsaimi_maxsmb_summary">Value of max smb size</string>
     <string name="key_openapsaimi_max_smb">key_openapsaimi_max_smb</string>
     <string name="openapsaimi_maxsmb_title">OpenapsAIMI Max SMB</string>
-    <string name="description_openapsaimi">Small micro boluses based on Artifical Intelligence and Machine Learning.</string>
+    <string name="description_openapsaimi">Small micro boluses based on Artificial Intelligence and Machine Learning.</string>
     <string name="oaps_aimi_shortname">OpenApsAIMI</string>
     <string name="key_aimiweight">key_aimiweight</string>
     <string name="key_tdd7">key_tdd7</string>
