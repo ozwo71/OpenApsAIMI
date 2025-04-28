@@ -3323,7 +3323,7 @@ private fun neuralnetwork5(
             if (detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime) {
                 rT.reason.append("Détection précoce de repas: activation d'une basale maximale pendant 30 minutes. ")
                 //val forcedBasal = profile_current_basal * 10  // Exemple, ajuster le facteur selon le profil
-                val forcedBasal = 2.5
+                val forcedBasal = preferences.get(DoubleKey.OAPSFixedTBRrisedetect)
                 return setTempBasal(forcedBasal, 30, profile, rT, currenttemp)
 
             }
