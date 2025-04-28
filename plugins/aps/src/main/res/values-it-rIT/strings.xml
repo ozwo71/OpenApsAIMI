@@ -199,8 +199,8 @@
     <string name="key_oaps_aimi_hyper_factor">key_oaps_aimi_hyper_factor</string>
     <string name="key_DynISFAdjusthyper">key_DynISFAdjusthyper</string>
     <string name="key_DynISF_Adjust">key_DynISF_Adjust</string>
-    <string name="oaps_aimi_hyper_factor_summary"><![CDATA[Reactivity factor when bg > 120]]></string>
-    <string name="oaps_aimi_hyper_factor_title"><![CDATA[Reactivity factor BG > 120, for Child BG > 180]]></string>
+    <string name="oaps_aimi_hyper_factor_summary"><![CDATA[Reattività quando  bg > 120]]></string>
+    <string name="oaps_aimi_hyper_factor_title"><![CDATA[Reattività BG > 120, per bambino BG > 180]]></string>
     <string name="DynISFAdjusthyper_summary"><![CDATA[Increasing this value will increase the velocity to send smb when bg > 120]]></string>
     <string name="DynISFAdjusthyper_title"><![CDATA[Dynisf Adjustment factor % BG > 120]]></string>
     <string name="key_enable_basal">key_enable_basal</string>
@@ -258,7 +258,7 @@
     <string name="oaps_aimi_HC_interval_summary">Interval between SMB for the high carb mode.</string>
     <string name="oaps_aimi_HC_interval_title">SMB interval High Carb Mode</string>
     <string name="prebolus_snack_mode_summary">If you set a note in action page, with the word snack, you will receive this pre-bolus one time.</string>
-    <string name="prebolus_snack_mode_title">Mode snack pre-bolus</string>
+    <string name="prebolus_snack_mode_title">Modalità snack pre-bolo</string>
     <string name="oaps_aimi_snackAdjFact_summary">DynISF adjustment factor for Snack mode.</string>
     <string name="oaps_aimi_snackAdjFact_title">Snack Mode DynISF factor</string>
     <string name="OApsAIMI_snack_Factor_summary">% of insulin required by the ai for the Snack mode.</string>
