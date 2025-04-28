@@ -174,7 +174,7 @@
     <string name="not_available_full">Non disponibile</string>
     <string name="pump_disconnected">Micro disconnesso</string>
     <string name="key_openapsaimi_settings">key_openapsaimi_settings</string>
-    <string name="openapsaimi">"OpenapsAIMI Settings "</string>
+    <string name="openapsaimi">"AIMI 3.3"</string>
     <string name="openapsaimi_maxsmb_summary">Max SMB value quando BG è minore di 120</string>
     <string name="key_openapsaimi_fixed_tbr_rise">key_openapsaimi_fixed_tbr_rise</string>
     <string name="key_openapsaimi_max_smb">key_openapsaimi_max_smb</string>
@@ -233,7 +233,7 @@
     <string name="Enable_basal_title">Enable Basal</string>
     <string name="Enable_basal_summary">This option will enable basal from the profile when bg is greater than 80 and delta not negative.</string>
     <string name="countsteps_watch_title">Abilita conteggio passi da orologio</string>
-    <string name="countsteps_watch_summary">Questa opzione abilita la conta dei passi ricevendo i dati dall'orologio, invece che dal telefono.</string>
+    <string name="countsteps_watch_summary">Questa opzione abilita la conta dei passi ricevendo i dati dall\'orologio, invece che dal telefono.</string>
     <string name="oaps_aimi_weight_summary">Peso in kg per calcolare la basale</string>
     <string name="oaps_aimi_weight_title">Peso in kg</string>
     <string name="oaps_aimi_tdd7_summary">TDD media 7 giorni</string>
@@ -258,6 +258,8 @@
     <string name="OApsAIMI_HC_Factor_title">High Carb mode reactivity percentage</string>
     <string name="oaps_aimi_HC_interval_summary">Interval between SMB for the high carb mode.</string>
     <string name="oaps_aimi_HC_interval_title">SMB interval High Carb Mode</string>
+    <string name="oaps_aimi_tbr_fixed_rise_summary">Valore Fixed TBR Rise quando pasto rilevato</string>
+    <string name="oaps_aimi_tbr_fixed_rise_title">Valore Fixed TBR Rise</string>
     <string name="prebolus_snack_mode_summary">If you set a note in action page, with the word snack, you will receive this pre-bolus one time.</string>
     <string name="prebolus_snack_mode_title">Modalità snack pre-bolo</string>
     <string name="oaps_aimi_snackAdjFact_summary">DynISF adjustment factor for Snack mode.</string>

@@ -789,7 +789,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 //title = "Autodrive settings"
                 title = rh.gs(R.string.autodrive_preferences)
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIautoDrive, title = R.string.oaps_aimi_enableMlautoDrive_title))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OAPSFixedTBRrisedetect, dialogMessage = R.string.openapssmb_max_iob_summary, title = R.string.openapssmb_max_iob_title))
+                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OAPSFixedTBRrisedetect, dialogMessage = R.string.oaps_aimi_tbr_fixed_rise_summary, title = R.string.oaps_aimi_tbr_fixed_rise_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolus, dialogMessage = R.string.prebolussmall_autodrive_mode_summary, title = R.string.prebolussmall_autodrive_mode_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivePrebolus, dialogMessage = R.string.prebolus_autodrive_mode_summary, title = R.string.prebolus_autodrive_mode_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIcombinedDelta, dialogMessage = R.string.OApsAIMI_CombinedDelta_summary, title = R.string.OApsAIMI_CombinedDelta_title))
