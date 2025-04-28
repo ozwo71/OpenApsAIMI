@@ -211,8 +211,8 @@
     <string name="key_oaps_aimi_hyper_factor">key_oaps_aimi_hyper_factor</string>
     <string name="key_openapsaimi_fixed_tbr_rise">key_openapsaimi_fixed_tbr_rise</string>
     <string name="key_DynISFAdjusthyper">key_DynISFAdjusthyper</string>
-    <string name="oaps_aimi_tbr_fixed_rise_summary">Valore Fixed TBR Rise quando pasto rilevato</string>
-    <string name="oaps_aimi_tbr_fixed_rise_title">Valore Fixed TBR Rise</string>
+    <string name="oaps_aimi_tbr_fixed_rise_summary">Value Fixed TBR Rise when rise meal detect</string>
+    <string name="oaps_aimi_tbr_fixed_rise_title">Value Fixed TBR Rise detect</string>
     <string name="key_DynISF_Adjust">key_DynISF_Adjust</string>
     <string name="oaps_aimi_hyper_factor_summary"><![CDATA[Reactivity factor when bg > 120]]></string>
     <string name="oaps_aimi_hyper_factor_title"><![CDATA[Reactivity factor BG > 120, for Child BG > 180]]></string>
