@@ -728,8 +728,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "Training_ML_Modes"
-                title = "Training ML and Modes"
-
+                //title = "Training ML and Modes"
+                title = rh.gs(R.string.training_ml_modes_preferences)
 
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "mode_Breakfast"
@@ -786,7 +786,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "Autodrive"
-                title = "Autodrive settings"
+                //title = "Autodrive settings"
+                title = rh.gs(R.string.autodrive_preferences)
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIautoDrive, title = R.string.oaps_aimi_enableMlautoDrive_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolus, dialogMessage = R.string.prebolussmall_autodrive_mode_summary, title = R.string.prebolussmall_autodrive_mode_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivePrebolus, dialogMessage = R.string.prebolus_autodrive_mode_summary, title = R.string.prebolus_autodrive_mode_title))
