@@ -232,13 +232,13 @@
     <string name="Enable_basal_title">Enable Basal</string>
     <string name="Enable_basal_summary">This option will enable basal from the profile when bg is greater than 80 and delta not negative.</string>
     <string name="countsteps_watch_title">Abilita conteggio passi da orologio</string>
-    <string name="countsteps_watch_summary">This option will use the hardware from the watch instead of the phone.</string>
-    <string name="oaps_aimi_weight_summary">Weight in kg to calculate the basal</string>
+    <string name="countsteps_watch_summary">Questa opzione abilita la conta dei passi ricevendo i dati dall'orologio, invece che dal telefono.</string>
+    <string name="oaps_aimi_weight_summary">Peso in kg per calcolare la basale</string>
     <string name="oaps_aimi_weight_title">Peso in kg</string>
     <string name="oaps_aimi_tdd7_summary">TDD media 7 giorni</string>
     <string name="oaps_aimi_tdd7_title">TDD 7 giorni</string>
-    <string name="oaps_aimi_cho_summary">Average carbs for a meal. it\'s an estimation not a precise value</string>
-    <string name="oaps_aimi_cho_title">CHO media pranzo/cena</string>
+    <string name="oaps_aimi_cho_summary">Media carboidrati per un pasto. Valore stimato, non è un valore preciso</string>
+    <string name="oaps_aimi_cho_title">Carboidrati quantità media pranzo/cena</string>
     <string name="aimi_preferences">AIMI pannello impostazioni</string>
     <string name="user_preferences">Profilo utente AIMI</string>
     <string name="reactivity_preferences"><![CDATA[Glicemia < di 120 - Impostazioni]]></string>
