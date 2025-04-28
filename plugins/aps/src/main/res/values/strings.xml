@@ -209,6 +209,7 @@
     <string name="oaps_aimi_afternoon_factor_summary">Afternoon reactivity percentage between 12pm and 6 pm</string>
     <string name="key_oaps_aimi_afternoon_factor">key_oaps_aimi_afternoon_factor</string>
     <string name="key_oaps_aimi_hyper_factor">key_oaps_aimi_hyper_factor</string>
+    <string name="key_openapsaimi_fixed_tbr_rise">key_openapsaimi_fixed_tbr_rise</string>
     <string name="key_DynISFAdjusthyper">key_DynISFAdjusthyper</string>
     <string name="key_DynISF_Adjust">key_DynISF_Adjust</string>
     <string name="oaps_aimi_hyper_factor_summary"><![CDATA[Reactivity factor when bg > 120]]></string>

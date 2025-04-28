@@ -175,7 +175,8 @@
     <string name="pump_disconnected">Micro disconnesso</string>
     <string name="key_openapsaimi_settings">key_openapsaimi_settings</string>
     <string name="openapsaimi">"OpenapsAIMI Settings "</string>
-    <string name="openapsaimi_maxsmb_summary">Max SMB value quando BG Ã¨ minore di 120</string>
+    <string name="openapsaimi_maxsmb_summary">Max SMB value quando BG è minore di 120</string>
+    <string name="key_openapsaimi_fixed_tbr_rise">key_openapsaimi_fixed_tbr_rise</string>
     <string name="key_openapsaimi_max_smb">key_openapsaimi_max_smb</string>
     <string name="openapsaimi_maxsmb_title">Max SMB LOW BG</string>
     <string name="description_openapsaimi">Small micro boluses based on Artificial Intelligence and Machine Learning.</string>
