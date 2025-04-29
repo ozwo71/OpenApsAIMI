@@ -178,8 +178,6 @@
     <string name="openapsaimi_maxsmb_summary">Max SMB value quando BG è minore di 120</string>
     <string name="key_openapsaimi_fixed_tbr_rise">key_openapsaimi_fixed_tbr_rise</string>
     <string name="key_openapsaimi_max_smb">key_openapsaimi_max_smb</string>
-    <string name="autodrive_max_basal_summary">Meal early detection, fix the maxbasal during 30 minutes</string>
-    <string name="autodrive_max_basal_title">Meal Early Detection TBR</string>
     <string name="openapsaimi_maxsmb_title">Max SMB LOW BG</string>
     <string name="description_openapsaimi">Small micro boluses based on Artificial Intelligence and Machine Learning.</string>
     <string name="oaps_aimi_shortname">OpenApsAIMI</string>
@@ -378,11 +376,13 @@
     <string name="oaps_aimi_AutodriveAcceleration_title">Autodrive BG acceleration condition</string>
     <string name="prebolussmall_autodrive_mode_summary"><![CDATA[use by an early meal detection, bg > 100, predictionBG > 180. The idea is when we get a early detection sending a small smb to avoid negative iob or late correction. can be a good approach for a small snack.]]></string>
     <string name="prebolussmall_autodrive_mode_title">snack autodrive prebolus/early meal detection</string>
+    <string name="autodrive_max_basal_summary">Quando viene rilevato precocemente un pasto, AIMI esegue una basale fissa per 30 minuti. Inserire il valore orario di questa basale (es. 4 unità, farà 2 unità in 30 minuti)</string>
+    <string name="autodrive_max_basal_title">TBR Valore rilevamento precoce pasto</string>
     <string name="user_preferences_title_menu">Profilo utente AIMI</string>
     <string name="autodrive_preferences_title_menu">FCL - Autodrive - Rilevamento pasto autom.</string>
     <string name="manual_modes_preferences_title_menu">HCL - Pasti/Attività manuali</string>
     <string name="bg_under_120_preferences_title_menu"><![CDATA[Glicemia < 120 - Impostazioni]]></string>
     <string name="bg_over_120_preferences_title_menu">Glicemia > 120 - Impostazioni</string>
     <string name="aaps_preferences_title_menu">Sensibilità - Impostazioni AAPS</string>
-    <string name="user_preferences_title_menu">Global User Preferences</string>
+
 </resources>
