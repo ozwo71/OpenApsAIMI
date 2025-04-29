@@ -48,7 +48,6 @@ enum class DoubleKey(
     ApsAutoIsfSmbDeliveryRatioMax("openapsama_smb_delivery_ratio_max", 0.5, 0.5, 1.0, defaultedBySM = true),
     ApsAutoIsfSmbMaxRangeExtension("openapsama_smb_max_range_extension", 1.0, 1.0, 5.0, defaultedBySM = true),
     EquilMaxBolus("equil_maxbolus", 10.0, 0.1, 25.0),
-    OAPSFixedTBRrisedetect ("key_openapsaimi_fixed_tbr_rise",1.0,0.05,10.0),
     OApsAIMIMaxSMB("key_openapsaimi_max_smb",1.0,0.05,15.0),
     OApsAIMIHighBGMaxSMB("key_openapsaimi_high_bg_max_smb",1.0,0.05,15.0),
     OApsAIMIweight("key_aimiweight",50.0,1.0,200.0),

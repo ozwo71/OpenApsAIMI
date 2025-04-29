@@ -178,6 +178,8 @@
     <string name="openapsaimi_maxsmb_summary">Max SMB value quando BG è minore di 120</string>
     <string name="key_openapsaimi_fixed_tbr_rise">key_openapsaimi_fixed_tbr_rise</string>
     <string name="key_openapsaimi_max_smb">key_openapsaimi_max_smb</string>
+    <string name="autodrive_max_basal_summary">Meal early detection, fix the maxbasal during 30 minutes</string>
+    <string name="autodrive_max_basal_title">Meal Early Detection TBR</string>
     <string name="openapsaimi_maxsmb_title">Max SMB LOW BG</string>
     <string name="description_openapsaimi">Small micro boluses based on Artificial Intelligence and Machine Learning.</string>
     <string name="oaps_aimi_shortname">OpenApsAIMI</string>
@@ -258,8 +260,6 @@
     <string name="OApsAIMI_HC_Factor_title">High Carb mode reactivity percentage</string>
     <string name="oaps_aimi_HC_interval_summary">Interval between SMB for the high carb mode.</string>
     <string name="oaps_aimi_HC_interval_title">SMB interval High Carb Mode</string>
-    <string name="oaps_aimi_tbr_fixed_rise_summary">Valore Fixed TBR Rise quando pasto rilevato</string>
-    <string name="oaps_aimi_tbr_fixed_rise_title">Valore Fixed TBR Rise</string>
     <string name="prebolus_snack_mode_summary">If you set a note in action page, with the word snack, you will receive this pre-bolus one time.</string>
     <string name="prebolus_snack_mode_title">Modalità snack pre-bolo</string>
     <string name="oaps_aimi_snackAdjFact_summary">DynISF adjustment factor for Snack mode.</string>
