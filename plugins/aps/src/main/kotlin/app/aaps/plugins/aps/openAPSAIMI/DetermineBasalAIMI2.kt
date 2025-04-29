@@ -29,7 +29,6 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.Preferences
-import app.aaps.core.ui.toast.ToastUtils
 import org.tensorflow.lite.Interpreter
 import java.io.File
 import java.text.DecimalFormat
@@ -72,7 +71,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
     private val csvfile = File(externalDir, "oapsaimiML2_records.csv")
     private val csvfile2 = File(externalDir, "oapsaimi2_records.csv")
-    private val tempFile = File(externalDir, "temp.csv")
+    //private val tempFile = File(externalDir, "temp.csv")
+    private var bgacc = 0.0
     private var predictedSMB = 0.0f
     private var variableSensitivity = 0.0f
     private var averageBeatsPerMinute = 0.0
@@ -530,9 +530,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     fun setTempBasal(_rate: Double, duration: Int, profile: OapsProfileAimi, rT: RT, currenttemp: CurrentTemp): RT {
         val maxSafeBasal = getMaxSafeBasal(profile)
         var rate = _rate
-
+        val recentDeltas = getRecentDeltas()
+        val predicted = predictedDelta(recentDeltas)
+        val mealR = detectMealOnset(delta, predicted.toFloat(), bgacc.toFloat())
         if (rate < 0) rate = 0.0
-        else if (rate > maxSafeBasal) rate = maxSafeBasal
+        else if (rate > maxSafeBasal && !mealR) rate = maxSafeBasal
 
         val suggestedRate = roundBasal(rate)
 
@@ -2202,6 +2204,7 @@ private fun neuralnetwork5(
         this.shortAvgDelta = glucose_status.shortAvgDelta.toFloat()
         this.longAvgDelta = glucose_status.longAvgDelta.toFloat()
         val bgAcceleration = glucose_status.bgAcceleration ?: 0f
+        this.bgacc = bgAcceleration.toDouble()
         val therapy = Therapy(persistenceLayer).also {
             it.updateStatesBasedOnTherapyEvents()
         }
@@ -3322,10 +3325,8 @@ private fun neuralnetwork5(
             }
             if (detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime) {
                 rT.reason.append("Détection précoce de repas: activation d'une basale maximale pendant 30 minutes. ")
-                //val forcedBasal = profile_current_basal * 10  // Exemple, ajuster le facteur selon le profil
-                val forcedBasal = preferences.get(DoubleKey.OAPSFixedTBRrisedetect)
+                val forcedBasal = preferences.get(DoubleKey.autodriveMaxBasal)  // Exemple, ajuster le facteur selon le profil
                 return setTempBasal(forcedBasal, 30, profile, rT, currenttemp)
-
             }
             // 🔴 Sécurité : Arrêt de la basale en cas de tendance baissière ou IOB trop élevé
             if (predictedBg < 100 && mealData.slopeFromMaxDeviation <= 0 || iob > maxIob) {
