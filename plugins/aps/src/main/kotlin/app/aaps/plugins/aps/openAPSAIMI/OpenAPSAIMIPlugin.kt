@@ -676,6 +676,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "OAPS_SMB_Settings"
                 title = rh.gs(R.string.AAPS_SMB_Settings)
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.aaps_preferences_title_menu)
+                })
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseDynamicSensitivity, summary = R.string.use_dynamic_sensitivity_summary, title = R.string.use_dynamic_sensitivity_title))
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseAutosens, title = R.string.openapsama_use_autosens))
                 addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.ApsDynIsfAdjustmentFactor, dialogMessage = R.string.dyn_isf_adjust_summary, title = R.string.dyn_isf_adjust_title))
@@ -715,6 +718,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 key = "Reactivity"
                 //title = "Reactivity BG < 120"
                 title = rh.gs(R.string.reactivity_preferences)
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.bg_under_120_preferences_title_menu)
+                })
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIMorningFactor, dialogMessage = R.string.oaps_aimi_morning_factor_summary, title = R.string.oaps_aimi_morning_factor_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAfternoonFactor, dialogMessage = R.string.oaps_aimi_afternoon_factor_summary, title = R.string.oaps_aimi_afternoon_factor_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIEveningFactor, dialogMessage = R.string.oaps_aimi_evening_factor_summary, title = R.string.oaps_aimi_evening_factor_title))
@@ -724,6 +730,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 key = "high_BG_settings"
                 //title = "High BG Preferences (BG > 120)"
                 title = rh.gs(R.string.high_BG_preferences)
+                addPreference(PreferenceCategory(context).apply {
+                       title = rh.gs(R.string.bg_over_120_preferences_title_menu)
+                })
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHyperFactor, dialogMessage = R.string.oaps_aimi_hyper_factor_summary, title = R.string.oaps_aimi_hyper_factor_title))
                 addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIHighBGinterval, dialogMessage = R.string.oaps_aimi_HIGHBG_interval_summary, title = R.string.oaps_aimi_HIGHBG_interval_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHighBGMaxSMB, dialogMessage = R.string.openapsaimi_highBG_maxsmb_summary, title = R.string.openapsaimi_highBG_maxsmb_title))
@@ -733,7 +742,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "Training_ML_Modes"
                 title = "Training ML and Modes"
-
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.manual_modes_preferences_title_menu)
+                })
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "mode_Breakfast"
                     title = "Breakfast Mode settings"
