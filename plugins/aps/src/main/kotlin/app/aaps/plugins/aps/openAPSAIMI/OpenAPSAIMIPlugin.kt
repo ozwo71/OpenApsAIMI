@@ -237,9 +237,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 factor.coerceAtMost(1.4)
             }
             // En hyperglycémie : si BG est > 130, on applique une réduction progressive
-            bg > 100.0        -> {
+            bg > 110.0        -> {
                 // On réduit d’un certain pourcentage (ici jusqu’à 30%) en fonction de BG
-                val bgReduction = 1.0 - ((bg - 100.0) / (200.0 - 100.0)) * 0.5
+                val bgReduction = 1.0 - ((bg - 110.0) / (200.0 - 110.0)) * 0.5
                 // On combine ce facteur avec la réponse exponentielle basée sur combinedDelta si nécessaire
                 if (combinedDelta > 10) {
                     // Si le delta est important, on accentue la réduction avec une réponse exponentielle
