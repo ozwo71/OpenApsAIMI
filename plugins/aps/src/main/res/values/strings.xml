@@ -258,7 +258,7 @@
     <string name="user_preferences">Global User Preferences</string>
     <string name="reactivity_preferences"><![CDATA[Reactivity BG < 120]]></string>
     <string name="high_BG_preferences">High BG Preferences (BG > 120)</string>
-    <string name="training_ml_modes_preferences">Training and Manual Modes</string>
+    <string name="training_ml_modes_preferences">Training ML and Modes</string>
     <string name="autodrive_preferences">Autodrive settings</string>
     <string name="AAPS_SMB_Settings">AAPS SMB Settings</string>
     <string name="oaps_aimi_enableMlTraining_title">Enable ML training calculation</string>
