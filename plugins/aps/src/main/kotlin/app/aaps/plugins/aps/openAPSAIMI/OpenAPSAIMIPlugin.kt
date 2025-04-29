@@ -744,7 +744,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "Training_ML_Modes"
-                title = "Training ML and Modes"
+                //title = "Training ML and Modes"
+                title = rh.gs(R.string.training_ml_modes_preferences)
                 addPreference(PreferenceCategory(context).apply {
                     title = rh.gs(R.string.manual_modes_preferences_title_menu)
                 })
