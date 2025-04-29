@@ -686,6 +686,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 key = "Autodrive"
                 title = "Autodrive settings"
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIautoDrive, title = R.string.oaps_aimi_enableMlautoDrive_title))
+                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.autodriveMaxBasal, dialogMessage = R.string.autodrive_max_basal_summary, title = R.string.autodrive_max_basal_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolus, dialogMessage = R.string.prebolussmall_autodrive_mode_summary, title = R.string.prebolussmall_autodrive_mode_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivePrebolus, dialogMessage = R.string.prebolus_autodrive_mode_summary, title = R.string.prebolus_autodrive_mode_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIcombinedDelta, dialogMessage = R.string.OApsAIMI_CombinedDelta_summary, title = R.string.OApsAIMI_CombinedDelta_title))
