@@ -409,9 +409,10 @@
     <string name="table_plugin_request_title">Richiesta</string>
     <string name="table_plugin_smb_prediction_title">SMB Previsione</string>
     <string name="table_plugin_adjusted_factors_title">Fattori aggiustati</string>
-    <string name="table_plugin_limits_title">Limiti e Condizioni</string>
-    <string name="table_plugin_glucose_title">Glicemia Dati</string>
-    <string name="table_plugin_tir_title">TIR Dati</string>
-    <string name="table_plugin_steps_title">Rilevamento passi</string>
-    <string name="table_plugin_heart_title">Rilevamento battiti cardiaci</string>
+    <string name="table_plugin_limits_title">Limiti AAPS e Condizioni</string>
+    <string name="table_plugin_glucose_title">Glicemia</string>
+    <string name="table_plugin_tir_title">TIR</string>
+    <string name="table_plugin_steps_title">Passi conteggio</string>
+    <string name="table_plugin_heart_title">Battiti cardiaci</string>
+    <string name="table_plugin_manual_modes_title">Modalità Manuale pasto/attività</string>
 </resources>

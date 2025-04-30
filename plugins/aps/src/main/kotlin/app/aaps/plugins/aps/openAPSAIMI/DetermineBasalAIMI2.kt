@@ -3213,7 +3213,8 @@ private fun neuralnetwork5(
             appendLine()
 
             appendLine("╔${"═".repeat(screenWidth)}╗")
-            appendLine(String.format("║ %-${screenWidth}s ║", "Modes"))
+            //appendLine(String.format("║ %-${screenWidth}s ║", "Modes"))
+            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_manual_modes_title)))
             appendLine("╠${"═".repeat(screenWidth)}╣")
             appendLine(String.format("║ %-${columnWidth}s │ %s", "Delete Time", if (deleteTime) "Active" else "Inactive"))
             appendLine(String.format("║ %-${columnWidth}s │ %s", "Date", deleteEventDate ?: "N/A"))
