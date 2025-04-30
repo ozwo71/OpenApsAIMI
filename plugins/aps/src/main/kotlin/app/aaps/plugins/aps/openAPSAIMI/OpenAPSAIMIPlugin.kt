@@ -753,7 +753,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     key = "mode_Breakfast"
                     title = "Breakfast Mode settings"
                     addPreference(PreferenceCategory(context).apply {
-                        title = rh.gs(R.string.manual_modes_preferences_title_menu)
+                        title = rh.gs(R.string.breakfast_modes_preferences_title_menu)
                     })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIBFPrebolus, dialogMessage = R.string.prebolus_BF_mode_summary, title = R.string.prebolus_BF_mode_title))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIBFPrebolus2, dialogMessage = R.string.prebolus2_BF_mode_summary, title = R.string.prebolus2_BF_mode_title))
@@ -764,7 +764,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     key = "mode_Lunch"
                     title = "Lunch Mode settings"
                     addPreference(PreferenceCategory(context).apply {
-                        title = rh.gs(R.string.manual_modes_preferences_title_menu)
+                        title = rh.gs(R.string.lunch_modes_preferences_title_menu)
                     })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMILunchPrebolus, dialogMessage = R.string.prebolus_lunch_mode_summary, title = R.string.prebolus_lunch_mode_title))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMILunchPrebolus2, dialogMessage = R.string.prebolus2_lunch_mode_summary, title = R.string.prebolus2_lunch_mode_title))
@@ -775,7 +775,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     key = "mode_dinner"
                     title = "Dinner Mode settings"
                     addPreference(PreferenceCategory(context).apply {
-                        title = rh.gs(R.string.manual_modes_preferences_title_menu)
+                        title = rh.gs(R.string.dinner_modes_preferences_title_menu)
                     })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIDinnerPrebolus, dialogMessage = R.string.prebolus_Dinner_mode_summary, title = R.string.prebolus_Dinner_mode_title))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIDinnerPrebolus2, dialogMessage = R.string.prebolus2_Dinner_mode_summary, title = R.string.prebolus2_Dinner_mode_title))
@@ -786,7 +786,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     key = "mode_highcarb"
                     title = "High Carb Mode settings"
                     addPreference(PreferenceCategory(context).apply {
-                        title = rh.gs(R.string.manual_modes_preferences_title_menu)
+                        title = rh.gs(R.string.high_carb_modes_preferences_title_menu)
                     })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHighCarbPrebolus, dialogMessage = R.string.prebolus_highcarb_mode_summary, title = R.string.prebolus_highcarb_mode_title))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHCFactor, dialogMessage = R.string.OApsAIMI_HC_Factor_summary, title = R.string.OApsAIMI_HC_Factor_title))
@@ -796,7 +796,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     key = "mode_snack"
                     title = "Snack Mode settings"
                     addPreference(PreferenceCategory(context).apply {
-                        title = rh.gs(R.string.manual_modes_preferences_title_menu)
+                        title = rh.gs(R.string.snack_modes_preferences_title_menu)
                     })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMISnackPrebolus, dialogMessage = R.string.prebolus_snack_mode_summary, title = R.string.prebolus_snack_mode_title))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMISnackFactor, dialogMessage = R.string.OApsAIMI_snack_Factor_summary, title = R.string.OApsAIMI_snack_Factor_title))
@@ -806,7 +806,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     key = "mode_meal"
                     title = "Meal Mode settings"
                     addPreference(PreferenceCategory(context).apply {
-                        title = rh.gs(R.string.manual_modes_preferences_title_menu)
+                        title = rh.gs(R.string.generic_meal_modes_preferences_title_menu)
                     })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIMealPrebolus, dialogMessage = R.string.prebolus_meal_mode_summary, title = R.string.prebolus_meal_mode_title))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIMealFactor, dialogMessage = R.string.OApsAIMI_MealFactor_summary, title = R.string.OApsAIMI_MealFactor_title))
@@ -816,7 +816,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     key = "mode_sleep"
                     title = "Sleep Mode settings"
                     addPreference(PreferenceCategory(context).apply {
-                        title = rh.gs(R.string.manual_modes_preferences_title_menu)
+                        title = rh.gs(R.string.sleep_modes_preferences_title_menu)
                     })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIsleepFactor, dialogMessage = R.string.OApsAIMI_sleep_Factor_summary, title = R.string.OApsAIMI_sleep_Factor_title))
                     addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMISleepinterval, dialogMessage = R.string.oaps_aimi_sleep_interval_summary, title = R.string.oaps_aimi_sleep_interval_title))

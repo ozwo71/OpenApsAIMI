@@ -245,7 +245,7 @@
     <string name="reactivity_preferences"><![CDATA[Glicemia < di 120 - Impostazioni]]></string>
     <string name="high_BG_preferences">Glicemia > di 120 - Impostazioni</string>
     <string name="training_ml_modes_preferences">HCL - Modalità pasto manuale</string>
-    <string name="autodrive_preferences">FLC - Autodrive - Rilevamento pasto</string>
+    <string name="autodrive_preferences">FLC - Autodrive - Rilevamento pasto autom.</string>
     <string name="AAPS_SMB_Settings">Sensibilità - Impostazioni AAPS</string>
     <string name="oaps_aimi_enableMlTraining_title">Abilita apprendimento A.I.</string>
     <string name="OApsAIMI_MealFactor_summary">% of insulin required by the ai for the meal mode.</string>
@@ -384,6 +384,11 @@
     <string name="bg_under_120_preferences_title_menu"><![CDATA[Glicemia < 120 - Impostazioni]]></string>
     <string name="bg_over_120_preferences_title_menu">Glicemia > 120 - Impostazioni</string>
     <string name="aaps_preferences_title_menu">Sensibilità - Impostazioni AAPS</string>
-
-
+    <string name="breakfast_modes_preferences_title_menu">Colazione - Modalità manuale - Impostaz.</string>
+    <string name="lunch_modes_preferences_title_menu">Pranzo - Modalità manuale - Impostaz.</string>
+    <string name="dinner_modes_preferences_title_menu">Cena - Modalità manuale - Impostaz.</string>
+    <string name="snack_modes_preferences_title_menu">Snack - Modalità manuale - Impostaz.</string>
+    <string name="high_carb_modes_preferences_title_menu">High Carb - Modalità manuale - Impostaz.</string>
+    <string name="generic_meal_modes_preferences_title_menu">Pasto generico - Modalità manuale - Impostaz.</string>
+    <string name="sleep_modes_preferences_title_menu">Riposo - Modalità manuale - Impostaz.</string>
 </resources>
