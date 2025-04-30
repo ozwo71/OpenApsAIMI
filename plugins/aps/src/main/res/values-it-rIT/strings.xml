@@ -384,6 +384,13 @@
     <string name="bg_under_120_preferences_title_menu"><![CDATA[Glicemia < 120 - Impostazioni]]></string>
     <string name="bg_over_120_preferences_title_menu">Glicemia > 120 - Impostazioni</string>
     <string name="aaps_preferences_title_menu">Sensibilità - Impostazioni AAPS</string>
+    <string name="training_ml_breakfast_modes_preferences">Colazione</string>
+    <string name="training_ml_lunch_modes_preferences">Pranzo</string>
+    <string name="training_ml_dinner_modes_preferences">Cena</string>
+    <string name="training_ml_high_carb_modes_preferences">High Carb</string>
+    <string name="training_ml_snack_modes_preferences">Snack</string>
+    <string name="training_ml_generic_meal_modes_preferences">Pasto generico</string>
+    <string name="training_ml_sleep_modes_preferences">Riposo</string>
     <string name="breakfast_modes_preferences_title_menu">Colazione - Modalità manuale - Impostaz.</string>
     <string name="lunch_modes_preferences_title_menu">Pranzo - Modalità manuale - Impostaz.</string>
     <string name="dinner_modes_preferences_title_menu">Cena - Modalità manuale - Impostaz.</string>

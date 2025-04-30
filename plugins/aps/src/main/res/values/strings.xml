@@ -400,6 +400,13 @@
     <string name="bg_under_120_preferences_title_menu"><![CDATA[Reactivity BG < 120]]></string>
     <string name="bg_over_120_preferences_title_menu">High BG Preferences (BG > 120)</string>
     <string name="aaps_preferences_title_menu">AAPS SMB Settings</string>
+    <string name="training_ml_breakfast_modes_preferences">Breakfast Mode settings</string>
+    <string name="training_ml_lunch_modes_preferences">Lunch Mode settings</string>
+    <string name="training_ml_dinner_modes_preferences">Dinner Mode settings</string>
+    <string name="training_ml_high_carb_modes_preferences">High Carb Mode settings</string>
+    <string name="training_ml_snack_modes_preferences">Snack Mode settings</string>
+    <string name="training_ml_generic_meal_modes_preferences">Generic Meal Mode settings</string>
+    <string name="training_ml_sleep_modes_preferences">Sleep Mode settings</string>
     <string name="breakfast_modes_preferences_title_menu">Breakfast - Manual Mode settings</string>
     <string name="lunch_modes_preferences_title_menu">Lunch - Manual Mode settings</string>
     <string name="dinner_modes_preferences_title_menu">Dinner - Manual Mode settings</string>

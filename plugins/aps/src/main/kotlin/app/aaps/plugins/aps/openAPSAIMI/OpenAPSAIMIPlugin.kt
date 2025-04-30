@@ -751,7 +751,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 })
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "mode_Breakfast"
-                    title = "Breakfast Mode settings"
+                    //title = "Breakfast Mode settings"
+                    title = rh.gs(R.string.training_ml_breakfast_modes_preferences)
                     addPreference(PreferenceCategory(context).apply {
                         title = rh.gs(R.string.breakfast_modes_preferences_title_menu)
                     })
@@ -762,7 +763,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 })
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "mode_Lunch"
-                    title = "Lunch Mode settings"
+                    //title = "Lunch Mode settings"
+                    title = rh.gs(R.string.training_ml_lunch_modes_preferences)
                     addPreference(PreferenceCategory(context).apply {
                         title = rh.gs(R.string.lunch_modes_preferences_title_menu)
                     })
@@ -773,7 +775,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 })
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "mode_dinner"
-                    title = "Dinner Mode settings"
+                    //title = "Dinner Mode settings"
+                    title = rh.gs(R.string.training_ml_dinner_modes_preferences)
                     addPreference(PreferenceCategory(context).apply {
                         title = rh.gs(R.string.dinner_modes_preferences_title_menu)
                     })
@@ -784,7 +787,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 })
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "mode_highcarb"
-                    title = "High Carb Mode settings"
+                    //title = "High Carb Mode settings"
+                    title = rh.gs(R.string.training_ml_high_carb_modes_preferences)
                     addPreference(PreferenceCategory(context).apply {
                         title = rh.gs(R.string.high_carb_modes_preferences_title_menu)
                     })
@@ -794,7 +798,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 })
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "mode_snack"
-                    title = "Snack Mode settings"
+                    //title = "Snack Mode settings"
+                    title = rh.gs(R.string.training_ml_snack_modes_preferences)
                     addPreference(PreferenceCategory(context).apply {
                         title = rh.gs(R.string.snack_modes_preferences_title_menu)
                     })
@@ -804,7 +809,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 })
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "mode_meal"
-                    title = "Meal Mode settings"
+                    //title = "Meal Mode settings"
+                    title = rh.gs(R.string.training_ml_generic_meal_modes_preferences)
                     addPreference(PreferenceCategory(context).apply {
                         title = rh.gs(R.string.generic_meal_modes_preferences_title_menu)
                     })
@@ -814,7 +820,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 })
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "mode_sleep"
-                    title = "Sleep Mode settings"
+                    //title = "Sleep Mode settings"
+                    title = rh.gs(R.string.training_ml_sleep_modes_preferences)
                     addPreference(PreferenceCategory(context).apply {
                         title = rh.gs(R.string.sleep_modes_preferences_title_menu)
                     })
