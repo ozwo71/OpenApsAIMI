@@ -56,7 +56,7 @@ import android.content.Context
 @Singleton
 class DetermineBasalaimiSMB2 @Inject constructor(
     private val profileUtil: ProfileUtil,
-    private val fabricPrivacy: FabricPrivacy
+    private val fabricPrivacy: FabricPrivacy,
     private val context: Context
 ) {
     @Inject lateinit var preferences: Preferences
