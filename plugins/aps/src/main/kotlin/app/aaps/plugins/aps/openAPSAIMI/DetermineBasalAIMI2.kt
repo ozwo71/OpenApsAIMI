@@ -3109,9 +3109,9 @@ private fun neuralnetwork5(
             //appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             //appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
             //appendLine(String.format("║ %-${screenWidth}s ║", "27 Avril 2025"))
-            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_request_title)))
-            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_request_title)))
-            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_request_title)))
+            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_main_title_1)))
+            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_main_title_2)))
+            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_main_title_3)))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
