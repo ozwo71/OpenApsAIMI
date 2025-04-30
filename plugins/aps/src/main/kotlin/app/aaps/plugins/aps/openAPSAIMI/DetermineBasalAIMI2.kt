@@ -3155,7 +3155,8 @@ private fun neuralnetwork5(
             appendLine()
 
             appendLine("╔${"═".repeat(screenWidth)}╗")
-            appendLine(String.format("║ %-${screenWidth}s ║", "Glucose Data"))
+            //appendLine(String.format("║ %-${screenWidth}s ║", "Glucose Data"))
+            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_glucose_title)))
             appendLine("╠${"═".repeat(screenWidth)}╣")
             appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Current BG", String.format("%.1f", bg)))
             appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "predictedBg", String.format("%.1f", predictedBg)))
