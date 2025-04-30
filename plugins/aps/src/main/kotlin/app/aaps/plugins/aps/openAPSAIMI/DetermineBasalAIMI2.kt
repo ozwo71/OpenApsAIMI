@@ -1,5 +1,4 @@
 package app.aaps.plugins.aps.openAPSAIMI
-
 import android.annotation.SuppressLint
 import android.os.Environment
 import app.aaps.core.data.model.BS
@@ -51,10 +50,13 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
+import android.content.Context
+
 @Singleton
 class DetermineBasalaimiSMB2 @Inject constructor(
     private val profileUtil: ProfileUtil,
     private val fabricPrivacy: FabricPrivacy
+    private val context: Context
 ) {
     @Inject lateinit var preferences: Preferences
     @Inject lateinit var persistenceLayer: PersistenceLayer
@@ -3182,7 +3184,7 @@ private fun neuralnetwork5(
 
             appendLine("╔${"═".repeat(screenWidth)}╗")
             //appendLine(String.format("║ %-${screenWidth}s ║", "Step Data"))
-            appendLine(String.format("║ %-${screenWidth}s ║", table_plugin_steps_title))
+            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_steps_title)))
             appendLine("╠${"═".repeat(screenWidth)}╣")
             appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (5m)", recentSteps5Minutes))
             appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (30m)", recentSteps30Minutes))
