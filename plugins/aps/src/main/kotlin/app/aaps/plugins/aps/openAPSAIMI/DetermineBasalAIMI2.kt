@@ -3106,9 +3106,12 @@ private fun neuralnetwork5(
         val columnWidth = (screenWidth / 2) - 2 // Calcul de la largeur des colonnes en fonction de la largeur de l'écran
         val logTemplate = buildString {
             appendLine("╔${"═".repeat(screenWidth)}╗")
-            appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "27 Avril 2025"))
+            //appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
+            //appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
+            //appendLine(String.format("║ %-${screenWidth}s ║", "27 Avril 2025"))
+            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_request_title)))
+            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_request_title)))
+            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_request_title)))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
