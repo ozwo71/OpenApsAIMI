@@ -421,4 +421,5 @@
         <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN -->
 
     <string name="table_plugin_steps_title">Step Data</string>
+    <string name="table_plugin_heart_title">Heart Rate Data</string>
 </resources>

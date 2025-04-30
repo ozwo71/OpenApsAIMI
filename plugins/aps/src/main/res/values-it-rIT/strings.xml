@@ -405,4 +405,5 @@
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN  -->
 
     <string name="table_plugin_steps_title">Rilevamento passi</string>
+    <string name="table_plugin_heart_title">Rilevamento battiti cardiaci</string>
 </resources>
