@@ -3181,7 +3181,8 @@ private fun neuralnetwork5(
             appendLine()
 
             appendLine("╔${"═".repeat(screenWidth)}╗")
-            appendLine(String.format("║ %-${screenWidth}s ║", "Step Data"))
+            //appendLine(String.format("║ %-${screenWidth}s ║", "Step Data"))
+            appendLine(String.format("║ %-${screenWidth}s ║", table_plugin_steps_title))
             appendLine("╠${"═".repeat(screenWidth)}╣")
             appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (5m)", recentSteps5Minutes))
             appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (30m)", recentSteps30Minutes))
