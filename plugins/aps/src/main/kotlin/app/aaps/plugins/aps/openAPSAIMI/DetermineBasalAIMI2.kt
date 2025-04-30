@@ -3120,7 +3120,8 @@ private fun neuralnetwork5(
             appendLine()
 
             appendLine("╔${"═".repeat(screenWidth)}╗")
-            appendLine(String.format("║ %-${screenWidth}s ║", "SMB Prediction"))
+            //appendLine(String.format("║ %-${screenWidth}s ║", "SMB Prediction"))
+            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_smb_prediction_title)))
             appendLine("╠${"═".repeat(screenWidth)}╣")
             appendLine(String.format("║ %-${columnWidth}s │ %s u", "AI Pred.", String.format("%.2f", predictedSMB)))
             appendLine(String.format("║ %-${columnWidth}s │ %s u", "Req. SMB", String.format("%.2f", smbToGive)))
@@ -3128,7 +3129,8 @@ private fun neuralnetwork5(
             appendLine()
 
             appendLine("╔${"═".repeat(screenWidth)}╗")
-            appendLine(String.format("║ %-${screenWidth}s ║", "Adjusted Factors"))
+            //appendLine(String.format("║ %-${screenWidth}s ║", "Adjusted Factors"))
+            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_adjusted_factors_title)))
             appendLine("╠${"═".repeat(screenWidth)}╣")
             appendLine(String.format("║ %-${columnWidth}s │ %s", "Factors", adjustedFactors))
             appendLine("╚${"═".repeat(screenWidth)}╝")

@@ -403,7 +403,8 @@
     <string name="sleep_modes_preferences_title_menu">Riposo - Modalità manuale - Impostaz.</string>
 
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN  -->
-
+    <string name="table_plugin_smb_prediction_title">SMB Previsione</string>
+    <string name="table_plugin_adjusted_factors_title">Fattori aggiustati</string>
     <string name="table_plugin_limits_title">Limiti & Condizioni</string>
     <string name="table_plugin_glucose_title">Glicemia Dati</string>
     <string name="table_plugin_tir_title">TIR Dati</string>
