@@ -415,4 +415,5 @@
     <string name="table_plugin_steps_title">Passi conteggio</string>
     <string name="table_plugin_heart_title">Battiti cardiaci</string>
     <string name="table_plugin_manual_modes_title">Modalità Manuale pasto/attività</string>
+    <string name="table_plugin_miscellaneous_title">Analisi ultimi trattamenti</string>
 </resources>
