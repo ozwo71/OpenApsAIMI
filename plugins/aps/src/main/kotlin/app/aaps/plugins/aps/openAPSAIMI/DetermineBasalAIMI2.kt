@@ -3067,7 +3067,9 @@ private fun neuralnetwork5(
             rT.carbsReqWithin = minutesAboveThreshold
             rT.reason.append("$carbsRequired add\'l carbs req w/in ${minutesAboveThreshold}m; ")
         }
+        val forcedBasal = preferences.get(DoubleKey.autodriveMaxBasal)
         var rate = when {
+            detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime -> calculateRate(forcedBasal, profile_current_basal, 1.0, "Early Meal detection: activation d'une basale maximale pendant 30 minutes.", currenttemp, rT)
             snackTime && snackrunTime in 0..30 && delta < 10 -> calculateRate(basal, profile_current_basal, 4.0, "AI Force basal because snackTime $snackrunTime.", currenttemp, rT)
             mealTime && mealruntime in 0..30 && delta < 10 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because mealTime $mealruntime.", currenttemp, rT)
             bfastTime && bfastruntime in 0..30 && delta < 10 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because bfastTime $bfastruntime.", currenttemp, rT)
@@ -3340,17 +3342,17 @@ private fun neuralnetwork5(
             if (safetyDecision.basalLS && combinedDelta in -1.0..3.0 && predictedBg > 130 && iob > 0.1){
                 return setTempBasal(profile_current_basal, 30, profile, rT, currenttemp)
             }
-            if (detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime) {
-                rT.reason.append("Détection précoce de repas: activation d'une basale maximale pendant 30 minutes. ")
-                val forcedBasal = preferences.get(DoubleKey.autodriveMaxBasal)  // Exemple, ajuster le facteur selon le profil
-                //return setTempBasal(forcedBasal, 30, profile, rT, currenttemp)
-                rate?.let {
-                    rT.rate = forcedBasal
-                    rT.deliverAt = deliverAt
-                    rT.duration = 30
-                }
-                return rT
-            }
+            // if (detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime) {
+            //     rT.reason.append("Détection précoce de repas: activation d'une basale maximale pendant 30 minutes. ")
+            //     val forcedBasal = preferences.get(DoubleKey.autodriveMaxBasal)  // Exemple, ajuster le facteur selon le profil
+            //     //return setTempBasal(forcedBasal, 30, profile, rT, currenttemp)
+            //     rate?.let {
+            //         rT.rate = forcedBasal
+            //         rT.deliverAt = deliverAt
+            //         rT.duration = 30
+            //     }
+            //     return rT
+            // }
             // 🔴 Sécurité : Arrêt de la basale en cas de tendance baissière ou IOB trop élevé
             if (predictedBg < 100 && mealData.slopeFromMaxDeviation <= 0 || iob > maxIob) {
                 return setTempBasal(0.0, 30, profile, rT, currenttemp)
