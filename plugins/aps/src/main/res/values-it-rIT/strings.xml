@@ -354,10 +354,13 @@
     <string name="enableSMB_EvenOn_OddOff_always">Abilita l\'attivazione alternativa di SMB a seconda che il target attivo sia un numero pari</string>
     <string name="enableSMB_EvenOn_OddOff_always_summary">\nenabled ...\nif il target attivo(mmol/L) ha una cifra decimale pari\no il bersaglio attivo(mg/dL) è un numero pari\n\nnon abilitato altrimenti</string>
     <string name="oaps_aimi_enableDeleteLine_title">Enable the possibility to delete one day in the ML Training</string>
-    <string name="oaps_aimi_logsize_summary">log colon size</string>
-    <string name="oaps_aimi_logsize_title">Numero linee tabella analisi AIMI nella scheda Loop</string>
     <string name="openapsama_iob_threshold_percent_summary" formatted="false">Percentuale di maxIOB al di sopra del quale gli SMB sono disabilitati.\nValore predefinito: 100%\nCon 100% questa funzione Ã¨ effettivamente disabilitata.</string>
     <string name="openapsama_iob_threshold_percent">soglia maxIOB percentuale per SMB\n(iob_threshold_percent)</string>
+
+    <!--    AIMI INIZIO TRADUZIONE PREFENZE E MENU   -->
+
+    <string name="oaps_aimi_logsize_summary">log colon size</string>
+    <string name="oaps_aimi_logsize_title">Numero linee tabella analisi AIMI nella scheda Loop</string>
     <string name="Enable_xdripOM_title">xDrip BG sensore 1 minuto</string>
     <string name="oaps_aimi_enableMlautoDrive_title">SPERIMENTALE : Auto Drive FULL CLOSED LOOP</string>
     <string name="prebolus_autodrive_mode_summary">Autodrive will send a prebolus regarding the raise detection conditions</string>
@@ -398,4 +401,8 @@
     <string name="high_carb_modes_preferences_title_menu">High Carb - Modalità manuale - Impostaz.</string>
     <string name="generic_meal_modes_preferences_title_menu">Pasto generico - Modalità manuale - Impostaz.</string>
     <string name="sleep_modes_preferences_title_menu">Riposo - Modalità manuale - Impostaz.</string>
+
+    <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN  -->
+
+
 </resources>

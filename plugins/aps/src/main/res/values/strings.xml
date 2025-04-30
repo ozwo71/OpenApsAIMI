@@ -369,11 +369,14 @@
     <string name="openapsama_smb_max_range_extension_summary">Default value: 1 This is another key OpenAPS safety cap, and specifies by what factor you can exceed the regular 120 maxSMB/maxUAM minutes. Increase this experimental value slowly and with caution.</string>
     <string name="enableSMB_EvenOn_OddOff_always">Enable alternative activation of SMB depending on active target being even number</string>
     <string name="enableSMB_EvenOn_OddOff_always_summary">\nenabled ...\nif active target(mmol/L) has even decimal\nor active target(mg/dL) is even number\n\ndisabled otherwise</string>
+    <string name="openapsama_iob_threshold_percent_summary" formatted="false">Percentage of maxIOB above which SMBs are disabled.\nDefault value: 100%\nWith 100% this feature is effectively disabled.</string>
+    <string name="openapsama_iob_threshold_percent">maxIOB threshold percent for SMB\n(iob_threshold_percent)</string>
+
+    <!--    AIMI START TRANSLATION MENU PREFERENCES   -->
+
     <string name="oaps_aimi_enableDeleteLine_title">Enable the possibility to delete one day in the ML Training</string>
     <string name="oaps_aimi_logsize_summary">log colon size</string>
     <string name="oaps_aimi_logsize_title">Define the log size for the colon in loop page</string>
-    <string name="openapsama_iob_threshold_percent_summary" formatted="false">Percentage of maxIOB above which SMBs are disabled.\nDefault value: 100%\nWith 100% this feature is effectively disabled.</string>
-    <string name="openapsama_iob_threshold_percent">maxIOB threshold percent for SMB\n(iob_threshold_percent)</string>
     <string name="Enable_xdripOM_title">Enable xdrip bg each one minute</string>
     <string name="oaps_aimi_enableMlautoDrive_title">Experimental : Auto Drive</string>
     <string name="prebolus_autodrive_mode_summary">Autodrive will send a prebolus regarding the raise detection conditions</string>
@@ -414,4 +417,8 @@
     <string name="high_carb_modes_preferences_title_menu">High Carb - Manual Mode settings</string>
     <string name="generic_meal_modes_preferences_title_menu">Generic Meal - Manual Mode settings</string>
     <string name="sleep_modes_preferences_title_menu">Sleep - Manual Mode - settings</string>
+
+        <!--    AIMI -----START TRANSLATION AIMI TABLE PLUGIN -----------------------  -->
+
+
 </resources>
