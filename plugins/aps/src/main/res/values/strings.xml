@@ -229,59 +229,62 @@
     <!-- AIMI START TRANSLATION CORE -->
 
     <string name="key_openapsaimi_settings">key_openapsaimi_settings</string>
-    <string name="openapsaimi">"AIMI 3.3"</string>
-    <string name="openapsaimi_maxsmb_summary">Value of max smb size</string>
     <string name="key_openapsaimi_max_smb">key_openapsaimi_max_smb</string>
-    <string name="openapsaimi_maxsmb_title">OpenapsAIMI Max SMB</string>
-    <string name="description_openapsaimi">Small micro boluses based on Artificial Intelligence and Machine Learning.</string>
-    <string name="oaps_aimi_shortname">OpenApsAIMI</string>
     <string name="key_aimiweight">key_aimiweight</string>
     <string name="key_tdd7">key_tdd7</string>
     <string name="key_cho">key_cho</string>
     <string name="key_B30_upperBG">key_B30_upperBG</string>
     <string name="key_B30_upperdelta">key_B30_upperdelta</string>
     <string name="key_B30_duration">key_B30_duration</string>
+    <string name="key_oaps_aimi_evening_factor">key_oaps_aimi_evening_factor</string>
+    <string name="key_oaps_aimi_morning_factor">key_oaps_aimi_morning_factor</string>
+    <string name="key_oaps_aimi_afternoon_factor">key_oaps_aimi_afternoon_factor</string>
+    <string name="key_oaps_aimi_hyper_factor">key_oaps_aimi_hyper_factor</string>
+    <string name="key_DynISFAdjusthyper">key_DynISFAdjusthyper</string>
+    <string name="key_DynISF_Adjust">key_DynISF_Adjust</string>
+    <string name="key_enable_basal">key_enable_basal</string>
+    <string name="key_prebolus_meal_mode">key_prebolus_meal_mode</string>
+    <string name="key_prebolus_highcarb_mode">key_prebolus_highcarb_mode</string>
+    <string name="key_nb_day_ML_training">key_nb_day_ML_training</string>
+    <string name="key_enable_ML_training">key_enable_ML_training</string>
+    <string name="key_nb_epoch_ML_training">key_nb_epoch_ML_training</string>
+    <string name="key_nb_learningrate_ML_training">key_nb_learningrate_ML_training</string>
+    <string name="key_nb_iteration_ML_training">key_nb_iteration_ML_training</string>
+    <string name="key_openapsaimi_fixed_tbr_rise">key_openapsaimi_fixed_tbr_rise</string>
+
+    <!--    AIMI START TRANSLATION MENU , SUBMENU AND PREFERENCES   -->
+
+    <string name="openapsaimi">"AIMI 3.3"</string>
+    <string name="openapsaimi_maxsmb_summary">Value of max smb size</string>
+    <string name="openapsaimi_maxsmb_title">OpenapsAIMI Max SMB</string>
+    <string name="description_openapsaimi">Small micro boluses based on Artificial Intelligence and Machine Learning.</string>
+    <string name="oaps_aimi_shortname">OpenApsAIMI</string>
     <string name="count_steps_watch">count_steps_watch</string>
     <string name="oaps_aimi_evening_factor_summary">% of Reactivity of the plugin between 6 pm and midnight</string>
-    <string name="key_oaps_aimi_evening_factor">key_oaps_aimi_evening_factor</string>
     <string name="oaps_aimi_evening_factor_title">Evening Reactivity Percentage</string>
     <string name="oaps_aimi_afternoon_factor_title">Afternoon Reactivity Percentage</string>
     <string name="oaps_aimi_morning_factor_title">Morning Reactivity Percentage</string>
     <string name="oaps_aimi_morning_factor_summary">Morning Reactivity Percentage between midnight and 11 am</string>
-    <string name="key_oaps_aimi_morning_factor">key_oaps_aimi_morning_factor</string>
     <string name="oaps_aimi_afternoon_factor_summary">Afternoon reactivity percentage between 12pm and 6 pm</string>
-    <string name="key_oaps_aimi_afternoon_factor">key_oaps_aimi_afternoon_factor</string>
-    <string name="key_oaps_aimi_hyper_factor">key_oaps_aimi_hyper_factor</string>
-    <string name="key_openapsaimi_fixed_tbr_rise">key_openapsaimi_fixed_tbr_rise</string>
-    <string name="key_DynISFAdjusthyper">key_DynISFAdjusthyper</string>
     <string name="oaps_aimi_tbr_fixed_rise_summary">Value Fixed TBR Rise when rise meal detect</string>
     <string name="oaps_aimi_tbr_fixed_rise_title">Value Fixed TBR Rise detect</string>
-    <string name="key_DynISF_Adjust">key_DynISF_Adjust</string>
     <string name="oaps_aimi_hyper_factor_summary"><![CDATA[Reactivity factor when bg > 120]]></string>
     <string name="oaps_aimi_hyper_factor_title"><![CDATA[Reactivity factor BG > 120, for Child BG > 180]]></string>
     <string name="DynISFAdjusthyper_summary"><![CDATA[Increasing this value will increase the velocity to send smb when bg > 120]]></string>
     <string name="DynISFAdjusthyper_title"><![CDATA[Dynisf Adjustment factor % BG > 120]]></string>
-    <string name="key_enable_basal">key_enable_basal</string>
     <string name="prebolus_meal_mode_summary">If you set a note in action page, with the work meal, you will receive one time this value like a pre-bolus.</string>
-    <string name="key_prebolus_meal_mode">key_prebolus_meal_mode</string>
     <string name="prebolus_meal_mode_title">Meal mode pre-bolus</string>
     <string name="prebolus_highcarb_mode_title">Mode high carb pre-bolus</string>
-    <string name="key_prebolus_highcarb_mode">key_prebolus_highcarb_mode</string>
     <string name="prebolus_highcarb_mode_summary">If you set a note in action page, with the word highcarb, you will receive this pre-bolus one time.</string>
     <string name="number_day_ML_training_summary">Number of day to train the model</string>
-    <string name="key_nb_day_ML_training">key_nb_day_ML_training</string>
     <string name="nb_day_ML_training_title">ML number training day</string>
-    <string name="key_enable_ML_training">key_enable_ML_training</string>
     <string name="nb_minutes_ML_training_title">Nb minutes to train the data</string>
     <string name="number_minutes_training_summary">Nb minutes to train the data for the ML engine</string>
     <string name="number_epoch_training_summary">NB Epoch to train the data</string>
     <string name="nb_epoch_ML_training_title">NB Epoch to train the data</string>
-    <string name="key_nb_epoch_ML_training">key_nb_epoch_ML_training</string>
-    <string name="key_nb_learningrate_ML_training">key_nb_learningrate_ML_training</string>
     <string name="number_learningrate_training_summary">nb learning rate to train the data</string>
     <string name="nb_learningrate_ML_training_title">learning rate to train the data</string>
     <string name="number_iteration_training_summary">Nb time it will try before stopping the loop if it can not get a satisfying result.</string>
-    <string name="key_nb_iteration_ML_training">key_nb_iteration_ML_training</string>
     <string name="nb_iteration_ML_training_title">NB iteration stopping the loop</string>
     <string name="DynISF_Adjust_summary" formatted="false">Increase this value greater than 100 if you want to receive more smb. The opposite is true if you receive too much smb.</string>
     <string name="DynISF_Adjust_title" formatted="false">DynISF factor to increase or discrease the number of SMB</string>
@@ -374,10 +377,6 @@
     <string name="OApsAIMI_BFFactor_title">Reactivity mode breakfast</string>
     <string name="oaps_aimi_BF_interval_summary">Interval between 2 SMB mode breakfast</string>
     <string name="oaps_aimi_BF_interval_title">SMB Interval Mode Breakfast</string>
-
-
-    <!--    AIMI START TRANSLATION MENU PREFERENCES   -->
-
     <string name="oaps_aimi_enableDeleteLine_title">Enable the possibility to delete one day in the ML Training</string>
     <string name="oaps_aimi_logsize_summary">log colon size</string>
     <string name="oaps_aimi_logsize_title">Define the log size for the colon in loop page</string>
