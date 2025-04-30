@@ -749,6 +749,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(PreferenceCategory(context).apply {
                     title = rh.gs(R.string.manual_modes_preferences_title_menu)
                 })
+
+                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.meal_modes_MaxBasal, dialogMessage = R.string.meal_modes_max_basal_summary, title = R.string.meal_modes_max_basal_title))
+
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "mode_Breakfast"
                     //title = "Breakfast Mode settings"
