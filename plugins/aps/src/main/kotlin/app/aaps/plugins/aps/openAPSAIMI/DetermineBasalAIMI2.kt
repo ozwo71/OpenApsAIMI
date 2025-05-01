@@ -540,7 +540,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (rate < 0) rate = 0.0
         //else if (rate > maxSafeBasal && !mealR) rate = maxSafeBasal
         else if (rate > maxSafeBasal && !mealR &&
-            !mealTime && !bfastTime && !lunchTime && !dinnerTime && !snackTime && !highCarbTime) {
+            !mealTime && !bfastTime && !lunchTime && !dinnerTime && !highCarbTime) {
             rate = maxSafeBasal
         }
 
