@@ -405,6 +405,7 @@
     <string name="sleep_modes_preferences_title_menu">Riposo - Modalità manuale - Impostaz.</string>
     <string name="meal_modes_max_basal_summary">Meal early detection, fix the maxbasal during 30 minutes</string>
     <string name="meal_modes_max_basal_title">Meal Early Detection TBR</string>
+    <string name="OApsAIMI_Force_Limits">Forza limiti moltiplicatori AAPS</string>
 
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN  -->
     <string name="table_plugin_main_title_1">AIMI-3.3.2</string>
