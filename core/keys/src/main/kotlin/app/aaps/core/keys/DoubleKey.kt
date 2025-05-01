@@ -90,8 +90,36 @@ enum class DoubleKey(
     companion object {
         fun get(key: DoubleKey): DoubleKey {
             return when (key) {
-                ApsMaxDailyMultiplier -> key.copy(max = if (BooleanKey.OApsAIMIforcelimits.defaultValue) 50.0 else 10.0)
-                ApsMaxCurrentBasalMultiplier -> key.copy(max = if (BooleanKey.OApsAIMIforcelimits.defaultValue) 50.0 else 10.0)
+                ApsMaxDailyMultiplier -> DoubleKey(
+                    key = key.key,
+                    defaultValue = key.defaultValue,
+                    min = key.min,
+                    max = if (BooleanKey.OApsAIMIforcelimits.defaultValue) 50.0 else 10.0,
+                    defaultedBySM = key.defaultedBySM,
+                    calculatedBySM = key.calculatedBySM,
+                    showInApsMode = key.showInApsMode,
+                    showInNsClientMode = key.showInNsClientMode,
+                    showInPumpControlMode = key.showInPumpControlMode,
+                    dependency = key.dependency,
+                    negativeDependency = key.negativeDependency,
+                    hideParentScreenIfHidden = key.hideParentScreenIfHidden
+                )
+
+                ApsMaxCurrentBasalMultiplier -> DoubleKey(
+                    key = key.key,
+                    defaultValue = key.defaultValue,
+                    min = key.min,
+                    max = if (BooleanKey.OApsAIMIforcelimits.defaultValue) 50.0 else 10.0,
+                    defaultedBySM = key.defaultedBySM,
+                    calculatedBySM = key.calculatedBySM,
+                    showInApsMode = key.showInApsMode,
+                    showInNsClientMode = key.showInNsClientMode,
+                    showInPumpControlMode = key.showInPumpControlMode,
+                    dependency = key.dependency,
+                    negativeDependency = key.negativeDependency,
+                    hideParentScreenIfHidden = key.hideParentScreenIfHidden
+                )
+
                 else -> key
             }
         }
