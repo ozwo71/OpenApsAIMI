@@ -251,6 +251,7 @@
     <string name="key_nb_learningrate_ML_training">key_nb_learningrate_ML_training</string>
     <string name="key_nb_iteration_ML_training">key_nb_iteration_ML_training</string>
     <string name="key_openapsaimi_fixed_tbr_rise">key_openapsaimi_fixed_tbr_rise</string>
+    <string name="key_use_AimiForceLimits">key_use_AimiForceLimits</string>
 
     <!--    AIMI START TRANSLATION MENU , SUBMENU AND PREFERENCES   -->
 
@@ -333,6 +334,7 @@
     <string name="oaps_aimi_sleep_interval_summary">Interval between SMB for the sleep mode.</string>
     <string name="oaps_aimi_sleep_interval_title">SMB interval Sleep Mode</string>
     <string name="OApsAIMI_Enable_pregnancy">Enable Pregnancy mode</string>
+    <string name="OApsAIMI_Force_Limits">Enable forced limits</string>
     <string name="OApsAIMI_Enable_honeymoon">Enable child mode for a response better suited to lower insulin needs compared to those of an adult</string>
     <string name="oaps_aimi_HIGHBG_interval_summary">High BG SMB Interval</string>
     <string name="oaps_aimi_HIGHBG_interval_title">High BG SMB Interval</string>
