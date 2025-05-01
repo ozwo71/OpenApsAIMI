@@ -4,7 +4,7 @@ import app.aaps.core.keys.BooleanKey.OApsAIMIforcelimits
 enum class DoubleKey(
     override val key: String,
     override val defaultValue: Double,
-    override val min: Double,
+    override var min: Double,
     override var max: Double,
     override val defaultedBySM: Boolean = false,
     override val calculatedBySM: Boolean = false,
@@ -26,20 +26,8 @@ enum class DoubleKey(
     ApsMaxBasal("openapsma_max_basal", 1.0, 0.1, 25.0, defaultedBySM = true, calculatedBySM = true),
     ApsSmbMaxIob("openapsmb_max_iob", 3.0, 0.0, 70.0, defaultedBySM = true, calculatedBySM = true),
     ApsAmaMaxIob("openapsma_max_iob", 1.5, 0.0, 25.0, defaultedBySM = true, calculatedBySM = true),
-    ApsMaxDailyMultiplier(
-        "openapsama_max_daily_safety_multiplier",
-        3.0,
-        1.0,
-        if (OApsAIMIforcelimits) 50.0 else 10.0, // Inizializzazione diretta
-        defaultedBySM = true
-    ),
-    ApsMaxCurrentBasalMultiplier(
-        "openapsama_current_basal_safety_multiplier",
-        4.0,
-        1.0,
-        if (OApsAIMIforcelimits) 50.0 else 10.0, // Inizializzazione diretta
-        defaultedBySM = true
-    ),
+    ApsMaxDailyMultiplier("openapsama_max_daily_safety_multiplier", 3.0, 1.0, 50.0, defaultedBySM = true),
+    ApsMaxCurrentBasalMultiplier("openapsama_current_basal_safety_multiplier", 4.0, 1.0, 50.0, defaultedBySM = true),
 
     ApsAmaBolusSnoozeDivisor("bolussnooze_dia_divisor", 2.0, 1.0, 10.0, defaultedBySM = true),
     ApsAmaMin5MinCarbsImpact("openapsama_min_5m_carbimpact", 3.0, 1.0, 12.0, defaultedBySM = true),
@@ -95,4 +83,14 @@ enum class DoubleKey(
     OApsAIMIDinnerPrebolus2("key_prebolus2_dinner_mode", 2.0, 0.1, 10.0),
     OApsAIMISnackPrebolus("key_prebolus_snack_mode", 1.0, 0.1, 10.0),
     OApsAIMIHighCarbPrebolus("key_prebolus_highcarb_mode", 5.0, 0.1, 10.0);
+
+    init {
+        if (OApsAIMIforcelimits.value) { // Accediamo al valore booleano della BooleanKey
+            ApsMaxDailyMultiplier.max = 50.0
+            ApsMaxCurrentBasalMultiplier.max = 50.0
+        } else {
+            ApsMaxDailyMultiplier.max = 10.0
+            ApsMaxCurrentBasalMultiplier.max = 10.0
+        }
+    }
 }
