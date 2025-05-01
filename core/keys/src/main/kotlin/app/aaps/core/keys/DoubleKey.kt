@@ -1,10 +1,10 @@
 package app.aaps.core.keys
-
+import app.aaps.core.keys.BooleanKey.OApsAIMIforcelimits
 enum class DoubleKey(
     override val key: String,
     override val defaultValue: Double,
     override val min: Double,
-    override val max: Double,
+    override var max: Double,
     override val defaultedBySM: Boolean = false,
     override val calculatedBySM: Boolean = false,
     override val showInApsMode: Boolean = true,
@@ -27,6 +27,7 @@ enum class DoubleKey(
     ApsAmaMaxIob("openapsma_max_iob", 1.5, 0.0, 25.0, defaultedBySM = true, calculatedBySM = true),
     ApsMaxDailyMultiplier("openapsama_max_daily_safety_multiplier", 3.0, 1.0, 50.0, defaultedBySM = true),
     ApsMaxCurrentBasalMultiplier("openapsama_current_basal_safety_multiplier", 4.0, 1.0, 50.0, defaultedBySM = true),
+
     ApsAmaBolusSnoozeDivisor("bolussnooze_dia_divisor", 2.0, 1.0, 10.0, defaultedBySM = true),
     ApsAmaMin5MinCarbsImpact("openapsama_min_5m_carbimpact", 3.0, 1.0, 12.0, defaultedBySM = true),
     ApsSmbMin5MinCarbsImpact("openaps_smb_min_5m_carbimpact", 8.0, 1.0, 12.0, defaultedBySM = true),
@@ -80,7 +81,15 @@ enum class DoubleKey(
     OApsAIMIDinnerPrebolus("key_prebolus_dinner_mode",2.5,0.1, 10.0),
     OApsAIMIDinnerPrebolus2("key_prebolus2_dinner_mode",2.0,0.1, 10.0),
     OApsAIMISnackPrebolus("key_prebolus_snack_mode",1.0,0.1, 10.0),
-    OApsAIMIHighCarbPrebolus("key_prebolus_highcarb_mode",5.0,0.1, 10.0)
+    OApsAIMIHighCarbPrebolus("key_prebolus_highcarb_mode",5.0,0.1, 10.0);
 
-
+    init {
+        if (OApsAIMIforcelimits) {
+            ApsMaxDailyMultiplier.max = 50.0
+            ApsMaxCurrentBasalMultiplier.max = 50.0
+        } else {
+            ApsMaxDailyMultiplier.max = 10.0
+            ApsMaxCurrentBasalMultiplier.max = 10.0
+        }
+    }
 }
