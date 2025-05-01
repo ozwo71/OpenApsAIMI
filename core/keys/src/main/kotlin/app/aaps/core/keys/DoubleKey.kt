@@ -81,5 +81,5 @@ enum class DoubleKey(
     OApsAIMIDinnerPrebolus2("key_prebolus2_dinner_mode", 2.0, 0.1, 10.0),
     OApsAIMISnackPrebolus("key_prebolus_snack_mode", 1.0, 0.1, 10.0),
     OApsAIMIHighCarbPrebolus("key_prebolus_highcarb_mode", 5.0, 0.1, 10.0);
-    
+
 }
