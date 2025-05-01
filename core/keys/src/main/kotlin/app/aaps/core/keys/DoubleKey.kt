@@ -24,8 +24,13 @@ enum class DoubleKey(
     SafetyMaxBolus("treatmentssafety_maxbolus", 3.0, 0.1, 60.0),
     ApsMaxBasal("openapsma_max_basal", 1.0, 0.1, 25.0, defaultedBySM = true, calculatedBySM = true),
     ApsSmbMaxIob("openapsmb_max_iob", 3.0, 0.0, 70.0, defaultedBySM = true, calculatedBySM = true),
-    ApsAmaMaxIob("openapsma_max_iob", 1.5, 0.0, 25.0, defaultedBySM = true, calculatedBySM = true),
-    ApsMaxDailyMultiplier("openapsama_max_daily_safety_multiplier", 3.0, 1.0, 50.0, defaultedBySM = true),
+    //ApsAmaMaxIob("openapsma_max_iob", 1.5, 0.0, 25.0, defaultedBySM = true, calculatedBySM = true),
+    //ApsMaxDailyMultiplier("openapsama_max_daily_safety_multiplier", 3.0, 1.0, 50.0, defaultedBySM = true),
+
+    // Variabili con logica dinamica
+    ApsMaxDailyMultiplier("openapsama_max_daily_safety_multiplier", 3.0, 1.0, 10.0, defaultedBySM = true),
+    ApsMaxCurrentBasalMultiplier("openapsama_current_basal_safety_multiplier", 4.0, 1.0, 10.0, defaultedBySM = true),
+
     ApsMaxCurrentBasalMultiplier("openapsama_current_basal_safety_multiplier", 4.0, 1.0, 50.0, defaultedBySM = true),
     ApsAmaBolusSnoozeDivisor("bolussnooze_dia_divisor", 2.0, 1.0, 10.0, defaultedBySM = true),
     ApsAmaMin5MinCarbsImpact("openapsama_min_5m_carbimpact", 3.0, 1.0, 12.0, defaultedBySM = true),
@@ -81,4 +86,14 @@ enum class DoubleKey(
     OApsAIMIDinnerPrebolus2("key_prebolus2_dinner_mode", 2.0, 0.1, 10.0),
     OApsAIMISnackPrebolus("key_prebolus_snack_mode", 1.0, 0.1, 10.0),
     OApsAIMIHighCarbPrebolus("key_prebolus_highcarb_mode", 5.0, 0.1, 10.0);
+
+    companion object {
+        fun get(key: DoubleKey): DoubleKey {
+            return when (key) {
+                ApsMaxDailyMultiplier -> key.copy(max = if (BooleanKey.OApsAIMIforcelimits.defaultValue) 50.0 else 10.0)
+                ApsMaxCurrentBasalMultiplier -> key.copy(max = if (BooleanKey.OApsAIMIforcelimits.defaultValue) 50.0 else 10.0)
+                else -> key
+            }
+        }
+    }
 }
