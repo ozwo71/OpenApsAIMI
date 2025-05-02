@@ -407,7 +407,7 @@
     <string name="generic_meal_modes_preferences_title_menu">Pasto generico - Modalità manuale - Impostaz.</string>
     <string name="sleep_modes_preferences_title_menu">Riposo - Modalità manuale - Impostaz.</string>
     <string name="meal_modes_max_basal_summary">Manual modes fixed TBR, after prebolus 1 set 30 minutes a fixed TBR</string>
-    <string name="meal_modes_max_basal_title">U/h basale temporanea 30 minuti inizio pasto</string>
+    <string name="meal_modes_max_basal_title">Basale fissa 30 minuti inizio pasto (U/h)</string>
     <string name="OApsAIMI_Force_Limits">Forza limiti moltiplicatori AAPS</string>
 
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN  -->
