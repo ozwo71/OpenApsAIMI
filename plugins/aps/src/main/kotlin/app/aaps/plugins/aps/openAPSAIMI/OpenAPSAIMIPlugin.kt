@@ -819,11 +819,21 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.autodriveMaxBasal, dialogMessage = R.string.autodrive_max_basal_summary, title = R.string.autodrive_max_basal_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolus, dialogMessage = R.string.prebolussmall_autodrive_mode_summary, title = R.string.prebolussmall_autodrive_mode_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivePrebolus, dialogMessage = R.string.prebolus_autodrive_mode_summary, title = R.string.prebolus_autodrive_mode_title))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIcombinedDelta, dialogMessage = R.string.OApsAIMI_CombinedDelta_summary, title = R.string.OApsAIMI_CombinedDelta_title))
-                addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIAutodriveTarget, dialogMessage = R.string.oaps_aimi_AutodriveTarget_summary, title = R.string.oaps_aimi_AutodriveTarget_title))
-                addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIAutodriveBG, dialogMessage = R.string.oaps_aimi_AutodriveBG_summary, title = R.string.oaps_aimi_AutodriveBG_title))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodriveDeviation, dialogMessage = R.string.oaps_aimi_AutodriveDeviation_summary, title = R.string.oaps_aimi_AutodriveDeviation_title))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodriveAcceleration, dialogMessage = R.string.oaps_aimi_AutodriveAcceleration_summary, title = R.string.oaps_aimi_AutodriveAcceleration_title))
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "Autodrive prebolus variables"
+                    //title = "Autodrive prebolus variables"
+                    title = rh.gs(R.string.autodrive_prebolus_variables)
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.autodrive_prebolus_title_menu)
+                    })
+                    addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIAutodriveTarget, dialogMessage = R.string.oaps_aimi_AutodriveTarget_summary, title = R.string.oaps_aimi_AutodriveTarget_title))
+                    addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIAutodriveBG, dialogMessage = R.string.oaps_aimi_AutodriveBG_summary, title = R.string.oaps_aimi_AutodriveBG_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIcombinedDelta, dialogMessage = R.string.OApsAIMI_CombinedDelta_summary, title = R.string.OApsAIMI_CombinedDelta_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodriveDeviation, dialogMessage = R.string.oaps_aimi_AutodriveDeviation_summary, title = R.string.oaps_aimi_AutodriveDeviation_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodriveAcceleration, dialogMessage = R.string.oaps_aimi_AutodriveAcceleration_summary, title = R.string.oaps_aimi_AutodriveAcceleration_title))
+
+
+                })
             })
             addPreference(PreferenceCategory(context).apply {
                 title = rh.gs(R.string.aimi_preferences_title_menu)
