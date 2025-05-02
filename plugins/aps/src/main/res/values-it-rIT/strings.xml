@@ -44,7 +44,7 @@
     <string name="openapsma_autosensdata_label">Dati autosens</string>
     <string name="openapsma_script_debug_data_label">Script debug</string>
     <string name="openapsama_use_autosens">Usa la funzione Autosens</string>
-    <string name="openapsma_max_basal_title">Max U/h a cui limitare una basale temporanea</string>
+    <string name="openapsma_max_basal_title">Max U/h basale temporanea - fuori pasto</string>
     <string name="openapsma_max_basal_summary">Questo valore è chiamato max basale nel contesto OpenAPS</string>
     <string name="openapsma_max_iob_title">Max IOB da basale a cui limitare OpenAPS [U]</string>
     <string name="openapsma_max_iob_summary">Questo valore è chiamato Max IOB nel contesto OpenAPS\nIndica l\'insulina massima in [U] che APS può erogare in contemporanea.</string>
@@ -382,7 +382,7 @@
     <string name="prebolussmall_autodrive_mode_summary"><![CDATA[use by an early meal detection, bg > 100, predictionBG > 180. The idea is when we get a early detection sending a small smb to avoid negative iob or late correction. can be a good approach for a small snack.]]></string>
     <string name="prebolussmall_autodrive_mode_title">Prebolo snack leggero</string>
     <string name="autodrive_max_basal_summary">Quando viene rilevato precocemente un pasto, AIMI esegue una basale fissa per 30 minuti. Inserire il valore orario di questa basale (es. 4 unità, farà 2 unità in 30 minuti)</string>
-    <string name="autodrive_max_basal_title">Basale oraria se pasto rilevato</string>
+    <string name="autodrive_max_basal_title">U/h basale temporanea 30 minuti se pasto rilevato</string>
     <string name="user_preferences_title_menu">Profilo utente AIMI</string>
     <string name="aimi_preferences_title_menu">AAPS impostazioni</string>
     <string name="autodrive_preferences_title_menu">Autodrive - Pasto autom. - Impostazioni</string>
@@ -405,7 +405,7 @@
     <string name="generic_meal_modes_preferences_title_menu">Pasto generico - Modalità manuale - Impostaz.</string>
     <string name="sleep_modes_preferences_title_menu">Riposo - Modalità manuale - Impostaz.</string>
     <string name="meal_modes_max_basal_summary">Manual modes fixed TBR, after prebolus 1 set 30 minutes a fixed TBR</string>
-    <string name="meal_modes_max_basal_title">Valore TBR@30min inizio pasto</string>
+    <string name="meal_modes_max_basal_title">U/h basale temporanea 30 minuti inizio pasto</string>
     <string name="OApsAIMI_Force_Limits">Forza limiti moltiplicatori AAPS</string>
 
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN  -->
