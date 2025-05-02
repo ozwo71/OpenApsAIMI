@@ -533,14 +533,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     //val forcedBasalMealModes = preferences.get(DoubleKey.meal_modes_MaxBasal)
     //val forcedBasalAutoDrive = preferences.get(DoubleKey.autodriveMaxBasal)
-    val autoDrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
 
+    var forcedBasalMealModes = preferences.get(DoubleKey.meal_modes_MaxBasal)
+    var forcedBasalAutoDrive = preferences.get(DoubleKey.autodriveMaxBasal)
+    var autoDrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
 
     fun setTempBasal(_rate: Double, duration: Int, profile: OapsProfileAimi, rT: RT, currenttemp: CurrentTemp, overrideSafetyLimits: Boolean = false): RT {
         val maxSafeBasal = getMaxSafeBasal(profile)
-        val forcedBasalMealModes = preferences.get(DoubleKey.meal_modes_MaxBasal)
-        val forcedBasalAutoDrive = preferences.get(DoubleKey.autodriveMaxBasal)
-        val autoDrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
+
 
 
         val isMealManual = mealTime || bfastTime || lunchTime || dinnerTime || snackTime || highCarbTime
