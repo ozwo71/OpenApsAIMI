@@ -534,7 +534,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     //val forcedBasalMealModes = preferences.get(DoubleKey.meal_modes_MaxBasal)
     //val forcedBasalAutoDrive = preferences.get(DoubleKey.autodriveMaxBasal)
 
-    var forcedBasalMealModes = preferences.get(DoubleKey.meal_modes_MaxBasal)
+    var forcedBasalmealmodes = preferences.get(DoubleKey.meal_modes_MaxBasal)
     var forcedBasalAutoDrive = preferences.get(DoubleKey.autodriveMaxBasal)
     var autoDrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
 
@@ -549,7 +549,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         var rate = _rate
 
          if (isMealManual) {
-            rate = forcedBasalMealModes
+            rate = forcedBasalmealmodes
             duration = 30
             reason(rT, "Forced TBR 30 mins for mealTime manual ($rate U/h)")
         } else if (isAutoDriveWithMeal) {
@@ -3092,9 +3092,6 @@ private fun neuralnetwork5(
             rT.reason.append("$carbsRequired add\'l carbs req w/in ${minutesAboveThreshold}m; ")
         }
 
-        val forcedBasalMealModes = preferences.get(DoubleKey.meal_modes_MaxBasal)
-        val forcedBasalAutoDrive = preferences.get(DoubleKey.autodriveMaxBasal)
-        val autoDrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
 
 /* var rate = when {
      detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime -> calculateRate(forcedBasal, profile_current_basal, 1.0, "Early Meal detection: activation d'une basale maximale pendant 30 minutes.", currenttemp, rT)
@@ -3499,7 +3496,7 @@ private fun neuralnetwork5(
 // 1️⃣ Préparation des variables
      var overrideSafety = false
      var chosenRate: Double? = null
-     var forcedBasalMealModes = preferences.get(DoubleKey.meal_modes_MaxBasal)
+     var forcedBasalmealmodes = preferences.get(DoubleKey.meal_modes_MaxBasal)
      var forcedBasalAutoDrive = preferences.get(DoubleKey.autodriveMaxBasal)
      var autoDrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
 // ------------------------------
