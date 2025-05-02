@@ -600,9 +600,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         var bfastTime = therapy.bfastTime
         var maxBasal = preferences.get(DoubleKey.ApsMaxBasal)
         val recentDeltas = getRecentDeltas()
+        val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
         val predictedDelta = predictedDelta(recentDeltas)
         if (snackTime || highCarbTime || mealTime || lunchTime || dinnerTime || bfastTime) maxBasal = preferences.get(DoubleKey.meal_modes_MaxBasal) else maxBasal
-        if (detectMealOnset(glucoseStatusProvider.glucoseStatusData!!.delta.toFloat(), predictedDelta.toFloat(),glucoseStatusProvider.glucoseStatusData!!.bgAcceleration.toFloat())) maxBasal = preferences.get(DoubleKey.autodriveMaxBasal) else maxBasal
+        if (autodrive && detectMealOnset(glucoseStatusProvider.glucoseStatusData!!.delta.toFloat(), predictedDelta.toFloat(),glucoseStatusProvider.glucoseStatusData!!.bgAcceleration.toFloat())) maxBasal = preferences.get(DoubleKey.autodriveMaxBasal) else maxBasal
         if (isEnabled()) {
 
             if (maxBasal < profile.getMaxDailyBasal()) {
