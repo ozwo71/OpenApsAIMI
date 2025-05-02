@@ -3496,18 +3496,16 @@ private fun neuralnetwork5(
 // 1️⃣ Préparation des variables
      var overrideSafety = false
      var chosenRate: Double? = null
-     var forcedBasalmealmodes = preferences.get(DoubleKey.meal_modes_MaxBasal)
-     var forcedBasalAutoDrive = preferences.get(DoubleKey.autodriveMaxBasal)
-     var autoDrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
+
 // ------------------------------
 // 2️⃣ Early‐meal detection → bypass sécurité, forçage vers `forcedBasal`
      if (detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat())
          && !night && !mealTime && !lunchTime && !bfastTime && !dinnerTime
          && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime
      ) {
-         chosenRate     = forcedBasal.toDouble()
+         chosenRate     = forcedBasalAutoDrive.toDouble()
          overrideSafety = true
-         rT.reason.append("Early meal detected → TBR forcée à ${forcedBasal}U/h x30 (override).\n")
+         rT.reason.append("Early meal detected → TBR forcée à ${forcedBasalAutoDrive}U/h x30 (override).\n")
      } else {
          // ------------------------------
          // 3️⃣ Cas snack / meal / bfast / lunch / dinner / highCarb / fasting / sport
