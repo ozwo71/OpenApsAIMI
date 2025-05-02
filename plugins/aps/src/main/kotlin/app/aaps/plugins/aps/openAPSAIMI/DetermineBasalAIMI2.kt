@@ -531,29 +531,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun getMaxSafeBasal(profile: OapsProfileAimi): Double =
         min(profile.max_basal, min(profile.max_daily_safety_multiplier * profile.max_daily_basal, profile.current_basal_safety_multiplier * profile.current_basal))
 
-    //val forcedBasalMealModes = preferences.get(DoubleKey.meal_modes_MaxBasal)
-    //val forcedBasalAutoDrive = preferences.get(DoubleKey.autodriveMaxBasal)
-
-    var forcedBasalmealmodes = preferences.get(DoubleKey.meal_modes_MaxBasal)
-    var forcedBasalAutoDrive = preferences.get(DoubleKey.autodriveMaxBasal)
-    var autoDrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
-
     fun setTempBasal(_rate: Double, duration: Int, profile: OapsProfileAimi, rT: RT, currenttemp: CurrentTemp, overrideSafetyLimits: Boolean = false): RT {
         val maxSafeBasal = getMaxSafeBasal(profile)
-        val isMealManual = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime
-        val isAutoDriveWithMeal = autoDrive && mealruntime > 0
-
         var rate = _rate
-
-        // if (isMealManual) {
-          //  rate = forcedBasalmealmodes
-          //   rT.duration = 30
-          //  reason(rT, "Forced TBR 30 mins for mealTime manual ($rate U/h)")
-       // } else if (isAutoDriveWithMeal) {
-          //  rate = forcedBasalAutoDrive
-         //    rT.duration = 30
-          //  reason(rT, "Forced TBR 30 mins for Autodrive detect meal ($rate U/h)")
-       // }
         if (rate < 0) rate = 0.0
         //else if (rate > maxSafeBasal && !mealR) rate = maxSafeBasal
         else if (rate > maxSafeBasal && !overrideSafetyLimits  &&
@@ -3089,6 +3069,8 @@ private fun neuralnetwork5(
             rT.reason.append("$carbsRequired add\'l carbs req w/in ${minutesAboveThreshold}m; ")
         }
 
+        val forcedBasalmealmodes = preferences.get(DoubleKey.meal_modes_MaxBasal)
+        val forcedBasal = preferences.get(DoubleKey.autodriveMaxBasal)
 
 /* var rate = when {
      detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime -> calculateRate(forcedBasal, profile_current_basal, 1.0, "Early Meal detection: activation d'une basale maximale pendant 30 minutes.", currenttemp, rT)
@@ -3500,9 +3482,9 @@ private fun neuralnetwork5(
          && !night && !mealTime && !lunchTime && !bfastTime && !dinnerTime
          && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime
      ) {
-         chosenRate     = forcedBasalAutoDrive.toDouble()
+         chosenRate     = forcedBasal.toDouble()
          overrideSafety = true
-         rT.reason.append("Early meal detected → TBR forcée à ${forcedBasalAutoDrive}U/h x30 (override).\n")
+         rT.reason.append("Early meal detected → TBR forcée à ${forcedBasal}U/h x30 (override).\n")
      } else {
          // ------------------------------
          // 3️⃣ Cas snack / meal / bfast / lunch / dinner / highCarb / fasting / sport
