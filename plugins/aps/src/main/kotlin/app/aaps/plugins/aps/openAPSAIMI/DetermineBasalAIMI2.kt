@@ -3499,7 +3499,9 @@ private fun neuralnetwork5(
 // 1️⃣ Préparation des variables
      var overrideSafety = false
      var chosenRate: Double? = null
-
+     var forcedBasalMealModes = preferences.get(DoubleKey.meal_modes_MaxBasal)
+     var forcedBasalAutoDrive = preferences.get(DoubleKey.autodriveMaxBasal)
+     var autoDrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
 // ------------------------------
 // 2️⃣ Early‐meal detection → bypass sécurité, forçage vers `forcedBasal`
      if (detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat())
