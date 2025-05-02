@@ -3559,8 +3559,7 @@ private fun neuralnetwork5(
 // ------------------------------
 // 2️⃣ Early‐meal detection → bypass sécurité, forçage vers `forcedBasal`
      if (detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat())
-         && !nightbis && !mealTime && !lunchTime && !bfastTime && !dinnerTime
-         && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime && bg > 110 && autodrive
+         && !nightbis && modesCondition && bg > 110 && autodrive
      ) {
          chosenRate     = forcedBasal.toDouble()
          overrideSafety = true
