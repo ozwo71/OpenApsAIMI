@@ -363,7 +363,7 @@
     <string name="oaps_aimi_BF_interval_title">SMB Interval Mode Breakfast</string>
     <string name="oaps_aimi_logsize_summary">Numero linee tabella analisi AIMI nella scheda plugin e Loop</string>
     <string name="oaps_aimi_logsize_title">Numero linee tabella AIMI plugin/Loop</string>
-    <string name="Enable_xdripOM_title">xDrip supporto BG sensore 1 minuto</string>
+    <string name="Enable_xdripOM_title">xDrip supporto sensore 1 minuto</string>
     <string name="oaps_aimi_enableMlautoDrive_title">Abilita Auto Drive - rilevamento automatico pasti - SPERIMENTALE</string>
     <string name="prebolus_autodrive_mode_summary">Autodrive will send a prebolus regarding the raise detection conditions</string>
     <string name="prebolus_autodrive_mode_title">Prebolo pasto</string>
