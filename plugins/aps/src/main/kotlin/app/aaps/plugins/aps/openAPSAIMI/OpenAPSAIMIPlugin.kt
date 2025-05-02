@@ -598,12 +598,19 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         var lunchTime = therapy.lunchTime
         var dinnerTime = therapy.dinnerTime
         var bfastTime = therapy.bfastTime
+        var sportTime = therapy.sportTime
+        var sleepTime = therapy.sleepTime
+        var lowCarbTime = therapy.lowCarbTime
+        val calendarInstance = Calendar.getInstance()
+        var hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
+        var night = hourOfDay <= 7
+        val modesCondition = !night && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime
         var maxBasal = preferences.get(DoubleKey.ApsMaxBasal)
         val recentDeltas = getRecentDeltas()
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
         val predictedDelta = predictedDelta(recentDeltas)
         if (snackTime || highCarbTime || mealTime || lunchTime || dinnerTime || bfastTime) maxBasal = preferences.get(DoubleKey.meal_modes_MaxBasal) else maxBasal
-        if (autodrive && detectMealOnset(glucoseStatusProvider.glucoseStatusData!!.delta.toFloat(), predictedDelta.toFloat(),glucoseStatusProvider.glucoseStatusData!!.bgAcceleration.toFloat())) maxBasal = preferences.get(DoubleKey.autodriveMaxBasal) else maxBasal
+        if (modesCondition && autodrive && glucoseStatusProvider.glucoseStatusData!!.glucose > 110 && detectMealOnset(glucoseStatusProvider.glucoseStatusData!!.delta.toFloat(), predictedDelta.toFloat(),glucoseStatusProvider.glucoseStatusData!!.bgAcceleration.toFloat())) maxBasal = preferences.get(DoubleKey.autodriveMaxBasal) else maxBasal
         if (isEnabled()) {
 
             if (maxBasal < profile.getMaxDailyBasal()) {
