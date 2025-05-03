@@ -448,8 +448,8 @@
 
     <string name="basal_arguments_1">Neutral rate = profile &amp; TBR active → TBR delete.\n</string>
     <string name="basal_arguments_2">Neutral rate = profile &amp; no TBR active → do nothing.\n</string>
-    <string name="basal_arguments_3">Neutral rate = profile → set a TBR of %1$s U/h.\n</string>
-    <string name="basal_arguments_4">Set TBR of %1$s U/h for %2$s minutes.\n</string>
+    <string name="basal_arguments_3">Neutral rate = profile → set a TBR of %1$.2f U/h.\n</string>
+    <string name="basal_arguments_4">Set TBR of %1$.2f U/h for %2$d minutes.\n</string>
     <string name="basal_arguments_5">Slow rise → proportional adjustment.\n</string>
     <string name="basal_arguments_6"><![CDATA[EventualBG>110 & hyper → adjustement by factor]]></string>
 
