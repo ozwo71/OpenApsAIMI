@@ -3688,7 +3688,7 @@ private fun neuralnetwork5(
              bgAcceleration.toFloat() > 0.0f
          ) {
              chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor)
-             rT.reason.append(context.getString(R.string.basal_arguments_6)))
+             rT.reason.append(context.getString(R.string.basal_arguments_6))
          }
      }
 
