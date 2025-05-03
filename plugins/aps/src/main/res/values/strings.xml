@@ -446,11 +446,11 @@
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BASAL ARGUMENTS - FILE DetermineBasalAIMI2.kt -->
 
-    <string name="basal_arguments_1"><![CDATA[Neutral rate = profile & TBR active → TBR delete.\n]]></string>
-    <string name="basal_arguments_2"><![CDATA[Neutral rate = profile & no TBR active → do nothing.\n]]></string>
-    <string name="basal_arguments_3"><![CDATA[Neutral rate = profile → set a TBR of $rate U/h.\n]]></string>
-    <string name="basal_arguments_4"><![CDATA[Set TBR of $rate U/h for $duration minutes.\n]]></string>
-    <string name="basal_arguments_5"><![CDATA[Slow rise → proportional adjustment.\n]]></string>
+    <string name="basal_arguments_1">Neutral rate = profile & TBR active → TBR delete.\n</string>
+    <string name="basal_arguments_2">Neutral rate = profile & no TBR active → do nothing.\n</string>
+    <string name="basal_arguments_3">Neutral rate = profile → set a TBR of %1$s U/h.\n</string>
+    <string name="basal_arguments_4">Set TBR of %1$s U/h for %2$s minutes.\n</string>
+    <string name="basal_arguments_5">Slow rise → proportional adjustment.\n</string>
     <string name="basal_arguments_6"><![CDATA[EventualBG>110 & hyper → adjustement by factor]]></string>
 
 </resources>

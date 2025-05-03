@@ -599,14 +599,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
             } else {
                 //rT.reason.append("Taux neutre = profil → pose d’un temp à $rate U/h.\n")
-                rT.reason.append(context.getString(R.string.basal_arguments_3))
+                rT.reason.append(context.getString(R.string.basal_arguments_3, rate))
                 rT.duration = duration
                 rT.rate = rate
             }
         } else {
             // Pose standard du temp
             //rT.reason.append("Pose temp à $rate U/h pour $duration minutes.\n")
-            rT.reason.append(context.getString(R.string.basal_arguments_4))
+            rT.reason.append(context.getString(R.string.basal_arguments_4, rate, duration))
             rT.duration = duration
             rT.rate = rate
         }
