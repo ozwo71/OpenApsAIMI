@@ -266,7 +266,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val windowMinutes = 30f
         val dropPerHour = calculateDropPerHour(bgHistory, windowMinutes)
         val maxAllowedDropPerHour = 25f  // Ajustez si besoin
-
+        val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
         val reasonBuilder = StringBuilder()
         var stopBasal = false
         var basalLS = false
@@ -282,7 +282,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bolusFactor *= 0.3
             reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction du bolus; ")
         }
-        if (delta >= 20f && combinedDelta >= 15f) {
+        if (delta >= 20f && combinedDelta >= 15f && !honeymoon) {
             // Mode "montée rapide" détecté, on override les réductions habituelles
             bolusFactor = 1.0
             reasonBuilder.append("Montée rapide détectée (delta ${delta} mg/dL), application du mode d'urgence; ")
@@ -318,14 +318,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 5. Contrôle du TDD par heure
         val tddThreshold = tdd24Hrs / 24f
         if (tddPerHour > tddThreshold) {
-            bolusFactor *= 0.9
-            reasonBuilder.append("TDD/h élevé ($tddPerHour U/h), réduction x0.9; ")
+            bolusFactor *= 0.8
+            reasonBuilder.append("TDD/h élevé ($tddPerHour U/h), réduction x0.8; ")
         }
 
         // 6. TIR élevé
         if (tirInhypo >= 8f) {
-            bolusFactor *= 0.6
-            reasonBuilder.append("TIR élevé ($tirInhypo%), réduction x0.7; ")
+            bolusFactor *= 0.5
+            reasonBuilder.append("TIR élevé ($tirInhypo%), réduction x0.5; ")
         }
 
         // 7. BG prédit proche de la cible
