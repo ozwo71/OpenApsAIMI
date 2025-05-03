@@ -280,26 +280,33 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             // Option B : on réduit fortement le bolusFactor sans stopper la basale
             bolusFactor *= 0.3
-            reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction du bolus; ")
+            //reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction du bolus; ")
+            reasonBuilder.append(context.getString(R.string.drop_control_1,dropPerHour))
+
         }
         if (delta >= 20f && combinedDelta >= 15f && !honeymoon) {
             // Mode "montée rapide" détecté, on override les réductions habituelles
             bolusFactor = 1.0
-            reasonBuilder.append("Montée rapide détectée (delta ${delta} mg/dL), application du mode d'urgence; ")
+            //reasonBuilder.append("Montée rapide détectée (delta ${delta} mg/dL), application du mode d'urgence; ")
+            reasonBuilder.append(context.getString(R.string.drop_control_2,delta))
+
         }
         // 2. Palier sur le combinedDelta
         when {
             combinedDelta < 1f -> {
                 bolusFactor *= 0.6
-                reasonBuilder.append("combinedDelta très faible ($combinedDelta), réduction x0.6; ")
+                //reasonBuilder.append("combinedDelta très faible ($combinedDelta), réduction x0.6; ")
+                reasonBuilder.append(context.getString(R.string.combined_delta_1,combinedDelta))
             }
             combinedDelta < 2f -> {
                 bolusFactor *= 0.8
-                reasonBuilder.append("combinedDelta modéré ($combinedDelta), réduction x0.8; ")
+                //reasonBuilder.append("combinedDelta modéré ($combinedDelta), réduction x0.8; ")
+                reasonBuilder.append(context.getString(R.string.combined_delta_2,combinedDelta))
             }
             else -> {
                 bolusFactor *= computeDynamicBolusMultiplier(combinedDelta)
-                reasonBuilder.append("combinedDelta élevé ($combinedDelta), pas de réduction; ")
+                //reasonBuilder.append("combinedDelta élevé ($combinedDelta), pas de réduction; ")
+                reasonBuilder.append(context.getString(R.string.combined_delta_3,combinedDelta))
             }
         }
 

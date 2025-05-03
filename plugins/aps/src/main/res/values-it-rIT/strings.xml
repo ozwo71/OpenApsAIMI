@@ -433,4 +433,13 @@
     <string name="basal_arguments_4">Imposto nuova TBR %1$.2f U/h per %2$d minuti.\n</string>
     <string name="basal_arguments_5">Aumento lento glicemia → adeguamento proporzionale.\n</string>
     <string name="basal_arguments_6"><![CDATA[Eventuale BG>110 & iper → adeguamento tramite fattore]]></string>
-</resources>
+
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION DROP CONTROL ARGUMENTS - FILE DetermineBasalAIMI2.kt -->
+
+    <string name="drop_control_1">Calo glicemico elevato (%1$.1f mg/dL/h), forte riduzione del bolo;</string>
+    <string name="drop_control_2">Rilevato rapido aumento (delta %1$.1f mg/dL), modalità di emergenza applicata;</string>
+    <string name="combined_delta_1">Delta combinato molto basso (%1$.1f), riduzione x0.6;</string>
+    <string name="combined_delta_2">Delta combinato moderato (%1$.1f), riduzione x0.8;</string>
+    <string name="combined_delta_3">Delta combinato elevato (%1$.1f), nessuna riduzione;</string>
+    </resources>
+

@@ -453,4 +453,11 @@
     <string name="basal_arguments_5">Slow rise → proportional adjustment.\n</string>
     <string name="basal_arguments_6"><![CDATA[EventualBG>110 & hyper → adjustement by factor]]></string>
 
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION DROP CONTROL ARGUMENTS - FILE DetermineBasalAIMI2.kt -->
+
+    <string name="drop_control_1">High BG drop (%1$.1f mg/dL/h), strong reduction of the bolus;</string>
+    <string name="drop_control_2">Rapid rise detected (delta %1$.1f mg/dL), emergency mode applied</string>
+    <string name="combined_delta_1">Combined delta very low (%1$.1f), reduction x0.6;</string>
+    <string name="combined_delta_2">Combined delta moderate (%1$.1f), reduction x0.8;</string>
+    <string name="combined_delta_3">Combined delta very high (%1$.1f), no reduction;</string>
 </resources>
