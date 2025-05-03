@@ -549,14 +549,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         overrideSafetyLimits: Boolean = false
     ): RT {
         // Calcul du maxSafeBasal habituel
-        val maxSafe = min(
-            profile.max_basal,
-            min(
-                profile.max_daily_safety_multiplier * profile.max_daily_basal,
-                profile.current_basal_safety_multiplier * profile.current_basal
-            )
-        )
-
+        // val maxSafe = min(
+        //     profile.max_basal,
+        //     min(
+        //         profile.max_daily_safety_multiplier * profile.max_daily_basal,
+        //         profile.current_basal_safety_multiplier * profile.current_basal
+        //     )
+        // )
+val maxSafe = profile.max_basal
         // Choix du taux à appliquer :
         // - si overrideSafetyLimits, on ne clamp pas à maxSafe
         // - sinon on clamp le rate à maxSafe
