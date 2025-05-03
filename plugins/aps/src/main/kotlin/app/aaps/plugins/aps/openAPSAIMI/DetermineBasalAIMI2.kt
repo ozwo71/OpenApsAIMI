@@ -530,7 +530,85 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     // private fun getMaxSafeBasal(profile: OapsProfileAimi): Double =
     //     min(profile.max_basal, min(profile.max_daily_safety_multiplier * profile.max_daily_basal, profile.current_basal_safety_multiplier * profile.current_basal))
-     /**
+    //  /**
+    //  * Pose un temp basal en respectant — ou non — la limite de sécurité.
+    //  *
+    //  * @param _rate Taux souhaité (U/h).
+    //  * @param duration Durée du temp basal (en minutes).
+    //  * @param profile Profil utilisateur contenant les paramètres de sécurité.
+    //  * @param rT Objet RT pour accumuler la raison.
+    //  * @param currenttemp Temp actuel pour comparaison.
+    //  * @param overrideSafetyLimits Si vrai, bypass de la limite maxSafeBasal.
+    //  */
+    // fun setTempBasal(
+    //     _rate: Double,
+    //     duration: Int,
+    //     profile: OapsProfileAimi,
+    //     rT: RT,
+    //     currenttemp: CurrentTemp,
+    //     overrideSafetyLimits: Boolean = false
+    // ): RT {
+    //     // Calcul du maxSafeBasal habituel
+    //     val maxSafe = min(
+    //         profile.max_basal,
+    //         min(
+    //             profile.max_daily_safety_multiplier * profile.max_daily_basal,
+    //             profile.current_basal_safety_multiplier * profile.current_basal
+    //         )
+    //     )
+    //     // Choix du taux à appliquer :
+    //     // - si overrideSafetyLimits, on ne clamp pas à maxSafe
+    //     // - sinon on clamp le rate à maxSafe
+    //     val rate = if (overrideSafetyLimits) {
+    //         _rate
+    //     } else {
+    //         _rate.coerceIn(0.0, maxSafe)
+    //     }
+    //
+    //     // Log pour debug
+    //     if (overrideSafetyLimits) {
+    //         rT.reason.append("→ bypass sécurité (override) : rate = ${rate}U/h\n")
+    //     } else if (rate != _rate) {
+    //         rT.reason.append("→ clamped à maxSafeBasal $maxSafe U/h (demande: ${_rate}U/h)\n")
+    //     }
+    //
+    //     // Cas où il n’y a pas de changement utile
+    //     if (currenttemp.duration > (duration - 10)
+    //         && currenttemp.duration <= 120
+    //         && rate <= currenttemp.rate * 1.2
+    //         && rate >= currenttemp.rate * 0.8
+    //         && duration > 0
+    //     ) {
+    //         rT.reason.append("${currenttemp.duration}m restants & ${currenttemp.rate} ~ req $rate U/h : pas de temp.\n")
+    //         return rT
+    //     }
+    //
+    //     // Si le nouveau rate = basal de profil et qu’on skip les neutres
+    //     val profileBasal = profile.current_basal
+    //     if (rate == profileBasal) {
+    //         if (profile.skip_neutral_temps) {
+    //             if (currenttemp.duration > 0) {
+    //                 rT.reason.append("Taux neutre = profil & temp actif → annulation du temp.\n")
+    //                 rT.duration = 0
+    //                 rT.rate = 0.0
+    //             } else {
+    //                 rT.reason.append("Taux neutre = profil & pas de temp → rien à faire.\n")
+    //             }
+    //         } else {
+    //             rT.reason.append("Taux neutre = profil → pose d’un temp à $rate U/h.\n")
+    //             rT.duration = duration
+    //             rT.rate = rate
+    //         }
+    //     } else {
+    //         // Pose standard du temp
+    //         rT.reason.append("Pose temp à $rate U/h pour $duration minutes.\n")
+    //         rT.duration = duration
+    //         rT.rate = rate
+    //     }
+    //
+    //     return rT
+    // }
+    /**
      * Pose un temp basal en respectant — ou non — la limite de sécurité.
      *
      * @param _rate Taux souhaité (U/h).
@@ -538,7 +616,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * @param profile Profil utilisateur contenant les paramètres de sécurité.
      * @param rT Objet RT pour accumuler la raison.
      * @param currenttemp Temp actuel pour comparaison.
-     * @param overrideSafetyLimits Si vrai, bypass de la limite maxSafeBasal.
+     * @param overrideSafetyLimits Si vrai, bypass explicite de la limite maxSafeBasal.
      */
     fun setTempBasal(
         _rate: Double,
@@ -548,32 +626,61 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         currenttemp: CurrentTemp,
         overrideSafetyLimits: Boolean = false
     ): RT {
-        // Calcul du maxSafeBasal habituel
-        // val maxSafe = min(
-        //     profile.max_basal,
-        //     min(
-        //         profile.max_daily_safety_multiplier * profile.max_daily_basal,
-        //         profile.current_basal_safety_multiplier * profile.current_basal
-        //     )
-        // )
-val maxSafe = profile.max_basal
-        // Choix du taux à appliquer :
-        // - si overrideSafetyLimits, on ne clamp pas à maxSafe
-        // - sinon on clamp le rate à maxSafe
-        val rate = if (overrideSafetyLimits) {
+        // ────────────────────────────────────────────────────────────────
+        // 1️⃣ On recalcule le mode “meal” / “highCarb” / “snack” / etc.
+        val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
+        val isMealMode = therapy.snackTime
+            || therapy.highCarbTime
+            || therapy.mealTime
+            || therapy.lunchTime
+            || therapy.dinnerTime
+            || therapy.bfastTime
+
+        // 2️⃣ On recalcule le mode “early autodrive”
+        val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
+        val night = hour <= 7
+        val predDelta = predictedDelta(getRecentDeltas()).toFloat()
+        val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
+
+        val isEarlyAutodrive = !night
+            && !isMealMode
+            && autodrive
+            && bg > 110
+            && detectMealOnset(delta, predDelta, bgacc.toFloat())
+
+        // 3️⃣ On décide de bypasser la limite de sécurité si override ou mode spécial
+        val bypassSafety = overrideSafetyLimits || isMealMode || isEarlyAutodrive
+
+        // ────────────────────────────────────────────────────────────────
+        // 4️⃣ Calcul du maxSafeBasal standard
+        val maxSafe = min(
+            profile.max_basal,
+            min(
+                profile.max_daily_safety_multiplier * profile.max_daily_basal,
+                profile.current_basal_safety_multiplier * profile.current_basal
+            )
+        )
+
+        // 5️⃣ Choix du rate effectif : bypass ou clamp
+        val rate = if (bypassSafety) {
             _rate
         } else {
             _rate.coerceIn(0.0, maxSafe)
         }
 
-        // Log pour debug
-        if (overrideSafetyLimits) {
-            rT.reason.append("→ bypass sécurité (override) : rate = ${rate}U/h\n")
-        } else if (rate != _rate) {
-            rT.reason.append("→ clamped à maxSafeBasal $maxSafe U/h (demande: ${_rate}U/h)\n")
+        // ────────────────────────────────────────────────────────────────
+        // 6️⃣ Logging des raisons
+        when {
+            bypassSafety -> {
+                rT.reason.append("→ bypass sécurité${if (isMealMode) " (meal mode)" else if (isEarlyAutodrive) " (early autodrive)" else ""}: rate = ${rate} U/h\n")
+            }
+            rate != _rate -> {
+                rT.reason.append("→ clamped à maxSafeBasal ${"%.2f".format(maxSafe)} U/h (demandé: ${"%.2f".format(_rate)} U/h)\n")
+            }
         }
 
-        // Cas où il n’y a pas de changement utile
+        // ────────────────────────────────────────────────────────────────
+        // 7️⃣ Si pas de changement utile, on sort
         if (currenttemp.duration > (duration - 10)
             && currenttemp.duration <= 120
             && rate <= currenttemp.rate * 1.2
@@ -584,7 +691,8 @@ val maxSafe = profile.max_basal
             return rT
         }
 
-        // Si le nouveau rate = basal de profil et qu’on skip les neutres
+        // ────────────────────────────────────────────────────────────────
+        // 8️⃣ Gestion du “neutral temp” = profil.current_basal
         val profileBasal = profile.current_basal
         if (rate == profileBasal) {
             if (profile.skip_neutral_temps) {
@@ -600,15 +708,17 @@ val maxSafe = profile.max_basal
                 rT.duration = duration
                 rT.rate = rate
             }
-        } else {
-            // Pose standard du temp
-            rT.reason.append("Pose temp à $rate U/h pour $duration minutes.\n")
-            rT.duration = duration
-            rT.rate = rate
+            return rT
         }
 
+        // ────────────────────────────────────────────────────────────────
+        // 9️⃣ Pose “standard” du temp basal
+        rT.reason.append("Pose temp à ${"%.2f".format(rate)} U/h pour $duration minutes.\n")
+        rT.duration = duration
+        rT.rate = rate
         return rT
     }
+
 
     // fun setTempBasal(_rate: Double, duration: Int, profile: OapsProfileAimi, rT: RT, currenttemp: CurrentTemp, overrideSafetyLimits: Boolean = false): RT {
     //     val maxSafeBasal = getMaxSafeBasal(profile)
