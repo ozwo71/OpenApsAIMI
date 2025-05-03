@@ -254,28 +254,52 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         }
     }
 
+    // private fun getRecentDeltas(): List<Double> {
+    //     val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
+    //     if (data.isEmpty()) return emptyList()
+    //
+    //     val now = data.first()
+    //     val nowDate = now.timestamp
+    //     val recentDeltas = mutableListOf<Double>()
+    //
+    //     // collecte des deltas sur une fenêtre pertinente (entre 2.5 et 7.5 minutes)
+    //     for (i in 1 until data.size) {
+    //         if (data[i].value > 39 && !data[i].filledGap) {
+    //             val minutesAgo = ((nowDate - data[i].timestamp) / (1000.0 * 60))
+    //             // On choisit ici un intervalle où les données sont suffisamment récentes
+    //             if (minutesAgo in 0.0..10.0) {
+    //                 val delta = (now.recalculated - data[i].recalculated) / minutesAgo * 5
+    //                 recentDeltas.add(delta)
+    //             }
+    //         }
+    //     }
+    //     return recentDeltas
+    // }
     private fun getRecentDeltas(): List<Double> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
+        var bg = glucoseStatusProvider.glucoseStatusData?.glucose ?: return emptyList()
+        var delta = glucoseStatusProvider.glucoseStatusData?.delta ?: return emptyList()
         if (data.isEmpty()) return emptyList()
+        // Fenêtre standard selon BG
+        val standardWindow = if (bg < 130) 30f else 15f
+        // Fenêtre raccourcie pour détection rapide
+        val rapidRiseWindow = 10f
+        // Si le delta instantané est supérieur à 15 mg/dL, on choisit la fenêtre rapide
+        val intervalMinutes = if (delta > 15) rapidRiseWindow else standardWindow
 
-        val now = data.first()
-        val nowDate = now.timestamp
+        val nowTimestamp = data.first().timestamp
         val recentDeltas = mutableListOf<Double>()
-
-        // collecte des deltas sur une fenêtre pertinente (entre 2.5 et 7.5 minutes)
         for (i in 1 until data.size) {
             if (data[i].value > 39 && !data[i].filledGap) {
-                val minutesAgo = ((nowDate - data[i].timestamp) / (1000.0 * 60))
-                // On choisit ici un intervalle où les données sont suffisamment récentes
-                if (minutesAgo in 0.0..10.0) {
-                    val delta = (now.recalculated - data[i].recalculated) / minutesAgo * 5
+                val minutesAgo = ((nowTimestamp - data[i].timestamp) / (1000.0 * 60)).toFloat()
+                if (minutesAgo in 0.0f..intervalMinutes) {
+                    val delta = (data.first().recalculated - data[i].recalculated) / minutesAgo * 5f
                     recentDeltas.add(delta)
                 }
             }
         }
         return recentDeltas
     }
-
     @Synchronized
     private fun calculateVariableIsf(timestamp: Long, bg: Double?): Pair<String, Double?> {
         if (!preferences.get(BooleanKey.ApsUseDynamicSensitivity)) return Pair("OFF", null)

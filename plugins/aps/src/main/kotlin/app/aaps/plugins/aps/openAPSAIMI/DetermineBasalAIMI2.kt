@@ -1525,9 +1525,9 @@ private fun neuralnetwork5(
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
         if (data.isEmpty()) return emptyList()
         // Fenêtre standard selon BG
-        val standardWindow = if (bg < 130) 20f else 10f
+        val standardWindow = if (bg < 130) 30f else 15f
         // Fenêtre raccourcie pour détection rapide
-        val rapidRiseWindow = 5f
+        val rapidRiseWindow = 10f
         // Si le delta instantané est supérieur à 15 mg/dL, on choisit la fenêtre rapide
         val intervalMinutes = if (delta > 15) rapidRiseWindow else standardWindow
 
