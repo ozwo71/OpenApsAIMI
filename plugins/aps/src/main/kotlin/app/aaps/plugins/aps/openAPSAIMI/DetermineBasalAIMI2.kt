@@ -685,10 +685,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 6️⃣ Logging des raisons
         when {
             bypassSafety -> {
-                rT.reason.append("→ bypass sécurité${if (isMealMode) " (meal mode)" else if (isEarlyAutodrive) " (early autodrive)" else ""}: rate = ${rate} U/h\n")
+                //rT.reason.append("→ bypass sécurité${if (isMealMode) " (meal mode)" else if (isEarlyAutodrive) " (early autodrive)" else ""}: rate = ${rate} U/h\n")
+                val suffix = when {
+                    isMealMode -> context.getString(R.string.meal_mode_suffix)
+                    isEarlyAutodrive -> context.getString(R.string.early_autodrive_suffix)
+                    else -> ""
+                }
+
+                rT.reason.append(context.getString(R.string.safety_adjustments_12, suffix, rate))
             }
             rate != _rate -> {
-                rT.reason.append("→ clamped à maxSafeBasal ${"%.2f".format(maxSafe)} U/h (demandé: ${"%.2f".format(_rate)} U/h)\n")
+
+                //rT.reason.append("→ clamped à maxSafeBasal ${"%.2f".format(maxSafe)} U/h (demandé: ${"%.2f".format(_rate)} U/h)\n")
+                val formattedMaxSafe = "%.2f".format(maxSafe)
+                val formattedRate = "%.2f".format(_rate)
+
+                rT.reason.append(context.getString(R.string.safety_adjustments_13, formattedMaxSafe, formattedRate))
             }
         }
 
@@ -700,7 +712,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             && rate >= currenttemp.rate * 0.8
             && duration > 0
         ) {
-            rT.reason.append("${currenttemp.duration}m restants & ${currenttemp.rate} ~ req $rate U/h : pas de temp.\n")
+            //rT.reason.append("${currenttemp.duration}m restants & ${currenttemp.rate} ~ req $rate U/h : pas de temp.\n")
+            val formattedDuration = "${currenttemp.duration}m"
+            val formattedRate = "%.2f".format(currenttemp.rate)
+            val formattedRequestedRate = "%.2f".format(rate)
+
+            rT.reason.append(context.getString(R.string.safety_adjustments_14, formattedDuration, formattedRate, formattedRequestedRate))
             return rT
         }
 

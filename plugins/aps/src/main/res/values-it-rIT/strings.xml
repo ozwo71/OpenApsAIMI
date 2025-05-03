@@ -448,8 +448,10 @@
     <string name="safety_adjustments_9">TIR elevato (%1$.0f%%), riduzione x0.5;</string>
     <string name="safety_adjustments_10">BG previsto (%1$.0f) vicino al target (%2$.0f), riduzione x0.5;</string>
     <string name="safety_adjustments_11">Durata basale zero (%1$d min) superata, forzatura basale minima;</string>
-
-
-
-    </resources>
+    <string name="meal_mode_suffix">(modalità pasto)</string>
+    <string name="early_autodrive_suffix">(early autodrive)</string>
+    <string name="safety_adjustments_12">→ bypass sicurezza%s: tasso = %2$.2f U/h\n</string>
+    <string name="safety_adjustments_13">→ limitato a maxSafeBasal %1$s U/h (richiesto: %2$s U/h)\n</string>
+    <string name="safety_adjustments_14">%1$s rimanenti &amp; %2$s ~ richiesto %3$s U/h: nessuna basale temp.\n</string>
+</resources>
 
