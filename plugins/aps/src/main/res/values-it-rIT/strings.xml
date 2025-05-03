@@ -427,8 +427,8 @@
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SEZIONE RAGIONAMENTI BASALE - FILE DetermineBasalAIMI2.kt -->
 
-    <string name="basal_arguments_1">Tasso neutro = profilo & tbr attiva → annullamento TBR.\n</string>
-    <string name="basal_arguments_2">Tasso neutro = profilo & nessuna TBR → non fare niente.\n</string>
+    <string name="basal_arguments_1">Tasso neutro = profilo e tbr attiva → annullamento TBR.\n</string>
+    <string name="basal_arguments_2">Tasso neutro = profilo e nessuna TBR → non fare niente.\n</string>
     <string name="basal_arguments_3">Tasso neutro = profilo → imposto nuova TBR %1$s U/h.\n</string>
     <string name="basal_arguments_4">Imposto nuova TBR %1$s U/h per %2$s minuti.\n</string>
     <string name="basal_arguments_5">Aumento lento glicemia → adeguamento proporzionale.\n</string>
