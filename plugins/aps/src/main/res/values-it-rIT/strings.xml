@@ -240,7 +240,7 @@
     <string name="key_nb_epoch_ML_training">key_nb_epoch_ML_training</string>
     <string name="key_nb_learningrate_ML_training">key_nb_learningrate_ML_training</string>
 
-    <!--    AIMI INIZIO TRADUZIONE MENU, SOTTOMENU e PREFERENZE   -->
+    <!--    AIMI INIZIO TRADUZIONE MENU, SOTTOMENU e PREFERENZE - FILE OpenAPSAIMIPlugin.kt   -->
     <string name="openapsaimi">"AIMI 3.3"</string>
     <string name="openapsaimi_maxsmb_summary">Max SMB value quando BG è minore di 120</string>
     <string name="openapsaimi_maxsmb_title">Max SMB LOW BG</string>
@@ -410,7 +410,7 @@
     <string name="meal_modes_max_basal_title">Basale fissa 30 minuti inizio pasto (U/h)</string>
     <string name="OApsAIMI_Force_Limits">Forza limiti moltiplicatori AAPS</string>
 
-    <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN  -->
+    <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE TITOLI - FILE DetermineBasalAIMI2.kt  -->
     <string name="table_plugin_main_title_1">AIMI-3.3.2</string>
     <string name="table_plugin_main_title_2">Master-TEST</string>
     <string name="table_plugin_main_title_3">30 Aprile 2025</string>
@@ -424,4 +424,13 @@
     <string name="table_plugin_heart_title">Battiti cardiaci</string>
     <string name="table_plugin_manual_modes_title">Modalità Manuale pasto/attività</string>
     <string name="table_plugin_miscellaneous_title">Analisi ultimi trattamenti</string>
+
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SEZIONE RAGIONAMENTI BASALE - FILE DetermineBasalAIMI2.kt -->
+
+    <string name="basal_arguments_1"><![CDATA[Tasso neutro = profilo & tbr attiva → annullamento TBR.\n]]></string>
+    <string name="basal_arguments_2"><![CDATA[Tasso neutro = profilo & nessuna TBR → non fare niente.\n]]></string>
+    <string name="basal_arguments_3"><![CDATA[Tasso neutro = profilo → imposto nuova TBR $rate U/h.\n]]></string>
+    <string name="basal_arguments_4"><![CDATA[Imposto nuova TBR $rate U/h per $duration minuti.\n]]></string>
+    <string name="basal_arguments_5"><![CDATA[Aumento lento glicemia → adeguamento proporzionale.\n]]></string>
+    <string name="basal_arguments_6"><![CDATA[Eventuale BG>110 & iper → adeguamento tramite fattore]]></string>
 </resources>

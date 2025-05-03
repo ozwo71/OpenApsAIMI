@@ -589,20 +589,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (rate == profileBasal) {
             if (profile.skip_neutral_temps) {
                 if (currenttemp.duration > 0) {
-                    rT.reason.append("Taux neutre = profil & temp actif → annulation du temp.\n")
+                    //rT.reason.append("Taux neutre = profil & temp actif → annulation du temp.\n")
+                    rT.reason.append(context.getString(R.string.basal_arguments_1))
                     rT.duration = 0
                     rT.rate = 0.0
                 } else {
-                    rT.reason.append("Taux neutre = profil & pas de temp → rien à faire.\n")
+                    //rT.reason.append("Taux neutre = profil & pas de temp → rien à faire.\n")
+                    rT.reason.append(context.getString(R.string.basal_arguments_2))
                 }
             } else {
-                rT.reason.append("Taux neutre = profil → pose d’un temp à $rate U/h.\n")
+                //rT.reason.append("Taux neutre = profil → pose d’un temp à $rate U/h.\n")
+                rT.reason.append(context.getString(R.string.basal_arguments_3))
                 rT.duration = duration
                 rT.rate = rate
             }
         } else {
             // Pose standard du temp
-            rT.reason.append("Pose temp à $rate U/h pour $duration minutes.\n")
+            //rT.reason.append("Pose temp à $rate U/h pour $duration minutes.\n")
+            rT.reason.append(context.getString(R.string.basal_arguments_4))
             rT.duration = duration
             rT.rate = rate
         }
@@ -3676,14 +3680,15 @@ private fun neuralnetwork5(
              bgAcceleration.toFloat() > 1.0f
          ) {
              chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, combinedDelta.toDouble())
-             rT.reason.append("Montée lente → ajustement proportionnel.\n")
+             //rT.reason.append("Montée lente → ajustement proportionnel.\n")
+             rT.reason.append(context.getString(R.string.basal_arguments_5))
          }
          else if (eventualBG > 110 && !sportTime && bg > 150 &&
              combinedDelta in -2.0..15.0 &&
              bgAcceleration.toFloat() > 0.0f
          ) {
              chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor)
-             rT.reason.append("EventualBG>110 & hyper → ajustement par facteur.\n")
+             rT.reason.append(context.getString(R.string.basal_arguments_6)))
          }
      }
 

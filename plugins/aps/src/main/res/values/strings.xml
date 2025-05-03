@@ -226,7 +226,7 @@
     <string name="openapsama_iob_threshold_percent_summary" formatted="false">Percentage of maxIOB above which SMBs are disabled.\nDefault value: 100%\nWith 100% this feature is effectively disabled.</string>
     <string name="openapsama_iob_threshold_percent">maxIOB threshold percent for SMB\n(iob_threshold_percent)</string>
 
-    <!-- AIMI START TRANSLATION CORE -->
+    <!-- AIMI START TRANSLATION CORE - FILE OpenAPSAIMIPlugin.kt -->
 
     <string name="key_openapsaimi_settings">key_openapsaimi_settings</string>
     <string name="key_openapsaimi_max_smb">key_openapsaimi_max_smb</string>
@@ -253,7 +253,7 @@
     <string name="key_openapsaimi_fixed_tbr_rise">key_openapsaimi_fixed_tbr_rise</string>
     <string name="key_use_AimiForceLimits">key_use_AimiForceLimits</string>
 
-    <!--    AIMI START TRANSLATION MENU , SUBMENU AND PREFERENCES   -->
+    <!--    AIMI START TRANSLATION MENU , SUBMENU AND PREFERENCES - FILE OpenAPSAIMIPlugin.kt   -->
 
     <string name="openapsaimi">"AIMI 3.3"</string>
     <string name="openapsaimi_maxsmb_summary">Value of max smb size</string>
@@ -428,7 +428,7 @@
     <string name="meal_modes_max_basal_summary">Manual modes fixed TBR, after prebolus 1 set 30 minutes a fixed TBR</string>
     <string name="meal_modes_max_basal_title">Manual modes fixed TBR</string>
 
-        <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN -->
+        <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION TITLE - FILE DetermineBasalAIMI2.kt -->
 
     <string name="table_plugin_main_title_1">AAPS-MASTER-AIMI</string>
     <string name="table_plugin_main_title_2">OpenApsAIMI Settings</string>
@@ -443,4 +443,14 @@
     <string name="table_plugin_heart_title">Heart Rate Data</string>
     <string name="table_plugin_manual_modes_title">Modes</string>
     <string name="table_plugin_miscellaneous_title">Miscellaneous</string>
+
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BASAL ARGUMENTS - FILE DetermineBasalAIMI2.kt -->
+
+    <string name="basal_arguments_1"><![CDATA[Neutral rate = profile & TBR active → TBR delete.\n]]></string>
+    <string name="basal_arguments_2"><![CDATA[Neutral rate = profile & no TBR active → do nothing.\n]]></string>
+    <string name="basal_arguments_3"><![CDATA[Neutral rate = profile → set a TBR of $rate U/h.\n]]></string>
+    <string name="basal_arguments_4"><![CDATA[Set TBR of $rate U/h for $duration minutes.\n]]></string>
+    <string name="basal_arguments_5"><![CDATA[Slow rise → proportional adjustment.\n]]></string>
+    <string name="basal_arguments_6"><![CDATA[EventualBG>110 & hyper → adjustement by factor]]></string>
+
 </resources>
