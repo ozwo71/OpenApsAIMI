@@ -281,14 +281,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Option B : on réduit fortement le bolusFactor sans stopper la basale
             bolusFactor *= 0.3
             //reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction du bolus; ")
-            reasonBuilder.append(context.getString(R.string.drop_control_1,dropPerHour))
+            reasonBuilder.append(context.getString(R.string.safety_adjustments_1,dropPerHour))
 
         }
         if (delta >= 20f && combinedDelta >= 15f && !honeymoon) {
             // Mode "montée rapide" détecté, on override les réductions habituelles
             bolusFactor = 1.0
             //reasonBuilder.append("Montée rapide détectée (delta ${delta} mg/dL), application du mode d'urgence; ")
-            reasonBuilder.append(context.getString(R.string.drop_control_2,delta))
+            reasonBuilder.append(context.getString(R.string.safety_adjustments_2,delta))
 
         }
         // 2. Palier sur le combinedDelta
@@ -296,49 +296,54 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             combinedDelta < 1f -> {
                 bolusFactor *= 0.6
                 //reasonBuilder.append("combinedDelta très faible ($combinedDelta), réduction x0.6; ")
-                reasonBuilder.append(context.getString(R.string.combined_delta_1,combinedDelta))
+                reasonBuilder.append(context.getString(R.string.safety_adjustments_3,combinedDelta))
             }
             combinedDelta < 2f -> {
                 bolusFactor *= 0.8
                 //reasonBuilder.append("combinedDelta modéré ($combinedDelta), réduction x0.8; ")
-                reasonBuilder.append(context.getString(R.string.combined_delta_2,combinedDelta))
+                reasonBuilder.append(context.getString(R.string.safety_adjustments_4,combinedDelta))
             }
             else -> {
                 bolusFactor *= computeDynamicBolusMultiplier(combinedDelta)
                 //reasonBuilder.append("combinedDelta élevé ($combinedDelta), pas de réduction; ")
-                reasonBuilder.append(context.getString(R.string.combined_delta_3,combinedDelta))
+                reasonBuilder.append(context.getString(R.string.safety_adjustments_5,combinedDelta))
             }
         }
 
         // 3. Plateau si BG élevé + combinedDelta très faible
         if (currentBG > 160f && combinedDelta < 1f) {
             bolusFactor *= 0.8
-            reasonBuilder.append("Plateau BG>180 & combinedDelta<2 => réduction x0.8; ")
+            //reasonBuilder.append("Plateau BG>180 & combinedDelta<2 => réduction x0.8; ")
+            reasonBuilder.append(context.getString(R.string.safety_adjustments_6))
         }
 
         // 4. Contrôle IOB
         if (iob >= maxIob * 0.85f) {
             bolusFactor *= 0.85
-            reasonBuilder.append("IOB élevé ($iob U), réduction x0.8; ")
+            //reasonBuilder.append("IOB élevé ($iob U), réduction x0.8; ")
+            reasonBuilder.append(context.getString(R.string.safety_adjustments_7,iob))
         }
 
         // 5. Contrôle du TDD par heure
         val tddThreshold = tdd24Hrs / 24f
         if (tddPerHour > tddThreshold) {
             bolusFactor *= 0.8
-            reasonBuilder.append("TDD/h élevé ($tddPerHour U/h), réduction x0.8; ")
+            //reasonBuilder.append("TDD/h élevé ($tddPerHour U/h), réduction x0.8; ")
+            reasonBuilder.append(context.getString(R.string.safety_adjustments_8,tddPerHour))
         }
 
         // 6. TIR élevé
         if (tirInhypo >= 8f) {
             bolusFactor *= 0.5
-            reasonBuilder.append("TIR élevé ($tirInhypo%), réduction x0.5; ")
+            //reasonBuilder.append("TIR élevé ($tirInhypo%), réduction x0.5; ")
+            reasonBuilder.append(context.getString(R.string.safety_adjustments_9,tirInhypo))
         }
 
         // 7. BG prédit proche de la cible
         if (predictedBG < targetBG + 10) {
             bolusFactor *= 0.5
-            reasonBuilder.append("BG prédit ($predictedBG) proche de la cible ($targetBG), réduction x0.5; ")
+            //reasonBuilder.append("BG prédit ($predictedBG) proche de la cible ($targetBG), réduction x0.5; ")
+            reasonBuilder.append(context.getString(R.string.safety_adjustments_10,predictedBG,targetBG))
         }
         // ---- Intégration du suivi de durée zéro basal ----
         // Si nous avons déjà trop longtemps de basal à 0, on ne souhaite pas stopper la basale.
@@ -348,7 +353,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             stopBasal = false
             basalLS = true
             bolusFactor = 1.0
-            reasonBuilder.append("Zero basal duration ($zeroBasalDurationMinutes min) dépassé, forçant basal minimal; ")
+            //reasonBuilder.append("Zero basal duration ($zeroBasalDurationMinutes min) dépassé, forçant basal minimal; ")
+            reasonBuilder.append(context.getString(R.string.safety_adjustments_11,zeroBasalDurationMinutes))
         }
 
         return SafetyDecision(

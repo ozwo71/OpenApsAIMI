@@ -453,11 +453,17 @@
     <string name="basal_arguments_5">Slow rise → proportional adjustment.\n</string>
     <string name="basal_arguments_6"><![CDATA[EventualBG>110 & hyper → adjustement by factor]]></string>
 
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION DROP CONTROL ARGUMENTS - FILE DetermineBasalAIMI2.kt -->
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION SAFETY ADJUSTMENTS - FILE DetermineBasalAIMI2.kt -->
 
-    <string name="drop_control_1">High BG drop (%1$.1f mg/dL/h), strong reduction of the bolus;</string>
-    <string name="drop_control_2">Rapid rise detected (delta %1$.1f mg/dL), emergency mode applied</string>
-    <string name="combined_delta_1">Combined delta very low (%1$.1f), reduction x0.6;</string>
-    <string name="combined_delta_2">Combined delta moderate (%1$.1f), reduction x0.8;</string>
-    <string name="combined_delta_3">Combined delta very high (%1$.1f), no reduction;</string>
+    <string name="safety_adjustments_1">High BG drop (%1$.1f mg/dL/h), strong reduction of the bolus;</string>
+    <string name="safety_adjustments_2">Rapid rise detected (delta %1$.1f mg/dL), emergency mode applied</string>
+    <string name="safety_adjustments_3">Combined delta very low (%1$.1f), reduction x0.6;</string>
+    <string name="safety_adjustments_4">Combined delta moderate (%1$.1f), reduction x0.8;</string>
+    <string name="safety_adjustments_5">Combined delta very high (%1$.1f), no reduction;</string>
+    <string name="safety_adjustments_6"><![CDATA[Stable BG>180 & Combined Delta<2 => reduction x0.8;]]></string>
+    <string name="safety_adjustments_7">High IOB (%1$.2f U), reduction x0.8;</string>
+    <string name="safety_adjustments_8">High TDD/h (%1$.2f U/h), reduction x0.8;</string>
+    <string name="safety_adjustments_9">High TIR (%1$.0f%%), reduction x0.5;</string>
+    <string name="safety_adjustments_10">Predicted BG (%1$.0f) close to target (%2$.0f), reduction x0.5;</string>
+    <string name="safety_adjustments_11">Zero basal duration (%1$d min) exceeded, forcing minimal basal;</string>
 </resources>

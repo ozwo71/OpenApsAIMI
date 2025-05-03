@@ -411,6 +411,7 @@
     <string name="OApsAIMI_Force_Limits">Forza limiti moltiplicatori AAPS</string>
 
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE TITOLI - FILE DetermineBasalAIMI2.kt  -->
+
     <string name="table_plugin_main_title_1">AIMI-3.3.2</string>
     <string name="table_plugin_main_title_2">Master-TEST</string>
     <string name="table_plugin_main_title_3">30 Aprile 2025</string>
@@ -425,7 +426,7 @@
     <string name="table_plugin_manual_modes_title">Modalità Manuale pasto/attività</string>
     <string name="table_plugin_miscellaneous_title">Analisi ultimi trattamenti</string>
 
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SEZIONE RAGIONAMENTI BASALE - FILE DetermineBasalAIMI2.kt -->
+    <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE RAGIONAMENTI BASALE - FILE DetermineBasalAIMI2.kt -->
 
     <string name="basal_arguments_1">Tasso neutro = profilo e tbr attiva → annullamento TBR.\n</string>
     <string name="basal_arguments_2">Tasso neutro = profilo e nessuna TBR → non fare niente.\n</string>
@@ -434,12 +435,21 @@
     <string name="basal_arguments_5">Aumento lento glicemia → adeguamento proporzionale.\n</string>
     <string name="basal_arguments_6"><![CDATA[Eventuale BG>110 & iper → adeguamento tramite fattore]]></string>
 
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION DROP CONTROL ARGUMENTS - FILE DetermineBasalAIMI2.kt -->
+    <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE AGGIUSTAMENTI SICUREZZA - FILE DetermineBasalAIMI2.kt -->
 
-    <string name="drop_control_1">Calo glicemico elevato (%1$.1f mg/dL/h), forte riduzione del bolo;</string>
-    <string name="drop_control_2">Rilevato rapido aumento (delta %1$.1f mg/dL), modalità di emergenza applicata;</string>
-    <string name="combined_delta_1">Delta combinato molto basso (%1$.1f), riduzione x0.6;</string>
-    <string name="combined_delta_2">Delta combinato moderato (%1$.1f), riduzione x0.8;</string>
-    <string name="combined_delta_3">Delta combinato elevato (%1$.1f), nessuna riduzione;</string>
+    <string name="safety_adjustments_1">Calo glicemico elevato (%1$.1f mg/dL/h), forte riduzione del bolo;</string>
+    <string name="safety_adjustments_2">Rilevato rapido aumento (delta %1$.1f mg/dL), modalità di emergenza applicata;</string>
+    <string name="safety_adjustments_3">Delta combinato molto basso (%1$.1f), riduzione x0.6;</string>
+    <string name="safety_adjustments_4">Delta combinato moderato (%1$.1f), riduzione x0.8;</string>
+    <string name="safety_adjustments_5">Delta combinato elevato (%1$.1f), nessuna riduzione;</string>
+    <string name="safety_adjustments_6"><![CDATA[Glicemia stabile>180 & Delta combinato<2 => riduzione x0.8;]]></string>
+    <string name="safety_adjustments_7">IOB elevato (%1$.2f U), riduzione x0.8;</string>
+    <string name="safety_adjustments_8">TDD/h elevato (%1$.2f U/h), riduzione x0.8;</string>
+    <string name="safety_adjustments_9">TIR elevato (%1$.0f%%), riduzione x0.5;</string>
+    <string name="safety_adjustments_10">BG previsto (%1$.0f) vicino al target (%2$.0f), riduzione x0.5;</string>
+    <string name="safety_adjustments_11">Durata basale zero (%1$d min) superata, forzatura basale minima;</string>
+
+
+
     </resources>
 
