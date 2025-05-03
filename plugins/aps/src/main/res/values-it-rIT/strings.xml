@@ -453,5 +453,6 @@
     <string name="safety_adjustments_12">→ bypass sicurezza%s: tasso = %2$.2f U/h\n</string>
     <string name="safety_adjustments_13">→ limitato a maxSafeBasal %1$s U/h (richiesto: %2$s U/h)\n</string>
     <string name="safety_adjustments_14">%1$s rimanenti &amp; %2$s ~ richiesto %3$s U/h: nessuna basale temp.\n</string>
+    <string name="safety_cut"><![CDATA[Safety cut: BG previsto<100 o IOB>%1$.2f → basale temp. 0.\n]]></string>
 </resources>
 

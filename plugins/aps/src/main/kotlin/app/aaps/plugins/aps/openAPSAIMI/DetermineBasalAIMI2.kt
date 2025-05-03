@@ -3681,7 +3681,8 @@ private fun neuralnetwork5(
      ) {
          chosenRate     = 0.0
          overrideSafety = false
-         rT.reason.append("Safety cut: predictedBg<100 ou IOB>$maxIob → basale à 0.\n")
+         //rT.reason.append("Safety cut: predictedBg<100 ou IOB>$maxIob → basale à 0.\n")
+         rT.reason.append(context.getString(R.string.safety_cut, maxIob))
      }
 
 // ------------------------------
