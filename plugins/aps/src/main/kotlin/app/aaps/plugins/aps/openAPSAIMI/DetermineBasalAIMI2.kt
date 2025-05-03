@@ -716,7 +716,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // ────────────────────────────────────────────────────────────────
         // 9️⃣ Pose “standard” du temp basal
-        rT.reason.append("Pose temp à ${"%.2f".format(rate)} U/h pour $duration minutes.\n")
+        //rT.reason.append("Pose temp à ${"%.2f".format(rate)} U/h pour $duration minutes.\n")
+        rT.reason.append(context.getString(R.string.basal_arguments_4, rate,duration))
         rT.duration = duration
         rT.rate = rate
         return rT
