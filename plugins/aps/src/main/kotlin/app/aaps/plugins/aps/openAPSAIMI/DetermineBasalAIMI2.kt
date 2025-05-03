@@ -282,7 +282,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bolusFactor *= 0.3
             reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction du bolus; ")
         }
-        if (delta > 15f) {
+        if (delta >= 20f && combinedDelta >= 15f) {
             // Mode "montée rapide" détecté, on override les réductions habituelles
             bolusFactor = 1.0
             reasonBuilder.append("Montée rapide détectée (delta ${delta} mg/dL), application du mode d'urgence; ")
@@ -3458,99 +3458,7 @@ private fun neuralnetwork5(
      if (safetyDecision.basalLS && combinedDelta in -1.0..3.0 && predictedBg > 130 && iob > 0.1){
          return setTempBasal(profile_current_basal, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
      }
-     // if (detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime) {
-     //     rT.reason.append("Détection précoce de repas: activation d'une basale maximale pendant 30 minutes. ")
-     //     val forcedBasal = preferences.get(DoubleKey.autodriveMaxBasal)  // Exemple, ajuster le facteur selon le profil
-     //     //return setTempBasal(forcedBasal, 30, profile, rT, currenttemp)
-     //     rate?.let {
-     //         rT.rate = forcedBasal
-     //         rT.deliverAt = deliverAt
-     //         rT.duration = 30
-     //     }
-     //     return rT
-     // }
-     // 🔴 Sécurité : Arrêt de la basale en cas de tendance baissière ou IOB trop élevé
-//      if (predictedBg < 100 && mealData.slopeFromMaxDeviation <= 0 || iob > maxIob) {
-//          return setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
-//      }
-//
-//      // ⚠️ Gestion des hypoglycémies et basale réduite si risque
-//      when {
-//          bg < 80                                                                                                                  -> rate = 0.0
-//          bg in 80.0..90.0 && slopeFromMaxDeviation <= 0 && iob > 0.1 && !sportTime                                                -> rate = 0.0
-//          bg in 80.0..90.0 && slopeFromMinDeviation >= 0.3 && slopeFromMaxDeviation >= 0 &&
-//              combinedDelta in -1.0..2.0 && !sportTime && bgAcceleration.toFloat() > 0.0f                                                  -> rate = profile_current_basal * 0.2
-//
-//          bg in 90.0..100.0 && slopeFromMinDeviation <= 0.3 && iob > 0.1 && !sportTime && bgAcceleration.toFloat() > 0.0f          -> rate = 0.0
-//          bg in 90.0..100.0 && slopeFromMinDeviation >= 0.3 && combinedDelta in -1.0..2.0 && !sportTime && bgAcceleration.toFloat() > 0.0f -> rate = profile_current_basal * 0.5
-//      }
-//
-//      // 🔺 Gestion des hausses lentes et rapides
-//      if (bg > 120 && slopeFromMinDeviation in 0.4..20.0 && combinedDelta > 1 && !sportTime && bgAcceleration.toFloat() > 1.0f) {
-//          rate = calculateBasalRate(finalBasalRate, profile_current_basal, combinedDelta.toDouble())
-//      } else if (eventualBG > 110 && !sportTime && bg > 150 && combinedDelta in -2.0..15.0 && bgAcceleration.toFloat() > 0.0f) {
-//          rate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor)
-//      }
-//
-//      // 🔵 Gestion des horaires et activité
-//      if ((timenow in 11..13 || timenow in 18..21) && iob < 0.8 && recentSteps5Minutes < 100 && combinedDelta > -1 && slopeFromMinDeviation > 0.3 && bgAcceleration.toFloat() > 0.0f) {
-//          rate = profile_current_basal * 1.5
-//      } else if (timenow > sixAMHour && recentSteps5Minutes > 100) {
-//          rate = 0.0
-//      } else if (timenow <= sixAMHour && delta > 0 && bgAcceleration.toFloat() > 0.0f) {
-//          rate = profile_current_basal
-//      }
-//
-//      // 🍽️ Gestion des repas et snacks
-//      val mealConditions = listOf(
-//          snackTime to snackrunTime,
-//          mealTime to mealruntime,
-//          bfastTime to bfastruntime,
-//          lunchTime to lunchruntime,
-//          dinnerTime to dinnerruntime,
-//          highCarbTime to highCarbrunTime
-//      )
-//
-//      for ((meal, runtime) in mealConditions) {
-//          if (meal && runtime in 0..30) {
-//              rate = calculateBasalRate(finalBasalRate, profile_current_basal, 10.0)
-//          } else if (meal && runtime in 30..60 && delta > 0) {
-//              rate = calculateBasalRate(finalBasalRate, profile_current_basal, delta.toDouble())
-//          }
-//      }
-//
-//      // 🟢 Gestion des hyperglycémies et corrections
-//      when {
-//          eventualBG > 180 && delta > 3  -> rate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, basalAdjustmentFactor)
-//          bg > 180 && delta in -5.0..1.0 -> rate = profile_current_basal * basalAdjustmentFactor
-//      }
-//
-//      // 🌙 Mode honeymoon
-//      if (honeymoon) {
-//          when {
-//              bg in 140.0..169.0 && delta > 0                                                                                             -> rate = profile_current_basal
-//              bg > 170 && delta > 0                                                                                                       -> rate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor)
-//              combinedDelta > 2 && bg in 90.0..119.0                                                                                              -> rate = profile_current_basal
-//              combinedDelta > 0 && bg > 110 && eventualBG > 120 && bg < 160                                                                       -> rate = profile_current_basal * basalAdjustmentFactor
-//              mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 && bg > 110 && combinedDelta > 0                           -> rate = profile_current_basal * basalAdjustmentFactor
-//              mealData.slopeFromMaxDeviation in 0.0..0.2 && mealData.slopeFromMinDeviation in 0.0..0.5 && bg in 120.0..150.0 && delta > 0 -> rate = profile_current_basal * basalAdjustmentFactor
-//              mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 && bg in 100.0..120.0 && delta > 0                 -> rate = profile_current_basal * basalAdjustmentFactor
-//          }
-//      }
-//
-//      // 🤰 Cas de grossesse
-//      if (pregnancyEnable && delta > 0 && bg > 110 && !honeymoon) {
-//          rate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor)
-//      }
-//
-// // Application finale
-//      rate.let {
-//          rT.rate = it
-//          if (rate != null) {
-//              rT.reason.append("${currenttemp.duration}m@${(currenttemp.rate).toFixed2()} AI Force basal because of specific condition: ${round(rate.toDouble(), 2)}U/hr. ")
-//          }
-//          return setTempBasal(rate!!, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
-//      }
+
      // ------------------------------
 // 1️⃣ Préparation des variables
      var overrideSafety = false
