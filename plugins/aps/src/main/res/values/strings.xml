@@ -489,7 +489,7 @@
     <string name="table_plugin_hours_activity_1">Calm meal &amp; time → basal x1.5.\n</string>
     <string name="table_plugin_hours_activity_2">Morning activity → basal to 0.\n</string>
     <string name="table_plugin_hours_activity_3">Morning rising → profile basal.\n</string>
-    <string name="table_plugin_meal_snack_1">Meal/snack <30m → basal x10.\n</string>
+    <string name="table_plugin_meal_snack_1"><![CDATA[Meal/snack 30m → basal x10.\n]]></string>
     <string name="table_plugin_meal_snack_2">Meal/snack 30–60m &amp; rising → basal Δ.\n</string>
     <string name="table_plugin_hyperglycemia_1">EventualBG&gt;180 &amp; hyper → basal AIMI adjustment.\n</string>
     <string name="table_plugin_hyperglycemia_2">BG&gt;180 stable → basal X factor adjustment.\n</string>
