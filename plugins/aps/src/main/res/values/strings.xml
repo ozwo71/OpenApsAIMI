@@ -486,6 +486,9 @@
     <string name="basal_arguments_4">Set TBR of %1$.2f U/h for %2$d minutes.\n</string>
     <string name="basal_arguments_5">Slow rise → proportional adjustment.\n</string>
     <string name="basal_arguments_6"><![CDATA[EventualBG>110 & hyper → adjustement by factor]]></string>
+    <string name="table_plugin_hours_activity_1">Calm meal &amp; time → basal x1.5.\n</string>
+    <string name="table_plugin_hours_activity_2">Morning activity → basal to 0.\n</string>
+    <string name="table_plugin_hours_activity_3">Morning rising → profile basal.\n</string>
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION SAFETY ADJUSTMENTS - FILE DetermineBasalAIMI2.kt -->
 

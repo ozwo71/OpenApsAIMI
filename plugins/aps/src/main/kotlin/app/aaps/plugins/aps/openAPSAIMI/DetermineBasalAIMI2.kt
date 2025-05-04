@@ -3842,15 +3842,18 @@ private fun neuralnetwork5(
              bgAcceleration.toFloat() > 0.0f
          ) {
              chosenRate = profile_current_basal * 1.5
-             rT.reason.append("Repas calme & horaire → basale x1.5.\n")
+             //rT.reason.append("Repas calme & horaire → basale x1.5.\n")
+             rT.reason.append(context.getString(R.string.table_plugin_hours_activity_1))
          }
          else if (timenow > sixAMHour && recentSteps5Minutes > 100) {
              chosenRate = 0.0
-             rT.reason.append("Activité matinale → basale à 0.\n")
+             //rT.reason.append("Activité matinale → basale à 0.\n")
+             rT.reason.append(context.getString(R.string.table_plugin_hours_activity_2))
          }
          else if (timenow <= sixAMHour && delta > 0 && bgAcceleration.toFloat() > 0.0f) {
              chosenRate = profile_current_basal.toDouble()
-             rT.reason.append("Matinée montante → basale de profil.\n")
+             //rT.reason.append("Matinée montante → basale de profil.\n")
+             rT.reason.append(context.getString(R.string.table_plugin_hours_activity_3))
          }
      }
 

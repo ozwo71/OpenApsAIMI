@@ -469,6 +469,9 @@
     <string name="basal_arguments_4">Imposto nuova TBR %1$.2f U/h per %2$d minuti.\n</string>
     <string name="basal_arguments_5">Aumento lento glicemia → adeguamento proporzionale.\n</string>
     <string name="basal_arguments_6"><![CDATA[Eventuale BG>110 & iper → adeguamento tramite fattore]]></string>
+    <string name="table_plugin_hours_activity_1">Pasto tranquillo &amp; orario → basale x1.5.\n</string>
+    <string name="table_plugin_hours_activity_2">Attività mattutina → basale temp. 0.\n</string>
+    <string name="table_plugin_hours_activity_3">Rialzo mattutino → basale profilo.\n</string>
 
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE AGGIUSTAMENTI SICUREZZA - FILE DetermineBasalAIMI2.kt -->
 
