@@ -422,9 +422,23 @@
     <string name="table_plugin_glucose_title">Glicemia</string>
     <string name="table_plugin_tir_title">TIR</string>
     <string name="table_plugin_steps_title">Passi conteggio</string>
+    <string name="table_plugin_steps_1">ultimi 5m</string>
+    <string name="table_plugin_steps_2">ultimi 30m</string>
+    <string name="table_plugin_steps_3">ultima 60m</string>
+    <string name="table_plugin_steps_4">ultime 3hr</string>
     <string name="table_plugin_heart_title">Battiti cardiaci</string>
-    <string name="table_plugin_manual_modes_title">Modalità Manuale pasto/attività</string>
-    <string name="table_plugin_miscellaneous_title">Analisi ultimi trattamenti</string>
+    <string name="table_plugin_heart_1">ultimi 5m</string>
+    <string name="table_plugin_heart_2">ultimi 60m</string>
+    <string name="table_plugin_manual_modes_title">Modalità Manuale</string>
+    <string name="table_plugin_miscellaneous_title">Ultimi trattamenti</string>
+    <string name="table_plugin_miscellaneous_1">Ultimo SMB</string>
+    <string name="table_plugin_miscellaneous_2">Ora attuale</string>
+    <string name="table_plugin_miscellaneous_3">Festivo</string>
+    <string name="table_plugin_miscellaneous_4">ultimi 60m</string>
+    <string name="table_plugin_miscellaneous_5">1-2 ore precedenti</string>
+    <string name="table_plugin_miscellaneous_6">2-3 ore precedenti</string>
+    <string name="table_plugin_miscellaneous_7">3-4 ore precedenti</string>
+
 
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE RAGIONAMENTI BASALE - FILE DetermineBasalAIMI2.kt -->
 
@@ -453,6 +467,6 @@
     <string name="safety_adjustments_12">→ bypass sicurezza%s: tasso = %2$.2f U/h\n</string>
     <string name="safety_adjustments_13">→ limitato a maxSafeBasal %1$s U/h (richiesto: %2$s U/h)\n</string>
     <string name="safety_adjustments_14">%1$s rimanenti &amp; %2$s ~ richiesto %3$s U/h: nessuna basale temp.\n</string>
-    <string name="safety_cut"><![CDATA[Safety cut: BG previsto<100 o IOB>%1$.2f → basale temp. 0.\n]]></string>
+    <string name="safety_cut"><![CDATA[Sicurezza taglio: BG previsto<100 o IOB>%1$.2f → basale temp. 0.\n]]></string>
 </resources>
 

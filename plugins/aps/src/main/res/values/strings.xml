@@ -440,9 +440,22 @@
     <string name="table_plugin_glucose_title">Glucose Data</string>
     <string name="table_plugin_tir_title">TIR Data</string>
     <string name="table_plugin_steps_title">Step Data</string>
+    <string name="table_plugin_steps_1">Steps (5m)</string>
+    <string name="table_plugin_steps_2">Steps (30m)</string>
+    <string name="table_plugin_steps_3">Steps (60m)</string>
+    <string name="table_plugin_steps_4">Steps (180m)</string>
     <string name="table_plugin_heart_title">Heart Rate Data</string>
+    <string name="table_plugin_heart_1">HR (5m)</string>
+    <string name="table_plugin_heart_2">HR (60m)</string>
     <string name="table_plugin_manual_modes_title">Modes</string>
     <string name="table_plugin_miscellaneous_title">Miscellaneous</string>
+    <string name="table_plugin_miscellaneous_1">Last SMB</string>
+    <string name="table_plugin_miscellaneous_2">Hour</string>
+    <string name="table_plugin_miscellaneous_3">Weekend</string>
+    <string name="table_plugin_miscellaneous_4">tags0-60m</string>
+    <string name="table_plugin_miscellaneous_5">tags60-120m</string>
+    <string name="table_plugin_miscellaneous_6">tags120-180m</string>
+    <string name="table_plugin_miscellaneous_7">tags180-240m</string>
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BASAL ARGUMENTS - FILE DetermineBasalAIMI2.kt -->
 
