@@ -459,6 +459,11 @@
     <string name="table_plugin_miscellaneous_5">1-2 ore prec.</string>
     <string name="table_plugin_miscellaneous_6">2-3 ore prec.</string>
     <string name="table_plugin_miscellaneous_7">3-4 ore prec.</string>
+    <string name="table_plugin_miscellaneous_8">più aggressivo</string>
+    <string name="table_plugin_miscellaneous_9">meno aggressivo</string>
+    <string name="table_plugin_miscellaneous_10">troppo aggressivo</string>
+    <string name="table_plugin_miscellaneous_11">abbassa trattamenti</string>
+    <string name="table_plugin_miscellaneous_12">normale</string>
 
 
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE RAGIONAMENTI BASALE - FILE DetermineBasalAIMI2.kt -->

@@ -2159,13 +2159,24 @@ private fun neuralnetwork5(
         return finalBasal.coerceIn(0.0, 8.0)
     }
 
-    private fun determineNoteBasedOnBg(bg: Double): String {
+    //private fun determineNoteBasedOnBg(bg: Double): String {
+      //  return when {
+            //bg > 170 -> "more aggressive"
+            //bg in 90.0..100.0 -> "less aggressive"
+            //bg in 80.0..89.9 -> "too aggressive" // Vous pouvez ajuster ces valeurs selon votre logique
+            //bg < 80 -> "low treatment"
+            //else -> "normal" // Vous pouvez définir un autre message par défaut pour les cas non couverts
+
+        //}
+    //}
+
+    private fun determineNoteBasedOnBg(bg: Double, context: Context): String {
         return when {
-            bg > 170 -> "more aggressive"
-            bg in 90.0..100.0 -> "less aggressive"
-            bg in 80.0..89.9 -> "too aggressive" // Vous pouvez ajuster ces valeurs selon votre logique
-            bg < 80 -> "low treatment"
-            else -> "normal" // Vous pouvez définir un autre message par défaut pour les cas non couverts
+            bg > 170 -> context.getString(R.string.table_plugin_miscellaneous_8)
+            bg in 90.0..100.0 -> context.getString(R.string.table_plugin_miscellaneous_9)
+            bg in 80.0..89.9 -> context.getString(R.string.table_plugin_miscellaneous_10)
+            bg < 80 -> context.getString(R.string.table_plugin_miscellaneous_11)
+            else -> context.getString(R.string.table_plugin_miscellaneous_12)
         }
     }
     private fun processNotesAndCleanUp(notes: String): String {
@@ -2262,12 +2273,12 @@ private fun neuralnetwork5(
         return combinedDelta > 3.0f && acceleration > 1.2f
     }
 
-    private fun parseNotes(startMinAgo: Int, endMinAgo: Int): String {
+    private fun parseNotes(context: Context,startMinAgo: Int, endMinAgo: Int): String {
         val olderTimeStamp = now - endMinAgo * 60 * 1000
         val moreRecentTimeStamp = now - startMinAgo * 60 * 1000
         var notes = ""
         val recentNotes2: MutableList<String> = mutableListOf()
-        val autoNote = determineNoteBasedOnBg(bg)
+        val autoNote = determineNoteBasedOnBg(bg,context)
         recentNotes2.add(autoNote)
         notes += autoNote  // Ajout de la note auto générée
 
@@ -2424,10 +2435,10 @@ private fun neuralnetwork5(
         val fourHoursAgo = now - 4 * 60 * 60 * 1000
         this.recentNotes = persistenceLayer.getUserEntryDataFromTime(fourHoursAgo).blockingGet()
 
-        this.tags0to60minAgo = parseNotes(0, 60)
-        this.tags60to120minAgo = parseNotes(60, 120)
-        this.tags120to180minAgo = parseNotes(120, 180)
-        this.tags180to240minAgo = parseNotes(180, 240)
+        this.tags0to60minAgo = parseNotes(context,0, 60)
+        this.tags60to120minAgo = parseNotes(context,60, 120)
+        this.tags120to180minAgo = parseNotes(context,120, 180)
+        this.tags180to240minAgo = parseNotes(context,180, 240)
         this.delta = glucose_status.delta.toFloat()
         this.shortAvgDelta = glucose_status.shortAvgDelta.toFloat()
         this.longAvgDelta = glucose_status.longAvgDelta.toFloat()

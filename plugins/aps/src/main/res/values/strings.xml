@@ -477,6 +477,11 @@
     <string name="table_plugin_miscellaneous_5">tags60-120m</string>
     <string name="table_plugin_miscellaneous_6">tags120-180m</string>
     <string name="table_plugin_miscellaneous_7">tags180-240m</string>
+    <string name="table_plugin_miscellaneous_8">more aggressive</string>
+    <string name="table_plugin_miscellaneous_9">less aggressive</string>
+    <string name="table_plugin_miscellaneous_10">too aggressive</string>
+    <string name="table_plugin_miscellaneous_11">low treatment</string>
+    <string name="table_plugin_miscellaneous_12">normal</string>
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BASAL ARGUMENTS - FILE DetermineBasalAIMI2.kt -->
 
