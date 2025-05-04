@@ -3871,12 +3871,14 @@ private fun neuralnetwork5(
          for ((meal, runtime) in mealConditions) {
              if (meal && runtime in 0..30) {
                  chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, 10.0)
-                 rT.reason.append("Repas/snack <30m → basale x10.\n")
+                 //rT.reason.append("Repas/snack <30m → basale x10.\n")
+                 rT.reason.append(context.getString(R.string.table_plugin_meal_snack_1))
                  break
              }
              else if (meal && runtime in 30..60 && delta > 0) {
                  chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, delta.toDouble())
-                 rT.reason.append("Repas/snack 30-60m & montée → basale Δ.\n")
+                 //rT.reason.append("Repas/snack 30-60m & montée → basale Δ.\n")
+                 rT.reason.append(context.getString(R.string.table_plugin_meal_snack_2))
                  break
              }
          }
@@ -3888,11 +3890,13 @@ private fun neuralnetwork5(
          when {
              eventualBG > 180 && delta > 3 ->
                  chosenRate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, basalAdjustmentFactor).also {
-                     rT.reason.append("EventualBG>180 & hyper → ajustement basalaimi.\n")
+                     //rT.reason.append("EventualBG>180 & hyper → ajustement basalaimi.\n")
+                     rT.reason.append(context.getString(R.string.table_plugin_hyperglycemia_1))
                  }
              bg > 180 && delta in -5.0..1.0 ->
                  chosenRate = (profile_current_basal * basalAdjustmentFactor).also {
-                     rT.reason.append("BG>180 stable → basale x facteur.\n")
+                     //rT.reason.append("BG>180 stable → basale x facteur.\n")
+                     rT.reason.append(context.getString(R.string.table_plugin_hyperglycemia_2))
                  }
          }
      }
