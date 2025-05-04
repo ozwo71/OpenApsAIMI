@@ -3502,18 +3502,57 @@ private fun neuralnetwork5(
      //appendLine(String.format("║ %-${columnWidth}s │ %s", "Calibration", if (iscalibration) "Active" else "Inactive"))
      appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_1), if (deleteTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
      //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_2), deleteEventDate ?: "N/A"))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_2), deleteEventDate ?: context.getString(R.string.table_plugin_manual_modes_na)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_3), if (sleepTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_4), if (sportTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_5), if (snackTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_6), if (lowCarbTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_7), if (highCarbTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_8), if (mealTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_9), if (bfastTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_10), if (lunchTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_11), if (dinnerTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_12), if (fastingTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_13), if (iscalibration) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_2), deleteEventDate ?: context.getString(R.string.table_plugin_manual_modes_na)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_3), if (sleepTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_4), if (sportTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_5), if (snackTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_6), if (lowCarbTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_7), if (highCarbTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_8), if (mealTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_9), if (bfastTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_10), if (lunchTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_11), if (dinnerTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_12), if (fastingTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_13), if (iscalibration) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
+     if (deleteTime) {
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_1), context.getString(R.string.table_plugin_manual_modes_active)))
+     }
+     if (deleteEventDate != null) {
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_2), deleteEventDate))
+     }
+     if (sleepTime) {
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_3), context.getString(R.string.table_plugin_manual_modes_active)))
+     }
+     if (sportTime) {
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_4), context.getString(R.string.table_plugin_manual_modes_active)))
+     }
+     if (snackTime) {
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_5), context.getString(R.string.table_plugin_manual_modes_active)))
+     }
+     if (lowCarbTime) {
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_6), context.getString(R.string.table_plugin_manual_modes_active)))
+     }
+     if (highCarbTime) {
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_7), context.getString(R.string.table_plugin_manual_modes_active)))
+     }
+     if (mealTime) {
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_8), context.getString(R.string.table_plugin_manual_modes_active)))
+     }
+     if (bfastTime) {
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_9), context.getString(R.string.table_plugin_manual_modes_active)))
+     }
+     if (lunchTime) {
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_10), context.getString(R.string.table_plugin_manual_modes_active)))
+     }
+     if (dinnerTime) {
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_11), context.getString(R.string.table_plugin_manual_modes_active)))
+     }
+     if (fastingTime) {
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_12), context.getString(R.string.table_plugin_manual_modes_active)))
+     }
+     if (iscalibration) {
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_13), context.getString(R.string.table_plugin_manual_modes_active)))
+     }
 
      appendLine("╚${"═".repeat(screenWidth)}╝")
      appendLine()
