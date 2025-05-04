@@ -439,6 +439,11 @@
     <string name="table_plugin_limits_title">Limits and Conditions</string>
     <string name="table_plugin_glucose_title">Glucose Data</string>
     <string name="table_plugin_tir_title">TIR Data</string>
+    <string name="table_plugin_tir_1">TIR Low</string>
+    <string name="table_plugin_tir_2">TIR In Range</string>
+    <string name="table_plugin_tir_3">TIR High</string>
+    <string name="table_plugin_tir_4">Last Hr TIR Low</string>
+    <string name="table_plugin_tir_5">Last Hr TIR &gt;120</string>
     <string name="table_plugin_steps_title">Step Data</string>
     <string name="table_plugin_steps_1">Steps (5m)</string>
     <string name="table_plugin_steps_2">Steps (30m)</string>

@@ -421,14 +421,19 @@
     <string name="table_plugin_limits_title">Limiti AAPS e Condizioni</string>
     <string name="table_plugin_glucose_title">Glicemia</string>
     <string name="table_plugin_tir_title">TIR</string>
+    <string name="table_plugin_tir_1">Basso</string>
+    <string name="table_plugin_tir_2">nel range</string>
+    <string name="table_plugin_tir_3">Alto</string>
+    <string name="table_plugin_tir_4">Ultima hr Basso</string>
+    <string name="table_plugin_tir_5">Ultima hr &gt;120</string>
     <string name="table_plugin_steps_title">Passi conteggio</string>
-    <string name="table_plugin_steps_1">ultimi 5m</string>
-    <string name="table_plugin_steps_2">ultimi 30m</string>
-    <string name="table_plugin_steps_3">ultima 60m</string>
+    <string name="table_plugin_steps_1">5min</string>
+    <string name="table_plugin_steps_2">30min</string>
+    <string name="table_plugin_steps_3">60min</string>
     <string name="table_plugin_steps_4">ultime 3hr</string>
     <string name="table_plugin_heart_title">Battiti cardiaci</string>
-    <string name="table_plugin_heart_1">ultimi 5m</string>
-    <string name="table_plugin_heart_2">ultimi 60m</string>
+    <string name="table_plugin_heart_1">5min</string>
+    <string name="table_plugin_heart_2">60min</string>
     <string name="table_plugin_manual_modes_title">Modalità Manuale</string>
     <string name="table_plugin_manual_modes_active">ON</string>
     <string name="table_plugin_manual_modes_inactive"></string>
@@ -451,9 +456,9 @@
     <string name="table_plugin_miscellaneous_2">Ora attuale</string>
     <string name="table_plugin_miscellaneous_3">Festivo</string>
     <string name="table_plugin_miscellaneous_4">ultimi 60m</string>
-    <string name="table_plugin_miscellaneous_5">1-2 ore precedenti</string>
-    <string name="table_plugin_miscellaneous_6">2-3 ore precedenti</string>
-    <string name="table_plugin_miscellaneous_7">3-4 ore precedenti</string>
+    <string name="table_plugin_miscellaneous_5">1-2 ore prec.</string>
+    <string name="table_plugin_miscellaneous_6">2-3 ore prec.</string>
+    <string name="table_plugin_miscellaneous_7">3-4 ore prec.</string>
 
 
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE RAGIONAMENTI BASALE - FILE DetermineBasalAIMI2.kt -->
