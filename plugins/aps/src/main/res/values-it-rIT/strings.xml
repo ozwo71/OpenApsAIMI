@@ -468,38 +468,38 @@
 
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE RAGIONAMENTI BASALE - FILE DetermineBasalAIMI2.kt -->
 
-    <string name="basal_arguments_1">Tasso neutro = profilo e tbr attiva → annullamento TBR.\n</string>
-    <string name="basal_arguments_2">Tasso neutro = profilo e nessuna TBR → non fare niente.\n</string>
-    <string name="basal_arguments_3">Tasso neutro = profilo → imposto nuova TBR %1$.2f U/h.\n</string>
-    <string name="basal_arguments_4">Imposto nuova TBR %1$.2f U/h per %2$d minuti.\n</string>
-    <string name="basal_arguments_5">Aumento lento glicemia → adeguamento proporzionale.\n</string>
-    <string name="basal_arguments_6"><![CDATA[Eventuale BG>110 & iper → adeguamento tramite fattore]]></string>
-    <string name="table_plugin_hours_activity_1">Pasto tranquillo &amp; orario → basale x1.5.\n</string>
-    <string name="table_plugin_hours_activity_2">Attività mattutina → basale temp. 0.\n</string>
-    <string name="table_plugin_hours_activity_3">Rialzo mattutino → basale profilo.\n</string>
-    <string name="table_plugin_meal_snack_1"><![CDATA[Pasto/spuntino <30 min → basale x10.\n]]></string>
-    <string name="table_plugin_meal_snack_2">Pasto/spuntino 30–60 min &amp; in salita → basale Δ.\n</string>
-    <string name="table_plugin_hyperglycemia_1">BG Eventuale&gt;180 e iperglicemia → aggiustamento basale AIMI.\n</string>
-    <string name="table_plugin_hyperglycemia_2">BG&gt;180 stabile → basale X fattore aggiustamento.\n</string>
+    <string name="basal_arguments_1">\nTasso neutro = profilo e tbr attiva → annullamento TBR.\n</string>
+    <string name="basal_arguments_2">\nTasso neutro = profilo e nessuna TBR → non fare niente.\n</string>
+    <string name="basal_arguments_3">\nTasso neutro = profilo → imposto nuova TBR %1$.2f U/h.\n</string>
+    <string name="basal_arguments_4">\nImposto nuova TBR %1$.2f U/h per %2$d minuti.\n</string>
+    <string name="basal_arguments_5">\nAumento lento glicemia → adeguamento proporzionale.\n</string>
+    <string name="basal_arguments_6"><![CDATA[\nEventuale BG>110 & iper → adeguamento tramite fattore\n]]></string>
+    <string name="table_plugin_hours_activity_1">\nPasto tranquillo &amp; orario → basale x1.5.\n</string>
+    <string name="table_plugin_hours_activity_2">\nAttività mattutina → basale temp. 0.\n</string>
+    <string name="table_plugin_hours_activity_3">\nRialzo mattutino → basale profilo.\n</string>
+    <string name="table_plugin_meal_snack_1"><![CDATA[\nPasto/spuntino <30 min → basale x10.\n]]></string>
+    <string name="table_plugin_meal_snack_2">\nPasto/spuntino 30–60 min &amp; in salita → basale Δ.\n</string>
+    <string name="table_plugin_hyperglycemia_1">\nBG Eventuale&gt;180 e iperglicemia → aggiustamento basale AIMI.\n</string>
+    <string name="table_plugin_hyperglycemia_2">\nBG&gt;180 stabile → basale X fattore aggiustamento.\n</string>
 
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE AGGIUSTAMENTI SICUREZZA - FILE DetermineBasalAIMI2.kt -->
 
-    <string name="safety_adjustments_1">Calo glicemico elevato (%1$.1f mg/dL/h), forte riduzione del bolo;</string>
-    <string name="safety_adjustments_2">Rilevato rapido aumento (delta %1$.1f mg/dL), modalità di emergenza applicata;</string>
-    <string name="safety_adjustments_3">Delta combinato molto basso (%1$.1f), riduzione x0.6;</string>
-    <string name="safety_adjustments_4">Delta combinato moderato (%1$.1f), riduzione x0.8;</string>
-    <string name="safety_adjustments_5">Delta combinato elevato (%1$.1f), nessuna riduzione;</string>
-    <string name="safety_adjustments_6"><![CDATA[Glicemia stabile>180 & Delta combinato<2 => riduzione x0.8;]]></string>
-    <string name="safety_adjustments_7">IOB elevato (%1$.2f U), riduzione x0.8;</string>
-    <string name="safety_adjustments_8">TDD/h elevato (%1$.2f U/h), riduzione x0.8;</string>
-    <string name="safety_adjustments_9">TIR elevato (%1$.0f%%), riduzione x0.5;</string>
-    <string name="safety_adjustments_10">BG previsto (%1$.0f) vicino al target (%2$.0f), riduzione x0.5;</string>
-    <string name="safety_adjustments_11">Durata basale zero (%1$d min) superata, forzatura basale minima;</string>
+    <string name="safety_adjustments_1">\nCalo glicemico elevato (%1$.1f mg/dL/h), forte riduzione del bolo;\n</string>
+    <string name="safety_adjustments_2">\nRilevato rapido aumento (delta %1$.1f mg/dL), modalità di emergenza applicata;\n</string>
+    <string name="safety_adjustments_3">\nDelta combinato molto basso (%1$.1f), riduzione x0.6;\n</string>
+    <string name="safety_adjustments_4">\nDelta combinato moderato (%1$.1f), riduzione x0.8;\n</string>
+    <string name="safety_adjustments_5">\nDelta combinato elevato (%1$.1f), nessuna riduzione;\n</string>
+    <string name="safety_adjustments_6"><![CDATA[\nGlicemia stabile>180 & Delta combinato<2 => riduzione x0.8;\n]]></string>
+    <string name="safety_adjustments_7">\nIOB elevato (%1$.2f U), riduzione x0.8;\n</string>
+    <string name="safety_adjustments_8">\nTDD/h elevato (%1$.2f U/h), riduzione x0.8;\n</string>
+    <string name="safety_adjustments_9">\nTIR elevato (%1$.0f%%), riduzione x0.5;\n</string>
+    <string name="safety_adjustments_10">\nBG previsto (%1$.0f) vicino al target (%2$.0f), riduzione x0.5;\n</string>
+    <string name="safety_adjustments_11">\nDurata basale zero (%1$d min) superata, forzatura basale minima;\n</string>
     <string name="meal_mode_suffix">(modalità pasto)</string>
     <string name="early_autodrive_suffix">(early autodrive)</string>
-    <string name="safety_adjustments_12">→ bypass sicurezza%s: tasso = %2$.2f U/h\n</string>
-    <string name="safety_adjustments_13">→ limitato a maxSafeBasal %1$s U/h (richiesto: %2$s U/h)\n</string>
-    <string name="safety_adjustments_14">%1$s rimanenti &amp; %2$s ~ richiesto %3$s U/h: nessuna basale temp.\n</string>
-    <string name="safety_cut"><![CDATA[Sicurezza taglio: BG previsto<100 o IOB>%1$.2f → basale temp. 0.\n]]></string>
+    <string name="safety_adjustments_12">\n→ bypass sicurezza%s: tasso = %2$.2f U/h\n</string>
+    <string name="safety_adjustments_13">\n→ limitato a maxSafeBasal %1$s U/h (richiesto: %2$s U/h)\n</string>
+    <string name="safety_adjustments_14">\n%1$s rimanenti &amp; %2$s ~ richiesto %3$s U/h: nessuna basale temp.\n</string>
+    <string name="safety_cut"><![CDATA[\nSicurezza taglio: BG previsto<100 o IOB>%1$.2f → basale temp. 0.\n]]></string>
 </resources>
 
