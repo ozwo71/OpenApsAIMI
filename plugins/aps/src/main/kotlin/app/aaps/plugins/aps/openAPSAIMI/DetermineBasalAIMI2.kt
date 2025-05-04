@@ -3522,10 +3522,13 @@ private fun neuralnetwork5(
      //appendLine("╚${"═".repeat(screenWidth)}╝")
      //appendLine()
 
-     val hasAnyActiveMode = deleteTime || sleepTime || sportTime || snackTime || lowCarbTime || highCarbTime ||
-         mealTime || bfastTime || lunchTime || dinnerTime || fastingTime || iscalibration || deleteEventDate != null
+     val shouldShowTable = deleteTime ||
+         (deleteEventDate != null && deleteEventDate.lowercase() != "null" && deleteEventDate.isNotBlank()) ||
+         sleepTime || sportTime || snackTime || lowCarbTime ||
+         highCarbTime || mealTime || bfastTime || lunchTime ||
+         dinnerTime || fastingTime || iscalibration
 
-     if (hasAnyActiveMode) {
+     if (shouldShowTable) {
          appendLine("╔${"═".repeat(screenWidth)}╗")
          appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_manual_modes_title)))
          appendLine("╠${"═".repeat(screenWidth)}╣")
@@ -3533,7 +3536,8 @@ private fun neuralnetwork5(
          if (deleteTime) {
              appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_1), context.getString(R.string.table_plugin_manual_modes_active)))
          }
-         if (deleteEventDate != null) {
+         // Stampa la data solo se valida
+         if (!deleteEventDate.isNullOrBlank() && deleteEventDate.lowercase() != "null") {
              appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_2), deleteEventDate))
          }
          if (sleepTime) {
