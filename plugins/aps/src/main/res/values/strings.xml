@@ -450,6 +450,7 @@
     <string name="table_plugin_manual_modes_title">Modes</string>
     <string name="table_plugin_manual_modes_active">Active</string>
     <string name="table_plugin_manual_modes_inactive">Inactive</string>
+    <string name="table_plugin_manual_modes_na">N/A</string>
     <string name="table_plugin_manual_modes_1">Delete Time</string>
     <string name="table_plugin_manual_modes_2">Date</string>
     <string name="table_plugin_manual_modes_3">Sleep</string>

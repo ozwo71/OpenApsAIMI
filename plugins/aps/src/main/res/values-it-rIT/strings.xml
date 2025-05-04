@@ -432,6 +432,7 @@
     <string name="table_plugin_manual_modes_title">Modalità Manuale</string>
     <string name="table_plugin_manual_modes_active">ON</string>
     <string name="table_plugin_manual_modes_inactive"></string>
+    <string name="table_plugin_manual_modes_na"></string>
     <string name="table_plugin_manual_modes_1">Delete Time</string>
     <string name="table_plugin_manual_modes_2">Date</string>
     <string name="table_plugin_manual_modes_3">Riposo</string>
