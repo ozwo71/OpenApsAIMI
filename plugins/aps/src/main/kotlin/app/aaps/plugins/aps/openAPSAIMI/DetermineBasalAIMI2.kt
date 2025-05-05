@@ -281,14 +281,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Option B : on réduit fortement le bolusFactor sans stopper la basale
             bolusFactor *= 0.3
             //reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction du bolus; ")
-            reasonBuilder.append(context.getString(R.string.safety_adjustments_1,dropPerHour))
+            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_1,dropPerHour))
 
         }
         if (delta >= 20f && combinedDelta >= 15f && !honeymoon) {
             // Mode "montée rapide" détecté, on override les réductions habituelles
             bolusFactor = 1.0
             //reasonBuilder.append("Montée rapide détectée (delta ${delta} mg/dL), application du mode d'urgence; ")
-            reasonBuilder.append(context.getString(R.string.safety_adjustments_2,delta))
+            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_2,delta))
 
         }
         // 2. Palier sur le combinedDelta
@@ -296,17 +296,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             combinedDelta < 1f -> {
                 bolusFactor *= 0.6
                 //reasonBuilder.append("combinedDelta très faible ($combinedDelta), réduction x0.6; ")
-                reasonBuilder.append(context.getString(R.string.safety_adjustments_3,combinedDelta))
+                reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_3,combinedDelta))
             }
             combinedDelta < 2f -> {
                 bolusFactor *= 0.8
                 //reasonBuilder.append("combinedDelta modéré ($combinedDelta), réduction x0.8; ")
-                reasonBuilder.append(context.getString(R.string.safety_adjustments_4,combinedDelta))
+                reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_4,combinedDelta))
             }
             else -> {
                 bolusFactor *= computeDynamicBolusMultiplier(combinedDelta)
                 //reasonBuilder.append("combinedDelta élevé ($combinedDelta), pas de réduction; ")
-                reasonBuilder.append(context.getString(R.string.safety_adjustments_5,combinedDelta))
+                reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_5,combinedDelta))
             }
         }
 
@@ -314,14 +314,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (currentBG > 160f && combinedDelta < 1f) {
             bolusFactor *= 0.8
             //reasonBuilder.append("Plateau BG>180 & combinedDelta<2 => réduction x0.8; ")
-            reasonBuilder.append(context.getString(R.string.safety_adjustments_6))
+            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_6))
         }
 
         // 4. Contrôle IOB
         if (iob >= maxIob * 0.85f) {
             bolusFactor *= 0.85
             //reasonBuilder.append("IOB élevé ($iob U), réduction x0.8; ")
-            reasonBuilder.append(context.getString(R.string.safety_adjustments_7,iob))
+            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_7,iob))
         }
 
         // 5. Contrôle du TDD par heure
@@ -329,21 +329,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (tddPerHour > tddThreshold) {
             bolusFactor *= 0.8
             //reasonBuilder.append("TDD/h élevé ($tddPerHour U/h), réduction x0.8; ")
-            reasonBuilder.append(context.getString(R.string.safety_adjustments_8,tddPerHour))
+            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_8,tddPerHour))
         }
 
         // 6. TIR élevé
         if (tirInhypo >= 8f) {
             bolusFactor *= 0.5
             //reasonBuilder.append("TIR élevé ($tirInhypo%), réduction x0.5; ")
-            reasonBuilder.append(context.getString(R.string.safety_adjustments_9,tirInhypo))
+            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_9,tirInhypo))
         }
 
         // 7. BG prédit proche de la cible
         if (predictedBG < targetBG + 10) {
             bolusFactor *= 0.5
             //reasonBuilder.append("BG prédit ($predictedBG) proche de la cible ($targetBG), réduction x0.5; ")
-            reasonBuilder.append(context.getString(R.string.safety_adjustments_10,predictedBG,targetBG))
+            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_10,predictedBG,targetBG))
         }
         // ---- Intégration du suivi de durée zéro basal ----
         // Si nous avons déjà trop longtemps de basal à 0, on ne souhaite pas stopper la basale.
@@ -354,7 +354,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             basalLS = true
             bolusFactor = 1.0
             //reasonBuilder.append("Zero basal duration ($zeroBasalDurationMinutes min) dépassé, forçant basal minimal; ")
-            reasonBuilder.append(context.getString(R.string.safety_adjustments_11,zeroBasalDurationMinutes))
+            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_11,zeroBasalDurationMinutes))
         }
 
         return SafetyDecision(
@@ -692,7 +692,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     else -> ""
                 }
 
-                rT.reason.append(context.getString(R.string.safety_adjustments_12, suffix, rate))
+                rT.reason.appendLine(context.getString(R.string.safety_adjustments_12, suffix, rate))
             }
             rate != _rate -> {
 
@@ -700,7 +700,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val formattedMaxSafe = "%.2f".format(maxSafe)
                 val formattedRate = "%.2f".format(_rate)
 
-                rT.reason.append(context.getString(R.string.safety_adjustments_13, formattedMaxSafe, formattedRate))
+                rT.reason.appendLine(context.getString(R.string.safety_adjustments_13, formattedMaxSafe, formattedRate))
             }
         }
 
@@ -717,7 +717,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val formattedRate = "%.2f".format(currenttemp.rate)
             val formattedRequestedRate = "%.2f".format(rate)
 
-            rT.reason.append(context.getString(R.string.safety_adjustments_14, formattedDuration, formattedRate, formattedRequestedRate))
+            rT.reason.appendLine(context.getString(R.string.safety_adjustments_14, formattedDuration, formattedRate, formattedRequestedRate))
             return rT
         }
 
@@ -728,16 +728,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (profile.skip_neutral_temps) {
                 if (currenttemp.duration > 0) {
                     //rT.reason.append("Taux neutre = profil & temp actif → annulation du temp.\n")
-                    rT.reason.append(context.getString(R.string.basal_arguments_1))
+                    rT.reason.appendLine(context.getString(R.string.basal_arguments_1))
                     rT.duration = 0
                     rT.rate = 0.0
                 } else {
                     //rT.reason.append("Taux neutre = profil & pas de temp → rien à faire.\n")
-                    rT.reason.append(context.getString(R.string.basal_arguments_2))
+                    rT.reason.appendLine(context.getString(R.string.basal_arguments_2))
                 }
             } else {
                 //rT.reason.append("Taux neutre = profil → pose d’un temp à $rate U/h.\n")
-                rT.reason.append(context.getString(R.string.basal_arguments_3, rate))
+                rT.reason.appendLine(context.getString(R.string.basal_arguments_3, rate))
                 rT.duration = duration
                 rT.rate = rate
             }
@@ -747,7 +747,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // ────────────────────────────────────────────────────────────────
         // 9️⃣ Pose “standard” du temp basal
         //rT.reason.append("Pose temp à ${"%.2f".format(rate)} U/h pour $duration minutes.\n")
-        rT.reason.append(context.getString(R.string.basal_arguments_4, rate,duration))
+        rT.reason.appendLine(context.getString(R.string.basal_arguments_4, rate,duration))
         rT.duration = duration
         rT.rate = rate
         return rT
@@ -2483,70 +2483,70 @@ private fun neuralnetwork5(
         val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
         if (bg > 110 && predictedBg > 150 && !nightbis && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && modesCondition) {
             rT.units = pbolusAS
-            rT.reason.append("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
+            rT.reason.appendLine("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
             return rT
         }
         if (isMealModeCondition()){
              val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
                  rT.units = pbolusM
-                 rT.reason.append("Microbolusing Meal Mode ${pbolusM}U.")
+                 rT.reason.appendLine("Microbolusing Meal Mode ${pbolusM}U.")
              return rT
          }
         if (!nightbis && isAutodriveModeCondition(targetBg, delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat()) && modesCondition && bgAcceleration.toDouble() >= AutodriveAcceleration){
             val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
             rT.units = pbolusA
-            rT.reason.append("Microbolusing Autodrive Mode ${pbolusA}U. TargetBg : ${targetBg}, CombinedDelta : ${combinedDelta}, Slopemindeviation : ${mealData.slopeFromMinDeviation}, Acceleration : ${bgAcceleration}. ")
+            rT.reason.appendLine("Microbolusing Autodrive Mode ${pbolusA}U. TargetBg : ${targetBg}, CombinedDelta : ${combinedDelta}, Slopemindeviation : ${mealData.slopeFromMinDeviation}, Acceleration : ${bgAcceleration}. ")
             return rT
         }
         if (isbfastModeCondition()){
             val pbolusbfast: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
             rT.units = pbolusbfast
-            rT.reason.append("Microbolusing 1/2 Breakfast Mode ${pbolusbfast}U.")
+            rT.reason.appendLine("Microbolusing 1/2 Breakfast Mode ${pbolusbfast}U.")
             return rT
         }
         if (isbfast2ModeCondition()){
             val pbolusbfast2: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus2)
             this.maxSMB = pbolusbfast2
             rT.units = pbolusbfast2
-            rT.reason.append("Microbolusing 2/2 Breakfast Mode ${pbolusbfast2}U. ")
+            rT.reason.appendLine("Microbolusing 2/2 Breakfast Mode ${pbolusbfast2}U. ")
            return rT
         }
         if (isLunchModeCondition()){
             val pbolusLunch: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
                 rT.units = pbolusLunch
-                rT.reason.append("Microbolusing 1/2 Lunch Mode ${pbolusLunch}U.")
+                rT.reason.appendLine("Microbolusing 1/2 Lunch Mode ${pbolusLunch}U.")
             return rT
         }
         if (isLunch2ModeCondition()){
             val pbolusLunch2: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
             this.maxSMB = pbolusLunch2
             rT.units = pbolusLunch2
-            rT.reason.append("Microbolusing 2/2 Lunch Mode ${pbolusLunch2}U.")
+            rT.reason.appendLine("Microbolusing 2/2 Lunch Mode ${pbolusLunch2}U.")
             return rT
         }
         if (isDinnerModeCondition()){
             val pbolusDinner: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
             rT.units = pbolusDinner
-            rT.reason.append("Microbolusing 1/2 Dinner Mode ${pbolusDinner}U.")
+            rT.reason.appendLine("Microbolusing 1/2 Dinner Mode ${pbolusDinner}U.")
             return rT
         }
         if (isDinner2ModeCondition()){
             val pbolusDinner2: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
             this.maxSMB = pbolusDinner2
             rT.units = pbolusDinner2
-            rT.reason.append("Microbolusing 2/2 Dinner Mode ${pbolusDinner2}U.")
+            rT.reason.appendLine("Microbolusing 2/2 Dinner Mode ${pbolusDinner2}U.")
             return rT
         }
         if (isHighCarbModeCondition()){
             val pbolusHC: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
             rT.units = pbolusHC
-            rT.reason.append("Microbolusing High Carb Mode ${pbolusHC}U.")
+            rT.reason.appendLine("Microbolusing High Carb Mode ${pbolusHC}U.")
             return rT
         }
         if (issnackModeCondition()){
             val pbolussnack: Double = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
             rT.units = pbolussnack
-            rT.reason.append("Microbolusing snack Mode ${pbolussnack}U.")
+            rT.reason.appendLine("Microbolusing snack Mode ${pbolussnack}U.")
             return rT
         }
 
@@ -3620,19 +3620,19 @@ private fun neuralnetwork5(
  // eventual BG is at/above target
  // if iob is over max, just cancel any temps
  if (eventualBG >= max_bg) {
-     rT.reason.append("Eventual BG " + convertBG(eventualBG) + " >= " + convertBG(max_bg) + ", ")
+     rT.reason.appendLine("Eventual BG " + convertBG(eventualBG) + " >= " + convertBG(max_bg) + ", ")
  }
  if (iob_data.iob > max_iob) {
-     rT.reason.append("IOB ${round(iob_data.iob, 2)} > max_iob $max_iob")
+     rT.reason.appendLine("IOB ${round(iob_data.iob, 2)} > max_iob $max_iob")
      if (delta < 0) {
-         rT.reason.append(", BG is dropping (delta $delta), setting basal to 0. ")
+         rT.reason.appendLine(", BG is dropping (delta $delta), setting basal to 0. ")
          return setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = false) // Basal à 0 pendant 30 minutes
      }
      return if (currenttemp.duration > 15 && (roundBasal(basal) == roundBasal(currenttemp.rate))) {
-         rT.reason.append(", temp ${currenttemp.rate} ~ req ${round(basal, 2).withoutZeros()}U/hr. ")
+         rT.reason.appendLine(", temp ${currenttemp.rate} ~ req ${round(basal, 2).withoutZeros()}U/hr. ")
          rT
      } else {
-         rT.reason.append("; setting current basal of ${round(basal, 2)} as temp. ")
+         rT.reason.appendLine("; setting current basal of ${round(basal, 2)} as temp. ")
          setTempBasal(basal, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
      }
  } else {
@@ -3668,9 +3668,9 @@ private fun neuralnetwork5(
 
      if (microBolusAllowed && enableSMB) {
          val microBolus = insulinReq
-         rT.reason.append(" insulinReq $insulinReq")
+         rT.reason.appendLine(" insulinReq $insulinReq")
          if (microBolus >= maxSMB) {
-             rT.reason.append("; maxBolus $maxSMB")
+             rT.reason.appendLine("; maxBolus $maxSMB")
          }
          rT.reason.append(". ")
 
@@ -3682,10 +3682,10 @@ private fun neuralnetwork5(
          if (lastBolusAge > smbInterval) {
              if (microBolus > 0) {
                  rT.units = microBolus
-                 rT.reason.append("Microbolusing ${microBolus}U. ")
+                 rT.reason.appendLine("Microbolusing ${microBolus}U. ")
              }
          } else {
-             rT.reason.append("Waiting " + nextBolusMins + "m " + nextBolusSeconds + "s to microbolus again. ")
+             rT.reason.appendLine("Waiting " + nextBolusMins + "m " + nextBolusSeconds + "s to microbolus again. ")
          }
 
      }
@@ -3718,7 +3718,7 @@ private fun neuralnetwork5(
      ) {
          chosenRate     = forcedBasal.toDouble()
          overrideSafety = true
-         rT.reason.append("Early meal detected → TBR forcée à ${forcedBasal}U/h x30 (override).\n")
+         rT.reason.appendLine("Early meal detected → TBR forcée à ${forcedBasal}U/h x30 (override).\n")
      } else {
          // ------------------------------
          // 3️⃣ Cas snack / meal / bfast / lunch / dinner / highCarb / fasting / sport
@@ -3785,7 +3785,7 @@ private fun neuralnetwork5(
          chosenRate     = 0.0
          overrideSafety = false
          //rT.reason.append("Safety cut: predictedBg<100 ou IOB>$maxIob → basale à 0.\n")
-         rT.reason.append(context.getString(R.string.safety_cut, maxIob))
+         rT.reason.appendLine(context.getString(R.string.safety_cut, maxIob))
      }
 
 // ------------------------------
@@ -3794,31 +3794,31 @@ private fun neuralnetwork5(
          when {
              bg < 80.0 -> {
                  chosenRate = 0.0
-                 rT.reason.append("BG<80 → basale à 0.\n")
+                 rT.reason.appendLine("BG<80 → basale à 0.\n")
              }
              bg in 80.0..90.0 &&
                  slopeFromMaxDeviation <= 0 && iob > 0.1f && !sportTime -> {
                  chosenRate = 0.0
-                 rT.reason.append("BG 80-90 & chute → basale à 0.\n")
+                 rT.reason.appendLine("BG 80-90 & chute → basale à 0.\n")
              }
              bg in 80.0..90.0 &&
                  slopeFromMinDeviation >= 0.3 && slopeFromMaxDeviation >= 0 &&
                  combinedDelta in -1.0..2.0 && !sportTime &&
                  bgAcceleration.toFloat() > 0.0f -> {
                  chosenRate = profile_current_basal * 0.2
-                 rT.reason.append("BG 80-90 stable → basale x0.2.\n")
+                 rT.reason.appendLine("BG 80-90 stable → basale x0.2.\n")
              }
              bg in 90.0..100.0 &&
                  slopeFromMinDeviation <= 0.3 && iob > 0.1f && !sportTime &&
                  bgAcceleration.toFloat() > 0.0f -> {
                  chosenRate = 0.0
-                 rT.reason.append("BG 90-100 & risque modéré → basale à 0.\n")
+                 rT.reason.appendLine("BG 90-100 & risque modéré → basale à 0.\n")
              }
              bg in 90.0..100.0 &&
                  slopeFromMinDeviation >= 0.3 && combinedDelta in -1.0..2.0 && !sportTime &&
                  bgAcceleration.toFloat() > 0.0f -> {
                  chosenRate = profile_current_basal * 0.5
-                 rT.reason.append("BG 90-100 gain léger → basale x0.5.\n")
+                 rT.reason.appendLine("BG 90-100 gain léger → basale x0.5.\n")
              }
          }
      }
@@ -3833,14 +3833,14 @@ private fun neuralnetwork5(
          ) {
              chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, combinedDelta.toDouble())
              //rT.reason.append("Montée lente → ajustement proportionnel.\n")
-             rT.reason.append(context.getString(R.string.basal_arguments_5))
+             rT.reason.appendLine(context.getString(R.string.basal_arguments_5))
          }
          else if (eventualBG > 110 && !sportTime && bg > 150 &&
              combinedDelta in -2.0..15.0 &&
              bgAcceleration.toFloat() > 0.0f
          ) {
              chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor)
-             rT.reason.append(context.getString(R.string.basal_arguments_6))
+             rT.reason.appendLine(context.getString(R.string.basal_arguments_6))
          }
      }
 
@@ -3854,17 +3854,17 @@ private fun neuralnetwork5(
          ) {
              chosenRate = profile_current_basal * 1.5
              //rT.reason.append("Repas calme & horaire → basale x1.5.\n")
-             rT.reason.append(context.getString(R.string.table_plugin_hours_activity_1))
+             rT.reason.appendLine(context.getString(R.string.table_plugin_hours_activity_1))
          }
          else if (timenow > sixAMHour && recentSteps5Minutes > 100) {
              chosenRate = 0.0
              //rT.reason.append("Activité matinale → basale à 0.\n")
-             rT.reason.append(context.getString(R.string.table_plugin_hours_activity_2))
+             rT.reason.appendLine(context.getString(R.string.table_plugin_hours_activity_2))
          }
          else if (timenow <= sixAMHour && delta > 0 && bgAcceleration.toFloat() > 0.0f) {
              chosenRate = profile_current_basal.toDouble()
              //rT.reason.append("Matinée montante → basale de profil.\n")
-             rT.reason.append(context.getString(R.string.table_plugin_hours_activity_3))
+             rT.reason.appendLine(context.getString(R.string.table_plugin_hours_activity_3))
          }
      }
 
@@ -3883,13 +3883,13 @@ private fun neuralnetwork5(
              if (meal && runtime in 0..30) {
                  chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, 10.0)
                  //rT.reason.append("Repas/snack <30m → basale x10.\n")
-                 rT.reason.append(context.getString(R.string.table_plugin_meal_snack_1))
+                 rT.reason.appendLine(context.getString(R.string.table_plugin_meal_snack_1))
                  break
              }
              else if (meal && runtime in 30..60 && delta > 0) {
                  chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, delta.toDouble())
                  //rT.reason.append("Repas/snack 30-60m & montée → basale Δ.\n")
-                 rT.reason.append(context.getString(R.string.table_plugin_meal_snack_2))
+                 rT.reason.appendLine(context.getString(R.string.table_plugin_meal_snack_2))
                  break
              }
          }
@@ -3902,12 +3902,12 @@ private fun neuralnetwork5(
              eventualBG > 180 && delta > 3 ->
                  chosenRate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, basalAdjustmentFactor).also {
                      //rT.reason.append("EventualBG>180 & hyper → ajustement basalaimi.\n")
-                     rT.reason.append(context.getString(R.string.table_plugin_hyperglycemia_1))
+                     rT.reason.appendLine(context.getString(R.string.table_plugin_hyperglycemia_1))
                  }
              bg > 180 && delta in -5.0..1.0 ->
                  chosenRate = (profile_current_basal * basalAdjustmentFactor).also {
                      //rT.reason.append("BG>180 stable → basale x facteur.\n")
-                     rT.reason.append(context.getString(R.string.table_plugin_hyperglycemia_2))
+                     rT.reason.appendLine(context.getString(R.string.table_plugin_hyperglycemia_2))
                  }
          }
      }
@@ -3920,20 +3920,20 @@ private fun neuralnetwork5(
                  chosenRate = profile_current_basal.toDouble().also { rT.reason.append("Honeymoon BG 140-169 → profil.\n") }
              bg > 170 && delta > 0 ->
                  chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor).also {
-                     rT.reason.append("Honeymoon BG>170 → ajustement.\n")
+                     rT.reason.appendLine("Honeymoon BG>170 → ajustement.\n")
                  }
              combinedDelta > 2 && bg in 90.0..119.0 ->
-                 chosenRate = profile_current_basal.toDouble().also { rT.reason.append("Honeymoon Δ>2 & BG 90-119 → profil.\n") }
+                 chosenRate = profile_current_basal.toDouble().also { rT.reason.appendLine("Honeymoon Δ>2 & BG 90-119 → profil.\n") }
              combinedDelta > 0 && bg > 110 && eventualBG > 120 && bg < 160 ->
-                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.append("Honeymoon corr. mixte.\n") }
+                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.appendLine("Honeymoon corr. mixte.\n") }
              mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 && bg > 110 && combinedDelta > 0 ->
-                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.append("Honeymoon + repas détection.\n") }
+                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.appendLine("Honeymoon + repas détection.\n") }
              mealData.slopeFromMaxDeviation in 0.0..0.2 && mealData.slopeFromMinDeviation in 0.0..0.5 &&
                  bg in 120.0..150.0 && delta > 0 ->
-                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.append("Honeymoon petit slope.\n") }
+                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.appendLine("Honeymoon petit slope.\n") }
              mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 &&
                  bg in 100.0..120.0 && delta > 0 ->
-                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.append("Honeymoon slope repas.\n") }
+                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.appendLine("Honeymoon slope repas.\n") }
          }
      }
 
@@ -3941,7 +3941,7 @@ private fun neuralnetwork5(
 // 1️⃣1️⃣ Cas grossesse
      if (chosenRate == null && pregnancyEnable && delta > 0 && bg > 110 && !honeymoon) {
          chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor)
-         rT.reason.append("Grossesse & Δ>0 → ajustement.\n")
+         rT.reason.appendLine("Grossesse & Δ>0 → ajustement.\n")
      }
 
 // ------------------------------
