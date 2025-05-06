@@ -2536,7 +2536,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_2),
-                    pbolusbfast.toFloat()
+                    pbolusbfast.toDouble()
                 )
             )
 
@@ -2550,7 +2550,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_3),
-                    pbolusbfast2.toFloat()
+                    pbolusbfast2.toDouble()
                 )
             )
 
@@ -2563,7 +2563,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_4),
-                    pbolusLunch.toFloat()
+                    pbolusLunch.toDouble()
                 )
             )
             return rT
@@ -2576,7 +2576,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_5),
-                    pbolusLunch2.toFloat()
+                    pbolusLunch2.toDouble()
                 )
             )
 
@@ -2589,7 +2589,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_6),
-                    pbolusDinner.toFloat()
+                    pbolusDinner.toDouble()
                 )
             )
             return rT
@@ -2602,7 +2602,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_7),
-                    pbolusDinner2.toFloat()
+                    pbolusDinner2.toDouble()
                 )
             )
             return rT
@@ -2614,7 +2614,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_8),
-                    pbolusHC.toFloat()
+                    pbolusHC.toDouble()
                 )
             )
             return rT
@@ -2626,7 +2626,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_9),
-                    pbolussnack.toFloat()
+                    pbolussnack.toDouble()
                 )
             )
             return rT
