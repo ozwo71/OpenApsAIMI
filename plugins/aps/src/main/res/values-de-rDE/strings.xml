@@ -153,34 +153,6 @@
     <string name="autotune_profile_invalid">Profil ungültig</string>
     <!--    autoISF -->
 
-
-    <!-- AIMI START TRANSLATION CORE - FILE OpenAPSAIMIPlugin.kt -->
-
-    <string name="key_openapsaimi_settings">key_openapsaimi_settings</string>
-    <string name="key_openapsaimi_max_smb">key_openapsaimi_max_smb</string>
-    <string name="key_aimiweight">key_aimiweight</string>
-    <string name="key_tdd7">key_tdd7</string>
-    <string name="key_cho">key_cho</string>
-    <string name="key_B30_upperBG">key_B30_upperBG</string>
-    <string name="key_B30_upperdelta">key_B30_upperdelta</string>
-    <string name="key_B30_duration">key_B30_duration</string>
-    <string name="key_oaps_aimi_evening_factor">key_oaps_aimi_evening_factor</string>
-    <string name="key_oaps_aimi_morning_factor">key_oaps_aimi_morning_factor</string>
-    <string name="key_oaps_aimi_afternoon_factor">key_oaps_aimi_afternoon_factor</string>
-    <string name="key_oaps_aimi_hyper_factor">key_oaps_aimi_hyper_factor</string>
-    <string name="key_DynISFAdjusthyper">key_DynISFAdjusthyper</string>
-    <string name="key_DynISF_Adjust">key_DynISF_Adjust</string>
-    <string name="key_enable_basal">key_enable_basal</string>
-    <string name="key_prebolus_meal_mode">key_prebolus_meal_mode</string>
-    <string name="key_prebolus_highcarb_mode">key_prebolus_highcarb_mode</string>
-    <string name="key_nb_day_ML_training">key_nb_day_ML_training</string>
-    <string name="key_enable_ML_training">key_enable_ML_training</string>
-    <string name="key_nb_epoch_ML_training">key_nb_epoch_ML_training</string>
-    <string name="key_nb_learningrate_ML_training">key_nb_learningrate_ML_training</string>
-    <string name="key_nb_iteration_ML_training">key_nb_iteration_ML_training</string>
-    <string name="key_openapsaimi_fixed_tbr_rise">key_openapsaimi_fixed_tbr_rise</string>
-    <string name="key_use_AimiForceLimits">key_use_AimiForceLimits</string>
-
     <!-- AIMI START TRANSLATION CORE - FILE OpenAPSAIMIPlugin.kt -->
 
     <string name="key_openapsaimi_settings">key_openapsaimi_settings</string>
