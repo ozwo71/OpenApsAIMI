@@ -457,7 +457,7 @@
     <string name="table_plugin_steps_2">30min</string>
     <string name="table_plugin_steps_3">60min</string>
     <string name="table_plugin_steps_4">ultime 3hr</string>
-    <string name="table_plugin_heart_title">Battiti cardiaci</string>
+    <string name="table_plugin_heart_title">Battiti cardiaci orologio</string>
     <string name="table_plugin_heart_1">5min</string>
     <string name="table_plugin_heart_2">60min</string>
     <string name="table_plugin_manual_modes_title">Modalità Manuale</string>
