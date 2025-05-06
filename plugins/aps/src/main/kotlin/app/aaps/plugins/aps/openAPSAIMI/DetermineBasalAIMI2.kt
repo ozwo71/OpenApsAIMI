@@ -3472,6 +3472,23 @@ private fun neuralnetwork5(
      appendLine()
 
      appendLine("╔${"═".repeat(screenWidth)}╗")
+     //appendLine(String.format("║ %-${screenWidth}s ║", "TIR Data"))
+     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_tir_title)))
+     appendLine("╠${"═".repeat(screenWidth)}╣")
+     //appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR Low", String.format("%.1f", currentTIRLow)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR In Range", String.format("%.1f", currentTIRRange)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR High", String.format("%.1f", currentTIRAbove)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s%%", "Last Hr TIR Low", String.format("%.1f", lastHourTIRLow)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s%%", "Last Hr TIR >120", String.format("%.1f", lastHourTIRabove120)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s%%", context.getString(R.string.table_plugin_tir_1), String.format("%.1f", currentTIRLow)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s%%", context.getString(R.string.table_plugin_tir_2), String.format("%.1f", currentTIRRange)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s%%", context.getString(R.string.table_plugin_tir_3), String.format("%.1f", currentTIRAbove)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s%%", context.getString(R.string.table_plugin_tir_4), String.format("%.1f", lastHourTIRLow)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s%%", context.getString(R.string.table_plugin_tir_5), String.format("%.1f", lastHourTIRabove120)))
+     appendLine("╚${"═".repeat(screenWidth)}╝")
+     appendLine()
+
+     appendLine("╔${"═".repeat(screenWidth)}╗")
      //appendLine(String.format("║ %-${screenWidth}s ║", "Request"))
      appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_request_title)))
      appendLine("╠${"═".repeat(screenWidth)}╣")
@@ -3568,76 +3585,9 @@ private fun neuralnetwork5(
      appendLine("╚${"═".repeat(screenWidth)}╝")
      appendLine()
 
-     appendLine("╔${"═".repeat(screenWidth)}╗")
-     //appendLine(String.format("║ %-${screenWidth}s ║", "TIR Data"))
-     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_tir_title)))
-     appendLine("╠${"═".repeat(screenWidth)}╣")
-     //appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR Low", String.format("%.1f", currentTIRLow)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR In Range", String.format("%.1f", currentTIRRange)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR High", String.format("%.1f", currentTIRAbove)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s%%", "Last Hr TIR Low", String.format("%.1f", lastHourTIRLow)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s%%", "Last Hr TIR >120", String.format("%.1f", lastHourTIRabove120)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s%%", context.getString(R.string.table_plugin_tir_1), String.format("%.1f", currentTIRLow)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s%%", context.getString(R.string.table_plugin_tir_2), String.format("%.1f", currentTIRRange)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s%%", context.getString(R.string.table_plugin_tir_3), String.format("%.1f", currentTIRAbove)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s%%", context.getString(R.string.table_plugin_tir_4), String.format("%.1f", lastHourTIRLow)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s%%", context.getString(R.string.table_plugin_tir_5), String.format("%.1f", lastHourTIRabove120)))
-     appendLine("╚${"═".repeat(screenWidth)}╝")
-     appendLine()
-
-   //  appendLine("╔${"═".repeat(screenWidth)}╗")
-     //appendLine(String.format("║ %-${screenWidth}s ║", "Step Data"))
-   //  appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_steps_title)))
-   //  appendLine("╠${"═".repeat(screenWidth)}╣")
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (5m)", recentSteps5Minutes))
-     //  appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_1), recentSteps5Minutes))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (30m)", recentSteps30Minutes))
-     // appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_2), recentSteps30Minutes))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (60m)", recentSteps60Minutes))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_3), recentSteps180Minutes))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (180m)", recentSteps180Minutes))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_4), recentSteps180Minutes))
-
-     //appendLine("╚${"═".repeat(screenWidth)}╝")
-     //appendLine()
 
 
-     if (recentSteps5Minutes > 0 || recentSteps30Minutes > 0 || recentSteps60Minutes > 0 || recentSteps180Minutes > 0) {
-         appendLine("╔${"═".repeat(screenWidth)}╗")
-         appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_steps_title)))
-         appendLine("╠${"═".repeat(screenWidth)}╣")
-         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_1), recentSteps5Minutes))
-         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_2), recentSteps30Minutes))
-         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_3), recentSteps60Minutes))
-         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_4), recentSteps180Minutes))
-         appendLine("╚${"═".repeat(screenWidth)}╝")
-         appendLine()
-     }
 
-     //appendLine("╔${"═".repeat(screenWidth)}╗")
-     //appendLine(String.format("║ %-${screenWidth}s ║", "Heart Rate Data"))
-     //appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_heart_title)))
-     //appendLine("╠${"═".repeat(screenWidth)}╣")
-     //appendLine(String.format("║ %-${columnWidth}s │ %s bpm", "HR (5m)", String.format("%.1f", averageBeatsPerMinute)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s bpm", context.getString(R.string.table_plugin_heart_1), String.format("%.1f", averageBeatsPerMinute)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s bpm", "HR (60m)", String.format("%.1f", averageBeatsPerMinute60)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s bpm", context.getString(R.string.table_plugin_heart_2), String.format("%.1f", averageBeatsPerMinute60)))
-
-     //appendLine("╚${"═".repeat(screenWidth)}╝")
-     //appendLine()
-
-     if (
-         (!averageBeatsPerMinute.isNaN() && averageBeatsPerMinute > 0) ||
-         (!averageBeatsPerMinute60.isNaN() && averageBeatsPerMinute60 > 0)
-     ) {
-         appendLine("╔${"═".repeat(screenWidth)}╗")
-         appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_heart_title)))
-         appendLine("╠${"═".repeat(screenWidth)}╣")
-         appendLine(String.format("║ %-${columnWidth}s │ %s bpm", context.getString(R.string.table_plugin_heart_1), String.format("%.1f", averageBeatsPerMinute)))
-         appendLine(String.format("║ %-${columnWidth}s │ %s bpm", context.getString(R.string.table_plugin_heart_2), String.format("%.1f", averageBeatsPerMinute60)))
-         appendLine("╚${"═".repeat(screenWidth)}╝")
-         appendLine()
-     }
 
      //appendLine("╔${"═".repeat(screenWidth)}╗")
      //appendLine(String.format("║ %-${screenWidth}s ║", "Modes"))
@@ -3751,6 +3701,60 @@ private fun neuralnetwork5(
          appendLine(String.format("║ %-${columnWidth}s │ %.1f", context.getString(R.string.table_plugin_autodrive_min_deviation), autodriveminDeviation))
          appendLine(String.format("║ %-${columnWidth}s │ %d", context.getString(R.string.table_plugin_autodrive_target_bg), autodriveTarget))
          appendLine(String.format("║ %-${columnWidth}s │ %d", context.getString(R.string.table_plugin_autodrive_min_bg), autodriveBG))
+         appendLine("╚${"═".repeat(screenWidth)}╝")
+         appendLine()
+     }
+
+     //  appendLine("╔${"═".repeat(screenWidth)}╗")
+     //appendLine(String.format("║ %-${screenWidth}s ║", "Step Data"))
+     //  appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_steps_title)))
+     //  appendLine("╠${"═".repeat(screenWidth)}╣")
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (5m)", recentSteps5Minutes))
+     //  appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_1), recentSteps5Minutes))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (30m)", recentSteps30Minutes))
+     // appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_2), recentSteps30Minutes))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (60m)", recentSteps60Minutes))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_3), recentSteps180Minutes))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (180m)", recentSteps180Minutes))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_4), recentSteps180Minutes))
+
+     //appendLine("╚${"═".repeat(screenWidth)}╝")
+     //appendLine()
+
+
+     if (recentSteps5Minutes > 0 || recentSteps30Minutes > 0 || recentSteps60Minutes > 0 || recentSteps180Minutes > 0) {
+         appendLine("╔${"═".repeat(screenWidth)}╗")
+         appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_steps_title)))
+         appendLine("╠${"═".repeat(screenWidth)}╣")
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_1), recentSteps5Minutes))
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_2), recentSteps30Minutes))
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_3), recentSteps60Minutes))
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_4), recentSteps180Minutes))
+         appendLine("╚${"═".repeat(screenWidth)}╝")
+         appendLine()
+     }
+
+     //appendLine("╔${"═".repeat(screenWidth)}╗")
+     //appendLine(String.format("║ %-${screenWidth}s ║", "Heart Rate Data"))
+     //appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_heart_title)))
+     //appendLine("╠${"═".repeat(screenWidth)}╣")
+     //appendLine(String.format("║ %-${columnWidth}s │ %s bpm", "HR (5m)", String.format("%.1f", averageBeatsPerMinute)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s bpm", context.getString(R.string.table_plugin_heart_1), String.format("%.1f", averageBeatsPerMinute)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s bpm", "HR (60m)", String.format("%.1f", averageBeatsPerMinute60)))
+     //appendLine(String.format("║ %-${columnWidth}s │ %s bpm", context.getString(R.string.table_plugin_heart_2), String.format("%.1f", averageBeatsPerMinute60)))
+
+     //appendLine("╚${"═".repeat(screenWidth)}╝")
+     //appendLine()
+
+     if (
+         (!averageBeatsPerMinute.isNaN() && averageBeatsPerMinute > 0) ||
+         (!averageBeatsPerMinute60.isNaN() && averageBeatsPerMinute60 > 0)
+     ) {
+         appendLine("╔${"═".repeat(screenWidth)}╗")
+         appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_heart_title)))
+         appendLine("╠${"═".repeat(screenWidth)}╣")
+         appendLine(String.format("║ %-${columnWidth}s │ %s bpm", context.getString(R.string.table_plugin_heart_1), String.format("%.1f", averageBeatsPerMinute)))
+         appendLine(String.format("║ %-${columnWidth}s │ %s bpm", context.getString(R.string.table_plugin_heart_2), String.format("%.1f", averageBeatsPerMinute60)))
          appendLine("╚${"═".repeat(screenWidth)}╝")
          appendLine()
      }
