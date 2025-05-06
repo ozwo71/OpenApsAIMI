@@ -3418,7 +3418,7 @@ private fun neuralnetwork5(
      //appendLine(String.format("║ %-${screenWidth}s ║", "Limits & Conditions"))
      appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_limits_title)))
      appendLine("╠${"═".repeat(screenWidth)}╣")
-     appendLine(String.format("║ %-${columnWidth}s │ %s u", "Max IOB", String.format("%.1f", maxIob)))
+    /* appendLine(String.format("║ %-${columnWidth}s │ %s u", "Max IOB", String.format("%.1f", maxIob)))
      appendLine(String.format("║ %-${columnWidth}s │ %s u", "IOB", String.format("%.1f", iob)))
      appendLine(String.format("║ %-${columnWidth}s │ %s u", "IOB2", String.format("%.1f", iob2)))
      appendLine(String.format("║ %-${columnWidth}s │ %s u", "Max SMB", String.format("%.1f", maxSMB)))
@@ -3432,6 +3432,23 @@ private fun neuralnetwork5(
      appendLine(String.format("║ %-${columnWidth}s │ %s", "Adjusted Dia H", String.format("%.1f", adjustedDIAInMinutes/60)))
      appendLine(String.format("║ %-${columnWidth}s │ %s", "pumpAgeDays", String.format("%.1f", pumpAgeDays)))
      appendLine(String.format("║ %-${columnWidth}s │ %s", "zeroBasalAccumulatedMinutes", String.format("%.1f", zeroBasalAccumulatedMinutes.toDouble())))
+
+     */
+
+     appendLine(String.format("║ %-${columnWidth}s │ %s u", context.getString(R.string.table_plugin_limits_1), String.format("%.1f", maxIob)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s u", context.getString(R.string.table_plugin_limits_2), String.format("%.1f", iob)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s u", context.getString(R.string.table_plugin_limits_3), String.format("%.1f", iob2)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s u", context.getString(R.string.table_plugin_limits_4), String.format("%.1f", maxSMB)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_5), conditionResult))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_6), conditionsTrue))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_7), String.format("%.1f", profile.peakTime)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_8), String.format("%.1f", profile.currentActivity)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_9), String.format("%.1f", peakintermediaire)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_10), String.format("%.1f", profile.futureActivity / (profile.currentActivity + 0.0001))))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_11), String.format("%.1f", tp)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_12), String.format("%.1f", adjustedDIAInMinutes / 60)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_13), String.format("%.1f", pumpAgeDays)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_limits_14), String.format("%.1f", zeroBasalAccumulatedMinutes.toDouble())))
      appendLine("╚${"═".repeat(screenWidth)}╝")
      appendLine()
 
