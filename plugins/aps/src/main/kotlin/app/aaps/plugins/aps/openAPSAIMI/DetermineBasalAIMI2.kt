@@ -2488,9 +2488,12 @@ private fun neuralnetwork5(
                 String.format(
                     context.getString(R.string.table_plugin_autodrive_1),
                     pbolusAS,
-                    combinedDelta,
-                    predicted,
-                    bgAcceleration
+                    //combinedDelta,
+                    //predicted,
+                    //bgAcceleration
+                    combinedDelta.toFloat(), // Assicurati che combinedDelta sia un numero
+                    predicted.toFloat(), // Assicurati che predicted sia un numero
+                    bgAcceleration.toDouble() // Assicurati che bgAcceleration sia un numero
                 )
             )
             return rT
@@ -2516,10 +2519,11 @@ private fun neuralnetwork5(
                 String.format(
                     context.getString(R.string.table_plugin_autodrive_2),
                     pbolusA,
-                    targetBg,
-                    combinedDelta,
-                    mealData.slopeFromMinDeviation,
-                    bgAcceleration
+                    targetBg.toFloat(), // Assicurati che targetBg sia un numero, altrimenti usa .toFloat() o .toDouble()
+                    combinedDelta.toFloat(), // Assicurati che combinedDelta sia un numero
+                    mealData.slopeFromMinDeviation.toFloat(), // Assicurati che slopeFromMinDeviation sia un numero
+                    bgAcceleration.toDouble() // Assicurati che bgAcceleration sia un numero
+
                 )
             )
 
@@ -2532,7 +2536,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_2),
-                    pbolusbfast
+                    pbolusbfast.toFloat()
                 )
             )
 
@@ -2546,7 +2550,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_3),
-                    pbolusbfast2
+                    pbolusbfast2.toFloat()
                 )
             )
 
@@ -2559,7 +2563,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_4),
-                    pbolusLunch
+                    pbolusLunch.toFloat()
                 )
             )
             return rT
@@ -2572,7 +2576,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_5),
-                    pbolusLunch2
+                    pbolusLunch2.toFloat()
                 )
             )
 
@@ -2585,7 +2589,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_6),
-                    pbolusDinner
+                    pbolusDinner.toFloat()
                 )
             )
             return rT
@@ -2598,7 +2602,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_7),
-                    pbolusDinner2
+                    pbolusDinner2.toFloat()
                 )
             )
             return rT
@@ -2610,7 +2614,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_8),
-                    pbolusHC
+                    pbolusHC.toFloat()
                 )
             )
             return rT
@@ -2622,7 +2626,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_9),
-                    pbolussnack
+                    pbolussnack.toFloat()
                 )
             )
             return rT
