@@ -2536,7 +2536,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_2),
-                    pbolusbfast.toDouble()
+                    pbolusbfast
                 )
             )
 
@@ -2550,7 +2550,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_3),
-                    pbolusbfast2.toDouble()
+                    pbolusbfast2
                 )
             )
 
@@ -2563,7 +2563,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_4),
-                    pbolusLunch.toDouble()
+                    pbolusLunch
                 )
             )
             return rT
@@ -2576,7 +2576,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_5),
-                    pbolusLunch2.toDouble()
+                    pbolusLunch2
                 )
             )
 
@@ -2589,7 +2589,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_6),
-                    pbolusDinner.toDouble()
+                    pbolusDinner
                 )
             )
             return rT
@@ -2602,7 +2602,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_7),
-                    pbolusDinner2.toDouble()
+                    pbolusDinner2
                 )
             )
             return rT
@@ -2626,7 +2626,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_9),
-                    pbolussnack.toDouble()
+                    pbolussnack
                 )
             )
             return rT
@@ -3725,6 +3725,32 @@ private fun neuralnetwork5(
              appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_13), context.getString(R.string.table_plugin_manual_modes_active)))
          }
 
+         appendLine("╚${"═".repeat(screenWidth)}╝")
+         appendLine()
+     }
+
+     if (autodrive) {
+         val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
+         val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+         val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
+         val AutodriveAcceleration: Double = preferences.get(DoubleKey.OApsAIMIAutodriveAcceleration)
+         val autodriveminDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
+         val autodriveTarget: Int = preferences.get(IntKey.OApsAIMIAutodriveTarget)
+         val autodriveBG: Int = preferences.get(IntKey.OApsAIMIAutodriveBG)
+         appendLine("╔${"═".repeat(screenWidth)}╗")
+         appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_autodrive_title)))
+         appendLine("╠${"═".repeat(screenWidth)}╣")
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_autodrive_state), "ON"))
+         appendLine(String.format("║ %-${columnWidth}s │ %.1f", context.getString(R.string.table_plugin_autodrive_prebolus_snack), pbolusAS))
+         appendLine(String.format("║ %-${columnWidth}s │ %.1f", context.getString(R.string.table_plugin_autodrive_prebolus_meal), pbolusA))
+         appendLine("╠${"═".repeat(screenWidth)}╣")
+         appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_autodrive_conditions_title), ""))
+         appendLine("╠${"═".repeat(screenWidth)}╣")
+         appendLine(String.format("║ %-${columnWidth}s │ %.1f", context.getString(R.string.table_plugin_autodrive_combined_delta_min), autodriveDelta))
+         appendLine(String.format("║ %-${columnWidth}s │ %.1f", context.getString(R.string.table_plugin_autodrive_acceleration_min), AutodriveAcceleration))
+         appendLine(String.format("║ %-${columnWidth}s │ %.1f", context.getString(R.string.table_plugin_autodrive_min_deviation), autodriveminDeviation))
+         appendLine(String.format("║ %-${columnWidth}s │ %d", context.getString(R.string.table_plugin_autodrive_target_bg), autodriveTarget))
+         appendLine(String.format("║ %-${columnWidth}s │ %d", context.getString(R.string.table_plugin_autodrive_min_bg), autodriveBG))
          appendLine("╚${"═".repeat(screenWidth)}╝")
          appendLine()
      }

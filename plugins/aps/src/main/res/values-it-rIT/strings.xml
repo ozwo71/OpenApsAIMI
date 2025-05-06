@@ -477,6 +477,17 @@
     <string name="table_plugin_manual_modes_11">Cena</string>
     <string name="table_plugin_manual_modes_12">Fasting</string>
     <string name="table_plugin_manual_modes_13">Calibration</string>
+    <string name="table_plugin_autodrive_title">Autodrive</string>
+    <string name="table_plugin_autodrive_state">Stato</string>
+    <string name="table_plugin_autodrive_prebolus_snack">Prebolo Snack</string>
+    <string name="table_plugin_autodrive_prebolus_meal">Prebolo Pasto</string>
+    <string name="table_plugin_autodrive_conditions_title">Condizioni Prebolo</string>
+    <string name="table_plugin_autodrive_combined_delta_min">Delta Combinato Minimo</string>
+    <string name="table_plugin_autodrive_acceleration_min">Accelerazione Minima</string>
+    <string name="table_plugin_autodrive_min_deviation">Deviazione Minima</string>
+    <string name="table_plugin_autodrive_target_bg">Target BG</string>
+    <string name="table_plugin_autodrive_min_bg">Glicemia Minima</string>
+
     <string name="table_plugin_miscellaneous_title">Ultimi trattamenti</string>
     <string name="table_plugin_miscellaneous_1">Ultimo SMB</string>
     <string name="table_plugin_miscellaneous_2">Ora attuale</string>
