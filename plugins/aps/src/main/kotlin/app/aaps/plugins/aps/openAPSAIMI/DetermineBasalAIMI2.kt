@@ -2614,7 +2614,7 @@ private fun neuralnetwork5(
             rT.reason.appendLine(
                 String.format(
                     context.getString(R.string.table_plugin_mealmodes_prebolus_8),
-                    pbolusHC.toDouble()
+                    pbolusHC
                 )
             )
             return rT
