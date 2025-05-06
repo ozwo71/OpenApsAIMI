@@ -3456,7 +3456,7 @@ private fun neuralnetwork5(
      //appendLine(String.format("║ %-${screenWidth}s ║", "Glucose Data"))
      appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_glucose_title)))
      appendLine("╠${"═".repeat(screenWidth)}╣")
-     appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Current BG", String.format("%.1f", bg)))
+     /*appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Current BG", String.format("%.1f", bg)))
      appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "predictedBg", String.format("%.1f", predictedBg)))
      appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Target BG", String.format("%.1f", targetBg)))
      appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Prediction", String.format("%.1f", predictedBg)))
@@ -3468,6 +3468,21 @@ private fun neuralnetwork5(
      appendLine(String.format("║ %-${columnWidth}s │ %s", "slopeFromMaxDeviation", String.format("%.1f", mealData.slopeFromMaxDeviation)))
      appendLine(String.format("║ %-${columnWidth}s │ %s", "slopeFromMinDeviation", String.format("%.1f", mealData.slopeFromMinDeviation)))
      appendLine(String.format("║ %-${columnWidth}s │ %s", "bgAcceleration", String.format("%.1f", bgAcceleration)))
+
+      */
+
+     appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", context.getString(R.string.table_plugin_glucose_1), String.format("%.1f", bg)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", context.getString(R.string.table_plugin_glucose_2), String.format("%.1f", predictedBg)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", context.getString(R.string.table_plugin_glucose_3), String.format("%.1f", targetBg)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", context.getString(R.string.table_plugin_glucose_4), String.format("%.1f", predictedBg)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", context.getString(R.string.table_plugin_glucose_5), String.format("%.1f", eventualBG)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_glucose_6), String.format("%.1f", delta)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_glucose_7), String.format("%.1f", combinedDelta)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_glucose_8), String.format("%.1f", shortAvgDelta)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_glucose_9), String.format("%.1f", longAvgDelta)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_glucose_10), String.format("%.1f", mealData.slopeFromMaxDeviation)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_glucose_11), String.format("%.1f", mealData.slopeFromMinDeviation)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_glucose_12), String.format("%.1f", bgAcceleration)))
      appendLine("╚${"═".repeat(screenWidth)}╝")
      appendLine()
 
