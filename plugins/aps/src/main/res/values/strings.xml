@@ -509,6 +509,22 @@
     <string name="table_plugin_miscellaneous_11">low treatment</string>
     <string name="table_plugin_miscellaneous_12">normal</string>
 
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION MEAL DETECTION - FILE DetermineBasalAIMI2.kt -->
+    <string name="table_plugin_autodrive_1">Autodrive early meal detection/snack: Microbolusing %1$.1fU, CombinedDelta: %2$.1f, Predicted: %3$.1f, Acceleration: %4$.1f.</string>
+    <string name="table_plugin_autodrive_2">Microbolusing Autodrive Mode: %1$.1fU. Target BG: %2$.1f, Combined Delta: %3$.1f, Slope min deviation: %4$.1f, Acceleration: %5$.1f.</string>
+    <string name="table_plugin_mealmodes_prebolus_1">Microbolusing Meal Mode: %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_2">Microbolusing 1/2 Breakfast Mode %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_3">Microbolusing 2/2 Breakfast Mode %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_4">Microbolusing 1/2 Lunch Mode %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_5">Microbolusing 2/2 Lunch Mode %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_6">Microbolusing 1/2 Dinner Mode %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_7">Microbolusing 2/2 Dinner Mode %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_8">Microbolusing High Carb Mode %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_9">Microbolusing snack Mode %1$.1fU.</string>
+
+
+
+
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BASAL ARGUMENTS - FILE DetermineBasalAIMI2.kt -->
 
     <string name="basal_arguments_1">Neutral rate = profile &amp; TBR active → TBR delete.\n</string>

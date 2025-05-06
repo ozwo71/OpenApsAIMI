@@ -491,6 +491,21 @@
     <string name="table_plugin_miscellaneous_11">abbassa trattamenti</string>
     <string name="table_plugin_miscellaneous_12">normale</string>
 
+    <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE RILEVAMENTO PASTO e AUTODRIVE - FILE DetermineBasalAIMI2.kt -->
+
+    <string name="table_plugin_autodrive_1">Autodrive - Rilevamento precoce pasto/spuntino : microbolo %1$.1fU, Delta combinato: %2$.1f, Previsto: %3$.1f, Accelerazione: %4$.1f.</string>
+    <string name="table_plugin_autodrive_2">Autodrive - Prebolo pasto : %1$.1fU. Target BG: %2$.1f, Delta combinato: %3$.1f, Slope min deviation: %4$.1f, Accelerazione: %5$.1f.</string>
+    <string name="table_plugin_mealmodes_prebolus_1">Mod. manuale Pasto Generico - Prebolo %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_2">Mod. manuale Colazione - Prebolo 1/2 %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_3">Mod. manuale Colazione - Prebolo 2/2 %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_4">Mod. manuale Pranzo - Prebolo 1/2 %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_5">Mod. manuale Pranzo - Prebolo 2/2 %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_6">Mod. manuale Cena - Prebolo 1/2 %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_7">Mod. manuale Cena - Prebolo 2/2 %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_8">Mod. manuale High Carb - Prebolo %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_9">Mod. manuale Snack - Prebolo %1$.1fU.</string>
+
+
 
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE RAGIONAMENTI BASALE - FILE DetermineBasalAIMI2.kt -->
 
