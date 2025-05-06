@@ -502,7 +502,7 @@
     <string name="table_plugin_mealmodes_prebolus_5">Mod. manuale Pranzo - Prebolo 2/2 %1$.1fU.</string>
     <string name="table_plugin_mealmodes_prebolus_6">Mod. manuale Cena - Prebolo 1/2 %1$.1fU.</string>
     <string name="table_plugin_mealmodes_prebolus_7">Mod. manuale Cena - Prebolo 2/2 %1$.1fU.</string>
-    <string name="table_plugin_mealmodes_prebolus_8">Mod. manuale High Carb - Prebolo %1$.1fU.</string>
+    <!--<string name="table_plugin_mealmodes_prebolus_8">Mod. manuale High Carb - Prebolo %1$.1fU.</string>-->
     <string name="table_plugin_mealmodes_prebolus_9">Mod. manuale Snack - Prebolo %1$.1fU.</string>
 
 
