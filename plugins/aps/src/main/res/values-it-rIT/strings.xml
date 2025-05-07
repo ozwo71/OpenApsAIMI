@@ -539,6 +539,7 @@
     <string name="table_plugin_meal_snack_2">Pasto/spuntino 30–60 min &amp; in salita → basale Δ.\n</string>
     <string name="table_plugin_hyperglycemia_1">BG Eventuale&gt;180 e iperglicemia → aggiustamento basale AIMI.\n</string>
     <string name="table_plugin_hyperglycemia_2">BG&gt;180 stabile → basale X fattore aggiustamento.\n</string>
+    <string name="early_meal_tbr_forced">Pasto precoce rilevato → TBR forzata %1$1.2fU/h x 30min (override Sicurezza).\n</string>
 
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE AGGIUSTAMENTI SICUREZZA - FILE DetermineBasalAIMI2.kt -->
 

@@ -539,6 +539,7 @@
 
 
 
+
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BASAL ARGUMENTS - FILE DetermineBasalAIMI2.kt -->
 
     <string name="basal_arguments_1">Neutral rate = profile &amp; TBR active → TBR delete.\n</string>
@@ -554,6 +555,7 @@
     <string name="table_plugin_meal_snack_2">Meal/snack 30–60m &amp; rising → basal Δ.\n</string>
     <string name="table_plugin_hyperglycemia_1">EventualBG&gt;180 &amp; hyper → basal AIMI adjustment.\n</string>
     <string name="table_plugin_hyperglycemia_2">BG&gt;180 stable → basal X factor adjustment.\n</string>
+    <string name="early_meal_tbr_forced">Early meal detected → TBR forced to %1$1.2fU/h x30 (override).\n</string>
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION SAFETY ADJUSTMENTS - FILE DetermineBasalAIMI2.kt -->
 

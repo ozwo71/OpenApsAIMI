@@ -3965,7 +3965,8 @@ private fun neuralnetwork5(
      ) {
          chosenRate     = forcedBasal.toDouble()
          overrideSafety = true
-         rT.reason.appendLine("Early meal detected → TBR forcée à ${forcedBasal}U/h x30 (override).\n")
+         //rT.reason.appendLine("Early meal detected → TBR forcée à ${forcedBasal}U/h x30 (override).\n")
+         rT.reason.appendLine(context.getString(R.string.early_meal_tbr_forced, forcedBasal))
      } else {
          // ------------------------------
          // 3️⃣ Cas snack / meal / bfast / lunch / dinner / highCarb / fasting / sport
