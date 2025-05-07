@@ -418,6 +418,7 @@
     <string name="user_preferences_title_menu">Global User Preferences</string>
     <string name="autodrive_preferences_title_menu">Autodrive settings</string>
     <string name="autodrive_prebolus_title_menu">Autodrive Prebolus settings</string>
+    <string name="autodrive_prebolus_variables">Prebolus variables</string>
     <string name="autodrive_prebolus_variablesMorning">Prebolus variables</string>
     <string name="autodrive_prebolus_title_menuMorning">Meal 00-10:00 settings</string>
     <string name="autodrive_prebolus_variablesAfternoon">Prebolus variables</string>
