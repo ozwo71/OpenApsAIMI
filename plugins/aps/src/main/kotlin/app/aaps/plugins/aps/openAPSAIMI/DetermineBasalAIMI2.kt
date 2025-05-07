@@ -3458,7 +3458,13 @@ private fun neuralnetwork5(
         }
 
         val forcedBasalmealmodes = preferences.get(DoubleKey.meal_modes_MaxBasal)
-        val forcedBasal = preferences.get(DoubleKey.autodriveMaxBasal)
+        //val forcedBasal = preferences.get(DoubleKey.autodriveMaxBasal)
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val forcedBasal = when (hour) {
+            in 0..10 -> preferences.get(DoubleKey.autodriveMaxBasalMorning)
+            in 11..17 -> preferences.get(DoubleKey.autodriveMaxBasalAfternoon)
+            else -> preferences.get(DoubleKey.autodriveMaxBasalEvening)
+        }
 
 /* var rate = when {
      detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime -> calculateRate(forcedBasal, profile_current_basal, 1.0, "Early Meal detection: activation d'une basale maximale pendant 30 minutes.", currenttemp, rT)
