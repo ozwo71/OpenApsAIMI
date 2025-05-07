@@ -689,12 +689,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // 2️⃣ On choisit la bonne pref en fonction du mode
         var maxBasal = when {
             isMealMode       -> preferences.get(DoubleKey.meal_modes_MaxBasal)
-            isEarlyAutodrive ->
+            isEarlyAutodrive -> {
                 val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-                val isEarlyAutodrive = when (hour) {
-                in 0..10 -> preferences.get(DoubleKey.autodriveMaxBasalMorning)
-                in 11..17 -> preferences.get(DoubleKey.autodriveMaxBasalAfternoon)
-                else -> preferences.get(DoubleKey.autodriveMaxBasalEvening)
+                when (hour) {
+                    in 0..10 -> preferences.get(DoubleKey.autodriveMaxBasalMorning)
+                    in 11..17 -> preferences.get(DoubleKey.autodriveMaxBasalAfternoon)
+                    else -> preferences.get(DoubleKey.autodriveMaxBasalEvening)
+                }
             }
             else             -> preferences.get(DoubleKey.ApsMaxBasal)
         }
