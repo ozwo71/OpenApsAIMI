@@ -947,15 +947,42 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     title = rh.gs(R.string.autodrive_preferences_title_menu)
                 })
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIautoDrive, title = R.string.oaps_aimi_enableMlautoDrive_title))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.autodriveMaxBasalMorning, dialogMessage = R.string.autodrive_max_basal_summaryMorning, title = R.string.autodrive_max_basal_titleMorning))
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                key = "Autodrive morning variables"
+                //title = "Autodrive prebolus variables"
+                title = rh.gs(R.string.autodrive_prebolus_variables)
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.autodrive_prebolus_title_menu)
+                })
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.autodriveMaxBasalMorning, dialogMessage = R.string.autodrive_max_basal_summaryMorning, title = R.string.autodrive_max_basal_titleMorning))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolusMorning, dialogMessage = R.string.prebolussmall_autodrive_mode_summaryMorning, title = R.string.prebolussmall_autodrive_mode_titleMorning))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodrivePrebolusMorning, dialogMessage = R.string.prebolus_autodrive_mode_summary_Morning, title = R.string.prebolus_autodrive_mode_title_Morning))
+                })
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                key = "Autodrive afternoon variables"
+                //title = "Autodrive prebolus variables"
+                title = rh.gs(R.string.autodrive_prebolus_variables)
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.autodrive_prebolus_title_menu)
+                })
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.autodriveMaxBasalAfternoon, dialogMessage = R.string.autodrive_max_basal_summaryAfternoon, title = R.string.autodrive_max_basal_titleAfternoon))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.autodriveMaxBasalEvening, dialogMessage = R.string.autodrive_max_basal_summaryEvening, title = R.string.autodrive_max_basal_titleEvening))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolusMorning, dialogMessage = R.string.prebolussmall_autodrive_mode_summaryMorning, title = R.string.prebolussmall_autodrive_mode_titleMorning))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolusAfternoon, dialogMessage = R.string.prebolussmall_autodrive_mode_summaryAfternoon, title = R.string.prebolussmall_autodrive_mode_titleAfternoon))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolusEvening, dialogMessage = R.string.prebolussmall_autodrive_mode_summaryEvening, title = R.string.prebolussmall_autodrive_mode_titleEvening))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodrivePrebolusMorning, dialogMessage = R.string.prebolus_autodrive_mode_summary_Morning, title = R.string.prebolus_autodrive_mode_title_Morning))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodrivePrebolusAfternoon, dialogMessage = R.string.prebolus_autodrive_mode_summary_Afternoon, title = R.string.prebolus_autodrive_mode_title_Afternoon))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodrivePrebolusEvening, dialogMessage = R.string.prebolus_autodrive_mode_summary_Evening, title = R.string.prebolus_autodrive_mode_title_Evening))
+            })
+
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "Autodrive afternoon variables"
+                    //title = "Autodrive prebolus variables"
+                    title = rh.gs(R.string.autodrive_prebolus_variables)
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.autodrive_prebolus_title_menu)
+                    })
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.autodriveMaxBasalEvening, dialogMessage = R.string.autodrive_max_basal_summaryEvening, title = R.string.autodrive_max_basal_titleEvening))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolusEvening, dialogMessage = R.string.prebolussmall_autodrive_mode_summaryEvening, title = R.string.prebolussmall_autodrive_mode_titleEvening))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodrivePrebolusEvening, dialogMessage = R.string.prebolus_autodrive_mode_summary_Evening, title = R.string.prebolus_autodrive_mode_title_Evening))
+                })
+
+
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "Autodrive prebolus variables"
                     //title = "Autodrive prebolus variables"
