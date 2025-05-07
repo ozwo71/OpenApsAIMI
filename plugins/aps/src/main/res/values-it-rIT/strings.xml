@@ -564,7 +564,6 @@
     <string name="safety_adjustments_17">Delta negativo</string>
     <string name="safety_adjustments_18">No SMB</string>
     <string name="safety_adjustments_19">Fasting</string>
-    <string name="safety_adjustments_20">Soglia minima superata</string>
     <string name="safety_adjustments_20">BG sotto soglia minima</string>
     <string name="safety_adjustments_21">Nuova calibrazione</string>
     <string name="safety_adjustments_22">BG sotto al target, in calo</string>
