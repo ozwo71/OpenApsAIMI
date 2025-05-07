@@ -1110,7 +1110,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         bg: Float
     ): Boolean {
         // Récupération de la valeur de pbolusMeal depuis les préférences
-        val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+        //val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val pbolusA = when (hour) {
+            in 0..10 -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusMorning)
+            in 11..17 -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusAfternoon)
+            else -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusEvening)
+        }
         val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
         val autodriveminDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
         //val autodriveISF: Int = preferences.get(IntKey.OApsAIMIautodriveISF)
@@ -2512,7 +2518,18 @@ private fun neuralnetwork5(
             return rT
          }
         if (!nightbis && isAutodriveModeCondition(targetBg, delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat()) && modesCondition && bgAcceleration.toDouble() >= AutodriveAcceleration){
-            val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+            //val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+
+            val pbolusAMorning = preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusMorning)
+            val pbolusAAfternoon = preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusAfternoon)
+            val pbolusAEvening = preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusEvening)
+
+            val pbolusA: Double = when (hour) {
+                in 0..10 -> pbolusAMorning
+                in 11..17 -> pbolusAAfternoon
+                else -> pbolusAEvening
+            }
             rT.units = pbolusA
             //rT.reason.appendLine("Microbolusing Autodrive Mode ${pbolusA}U. TargetBg : ${targetBg}, CombinedDelta : ${combinedDelta}, Slopemindeviation : ${mealData.slopeFromMinDeviation}, Acceleration : ${bgAcceleration}. ")
             rT.reason.appendLine(
@@ -3681,7 +3698,13 @@ private fun neuralnetwork5(
 
      if (autodrive) {
          val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
-         val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+         //val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+         val pbolusA = when (hour) {
+             in 0..10 -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusMorning)
+             in 11..17 -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusAfternoon)
+             else -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusEvening)
+         }
          val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
          val AutodriveAcceleration: Double = preferences.get(DoubleKey.OApsAIMIAutodriveAcceleration)
          val autodriveminDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)

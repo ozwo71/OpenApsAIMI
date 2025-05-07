@@ -385,8 +385,12 @@
     <string name="oaps_aimi_logsize_title">Define the log size for the colon in loop page</string>
     <string name="Enable_xdripOM_title">Enable xdrip bg each one minute</string>
     <string name="oaps_aimi_enableMlautoDrive_title">Experimental : Auto Drive</string>
-    <string name="prebolus_autodrive_mode_summary">Autodrive will send a prebolus regarding the raise detection conditions</string>
-    <string name="prebolus_autodrive_mode_title">Autodrive prebolus</string>
+    <string name="prebolus_autodrive_mode_summary_Morning">Autodrive will send a prebolus regarding the raise detection conditions</string>
+    <string name="prebolus_autodrive_mode_title_Morning">Autodrive prebolus Morning</string>
+    <string name="prebolus_autodrive_mode_summary_Afternoon">Autodrive will send a prebolus regarding the raise detection conditions</string>
+    <string name="prebolus_autodrive_mode_title_Afternoon">Autodrive prebolus Afternoon</string>
+    <string name="prebolus_autodrive_mode_summary_Evening">Autodrive will send a prebolus regarding the raise detection conditions</string>
+    <string name="prebolus_autodrive_mode_title_Evening">Autodrive prebolus Evening</string>
     <string name="oaps_aimi_AutodriveISF_summary">under this ISF value, the condition to receive the prebolus is true</string>
     <string name="oaps_aimi_AutodriveISF_title">ISF value Autodrive for prebolus</string>
     <string name="OApsAIMI_CombinedDelta_summary">"Greater than value, the condition to receive the prebolus is true. "</string>

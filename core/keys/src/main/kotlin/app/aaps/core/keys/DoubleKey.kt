@@ -68,8 +68,14 @@ enum class DoubleKey(
     OApsAIMIHyperFactor("key_oaps_aimi_hyper_factor", 60.0, 1.0, 150.0),
     OApsAIMIsleepFactor("key_oaps_aimi_sleep_factor", 60.0, 1.0, 150.0),
     OApsAIMIMealPrebolus("key_prebolus_meal_mode", 2.0, 0.1, 10.0),
-    OApsAIMIautodrivePrebolus("key_prebolus_autodrive_mode", 1.0, 0.1, 10.0),
+    //OApsAIMIautodrivePrebolus("key_prebolus_autodrive_mode", 1.0, 0.1, 10.0),
+    OApsAIMIAutodrivePrebolusMorning("key_prebolus_autodrive_mode_morning", 1.0, 0.1, 10.0),
+    OApsAIMIAutodrivePrebolusAfternoon("key_prebolus_autodrive_mode_afternoon", 1.0, 0.1, 10.0),
+    OApsAIMIAutodrivePrebolusEvening("key_prebolus_autodrive_mode_evening", 1.0, 0.1, 10.0),
+
     OApsAIMIautodrivesmallPrebolus("key_prebolussmall_autodrive_mode", 0.1, 0.05, 2.0),
+
+
     OApsAIMIcombinedDelta("key_combinedDelta_autodrive_mode", 1.0, 0.1, 20.0),
     OApsAIMIAutodriveDeviation("key_mindeviation_autodrive_mode", 1.0, 0.1, 5.0),
     OApsAIMIAutodriveAcceleration("key_Acceleration_autodrive_mode", 1.0, 0.1, 5.0),
