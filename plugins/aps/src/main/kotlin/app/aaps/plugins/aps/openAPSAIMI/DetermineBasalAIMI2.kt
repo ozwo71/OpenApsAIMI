@@ -2541,8 +2541,8 @@ private fun neuralnetwork5(
         val nightbis = hourOfDay <= 7
         val modesCondition = !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime
         //val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        val pbolusAS = when (hour) {
+        val hourpbolusAS = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val pbolusAS = when (hourpbolusAS) {
             in 0..10 -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusMorning)
             in 11..17 -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusAfternoon)
             else -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusEvening)
@@ -3467,8 +3467,8 @@ private fun neuralnetwork5(
 
         val forcedBasalmealmodes = preferences.get(DoubleKey.meal_modes_MaxBasal)
         //val forcedBasal = preferences.get(DoubleKey.autodriveMaxBasal)
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        val forcedBasal = when (hour) {
+        val hourforcedBasal = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val forcedBasal = when (hourforcedBasal) {
             in 0..10 -> preferences.get(DoubleKey.autodriveMaxBasalMorning)
             in 11..17 -> preferences.get(DoubleKey.autodriveMaxBasalAfternoon)
             else -> preferences.get(DoubleKey.autodriveMaxBasalEvening)
