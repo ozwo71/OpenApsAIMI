@@ -1179,7 +1179,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun roundToPoint05(number: Float): Float {
         return (number * 20.0).roundToInt() / 20.0f
     }
-    private fun isCriticalSafetyCondition(mealData: MealData): Pair<Boolean, String> {
+    /*private fun isCriticalSafetyCondition(mealData: MealData): Pair<Boolean, String> {
         val conditionsTrue = mutableListOf<String>()
         //val slopedeviation = mealData.slopeFromMaxDeviation <= -1.5 && mealData.slopeFromMinDeviation < 0.3
         //if (slopedeviation) conditionsTrue.add("slopedeviation")
@@ -1232,6 +1232,60 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             conditionsTrue.joinToString(", ")
         } else {
             "No conditions met"
+        }
+
+        return Pair(result, conditionsTrueString)
+    } */
+    private fun isCriticalSafetyCondition(mealData: MealData): Pair<Boolean, String> {
+        val conditionsTrue = mutableListOf<String>()
+        val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
+        val nosmbHM = iob > 0.7 && honeymoon && delta <= 10.0 && !mealTime && !bfastTime && !lunchTime && !dinnerTime && predictedBg < 130
+        if (nosmbHM) conditionsTrue.add(context.getString(R.string.safety_adjustments_15))
+        val honeysmb = honeymoon && delta < 0 && bg < 170
+        if (honeysmb) conditionsTrue.add(context.getString(R.string.safety_adjustments_16))
+        val negdelta = delta <= 0 && !mealTime && !bfastTime && !lunchTime && !dinnerTime && eventualBG < 140
+        if (negdelta) conditionsTrue.add(context.getString(R.string.safety_adjustments_17))
+        val nosmb = iob >= 2*maxSMB && bg < 110 && delta < 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+        if (nosmb) conditionsTrue.add(context.getString(R.string.safety_adjustments_18))
+        val fasting = fastingTime
+        if (fasting) conditionsTrue.add(context.getString(R.string.safety_adjustments_19))
+        val belowMinThreshold = bg < 100 && delta < 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+        if (belowMinThreshold) conditionsTrue.add(context.getString(R.string.safety_adjustments_20))
+        val isNewCalibration = iscalibration && delta > 8
+        if (isNewCalibration) conditionsTrue.add(context.getString(R.string.safety_adjustments_21))
+        val belowTargetAndDropping = bg < targetBg && delta < -2 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+        if (belowTargetAndDropping) conditionsTrue.add(context.getString(R.string.safety_adjustments_22))
+        val belowTargetAndStableButNoCob = bg < targetBg - 15 && shortAvgDelta <= 2 && cob <= 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+        if (belowTargetAndStableButNoCob) conditionsTrue.add(context.getString(R.string.safety_adjustments_23))
+        val droppingFast = bg < 150 && delta < -2
+        if (droppingFast) conditionsTrue.add(context.getString(R.string.safety_adjustments_24))
+        val droppingFastAtHigh = bg < 220 && delta <= -7
+        if (droppingFastAtHigh) conditionsTrue.add(context.getString(R.string.safety_adjustments_25))
+        val droppingVeryFast = delta < -11
+        if (droppingVeryFast) conditionsTrue.add(context.getString(R.string.safety_adjustments_26))
+        val prediction = predictedBg < targetBg && bg < 135 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+        if (prediction) conditionsTrue.add(context.getString(R.string.safety_adjustments_27))
+        val interval = eventualBG < targetBg && delta > 10 && iob >= maxSMB/2 && lastsmbtime < 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime && !snackTime
+        if (interval) conditionsTrue.add(context.getString(R.string.safety_adjustments_28))
+        val targetinterval = targetBg >= 120 && delta > 0 && iob >= maxSMB/2 && lastsmbtime < 12 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime && !snackTime
+        if (targetinterval) conditionsTrue.add(context.getString(R.string.safety_adjustments_29))
+        val acceleratingDown = delta < -2 && delta - longAvgDelta < -2 && lastsmbtime < 15
+        if (acceleratingDown) conditionsTrue.add(context.getString(R.string.safety_adjustments_30))
+        val decceleratingdown = delta < 0 && (delta > shortAvgDelta || delta > longAvgDelta) && lastsmbtime < 15
+        if (decceleratingdown) conditionsTrue.add(context.getString(R.string.safety_adjustments_31))
+        val nosmbhoneymoon = honeymoon && iob > maxIob / 2 && delta < 0
+        if (nosmbhoneymoon) conditionsTrue.add(context.getString(R.string.safety_adjustments_32))
+        val bg90 = bg < 90
+        if (bg90) conditionsTrue.add(context.getString(R.string.safety_adjustments_33))
+
+        val result = belowTargetAndDropping || belowTargetAndStableButNoCob || nosmbHM || honeysmb ||
+            droppingFast || droppingFastAtHigh || droppingVeryFast || prediction || interval || targetinterval || bg90 || negdelta ||
+            fasting || nosmb || isNewCalibration || belowMinThreshold || acceleratingDown || decceleratingdown || nosmbhoneymoon
+
+        val conditionsTrueString = if (conditionsTrue.isNotEmpty()) {
+            conditionsTrue.joinToString(", ")
+        } else {
+            context.getString(R.string.no_conditions_met)
         }
 
         return Pair(result, conditionsTrueString)

@@ -559,5 +559,26 @@
     <string name="safety_adjustments_13">→ limitato a maxSafeBasal %1$s U/h (richiesto: %2$s U/h)\n</string>
     <string name="safety_adjustments_14">%1$s rimanenti &amp; %2$s ~ richiesto %3$s U/h: nessuna basale temp.\n</string>
     <string name="safety_cut"><![CDATA[Sicurezza taglio: BG previsto<100 o IOB>%1$.2f → basale temp. 0.\n]]></string>
+    <string name="safety_adjustments_15">Niente SMB durante luna di miele</string>
+    <string name="safety_adjustments_16">SMB durante luna di miele</string>
+    <string name="safety_adjustments_17">Delta negativo</string>
+    <string name="safety_adjustments_18">No SMB</string>
+    <string name="safety_adjustments_19">Fasting</string>
+    <string name="safety_adjustments_20">Soglia minima superata</string>
+    <string name="safety_adjustments_20">BG sotto soglia minima</string>
+    <string name="safety_adjustments_21">Nuova calibrazione</string>
+    <string name="safety_adjustments_22">BG sotto al target, in calo</string>
+    <string name="safety_adjustments_23">BG sotto al target, stabile ma no COB</string>
+    <string name="safety_adjustments_24">Calo rapido BG</string>
+    <string name="safety_adjustments_25">BG calo rapido da livelli elevati</string>
+    <string name="safety_adjustments_26">BG calo molto rapido</string>
+    <string name="safety_adjustments_27">Previsione</string>
+    <string name="safety_adjustments_28">Intervallo</string>
+    <string name="safety_adjustments_29">Target intervallo</string>
+    <string name="safety_adjustments_30">BG Accelerazione in calo</string>
+    <string name="safety_adjustments_31">BG Decelerazione in calo</string>
+    <string name="safety_adjustments_32">Niente SMB luna di miele</string>
+    <string name="safety_adjustments_33">BG inferiore a 90</string>
+    <string name="no_conditions_met">Nessuna condizione soddisfatta</string>
 </resources>
 
