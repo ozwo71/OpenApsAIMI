@@ -658,7 +658,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val isEarlyAutodrive = !night
             && !isMealMode
             && autodrive
-            && bg > 110
+            && bg > 90 // original 110
             && detectMealOnset(delta, predDelta, bgacc.toFloat())
 
         // 3️⃣ On décide de bypasser la limite de sécurité si override ou mode spécial
@@ -3770,12 +3770,19 @@ private fun neuralnetwork5(
          val autodriveminDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
          val autodriveTarget: Int = preferences.get(IntKey.OApsAIMIAutodriveTarget)
          val autodriveBG: Int = preferences.get(IntKey.OApsAIMIAutodriveBG)
+         val forcedBasal = when (hour) {
+             in 0..10 -> preferences.get(DoubleKey.autodriveMaxBasalMorning)
+             in 11..17 -> preferences.get(DoubleKey.autodriveMaxBasalAfternoon)
+             else -> preferences.get(DoubleKey.autodriveMaxBasalEvening)
+         }
+
          appendLine("╔${"═".repeat(screenWidth)}╗")
          appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_autodrive_title)))
          appendLine("╠${"═".repeat(screenWidth)}╣")
          appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_autodrive_state), "ON"))
          appendLine(String.format("║ %-${columnWidth}s │ %.1f", context.getString(R.string.table_plugin_autodrive_prebolus_snack), pbolusAS))
          appendLine(String.format("║ %-${columnWidth}s │ %.1f", context.getString(R.string.table_plugin_autodrive_prebolus_meal), pbolusA))
+         appendLine(String.format("║ %-${columnWidth}s │ %.1f", context.getString(R.string.table_plugin_autodrive_prebolus_tbr), forcedBasal))
          appendLine("╠${"═".repeat(screenWidth)}╣")
          appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_autodrive_conditions_title), ""))
          appendLine("╠${"═".repeat(screenWidth)}╣")

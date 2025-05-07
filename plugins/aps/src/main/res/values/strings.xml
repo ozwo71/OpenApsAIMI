@@ -507,6 +507,7 @@
     <string name="table_plugin_autodrive_state">State</string>
     <string name="table_plugin_autodrive_prebolus_snack">Prebolus Snack</string>
     <string name="table_plugin_autodrive_prebolus_meal">Prebolus Meal</string>
+    <string name="table_plugin_autodrive_prebolus_tbr">TRB 30min Meal</string>
     <string name="table_plugin_autodrive_conditions_title">Prebolo Conditions</string>
     <string name="table_plugin_autodrive_combined_delta_min">Combined Delta Minimum</string>
     <string name="table_plugin_autodrive_acceleration_min">Minimum Acceleration</string>

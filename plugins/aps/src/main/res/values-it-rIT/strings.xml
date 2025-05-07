@@ -493,6 +493,7 @@
     <string name="table_plugin_autodrive_state">Stato</string>
     <string name="table_plugin_autodrive_prebolus_snack">Prebolo Snack</string>
     <string name="table_plugin_autodrive_prebolus_meal">Prebolo Pasto</string>
+    <string name="table_plugin_autodrive_prebolus_tbr">TRB 30min Pasto</string>
     <string name="table_plugin_autodrive_conditions_title">Condizioni Prebolo</string>
     <string name="table_plugin_autodrive_combined_delta_min">Delta Combinato Minimo</string>
     <string name="table_plugin_autodrive_acceleration_min">Accelerazione Minima</string>
