@@ -403,8 +403,12 @@
     <string name="oaps_aimi_AutodriveDeviation_title">Autodrive min deviation</string>
     <string name="oaps_aimi_AutodriveAcceleration_summary">BG acceleration, if the acceleration is greater than this value, the condition for autodrive prebolus is true.</string>
     <string name="oaps_aimi_AutodriveAcceleration_title">Autodrive BG acceleration condition</string>
-    <string name="prebolussmall_autodrive_mode_summary"><![CDATA[use by an early meal detection, bg > 100, predictionBG > 180. The idea is when we get a early detection sending a small smb to avoid negative iob or late correction. can be a good approach for a small snack.]]></string>
-    <string name="prebolussmall_autodrive_mode_title">snack autodrive prebolus/early meal detection</string>
+    <string name="prebolussmall_autodrive_mode_summaryMorning"><![CDATA[use by an early meal detection, bg > 100, predictionBG > 180. The idea is when we get a early detection sending a small smb to avoid negative iob or late correction. can be a good approach for a small snack.]]></string>
+    <string name="prebolussmall_autodrive_mode_titleMorning">snack autodrive prebolus/early meal detection</string>
+    <string name="prebolussmall_autodrive_mode_summaryAfternoon"><![CDATA[use by an early meal detection, bg > 100, predictionBG > 180. The idea is when we get a early detection sending a small smb to avoid negative iob or late correction. can be a good approach for a small snack.]]></string>
+    <string name="prebolussmall_autodrive_mode_titleAfternoon">snack autodrive prebolus/early meal detection</string>
+    <string name="prebolussmall_autodrive_mode_summaryEvening"><![CDATA[use by an early meal detection, bg > 100, predictionBG > 180. The idea is when we get a early detection sending a small smb to avoid negative iob or late correction. can be a good approach for a small snack.]]></string>
+    <string name="prebolussmall_autodrive_mode_titleEvening">snack autodrive prebolus/early meal detection</string>
     <string name="autodrive_max_basal_summaryMorning">Meal early detection, fix the maxbasal during 30 minutes</string>
     <string name="autodrive_max_basal_titleMorning">Meal Early Detection TBR Morning</string>
     <string name="autodrive_max_basal_summaryAfternoon">Meal early detection, fix the maxbasal during 30 minutes</string>

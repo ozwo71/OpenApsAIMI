@@ -387,8 +387,12 @@
     <string name="oaps_aimi_AutodriveDeviation_title">Deviazione minima glicemia per erogare prebolo </string>
     <string name="oaps_aimi_AutodriveAcceleration_summary">BG acceleration, if the acceleration is greater than this value, the condition for autodrive prebolus is true.</string>
     <string name="oaps_aimi_AutodriveAcceleration_title">Accelerazione minima glicemia per erogare prebolo</string>
-    <string name="prebolussmall_autodrive_mode_summary"><![CDATA[use by an early meal detection, bg > 100, predictionBG > 180. The idea is when we get a early detection sending a small smb to avoid negative iob or late correction. can be a good approach for a small snack.]]></string>
-    <string name="prebolussmall_autodrive_mode_title">Prebolo snack leggero</string>
+    <string name="prebolussmall_autodrive_mode_summaryMorning"><![CDATA[use by an early meal detection, bg > 100, predictionBG > 180. The idea is when we get a early detection sending a small smb to avoid negative iob or late correction. can be a good approach for a small snack.]]></string>
+    <string name="prebolussmall_autodrive_mode_titleMorning">Prebolo snack leggero 0-10:00</string>
+    <string name="prebolussmall_autodrive_mode_summaryAfternoon"><![CDATA[use by an early meal detection, bg > 100, predictionBG > 180. The idea is when we get a early detection sending a small smb to avoid negative iob or late correction. can be a good approach for a small snack.]]></string>
+    <string name="prebolussmall_autodrive_mode_titleAfternoon">Prebolo snack leggero 11-17:00</string>
+    <string name="prebolussmall_autodrive_mode_summaryEvening"><![CDATA[use by an early meal detection, bg > 100, predictionBG > 180. The idea is when we get a early detection sending a small smb to avoid negative iob or late correction. can be a good approach for a small snack.]]></string>
+    <string name="prebolussmall_autodrive_mode_titleEvening">Prebolo snack leggero 18:00-00</string>
     <string name="autodrive_max_basal_summaryMorning">Quando viene rilevato precocemente un pasto, AIMI esegue una basale fissa per 30 minuti. Inserire il valore orario di questa basale (es. 4 unità, farà 2 unità in 30 minuti)</string>
     <string name="autodrive_max_basal_titleMorning">Basale fissa 30 minuti se pasto rilevato (U/h) 0-10:00</string>
     <string name="autodrive_max_basal_summaryAfternoon">Quando viene rilevato precocemente un pasto, AIMI esegue una basale fissa per 30 minuti. Inserire il valore orario di questa basale (es. 4 unità, farà 2 unità in 30 minuti)</string>

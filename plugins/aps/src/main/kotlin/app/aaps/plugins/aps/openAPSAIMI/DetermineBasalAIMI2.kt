@@ -2540,7 +2540,15 @@ private fun neuralnetwork5(
         val AutodriveAcceleration = preferences.get(DoubleKey.OApsAIMIAutodriveAcceleration)
         val nightbis = hourOfDay <= 7
         val modesCondition = !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime
-        val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
+        //val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val pbolusAS = when (hour) {
+            in 0..10 -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusMorning)
+            in 11..17 -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusAfternoon)
+            else -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusEvening)
+        }
+
+
         if (bg > 90 && predictedBg > 150 && !nightbis && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && modesCondition) {
             rT.units = pbolusAS // original >110
             //rT.reason.appendLine("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
@@ -3757,9 +3765,14 @@ private fun neuralnetwork5(
      }
 
      if (autodrive) {
-         val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
-         //val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+         //val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
          val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+         val pbolusAS = when (hour) {
+             in 0..10 -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusMorning)
+             in 11..17 -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusAfternoon)
+             else -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusEvening)
+         }
+         //val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
          val pbolusA = when (hour) {
              in 0..10 -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusMorning)
              in 11..17 -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusAfternoon)
