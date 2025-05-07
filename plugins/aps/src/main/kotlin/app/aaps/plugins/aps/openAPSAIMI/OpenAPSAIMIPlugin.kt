@@ -950,9 +950,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "Autodrive morning variables"
                 //title = "Autodrive prebolus variables"
-                title = rh.gs(R.string.autodrive_prebolus_variables)
+                title = rh.gs(R.string.autodrive_prebolus_variablesMorning)
                 addPreference(PreferenceCategory(context).apply {
-                    title = rh.gs(R.string.autodrive_prebolus_title_menu)
+                    title = rh.gs(R.string.autodrive_prebolus_title_menuMorning)
                 })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.autodriveMaxBasalMorning, dialogMessage = R.string.autodrive_max_basal_summaryMorning, title = R.string.autodrive_max_basal_titleMorning))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolusMorning, dialogMessage = R.string.prebolussmall_autodrive_mode_summaryMorning, title = R.string.prebolussmall_autodrive_mode_titleMorning))
@@ -961,9 +961,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "Autodrive afternoon variables"
                 //title = "Autodrive prebolus variables"
-                title = rh.gs(R.string.autodrive_prebolus_variables)
+                title = rh.gs(R.string.autodrive_prebolus_variablesAfternoon)
                 addPreference(PreferenceCategory(context).apply {
-                    title = rh.gs(R.string.autodrive_prebolus_title_menu)
+                    title = rh.gs(R.string.autodrive_prebolus_title_menuAfternoon)
                 })
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.autodriveMaxBasalAfternoon, dialogMessage = R.string.autodrive_max_basal_summaryAfternoon, title = R.string.autodrive_max_basal_titleAfternoon))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolusAfternoon, dialogMessage = R.string.prebolussmall_autodrive_mode_summaryAfternoon, title = R.string.prebolussmall_autodrive_mode_titleAfternoon))
@@ -973,9 +973,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "Autodrive afternoon variables"
                     //title = "Autodrive prebolus variables"
-                    title = rh.gs(R.string.autodrive_prebolus_variables)
+                    title = rh.gs(R.string.autodrive_prebolus_variablesEvening)
                     addPreference(PreferenceCategory(context).apply {
-                        title = rh.gs(R.string.autodrive_prebolus_title_menu)
+                        title = rh.gs(R.string.autodrive_prebolus_title_menuEvening)
                     })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.autodriveMaxBasalEvening, dialogMessage = R.string.autodrive_max_basal_summaryEvening, title = R.string.autodrive_max_basal_titleEvening))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolusEvening, dialogMessage = R.string.prebolussmall_autodrive_mode_summaryEvening, title = R.string.prebolussmall_autodrive_mode_titleEvening))
