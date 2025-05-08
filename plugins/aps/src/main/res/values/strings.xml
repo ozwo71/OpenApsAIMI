@@ -419,11 +419,11 @@
     <string name="autodrive_preferences_title_menu">Autodrive settings</string>
     <string name="autodrive_prebolus_title_menu">Autodrive Prebolus settings</string>
     <string name="autodrive_prebolus_variables">Prebolus variables</string>
-    <string name="autodrive_prebolus_variablesMorning">Prebolus variables</string>
+    <string name="autodrive_prebolus_variablesMorning">Meal 00-10:00</string>
     <string name="autodrive_prebolus_title_menuMorning">Meal 00-10:00 settings</string>
-    <string name="autodrive_prebolus_variablesAfternoon">Prebolus variables</string>
+    <string name="autodrive_prebolus_variablesAfternoon">Meal 11-17:00</string>
     <string name="autodrive_prebolus_title_menuAfternoon">Meal 11-17:00 settings</string>
-    <string name="autodrive_prebolus_variablesEvening">Prebolus variables</string>
+    <string name="autodrive_prebolus_variablesEvening">Meal 18:00-00</string>
     <string name="autodrive_prebolus_title_menuEvening">Meal 18:00-00 settings</string>
     <string name="manual_modes_preferences_title_menu">Training ML and Modes</string>
     <string name="bg_under_120_preferences_title_menu"><![CDATA[Reactivity BG < 120]]></string>
