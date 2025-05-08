@@ -658,7 +658,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val isEarlyAutodrive = !night
             && !isMealMode
             && autodrive
-            && bg > 90 //original 110
+            && bg > 110 //original 110
             && detectMealOnset(delta, predDelta, bgacc.toFloat())
 
         // 3️⃣ On décide de bypasser la limite de sécurité si override ou mode spécial
@@ -2549,7 +2549,7 @@ private fun neuralnetwork5(
         }
 
 
-        if (bg > 90 && predictedBg > 150 && !nightbis && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && modesCondition) {
+        if (bg > 110 && predictedBg > 150 && !nightbis && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && modesCondition) {
             rT.units = pbolusAS //original >110
             //rT.reason.appendLine("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
             rT.reason.appendLine(
@@ -3987,7 +3987,7 @@ private fun neuralnetwork5(
 // ------------------------------
 // 2️⃣ Early‐meal detection → bypass sécurité, forçage vers `forcedBasal`
      if (detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat())
-         && !nightbis && modesCondition && bg > 90 && autodrive //original 110
+         && !nightbis && modesCondition && bg > 110 && autodrive //original 110
      ) {
          chosenRate     = forcedBasal.toDouble()
          overrideSafety = true
