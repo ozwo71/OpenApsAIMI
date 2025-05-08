@@ -3469,8 +3469,8 @@ private fun neuralnetwork5(
         //val forcedBasal = preferences.get(DoubleKey.autodriveMaxBasal)
         val hourforcedBasal = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         val forcedBasal = when (hourforcedBasal) {
-            in 0..10 -> preferences.get(DoubleKey.autodriveMaxBasalMorning)
-            in 11..17 -> preferences.get(DoubleKey.autodriveMaxBasalAfternoon)
+            in 1..11 -> preferences.get(DoubleKey.autodriveMaxBasalMorning)
+            in 12..18 -> preferences.get(DoubleKey.autodriveMaxBasalAfternoon)
             else -> preferences.get(DoubleKey.autodriveMaxBasalEvening)
         }
 
@@ -3768,14 +3768,14 @@ private fun neuralnetwork5(
          //val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
          val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
          val pbolusAS = when (hour) {
-             in 0..10 -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusMorning)
-             in 11..17 -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusAfternoon)
+             in 1..11 -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusMorning)
+             in 12..18 -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusAfternoon)
              else -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusEvening)
          }
          //val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
          val pbolusA = when (hour) {
-             in 0..10 -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusMorning)
-             in 11..17 -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusAfternoon)
+             in 1..11 -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusMorning)
+             in 12..18 -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusAfternoon)
              else -> preferences.get(DoubleKey.OApsAIMIAutodrivePrebolusEvening)
          }
          val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
@@ -3784,8 +3784,8 @@ private fun neuralnetwork5(
          val autodriveTarget: Int = preferences.get(IntKey.OApsAIMIAutodriveTarget)
          val autodriveBG: Int = preferences.get(IntKey.OApsAIMIAutodriveBG)
          val forcedBasal = when (hour) {
-             in 0..10 -> preferences.get(DoubleKey.autodriveMaxBasalMorning)
-             in 11..17 -> preferences.get(DoubleKey.autodriveMaxBasalAfternoon)
+             in 1..11 -> preferences.get(DoubleKey.autodriveMaxBasalMorning)
+             in 12..18 -> preferences.get(DoubleKey.autodriveMaxBasalAfternoon)
              else -> preferences.get(DoubleKey.autodriveMaxBasalEvening)
          }
 
