@@ -3478,7 +3478,7 @@ private fun neuralnetwork5(
      // Fin de l'assemblage du log
  }
 
- rT.reason.append(logTemplate)
+ //rT.reason.append(logTemplate)
 
  // eventual BG is at/above target
  // if iob is over max, just cancel any temps
