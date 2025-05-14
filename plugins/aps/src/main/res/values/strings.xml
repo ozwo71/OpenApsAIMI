@@ -445,6 +445,18 @@
     <string name="sleep_modes_preferences_title_menu">Sleep - Manual Mode - settings</string>
     <string name="meal_modes_max_basal_summary">Manual modes fixed TBR, after prebolus 1 set 30 minutes a fixed TBR</string>
     <string name="meal_modes_max_basal_title">Manual modes fixed TBR</string>
+    <string name="meal_modes_max_basal_title_bfast">Fixed TBR – Breakfast</string>
+    <string name="meal_modes_max_basal_summary_bfast">Manual modes fixed TBR, after prebolus 1 set 30 minutes a fixed TBR for breakfast</string>
+    <string name="meal_modes_max_basal_title_lunch">Fixed TBR – Lunch</string>
+    <string name="meal_modes_max_basal_summary_lunch">Manual modes fixed TBR, after prebolus 1 set 30 minutes a fixed TBR for lunch</string>
+    <string name="meal_modes_max_basal_title_dinner">Fixed TBR – Dinner</string>
+    <string name="meal_modes_max_basal_summary_dinner">Manual modes fixed TBR, after prebolus 1 set 30 minutes a fixed TBR for dinner</string>
+    <string name="meal_modes_max_basal_title_highcarb">Fixed TBR – High Carb</string>
+    <string name="meal_modes_max_basal_summary_highcarb">Manual modes fixed TBR, after prebolus 1 set 30 minutes a fixed TBR for high carb meal</string>
+    <string name="meal_modes_max_basal_title_snack">Fixed TBR – Snack</string>
+    <string name="meal_modes_max_basal_summary_snack">Manual modes fixed TBR, after prebolus 1 set 30 minutes a fixed TBR for snack</string>
+    <string name="meal_modes_max_basal_title_genericmeal">Fixed TBR – Generic Meal</string>
+    <string name="meal_modes_max_basal_summary_genericmeal">Manual modes fixed TBR, after prebolus 1 set 30 minutes a fixed TBR for generic meal</string>
 
         <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION TITLE - FILE DetermineBasalAIMI2.kt -->
 

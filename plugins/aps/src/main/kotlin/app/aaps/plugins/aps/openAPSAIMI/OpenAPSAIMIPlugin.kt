@@ -688,7 +688,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // ────────────────────────────────────────────────────
         // 2️⃣ On choisit la bonne pref en fonction du mode
         var maxBasal = when {
-            isMealMode       -> preferences.get(DoubleKey.meal_modes_MaxBasal)
+           // isMealMode       -> preferences.get(DoubleKey.meal_modes_MaxBasal)
+            therapy.bfastTime    -> preferences.get(DoubleKey.meal_modes_MaxBasal_bfast)     // breakfast user prefs tbr 30mins
+            therapy.lunchTime    -> preferences.get(DoubleKey.meal_modes_MaxBasal_lunch)     // lunch user prefs tbr 30mins
+            therapy.dinnerTime   -> preferences.get(DoubleKey.meal_modes_MaxBasal_dinner)    // dinner user prefs tbr 30mins
+            therapy.snackTime    -> preferences.get(DoubleKey. meal_modes_MaxBasal_snack)    // snack user prefs tbr 30mins
+            therapy.highCarbTime -> preferences.get(DoubleKey. meal_modes_MaxBasal_highcarb) // high carb meal user prefs tbr 30mins
+            therapy.mealTime     -> preferences.get(DoubleKey.meal_modes_MaxBasal_genericmeal)  // generic meal user prefs tbr 30mins
+
             isEarlyAutodrive -> {
                 val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
                 when (hour) {
@@ -856,7 +863,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     title = rh.gs(R.string.manual_modes_preferences_title_menu)
                 })
 
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.meal_modes_MaxBasal, dialogMessage = R.string.meal_modes_max_basal_summary, title = R.string.meal_modes_max_basal_title))
+                //addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.meal_modes_MaxBasal, dialogMessage = R.string.meal_modes_max_basal_summary, title = R.string.meal_modes_max_basal_title))
 
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "mode_Breakfast"
@@ -867,6 +874,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIBFPrebolus, dialogMessage = R.string.prebolus_BF_mode_summary, title = R.string.prebolus_BF_mode_title))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIBFPrebolus2, dialogMessage = R.string.prebolus2_BF_mode_summary, title = R.string.prebolus2_BF_mode_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.meal_modes_MaxBasal_bfast, dialogMessage = R.string.meal_modes_max_basal_summary_bfast, title = R.string.meal_modes_max_basal_title_bfast))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIBFFactor, dialogMessage = R.string.OApsAIMI_BFFactor_summary, title = R.string.OApsAIMI_BFFactor_title))
                     addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIBFinterval, dialogMessage = R.string.oaps_aimi_BF_interval_summary, title = R.string.oaps_aimi_BF_interval_title))
                 })
@@ -879,6 +887,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMILunchPrebolus, dialogMessage = R.string.prebolus_lunch_mode_summary, title = R.string.prebolus_lunch_mode_title))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMILunchPrebolus2, dialogMessage = R.string.prebolus2_lunch_mode_summary, title = R.string.prebolus2_lunch_mode_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.meal_modes_MaxBasal_lunch, dialogMessage = R.string.meal_modes_max_basal_summary_lunch, title = R.string.meal_modes_max_basal_title_lunch))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMILunchFactor, dialogMessage = R.string.OApsAIMI_LunchFactor_summary, title = R.string.OApsAIMI_lunchFactor_title))
                     addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMILunchinterval, dialogMessage = R.string.oaps_aimi_lunch_interval_summary, title = R.string.oaps_aimi_lunch_interval_title))
                 })
@@ -891,6 +900,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIDinnerPrebolus, dialogMessage = R.string.prebolus_Dinner_mode_summary, title = R.string.prebolus_Dinner_mode_title))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIDinnerPrebolus2, dialogMessage = R.string.prebolus2_Dinner_mode_summary, title = R.string.prebolus2_Dinner_mode_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.meal_modes_MaxBasal_dinner, dialogMessage = R.string.meal_modes_max_basal_summary_dinner, title = R.string.meal_modes_max_basal_title_dinner))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIDinnerFactor, dialogMessage = R.string.OApsAIMI_DinnerFactor_summary, title = R.string.OApsAIMI_DinnerFactor_title))
                     addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIDinnerinterval, dialogMessage = R.string.oaps_aimi_Dinner_interval_summary, title = R.string.oaps_aimi_Dinner_interval_title))
                 })
@@ -902,6 +912,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         title = rh.gs(R.string.high_carb_modes_preferences_title_menu)
                     })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHighCarbPrebolus, dialogMessage = R.string.prebolus_highcarb_mode_summary, title = R.string.prebolus_highcarb_mode_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.meal_modes_MaxBasal_highcarb, dialogMessage = R.string.meal_modes_max_basal_summary_highcarb, title = R.string.meal_modes_max_basal_title_highcarb))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHCFactor, dialogMessage = R.string.OApsAIMI_HC_Factor_summary, title = R.string.OApsAIMI_HC_Factor_title))
                     addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIHCinterval, dialogMessage = R.string.oaps_aimi_HC_interval_summary, title = R.string.oaps_aimi_HC_interval_title))
                 })
@@ -913,6 +924,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         title = rh.gs(R.string.snack_modes_preferences_title_menu)
                     })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMISnackPrebolus, dialogMessage = R.string.prebolus_snack_mode_summary, title = R.string.prebolus_snack_mode_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.meal_modes_MaxBasal_snack, dialogMessage = R.string.meal_modes_max_basal_summary_snack, title = R.string.meal_modes_max_basal_title_snack))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMISnackFactor, dialogMessage = R.string.OApsAIMI_snack_Factor_summary, title = R.string.OApsAIMI_snack_Factor_title))
                     addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMISnackinterval, dialogMessage = R.string.oaps_aimi_snack_interval_summary, title = R.string.oaps_aimi_snack_interval_title))
                 })
@@ -924,6 +936,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         title = rh.gs(R.string.generic_meal_modes_preferences_title_menu)
                     })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIMealPrebolus, dialogMessage = R.string.prebolus_meal_mode_summary, title = R.string.prebolus_meal_mode_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.meal_modes_MaxBasal_genericmeal, dialogMessage = R.string.meal_modes_max_basal_summary_genericmeal, title = R.string.meal_modes_max_basal_title_genericmeal))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIMealFactor, dialogMessage = R.string.OApsAIMI_MealFactor_summary, title = R.string.OApsAIMI_MealFactor_title))
                     addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMImealinterval, dialogMessage = R.string.oaps_aimi_meal_interval_summary, title = R.string.oaps_aimi_meal_interval_title))
                 })

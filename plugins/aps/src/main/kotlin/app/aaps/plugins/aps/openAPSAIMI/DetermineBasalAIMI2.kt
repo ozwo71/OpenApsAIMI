@@ -3465,7 +3465,20 @@ private fun neuralnetwork5(
             rT.reason.append("$carbsRequired add\'l carbs req w/in ${minutesAboveThreshold}m; ")
         }
 
-        val forcedBasalmealmodes = preferences.get(DoubleKey.meal_modes_MaxBasal)
+//        val forcedBasalmealmodes = preferences.get(DoubleKey.meal_modes_MaxBasal)
+        val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
+
+        val forcedBasalmealmodes = when {
+            therapy.bfastTime    -> preferences.get(DoubleKey.meal_modes_MaxBasal_bfast)
+            therapy.lunchTime    -> preferences.get(DoubleKey.meal_modes_MaxBasal_lunch)
+            therapy.dinnerTime   -> preferences.get(DoubleKey.meal_modes_MaxBasal_dinner)
+            therapy.snackTime    -> preferences.get(DoubleKey.meal_modes_MaxBasal_snack)
+            therapy.highCarbTime -> preferences.get(DoubleKey.meal_modes_MaxBasal_highcarb)
+            therapy.mealTime     -> preferences.get(DoubleKey.meal_modes_MaxBasal_genericmeal)
+            else                 -> preferences.get(DoubleKey.ApsMaxBasal)
+
+        }
+
         //val forcedBasal = preferences.get(DoubleKey.autodriveMaxBasal)
         val hourforcedBasal = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         val forcedBasal = when (hourforcedBasal) {

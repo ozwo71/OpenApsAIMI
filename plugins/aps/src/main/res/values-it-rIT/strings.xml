@@ -430,6 +430,19 @@
     <string name="sleep_modes_preferences_title_menu">Riposo - Modalità manuale - Impostaz.</string>
     <string name="meal_modes_max_basal_summary">Manual modes fixed TBR, after prebolus 1 set 30 minutes a fixed TBR</string>
     <string name="meal_modes_max_basal_title">Basale fissa 30 minuti inizio pasto (U/h)</string>
+    <string name="meal_modes_max_basal_title_bfast">Basale fissa 30 minuti inizio pasto (U/h)</string>
+    <string name="meal_modes_max_basal_summary_bfast">Modalità manuale, TBR fissa, dopo il prebolus 1 impostato 30 minuti una TBR fissa per la colazione</string>
+    <string name="meal_modes_max_basal_title_lunch">Basale fissa 30 minuti inizio pasto (U/h)</string>
+    <string name="meal_modes_max_basal_summary_lunch">Modalità manuale, TBR fissa, dopo il prebolus 1 impostato 30 minuti una TBR fissa per il pranzo</string>
+    <string name="meal_modes_max_basal_title_dinner">Basale fissa 30 minuti inizio pasto (U/h)</string>
+    <string name="meal_modes_max_basal_summary_dinner">Modalità manuale, TBR fissa, dopo il prebolus 1 impostato 30 minuti una TBR fissa per la cena</string>
+    <string name="meal_modes_max_basal_title_highcarb">Basale fissa 30 minuti inizio pasto (U/h)</string>
+    <string name="meal_modes_max_basal_summary_highcarb">Modalità manuale, TBR fissa, dopo il prebolus 1 impostato 30 minuti una TBR fissa per il pasto ad alto contenuto di carboidrati</string>
+    <string name="meal_modes_max_basal_title_snack">Basale fissa 30 minuti inizio pasto (U/h)</string>
+    <string name="meal_modes_max_basal_summary_snack">Modalità manuale, TBR fissa, dopo il prebolus 1 impostato 30 minuti una TBR fissa per lo spuntino</string>
+    <string name="meal_modes_max_basal_title_genericmeal">Basale fissa 30 minuti inizio pasto (U/h)</string>
+    <string name="meal_modes_max_basal_summary_genericmeal">Modalità manuale, TBR fissa, dopo il prebolus 1 impostato 30 minuti una TBR fissa per il pasto generico</string>
+
     <string name="OApsAIMI_Force_Limits">Forza limiti moltiplicatori AAPS</string>
 
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE TITOLI - FILE DetermineBasalAIMI2.kt  -->
