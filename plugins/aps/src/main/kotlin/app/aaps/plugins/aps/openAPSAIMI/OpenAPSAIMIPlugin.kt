@@ -971,7 +971,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             })
 
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
-                    key = "Autodrive afternoon variables"
+                    key = "Autodrive evening variables"
                     //title = "Autodrive prebolus variables"
                     title = rh.gs(R.string.autodrive_prebolus_variablesEvening)
                     addPreference(PreferenceCategory(context).apply {
@@ -984,7 +984,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
 
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
-                    key = "Autodrive evening variables"
+                    key = "Autodrive prebolus variables"
                     //title = "Autodrive prebolus variables"
                     title = rh.gs(R.string.autodrive_prebolus_variables)
                     addPreference(PreferenceCategory(context).apply {
