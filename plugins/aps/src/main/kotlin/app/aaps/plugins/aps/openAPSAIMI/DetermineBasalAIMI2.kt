@@ -2360,7 +2360,6 @@ private fun neuralnetwork5(
         val tir1DAYIR = tirCalculator.averageTIR(tirCalculator.calculate(1, 65.0, 180.0))?.inRangePct()!!
         this.currentTIRLow = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0))?.belowPct()!!
         this.currentTIRRange = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0))?.inRangePct()!!
-        rT.reason.append("Current TIR : $currentTIRRange.\n")
         this.currentTIRAbove = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0))?.abovePct()!!
         this.lastHourTIRLow = tirCalculator.averageTIR(tirCalculator.calculateHour(80.0,140.0))?.belowPct()!!
         val lastHourTIRAbove = tirCalculator.averageTIR(tirCalculator.calculateHour(72.0, 140.0))?.abovePct()
@@ -3278,12 +3277,13 @@ private fun neuralnetwork5(
  this.zeroBasalAccumulatedMinutes = getZeroBasalDuration(persistenceLayer,2)
  val screenWidth = preferences.get(IntKey.OApsAIMIlogsize)// Largeur d'écran par défaut en caractères si non spécifié
  val columnWidth = (screenWidth / 2) - 2 // Calcul de la largeur des colonnes en fonction de la largeur de l'écran
-
+        consoleError.clear()
+        consoleLog.clear()
  val logTemplate = buildString {
      appendLine("╔${"═".repeat(screenWidth)}╗")
      appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
      appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-     appendLine(String.format("║ %-${screenWidth}s ║", "10 Mai 2025"))
+     appendLine(String.format("║ %-${screenWidth}s ║", "14 Mai 2025"))
      // appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_main_title_1)))
      // appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_main_title_2)))
      // appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_main_title_3)))
@@ -3357,15 +3357,15 @@ private fun neuralnetwork5(
      //
      // appendLine("╔${"═".repeat(screenWidth)}╗")
      // //appendLine(String.format("║ %-${screenWidth}s ║", "TIR Data"))
-     // appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_tir_title)))
+     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_tir_title)))
      // appendLine("╠${"═".repeat(screenWidth)}╣")
-     // appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR Low", String.format("%.1f", currentTIRLow)))
-     // appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR In Range", String.format("%.1f", currentTIRRange)))
-     // appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR High", String.format("%.1f", currentTIRAbove)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR Low", String.format("%.1f", currentTIRLow)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR In Range", String.format("%.1f", currentTIRRange)))
+     appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR High", String.format("%.1f", currentTIRAbove)))
      // appendLine(String.format("║ %-${columnWidth}s │ %s%%", "Last Hr TIR Low", String.format("%.1f", lastHourTIRLow)))
      // appendLine(String.format("║ %-${columnWidth}s │ %s%%", "Last Hr TIR >120", String.format("%.1f", lastHourTIRabove120)))
-     // appendLine("╚${"═".repeat(screenWidth)}╝")
-     // appendLine()
+     appendLine("╚${"═".repeat(screenWidth)}╝")
+     appendLine()
 
      appendLine("╔${"═".repeat(screenWidth)}╗")
      //appendLine(String.format("║ %-${screenWidth}s ║", "Step Data"))
@@ -3424,7 +3424,7 @@ private fun neuralnetwork5(
      // Fin de l'assemblage du log
  }
 
- //rT.reason.append(logTemplate)
+ rT.reason.append(logTemplate)
 
  // eventual BG is at/above target
  // if iob is over max, just cancel any temps
