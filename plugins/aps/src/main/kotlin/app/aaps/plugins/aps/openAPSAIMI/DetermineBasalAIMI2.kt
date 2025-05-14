@@ -3466,7 +3466,7 @@ private fun neuralnetwork5(
         }
 
 //        val forcedBasalmealmodes = preferences.get(DoubleKey.meal_modes_MaxBasal)
-        val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
+        //val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
 
         val forcedBasalmealmodes = when {
             therapy.bfastTime    -> preferences.get(DoubleKey.meal_modes_MaxBasal_bfast)
