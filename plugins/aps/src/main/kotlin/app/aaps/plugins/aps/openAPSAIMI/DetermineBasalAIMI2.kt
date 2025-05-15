@@ -2329,6 +2329,7 @@ private fun neuralnetwork5(
         }
 
         this.maxIob = if (autodrive) DinMaxIob.toDouble() else maxIob
+        rT.reason.append(", MaxIob: $maxIob")
         this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
         this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
         // Calcul initial avec ajustement basé sur la glycémie et le delta
@@ -2504,7 +2505,7 @@ private fun neuralnetwork5(
             rT.reason.append("Microbolusing snack Mode ${pbolussnack}U.")
             return rT
         }
-
+        rT.reason.append(", MaxSMB: $maxSMB")
         var nowMinutes = calendarInstance[Calendar.HOUR_OF_DAY] + calendarInstance[Calendar.MINUTE] / 60.0 + calendarInstance[Calendar.SECOND] / 3600.0
         nowMinutes = (kotlin.math.round(nowMinutes * 100) / 100)  // Arrondi à 2 décimales
         val circadianSensitivity = (0.00000379 * nowMinutes.pow(5)) -
@@ -3421,6 +3422,10 @@ private fun neuralnetwork5(
  //
  //     //Fin de l'assemblage du log
  // }
+        rT.reason.append("╔${"═".repeat(screenWidth)}╗")
+        rT.reason.append(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
+        rT.reason.append(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
+        rT.reason.append(String.format("║ %-${screenWidth}s ║", "15 Mai 2025"))
         rT.reason.apply {
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
