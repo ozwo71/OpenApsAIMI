@@ -528,86 +528,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         consoleError.add(msg)
     }
 
-    // private fun getMaxSafeBasal(profile: OapsProfileAimi): Double =
-    //     min(profile.max_basal, min(profile.max_daily_safety_multiplier * profile.max_daily_basal, profile.current_basal_safety_multiplier * profile.current_basal))
-    //  /**
-    //  * Pose un temp basal en respectant — ou non — la limite de sécurité.
-    //  *
-    //  * @param _rate Taux souhaité (U/h).
-    //  * @param duration Durée du temp basal (en minutes).
-    //  * @param profile Profil utilisateur contenant les paramètres de sécurité.
-    //  * @param rT Objet RT pour accumuler la raison.
-    //  * @param currenttemp Temp actuel pour comparaison.
-    //  * @param overrideSafetyLimits Si vrai, bypass de la limite maxSafeBasal.
-    //  */
-    // fun setTempBasal(
-    //     _rate: Double,
-    //     duration: Int,
-    //     profile: OapsProfileAimi,
-    //     rT: RT,
-    //     currenttemp: CurrentTemp,
-    //     overrideSafetyLimits: Boolean = false
-    // ): RT {
-    //     // Calcul du maxSafeBasal habituel
-    //     val maxSafe = min(
-    //         profile.max_basal,
-    //         min(
-    //             profile.max_daily_safety_multiplier * profile.max_daily_basal,
-    //             profile.current_basal_safety_multiplier * profile.current_basal
-    //         )
-    //     )
-    //     // Choix du taux à appliquer :
-    //     // - si overrideSafetyLimits, on ne clamp pas à maxSafe
-    //     // - sinon on clamp le rate à maxSafe
-    //     val rate = if (overrideSafetyLimits) {
-    //         _rate
-    //     } else {
-    //         _rate.coerceIn(0.0, maxSafe)
-    //     }
-    //
-    //     // Log pour debug
-    //     if (overrideSafetyLimits) {
-    //         rT.reason.append("→ bypass sécurité (override) : rate = ${rate}U/h\n")
-    //     } else if (rate != _rate) {
-    //         rT.reason.append("→ clamped à maxSafeBasal $maxSafe U/h (demande: ${_rate}U/h)\n")
-    //     }
-    //
-    //     // Cas où il n’y a pas de changement utile
-    //     if (currenttemp.duration > (duration - 10)
-    //         && currenttemp.duration <= 120
-    //         && rate <= currenttemp.rate * 1.2
-    //         && rate >= currenttemp.rate * 0.8
-    //         && duration > 0
-    //     ) {
-    //         rT.reason.append("${currenttemp.duration}m restants & ${currenttemp.rate} ~ req $rate U/h : pas de temp.\n")
-    //         return rT
-    //     }
-    //
-    //     // Si le nouveau rate = basal de profil et qu’on skip les neutres
-    //     val profileBasal = profile.current_basal
-    //     if (rate == profileBasal) {
-    //         if (profile.skip_neutral_temps) {
-    //             if (currenttemp.duration > 0) {
-    //                 rT.reason.append("Taux neutre = profil & temp actif → annulation du temp.\n")
-    //                 rT.duration = 0
-    //                 rT.rate = 0.0
-    //             } else {
-    //                 rT.reason.append("Taux neutre = profil & pas de temp → rien à faire.\n")
-    //             }
-    //         } else {
-    //             rT.reason.append("Taux neutre = profil → pose d’un temp à $rate U/h.\n")
-    //             rT.duration = duration
-    //             rT.rate = rate
-    //         }
-    //     } else {
-    //         // Pose standard du temp
-    //         rT.reason.append("Pose temp à $rate U/h pour $duration minutes.\n")
-    //         rT.duration = duration
-    //         rT.rate = rate
-    //     }
-    //
-    //     return rT
-    // }
+
     /**
      * Pose un temp basal en respectant — ou non — la limite de sécurité.
      *
@@ -2302,6 +2223,7 @@ private fun neuralnetwork5(
         )
 
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
+        rT.reason.append("Autodrive: $autodrive, Combined Delta: $combinedDelta, PredictedBg: $predictedBg, bgAcceleration: $bgacc, ")
         val calendarInstance = Calendar.getInstance()
         this.hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
         val dayOfWeek = calendarInstance[Calendar.DAY_OF_WEEK]
@@ -2370,6 +2292,7 @@ private fun neuralnetwork5(
         val tirbasal3B = tirCalculator.averageTIR(tirCalculator.calculate(3, 65.0, 120.0))?.belowPct()
         val tirbasal3A = tirCalculator.averageTIR(tirCalculator.calculate(3, 65.0, 120.0))?.abovePct()
         val tirbasalhAP = tirCalculator.averageTIR(tirCalculator.calculateHour(65.0, 100.0))?.abovePct()
+        rT.reason.append("TIRBelow: $currentTIRLow, TIRinRange: $currentTIRRange, TIRAbove: $currentTIRAbove")
         //this.enablebasal = preferences.get(BooleanKey.OApsAIMIEnableBasal)
         this.now = System.currentTimeMillis()
         automateDeletionIfBadDay(tir1DAYIR.toInt())
@@ -2979,9 +2902,9 @@ private fun neuralnetwork5(
             bg > 180 && delta > 5 && iob < 1.2 && honeymoon                                                                                   -> smbToGive * hyperfactor.toFloat()
             else                                                                                                                              -> smbToGive
         }
-        rT.reason.append("adjustedMorningFactor $adjustedMorningFactor")
-        rT.reason.append("adjustedAfternoonFactor $adjustedAfternoonFactor")
-        rT.reason.append("adjustedEveningFactor $adjustedEveningFactor")
+        rT.reason.append("adjustedMorningFactor ${adjustedMorningFactor}, ")
+        rT.reason.append("adjustedAfternoonFactor ${adjustedAfternoonFactor}, ")
+        rT.reason.append("adjustedEveningFactor ${adjustedEveningFactor}, ")
         val factors = when {
             lunchTime                           -> lunchfactor
             bfastTime                           -> bfastfactor
@@ -3007,6 +2930,7 @@ private fun neuralnetwork5(
             pumpAgeDays = pumpAgeDays
         )
         consoleLog.add("DIA ajusté (en minutes) : $adjustedDIAInMinutes")
+        rT.reason.append(", DIA ajusté (en minutes) : $adjustedDIAInMinutes, ")
         val actCurr = profile.sensorLagActivity
         val actFuture = profile.futureActivity
         val td = adjustedDIAInMinutes
@@ -3281,8 +3205,8 @@ private fun neuralnetwork5(
         )
         val (conditionResult, conditionsTrue) = isCriticalSafetyCondition(mealData)
         this.zeroBasalAccumulatedMinutes = getZeroBasalDuration(persistenceLayer, 2)
-        val screenWidth = preferences.get(IntKey.OApsAIMIlogsize)// Largeur d'écran par défaut en caractères si non spécifié
-        val columnWidth = (screenWidth / 2) - 2 // Calcul de la largeur des colonnes en fonction de la largeur de l'écran
+        //val screenWidth = preferences.get(IntKey.OApsAIMIlogsize)// Largeur d'écran par défaut en caractères si non spécifié
+        //val columnWidth = (screenWidth / 2) - 2 // Calcul de la largeur des colonnes en fonction de la largeur de l'écran
 
         // rT.reason.apply {
         //     appendLine("╔${"═".repeat(screenWidth)}╗")
@@ -3451,152 +3375,152 @@ private fun neuralnetwork5(
                 targetBG = targetBg,
                 zeroBasalDurationMinutes = zeroBasalAccumulatedMinutes
             )
-            rT.reason.append(safetyDecision.reason)
-            val logTemplate = buildString {
-                appendLine("╔${"═".repeat(screenWidth)}╗")
-                appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
-                appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-                appendLine(String.format("║ %-${screenWidth}s ║", "15 Mai 2025"))
-                // appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_main_title_1)))
-                // appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_main_title_2)))
-                // appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_main_title_3)))
-                appendLine("╚${"═".repeat(screenWidth)}╝")
-                appendLine()
-
-                appendLine("╔${"═".repeat(screenWidth)}╗")
-                //appendLine(String.format("║ %-${screenWidth}s ║", "Request"))
-                appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_request_title)))
-                appendLine("╠${"═".repeat(screenWidth)}╣")
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Reason", "COB: $cob, Dev: $deviation, BGI: $bgi, ISF: $variableSensitivity, CR: $ci, Target: $target_bg"))
-                appendLine("╚${"═".repeat(screenWidth)}╝")
-                appendLine()
-
-                appendLine("╔${"═".repeat(screenWidth)}╗")
-                //appendLine(String.format("║ %-${screenWidth}s ║", "SMB Prediction"))
-                appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_smb_prediction_title)))
-                appendLine("╠${"═".repeat(screenWidth)}╣")
-                appendLine(String.format("║ %-${columnWidth}s │ %s u", "AI Pred.", String.format("%.2f", predictedSMB)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s u", "Req. SMB", String.format("%.2f", smbToGive)))
-                appendLine("╚${"═".repeat(screenWidth)}╝")
-                appendLine()
-
-                appendLine("╔${"═".repeat(screenWidth)}╗")
-                //appendLine(String.format("║ %-${screenWidth}s ║", "Adjusted Factors"))
-                appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_adjusted_factors_title)))
-                appendLine("╠${"═".repeat(screenWidth)}╣")
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Factors", adjustedFactors))
-                appendLine("╚${"═".repeat(screenWidth)}╝")
-                appendLine()
-
-                appendLine("╔${"═".repeat(screenWidth)}╗")
-                //appendLine(String.format("║ %-${screenWidth}s ║", "Limits & Conditions"))
-                appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_limits_title)))
-                appendLine("╠${"═".repeat(screenWidth)}╣")
-                appendLine(String.format("║ %-${columnWidth}s │ %s u", "Max IOB", String.format("%.1f", maxIob)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s u", "IOB", String.format("%.1f", iob)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s u", "IOB2", String.format("%.1f", iob2)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s u", "Max SMB", String.format("%.1f", maxSMB)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Safety", conditionResult))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Met", conditionsTrue))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "peakTimeProfile", String.format("%.1f", profile.peakTime)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "currentActivity", String.format("%.1f", profile.currentActivity)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "After IOB Adjustment", String.format("%.1f", peakintermediaire)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Activity Ratio", String.format("%.1f", profile.futureActivity / (profile.currentActivity + 0.0001))))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Final Peak Time after coerceIn", String.format("%.1f", tp)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Adjusted Dia H", String.format("%.1f", adjustedDIAInMinutes/60)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "pumpAgeDays", String.format("%.1f", pumpAgeDays)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "zeroBasalAccumulatedMinutes", String.format("%.1f", zeroBasalAccumulatedMinutes.toDouble())))
-                appendLine("╚${"═".repeat(screenWidth)}╝")
-                appendLine()
-
-                appendLine("╔${"═".repeat(screenWidth)}╗")
-                //appendLine(String.format("║ %-${screenWidth}s ║", "Glucose Data"))
-                appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_glucose_title)))
-                appendLine("╠${"═".repeat(screenWidth)}╣")
-                appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Current BG", String.format("%.1f", bg)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "predictedBg", String.format("%.1f", predictedBg)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Target BG", String.format("%.1f", targetBg)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Prediction", String.format("%.1f", predictedBg)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Eventual BG", String.format("%.1f", eventualBG)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Delta", String.format("%.1f", delta)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "combinedDelta", String.format("%.1f", combinedDelta)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Short Δ", String.format("%.1f", shortAvgDelta)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Long Δ", String.format("%.1f", longAvgDelta)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "slopeFromMaxDeviation", String.format("%.1f", mealData.slopeFromMaxDeviation)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "slopeFromMinDeviation", String.format("%.1f", mealData.slopeFromMinDeviation)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "bgAcceleration", String.format("%.1f", bgAcceleration)))
-                appendLine("╚${"═".repeat(screenWidth)}╝")
-                appendLine()
-                //
-                // appendLine("╔${"═".repeat(screenWidth)}╗")
-                // //appendLine(String.format("║ %-${screenWidth}s ║", "TIR Data"))
-                appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_tir_title)))
-                // appendLine("╠${"═".repeat(screenWidth)}╣")
-                appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR Low", String.format("%.1f", currentTIRLow)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR In Range", String.format("%.1f", currentTIRRange)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR High", String.format("%.1f", currentTIRAbove)))
-                // appendLine(String.format("║ %-${columnWidth}s │ %s%%", "Last Hr TIR Low", String.format("%.1f", lastHourTIRLow)))
-                // appendLine(String.format("║ %-${columnWidth}s │ %s%%", "Last Hr TIR >120", String.format("%.1f", lastHourTIRabove120)))
-                appendLine("╚${"═".repeat(screenWidth)}╝")
-                appendLine()
-
-                appendLine("╔${"═".repeat(screenWidth)}╗")
-                //appendLine(String.format("║ %-${screenWidth}s ║", "Step Data"))
-                appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_steps_title)))
-                appendLine("╠${"═".repeat(screenWidth)}╣")
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (5m)", recentSteps5Minutes))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (30m)", recentSteps30Minutes))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (60m)", recentSteps60Minutes))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (180m)", recentSteps180Minutes))
-                appendLine("╚${"═".repeat(screenWidth)}╝")
-                appendLine()
-
-                appendLine("╔${"═".repeat(screenWidth)}╗")
-                //appendLine(String.format("║ %-${screenWidth}s ║", "Heart Rate Data"))
-                appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_heart_title)))
-                appendLine("╠${"═".repeat(screenWidth)}╣")
-                appendLine(String.format("║ %-${columnWidth}s │ %s bpm", "HR (5m)", String.format("%.1f", averageBeatsPerMinute)))
-                appendLine(String.format("║ %-${columnWidth}s │ %s bpm", "HR (60m)", String.format("%.1f", averageBeatsPerMinute60)))
-                appendLine("╚${"═".repeat(screenWidth)}╝")
-                appendLine()
-
-                appendLine("╔${"═".repeat(screenWidth)}╗")
-                //appendLine(String.format("║ %-${screenWidth}s ║", "Modes"))
-                appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_manual_modes_title)))
-                appendLine("╠${"═".repeat(screenWidth)}╣")
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Delete Time", if (deleteTime) "Active" else "Inactive"))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Date", deleteEventDate ?: "N/A"))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Sleep", if (sleepTime) "Active" else "Inactive"))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Sport", if (sportTime) "Active" else "Inactive"))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Snack", if (snackTime) "Active" else "Inactive"))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Low Carb", if (lowCarbTime) "Active" else "Inactive"))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "High Carb", if (highCarbTime) "Active" else "Inactive"))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Meal", if (mealTime) "Active" else "Inactive"))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Breakfast", if (bfastTime) "Active" else "Inactive"))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Lunch", if (lunchTime) "Active" else "Inactive"))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Dinner", if (dinnerTime) "Active" else "Inactive"))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Fasting", if (fastingTime) "Active" else "Inactive"))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Calibration", if (iscalibration) "Active" else "Inactive"))
-                appendLine("╚${"═".repeat(screenWidth)}╝")
-                appendLine()
-
-                appendLine("╔${"═".repeat(screenWidth)}╗")
-                //appendLine(String.format("║ %-${screenWidth}s ║", "Miscellaneous"))
-                appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_miscellaneous_title)))
-                appendLine("╠${"═".repeat(screenWidth)}╣")
-                appendLine(String.format("║ %-${columnWidth}s │ %s min", "Last SMB", lastsmbtime))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Hour", hourOfDay))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "Weekend", weekend))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "tags0-60m", tags0to60minAgo))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "tags60-120m", tags60to120minAgo))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "tags120-180m", tags120to180minAgo))
-                appendLine(String.format("║ %-${columnWidth}s │ %s", "tags180-240m", tags180to240minAgo))
-                appendLine("╚${"═".repeat(screenWidth)}╝")
-                appendLine()
-
-                //Fin de l'assemblage du log
-            }
-            rT.reason.append(logTemplate)
+            // rT.reason.append(safetyDecision.reason)
+            // val logTemplate = buildString {
+            //     appendLine("╔${"═".repeat(screenWidth)}╗")
+            //     appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
+            //     appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
+            //     appendLine(String.format("║ %-${screenWidth}s ║", "15 Mai 2025"))
+            //     // appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_main_title_1)))
+            //     // appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_main_title_2)))
+            //     // appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_main_title_3)))
+            //     appendLine("╚${"═".repeat(screenWidth)}╝")
+            //     appendLine()
+            //
+            //     appendLine("╔${"═".repeat(screenWidth)}╗")
+            //     //appendLine(String.format("║ %-${screenWidth}s ║", "Request"))
+            //     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_request_title)))
+            //     appendLine("╠${"═".repeat(screenWidth)}╣")
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Reason", "COB: $cob, Dev: $deviation, BGI: $bgi, ISF: $variableSensitivity, CR: $ci, Target: $target_bg"))
+            //     appendLine("╚${"═".repeat(screenWidth)}╝")
+            //     appendLine()
+            //
+            //     appendLine("╔${"═".repeat(screenWidth)}╗")
+            //     //appendLine(String.format("║ %-${screenWidth}s ║", "SMB Prediction"))
+            //     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_smb_prediction_title)))
+            //     appendLine("╠${"═".repeat(screenWidth)}╣")
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s u", "AI Pred.", String.format("%.2f", predictedSMB)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s u", "Req. SMB", String.format("%.2f", smbToGive)))
+            //     appendLine("╚${"═".repeat(screenWidth)}╝")
+            //     appendLine()
+            //
+            //     appendLine("╔${"═".repeat(screenWidth)}╗")
+            //     //appendLine(String.format("║ %-${screenWidth}s ║", "Adjusted Factors"))
+            //     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_adjusted_factors_title)))
+            //     appendLine("╠${"═".repeat(screenWidth)}╣")
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Factors", adjustedFactors))
+            //     appendLine("╚${"═".repeat(screenWidth)}╝")
+            //     appendLine()
+            //
+            //     appendLine("╔${"═".repeat(screenWidth)}╗")
+            //     //appendLine(String.format("║ %-${screenWidth}s ║", "Limits & Conditions"))
+            //     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_limits_title)))
+            //     appendLine("╠${"═".repeat(screenWidth)}╣")
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s u", "Max IOB", String.format("%.1f", maxIob)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s u", "IOB", String.format("%.1f", iob)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s u", "IOB2", String.format("%.1f", iob2)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s u", "Max SMB", String.format("%.1f", maxSMB)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Safety", conditionResult))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Met", conditionsTrue))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "peakTimeProfile", String.format("%.1f", profile.peakTime)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "currentActivity", String.format("%.1f", profile.currentActivity)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "After IOB Adjustment", String.format("%.1f", peakintermediaire)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Activity Ratio", String.format("%.1f", profile.futureActivity / (profile.currentActivity + 0.0001))))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Final Peak Time after coerceIn", String.format("%.1f", tp)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Adjusted Dia H", String.format("%.1f", adjustedDIAInMinutes/60)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "pumpAgeDays", String.format("%.1f", pumpAgeDays)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "zeroBasalAccumulatedMinutes", String.format("%.1f", zeroBasalAccumulatedMinutes.toDouble())))
+            //     appendLine("╚${"═".repeat(screenWidth)}╝")
+            //     appendLine()
+            //
+            //     appendLine("╔${"═".repeat(screenWidth)}╗")
+            //     //appendLine(String.format("║ %-${screenWidth}s ║", "Glucose Data"))
+            //     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_glucose_title)))
+            //     appendLine("╠${"═".repeat(screenWidth)}╣")
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Current BG", String.format("%.1f", bg)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "predictedBg", String.format("%.1f", predictedBg)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Target BG", String.format("%.1f", targetBg)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Prediction", String.format("%.1f", predictedBg)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s mg/dL", "Eventual BG", String.format("%.1f", eventualBG)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Delta", String.format("%.1f", delta)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "combinedDelta", String.format("%.1f", combinedDelta)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Short Δ", String.format("%.1f", shortAvgDelta)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Long Δ", String.format("%.1f", longAvgDelta)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "slopeFromMaxDeviation", String.format("%.1f", mealData.slopeFromMaxDeviation)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "slopeFromMinDeviation", String.format("%.1f", mealData.slopeFromMinDeviation)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "bgAcceleration", String.format("%.1f", bgAcceleration)))
+            //     appendLine("╚${"═".repeat(screenWidth)}╝")
+            //     appendLine()
+            //     //
+            //     // appendLine("╔${"═".repeat(screenWidth)}╗")
+            //     // //appendLine(String.format("║ %-${screenWidth}s ║", "TIR Data"))
+            //     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_tir_title)))
+            //     // appendLine("╠${"═".repeat(screenWidth)}╣")
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR Low", String.format("%.1f", currentTIRLow)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR In Range", String.format("%.1f", currentTIRRange)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s%%", "TIR High", String.format("%.1f", currentTIRAbove)))
+            //     // appendLine(String.format("║ %-${columnWidth}s │ %s%%", "Last Hr TIR Low", String.format("%.1f", lastHourTIRLow)))
+            //     // appendLine(String.format("║ %-${columnWidth}s │ %s%%", "Last Hr TIR >120", String.format("%.1f", lastHourTIRabove120)))
+            //     appendLine("╚${"═".repeat(screenWidth)}╝")
+            //     appendLine()
+            //
+            //     appendLine("╔${"═".repeat(screenWidth)}╗")
+            //     //appendLine(String.format("║ %-${screenWidth}s ║", "Step Data"))
+            //     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_steps_title)))
+            //     appendLine("╠${"═".repeat(screenWidth)}╣")
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (5m)", recentSteps5Minutes))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (30m)", recentSteps30Minutes))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (60m)", recentSteps60Minutes))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (180m)", recentSteps180Minutes))
+            //     appendLine("╚${"═".repeat(screenWidth)}╝")
+            //     appendLine()
+            //
+            //     appendLine("╔${"═".repeat(screenWidth)}╗")
+            //     //appendLine(String.format("║ %-${screenWidth}s ║", "Heart Rate Data"))
+            //     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_heart_title)))
+            //     appendLine("╠${"═".repeat(screenWidth)}╣")
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s bpm", "HR (5m)", String.format("%.1f", averageBeatsPerMinute)))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s bpm", "HR (60m)", String.format("%.1f", averageBeatsPerMinute60)))
+            //     appendLine("╚${"═".repeat(screenWidth)}╝")
+            //     appendLine()
+            //
+            //     appendLine("╔${"═".repeat(screenWidth)}╗")
+            //     //appendLine(String.format("║ %-${screenWidth}s ║", "Modes"))
+            //     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_manual_modes_title)))
+            //     appendLine("╠${"═".repeat(screenWidth)}╣")
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Delete Time", if (deleteTime) "Active" else "Inactive"))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Date", deleteEventDate ?: "N/A"))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Sleep", if (sleepTime) "Active" else "Inactive"))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Sport", if (sportTime) "Active" else "Inactive"))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Snack", if (snackTime) "Active" else "Inactive"))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Low Carb", if (lowCarbTime) "Active" else "Inactive"))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "High Carb", if (highCarbTime) "Active" else "Inactive"))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Meal", if (mealTime) "Active" else "Inactive"))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Breakfast", if (bfastTime) "Active" else "Inactive"))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Lunch", if (lunchTime) "Active" else "Inactive"))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Dinner", if (dinnerTime) "Active" else "Inactive"))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Fasting", if (fastingTime) "Active" else "Inactive"))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Calibration", if (iscalibration) "Active" else "Inactive"))
+            //     appendLine("╚${"═".repeat(screenWidth)}╝")
+            //     appendLine()
+            //
+            //     appendLine("╔${"═".repeat(screenWidth)}╗")
+            //     //appendLine(String.format("║ %-${screenWidth}s ║", "Miscellaneous"))
+            //     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_miscellaneous_title)))
+            //     appendLine("╠${"═".repeat(screenWidth)}╣")
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s min", "Last SMB", lastsmbtime))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Hour", hourOfDay))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "Weekend", weekend))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "tags0-60m", tags0to60minAgo))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "tags60-120m", tags60to120minAgo))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "tags120-180m", tags120to180minAgo))
+            //     appendLine(String.format("║ %-${columnWidth}s │ %s", "tags180-240m", tags180to240minAgo))
+            //     appendLine("╚${"═".repeat(screenWidth)}╝")
+            //     appendLine()
+            //
+            //     //Fin de l'assemblage du log
+            // }
+            // rT.reason.append(logTemplate)
             // Ajustement de la dose SMB proposée en fonction du bolusFactor calculé
             insulinReq = insulinReq * safetyDecision.bolusFactor
             insulinReq = round(insulinReq, 3)
