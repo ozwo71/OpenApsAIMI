@@ -68,6 +68,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var profileFunction: ProfileFunction
     @Inject lateinit var iobCobCalculator: IobCobCalculator
     @Inject lateinit var activePlugin: ActivePlugin
+    private var aimilog = StringBuilder()
     private val consoleError = mutableListOf<String>()
     private val consoleLog = mutableListOf<String>()
     private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
@@ -3013,6 +3014,7 @@ private fun neuralnetwork5(
             sensitivityRatio = sensitivityRatio, // autosens ratio (fraction of normal basal)
             consoleLog = consoleLog,
             consoleError = consoleError,
+            aimilog = aimilog,
             variable_sens = variableSensitivity.toDouble()
         )
         rT.reason.append("Autodrive: $autodrive, Combined Delta: $combinedDelta, PredictedBg: $predictedBg, bgAcceleration: $bgacc, ")
@@ -3209,7 +3211,7 @@ private fun neuralnetwork5(
         val screenWidth = preferences.get(IntKey.OApsAIMIlogsize)// Largeur d'écran par défaut en caractères si non spécifié
         val columnWidth = (screenWidth / 2) - 2 // Calcul de la largeur des colonnes en fonction de la largeur de l'écran
 
-        val logTemplate = buildString {
+        val aimilog = buildString {
             appendLine("╔${"═".repeat(screenWidth)}╗")
             appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
             appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
@@ -3354,7 +3356,7 @@ private fun neuralnetwork5(
             // Fin de l'assemblage du log
         }
 
-        rT.consoleLog!!.add(logTemplate)
+        rT.reason.append(aimilog)
 
         // eventual BG is at/above target
         // if iob is over max, just cancel any temps
