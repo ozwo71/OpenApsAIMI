@@ -1986,7 +1986,6 @@ private fun neuralnetwork5(
             algorithm = APSResult.Algorithm.AIMI,
             runningDynamicIsf = dynIsfMode,
             timestamp = currentTime,
-            aimilog = aimilog,
             consoleLog = consoleLog,
             consoleError = consoleError
         )
@@ -2810,6 +2809,7 @@ private fun neuralnetwork5(
             insulinReq = 0.0,
             deliverAt = deliverAt, // The time at which the microbolus should be delivered
             sensitivityRatio = sensitivityRatio, // autosens ratio (fraction of normal basal)
+            aimilog = aimilog,
             consoleLog = consoleLog,
             consoleError = consoleError,
             variable_sens = variableSensitivity.toDouble()
