@@ -2189,6 +2189,7 @@ private fun neuralnetwork5(
             algorithm = APSResult.Algorithm.AIMI,
             runningDynamicIsf = dynIsfMode,
             timestamp = currentTime,
+            aimilog = aimilog,
             consoleLog = consoleLog,
             consoleError = consoleError
         )
@@ -3014,7 +3015,6 @@ private fun neuralnetwork5(
             sensitivityRatio = sensitivityRatio, // autosens ratio (fraction of normal basal)
             consoleLog = consoleLog,
             consoleError = consoleError,
-            aimilog = aimilog,
             variable_sens = variableSensitivity.toDouble()
         )
         rT.reason.append("Autodrive: $autodrive, Combined Delta: $combinedDelta, PredictedBg: $predictedBg, bgAcceleration: $bgacc, ")
