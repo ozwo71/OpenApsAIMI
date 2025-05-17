@@ -805,12 +805,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (hasReceivedPbolusMInLastHour(pbolusA)) {
             return false
         }
-
-        return targetBg <= autodriveTarget &&
+        var conditions = targetBg <= autodriveTarget &&
             combinedDelta >= autodriveDelta &&
             autodrive &&
             slopeFromMinDeviation >= autodriveminDeviation &&
             bg >= autodriveBG
+        if (bg > 120 && iob < 2 && combinedDelta > 1 && delta >= 10 && bgacc > 2){
+            conditions = true
+        }
+
+        return conditions
     }
 
     private fun isMealModeCondition(): Boolean {
