@@ -398,6 +398,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         averageHR60: Float,
         pumpAgeDays: Float
     ): Double {
+        val reasonBuilder = StringBuilder()
         // 1. Conversion du DIA de base en minutes
         var diaMinutes = baseDIAHours * 60f  // Pour 9h, 9*60 = 540 min
 
@@ -436,7 +437,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 6. Contrainte de la plage finale : entre 180 min (3h) et 720 min (12h)
         diaMinutes = diaMinutes.coerceIn(180f, 720f)
-
+        reasonBuilder.append("Dia in minutes : $diaMinutes")
         return diaMinutes.toDouble()
     }
 
@@ -641,44 +642,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return rT
     }
 
-
-    // fun setTempBasal(_rate: Double, duration: Int, profile: OapsProfileAimi, rT: RT, currenttemp: CurrentTemp, overrideSafetyLimits: Boolean = false): RT {
-    //     val maxSafeBasal = getMaxSafeBasal(profile)
-    //     var rate = _rate
-    //     if (rate < 0) rate = 0.0
-    //     //else if (rate > maxSafeBasal && !mealR) rate = maxSafeBasal
-    //     else if (rate > maxSafeBasal && !overrideSafetyLimits  &&
-    //         !mealTime && !bfastTime && !lunchTime && !dinnerTime && !snackTime && !highCarbTime) {
-    //         rate = maxSafeBasal
-    //     }
-    //
-    //     val suggestedRate = roundBasal(rate)
-    //
-    //     if (currenttemp.duration > (duration - 10) && currenttemp.duration <= 120 &&
-    //         suggestedRate <= currenttemp.rate * 1.2 && suggestedRate >= currenttemp.rate * 0.8 &&
-    //         duration > 0) {
-    //         rT.reason.append(" ${currenttemp.duration}m left and ${currenttemp.rate.withoutZeros()} ~ req ${suggestedRate.withoutZeros()}U/hr: no temp required")
-    //     } else if (suggestedRate == profile.current_basal) {
-    //         if (profile.skip_neutral_temps) {
-    //             if (currenttemp.duration > 0) {
-    //                 reason(rT, "Suggested rate is same as profile rate, a temp basal is active, canceling current temp")
-    //                 rT.duration = 0
-    //                 rT.rate = 0.0
-    //             } else {
-    //                 reason(rT, "Suggested rate is same as profile rate, no temp basal is active, doing nothing")
-    //             }
-    //         } else {
-    //             reason(rT, "Setting neutral temp basal of ${profile.current_basal}U/hr")
-    //             rT.duration = duration
-    //             rT.rate = suggestedRate
-    //         }
-    //     } else {
-    //         rT.duration = duration
-    //         rT.rate = suggestedRate
-    //     }
-    //     return rT
-    // }
-
     private fun logDataMLToCsv(predictedSMB: Float, smbToGive: Float) {
         val usFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm")
         val dateStr = dateUtil.dateAndTimeString(dateUtil.now()).format(usFormatter)
@@ -697,157 +660,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         csvfile.appendText(valuesToRecord + "\n")
     }
-    // private fun createFilteredAndSortedCopy(dateToRemove: String) {
-    //     if (!csvfile.exists()) {
-    //         println("Le fichier original n'existe pas.")
-    //         return
-    //     }
-    //
-    //     try {
-    //         // Lire le fichier original ligne par ligne
-    //         val lines = csvfile.readLines()
-    //         val header = lines.firstOrNull() ?: return
-    //         val dataLines = lines.drop(1)
-    //
-    //         // Liste des lignes valides après filtrage
-    //         val validLines = mutableListOf<String>()
-    //
-    //         // Filtrer les lignes qui ne correspondent pas à la date à supprimer
-    //         dataLines.forEach { line ->
-    //             val lineParts = line.split(",")
-    //             if (lineParts.isNotEmpty()) {
-    //                 val dateStr = lineParts[0].trim()
-    //                 if (!dateStr.startsWith(dateToRemove)) {
-    //                     validLines.add(line)
-    //                 } else {
-    //                     println("Ligne supprimée : $line")
-    //                 }
-    //             }
-    //         }
-    //
-    //         // Trier les lignes par ordre croissant de date (en utilisant les dates en texte)
-    //         validLines.sortBy { it.split(",")[0] }
-    //
-    //         if (!tempFile.exists()) {
-    //             tempFile.createNewFile()
-    //         }
-    //
-    //         // Écrire les lignes filtrées et triées dans le fichier temporaire
-    //         tempFile.writeText(header + "\n")
-    //         validLines.forEach { line ->
-    //             tempFile.appendText(line + "\n")
-    //         }
-    //
-    //         // Obtenir la date et l'heure actuelles pour renommer le fichier original
-    //         val dateFormat = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault())
-    //         val currentDateTime = dateFormat.format(Date())
-    //         val backupFileName = "oapsaimiML2_records_$currentDateTime.csv"
-    //         val backupFile = File(externalDir, backupFileName)
-    //
-    //         // Renommer le fichier original en fichier de sauvegarde
-    //         if (csvfile.renameTo(backupFile)) {
-    //             // Renommer le fichier temporaire en fichier principal
-    //             if (tempFile.renameTo(csvfile)) {
-    //                 println("Le fichier original a été sauvegardé sous '$backupFileName', et 'temp.csv' a été renommé en 'oapsaimiML2_records.csv'.")
-    //             } else {
-    //                 println("Erreur lors du renommage du fichier temporaire 'temp.csv' en 'oapsaimiML2_records.csv'.")
-    //             }
-    //         } else {
-    //             println("Erreur lors du renommage du fichier original en '$backupFileName'.")
-    //         }
-    //
-    //     } catch (e: Exception) {
-    //         println("Erreur lors de la gestion des fichiers : ${e.message}")
-    //     }
-    // }
-    // fun createFilteredAndSortedCopy(csvFile: File, dateToRemove: String) {
-    //     // Vérifier que le fichier CSV existe
-    //     if (!csvFile.exists()) {
-    //         println("Le fichier original n'existe pas.")
-    //         return
-    //     }
-    //
-    //     // Tenter de parser la date cible (attendue au format "dd/MM/yyyy")
-    //     val targetDate: Date? = try {
-    //         SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).parse(dateToRemove)
-    //     } catch (e: Exception) {
-    //         println("Erreur de parsing de la date cible : ${e.message}")
-    //         null
-    //     }
-    //     if (targetDate == null) {
-    //         println("La date cible est invalide.")
-    //         return
-    //     }
-    //
-    //     // Normaliser la date cible dans un format standard (ici "yyyyMMdd")
-    //     val normalizedTarget = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(targetDate)
-    //
-    //     // Liste des formats possibles présents dans le CSV pour la première colonne
-    //     val dateFormats = listOf(
-    //         SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()),
-    //         SimpleDateFormat("d/M/yy HH:mm", Locale.getDefault()),
-    //         SimpleDateFormat("d/M/yyyy HH:mm", Locale.getDefault())
-    //     )
-    //
-    //     // Lecture de toutes les lignes du fichier en mémoire (UTF-8)
-    //     val lines = csvFile.readLines(Charsets.UTF_8)
-    //     if (lines.isEmpty()) {
-    //         println("Le fichier CSV est vide.")
-    //         return
-    //     }
-    //
-    //     // La première ligne est l'en-tête
-    //     val header = lines.first()
-    //     val filteredLines = mutableListOf<String>()
-    //
-    //     // Traiter chaque ligne (à partir de la deuxième)
-    //     for (line in lines.drop(1)) {
-    //         val parts = line.split(",")
-    //         if (parts.isNotEmpty()) {
-    //             val rawDateStr = parts[0].trim() // Par exemple "01/01/2025 00:18" ou "4/3/25 00:44"
-    //             var parsedDate: Date? = null
-    //             // Essayer de parser la date avec chacun des formats disponibles
-    //             for (format in dateFormats) {
-    //                 try {
-    //                     parsedDate = format.parse(rawDateStr)
-    //                     if (parsedDate != null) break
-    //                 } catch (e: Exception) {
-    //                     // En cas d'erreur, on continue avec le format suivant
-    //                 }
-    //             }
-    //             if (parsedDate != null) {
-    //                 // Normaliser la date de la ligne
-    //                 val normalizedLineDate = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(parsedDate)
-    //                 if (normalizedLineDate == normalizedTarget) {
-    //                     println("Ligne supprimée : $line")
-    //                     continue  // Ne pas inclure cette ligne dans le nouveau contenu
-    //                 }
-    //             } else {
-    //                 // Si la date ne peut pas être parsée, on peut choisir de conserver la ligne
-    //                 println("Impossible de parser la date pour la ligne : $line")
-    //             }
-    //         }
-    //         filteredLines.add(line)
-    //     }
-    //
-    //     // Reconstituer le contenu final : en-tête + lignes filtrées
-    //     val newContent = buildString {
-    //         append(header).append("\n")
-    //         for (line in filteredLines) {
-    //             append(line).append("\n")
-    //         }
-    //     }
-    //
-    //     // Créer une sauvegarde du fichier original en y ajoutant un timestamp
-    //     val backupFileName = "oapsaimiML2_records_${SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())}.csv"
-    //     val backupFile = File(csvFile.parentFile, backupFileName)
-    //     csvFile.copyTo(backupFile, overwrite = true)
-    //
-    //     // Écraser le fichier original avec le contenu filtré
-    //     csvFile.writeText(newContent, Charsets.UTF_8)
-    //
-    //     println("Fichier mis à jour. Backup créé sous '${backupFile.name}'.")
-    // }
 
     private fun logDataToCsv(predictedSMB: Float, smbToGive: Float) {
 
@@ -873,30 +685,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         csvfile2.appendText(valuesToRecord + "\n")
     }
-    // private fun automateDeletionIfBadDay(tir1DAYIR: Int) {
-    //     // Vérifier si le TIR est inférieur à 80
-    //     if (tir1DAYIR < 85) {
-    //         // Vérifier si l'heure actuelle est entre 00:05 et 00:10
-    //         val currentTime = LocalTime.now()
-    //         val start = LocalTime.of(0, 5)
-    //         val end = LocalTime.of(0, 10)
-    //
-    //         if (currentTime.isAfter(start) && currentTime.isBefore(end)) {
-    //             // Calculer la date de la veille au format dd/MM/yyyy
-    //             val yesterday = LocalDate.now().minusDays(1)
-    //             val dateToRemove = yesterday.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-    //
-    //             // Appeler la méthode de suppression
-    //             createFilteredAndSortedCopy(dateToRemove)
-    //             println("Les données pour la date $dateToRemove ont été supprimées car TIR1DAIIR est inférieur à 80.")
-    //         } else {
-    //             println("La suppression ne peut être exécutée qu'entre 00:05 et 00:10.")
-    //         }
-    //     } else {
-    //         println("Aucune suppression nécessaire : tir1DAYIR est supérieur ou égal à 85.")
-    //     }
-    // }
+
     fun removeLast200Lines(csvFile: File) {
+        val reasonBuilder = StringBuilder()
         if (!csvFile.exists()) {
             println("Le fichier original n'existe pas.")
             return
@@ -906,7 +697,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val lines = csvFile.readLines(Charsets.UTF_8)
 
         if (lines.size <= 200) {
-            println("Le fichier contient moins ou égal à 200 lignes, aucune suppression effectuée.")
+            reasonBuilder.append("Le fichier contient moins ou égal à 200 lignes, aucune suppression effectuée.")
             return
         }
 
@@ -925,9 +716,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Réécrire le fichier original avec les lignes restantes
         csvFile.writeText(newLines.joinToString("\n"), Charsets.UTF_8)
 
-        println("Les 200 dernières lignes ont été supprimées. Le fichier original a été sauvegardé sous '$backupFileName'.")
+        reasonBuilder.append("Les 200 dernières lignes ont été supprimées. Le fichier original a été sauvegardé sous '$backupFileName'.")
     }
     private fun automateDeletionIfBadDay(tir1DAYIR: Int) {
+        val reasonBuilder = StringBuilder()
         // Vérifier si le TIR est inférieur à 85%
         if (tir1DAYIR < 85) {
             // Vérifier si l'heure actuelle est entre 00:05 et 00:10
@@ -943,12 +735,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 // Appeler la méthode de suppression
                 //createFilteredAndSortedCopy(csvfile,dateToRemove)
                 removeLast200Lines(csvfile)
-                println("Les données pour la date $dateToRemove ont été supprimées car TIR1DAIIR est inférieur à 85%.")
+                reasonBuilder.append("Les données pour la date $dateToRemove ont été supprimées car TIR1DAIIR est inférieur à 85%.")
             } else {
-                println("La suppression ne peut être exécutée qu'entre 00:05 et 00:10.")
+                reasonBuilder.append("La suppression ne peut être exécutée qu'entre 00:05 et 00:10.")
             }
         } else {
-            println("Aucune suppression nécessaire : tir1DAYIR est supérieur ou égal à 85%.")
+            reasonBuilder.append("Aucune suppression nécessaire : tir1DAYIR est supérieur ou égal à 85%.")
         }
     }
 
@@ -1062,6 +854,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return (number * 20.0).roundToInt() / 20.0f
     }
     private fun isCriticalSafetyCondition(mealData: MealData): Pair<Boolean, String> {
+        val reasonBuilder = StringBuilder()
         val conditionsTrue = mutableListOf<String>()
         //val slopedeviation = mealData.slopeFromMaxDeviation <= -1.5 && mealData.slopeFromMinDeviation < 0.3
         //if (slopedeviation) conditionsTrue.add("slopedeviation")
@@ -1115,7 +908,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } else {
             "No conditions met"
         }
-
+        reasonBuilder.append("Safety condition $result : $conditionsTrue")
         return Pair(result, conditionsTrueString)
     }
     private fun isSportSafetyCondition(): Boolean {
@@ -1130,6 +923,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     }
     private fun calculateSMBInterval(): Int {
+        val reasonBuilder = StringBuilder()
         // Récupération des intervalles configurés
         val intervalSnack = preferences.get(IntKey.OApsAIMISnackinterval)
         val intervalMeal = preferences.get(IntKey.OApsAIMImealinterval)
@@ -1181,7 +975,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (preferences.get(BooleanKey.OApsAIMInight) && currentHour == 23 && delta < 10 && iob < maxSMB) {
             interval = (interval * 0.8).toInt()
         }
-
+        reasonBuilder.append("Interval : $interval")
         return interval
     }
 
@@ -1763,6 +1557,7 @@ private fun neuralnetwork5(
         averageBeatsPerMinute10: Float,
         insulinDivisor: Float
     ): Float {
+        val reasonBuilder = StringBuilder()
         // Calculer l'effet initial de l'insuline
         var insulinEffect = iob * variableSensitivity / insulinDivisor
 
@@ -1790,7 +1585,7 @@ private fun neuralnetwork5(
         if (currentHour in 0..5) {
             insulinEffect *= 0.8f
         }
-
+        reasonBuilder.append("insulin effect : $insulinEffect")
         return insulinEffect
     }
     private fun calculateTrendIndicator(
@@ -1846,6 +1641,7 @@ private fun neuralnetwork5(
         snackTime: Boolean,
         honeymoon: Boolean
     ): Float {
+        val reasonBuilder = StringBuilder()
         // 1. Détermination des paramètres glucidiques en fonction du contexte
         val (averageCarbAbsorptionTime, carbTypeFactor, estimatedCob) = when {
             highCarbTime -> Triple(3.5f, 0.75f, 100f)
@@ -1895,7 +1691,7 @@ private fun neuralnetwork5(
             honeymoon && predictedBG < 50f -> 50f
             else -> predictedBG
         }
-
+        reasonBuilder.append("Predicted BG : $finalPredictedBG")
         return finalPredictedBG
     }
 
@@ -2077,6 +1873,7 @@ private fun neuralnetwork5(
     bg: Double,             // Glycémie actuelle
     delta: Double           // Variation glycémique
 ): Double {
+    val reasonBuilder = StringBuilder()
     var dynamicPeakTime = profile.peakTime
     val activityRatio = futureActivity / (currentActivity + 0.0001)
 
@@ -2140,7 +1937,7 @@ private fun neuralnetwork5(
             dynamicPeakTime *= 1.2
         }
     }
-
+       reasonBuilder.append("Dynamic Peak Time : $dynamicPeakTime")
     // 🔥 **Limiter le peakTime à des valeurs réalistes (35-120 min)**
     return dynamicPeakTime.coerceIn(35.0, 120.0)
 }
@@ -3355,8 +3152,6 @@ private fun neuralnetwork5(
 
             // Fin de l'assemblage du log
         }
-
-        rT.reason.append(aimilog)
 
         // eventual BG is at/above target
         // if iob is over max, just cancel any temps
