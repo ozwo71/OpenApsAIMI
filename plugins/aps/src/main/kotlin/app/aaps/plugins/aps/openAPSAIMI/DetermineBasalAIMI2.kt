@@ -2232,7 +2232,7 @@ private fun neuralnetwork5(
 
             return rT
          }
-        if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat()) && modesCondition && bgAcceleration.toDouble() >= AutodriveAcceleration){
+        if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat()) && modesCondition ){
             //val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
             val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
 
