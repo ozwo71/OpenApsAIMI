@@ -564,9 +564,6 @@
     <string name="table_plugin_mealmodes_prebolus_9">Microbolusing snack Mode %1$.1fU.</string>
 
 
-
-
-
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BASAL ARGUMENTS - FILE DetermineBasalAIMI2.kt -->
 
     <string name="basal_arguments_1">Neutral rate = profile &amp; TBR active → TBR delete.\n</string>
@@ -623,6 +620,4 @@
     <string name="safety_adjustments_32">No SMB honeymoon</string>
     <string name="safety_adjustments_33">BG below 90</string>
     <string name="no_conditions_met">No conditions met</string>
-
-
 </resources>
