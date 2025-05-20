@@ -6,7 +6,6 @@
     tools:context=".objectives.ObjectivesFragment">
 
     <LinearLayout
-
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
@@ -15,7 +14,7 @@
         android:paddingTop="16dp"
         android:paddingEnd="16dp"
         android:visibility="visible">
-<!--
+
         <CheckBox
             android:id="@+id/fake"
             style="@style/Widget.App.CheckBox"
@@ -33,7 +32,7 @@
             android:layout_height="wrap_content"
             android:text="Reset"
             tools:ignore="HardcodedText" />
-  -->
+
     </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
