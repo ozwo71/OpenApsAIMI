@@ -3208,7 +3208,7 @@ private fun neuralnetwork5(
  //            overrideSafetyLimits = true
  //        )
 
- val enableSMB = enablesmb(profile, microBolusAllowed, mealData, target_bg)
+        val enableSMB = enablesmb(profile, microBolusAllowed, mealData, target_bg)
 
 
         rT.COB = mealData.mealCOB
@@ -3586,24 +3586,24 @@ private fun neuralnetwork5(
 
 // Calcul du facteur d'ajustement en fonction de la glycémie
 // (ici, j'utilise la fonction simplifiée d'interpolation)
-     val basalAdjustmentFactor = interpolatebasal(bg)
+            val basalAdjustmentFactor = interpolatebasal(bg)
 
 // Calcul du taux basal final lissé à partir du TDD récent
-     val finalBasalRate = computeFinalBasal(bg, tdd7P.toFloat(), tdd7Days.toFloat(), basalaimi)
+            val finalBasalRate = computeFinalBasal(bg, tdd7P.toFloat(), tdd7Days.toFloat(), basalaimi)
 
 // Taux basal courant comme valeur de base
-     var rate = profile_current_basal
-     if (safetyDecision.stopBasal) {
-         return setTempBasal(0.0, 30, profile, rT, currenttemp)
-     }
-     if (safetyDecision.basalLS && combinedDelta in -1.0..3.0 && predictedBg > 130 && iob > 0.1){
-         return setTempBasal(profile_current_basal, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
-     }
+            var rate = profile_current_basal
+            if (safetyDecision.stopBasal) {
+                return setTempBasal(0.0, 30, profile, rT, currenttemp)
+            }
+            if (safetyDecision.basalLS && combinedDelta in -1.0..3.0 && predictedBg > 130 && iob > 0.1) {
+                return setTempBasal(profile_current_basal, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+            }
 
-     // ------------------------------
+            // ------------------------------
 // 1️⃣ Préparation des variables
-     var overrideSafety = false
-     var chosenRate: Double? = null
+            var overrideSafety = false
+            var chosenRate: Double? = null
 
 // ------------------------------
 // 2️⃣ Early‐meal detection → bypass sécurité, forçage vers `forcedBasal`
@@ -3623,54 +3623,54 @@ private fun neuralnetwork5(
                  calculateRate(basal, profile_current_basal, 4.0, "SnackTime", currenttemp, rT).toDouble()
              }
 
-             mealTime && mealruntime in 0..30 && delta < 10 -> {
-                 // meal forcé → bypass
-                 overrideSafety = true
-                 calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "MealTime", currenttemp, rT).toDouble()
-             }
+                    mealTime && mealruntime in 0..30 && delta < 10          -> {
+                        // meal forcé → bypass
+                        overrideSafety = true
+                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "MealTime", currenttemp, rT).toDouble()
+                    }
 
-             bfastTime && bfastruntime in 0..30 && delta < 10 -> {
-                 // breakfast forcé → bypass
-                 overrideSafety = true
-                 calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Breakfast", currenttemp, rT).toDouble()
-             }
+                    bfastTime && bfastruntime in 0..30 && delta < 10        -> {
+                        // breakfast forcé → bypass
+                        overrideSafety = true
+                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Breakfast", currenttemp, rT).toDouble()
+                    }
 
-             lunchTime && lunchruntime in 0..30 && delta < 10 -> {
-                 // lunch forcé → bypass
-                 overrideSafety = true
-                 calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Lunch", currenttemp, rT).toDouble()
-             }
+                    lunchTime && lunchruntime in 0..30 && delta < 10        -> {
+                        // lunch forcé → bypass
+                        overrideSafety = true
+                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Lunch", currenttemp, rT).toDouble()
+                    }
 
-             dinnerTime && dinnerruntime in 0..30 && delta < 10 -> {
-                 // dinner forcé → bypass
-                 overrideSafety = true
-                 calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Dinner", currenttemp, rT).toDouble()
-             }
+                    dinnerTime && dinnerruntime in 0..30 && delta < 10      -> {
+                        // dinner forcé → bypass
+                        overrideSafety = true
+                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Dinner", currenttemp, rT).toDouble()
+                    }
 
-             highCarbTime && highCarbrunTime in 0..30 && delta < 10 -> {
-                 // highCarb forcé → bypass
-                 overrideSafety = true
-                 calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "HighCarb", currenttemp, rT).toDouble()
-             }
+                    highCarbTime && highCarbrunTime in 0..30 && delta < 10  -> {
+                        // highCarb forcé → bypass
+                        overrideSafety = true
+                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "HighCarb", currenttemp, rT).toDouble()
+                    }
 
-             fastingTime ->
-                 calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "FastingTime", currenttemp, rT).toDouble()
+                    fastingTime                                             ->
+                        calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "FastingTime", currenttemp, rT).toDouble()
 
-             sportTime && bg > 169 && delta > 4 ->
-                 calculateRate(profile_current_basal, profile_current_basal, 1.3, "SportTime", currenttemp, rT).toDouble()
+                    sportTime && bg > 169 && delta > 4                      ->
+                        calculateRate(profile_current_basal, profile_current_basal, 1.3, "SportTime", currenttemp, rT).toDouble()
 
-             honeymoon && delta in 0.0..6.0 && bg in 99.0..141.0 ->
-                 calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "Honeymoon", currenttemp, rT).toDouble()
+                    honeymoon && delta in 0.0..6.0 && bg in 99.0..141.0     ->
+                        calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "Honeymoon", currenttemp, rT).toDouble()
 
-             bg in 81.0..99.0 && delta in 3.0..7.0 && honeymoon ->
-                 calculateRate(basal, profile_current_basal, 1.0, "Honeymoon small-rise", currenttemp, rT).toDouble()
+                    bg in 81.0..99.0 && delta in 3.0..7.0 && honeymoon      ->
+                        calculateRate(basal, profile_current_basal, 1.0, "Honeymoon small-rise", currenttemp, rT).toDouble()
 
-             bg > 120 && delta > 0 && smbToGive == 0.0f && honeymoon ->
-                 calculateRate(basal, profile_current_basal, 5.0, "Honeymoon corr.", currenttemp, rT).toDouble()
+                    bg > 120 && delta > 0 && smbToGive == 0.0f && honeymoon ->
+                        calculateRate(basal, profile_current_basal, 5.0, "Honeymoon corr.", currenttemp, rT).toDouble()
 
-             else -> null
-         }
-     }
+                    else                                                    -> null
+                }
+            }
 
 // ------------------------------
 // 4️⃣ Sécurité immédiate avant hypo : predictedBg<100 & slope négative OU IOB trop haut
