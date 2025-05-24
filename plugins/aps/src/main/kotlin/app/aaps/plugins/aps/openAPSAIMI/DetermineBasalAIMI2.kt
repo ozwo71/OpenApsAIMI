@@ -658,7 +658,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             || therapy.lunchTime
             || therapy.dinnerTime
             || therapy.bfastTime
-
+val reason = StringBuilder()
         // 2️⃣ On recalcule le mode “early autodrive”
         val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
         val night = hour <= 7
@@ -677,7 +677,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         var rateAdjustment = _rate
 
         if (recentBGs.isNotEmpty()) {
-            val bgTrend = calculateBgTrend(recentBGs)
+            val bgTrend = calculateBgTrend(recentBGs, reason)
             println("BG Trend: $bgTrend")
 
             // Ajuster le taux basal en fonction de la tendance des BG
@@ -726,11 +726,32 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return rT
     }
 
-    private fun calculateBgTrend(recentBGs: List<Float>): Float {
+    // private fun calculateBgTrend(recentBGs: List<Float>): Float {
+    //     // Calculer la tendance des BG en fonction de la différence entre les dernières valeurs
+    //     val lastValue = recentBGs.last()
+    //     val firstValue = recentBGs.first()
+    //     return (lastValue - firstValue) / recentBGs.size.toFloat()
+    // }
+    private fun calculateBgTrend(recentBGs: List<Float>, reason: StringBuilder): Float {
+        // Vérifier si la liste n'est pas vide avant de calculer la tendance
+        if (recentBGs.isEmpty()) {
+            reason.append("No recent BG values available.")
+            return 0.0f // Retourner une valeur par défaut ou lancer une exception selon vos besoins
+        }
+
         // Calculer la tendance des BG en fonction de la différence entre les dernières valeurs
         val lastValue = recentBGs.last()
         val firstValue = recentBGs.first()
-        return (lastValue - firstValue) / recentBGs.size.toFloat()
+
+        // Ajouter les valeurs intermédiaires et finales dans le reason.append
+        reason.append("First BG value: $firstValue\n")
+        reason.append("Last BG value: $lastValue\n")
+        reason.append("Number of BG values: ${recentBGs.size}\n")
+
+        val bgTrend = (lastValue - firstValue) / recentBGs.size.toFloat()
+        reason.append("Calculated BG trend: $bgTrend\n")
+
+        return bgTrend
     }
 
     private fun adjustRateBasedOnBgTrend(_rate: Double, bgTrend: Float): Double {
@@ -916,6 +937,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         bg: Float,
         predictedBg: Float
     ): Boolean {
+        val reason = StringBuilder()
         // Récupération de la valeur de pbolusMeal depuis les préférences
         val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
         val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
@@ -934,7 +956,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         var autodriveCondition = true
 
         if (recentBGs.isNotEmpty()) {
-            val bgTrend = calculateBgTrend(recentBGs)
+            val bgTrend = calculateBgTrend(recentBGs, reason)
             println("BG Trend: $bgTrend")
 
             // Ajuster les conditions d'autodrive en fonction de la tendance des BG
