@@ -949,7 +949,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return false
         }
 
-        return autodriveCondition && combinedDelta >= autodriveDelta &&
+        return autodriveCondition && combinedDelta >= autodriveDelta && autodrive &&
             predictedBg > 140 &&
             slopeFromMinDeviation >= autodriveminDeviation &&
             bg >= autodriveBG.toFloat()
