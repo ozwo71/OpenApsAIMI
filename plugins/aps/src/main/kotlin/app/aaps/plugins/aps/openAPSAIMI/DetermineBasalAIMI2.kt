@@ -935,7 +935,8 @@ val reason = StringBuilder()
         autodrive: Boolean,
         slopeFromMinDeviation: Double,
         bg: Float,
-        predictedBg: Float
+        predictedBg: Float,
+        reason: StringBuilder
     ): Boolean {
         val reason = StringBuilder()
         // Récupération de la valeur de pbolusMeal depuis les préférences
@@ -960,7 +961,7 @@ val reason = StringBuilder()
             println("BG Trend: $bgTrend")
 
             // Ajuster les conditions d'autodrive en fonction de la tendance des BG
-            autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat())
+            autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(), reason)
 
         } else {
             println("No recent BG values available.")
@@ -977,15 +978,45 @@ val reason = StringBuilder()
             bg >= autodriveBG.toFloat()
     }
 
-    private fun adjustAutodriveCondition(bgTrend: Float, predictedBg: Float, combinedDelta: Float): Boolean {
-        // Ajuster les conditions d'autodrive en fonction de la tendance des BG
+    // private fun adjustAutodriveCondition(bgTrend: Float, predictedBg: Float, combinedDelta: Float): Boolean {
+    //     // Ajuster les conditions d'autodrive en fonction de la tendance des BG
+    //     val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
+    //     val autodriveCondition = when {
+    //         bgTrend < 0.0f -> false // Diminution significative, pas besoin d'insuline supplémentaire
+    //         predictedBg > 140 && combinedDelta >= autodriveDelta -> true // Besoin accru en insuline
+    //         else -> false // Autre cas par défaut
+    //     }
+    //     return autodriveCondition
+    // }
+    private fun adjustAutodriveCondition(
+        bgTrend: Float,
+        predictedBg: Float,
+        combinedDelta: Float,
+        reason: StringBuilder
+    ): Boolean {
         val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
-        val autodriveCondition = when {
-            bgTrend < 0.0f -> false // Diminution significative, pas besoin d'insuline supplémentaire
-            predictedBg > 140 && combinedDelta >= autodriveDelta -> true // Besoin accru en insuline
-            else -> false // Autre cas par défaut
+
+        reason.append("→ Autodrive Debug\n")
+        reason.append("  • BG Trend: $bgTrend\n")
+        reason.append("  • Predicted BG: $predictedBg\n")
+        reason.append("  • Combined Delta: $combinedDelta\n")
+        reason.append("  • Required Combined Delta: $autodriveDelta\n")
+
+        // Cas 1 : glycémie baisse => désactivation
+        if (bgTrend < -0.15f) {
+            reason.append("  ✘ Autodrive désactivé : tendance glycémie en baisse\n")
+            return false
         }
-        return autodriveCondition
+
+        // Cas 2 : glycémie monte ou conditions fortes
+        if ((bgTrend >= 0f && combinedDelta >= autodriveDelta) || (predictedBg > 140 && combinedDelta >= autodriveDelta)) {
+            reason.append("  ✔ Autodrive activé : conditions favorables\n")
+            return true
+        }
+
+        // Cas 3 : conditions non remplies
+        reason.append("  ✘ Autodrive désactivé : conditions insuffisantes\n")
+        return false
     }
 
 
@@ -2359,7 +2390,7 @@ private fun neuralnetwork5(
         val reason = StringBuilder()
         val recentBGs = getRecentBGs()
         val bgTrend = calculateBgTrend(recentBGs, reason)
-        val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat())
+        val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(),reason)
         if (bg > 100 && predictedBg > 140 && !nightbis && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && modesCondition) {
             rT.units = pbolusAS
             rT.reason.append("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
@@ -2371,11 +2402,18 @@ private fun neuralnetwork5(
             rT.reason.append("Microbolusing Meal Mode ${pbolusM}U.")
             return rT
         }
-        if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg) && modesCondition) {
+        if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason) && modesCondition) {
             val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
             rT.units = pbolusA
-            rT.reason.append("Microbolusing Autodrive Mode ${pbolusA}U. TargetBg : ${targetBg}, CombinedDelta : ${combinedDelta}, Slopemindeviation : ${mealData.slopeFromMinDeviation}, Acceleration : ${bgAcceleration}. ")
+            reason.append("→ Microbolusing Autodrive Mode ${pbolusA}U\n")
+            reason.append("  • Target BG: $targetBg\n")
+            reason.append("  • Slope from min deviation: ${mealData.slopeFromMinDeviation}\n")
+            reason.append("  • BG acceleration: $bgAcceleration\n")
+
+            rT.reason.append(reason.toString()) // une seule fois à la fin
             return rT
+            // rT.reason.append("Microbolusing Autodrive Mode ${pbolusA}U. TargetBg : ${targetBg}, CombinedDelta : ${combinedDelta}, Slopemindeviation : ${mealData.slopeFromMinDeviation}, Acceleration : ${bgAcceleration}. ")
+            // return rT
         }
         if (isbfastModeCondition()) {
             val pbolusbfast: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
@@ -3017,7 +3055,7 @@ private fun neuralnetwork5(
         rT.reason.append("adjustedMorningFactor ${adjustedMorningFactor}, ")
         rT.reason.append("adjustedAfternoonFactor ${adjustedAfternoonFactor}, ")
         rT.reason.append("adjustedEveningFactor ${adjustedEveningFactor}, ")
-        rT.reason.append("Autodrive: $autodrive, autodrivemode : ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(),predictedBg)}, AutodriveCondition: $autodriveCondition, bgTrend:$bgTrend, Combined Delta: $combinedDelta, PredictedBg: $predictedBg, bgAcceleration: $bgacc, ")
+        rT.reason.append("Autodrive: $autodrive, autodrivemode : ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(),predictedBg, reason)}, AutodriveCondition: $autodriveCondition, bgTrend:$bgTrend, Combined Delta: $combinedDelta, PredictedBg: $predictedBg, bgAcceleration: $bgacc, ")
         rT.reason.append("TIRBelow: $currentTIRLow, TIRinRange: $currentTIRRange, TIRAbove: $currentTIRAbove")
 
         val csf = sens / profile.carb_ratio
