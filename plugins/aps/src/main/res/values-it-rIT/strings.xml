@@ -472,7 +472,7 @@
     <string name="reason_adjusted_morning_factor">fattore Mattutino aggiustato %1$.2f, </string>
     <string name="reason_adjusted_afternoon_factor">fattore Pomeridiano aggiustato %1$.2f, </string>
     <string name="reason_adjusted_evening_factor">fattore Serale aggiustato %1$.2f, </string>
-    <string name="reason_autodrive_status">Autodrive: %1$s, Modalità autodrive: %2$s, Condizioni Autodrive: %3$s, Trend BG: %4$.2f, Delta combinato: %5$.2f, BG Previsto: %6$.2f, Accelerazione BG: %7$.2f, </string>
+    <string name="reason_autodrive_status">Autodrive: %1$s, Modalità autodrive: %2$s, Condizioni Autodrive: %3$s, Trend BG: %4$.2f, Delta combinato: %5$.2f, BG Previsto: %6$.2f, Accelerazione BG: %7$.2f, SlopeMinDeviation: %8$.2f</string>
     <string name="reason_tir_stats">TIR basso: %1$d, TIR in range: %2$d, TIR alto: %3$d</string>
 
 
