@@ -464,9 +464,9 @@ fun appendCompactLog(
     reason: StringBuilder,
     peakTime: Double,
     bg: Double,
-    delta: Double,
+    delta: Float,
     stepCount: Int?,
-    heartRate: Int?
+    heartRate: Double?
 ) {
     val bgStr = "%.0f".format(bg)
     val deltaStr = "%.1f".format(delta)
@@ -3200,7 +3200,7 @@ rT.reason.appendLine(
 rT.reason.appendLine(
     "📊 TIR: <70: ${"%.1f".format(currentTIRLow)}% | 70–180: ${"%.1f".format(currentTIRRange)}% | >180: ${"%.1f".format(currentTIRAbove)}%"
 )
-        appendCompactLog(reasonAimi, tp, bg, delta.toDouble(), recentSteps5Minutes, averageBeatsPerMinute.toInt())
+        appendCompactLog(reasonAimi, tp, bg, delta, recentSteps5Minutes, averageBeatsPerMinute)
         rT.reason.append(reasonAimi.toString())
         val csf = sens / profile.carb_ratio
         consoleError.add("profile.sens: ${profile.sens}, sens: $sens, CSF: $csf")
