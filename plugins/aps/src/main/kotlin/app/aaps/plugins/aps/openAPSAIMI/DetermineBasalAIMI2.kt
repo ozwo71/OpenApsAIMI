@@ -3140,17 +3140,17 @@ private fun neuralnetwork5(
         rT.reason.append("Autodrive: $autodrive, autodrivemode : ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(),predictedBg, reason)}, AutodriveCondition: $autodriveCondition, bgTrend:$bgTrend, Combined Delta: $combinedDelta, PredictedBg: $predictedBg, bgAcceleration: $bgacc, ")
         rT.reason.append("TIRBelow: $currentTIRLow, TIRinRange: $currentTIRRange, TIRAbove: $currentTIRAbove")*/
 
-        rT.reason.append(context.getString(R.string.reason_adjusted_dia_minutes, adjustedDIAInMinutes.toString()))
-        rT.reason.append(context.getString(R.string.reason_adjusted_morning_factor, adjustedMorningFactor.toString()))
-        rT.reason.append(context.getString(R.string.reason_adjusted_afternoon_factor, adjustedAfternoonFactor.toString()))
-        rT.reason.append(context.getString(R.string.reason_adjusted_evening_factor, adjustedEveningFactor.toString()))
+        rT.reason.append(context.getString(R.string.reason_adjusted_dia_minutes, adjustedDIAInMinutes))
+        rT.reason.append(context.getString(R.string.reason_adjusted_morning_factor, adjustedMorningFactor))
+        rT.reason.append(context.getString(R.string.reason_adjusted_afternoon_factor, adjustedAfternoonFactor))
+        rT.reason.append(context.getString(R.string.reason_adjusted_evening_factor, adjustedEveningFactor))
 
         rT.reason.append(
             context.getString(
                 R.string.reason_autodrive_status,
-                autodrive,
+                autodrive.toString(),
                 isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason),
-                autodriveCondition,
+                autodriveCondition.toString(),
                 bgTrend,
                 combinedDelta,
                 predictedBg,
