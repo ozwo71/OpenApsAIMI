@@ -2095,7 +2095,86 @@ private fun neuralnetwork5(
             .replace("and", " ")
             .replace("\\s+", " ")
     }
-   private fun calculateDynamicPeakTime(
+//    private fun calculateDynamicPeakTime(
+//     currentActivity: Double,
+//     futureActivity: Double,
+//     sensorLagActivity: Double,
+//     historicActivity: Double,
+//     profile: OapsProfileAimi,
+//     stepCount: Int? = null, // Nombre de pas
+//     heartRate: Int? = null, // Rythme cardiaque
+//     bg: Double,             // Glycémie actuelle
+//     delta: Double           // Variation glycémique
+// ): Double {
+//     val reasonBuilder = StringBuilder()
+//     var dynamicPeakTime = profile.peakTime
+//     val activityRatio = futureActivity / (currentActivity + 0.0001)
+//
+//        // Calcul d'un facteur de correction hyperglycémique de façon continue
+//        val hyperCorrectionFactor = when {
+//            bg <= 130 || delta <= 4 -> 1.0
+//            bg in 130.0..240.0 -> {
+//                // Le multiplicateur passe de 0.6 à 0.3 quand bg évolue de 130 à 240
+//                0.6 - (bg - 130) * (0.6 - 0.3) / (240 - 130)
+//            }
+//            else -> 0.3
+//        }
+//        dynamicPeakTime *= hyperCorrectionFactor
+//
+//     // 2️⃣ **Ajustement basé sur l'IOB (currentActivity)**
+//     if (currentActivity > 0.1) {
+//         dynamicPeakTime += currentActivity * 20 + 5 // Ajuster proportionnellement à l'activité
+//     }
+//
+//     // 3️⃣ **Ajustement basé sur le ratio d'activité**
+//     dynamicPeakTime *= when {
+//         activityRatio > 1.5 -> 0.5 + (activityRatio - 1.5) * 0.05
+//         activityRatio < 0.5 -> 1.5 + (0.5 - activityRatio) * 0.05
+//         else -> 1.0
+//     }
+//
+//     // 4️⃣ **Ajustement basé sur le nombre de pas**
+//     stepCount?.let {
+//         if (it > 500) {
+//             dynamicPeakTime += it * 0.015 // Ajustement proportionnel plus agressif
+//         } else if (it < 100) {
+//             dynamicPeakTime *= 0.9 // Réduction du peakTime si peu de mouvement
+//         }
+//     }
+//
+//     // 5️⃣ **Ajustement basé sur le rythme cardiaque**
+//     heartRate?.let {
+//         if (it > 110) {
+//             dynamicPeakTime *= 1.15 // Augmenter le peakTime de 15% si FC élevée
+//         } else if (it < 55) {
+//             dynamicPeakTime *= 0.85 // Réduire le peakTime de 15% si FC basse
+//         }
+//     }
+//
+//     // 6️⃣ **Corrélation entre pas et rythme cardiaque**
+//     if (stepCount != null && heartRate != null) {
+//         if (stepCount > 1000 && heartRate > 110) {
+//             dynamicPeakTime *= 1.2 // Augmenter peakTime si activité intense
+//         } else if (stepCount < 200 && heartRate < 50) {
+//             dynamicPeakTime *= 0.75 // Réduction plus forte si repos total
+//         }
+//     }
+//
+//     this.peakintermediaire = dynamicPeakTime
+//
+//     // 7️⃣ **Ajustement basé sur le retard capteur (sensor lag) et historique**
+//     if (dynamicPeakTime > 40) {
+//         if (sensorLagActivity > historicActivity) {
+//             dynamicPeakTime *= 0.85
+//         } else if (sensorLagActivity < historicActivity) {
+//             dynamicPeakTime *= 1.2
+//         }
+//     }
+//        reasonBuilder.append("Dynamic Peak Time : $dynamicPeakTime")
+//     // 🔥 **Limiter le peakTime à des valeurs réalistes (35-120 min)**
+//     return dynamicPeakTime.coerceIn(35.0, 120.0)
+// }
+private fun calculateDynamicPeakTime(
     currentActivity: Double,
     futureActivity: Double,
     sensorLagActivity: Double,
@@ -2104,75 +2183,98 @@ private fun neuralnetwork5(
     stepCount: Int? = null, // Nombre de pas
     heartRate: Int? = null, // Rythme cardiaque
     bg: Double,             // Glycémie actuelle
-    delta: Double           // Variation glycémique
+    delta: Double,          // Variation glycémique
+    reasonBuilder: StringBuilder // Builder pour accumuler les logs
 ): Double {
-    val reasonBuilder = StringBuilder()
     var dynamicPeakTime = profile.peakTime
     val activityRatio = futureActivity / (currentActivity + 0.0001)
 
-       // Calcul d'un facteur de correction hyperglycémique de façon continue
-       val hyperCorrectionFactor = when {
-           bg <= 130 || delta <= 4 -> 1.0
-           bg in 130.0..240.0 -> {
-               // Le multiplicateur passe de 0.6 à 0.3 quand bg évolue de 130 à 240
-               0.6 - (bg - 130) * (0.6 - 0.3) / (240 - 130)
-           }
-           else -> 0.3
-       }
-       dynamicPeakTime *= hyperCorrectionFactor
+    reasonBuilder.append("🧠 Calcul Dynamic PeakTime\n")
+    reasonBuilder.append("  • PeakTime initial: ${profile.peakTime}\n")
+    reasonBuilder.append("  • BG: $bg, Delta: $delta\n")
 
-    // 2️⃣ **Ajustement basé sur l'IOB (currentActivity)**
+    // 1️⃣ Facteur de correction hyperglycémique
+    val hyperCorrectionFactor = when {
+        bg <= 130 || delta <= 4 -> 1.0
+        bg in 130.0..240.0 -> 0.6 - (bg - 130) * (0.6 - 0.3) / (240 - 130)
+        else -> 0.3
+    }
+    dynamicPeakTime *= hyperCorrectionFactor
+    reasonBuilder.append("  • Facteur hyperglycémie: $hyperCorrectionFactor\n")
+
+    // 2️⃣ Basé sur currentActivity (IOB)
     if (currentActivity > 0.1) {
-        dynamicPeakTime += currentActivity * 20 + 5 // Ajuster proportionnellement à l'activité
+        val adjustment = currentActivity * 20 + 5
+        dynamicPeakTime += adjustment
+        reasonBuilder.append("  • Ajout lié IOB: +$adjustment\n")
     }
 
-    // 3️⃣ **Ajustement basé sur le ratio d'activité**
-    dynamicPeakTime *= when {
+    // 3️⃣ Ratio d'activité
+    val ratioFactor = when {
         activityRatio > 1.5 -> 0.5 + (activityRatio - 1.5) * 0.05
         activityRatio < 0.5 -> 1.5 + (0.5 - activityRatio) * 0.05
         else -> 1.0
     }
+    dynamicPeakTime *= ratioFactor
+    reasonBuilder.append("  • Ratio activité: $activityRatio ➝ facteur $ratioFactor\n")
 
-    // 4️⃣ **Ajustement basé sur le nombre de pas**
+    // 4️⃣ Nombre de pas
     stepCount?.let {
-        if (it > 500) {
-            dynamicPeakTime += it * 0.015 // Ajustement proportionnel plus agressif
-        } else if (it < 100) {
-            dynamicPeakTime *= 0.9 // Réduction du peakTime si peu de mouvement
+        when {
+            it > 500 -> {
+                val stepAdj = it * 0.015
+                dynamicPeakTime += stepAdj
+                reasonBuilder.append("  • Pas ($it) ➝ +$stepAdj\n")
+            }
+            it < 100 -> {
+                dynamicPeakTime *= 0.9
+                reasonBuilder.append("  • Peu de pas ($it) ➝ x0.9\n")
+            }
         }
     }
 
-    // 5️⃣ **Ajustement basé sur le rythme cardiaque**
+    // 5️⃣ Fréquence cardiaque
     heartRate?.let {
-        if (it > 110) {
-            dynamicPeakTime *= 1.15 // Augmenter le peakTime de 15% si FC élevée
-        } else if (it < 55) {
-            dynamicPeakTime *= 0.85 // Réduire le peakTime de 15% si FC basse
+        when {
+            it > 110 -> {
+                dynamicPeakTime *= 1.15
+                reasonBuilder.append("  • FC élevée ($it) ➝ x1.15\n")
+            }
+            it < 55 -> {
+                dynamicPeakTime *= 0.85
+                reasonBuilder.append("  • FC basse ($it) ➝ x0.85\n")
+            }
         }
     }
 
-    // 6️⃣ **Corrélation entre pas et rythme cardiaque**
+    // 6️⃣ Corrélation FC + pas
     if (stepCount != null && heartRate != null) {
         if (stepCount > 1000 && heartRate > 110) {
-            dynamicPeakTime *= 1.2 // Augmenter peakTime si activité intense
+            dynamicPeakTime *= 1.2
+            reasonBuilder.append("  • Activité intense ➝ x1.2\n")
         } else if (stepCount < 200 && heartRate < 50) {
-            dynamicPeakTime *= 0.75 // Réduction plus forte si repos total
+            dynamicPeakTime *= 0.75
+            reasonBuilder.append("  • Repos total ➝ x0.75\n")
         }
     }
 
     this.peakintermediaire = dynamicPeakTime
 
-    // 7️⃣ **Ajustement basé sur le retard capteur (sensor lag) et historique**
+    // 7️⃣ Sensor lag vs historique
     if (dynamicPeakTime > 40) {
         if (sensorLagActivity > historicActivity) {
             dynamicPeakTime *= 0.85
+            reasonBuilder.append("  • SensorLag > Historic ➝ x0.85\n")
         } else if (sensorLagActivity < historicActivity) {
             dynamicPeakTime *= 1.2
+            reasonBuilder.append("  • SensorLag < Historic ➝ x1.2\n")
         }
     }
-       reasonBuilder.append("Dynamic Peak Time : $dynamicPeakTime")
-    // 🔥 **Limiter le peakTime à des valeurs réalistes (35-120 min)**
-    return dynamicPeakTime.coerceIn(35.0, 120.0)
+
+    // 🔚 Clamp entre 35 et 120
+    val finalPeak = dynamicPeakTime.coerceIn(35.0, 120.0)
+    reasonBuilder.append("  → Résultat PeakTime final : $finalPeak\n")
+    return finalPeak
 }
 
     fun detectMealOnset(delta: Float, predictedDelta: Float, acceleration: Float): Boolean {
@@ -2222,6 +2324,7 @@ private fun neuralnetwork5(
             consoleLog = consoleLog,
             consoleError = consoleError
         )
+        val reasonAimi = StringBuilder()
         // On définit fromTime pour couvrir une longue période (par exemple, les 7 derniers jours)
         val fromTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(7)
 // Récupération des événements de changement de cannule
@@ -2250,9 +2353,10 @@ private fun neuralnetwork5(
             recentSteps15Minutes,
             averageBeatsPerMinute.toInt(),
             bg,
-            combinedDelta.toDouble()
+            combinedDelta.toDouble(),
+            reasonAimi
         )
-
+        rT.reason.append(reasonAimi.toString())
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
 
         val calendarInstance = Calendar.getInstance()
@@ -3057,7 +3161,7 @@ private fun neuralnetwork5(
         rT.reason.append("adjustedMorningFactor ${adjustedMorningFactor}, ")
         rT.reason.append("adjustedAfternoonFactor ${adjustedAfternoonFactor}, ")
         rT.reason.append("adjustedEveningFactor ${adjustedEveningFactor}, ")
-        rT.reason.append("Autodrive: $autodrive, autodrivemode : ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(),predictedBg, reason)}, AutodriveCondition: $autodriveCondition, bgTrend:$bgTrend, Combined Delta: $combinedDelta, PredictedBg: $predictedBg, bgAcceleration: $bgacc, ")
+        rT.reason.append("Autodrive: $autodrive, autodrivemode : ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(),predictedBg, reason)}, AutodriveCondition: $autodriveCondition, bgTrend:$bgTrend, Combined Delta: $combinedDelta, PredictedBg: $predictedBg, bgAcceleration: $bgacc, SlopeMinDeviation: ${mealData.slopeFromMinDeviation}")
         rT.reason.append("TIRBelow: $currentTIRLow, TIRinRange: $currentTIRRange, TIRAbove: $currentTIRAbove")
 
         val csf = sens / profile.carb_ratio
