@@ -799,11 +799,10 @@ val reason = StringBuilder()
     //     return (lastValue - firstValue) / recentBGs.size.toFloat()
     // }
     private fun calculateBgTrend(recentBGs: List<Float>, reason: StringBuilder): Float {
-        if (recentBGs.isEmpty()) {
-            //reason.append("✘ Aucun historique de glycémie disponible.\n")
-            reason.append("✘ ${context.getString(R.string.bg_trend_6)}\n")
-            return 0.0f
-        }
+    if (recentBGs.isEmpty()) {
+        reason.append("✘ Aucun historique de glycémie disponible.\n")
+        return 0.0f
+    }
 
     // Hypothèse : recentBGs = liste du plus récent au plus ancien → on inverse
     val sortedBGs = recentBGs.reversed()
@@ -814,16 +813,11 @@ val reason = StringBuilder()
 
     val bgTrend = (lastValue - firstValue) / count.toFloat()
 
-        /*reason.append("→ Analyse BG Trend\n")
-        reason.append("  • Première glycémie : $firstValue mg/dL\n")
-        reason.append("  • Dernière glycémie : $lastValue mg/dL\n")
-        reason.append("  • Nombre de valeurs : $count\n")
-        reason.append("  • Tendance calculée : $bgTrend mg/dL/intervalle\n")*/
-        reason.append("→ ${context.getString(R.string.bg_trend_1)}\n")
-        reason.append("  • ${context.getString(R.string.bg_trend_2)}: $firstValue mg/dL\n")
-        reason.append("  • ${context.getString(R.string.bg_trend_3)}: $lastValue mg/dL\n")
-        reason.append("  • ${context.getString(R.string.bg_trend_4)}: $count\n")
-        reason.append("  • ${context.getString(R.string.bg_trend_5)}: $bgTrend mg/dL/${context.getString(R.string.bg_trend_interval)}\n")
+    reason.append("→ Analyse BG Trend\n")
+    reason.append("  • Première glycémie : $firstValue mg/dL\n")
+    reason.append("  • Dernière glycémie : $lastValue mg/dL\n")
+    reason.append("  • Nombre de valeurs : $count\n")
+    reason.append("  • Tendance calculée : $bgTrend mg/dL/intervalle\n")
 
     return bgTrend
 }
@@ -1076,34 +1070,26 @@ val reason = StringBuilder()
     ): Boolean {
         val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
 
-        /*reason.append("→ Autodrive Debug\n")
+        reason.append("→ Autodrive Debug\n")
         reason.append("  • BG Trend: $bgTrend\n")
         reason.append("  • Predicted BG: $predictedBg\n")
         reason.append("  • Combined Delta: $combinedDelta\n")
-        reason.append("  • Required Combined Delta: $autodriveDelta\n")*/
-        reason.append("→ ${context.getString(R.string.adjust_autodrive_condition_1)}\n")
-        reason.append("  • ${context.getString(R.string.adjust_autodrive_condition_2)}: $bgTrend\n")
-        reason.append("  • ${context.getString(R.string.adjust_autodrive_condition_3)}: $predictedBg\n")
-        reason.append("  • ${context.getString(R.string.adjust_autodrive_condition_4)}: $combinedDelta\n")
-        reason.append("  • ${context.getString(R.string.adjust_autodrive_condition_5)}: $autodriveDelta\n")
+        reason.append("  • Required Combined Delta: $autodriveDelta\n")
 
         // Cas 1 : glycémie baisse => désactivation
         if (bgTrend < -0.15f) {
-            //reason.append("  ✘ Autodrive désactivé : tendance glycémie en baisse\n")
-            reason.append("  ${context.getString(R.string.adjust_autodrive_condition_6)}\n")
+            reason.append("  ✘ Autodrive désactivé : tendance glycémie en baisse\n")
             return false
         }
 
         // Cas 2 : glycémie monte ou conditions fortes
         if ((bgTrend >= 0f && combinedDelta >= autodriveDelta) || (predictedBg > 140 && combinedDelta >= autodriveDelta)) {
-            //reason.append("  ✔ Autodrive activé : conditions favorables\n")
-            reason.append("  ${context.getString(R.string.adjust_autodrive_condition_7)}\n")
+            reason.append("  ✔ Autodrive activé : conditions favorables\n")
             return true
         }
 
         // Cas 3 : conditions non remplies
-        //reason.append("  ✘ Autodrive désactivé : conditions insuffisantes\n")
-        reason.append("  ${context.getString(R.string.adjust_autodrive_condition_8)}\n")
+        reason.append("  ✘ Autodrive désactivé : conditions insuffisantes\n")
         return false
     }
 
@@ -3340,47 +3326,12 @@ private fun calculateDynamicPeakTime(
             consoleError = consoleError,
             variable_sens = variableSensitivity.toDouble()
         )
-        /*rT.reason.append(", DIA ajusté (en minutes) : $adjustedDIAInMinutes, ")
+        rT.reason.append(", DIA ajusté (en minutes) : $adjustedDIAInMinutes, ")
         rT.reason.append("adjustedMorningFactor ${adjustedMorningFactor}, ")
         rT.reason.append("adjustedAfternoonFactor ${adjustedAfternoonFactor}, ")
         rT.reason.append("adjustedEveningFactor ${adjustedEveningFactor}, ")
         rT.reason.append("Autodrive: $autodrive, autodrivemode : ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(),predictedBg, reason)}, AutodriveCondition: $autodriveCondition, bgTrend:$bgTrend, Combined Delta: $combinedDelta, PredictedBg: $predictedBg, bgAcceleration: $bgacc, SlopeMinDeviation: ${mealData.slopeFromMinDeviation}")
-        rT.reason.append("TIRBelow: $currentTIRLow, TIRinRange: $currentTIRRange, TIRAbove: $currentTIRAbove")*/
-
-        rT.reason.append(context.getString(R.string.reason_adjusted_dia_minutes, adjustedDIAInMinutes))
-        rT.reason.append(context.getString(R.string.reason_adjusted_morning_factor, adjustedMorningFactor))
-        rT.reason.append(context.getString(R.string.reason_adjusted_afternoon_factor, adjustedAfternoonFactor))
-        rT.reason.append(context.getString(R.string.reason_adjusted_evening_factor, adjustedEveningFactor))
-
-        rT.reason.append(
-            context.getString(
-                R.string.reason_autodrive_status,
-                autodrive.toString(),
-                isAutodriveModeCondition(
-                    delta,
-                    autodrive,
-                    mealData.slopeFromMinDeviation,
-                    bg.toFloat(),
-                    predictedBg,
-                    reason
-                ).toString(),
-                autodriveCondition.toString(),
-                bgTrend,
-                combinedDelta,
-                predictedBg,
-                bgacc,
-                mealData.slopeFromMinDeviation
-            )
-        )
-        rT.reason.append(
-            context.getString(
-                R.string.reason_tir_stats,
-                currentTIRLow,
-                currentTIRRange,
-                currentTIRAbove
-            )
-        )
-
+        rT.reason.append("TIRBelow: $currentTIRLow, TIRinRange: $currentTIRRange, TIRAbove: $currentTIRAbove")
 
         val csf = sens / profile.carb_ratio
         consoleError.add("profile.sens: ${profile.sens}, sens: $sens, CSF: $csf")
