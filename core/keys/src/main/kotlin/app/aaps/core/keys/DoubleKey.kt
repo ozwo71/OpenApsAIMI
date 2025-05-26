@@ -72,6 +72,7 @@ enum class DoubleKey(
     OApsAIMIAutodrivePrebolusMorning("key_prebolus_autodrive_mode_morning", 1.0, 0.1, 10.0),
     OApsAIMIAutodrivePrebolusAfternoon("key_prebolus_autodrive_mode_afternoon", 1.0, 0.1, 10.0),
     OApsAIMIAutodrivePrebolusEvening("key_prebolus_autodrive_mode_evening", 1.0, 0.1, 10.0),
+    //OApsAIMIautodrivesmallPrebolus("key_prebolussmall_autodrive_mode", 0.1, 0.05, 2.0),
     OApsAIMIautodrivesmallPrebolusMorning("key_prebolussmall_autodrive_mode_morning", 0.1, 0.05, 10.0),
     OApsAIMIautodrivesmallPrebolusAfternoon("key_prebolussmall_autodrive_mode_afternoon", 0.1, 0.05, 10.0),
     OApsAIMIautodrivesmallPrebolusEvening("key_prebolussmall_autodrive_mode_evening", 0.1, 0.05, 10.0),
