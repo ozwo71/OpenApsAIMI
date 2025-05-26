@@ -2356,7 +2356,6 @@ private fun calculateDynamicPeakTime(
             combinedDelta.toDouble(),
             reasonAimi
         )
-        rT.reason.append(reasonAimi.toString())
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
 
         val calendarInstance = Calendar.getInstance()
@@ -3163,6 +3162,7 @@ private fun calculateDynamicPeakTime(
         rT.reason.append("adjustedEveningFactor ${adjustedEveningFactor}, ")
         rT.reason.append("Autodrive: $autodrive, autodrivemode : ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(),predictedBg, reason)}, AutodriveCondition: $autodriveCondition, bgTrend:$bgTrend, Combined Delta: $combinedDelta, PredictedBg: $predictedBg, bgAcceleration: $bgacc, SlopeMinDeviation: ${mealData.slopeFromMinDeviation}")
         rT.reason.append("TIRBelow: $currentTIRLow, TIRinRange: $currentTIRRange, TIRAbove: $currentTIRAbove")
+        rT.reason.append(reasonAimi.toString())
 
         val csf = sens / profile.carb_ratio
         consoleError.add("profile.sens: ${profile.sens}, sens: $sens, CSF: $csf")
