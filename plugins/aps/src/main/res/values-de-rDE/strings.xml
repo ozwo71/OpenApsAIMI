@@ -479,7 +479,7 @@
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION MEAL DETECTION - FILE DetermineBasalAIMI2.kt -->
     <string name="table_plugin_autodrive_1">Autodrive early meal detection/snack: Microbolusing %1$.1fU, Combined Delta: %2$.1f, Predicted: %3$.1f, Acceleration: %4$.1f.</string>
-    <string name="table_plugin_autodrive_2">Microbolusing Autodrive Mode: %1$.1fU. Target BG: %2$.1f, Combined Delta: %3$.1f, Slope min deviation: %4$.1f, Acceleration: %5$.1f.</string>
+    <string name="table_plugin_autodrive_2">→ Microbolusing Autodrive Mode %1$.1fU\n  • Target BG: %2$.1f\n  • Slope from min deviation: %3$.3f\n  • BG acceleration: %4$.2f\n</string>
     <string name="table_plugin_mealmodes_prebolus_1">Microbolusing Meal Mode: %1$.1fU.</string>
     <string name="table_plugin_mealmodes_prebolus_2">Microbolusing 1/2 Breakfast Mode %1$.1fU.</string>
     <string name="table_plugin_mealmodes_prebolus_3">Microbolusing 2/2 Breakfast Mode %1$.1fU.</string>

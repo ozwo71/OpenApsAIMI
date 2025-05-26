@@ -458,7 +458,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun getRecentBGs(): List<Float> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
         if (data.isEmpty()) return emptyList()
-        val intervalMinutes = if (bg < 130) 60f else 30f
+        val intervalMinutes = if (bg < 130) 40f else 20f
         val nowTimestamp = data.first().timestamp
         val recentBGs = mutableListOf<Float>()
 
@@ -571,7 +571,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             || therapy.lunchTime
             || therapy.dinnerTime
             || therapy.bfastTime
-
+val reason = StringBuilder()
         // 2️⃣ On recalcule le mode “early autodrive”
         val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
         val night = hour <= 7
@@ -583,6 +583,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             && autodrive
             && bg > 110
             && detectMealOnset(delta, predDelta, bgacc.toFloat())
+
+        // ────────────────────────────────────────────────────────────────
+        // Utilisation des valeurs récentes de BG pour ajuster le taux basal ou prendre d'autres décisions
+        val recentBGs = getRecentBGs()
+        var rateAdjustment = _rate
+
+        if (recentBGs.isNotEmpty()) {
+            val bgTrend = calculateBgTrend(recentBGs, reason)
+            println("BG Trend: $bgTrend")
+
+            // Ajuster le taux basal en fonction de la tendance des BG
+            rateAdjustment = adjustRateBasedOnBgTrend(_rate, bgTrend)
+
+        } else {
+            println("No recent BG values available.")
+        }
 
         // 3️⃣ On décide de bypasser la limite de sécurité si override ou mode spécial
         val bypassSafety = overrideSafetyLimits || isMealMode || isEarlyAutodrive
@@ -599,9 +615,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 5️⃣ Choix du rate effectif : bypass ou clamp
         val rate = if (bypassSafety) {
-            _rate
+            rateAdjustment
         } else {
-            _rate.coerceIn(0.0, maxSafe)
+            rateAdjustment.coerceIn(0.0, maxSafe)
         }
 
         // ────────────────────────────────────────────────────────────────
@@ -674,6 +690,40 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT.duration = duration
         rT.rate = rate
         return rT
+    }
+
+    // private fun calculateBgTrend(recentBGs: List<Float>): Float {
+    //     // Calculer la tendance des BG en fonction de la différence entre les dernières valeurs
+    //     val lastValue = recentBGs.last()
+    //     val firstValue = recentBGs.first()
+    //     return (lastValue - firstValue) / recentBGs.size.toFloat()
+    // }
+    private fun calculateBgTrend(recentBGs: List<Float>, reason: StringBuilder): Float {
+        // Vérifier si la liste n'est pas vide avant de calculer la tendance
+        if (recentBGs.isEmpty()) {
+            reason.append("No recent BG values available.")
+            return 0.0f // Retourner une valeur par défaut ou lancer une exception selon vos besoins
+        }
+
+        // Calculer la tendance des BG en fonction de la différence entre les dernières valeurs
+        val lastValue = recentBGs.last()
+        val firstValue = recentBGs.first()
+
+        // Ajouter les valeurs intermédiaires et finales dans le reason.append
+        reason.append("First BG value: $firstValue\n")
+        reason.append("Last BG value: $lastValue\n")
+        reason.append("Number of BG values: ${recentBGs.size}\n")
+
+        val bgTrend = (lastValue - firstValue) / recentBGs.size.toFloat()
+        reason.append("Calculated BG trend: $bgTrend\n")
+
+        return bgTrend
+    }
+
+    private fun adjustRateBasedOnBgTrend(_rate: Double, bgTrend: Float): Double {
+        // Ajuster le taux basal en fonction de la tendance des BG
+        val adjustmentFactor = if (bgTrend < 0.0f) 0.8 else 1.2
+        return _rate * adjustmentFactor
     }
 
     private fun logDataMLToCsv(predictedSMB: Float, smbToGive: Float) {
@@ -816,13 +866,45 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         return bolusesLastHour.any { Math.abs(it.amount - pbolusA) < epsilon }
     }
+    // private fun isAutodriveModeCondition(
+    //     delta: Float,
+    //     autodrive: Boolean,
+    //     slopeFromMinDeviation: Double,
+    //     bg: Float,
+    //     predictedBg: Float
+    // ): Boolean {
+    //     // Récupération de la valeur de pbolusMeal depuis les préférences
+    //     val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+    //     val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
+    //     val autodriveminDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
+    //     //val autodriveISF: Int = preferences.get(IntKey.OApsAIMIautodriveISF)
+    //     val autodriveTarget: Int = preferences.get(IntKey.OApsAIMIAutodriveTarget)
+    //     val autodriveBG: Int = preferences.get(IntKey.OApsAIMIAutodriveBG)
+    //     // Récupération des deltas récents et calcul du delta prédit
+    //     val recentDeltas = getRecentDeltas()
+    //     val predicted = predictedDelta(recentDeltas)
+    //     // Calcul du delta combiné : combine le delta mesuré et le delta prédit
+    //     val combinedDelta = (delta + predicted) / 2.0f
+    //     // Si un bolus de pbolusA a déjà été administré dans la dernière heure, on ne le ré-administrera pas
+    //     if (hasReceivedPbolusMInLastHour(pbolusA)) {
+    //         return false
+    //     }
+    //
+    //     return combinedDelta >= autodriveDelta &&
+    //         predictedBg > 140 &&
+    //         autodrive &&
+    //         slopeFromMinDeviation >= autodriveminDeviation &&
+    //         bg >= autodriveBG
+    // }
     private fun isAutodriveModeCondition(
         delta: Float,
         autodrive: Boolean,
         slopeFromMinDeviation: Double,
         bg: Float,
-        predictedBg: Float
+        predictedBg: Float,
+        reason: StringBuilder
     ): Boolean {
+        val reason = StringBuilder()
         // Récupération de la valeur de pbolusMeal depuis les préférences
         //val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
@@ -841,17 +923,74 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val predicted = predictedDelta(recentDeltas)
         // Calcul du delta combiné : combine le delta mesuré et le delta prédit
         val combinedDelta = (delta + predicted) / 2.0f
+
+        // Utilisation des valeurs récentes de BG pour ajuster les conditions d'autodrive
+        val recentBGs = getRecentBGs()
+        var autodriveCondition = true
+
+        if (recentBGs.isNotEmpty()) {
+            val bgTrend = calculateBgTrend(recentBGs, reason)
+            println("BG Trend: $bgTrend")
+
+            // Ajuster les conditions d'autodrive en fonction de la tendance des BG
+            autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(), reason)
+
+        } else {
+            println("No recent BG values available.")
+        }
+
         // Si un bolus de pbolusA a déjà été administré dans la dernière heure, on ne le ré-administrera pas
         if (hasReceivedPbolusMInLastHour(pbolusA)) {
             return false
         }
 
-        return combinedDelta >= autodriveDelta &&
+        return autodriveCondition && combinedDelta >= autodriveDelta && autodrive &&
             predictedBg > 140 &&
-            autodrive &&
             slopeFromMinDeviation >= autodriveminDeviation &&
-            bg >= autodriveBG
+            bg >= autodriveBG.toFloat()
     }
+
+    // private fun adjustAutodriveCondition(bgTrend: Float, predictedBg: Float, combinedDelta: Float): Boolean {
+    //     // Ajuster les conditions d'autodrive en fonction de la tendance des BG
+    //     val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
+    //     val autodriveCondition = when {
+    //         bgTrend < 0.0f -> false // Diminution significative, pas besoin d'insuline supplémentaire
+    //         predictedBg > 140 && combinedDelta >= autodriveDelta -> true // Besoin accru en insuline
+    //         else -> false // Autre cas par défaut
+    //     }
+    //     return autodriveCondition
+    // }
+    private fun adjustAutodriveCondition(
+        bgTrend: Float,
+        predictedBg: Float,
+        combinedDelta: Float,
+        reason: StringBuilder
+    ): Boolean {
+        val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
+
+        reason.append("→ Autodrive Debug\n")
+        reason.append("  • BG Trend: $bgTrend\n")
+        reason.append("  • Predicted BG: $predictedBg\n")
+        reason.append("  • Combined Delta: $combinedDelta\n")
+        reason.append("  • Required Combined Delta: $autodriveDelta\n")
+
+        // Cas 1 : glycémie baisse => désactivation
+        if (bgTrend < -0.15f) {
+            reason.append("  ✘ Autodrive désactivé : tendance glycémie en baisse\n")
+            return false
+        }
+
+        // Cas 2 : glycémie monte ou conditions fortes
+        if ((bgTrend >= 0f && combinedDelta >= autodriveDelta) || (predictedBg > 140 && combinedDelta >= autodriveDelta)) {
+            reason.append("  ✔ Autodrive activé : conditions favorables\n")
+            return true
+        }
+
+        // Cas 3 : conditions non remplies
+        reason.append("  ✘ Autodrive désactivé : conditions insuffisantes\n")
+        return false
+    }
+
 
     private fun isMealModeCondition(): Boolean {
         val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
@@ -893,7 +1032,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun roundToPoint05(number: Float): Float {
         return (number * 20.0).roundToInt() / 20.0f
     }
-
     private fun isCriticalSafetyCondition(mealData: MealData): Pair<Boolean, String> {
         val reasonBuilder = StringBuilder()
         val conditionsTrue = mutableListOf<String>()
@@ -928,6 +1066,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (interval) conditionsTrue.add(context.getString(R.string.safety_adjustments_28))
         val targetinterval = targetBg >= 120 && delta > 0 && iob >= maxSMB/2 && lastsmbtime < 12 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime && !snackTime
         if (targetinterval) conditionsTrue.add(context.getString(R.string.safety_adjustments_29))
+            //val stablebg = delta>-3 && delta<3 && shortAvgDelta>-3 && shortAvgDelta<3 && longAvgDelta>-3 && longAvgDelta<3 && bg < 120 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+            //if (stablebg) conditionsTrue.add("stablebg")
         val acceleratingDown = delta < -2 && delta - longAvgDelta < -2 && lastsmbtime < 15
         if (acceleratingDown) conditionsTrue.add(context.getString(R.string.safety_adjustments_30))
         val decceleratingdown = delta < 0 && (delta > shortAvgDelta || delta > longAvgDelta) && lastsmbtime < 15
@@ -946,7 +1086,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } else {
             context.getString(R.string.no_conditions_met)
         }
-
         reasonBuilder.append("Safety condition $result : $conditionsTrue")
         return Pair(result, conditionsTrueString)
     }
@@ -1381,30 +1520,54 @@ private fun neuralnetwork5(
     private fun interpolateFactor(value: Float, start1: Float, end1: Float, start2: Float, end2: Float): Float {
         return start2 + (value - start1) * (end2 - start2) / (end1 - start1)
     }
-    // Méthode pour récupérer les deltas récents (entre 2.5 et 7.5 minutes par exemple)
+    // // Méthode pour récupérer les deltas récents (entre 2.5 et 7.5 minutes par exemple)
+    // private fun getRecentDeltas(): List<Double> {
+    //     val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
+    //     if (data.isEmpty()) return emptyList()
+    //     // Fenêtre standard selon BG
+    //     val standardWindow = if (bg < 130) 40f else 20f
+    //     // Fenêtre raccourcie pour détection rapide
+    //     val rapidRiseWindow = 10f
+    //     // Si le delta instantané est supérieur à 15 mg/dL, on choisit la fenêtre rapide
+    //     val intervalMinutes = if (delta > 15) rapidRiseWindow else standardWindow
+    //
+    //     val nowTimestamp = data.first().timestamp
+    //     val recentDeltas = mutableListOf<Double>()
+    //     for (i in 1 until data.size) {
+    //         if (data[i].value > 39 && !data[i].filledGap) {
+    //             val minutesAgo = ((nowTimestamp - data[i].timestamp) / (1000.0 * 60)).toFloat()
+    //             if (minutesAgo in 0.0f..intervalMinutes) {
+    //                 val delta = (data.first().recalculated - data[i].recalculated) / minutesAgo * 5f
+    //                 recentDeltas.add(delta)
+    //             }
+    //         }
+    //     }
+    //     return recentDeltas
+    // }
     private fun getRecentDeltas(): List<Double> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
         if (data.isEmpty()) return emptyList()
+
         // Fenêtre standard selon BG
-        val standardWindow = if (bg < 130) 30f else 15f
+        val standardWindow = if (bg < 130) 40f else 20f
         // Fenêtre raccourcie pour détection rapide
         val rapidRiseWindow = 10f
         // Si le delta instantané est supérieur à 15 mg/dL, on choisit la fenêtre rapide
         val intervalMinutes = if (delta > 15) rapidRiseWindow else standardWindow
 
         val nowTimestamp = data.first().timestamp
-        val recentDeltas = mutableListOf<Double>()
-        for (i in 1 until data.size) {
-            if (data[i].value > 39 && !data[i].filledGap) {
-                val minutesAgo = ((nowTimestamp - data[i].timestamp) / (1000.0 * 60)).toFloat()
+        return data.drop(1).filter { it.value > 39 && !it.filledGap }
+            .mapNotNull { entry ->
+                val minutesAgo = ((nowTimestamp - entry.timestamp) / (1000.0 * 60)).toFloat()
                 if (minutesAgo in 0.0f..intervalMinutes) {
-                    val delta = (data.first().recalculated - data[i].recalculated) / minutesAgo * 5f
-                    recentDeltas.add(delta)
+                    val delta = (data.first().recalculated - entry.recalculated) / minutesAgo * 5f
+                    delta
+                } else {
+                    null
                 }
             }
-        }
-        return recentDeltas
     }
+
 
     // Calcul d'un delta prédit à partir d'une moyenne pondérée
     private fun predictedDelta(deltaHistory: List<Double>): Double {
@@ -2192,7 +2355,7 @@ private fun neuralnetwork5(
         this.acceleratingDown = if (delta < -2 && delta - longAvgDelta < -2) 1 else 0
         this.decceleratingDown = if (delta < 0 && (delta > shortAvgDelta || delta > longAvgDelta)) 1 else 0
         this.stable = if (delta > -3 && delta < 3 && shortAvgDelta > -3 && shortAvgDelta < 3 && longAvgDelta > -3 && longAvgDelta < 3 && bg < 180) 1 else 0
-        val AutodriveAcceleration = preferences.get(DoubleKey.OApsAIMIAutodriveAcceleration)
+        //val AutodriveAcceleration = preferences.get(DoubleKey.OApsAIMIAutodriveAcceleration)
         val nightbis = hourOfDay <= 7
         val modesCondition = !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime
         //val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
@@ -2202,30 +2365,29 @@ private fun neuralnetwork5(
             in 11..17 -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusAfternoon)
             else -> preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolusEvening)
         }
-
-
+        val reason = StringBuilder()
+        val recentBGs = getRecentBGs()
+        val bgTrend = calculateBgTrend(recentBGs, reason)
+        val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(),reason)
         if (bg > 100 && predictedBg > 140 && !nightbis && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && modesCondition) {
-            rT.units = pbolusAS //original >110
-            //rT.reason.appendLine("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
-            rT.reason.appendLine(
+            rT.units = pbolusAS
+            //rT.reason.append("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
+            rT.reason.append(
                 String.format(
                     context.getString(R.string.table_plugin_autodrive_1),
                     pbolusAS,
-                    //combinedDelta,
-                    //predicted,
-                    //bgAcceleration
-                    combinedDelta.toFloat(), // Assicurati che combinedDelta sia un numero
-                    predicted.toFloat(), // Assicurati che predicted sia un numero
-                    bgAcceleration.toDouble() // Assicurati che bgAcceleration sia un numero
+                    combinedDelta.toFloat(),
+                    predicted.toFloat(),
+                    bgAcceleration.toDouble()
                 )
             )
             return rT
         }
-        if (isMealModeCondition()){
-             val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
-                 rT.units = pbolusM
+        if (isMealModeCondition()) {
+            val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
+            rT.units = pbolusM
                 // rT.reason.appendLine("Microbolusing Meal Mode ${pbolusM}U.")
-                rT.reason.appendLine(
+            rT.reason.appendLine(
                     String.format(
                        context.getString(R.string.table_plugin_mealmodes_prebolus_1),
                       pbolusM
@@ -2233,8 +2395,8 @@ private fun neuralnetwork5(
                 )
 
             return rT
-         }
-        if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg) && modesCondition ){
+        }
+        if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason) && modesCondition) {
             //val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
             val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
 
@@ -2249,20 +2411,24 @@ private fun neuralnetwork5(
             }
 
             rT.units = pbolusA
-            //rT.reason.appendLine("Microbolusing Autodrive Mode ${pbolusA}U. TargetBg : ${targetBg}, CombinedDelta : ${combinedDelta}, Slopemindeviation : ${mealData.slopeFromMinDeviation}, Acceleration : ${bgAcceleration}. ")
-            rT.reason.appendLine(
+            //reason.append("→ Microbolusing Autodrive Mode ${pbolusA}U\n")
+            //reason.append("  • Target BG: $targetBg\n")
+            //reason.append("  • Slope from min deviation: ${mealData.slopeFromMinDeviation}\n")
+            //reason.append("  • BG acceleration: $bgAcceleration\n")
+            reason.append(
                 String.format(
                     context.getString(R.string.table_plugin_autodrive_2),
                     pbolusA,
-                    targetBg.toFloat(), // Assicurati che targetBg sia un numero, altrimenti usa .toFloat() o .toDouble()
-                    combinedDelta.toFloat(), // Assicurati che combinedDelta sia un numero
-                    mealData.slopeFromMinDeviation.toFloat(), // Assicurati che slopeFromMinDeviation sia un numero
-                    bgAcceleration.toDouble() // Assicurati che bgAcceleration sia un numero
-
+                    targetBg.toFloat(),
+                    mealData.slopeFromMinDeviation.toFloat(),
+                    bgAcceleration.toDouble()
                 )
             )
 
+            rT.reason.append(reason.toString()) // une seule fois à la fin
             return rT
+            // rT.reason.append("Microbolusing Autodrive Mode ${pbolusA}U. TargetBg : ${targetBg}, CombinedDelta : ${combinedDelta}, Slopemindeviation : ${mealData.slopeFromMinDeviation}, Acceleration : ${bgAcceleration}. ")
+            // return rT
         }
         if (isbfastModeCondition()) {
             val pbolusbfast: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
@@ -2841,9 +3007,6 @@ private fun neuralnetwork5(
             bg > 180 && delta > 5 && iob < 1.2 && honeymoon                                                                                   -> smbToGive * hyperfactor.toFloat()
             else                                                                                                                              -> smbToGive
         }
-        rT.reason.append("adjustedMorningFactor ${adjustedMorningFactor}, ")
-        rT.reason.append("adjustedAfternoonFactor ${adjustedAfternoonFactor}, ")
-        rT.reason.append("adjustedEveningFactor ${adjustedEveningFactor}, ")
         val factors = when {
             lunchTime                           -> lunchfactor
             bfastTime                           -> bfastfactor
@@ -2869,7 +3032,6 @@ private fun neuralnetwork5(
             pumpAgeDays = pumpAgeDays
         )
         consoleLog.add("DIA ajusté (en minutes) : $adjustedDIAInMinutes")
-        rT.reason.append(", DIA ajusté (en minutes) : $adjustedDIAInMinutes, ")
         val actCurr = profile.sensorLagActivity
         val actFuture = profile.futureActivity
         val td = adjustedDIAInMinutes
@@ -2955,7 +3117,11 @@ private fun neuralnetwork5(
             consoleError = consoleError,
             variable_sens = variableSensitivity.toDouble()
         )
-        rT.reason.append("Autodrive: $autodrive, autodrivemode : ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(),predictedBg)}, Combined Delta: $combinedDelta, PredictedBg: $predictedBg, bgAcceleration: $bgacc, ")
+        rT.reason.append(", DIA ajusté (en minutes) : $adjustedDIAInMinutes, ")
+        rT.reason.append("adjustedMorningFactor ${adjustedMorningFactor}, ")
+        rT.reason.append("adjustedAfternoonFactor ${adjustedAfternoonFactor}, ")
+        rT.reason.append("adjustedEveningFactor ${adjustedEveningFactor}, ")
+        rT.reason.append("Autodrive: $autodrive, autodrivemode : ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(),predictedBg, reason)}, AutodriveCondition: $autodriveCondition, bgTrend:$bgTrend, Combined Delta: $combinedDelta, PredictedBg: $predictedBg, bgAcceleration: $bgacc, ")
         rT.reason.append("TIRBelow: $currentTIRLow, TIRinRange: $currentTIRRange, TIRAbove: $currentTIRAbove")
 
         val csf = sens / profile.carb_ratio
@@ -3131,7 +3297,7 @@ private fun neuralnetwork5(
         }
 
 //        val forcedBasalmealmodes = preferences.get(DoubleKey.meal_modes_MaxBasal)
-        //val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
+        //val forcedBasal = preferences.get(DoubleKey.autodriveMaxBasal)
 
         val forcedBasalmealmodes = when {
             therapy.bfastTime    -> preferences.get(DoubleKey.meal_modes_MaxBasal_bfast)
@@ -3152,61 +3318,7 @@ private fun neuralnetwork5(
             else -> preferences.get(DoubleKey.autodriveMaxBasalEvening)
         }
 
-/* var rate = when {
-     detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime -> calculateRate(forcedBasal, profile_current_basal, 1.0, "Early Meal detection: activation d'une basale maximale pendant 30 minutes.", currenttemp, rT)
-     snackTime && snackrunTime in 0..30 && delta < 10 -> calculateRate(basal, profile_current_basal, 4.0, "AI Force basal because snackTime $snackrunTime.", currenttemp, rT)
-     mealTime && mealruntime in 0..30 && delta < 10 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because mealTime $mealruntime.", currenttemp, rT)
-     bfastTime && bfastruntime in 0..30 && delta < 10 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because bfastTime $bfastruntime.", currenttemp, rT)
-     lunchTime && lunchruntime in 0..30 && delta < 10 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because lunchTime $lunchruntime.", currenttemp, rT)
-     dinnerTime && dinnerruntime in 0..30 && delta < 10 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because dinnerTime $dinnerruntime.", currenttemp, rT)
-     highCarbTime && highCarbrunTime in 0..30 && delta < 10 -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because highcarb $highcarbfactor.", currenttemp, rT)
-     fastingTime -> calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "AI Force basal because fastingTime", currenttemp, rT)
-     sportTime && bg > 169 && delta > 4 -> calculateRate(profile_current_basal, profile_current_basal, 1.3, "AI Force basal because sportTime && bg > 170", currenttemp, rT)
-     //!honeymoon && delta in 0.0 .. 7.0 && bg in 81.0..111.0 -> calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "AI Force basal because bg lesser than 110 and delta lesser than 8", currenttemp, rT)
-     honeymoon && delta in 0.0.. 6.0 && bg in 99.0..141.0 -> calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "AI Force basal because honeymoon and bg lesser than 140 and delta lesser than 6", currenttemp, rT)
-     bg in 81.0..99.0 && delta in 3.0..7.0 && honeymoon -> calculateRate(basal, profile_current_basal, 1.0, "AI Force basal because bg is between 80 and 100 with a small delta.", currenttemp, rT)
-     //bg > 145 &&detectMealOnset delta > 0 && smbToGive == 0.0f && !honeymoon -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because bg is greater than 145 and SMB = 0U.", currenttemp, rT)
-     bg > 120 && delta > 0 && smbToGive == 0.0f && honeymoon -> calculateRate(basal, profile_current_basal, 5.0, "AI Force basal because bg is greater than 120 and SMB = 0U.", currenttemp, rT)
-     else -> null
- }
- rate?.let {
-     rT.rate = it
-     rT.deliverAt = deliverAt
-     rT.duration = 30
-     return rT
- } */
 
- // var rate = when {
- //     detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && !night && !mealTime && !lunchTime && !bfastTime && !dinnerTime && !sportTime && !snackTime && !highCarbTime && !sleepTime && !lowCarbTime -> calculateRate(forcedBasal, profile_current_basal, 1.0, "Early Meal detection: activation d'une basale maximale pendant 30 minutes.", currenttemp, rT)
- //     snackTime && snackrunTime in 0..30 && delta < 10 -> calculateRate(basal, profile_current_basal, 4.0, "AI Force basal because snackTime $snackrunTime.", currenttemp, rT)
- //     mealTime && mealruntime in 0..30 && delta < 10 -> calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "AI Force basal because mealTime $mealruntime.", currenttemp, rT)
- //     bfastTime && bfastruntime in 0..30 && delta < 10 -> calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "AI Force basal because bfastTime $bfastruntime.", currenttemp, rT)
- //     lunchTime && lunchruntime in 0..30 && delta < 10 -> calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "AI Force basal because lunchTime $lunchruntime.", currenttemp, rT)
- //     dinnerTime && dinnerruntime in 0..30 && delta < 10 -> calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "AI Force basal because dinnerTime $dinnerruntime.", currenttemp, rT)
- //     highCarbTime && highCarbrunTime in 0..30 && delta < 10 -> calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "AI Force basal because highcarb $highcarbfactor.", currenttemp, rT)
- //     fastingTime -> calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "AI Force basal because fastingTime", currenttemp, rT)
- //     sportTime && bg > 169 && delta > 4 -> calculateRate(profile_current_basal, profile_current_basal, 1.3, "AI Force basal because sportTime && bg > 170", currenttemp, rT)
- //     //!honeymoon && delta in 0.0 .. 7.0 && bg in 81.0..111.0 -> calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "AI Force basal because bg lesser than 110 and delta lesser than 8", currenttemp, rT)
- //     honeymoon && delta in 0.0.. 6.0 && bg in 99.0..141.0 -> calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "AI Force basal because honeymoon and bg lesser than 140 and delta lesser than 6", currenttemp, rT)
- //     bg in 81.0..99.0 && delta in 3.0..7.0 && honeymoon -> calculateRate(basal, profile_current_basal, 1.0, "AI Force basal because bg is between 80 and 100 with a small delta.", currenttemp, rT)
- //     //bg > 145 &&detectMealOnset delta > 0 && smbToGive == 0.0f && !honeymoon -> calculateRate(basal, profile_current_basal, 10.0, "AI Force basal because bg is greater than 145 and SMB = 0U.", currenttemp, rT)
- //     bg > 120 && delta > 0 && smbToGive == 0.0f && honeymoon -> calculateRate(basal, profile_current_basal, 5.0, "AI Force basal because bg is greater than 120 and SMB = 0U.", currenttemp, rT)
- //     else -> null
- // }
- // // rate?.let {
- // //     rT.rate = it
- // //     rT.deliverAt = deliverAt
- // //     rT.duration = 30
- // //     return rT
- // // }
- //        return setTempBasal(
- //            _rate             = rate!!.toDouble(),
- //            duration          = 30,
- //            profile           = profile,
- //            rT                = rT,
- //            currenttemp       = currenttemp,
- //            overrideSafetyLimits = true
- //        )
 
         val enableSMB = enablesmb(profile, microBolusAllowed, mealData, target_bg)
 
@@ -3235,30 +3347,30 @@ private fun neuralnetwork5(
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
-     appendLine("╔${"═".repeat(screenWidth)}╗")
-     //appendLine(String.format("║ %-${screenWidth}s ║", "Request"))
-     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_request_title)))
-     appendLine("╠${"═".repeat(screenWidth)}╣")
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Reason", "COB: $cob, Dev: $deviation, BGI: $bgi, ISF: $variableSensitivity, CR: $ci, Target: $target_bg"))
-     appendLine("╚${"═".repeat(screenWidth)}╝")
-     appendLine()
+            appendLine("╔${"═".repeat(screenWidth)}╗")
+            //appendLine(String.format("║ %-${screenWidth}s ║", "Request"))
+            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_request_title)))
+            appendLine("╠${"═".repeat(screenWidth)}╣")
+            appendLine(String.format("║ %-${columnWidth}s │ %s", "Reason", "COB: $cob, Dev: $deviation, BGI: $bgi, ISF: $variableSensitivity, CR: $ci, Target: $target_bg"))
+            appendLine("╚${"═".repeat(screenWidth)}╝")
+            appendLine()
 
-     appendLine("╔${"═".repeat(screenWidth)}╗")
-     //appendLine(String.format("║ %-${screenWidth}s ║", "SMB Prediction"))
-     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_smb_prediction_title)))
-     appendLine("╠${"═".repeat(screenWidth)}╣")
-     appendLine(String.format("║ %-${columnWidth}s │ %s u", "AI Pred.", String.format("%.2f", predictedSMB)))
-     appendLine(String.format("║ %-${columnWidth}s │ %s u", "Req. SMB", String.format("%.2f", smbToGive)))
-     appendLine("╚${"═".repeat(screenWidth)}╝")
-     appendLine()
+            appendLine("╔${"═".repeat(screenWidth)}╗")
+            //appendLine(String.format("║ %-${screenWidth}s ║", "SMB Prediction"))
+            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_smb_prediction_title)))
+            appendLine("╠${"═".repeat(screenWidth)}╣")
+            appendLine(String.format("║ %-${columnWidth}s │ %s u", "AI Pred.", String.format("%.2f", predictedSMB)))
+            appendLine(String.format("║ %-${columnWidth}s │ %s u", "Req. SMB", String.format("%.2f", smbToGive)))
+            appendLine("╚${"═".repeat(screenWidth)}╝")
+            appendLine()
 
-     appendLine("╔${"═".repeat(screenWidth)}╗")
-     //appendLine(String.format("║ %-${screenWidth}s ║", "Adjusted Factors"))
-     appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_adjusted_factors_title)))
-     appendLine("╠${"═".repeat(screenWidth)}╣")
-     appendLine(String.format("║ %-${columnWidth}s │ %s", "Factors", adjustedFactors))
-     appendLine("╚${"═".repeat(screenWidth)}╝")
-     appendLine()
+            appendLine("╔${"═".repeat(screenWidth)}╗")
+            //appendLine(String.format("║ %-${screenWidth}s ║", "Adjusted Factors"))
+            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_adjusted_factors_title)))
+            appendLine("╠${"═".repeat(screenWidth)}╣")
+            appendLine(String.format("║ %-${columnWidth}s │ %s", "Factors", adjustedFactors))
+            appendLine("╚${"═".repeat(screenWidth)}╝")
+            appendLine()
 
      appendLine("╔${"═".repeat(screenWidth)}╗")
      //appendLine(String.format("║ %-${screenWidth}s ║", "Limits & Conditions"))
@@ -3299,44 +3411,6 @@ private fun neuralnetwork5(
      appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_glucose_12), String.format("%.1f", bgAcceleration)))
      appendLine("╚${"═".repeat(screenWidth)}╝")
      appendLine()
-
-
-
-
-
-     //appendLine("╔${"═".repeat(screenWidth)}╗")
-     //appendLine(String.format("║ %-${screenWidth}s ║", "Modes"))
-     //appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_manual_modes_title)))
-     //appendLine("╠${"═".repeat(screenWidth)}╣")
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Delete Time", if (deleteTime) "Active" else "Inactive"))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Date", deleteEventDate ?: "N/A"))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Sleep", if (sleepTime) "Active" else "Inactive"))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Sport", if (sportTime) "Active" else "Inactive"))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Snack", if (snackTime) "Active" else "Inactive"))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Low Carb", if (lowCarbTime) "Active" else "Inactive"))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "High Carb", if (highCarbTime) "Active" else "Inactive"))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Meal", if (mealTime) "Active" else "Inactive"))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Breakfast", if (bfastTime) "Active" else "Inactive"))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Lunch", if (lunchTime) "Active" else "Inactive"))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Dinner", if (dinnerTime) "Active" else "Inactive"))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Fasting", if (fastingTime) "Active" else "Inactive"))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Calibration", if (iscalibration) "Active" else "Inactive"))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_1), if (deleteTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_2), deleteEventDate ?: "N/A"))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_2), deleteEventDate ?: context.getString(R.string.table_plugin_manual_modes_na)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_3), if (sleepTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_4), if (sportTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_5), if (snackTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_6), if (lowCarbTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_7), if (highCarbTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_8), if (mealTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_9), if (bfastTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_10), if (lunchTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_11), if (dinnerTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_12), if (fastingTime) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_manual_modes_13), if (iscalibration) context.getString(R.string.table_plugin_manual_modes_active) else context.getString(R.string.table_plugin_manual_modes_inactive)))
-     //appendLine("╚${"═".repeat(screenWidth)}╝")
-     //appendLine()
 
      val shouldShowTable = deleteTime ||
          (deleteEventDate != null && deleteEventDate.lowercase() != "null" && deleteEventDate.isNotBlank()) ||
@@ -3438,23 +3512,6 @@ private fun neuralnetwork5(
          appendLine()
      }
 
-     //  appendLine("╔${"═".repeat(screenWidth)}╗")
-     //appendLine(String.format("║ %-${screenWidth}s ║", "Step Data"))
-     //  appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_steps_title)))
-     //  appendLine("╠${"═".repeat(screenWidth)}╣")
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (5m)", recentSteps5Minutes))
-     //  appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_1), recentSteps5Minutes))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (30m)", recentSteps30Minutes))
-     // appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_2), recentSteps30Minutes))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (60m)", recentSteps60Minutes))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_3), recentSteps180Minutes))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", "Steps (180m)", recentSteps180Minutes))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s", context.getString(R.string.table_plugin_steps_4), recentSteps180Minutes))
-
-     //appendLine("╚${"═".repeat(screenWidth)}╝")
-     //appendLine()
-
-
      if (recentSteps5Minutes > 0 || recentSteps30Minutes > 0 || recentSteps60Minutes > 0 || recentSteps180Minutes > 0) {
          appendLine("╔${"═".repeat(screenWidth)}╗")
          appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_steps_title)))
@@ -3466,18 +3523,6 @@ private fun neuralnetwork5(
          appendLine("╚${"═".repeat(screenWidth)}╝")
          appendLine()
      }
-
-     //appendLine("╔${"═".repeat(screenWidth)}╗")
-     //appendLine(String.format("║ %-${screenWidth}s ║", "Heart Rate Data"))
-     //appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_heart_title)))
-     //appendLine("╠${"═".repeat(screenWidth)}╣")
-     //appendLine(String.format("║ %-${columnWidth}s │ %s bpm", "HR (5m)", String.format("%.1f", averageBeatsPerMinute)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s bpm", context.getString(R.string.table_plugin_heart_1), String.format("%.1f", averageBeatsPerMinute)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s bpm", "HR (60m)", String.format("%.1f", averageBeatsPerMinute60)))
-     //appendLine(String.format("║ %-${columnWidth}s │ %s bpm", context.getString(R.string.table_plugin_heart_2), String.format("%.1f", averageBeatsPerMinute60)))
-
-     //appendLine("╚${"═".repeat(screenWidth)}╝")
-     //appendLine()
 
      if (
          (!averageBeatsPerMinute.isNaN() && averageBeatsPerMinute > 0) ||
@@ -3506,31 +3551,31 @@ private fun neuralnetwork5(
      appendLine("╚${"═".repeat(screenWidth)}╝")
      appendLine()
 
-     // Fin de l'assemblage du log
- }
+            // Fin de l'assemblage du log
+        }
 
-  // eventual BG is at/above target
- // if iob is over max, just cancel any temps
- if (eventualBG >= max_bg) {
-     rT.reason.appendLine("Eventual BG " + convertBG(eventualBG) + " >= " + convertBG(max_bg) + ", ")
- }
- if (iob_data.iob > max_iob) {
-     rT.reason.appendLine("IOB ${round(iob_data.iob, 2)} > max_iob $max_iob")
-     if (delta < 0) {
-         rT.reason.appendLine(", BG is dropping (delta $delta), setting basal to 0. ")
-         return setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = false) // Basal à 0 pendant 30 minutes
-     }
-     return if (currenttemp.duration > 15 && (roundBasal(basal) == roundBasal(currenttemp.rate))) {
-         rT.reason.appendLine(", temp ${currenttemp.rate} ~ req ${round(basal, 2).withoutZeros()}U/hr. ")
-         rT
-     } else {
-         rT.reason.appendLine("; setting current basal of ${round(basal, 2)} as temp. ")
-         setTempBasal(basal, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
-     }
- } else {
-     var insulinReq = smbToGive.toDouble()
-     val recentBGValues: List<Float> = getRecentBGs()
-     //updateZeroBasalDuration(profile_current_basal)
+        // eventual BG is at/above target
+        // if iob is over max, just cancel any temps
+        if (eventualBG >= max_bg) {
+            rT.reason.append("Eventual BG " + convertBG(eventualBG) + " >= " + convertBG(max_bg) + ", ")
+        }
+        if (iob_data.iob > max_iob) {
+            rT.reason.append("IOB ${round(iob_data.iob, 2)} > max_iob $max_iob")
+            if (delta < 0) {
+                rT.reason.append(", BG is dropping (delta $delta), setting basal to 0. ")
+                return setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = false) // Basal à 0 pendant 30 minutes
+            }
+            return if (currenttemp.duration > 15 && (roundBasal(basal) == roundBasal(currenttemp.rate))) {
+                rT.reason.append(", temp ${currenttemp.rate} ~ req ${round(basal, 2).withoutZeros()}U/hr. ")
+                rT
+            } else {
+                rT.reason.append("; setting current basal of ${round(basal, 2)} as temp. ")
+                setTempBasal(basal, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+            }
+        } else {
+            var insulinReq = smbToGive.toDouble()
+            val recentBGValues: List<Float> = getRecentBGs()
+            //updateZeroBasalDuration(profile_current_basal)
 
             val safetyDecision = safetyAdjustment(
                 currentBG = bg.toFloat(),
@@ -3560,29 +3605,29 @@ private fun neuralnetwork5(
             //console.error(profile.temptargetSet, target_bg, rT.COB);
             // only allow microboluses with COB or low temp targets, or within DIA hours of a bolus
 
-     if (microBolusAllowed && enableSMB) {
-         val microBolus = insulinReq
-         rT.reason.appendLine(" insulinReq $insulinReq")
-         if (microBolus >= maxSMB) {
-             rT.reason.appendLine("; maxBolus $maxSMB")
-         }
-         rT.reason.append(". ")
+            if (microBolusAllowed && enableSMB) {
+                val microBolus = insulinReq
+                rT.reason.append(" insulinReq $insulinReq")
+                if (microBolus >= maxSMB) {
+                    rT.reason.append("; maxBolus $maxSMB")
+                }
+                rT.reason.append(". ")
 
-         // allow SMBIntervals between 1 and 10 minutes
-         //val SMBInterval = min(10, max(1, profile.SMBInterval))
-         val smbInterval = min(20, max(1, calculateSMBInterval()))
-         val nextBolusMins = round(smbInterval - lastBolusAge, 0)
-         val nextBolusSeconds = round((smbInterval - lastBolusAge) * 60, 0) % 60
-         if (lastBolusAge > smbInterval) {
-             if (microBolus > 0) {
-                 rT.units = microBolus
-                 rT.reason.appendLine("Microbolusing ${microBolus}U. ")
-             }
-         } else {
-             rT.reason.appendLine("Waiting " + nextBolusMins + "m " + nextBolusSeconds + "s to microbolus again. ")
-         }
+                // allow SMBIntervals between 1 and 10 minutes
+                //val SMBInterval = min(10, max(1, profile.SMBInterval))
+                val smbInterval = min(20, max(1, calculateSMBInterval()))
+                val nextBolusMins = round(smbInterval - lastBolusAge, 0)
+                val nextBolusSeconds = round((smbInterval - lastBolusAge) * 60, 0) % 60
+                if (lastBolusAge > smbInterval) {
+                    if (microBolus > 0) {
+                        rT.units = microBolus
+                        rT.reason.append("Microbolusing ${microBolus}U. ")
+                    }
+                } else {
+                    rT.reason.append("Waiting " + nextBolusMins + "m " + nextBolusSeconds + "s to microbolus again. ")
+                }
 
-     }
+            }
 
 // Calcul du facteur d'ajustement en fonction de la glycémie
 // (ici, j'utilise la fonction simplifiée d'interpolation)
@@ -3610,15 +3655,15 @@ private fun neuralnetwork5(
      if (detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat())
          && !nightbis && modesCondition && bg > 100 && autodrive
      ) {
-         chosenRate     = forcedBasal.toDouble()
+         chosenRate = forcedBasal.toDouble()
          overrideSafety = true
-         //rT.reason.appendLine("Early meal detected → TBR forcée à ${forcedBasal}U/h x30 (override).\n")
-         rT.reason.appendLine(context.getString(R.string.early_meal_tbr_forced, forcedBasal))
+         //rT.reason.append("Early meal detected → TBR forcée à ${forcedBasal}U/h x30 (override).\n")
+         rT.reason.append(context.getString(R.string.early_meal_tbr_forced, forcedBasal))
      } else {
          // ------------------------------
          // 3️⃣ Cas snack / meal / bfast / lunch / dinner / highCarb / fasting / sport
          chosenRate = when {
-             snackTime && snackrunTime in 0..30 && delta < 10 -> {
+             snackTime && snackrunTime in 0..30 && delta < 10        -> {
                  // pas de bypass pour snack
                  calculateRate(basal, profile_current_basal, 4.0, "SnackTime", currenttemp, rT).toDouble()
              }
@@ -3677,7 +3722,7 @@ private fun neuralnetwork5(
      if (chosenRate == null &&
          (predictedBg < 100 && mealData.slopeFromMaxDeviation <= 0 || iob > maxIob)
      ) {
-         chosenRate     = 0.0
+         chosenRate = 0.0
          overrideSafety = false
          //rT.reason.append("Safety cut: predictedBg<100 ou IOB>$maxIob → basale à 0.\n")
          rT.reason.appendLine(context.getString(R.string.safety_cut, maxIob))
@@ -3689,31 +3734,31 @@ private fun neuralnetwork5(
          when {
              bg < 80.0 -> {
                  chosenRate = 0.0
-                 rT.reason.appendLine("BG<80 → basale à 0.\n")
+                 rT.reason.append("BG<80 → basale à 0.\n")
              }
              bg in 80.0..90.0 &&
                  slopeFromMaxDeviation <= 0 && iob > 0.1f && !sportTime -> {
                  chosenRate = 0.0
-                 rT.reason.appendLine("BG 80-90 & chute → basale à 0.\n")
+                 rT.reason.append("BG 80-90 & chute → basale à 0.\n")
              }
              bg in 80.0..90.0 &&
                  slopeFromMinDeviation >= 0.3 && slopeFromMaxDeviation >= 0 &&
                  combinedDelta in -1.0..2.0 && !sportTime &&
                  bgAcceleration.toFloat() > 0.0f -> {
                  chosenRate = profile_current_basal * 0.2
-                 rT.reason.appendLine("BG 80-90 stable → basale x0.2.\n")
+                 rT.reason.append("BG 80-90 stable → basale x0.2.\n")
              }
              bg in 90.0..100.0 &&
                  slopeFromMinDeviation <= 0.3 && iob > 0.1f && !sportTime &&
                  bgAcceleration.toFloat() > 0.0f -> {
                  chosenRate = 0.0
-                 rT.reason.appendLine("BG 90-100 & risque modéré → basale à 0.\n")
+                 rT.reason.append("BG 90-100 & risque modéré → basale à 0.\n")
              }
              bg in 90.0..100.0 &&
                  slopeFromMinDeviation >= 0.3 && combinedDelta in -1.0..2.0 && !sportTime &&
                  bgAcceleration.toFloat() > 0.0f -> {
                  chosenRate = profile_current_basal * 0.5
-                 rT.reason.appendLine("BG 90-100 gain léger → basale x0.5.\n")
+                 rT.reason.append("BG 90-100 gain léger → basale x0.5.\n")
              }
          }
      }
@@ -3728,14 +3773,14 @@ private fun neuralnetwork5(
          ) {
              chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, combinedDelta.toDouble())
              //rT.reason.append("Montée lente → ajustement proportionnel.\n")
-             rT.reason.appendLine(context.getString(R.string.basal_arguments_5))
+             rT.reason.append(context.getString(R.string.basal_arguments_5))
          }
          else if (eventualBG > 110 && !sportTime && bg > 150 &&
              combinedDelta in -2.0..15.0 &&
              bgAcceleration.toFloat() > 0.0f
          ) {
              chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor)
-             rT.reason.appendLine(context.getString(R.string.basal_arguments_6))
+             rT.reason.append(context.getString(R.string.basal_arguments_6))
          }
      }
 
@@ -3749,17 +3794,17 @@ private fun neuralnetwork5(
          ) {
              chosenRate = profile_current_basal * 1.5
              //rT.reason.append("Repas calme & horaire → basale x1.5.\n")
-             rT.reason.appendLine(context.getString(R.string.table_plugin_hours_activity_1))
+             rT.reason.append(context.getString(R.string.table_plugin_hours_activity_1))
          }
          else if (timenow > sixAMHour && recentSteps5Minutes > 100) {
              chosenRate = 0.0
              //rT.reason.append("Activité matinale → basale à 0.\n")
-             rT.reason.appendLine(context.getString(R.string.table_plugin_hours_activity_2))
+             rT.reason.append(context.getString(R.string.table_plugin_hours_activity_2))
          }
          else if (timenow <= sixAMHour && delta > 0 && bgAcceleration.toFloat() > 0.0f) {
              chosenRate = profile_current_basal.toDouble()
              //rT.reason.append("Matinée montante → basale de profil.\n")
-             rT.reason.appendLine(context.getString(R.string.table_plugin_hours_activity_3))
+             rT.reason.append(context.getString(R.string.table_plugin_hours_activity_3))
          }
      }
 
@@ -3778,13 +3823,13 @@ private fun neuralnetwork5(
              if (meal && runtime in 0..30) {
                  chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, 10.0)
                  //rT.reason.append("Repas/snack <30m → basale x10.\n")
-                 rT.reason.appendLine(context.getString(R.string.table_plugin_meal_snack_1))
+                 rT.reason.append(context.getString(R.string.table_plugin_meal_snack_1))
                  break
              }
              else if (meal && runtime in 30..60 && delta > 0) {
                  chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, delta.toDouble())
                  //rT.reason.append("Repas/snack 30-60m & montée → basale Δ.\n")
-                 rT.reason.appendLine(context.getString(R.string.table_plugin_meal_snack_2))
+                 rT.reason.append(context.getString(R.string.table_plugin_meal_snack_2))
                  break
              }
          }
@@ -3797,40 +3842,46 @@ private fun neuralnetwork5(
              eventualBG > 180 && delta > 3 ->
                  chosenRate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, basalAdjustmentFactor).also {
                      //rT.reason.append("EventualBG>180 & hyper → ajustement basalaimi.\n")
-                     rT.reason.appendLine(context.getString(R.string.table_plugin_hyperglycemia_1))
+                     rT.reason.append(context.getString(R.string.table_plugin_hyperglycemia_1))
                  }
              bg > 180 && delta in -5.0..1.0 ->
                  chosenRate = (profile_current_basal * basalAdjustmentFactor).also {
                      //rT.reason.append("BG>180 stable → basale x facteur.\n")
-                     rT.reason.appendLine(context.getString(R.string.table_plugin_hyperglycemia_2))
+                     rT.reason.append(context.getString(R.string.table_plugin_hyperglycemia_2))
                  }
          }
      }
 
 // ------------------------------
 // 🔟 Mode “honeymoon”
-     if (chosenRate == null && honeymoon) {
-         when {
-             bg in 140.0..169.0 && delta > 0 ->
-                 chosenRate = profile_current_basal.toDouble().also { rT.reason.append("Honeymoon BG 140-169 → profil.\n") }
-             bg > 170 && delta > 0 ->
-                 chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor).also {
-                     rT.reason.appendLine("Honeymoon BG>170 → ajustement.\n")
-                 }
-             combinedDelta > 2 && bg in 90.0..119.0 ->
-                 chosenRate = profile_current_basal.toDouble().also { rT.reason.appendLine("Honeymoon Δ>2 & BG 90-119 → profil.\n") }
-             combinedDelta > 0 && bg > 110 && eventualBG > 120 && bg < 160 ->
-                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.appendLine("Honeymoon corr. mixte.\n") }
-             mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 && bg > 110 && combinedDelta > 0 ->
-                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.appendLine("Honeymoon + repas détection.\n") }
-             mealData.slopeFromMaxDeviation in 0.0..0.2 && mealData.slopeFromMinDeviation in 0.0..0.5 &&
-                 bg in 120.0..150.0 && delta > 0 ->
-                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.appendLine("Honeymoon petit slope.\n") }
-             mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 &&
-                 bg in 100.0..120.0 && delta > 0 ->
-                 chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.appendLine("Honeymoon slope repas.\n") }
-         }
-     }
+            if (chosenRate == null && honeymoon) {
+                when {
+                    bg in 140.0..169.0 && delta > 0                                                                           ->
+                        chosenRate = profile_current_basal.toDouble().also { rT.reason.append("Honeymoon BG 140-169 → profil.\n") }
+
+                    bg > 170 && delta > 0                                                                                     ->
+                        chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor).also {
+                            rT.reason.append("Honeymoon BG>170 → ajustement.\n")
+                        }
+
+                    combinedDelta > 2 && bg in 90.0..119.0                                                                    ->
+                        chosenRate = profile_current_basal.toDouble().also { rT.reason.append("Honeymoon Δ>2 & BG 90-119 → profil.\n") }
+
+                    combinedDelta > 0 && bg > 110 && eventualBG > 120 && bg < 160                                             ->
+                        chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.append("Honeymoon corr. mixte.\n") }
+
+                    mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 && bg > 110 && combinedDelta > 0 ->
+                        chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.append("Honeymoon + repas détection.\n") }
+
+                    mealData.slopeFromMaxDeviation in 0.0..0.2 && mealData.slopeFromMinDeviation in 0.0..0.5 &&
+                        bg in 120.0..150.0 && delta > 0                                                                       ->
+                        chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.append("Honeymoon petit slope.\n") }
+
+                    mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 &&
+                        bg in 100.0..120.0 && delta > 0                                                                       ->
+                        chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.append("Honeymoon slope repas.\n") }
+                }
+            }
 
 // ------------------------------
 // 1️⃣1️⃣ Cas grossesse
