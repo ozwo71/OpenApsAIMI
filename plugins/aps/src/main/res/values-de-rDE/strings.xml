@@ -414,7 +414,6 @@
     <string name="reason_tir_stats">TIR Below: %1$d, TIR In Range: %2$d, TIR Above: %3$d</string>
 
 
-
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION TITLE - FILE DetermineBasalAIMI2.kt -->
 
     <string name="table_plugin_main_title_1">AAPS-MASTER-AIMI</string>
