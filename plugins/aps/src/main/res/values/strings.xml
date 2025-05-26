@@ -477,6 +477,14 @@
     <string name="adjust_autodrive_condition_7">✔ Autodrive enabled: favorable conditions</string>
     <string name="adjust_autodrive_condition_8">✘ Autodrive disabled: conditions not met</string>
 
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION AIMILOG DetermineBasalAIMI2.kt -->
+
+    <string name="reason_adjusted_dia_minutes">, Adjusted DIA (minutes): %1$d, </string>
+    <string name="reason_adjusted_morning_factor">adjusted Morning Factor %1$.2f, </string>
+    <string name="reason_adjusted_afternoon_factor">adjusted Afternoon Factor %1$.2f, </string>
+    <string name="reason_adjusted_evening_factor">adjusted Evening Factor %1$.2f, </string>
+    <string name="reason_autodrive_status">Autodrive: %1$s, autodrive mode: %2$s, Autodrive Condition: %3$s, BG Trend: %4$.2f, Combined Delta: %5$.2f, Predicted BG: %6$.2f, BG Acceleration: %7$.2f, </string>
+    <string name="reason_tir_stats">TIR Below: %1$d, TIR In Range: %2$d, TIR Above: %3$d</string>
 
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION TITLE - FILE DetermineBasalAIMI2.kt -->

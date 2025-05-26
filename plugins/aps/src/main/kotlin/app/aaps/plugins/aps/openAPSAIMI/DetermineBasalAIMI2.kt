@@ -3133,12 +3133,39 @@ private fun neuralnetwork5(
             consoleError = consoleError,
             variable_sens = variableSensitivity.toDouble()
         )
-        rT.reason.append(", DIA ajusté (en minutes) : $adjustedDIAInMinutes, ")
+        /*rT.reason.append(", DIA ajusté (en minutes) : $adjustedDIAInMinutes, ")
         rT.reason.append("adjustedMorningFactor ${adjustedMorningFactor}, ")
         rT.reason.append("adjustedAfternoonFactor ${adjustedAfternoonFactor}, ")
         rT.reason.append("adjustedEveningFactor ${adjustedEveningFactor}, ")
         rT.reason.append("Autodrive: $autodrive, autodrivemode : ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(),predictedBg, reason)}, AutodriveCondition: $autodriveCondition, bgTrend:$bgTrend, Combined Delta: $combinedDelta, PredictedBg: $predictedBg, bgAcceleration: $bgacc, ")
-        rT.reason.append("TIRBelow: $currentTIRLow, TIRinRange: $currentTIRRange, TIRAbove: $currentTIRAbove")
+        rT.reason.append("TIRBelow: $currentTIRLow, TIRinRange: $currentTIRRange, TIRAbove: $currentTIRAbove")*/
+
+        rT.reason.append(context.getString(R.string.reason_adjusted_dia_minutes, adjustedDIAInMinutes.toString()))
+        rT.reason.append(context.getString(R.string.reason_adjusted_morning_factor, adjustedMorningFactor.toString()))
+        rT.reason.append(context.getString(R.string.reason_adjusted_afternoon_factor, adjustedAfternoonFactor.toString()))
+        rT.reason.append(context.getString(R.string.reason_adjusted_evening_factor, adjustedEveningFactor.toString()))
+
+        rT.reason.append(
+            context.getString(
+                R.string.reason_autodrive_status,
+                autodrive,
+                isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason),
+                autodriveCondition,
+                bgTrend,
+                combinedDelta,
+                predictedBg,
+                bgacc
+            )
+        )
+        rT.reason.append(
+            context.getString(
+                R.string.reason_tir_stats,
+                currentTIRLow,
+                currentTIRRange,
+                currentTIRAbove
+            )
+        )
+
 
         val csf = sens / profile.carb_ratio
         consoleError.add("profile.sens: ${profile.sens}, sens: $sens, CSF: $csf")
