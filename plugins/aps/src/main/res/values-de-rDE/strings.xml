@@ -385,11 +385,30 @@
     <string name="meal_modes_max_basal_title_genericmeal">Fixed TBR – Generic Meal</string>
     <string name="meal_modes_max_basal_summary_genericmeal">Manual modes fixed TBR, after prebolus 1 set 30 minutes a fixed TBR for generic meal</string>
 
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BG TREND - FILE DetermineBasalAIMI2.kt -->
+    <string name="bg_trend_1">BG Trend Analysis</string>
+    <string name="bg_trend_2">First blood glucose</string>
+    <string name="bg_trend_3">Last blood glucose</string>
+    <string name="bg_trend_4">Number of values</string>
+    <string name="bg_trend_5">Calculated trend</string>
+    <string name="bg_trend_interval">interval</string>
+    <string name="bg_trend_6">No blood glucose history available</string>
+
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - ADJUST AUTODRIVE CONDITIONS - FILE DetermineBasalAIMI2.kt -->
+    <string name="adjust_autodrive_condition_1">Autodrive Debug</string>
+    <string name="adjust_autodrive_condition_2">BG Trend</string>
+    <string name="adjust_autodrive_condition_3">Predicted BG</string>
+    <string name="adjust_autodrive_condition_4">Combined Delta</string>
+    <string name="adjust_autodrive_condition_5">Required Combined Delta</string>
+    <string name="adjust_autodrive_condition_6">✘ Autodrive disabled: blood glucose trend is dropping</string>
+    <string name="adjust_autodrive_condition_7">✔ Autodrive enabled: favorable conditions</string>
+    <string name="adjust_autodrive_condition_8">✘ Autodrive disabled: conditions not met</string>
+
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION TITLE - FILE DetermineBasalAIMI2.kt -->
 
     <string name="table_plugin_main_title_1">AAPS-MASTER-AIMI</string>
     <string name="table_plugin_main_title_2">OpenApsAIMI Settings</string>
-    <string name="table_plugin_main_title_3">03 May 2025</string>
+    <string name="table_plugin_main_title_3">26 May 2025</string>
     <string name="table_plugin_request_title">Request</string>
     <string name="table_plugin_smb_prediction_title">SMB Prediction</string>
     <string name="table_plugin_adjusted_factors_title">Adjusted Factors</string>

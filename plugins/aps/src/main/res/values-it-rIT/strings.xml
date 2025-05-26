@@ -445,11 +445,32 @@
 
     <string name="OApsAIMI_Force_Limits">Forza limiti moltiplicatori AAPS</string>
 
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SEZIONE BG TREND - FILE DetermineBasalAIMI2.kt -->
+
+    <string name="bg_trend_1">Analisi tendenza glicemica</string>
+    <string name="bg_trend_2">Prima glicemia</string>
+    <string name="bg_trend_3">Ultima glicemia</string>
+    <string name="bg_trend_4">Numero valori</string>
+    <string name="bg_trend_5">Tendenza calcolata</string>
+    <string name="bg_trend_interval">intervallo</string>
+    <string name="bg_trend_6">Nessun dato glicemico disponibile</string>
+
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - ADJUST AUTODRIVE CONDITIONS - FILE DetermineBasalAIMI2.kt -->
+
+    <string name="adjust_autodrive_condition_1">Debug Autodrive</string>
+    <string name="adjust_autodrive_condition_2">Tendenza glicemica</string>
+    <string name="adjust_autodrive_condition_3">Glicemia prevista</string>
+    <string name="adjust_autodrive_condition_4">Delta combinato</string>
+    <string name="adjust_autodrive_condition_5">Delta combinato richiesto</string>
+    <string name="adjust_autodrive_condition_6">✘ Autodrive disattivato: la tendenza glicemica è in calo</string>
+    <string name="adjust_autodrive_condition_7">✔ Autodrive attivato: condizioni favorevoli</string>
+    <string name="adjust_autodrive_condition_8">✘ Autodrive disattivato: condizioni non soddisfatte</string>
+
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE TITOLI - FILE DetermineBasalAIMI2.kt  -->
 
     <string name="table_plugin_main_title_1">AIMI-3.3.2</string>
     <string name="table_plugin_main_title_2">Master-TEST</string>
-    <string name="table_plugin_main_title_3">30 Aprile 2025</string>
+    <string name="table_plugin_main_title_3">26 Maggio 2025</string>
     <string name="table_plugin_request_title">Richiesta</string>
     <string name="table_plugin_smb_prediction_title">SMB Previsione</string>
     <string name="table_plugin_adjusted_factors_title">Fattori di aggiustamento</string>

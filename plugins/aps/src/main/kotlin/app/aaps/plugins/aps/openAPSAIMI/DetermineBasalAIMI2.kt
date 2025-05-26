@@ -700,7 +700,8 @@ val reason = StringBuilder()
     // }
     private fun calculateBgTrend(recentBGs: List<Float>, reason: StringBuilder): Float {
         if (recentBGs.isEmpty()) {
-            reason.append("✘ Aucun historique de glycémie disponible.\n")
+            //reason.append("✘ Aucun historique de glycémie disponible.\n")
+            reason.append("✘ ${context.getString(R.string.bg_trend_6)}\n")
             return 0.0f
         }
 
@@ -713,11 +714,16 @@ val reason = StringBuilder()
 
         val bgTrend = (lastValue - firstValue) / count.toFloat()
 
-        reason.append("→ Analyse BG Trend\n")
+        /*reason.append("→ Analyse BG Trend\n")
         reason.append("  • Première glycémie : $firstValue mg/dL\n")
         reason.append("  • Dernière glycémie : $lastValue mg/dL\n")
         reason.append("  • Nombre de valeurs : $count\n")
-        reason.append("  • Tendance calculée : $bgTrend mg/dL/intervalle\n")
+        reason.append("  • Tendance calculée : $bgTrend mg/dL/intervalle\n")*/
+        reason.append("→ ${context.getString(R.string.bg_trend_1)}\n")
+        reason.append("  • ${context.getString(R.string.bg_trend_2)}: $firstValue mg/dL\n")
+        reason.append("  • ${context.getString(R.string.bg_trend_3)}: $lastValue mg/dL\n")
+        reason.append("  • ${context.getString(R.string.bg_trend_4)}: $count\n")
+        reason.append("  • ${context.getString(R.string.bg_trend_5)}: $bgTrend mg/dL/${context.getString(R.string.bg_trend_interval)}\n")
 
         return bgTrend
     }
@@ -970,26 +976,34 @@ val reason = StringBuilder()
     ): Boolean {
         val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
 
-        reason.append("→ Autodrive Debug\n")
+        /*reason.append("→ Autodrive Debug\n")
         reason.append("  • BG Trend: $bgTrend\n")
         reason.append("  • Predicted BG: $predictedBg\n")
         reason.append("  • Combined Delta: $combinedDelta\n")
-        reason.append("  • Required Combined Delta: $autodriveDelta\n")
+        reason.append("  • Required Combined Delta: $autodriveDelta\n")*/
+        reason.append("→ ${context.getString(R.string.adjust_autodrive_condition_1)}\n")
+        reason.append("  • ${context.getString(R.string.adjust_autodrive_condition_2)}: $bgTrend\n")
+        reason.append("  • ${context.getString(R.string.adjust_autodrive_condition_3)}: $predictedBg\n")
+        reason.append("  • ${context.getString(R.string.adjust_autodrive_condition_4)}: $combinedDelta\n")
+        reason.append("  • ${context.getString(R.string.adjust_autodrive_condition_5)}: $autodriveDelta\n")
 
         // Cas 1 : glycémie baisse => désactivation
         if (bgTrend < -0.15f) {
-            reason.append("  ✘ Autodrive désactivé : tendance glycémie en baisse\n")
+            //reason.append("  ✘ Autodrive désactivé : tendance glycémie en baisse\n")
+            reason.append("  ${context.getString(R.string.adjust_autodrive_condition_6)}\n")
             return false
         }
 
         // Cas 2 : glycémie monte ou conditions fortes
         if ((bgTrend >= 0f && combinedDelta >= autodriveDelta) || (predictedBg > 140 && combinedDelta >= autodriveDelta)) {
-            reason.append("  ✔ Autodrive activé : conditions favorables\n")
+            //reason.append("  ✔ Autodrive activé : conditions favorables\n")
+            reason.append("  ${context.getString(R.string.adjust_autodrive_condition_7)}\n")
             return true
         }
 
         // Cas 3 : conditions non remplies
-        reason.append("  ✘ Autodrive désactivé : conditions insuffisantes\n")
+        //reason.append("  ✘ Autodrive désactivé : conditions insuffisantes\n")
+        reason.append("  ${context.getString(R.string.adjust_autodrive_condition_8)}\n")
         return false
     }
 
