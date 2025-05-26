@@ -3200,7 +3200,7 @@ rT.reason.appendLine(
 rT.reason.appendLine(
     "📊 TIR: <70: ${"%.1f".format(currentTIRLow)}% | 70–180: ${"%.1f".format(currentTIRRange)}% | >180: ${"%.1f".format(currentTIRAbove)}%"
 )
-        appendCompactLog(reasonAimi, tp, bg, delta, recentSteps5Minutes, averageBeatsPerMinute)
+        appendCompactLog(reasonAimi, tp, bg, delta.toDouble(), recentSteps5Minutes, averageBeatsPerMinute.toInt())
         rT.reason.append(reasonAimi.toString())
         val csf = sens / profile.carb_ratio
         consoleError.add("profile.sens: ${profile.sens}, sens: $sens, CSF: $csf")
