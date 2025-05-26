@@ -3149,7 +3149,7 @@ private fun neuralnetwork5(
             context.getString(
                 R.string.reason_autodrive_status,
                 autodrive.toString(),
-                isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason),
+                isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason).toString(),
                 autodriveCondition.toString(),
                 bgTrend,
                 combinedDelta,
