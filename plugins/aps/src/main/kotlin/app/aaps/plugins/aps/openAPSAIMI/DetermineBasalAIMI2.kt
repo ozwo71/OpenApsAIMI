@@ -460,7 +460,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         return recentBGs
     }
+fun appendCompactLog(
+    reason: StringBuilder,
+    peakTime: Double,
+    bg: Double,
+    delta: Double,
+    stepCount: Int?,
+    heartRate: Int?
+) {
+    val bgStr = "%.0f".format(bg)
+    val deltaStr = "%.1f".format(delta)
+    val peakStr = "%.1f".format(peakTime)
 
+    reason.append("🕒 PeakTime=$peakStr min | BG=$bgStr Δ$deltaStr")
+    stepCount?.let { reason.append(" | Steps=$it") }
+    heartRate?.let { reason.append(" | HR=$it bpm") }
+    reason.append("\n")
+}
     // Rounds value to 'digits' decimal places
     // different for negative numbers fun round(value: Double, digits: Int): Double = BigDecimal(value).setScale(digits, RoundingMode.HALF_EVEN).toDouble()
     fun round(value: Double, digits: Int): Double {
@@ -3156,14 +3172,36 @@ private fun calculateDynamicPeakTime(
             consoleError = consoleError,
             variable_sens = variableSensitivity.toDouble()
         )
-        rT.reason.append(", DIA ajusté (en minutes) : $adjustedDIAInMinutes, ")
-        rT.reason.append("adjustedMorningFactor ${adjustedMorningFactor}, ")
-        rT.reason.append("adjustedAfternoonFactor ${adjustedAfternoonFactor}, ")
-        rT.reason.append("adjustedEveningFactor ${adjustedEveningFactor}, ")
-        rT.reason.append("Autodrive: $autodrive, autodrivemode : ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(),predictedBg, reason)}, AutodriveCondition: $autodriveCondition, bgTrend:$bgTrend, Combined Delta: $combinedDelta, PredictedBg: $predictedBg, bgAcceleration: $bgacc, SlopeMinDeviation: ${mealData.slopeFromMinDeviation}")
-        rT.reason.append("TIRBelow: $currentTIRLow, TIRinRange: $currentTIRRange, TIRAbove: $currentTIRAbove")
-        rT.reason.append(reasonAimi.toString())
+        //rT.reason.append(", DIA ajusté (en minutes) : $adjustedDIAInMinutes, ")
+        //rT.reason.append("adjustedMorningFactor ${adjustedMorningFactor}, ")
+        //rT.reason.append("adjustedAfternoonFactor ${adjustedAfternoonFactor}, ")
+        //rT.reason.append("adjustedEveningFactor ${adjustedEveningFactor}, ")
+        //rT.reason.append("Autodrive: $autodrive, autodrivemode : ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(),predictedBg, reason)}, AutodriveCondition: $autodriveCondition, bgTrend:$bgTrend, Combined Delta: $combinedDelta, PredictedBg: $predictedBg, bgAcceleration: $bgacc, SlopeMinDeviation: ${mealData.slopeFromMinDeviation}")
+        //rT.reason.append("TIRBelow: $currentTIRLow, TIRinRange: $currentTIRRange, TIRAbove: $currentTIRAbove")
+        //rT.reason.append(reasonAimi.toString())
+        rT.reason.appendLine(
+    "📈 DIA ajusté: ${"%.1f".format(adjustedDIAInMinutes)} min | " +
+    "Morning: ${"%.1f".format(adjustedMorningFactor)}, " +
+    "Afternoon: ${"%.1f".format(adjustedAfternoonFactor)}, " +
+    "Evening: ${"%.1f".format(adjustedEveningFactor)}"
+)
 
+rT.reason.appendLine(
+    "🚗 Autodrive: $autodrive | Mode actif: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
+    "AutodriveCondition: $autodriveCondition"
+)
+
+rT.reason.appendLine(
+    "🔍 BGTrend: ${"%.2f".format(bgTrend)} | ΔCombiné: ${"%.2f".format(combinedDelta)} | " +
+    "Predicted BG: ${"%.0f".format(predictedBg)} | Accélération: ${"%.2f".format(bgacc)} | " +
+    "Slope Min Dev.: ${"%.2f".format(mealData.slopeFromMinDeviation)}"
+)
+
+rT.reason.appendLine(
+    "📊 TIR: <70: ${"%.1f".format(currentTIRLow)}% | 70–180: ${"%.1f".format(currentTIRRange)}% | >180: ${"%.1f".format(currentTIRAbove)}%"
+)
+        appendCompactLog(reasonAimi, tp, bg, delta, recentSteps5Minutes, averageBeatsPerMinute)
+        rT.reason.append(reasonAimi.toString())
         val csf = sens / profile.carb_ratio
         consoleError.add("profile.sens: ${profile.sens}, sens: $sens, CSF: $csf")
 
