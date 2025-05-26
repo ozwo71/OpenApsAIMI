@@ -699,23 +699,25 @@ val reason = StringBuilder()
     //     return (lastValue - firstValue) / recentBGs.size.toFloat()
     // }
     private fun calculateBgTrend(recentBGs: List<Float>, reason: StringBuilder): Float {
-        // Vérifier si la liste n'est pas vide avant de calculer la tendance
         if (recentBGs.isEmpty()) {
-            reason.append("No recent BG values available.")
-            return 0.0f // Retourner une valeur par défaut ou lancer une exception selon vos besoins
+            reason.append("✘ Aucun historique de glycémie disponible.\n")
+            return 0.0f
         }
 
-        // Calculer la tendance des BG en fonction de la différence entre les dernières valeurs
-        val lastValue = recentBGs.last()
-        val firstValue = recentBGs.first()
+        // Hypothèse : recentBGs = liste du plus récent au plus ancien → on inverse
+        val sortedBGs = recentBGs.reversed()
 
-        // Ajouter les valeurs intermédiaires et finales dans le reason.append
-        reason.append("First BG value: $firstValue\n")
-        reason.append("Last BG value: $lastValue\n")
-        reason.append("Number of BG values: ${recentBGs.size}\n")
+        val firstValue = sortedBGs.first()
+        val lastValue = sortedBGs.last()
+        val count = sortedBGs.size
 
-        val bgTrend = (lastValue - firstValue) / recentBGs.size.toFloat()
-        reason.append("Calculated BG trend: $bgTrend\n")
+        val bgTrend = (lastValue - firstValue) / count.toFloat()
+
+        reason.append("→ Analyse BG Trend\n")
+        reason.append("  • Première glycémie : $firstValue mg/dL\n")
+        reason.append("  • Dernière glycémie : $lastValue mg/dL\n")
+        reason.append("  • Nombre de valeurs : $count\n")
+        reason.append("  • Tendance calculée : $bgTrend mg/dL/intervalle\n")
 
         return bgTrend
     }
