@@ -3340,12 +3340,9 @@ private fun neuralnetwork5(
 
         val aimilog = buildString {
             appendLine("╔${"═".repeat(screenWidth)}╗")
-            appendLine(String.format("║ %-${screenWidth}s ║", "AAPS-MASTER-AIMI"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "OpenApsAIMI Settings"))
-            appendLine(String.format("║ %-${screenWidth}s ║", "16 Mai 2025"))
-            // appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_main_title_1)))
-            // appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_main_title_2)))
-            // appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_main_title_3)))
+            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_main_title_1)))
+            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_main_title_2)))
+            appendLine(String.format("║ %-${screenWidth}s ║", context.getString(R.string.table_plugin_main_title_3)))
             appendLine("╚${"═".repeat(screenWidth)}╝")
             appendLine()
 
