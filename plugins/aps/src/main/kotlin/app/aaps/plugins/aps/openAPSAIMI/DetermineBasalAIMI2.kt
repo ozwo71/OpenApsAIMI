@@ -68,7 +68,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var profileFunction: ProfileFunction
     @Inject lateinit var iobCobCalculator: IobCobCalculator
     @Inject lateinit var activePlugin: ActivePlugin
-    private var aimilog = StringBuilder()
+    private lateinit var interpreterUAM: Interpreter
+    private lateinit var interpreterMeal: Interpreter
     private val consoleError = mutableListOf<String>()
     private val consoleLog = mutableListOf<String>()
     private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
@@ -159,7 +160,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var insulinPeakTime = 0.0
     private var zeroBasalAccumulatedMinutes: Int = 0
     private val MAX_ZERO_BASAL_DURATION = 60  // Durée maximale autorisée en minutes à 0 basal
-
+    private fun initModelInterpreters() {
+        if (::interpreterMeal.isInitialized.not()) {
+            interpreterMeal = Interpreter(File(context.filesDir, "meal_model.tflite"))
+        }
+        if (::interpreterUAM.isInitialized.not()) {
+            interpreterUAM = Interpreter(File(context.filesDir, "uam_model.tflite"))
+        }
+    }
     private fun Double.toFixed2(): String = DecimalFormat("0.00#").format(round(this, 2))
     /**
      * Prédit l’évolution de la glycémie sur un horizon donné (en minutes),
@@ -1314,7 +1322,8 @@ val reason = StringBuilder()
             }
         }
 
-        val interpreter = Interpreter(selectedModelFile)
+        //val interpreter = Interpreter(selectedModelFile)
+        val interpreter = if (selectedModelFile == modelFileUAM) interpreterUAM else interpreterMeal
         val output = arrayOf(floatArrayOf(0.0F))
         interpreter.run(modelInputs, output)
         interpreter.close()
