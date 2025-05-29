@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
 import android.content.Context
+import android.os.Environment
 import android.util.Log
 import org.tensorflow.lite.Interpreter
 import java.io.File
@@ -9,20 +10,20 @@ import java.text.DecimalFormatSymbols
 import java.util.Locale
 
 class AimiModelHandler {
-
+    private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
+    private val modelFile = File(externalDir, "ml/model.tflite")
+    private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
     private var interpreterUAM: Interpreter? = null
     private var interpreterMeal: Interpreter? = null
 
     fun initModelInterpreters(context: Context) {
         try {
-            val mealModelFile = File(context.filesDir, "meal_model.tflite")
-            if (mealModelFile.exists() && interpreterMeal == null) {
-                interpreterMeal = Interpreter(mealModelFile)
+            if (modelFile.exists() && interpreterMeal == null) {
+                interpreterMeal = Interpreter(modelFile)
             }
 
-            val uamModelFile = File(context.filesDir, "uam_model.tflite")
-            if (uamModelFile.exists() && interpreterUAM == null) {
-                interpreterUAM = Interpreter(uamModelFile)
+            if (modelFileUAM.exists() && interpreterUAM == null) {
+                interpreterUAM = Interpreter(modelFileUAM)
             }
 
         } catch (e: Exception) {
