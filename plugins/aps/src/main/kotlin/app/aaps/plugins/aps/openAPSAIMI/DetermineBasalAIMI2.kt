@@ -29,10 +29,8 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.Preferences
-import org.tensorflow.lite.Interpreter
 import java.io.File
 import java.text.DecimalFormat
-import java.text.DecimalFormatSymbols
 import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.time.LocalTime
@@ -68,13 +66,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var profileFunction: ProfileFunction
     @Inject lateinit var iobCobCalculator: IobCobCalculator
     @Inject lateinit var activePlugin: ActivePlugin
-    private lateinit var interpreterUAM: Interpreter
-    private lateinit var interpreterMeal: Interpreter
     private val consoleError = mutableListOf<String>()
     private val consoleLog = mutableListOf<String>()
     private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
-    private val modelFile = File(externalDir, "ml/model.tflite")
-    private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
+    //private val modelFile = File(externalDir, "ml/model.tflite")
+    //private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
     private val csvfile = File(externalDir, "oapsaimiML2_records.csv")
     private val csvfile2 = File(externalDir, "oapsaimi2_records.csv")
     //private val tempFile = File(externalDir, "temp.csv")
@@ -160,14 +156,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var insulinPeakTime = 0.0
     private var zeroBasalAccumulatedMinutes: Int = 0
     private val MAX_ZERO_BASAL_DURATION = 60  // Durée maximale autorisée en minutes à 0 basal
-    private fun initModelInterpreters() {
-        if (::interpreterMeal.isInitialized.not()) {
-            interpreterMeal = Interpreter(File(context.filesDir, "meal_model.tflite"))
-        }
-        if (::interpreterUAM.isInitialized.not()) {
-            interpreterUAM = Interpreter(File(context.filesDir, "uam_model.tflite"))
-        }
-    }
     private fun Double.toFixed2(): String = DecimalFormat("0.00#").format(round(this, 2))
     /**
      * Prédit l’évolution de la glycémie sur un horizon donné (en minutes),
@@ -970,7 +958,7 @@ val reason = StringBuilder()
         val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
         val autodriveminDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
         //val autodriveISF: Int = preferences.get(IntKey.OApsAIMIautodriveISF)
-        val autodriveTarget: Int = preferences.get(IntKey.OApsAIMIAutodriveTarget)
+        //val autodriveTarget: Int = preferences.get(IntKey.OApsAIMIAutodriveTarget)
         val autodriveBG: Int = preferences.get(IntKey.OApsAIMIAutodriveBG)
         // Récupération des deltas récents et calcul du delta prédit
         val recentDeltas = getRecentDeltas()
@@ -1294,46 +1282,65 @@ val reason = StringBuilder()
         }
         return result
     }
-    private fun calculateSMBFromModel(): Float {
-        val selectedModelFile: File?
-        val modelInputs: FloatArray
+    fun determineBasalAndSMB(
+        context: Context,
+        hourOfDay: Int, weekend: Int,
+        bg: Float, targetBg: Float, iob: Float, cob: Float, lastCarbAgeMin: Int, futureCarbs: Float,
+        delta: Float, shortAvgDelta: Float, longAvgDelta: Float,
+        tdd7DaysPerHour: Float, tdd2DaysPerHour: Float, tddPerHour: Float, tdd24HrsPerHour: Float,
+        recentSteps5Minutes: Int, recentSteps10Minutes: Int, recentSteps15Minutes: Int,
+        recentSteps30Minutes: Int, recentSteps60Minutes: Int, recentSteps180Minutes: Int
+    ): Float {
 
-        when {
-            cob > 0 && lastCarbAgeMin < 240 && modelFile.exists() -> {
-                selectedModelFile = modelFile
-                modelInputs = floatArrayOf(
-                    hourOfDay.toFloat(), weekend.toFloat(),
-                    bg.toFloat(), targetBg, iob, cob, lastCarbAgeMin.toFloat(), futureCarbs, delta, shortAvgDelta, longAvgDelta
-                )
-            }
-
-            modelFileUAM.exists()   -> {
-                selectedModelFile = modelFileUAM
-                modelInputs = floatArrayOf(
-                    hourOfDay.toFloat(), weekend.toFloat(),
-                    bg.toFloat(), targetBg, iob, delta, shortAvgDelta, longAvgDelta,
-                    tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour,
-                    recentSteps5Minutes.toFloat(),recentSteps10Minutes.toFloat(),recentSteps15Minutes.toFloat(),recentSteps30Minutes.toFloat(),recentSteps60Minutes.toFloat(),recentSteps180Minutes.toFloat()
-                )
-            }
-
-            else                 -> {
-                return 0.0F
-            }
-        }
-
-        //val interpreter = Interpreter(selectedModelFile)
-        val interpreter = if (selectedModelFile == modelFileUAM) interpreterUAM else interpreterMeal
-        val output = arrayOf(floatArrayOf(0.0F))
-        interpreter.run(modelInputs, output)
-        interpreter.close()
-        var smbToGive = output[0][0].toString().replace(',', '.').toDouble()
-
-        val formatter = DecimalFormat("#.####", DecimalFormatSymbols(Locale.US))
-        smbToGive = formatter.format(smbToGive).toDouble()
-
-        return smbToGive.toFloat()
+        val modelHandler = AimiModelProvider.getInstance(context)
+        return modelHandler.calculateSMBFromModel(
+            hourOfDay, weekend, bg, targetBg, iob, cob, lastCarbAgeMin, futureCarbs,
+            delta, shortAvgDelta, longAvgDelta,
+            tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour,
+            recentSteps5Minutes, recentSteps10Minutes, recentSteps15Minutes,
+            recentSteps30Minutes, recentSteps60Minutes, recentSteps180Minutes
+        )
     }
+    // private fun calculateSMBFromModel(): Float {
+    //     val selectedModelFile: File?
+    //     val modelInputs: FloatArray
+    //
+    //     when {
+    //         cob > 0 && lastCarbAgeMin < 240 && modelFile.exists() -> {
+    //             selectedModelFile = modelFile
+    //             modelInputs = floatArrayOf(
+    //                 hourOfDay.toFloat(), weekend.toFloat(),
+    //                 bg.toFloat(), targetBg, iob, cob, lastCarbAgeMin.toFloat(), futureCarbs, delta, shortAvgDelta, longAvgDelta
+    //             )
+    //         }
+    //
+    //         modelFileUAM.exists()   -> {
+    //             selectedModelFile = modelFileUAM
+    //             modelInputs = floatArrayOf(
+    //                 hourOfDay.toFloat(), weekend.toFloat(),
+    //                 bg.toFloat(), targetBg, iob, delta, shortAvgDelta, longAvgDelta,
+    //                 tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour,
+    //                 recentSteps5Minutes.toFloat(),recentSteps10Minutes.toFloat(),recentSteps15Minutes.toFloat(),recentSteps30Minutes.toFloat(),recentSteps60Minutes.toFloat(),recentSteps180Minutes.toFloat()
+    //             )
+    //         }
+    //
+    //         else                 -> {
+    //             return 0.0F
+    //         }
+    //     }
+    //
+    //     //val interpreter = Interpreter(selectedModelFile)
+    //     val interpreter = if (selectedModelFile == modelFileUAM) interpreterUAM else interpreterMeal
+    //     val output = arrayOf(floatArrayOf(0.0F))
+    //     interpreter.run(modelInputs, output)
+    //     interpreter.close()
+    //     var smbToGive = output[0][0].toString().replace(',', '.').toDouble()
+    //
+    //     val formatter = DecimalFormat("#.####", DecimalFormatSymbols(Locale.US))
+    //     smbToGive = formatter.format(smbToGive).toDouble()
+    //
+    //     return smbToGive.toFloat()
+    // }
 
 private fun neuralnetwork5(
     delta: Float,
@@ -1347,7 +1354,30 @@ private fun neuralnetwork5(
     val combinedDelta = (delta + predicted) / 2.0f
     // Définir un nombre maximal d'itérations plus bas en cas de montée rapide
     val maxIterations = if (combinedDelta > 15f) 25 else 50
-    var finalRefinedSMB: Float = calculateSMBFromModel()
+    var finalRefinedSMB: Float = determineBasalAndSMB(
+        context = context,  // Assure-toi que appContext est bien initialisé dans ton plugin
+        hourOfDay = Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
+        weekend = if (Calendar.getInstance().get(Calendar.DAY_OF_WEEK) in listOf(Calendar.SATURDAY, Calendar.SUNDAY)) 1 else 0,
+        bg = bg.toFloat(),
+        targetBg = targetBg.toFloat(),
+        iob = iob ?: 0f,
+        cob = cob,
+        lastCarbAgeMin = lastCarbAgeMin,
+        futureCarbs = futureCarbs,
+        delta = combinedDelta.toFloat(),
+        shortAvgDelta = shortAvgDelta,
+        longAvgDelta = longAvgDelta,
+        tdd7DaysPerHour = tdd7DaysPerHour,
+        tdd2DaysPerHour = tdd2DaysPerHour,
+        tddPerHour = tddPerHour,
+        tdd24HrsPerHour = tdd24HrsPerHour,
+        recentSteps5Minutes = recentSteps5Minutes,
+        recentSteps10Minutes = recentSteps10Minutes,
+        recentSteps15Minutes = recentSteps15Minutes,
+        recentSteps30Minutes = recentSteps30Minutes,
+        recentSteps60Minutes = recentSteps60Minutes,
+        recentSteps180Minutes = recentSteps180Minutes
+    )
 
     val allLines = csvfile.readLines()
     println("CSV file path: \${csvfile.absolutePath}")
@@ -2605,15 +2635,6 @@ private fun calculateDynamicPeakTime(
             (0.02533782 * nowMinutes.pow(2)) -
             (0.33275556 * nowMinutes) +
             1.38581503
-
-        val circadianSmb = kotlin.math.round(
-            ((0.00000379 * delta * nowMinutes.pow(5)) -
-                (0.00016422 * delta * nowMinutes.pow(4)) +
-                (0.00128081 * delta * nowMinutes.pow(3)) +
-                (0.02533782 * delta * nowMinutes.pow(2)) -
-                (0.33275556 * delta * nowMinutes) +
-                1.38581503) * 100
-        ) / 100  // Arrondi à 2 décimales
         // TODO eliminate
         val deliverAt = currentTime
 
@@ -2995,7 +3016,32 @@ private fun calculateDynamicPeakTime(
         }
 
         //val expectedDelta = calculateExpectedDelta(target_bg, eventualBG, bgi)
-        val modelcal = calculateSMBFromModel()
+        //val modelcal = calculateSMBFromModel()
+        val modelcal = determineBasalAndSMB(
+            context = context,  // Assure-toi que appContext est bien initialisé dans ton plugin
+            hourOfDay = Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
+            weekend = if (Calendar.getInstance().get(Calendar.DAY_OF_WEEK) in listOf(Calendar.SATURDAY, Calendar.SUNDAY)) 1 else 0,
+            bg = bg.toFloat(),
+            targetBg = targetBg.toFloat(),
+            iob = iobArray.lastOrNull()?.iob?.toFloat() ?: 0f,
+            cob = cob,
+            lastCarbAgeMin = lastCarbAgeMin,
+            futureCarbs = futureCarbs,
+            delta = combinedDelta.toFloat(),
+            shortAvgDelta = shortAvgDelta,
+            longAvgDelta = longAvgDelta,
+            tdd7DaysPerHour = tdd7DaysPerHour,
+            tdd2DaysPerHour = tdd2DaysPerHour,
+            tddPerHour = tddPerHour,
+            tdd24HrsPerHour = tdd24HrsPerHour,
+            recentSteps5Minutes = recentSteps5Minutes,
+            recentSteps10Minutes = recentSteps10Minutes,
+            recentSteps15Minutes = recentSteps15Minutes,
+            recentSteps30Minutes = recentSteps30Minutes,
+            recentSteps60Minutes = recentSteps60Minutes,
+            recentSteps180Minutes = recentSteps180Minutes
+        )
+
         // min_bg of 90 -> threshold of 65, 100 -> 70 110 -> 75, and 130 -> 85
         var threshold = min_bg - 0.5 * (min_bg - 40)
         if (profile.lgsThreshold != null) {

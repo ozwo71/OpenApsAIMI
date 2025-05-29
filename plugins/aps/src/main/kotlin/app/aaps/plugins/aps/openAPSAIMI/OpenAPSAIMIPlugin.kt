@@ -79,8 +79,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.floor
-import kotlin.math.ln
-import kotlin.math.min
+import app.aaps.plugins.aps.openAPSAIMI.AimiModelProvider
 
 @Singleton
 open class OpenAPSAIMIPlugin  @Inject constructor(
@@ -119,9 +118,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         .setDefault(),
     aapsLogger, rh
 ), APS, PluginConstraints {
+    private lateinit var context: Context
 
     override fun onStart() {
         super.onStart()
+        // 🔹 Initialisation des modèles TFLite
+        AimiModelProvider.getInstance(context)
+        aapsLogger.info(LTag.APS, "✅ AimiModelHandler initialisé via AimiModelProvider")
         var count = 0
         val apsResults = persistenceLayer.getApsResults(dateUtil.now() - T.days(1).msecs(), dateUtil.now())
         apsResults.forEach {
@@ -160,6 +163,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         return sensitivity.second?.let { it * multiplier }
     }
+
 
     override fun getAverageIsfMgdl(timestamp: Long, caller: String): Double? {
         if (dynIsfCache == null || dynIsfCache.size() == 0) {
@@ -741,6 +745,12 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             .store(BooleanKey.ApsUseDynamicSensitivity, preferences)
             .store(IntKey.ApsDynIsfAdjustmentFactor, preferences)
     }
+    override fun onStop() {
+        super.onStop()
+        AimiModelProvider.release()
+        aapsLogger.info(LTag.APS, "🧹 AimiModelHandler libéré via AimiModelProvider (onStop)")
+    }
+
 
     override fun addPreferenceScreen(preferenceManager: PreferenceManager, parent: PreferenceScreen, context: Context, requiredKey: String?) {
         val category = PreferenceCategory(context)
