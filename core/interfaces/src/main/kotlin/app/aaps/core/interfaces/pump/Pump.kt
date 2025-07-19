@@ -119,6 +119,12 @@ interface Pump {
     val batteryLevel: Int
 
     /**
+     * Insuline concentration U100 = 1.0, U200 = 2.0, U40 = 0.4
+     */
+    val concentration: Double
+        get() = 1.0
+
+    /**
      * Request a bolus to be delivered, carbs to be stored on pump or both.
      *
      * @param detailedBolusInfo it's the caller's responsibility to ensure the request can be satisfied by the pump,
@@ -273,7 +279,7 @@ interface Pump {
     /**
      * Only used for pump types where hasCustomUnreachableAlertCheck=true
      */
-    fun isUnreachableAlertTimeoutExceeded(unreachableTimeoutMilliseconds: Long): Boolean = false
+    fun isUnreachableAlertTimeoutExceeded(alertTimeoutMilliseconds: Long): Boolean = false
 
     /**
      * if true APS set 100% basal before full hour to avoid pump beeping

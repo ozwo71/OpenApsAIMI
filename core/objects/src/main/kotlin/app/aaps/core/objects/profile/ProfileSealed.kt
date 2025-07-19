@@ -326,6 +326,25 @@ sealed class ProfileSealed(
             timeZone = TimeZone.getDefault()
         )
 
+    override fun toPumpProfile(concentration: Double): Profile =
+        Pure(
+            PureProfile(
+                jsonObject = JSONObject(),
+                basalBlocks = basalBlocks.shiftBlock(percentage / 100.0 / concentration, timeshift),
+                isfBlocks = isfBlocks.shiftBlock(100.0 / percentage * concentration, timeshift),
+                icBlocks = icBlocks.shiftBlock(100.0 / percentage * concentration, timeshift),
+                targetBlocks = targetBlocks.shiftTargetBlock(timeshift),
+                glucoseUnit = units,
+                dia = when (this) {
+                    is PS   -> this.value.iCfg.insulinEndTime / 3600.0 / 1000.0
+                    is EPS  -> this.value.iCfg.insulinEndTime / 3600.0 / 1000.0
+                    is Pure -> this.value.dia
+                },
+                timeZone = TimeZone.getDefault()
+            ),
+            null
+        )
+
     override fun toPureNsJson(dateUtil: DateUtil): JSONObject {
         val o = JSONObject()
         o.put("units", units.asText)

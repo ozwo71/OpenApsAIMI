@@ -45,7 +45,7 @@ class CommandSetProfile(
             callback?.result(instantiator.providePumpEnactResult().success(true).enacted(false))?.run()
             return
         }
-        val r = activePlugin.activePump.setNewBasalProfile(profile)
+        val r = activePlugin.activePump.setNewBasalProfile(profile.toPumpProfile(1.0))  // Todo: Get Insulin concentation here to replace hardcoded valude
         aapsLogger.debug(LTag.PUMPQUEUE, "Result success: ${r.success} enacted: ${r.enacted} profile: $profile")
         callback?.result(r)?.run()
         // Send SMS notification if ProfileSwitch is coming from NS
