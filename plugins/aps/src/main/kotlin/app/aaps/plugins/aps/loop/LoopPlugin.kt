@@ -782,7 +782,7 @@ class LoopPlugin @Inject constructor(
         aapsLogger.debug(LTag.APS, "applyAPSRequest: $request")
         val now = System.currentTimeMillis()
         val activeTemp = processedTbrEbData.getTempBasalIncludingConvertedExtended(now)
-        if (request.rate == 0.0 && request.duration == 0 || abs(request.rate - pump.baseBasalRate) < pump.pumpDescription.basalStep) {
+        if (request.rate == 0.0 && request.duration == 0 || abs(request.rate - pump.baseBasalRate * activePlugin.activeInsulin.concentration) < pump.pumpDescription.basalStep * activePlugin.activeInsulin.concentration) {
             if (activeTemp != null) {
                 aapsLogger.debug(LTag.APS, "applyAPSRequest: cancelTempBasal()")
                 uel.log(Action.CANCEL_TEMP_BASAL, Sources.Loop)

@@ -36,7 +36,7 @@ class CommandBolus(
     }
 
     override fun execute() {
-        val r = activePlugin.activePump.deliverTreatment(detailedBolusInfo)
+        val r = activePlugin.activePump.deliverTreatment(detailedBolusInfo.copy().also { it.insulin = it.insulin / activePlugin.activeInsulin.concentration })
         if (r.success) carbsRunnable.run()
         BolusProgressData.bolusEnded = true
         rxBus.send(EventDismissBolusProgressIfRunning(r.success, detailedBolusInfo.id))

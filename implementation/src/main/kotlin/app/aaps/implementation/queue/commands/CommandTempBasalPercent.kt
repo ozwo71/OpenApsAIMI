@@ -39,7 +39,7 @@ class CommandTempBasalPercent(
             if (percent == 100)
                 activePlugin.activePump.cancelTempBasal(enforceNew)
             else
-                activePlugin.activePump.setTempBasalPercent(percent, durationInMinutes, profile, enforceNew, tbrType)
+                activePlugin.activePump.setTempBasalPercent(percent, durationInMinutes, profile.toPumpProfile(activePlugin), enforceNew, tbrType)
         aapsLogger.debug(LTag.PUMPQUEUE, "Result percent: $percent durationInMinutes: $durationInMinutes success: ${r.success} enacted: ${r.enacted}")
         callback?.result(r)?.run()
     }

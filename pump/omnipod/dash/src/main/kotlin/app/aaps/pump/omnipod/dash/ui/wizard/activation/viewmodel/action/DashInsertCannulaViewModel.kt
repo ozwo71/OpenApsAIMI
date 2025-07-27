@@ -7,6 +7,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.objects.Instantiator
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.core.interfaces.pump.PumpSync
@@ -44,6 +45,7 @@ class DashInsertCannulaViewModel @Inject constructor(
     private val rh: ResourceHelper,
     private val fabricPrivacy: FabricPrivacy,
     private val history: DashHistory,
+    private val activePlugin: ActivePlugin,
     instantiator: Instantiator,
     logger: AAPSLogger,
     aapsSchedulers: AapsSchedulers
@@ -56,7 +58,7 @@ class DashInsertCannulaViewModel @Inject constructor(
     override fun isPodDeactivatable(): Boolean = true // TODO
 
     override fun doExecuteAction(): Single<PumpEnactResult> = Single.create { source ->
-        val profile = profileFunction.getProfile()
+        val profile = profileFunction.getProfile()?.toPumpProfile(activePlugin)
         if (profile == null) {
             source.onError(IllegalStateException("No profile set"))
         } else {

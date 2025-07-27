@@ -3,6 +3,7 @@ package app.aaps.core.interfaces.profile
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.pump.Pump
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
@@ -124,7 +125,7 @@ interface Profile {
     fun getMaxDailyBasal(): Double
     fun baseBasalSum(): Double
     fun percentageBasalSum(): Double
-    fun toPumpProfile(concentration: Double): Profile
+    fun toPumpProfile(activePlugin: ActivePlugin): Profile
 
     fun getBasalValues(): Array<ProfileValue>
     fun getIcsValues(): Array<ProfileValue>

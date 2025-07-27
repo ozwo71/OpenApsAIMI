@@ -25,6 +25,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.objects.Instantiator
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.OwnDatabasePlugin
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.Profile
@@ -147,7 +148,8 @@ class OmnipodErosPumpPlugin @Inject constructor(
     private val uiInteraction: UiInteraction,
     private val erosHistoryDatabase: ErosHistoryDatabase,
     private val decimalFormatter: DecimalFormatter,
-    private val instantiator: Instantiator
+    private val instantiator: Instantiator,
+    private val activePlugin: ActivePlugin
 ) : PumpPluginBase(
     pluginDescription = PluginDescription()
         .mainType(PluginType.PUMP)
@@ -709,7 +711,7 @@ class OmnipodErosPumpPlugin @Inject constructor(
             return executeCommand<PumpEnactResult?>(OmnipodCommandType.SUSPEND_DELIVERY) { aapsOmnipodErosManager.suspendDelivery() }
         }
         if (customCommand is CommandResumeDelivery) {
-            return executeCommand<PumpEnactResult?>(OmnipodCommandType.RESUME_DELIVERY) { aapsOmnipodErosManager.setBasalProfile(profileFunction.getProfile(), false) }
+            return executeCommand<PumpEnactResult?>(OmnipodCommandType.RESUME_DELIVERY) { aapsOmnipodErosManager.setBasalProfile(profileFunction.getProfile()?.toPumpProfile(activePlugin), false) }
         }
         if (customCommand is CommandDeactivatePod) {
             return executeCommand<PumpEnactResult?>(OmnipodCommandType.DEACTIVATE_POD) { aapsOmnipodErosManager.deactivatePod() }

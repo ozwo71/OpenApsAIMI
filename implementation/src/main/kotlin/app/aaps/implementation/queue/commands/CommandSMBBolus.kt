@@ -46,7 +46,7 @@ class CommandSMBBolus(
             aapsLogger.debug(LTag.APS, "SMB requested but still in ${preferences.get(IntKey.ApsMaxSmbFrequency)} min interval")
             r = instantiator.providePumpEnactResult().enacted(false).success(false).comment("SMB requested but still in ${preferences.get(IntKey.ApsMaxSmbFrequency)} min interval")
         } else if (detailedBolusInfo.deliverAtTheLatest != 0L && detailedBolusInfo.deliverAtTheLatest + T.mins(1).msecs() > System.currentTimeMillis()) {
-            r = activePlugin.activePump.deliverTreatment(detailedBolusInfo)
+            r = activePlugin.activePump.deliverTreatment(detailedBolusInfo.copy().also { it.insulin = it.insulin / activePlugin.activeInsulin.concentration})
         } else {
             r = instantiator.providePumpEnactResult().enacted(false).success(false).comment("SMB request too old")
             aapsLogger.debug(LTag.PUMPQUEUE, "SMB bolus canceled. deliverAt: " + dateUtil.dateAndTimeString(detailedBolusInfo.deliverAtTheLatest))

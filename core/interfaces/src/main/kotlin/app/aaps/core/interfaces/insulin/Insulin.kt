@@ -33,4 +33,6 @@ interface Insulin : ConfigExportImport {
     fun iobCalcForTreatment(bolus: BS, time: Long, dia: Double): Iob
 
     val iCfg: ICfg
+    val concentration: Double
+        get() = 2.0
 }

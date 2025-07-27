@@ -162,8 +162,8 @@ class PersistentNotificationPlugin @Inject constructor(
                 ) + ": " + iobCobCalculator.getCobInfo(
                     "PersistentNotificationPlugin"
                 ).generateCOBString(decimalFormatter) + "."
-            line3 = rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, pump.baseBasalRate)
-            var line3aa = rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, pump.baseBasalRate) + "."
+            line3 = rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, pump.baseBasalRate * activePlugins.activeInsulin.concentration)
+            var line3aa = rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, pump.baseBasalRate * activePlugins.activeInsulin.concentration) + "."
             line3 += " - " + profileFunction.getProfileName()
             line3aa += " - " + profileFunction.getProfileName() + "."
             /// For Android Auto

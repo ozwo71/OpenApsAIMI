@@ -278,7 +278,7 @@ open class OpenAPSAutoISFPlugin @Inject constructor(
         ) return
         if (!hardLimits.checkHardLimits(profile.getIsfMgdl("OpenAPSAutoISFPlugin"), app.aaps.core.ui.R.string.profile_sensitivity_value, HardLimits.MIN_ISF, HardLimits.MAX_ISF)) return
         if (!hardLimits.checkHardLimits(profile.getMaxDailyBasal(), app.aaps.core.ui.R.string.profile_max_daily_basal_value, 0.02, hardLimits.maxBasal())) return
-        if (!hardLimits.checkHardLimits(pump.baseBasalRate, app.aaps.core.ui.R.string.current_basal_value, 0.01, hardLimits.maxBasal())) return
+        if (!hardLimits.checkHardLimits(pump.baseBasalRate * activePlugin.activeInsulin.concentration, app.aaps.core.ui.R.string.current_basal_value, 0.01, hardLimits.maxBasal())) return
 
         // End of check, start gathering data
 
@@ -364,7 +364,7 @@ open class OpenAPSAutoISFPlugin @Inject constructor(
             maxUAMSMBBasalMinutes = preferences.get(IntKey.ApsUamMaxMinutesOfBasalToLimitSmb),
             bolus_increment = pump.pumpDescription.bolusStep,
             carbsReqThreshold = preferences.get(IntKey.ApsCarbsRequestThreshold),
-            current_basal = activePlugin.activePump.baseBasalRate,
+            current_basal = activePlugin.activePump.baseBasalRate * activePlugin.activeInsulin.concentration,
             temptargetSet = isTempTarget,
             autosens_max = preferences.get(DoubleKey.AutosensMax),
             out_units = if (profileFunction.getUnits() == GlucoseUnit.MMOL) "mmol/L" else "mg/dl",

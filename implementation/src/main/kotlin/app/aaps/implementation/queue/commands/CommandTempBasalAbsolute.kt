@@ -34,7 +34,7 @@ class CommandTempBasalAbsolute(
     override val commandType: Command.CommandType = Command.CommandType.TEMPBASAL
 
     override fun execute() {
-        val r = activePlugin.activePump.setTempBasalAbsolute(absoluteRate, durationInMinutes, profile, enforceNew, tbrType)
+        val r = activePlugin.activePump.setTempBasalAbsolute(absoluteRate / activePlugin.activeInsulin.concentration, durationInMinutes, profile.toPumpProfile(activePlugin), enforceNew, tbrType)
         aapsLogger.debug(LTag.PUMPQUEUE, "Result rate: $absoluteRate durationInMinutes: $durationInMinutes success: ${r.success} enacted: ${r.enacted}")
         callback?.result(r)?.run()
     }

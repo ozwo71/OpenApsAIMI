@@ -11,6 +11,7 @@ import app.aaps.core.data.pump.defs.PumpTempBasalType
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.defs.baseBasalRange
 import app.aaps.core.interfaces.pump.defs.hasExtendedBasals
@@ -44,6 +45,7 @@ class VirtualPumpFragment : DaggerFragment() {
     @Inject lateinit var decimalFormatter: DecimalFormatter
     @Inject lateinit var persistenceLayer: PersistenceLayer
     @Inject lateinit var preferences: Preferences
+    @Inject lateinit var activePlugin: ActivePlugin
 
     private val disposable = CompositeDisposable()
 
@@ -101,7 +103,7 @@ class VirtualPumpFragment : DaggerFragment() {
     @Synchronized
     private fun updateGui() {
         if (_binding == null) return
-        val profile = profileFunction.getProfile() ?: return
+        val profile = profileFunction.getProfile()?.toPumpProfile(activePlugin) ?: return
         binding.baseBasalRate.text = rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, virtualPumpPlugin.baseBasalRate)
         binding.tempbasal.text = persistenceLayer.getTemporaryBasalActiveAt(dateUtil.now())?.toStringFull(profile, dateUtil, rh)
             ?: ""

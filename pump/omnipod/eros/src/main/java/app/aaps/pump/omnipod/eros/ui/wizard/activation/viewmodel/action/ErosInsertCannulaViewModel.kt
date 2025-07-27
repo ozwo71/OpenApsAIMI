@@ -3,6 +3,7 @@ package app.aaps.pump.omnipod.eros.ui.wizard.activation.viewmodel.action
 import androidx.annotation.StringRes
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.objects.Instantiator
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.core.interfaces.rx.AapsSchedulers
@@ -17,6 +18,7 @@ class ErosInsertCannulaViewModel @Inject constructor(
     private val aapsOmnipodManager: AapsOmnipodErosManager,
     private val podStateManager: AapsErosPodStateManager,
     private val profileFunction: ProfileFunction,
+    private val activePlugin: ActivePlugin,
     instantiator: Instantiator,
     logger: AAPSLogger,
     aapsSchedulers: AapsSchedulers
@@ -28,7 +30,7 @@ class ErosInsertCannulaViewModel @Inject constructor(
 
     override fun isPodDeactivatable(): Boolean = podStateManager.activationProgress.isAtLeast(ActivationProgress.PAIRING_COMPLETED)
 
-    override fun doExecuteAction(): Single<PumpEnactResult> = Single.fromCallable { aapsOmnipodManager.insertCannula(profileFunction.getProfile()) }
+    override fun doExecuteAction(): Single<PumpEnactResult> = Single.fromCallable { aapsOmnipodManager.insertCannula(profileFunction.getProfile()?.toPumpProfile(activePlugin)) }
 
     @StringRes
     override fun getTitleId(): Int = app.aaps.pump.omnipod.common.R.string.omnipod_common_pod_activation_wizard_insert_cannula_title

@@ -187,7 +187,7 @@ class KeepAliveWorker(
         val lastConnection = pump.lastDataTime()
         val now = dateUtil.now()
         val isStatusOutdated = lastConnection + STATUS_UPDATE_FREQUENCY < now
-        val isBasalOutdated = abs(requestedProfile.getBasal() - pump.baseBasalRate) > pump.pumpDescription.basalStep
+        val isBasalOutdated = abs(requestedProfile.getBasal() - pump.baseBasalRate * activePlugin.activeInsulin.concentration) > pump.pumpDescription.basalStep * activePlugin.activeInsulin.concentration
         aapsLogger.debug(LTag.CORE, "Last connection: " + dateUtil.dateAndTimeString(lastConnection))
         // Sometimes it can happen that keepalive is not triggered every 5 minutes as it should.
         // In some cases, it may not even have been started at all.
@@ -205,7 +205,7 @@ class KeepAliveWorker(
         }
         if (loop.runningMode == RM.Mode.DISCONNECTED_PUMP) {
             // do nothing if pump is disconnected
-        } else if (runningProfile == null || ((!pump.isThisProfileSet(requestedProfile) || !requestedProfile.isEqual(runningProfile)
+        } else if (runningProfile == null || ((!pump.isThisProfileSet(requestedProfile.toPumpProfile(activePlugin)) || !requestedProfile.isEqual(runningProfile)
                 || (runningProfile is ProfileSealed.EPS && runningProfile.value.originalEnd < dateUtil.now() && runningProfile.value.originalDuration != 0L))
                 && !commandQueue.isRunning(Command.CommandType.BASAL_PROFILE))
         ) {

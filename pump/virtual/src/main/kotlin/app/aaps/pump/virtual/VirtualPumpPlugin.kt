@@ -21,6 +21,7 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
 import app.aaps.core.interfaces.objects.Instantiator
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.profile.ProfileFunction
@@ -75,7 +76,8 @@ open class VirtualPumpPlugin @Inject constructor(
     private val dateUtil: DateUtil,
     private val processedDeviceStatusData: ProcessedDeviceStatusData,
     private val persistenceLayer: PersistenceLayer,
-    private val instantiator: Instantiator
+    private val instantiator: Instantiator,
+    private val activePlugin: ActivePlugin
 ) : PumpPluginBase(
     pluginDescription = PluginDescription()
         .mainType(PluginType.PUMP)
@@ -173,7 +175,7 @@ open class VirtualPumpPlugin @Inject constructor(
     override fun lastDataTime(): Long = lastDataTime
 
     override val baseBasalRate: Double
-        get() = profileFunction.getProfile()?.getBasal() ?: 0.0
+        get() = profileFunction.getProfile()?.toPumpProfile(activePlugin)?.getBasal() ?: 0.0
 
     override val reservoirLevel: Double
         get() =

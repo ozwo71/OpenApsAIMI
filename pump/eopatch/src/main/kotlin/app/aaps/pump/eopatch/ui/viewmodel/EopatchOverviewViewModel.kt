@@ -7,6 +7,7 @@ import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -46,7 +47,8 @@ class EopatchOverviewViewModel @Inject constructor(
     private val aapsSchedulers: AapsSchedulers,
     private val aapsLogger: AAPSLogger,
     private val dateUtil: DateUtil,
-    private val pumpSync: PumpSync
+    private val pumpSync: PumpSync,
+    private val activePlugin: ActivePlugin
 ) : EoBaseViewModel<EoBaseNavigator>() {
 
     private val _eventHandler = SingleLiveEvent<UIEvent<EventType>>()
@@ -184,7 +186,7 @@ class EopatchOverviewViewModel @Inject constructor(
     }
 
     fun onClickActivation() {
-        val profile = profileFunction.getProfile()
+        val profile = profileFunction.getProfile()?.toPumpProfile(activePlugin)
         if (profile == null) {
             _eventHandler.postValue(UIEvent(EventType.PROFILE_NOT_SET))
         } else {

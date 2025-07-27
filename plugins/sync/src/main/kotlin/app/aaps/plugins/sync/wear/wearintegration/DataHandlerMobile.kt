@@ -1293,7 +1293,7 @@ class DataHandlerMobile @Inject constructor(
         // Reservoir Level
         val pump = activePlugin.activePump
         val maxReading = pump.pumpDescription.maxResorvoirReading.toDouble()
-        val reservoir = pump.reservoirLevel.let { if (pump.pumpDescription.isPatchPump && it > maxReading) maxReading else it }
+        val reservoir = pump.reservoirLevel.let { if (pump.pumpDescription.isPatchPump && it > maxReading) maxReading else it } * activePlugin.activeInsulin.concentration
         val reservoirString = if (reservoir > 0) decimalFormatter.to0Decimal(reservoir, rh.gs(app.aaps.core.ui.R.string.insulin_unit_shortname)) else ""
         val resUrgent = preferences.get(IntKey.OverviewResCritical)
         val resWarn = preferences.get(IntKey.OverviewResWarning)
@@ -1410,7 +1410,7 @@ class DataHandlerMobile @Inject constructor(
             } else if (result.rate == 0.0 && result.duration == 0) {
                 rh.gs(app.aaps.core.ui.R.string.cancel_temp) + "\n"
             } else {
-                rh.gs(R.string.rate_duration, result.rate, result.rate / activePlugin.activePump.baseBasalRate * 100, result.duration) + "\n"
+                rh.gs(R.string.rate_duration, result.rate, result.rate / (activePlugin.activePump.baseBasalRate * activePlugin.activeInsulin.concentration) * 100, result.duration) + "\n"
             }
             ret += "\n" + rh.gs(app.aaps.core.ui.R.string.reason) + ": " + result.reason
             return ret

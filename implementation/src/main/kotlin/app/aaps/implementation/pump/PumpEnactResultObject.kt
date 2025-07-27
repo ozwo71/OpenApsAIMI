@@ -1,9 +1,10 @@
 package app.aaps.implementation.pump
 
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.core.interfaces.resources.ResourceHelper
 
-class PumpEnactResultObject(private val rh: ResourceHelper) : PumpEnactResult {
+class PumpEnactResultObject(private val rh: ResourceHelper, private val activePlugin: ActivePlugin) : PumpEnactResult {
 
     override var success = false // request was processed successfully (but possible no change was needed)
     override var enacted = false // request was processed successfully and change has been made
@@ -32,6 +33,6 @@ class PumpEnactResultObject(private val rh: ResourceHelper) : PumpEnactResult {
     override fun percent(percent: Int): PumpEnactResultObject = this.also { it.percent = percent }
     override fun isPercent(isPercent: Boolean): PumpEnactResultObject = this.also { it.isPercent = isPercent }
     override fun isTempCancel(isTempCancel: Boolean): PumpEnactResultObject = this.also { it.isTempCancel = isTempCancel }
-    override fun bolusDelivered(bolusDelivered: Double): PumpEnactResultObject = this.also { it.bolusDelivered = bolusDelivered }
+    override fun bolusDelivered(bolusDelivered: Double): PumpEnactResultObject = this.also { it.bolusDelivered = bolusDelivered * activePlugin.activeInsulin.concentration }
     override fun queued(queued: Boolean): PumpEnactResultObject = this.also { it.queued = queued }
 }

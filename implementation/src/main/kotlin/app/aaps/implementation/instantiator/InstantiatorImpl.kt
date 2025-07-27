@@ -38,5 +38,5 @@ class InstantiatorImpl @Inject constructor(
     override fun provideProfileStore(jsonObject: JSONObject): ProfileStore = ProfileStoreObject(jsonObject, aapsLogger, activePlugin, config, rh, rxBus, hardLimits, dateUtil)
     override fun provideAPSResultObject(rt: RT): DetermineBasalResult = DetermineBasalResult(injector, rt)
     override fun provideAutosensDataObject(): AutosensData = AutosensDataObject(aapsLogger, preferences, dateUtil)
-    override fun providePumpEnactResult(): PumpEnactResult = PumpEnactResultObject(rh)
+    override fun providePumpEnactResult(): PumpEnactResult = PumpEnactResultObject(rh, activePlugin)
 }
