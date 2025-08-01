@@ -43,13 +43,8 @@ class OmnipodDashBleManagerImpl @Inject constructor(
     private var connection: Connection? = null
     private val ids = Ids(podState)
 
-    // Délai maximum d’attente du flag busy (3 s)
     private val MAX_WAIT_MS = 3000L
 
-    /**
-     * Tente d’acquérir le flag busy. Si une autre opération est en cours,
-     * patiente jusqu’à 3 s, puis force un reset du GATT si besoin.
-     */
     private fun acquireBusyFlag(): Boolean {
         val start = System.currentTimeMillis()
         while (!busy.compareAndSet(false, true)) {
@@ -62,7 +57,6 @@ class OmnipodDashBleManagerImpl @Inject constructor(
         return true
     }
 
-    /** Réinitialise complètement la connexion BLE et libère le flag busy. */
     private fun forceResetGatt() {
         try {
             connection?.disconnect(true)
@@ -115,26 +109,19 @@ class OmnipodDashBleManagerImpl @Inject constructor(
         return connection?.connectionState() ?: NotConnected
     }
 
-    // used for sync connections
     override fun connect(timeoutMs: Long): Observable<PodEvent> {
         return connect(ConnectionWaitCondition(timeoutMs = timeoutMs))
     }
 
-    // used for async connections
     override fun connect(stopConnectionLatch: CountDownLatch): Observable<PodEvent> {
         return connect(ConnectionWaitCondition(stopConnection = stopConnectionLatch))
     }
 
-    /** Retourne la session BLE établie ou lève une exception si non connectée. */
     private fun assertSessionEstablished(): Session {
         val conn = assertConnected()
         return conn.session ?: throw NotConnectedException("Missing session")
     }
 
-    /**
-     * Établit une connexion au pod (utilisée pour les connexions synchrones et asynchrones).
-     * On utilise acquireBusyFlag() pour éviter de lancer plusieurs connexions en parallèle.
-     */
     private fun connect(connectionWaitCond: ConnectionWaitCondition): Observable<PodEvent> =
         Observable.create { emitter ->
             if (!acquireBusyFlag()) {
@@ -149,7 +136,6 @@ class OmnipodDashBleManagerImpl @Inject constructor(
                 val podDevice = bluetoothAdapter?.getRemoteDevice(podAddress)
                     ?: throw ConnectException("Bluetooth not available")
 
-                // Gestion du bond sur Android S+ (BLUETOOTH_CONNECT) :
                 if (podDevice.bondState == BluetoothDevice.BOND_NONE &&
                     sp.getBoolean(app.aaps.pump.omnipod.common.R.string.key_omnipod_dash_use_bonding, false)
                 ) {
@@ -162,19 +148,16 @@ class OmnipodDashBleManagerImpl @Inject constructor(
                     }
                 }
 
-                // Création ou récupération de la connexion
                 val conn = connection
                     ?: Connection(podDevice, aapsLogger, config, context, podState)
                 connection = conn
 
-                // Si déjà connecté avec session établie, on notifie et on sort
                 if (conn.connectionState() is Connected && conn.session != null) {
                     emitter.onNext(PodEvent.AlreadyConnected(podAddress))
                     emitter.onComplete()
                     return@create
                 }
 
-                // Connexion au GATT
                 conn.connect(connectionWaitCond)
 
                 emitter.onNext(PodEvent.BluetoothConnected(podAddress))
@@ -191,10 +174,6 @@ class OmnipodDashBleManagerImpl @Inject constructor(
             }
         }
 
-    /**
-     * Appelé après qu’une connexion GATT soit établie ; permet d’initialiser la session chiffrée.
-     * Code d’origine conservé.
-     */
     private fun establishSession(msgSeq: Byte) {
         val conn = assertConnected()
         val ltk = assertPaired()
@@ -220,11 +199,6 @@ class OmnipodDashBleManagerImpl @Inject constructor(
     private fun assertConnected(): Connection {
         return connection ?: throw FailedToConnectException("connection lost")
     }
-
-    /**
-     * Appairage et activation d’un nouveau pod.
-     * La logique provient du fichier original:contentReference[oaicite:3]{index=3}.
-     */
     override fun pairNewPod(): Observable<PodEvent> =
         Observable.create { emitter ->
             if (!acquireBusyFlag()) {
@@ -281,9 +255,6 @@ class OmnipodDashBleManagerImpl @Inject constructor(
             ?: aapsLogger.info(LTag.PUMPBTCOMM, "Trying to disconnect a null connection")
     }
 
-    /**
-     * Supprime le bond avec le pod si l’option d’appairage est activée et que la permission Bluetooth est présente.
-     */
     override fun removeBond() {
         try {
             if (sp.getBoolean(app.aaps.pump.omnipod.common.R.string.key_omnipod_dash_use_bonding, false) &&
@@ -292,7 +263,6 @@ class OmnipodDashBleManagerImpl @Inject constructor(
             ) {
                 val device = bluetoothAdapter?.getRemoteDevice(podState.bluetoothAddress)
                     ?: throw IllegalStateException("MAC address not found")
-                // La méthode removeBond est cachée ; on y accède par réflexion
                 val removeBondMethod = device.javaClass.getMethod("removeBond")
                 val result = removeBondMethod.invoke(device)
                 aapsLogger.debug(LTag.PUMPBTCOMM, "Remove bond resulted $result")

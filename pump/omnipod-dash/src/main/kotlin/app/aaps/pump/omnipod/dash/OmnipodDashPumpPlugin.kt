@@ -303,13 +303,11 @@ class OmnipodDashPumpPlugin @Inject constructor(
                 while (retries < maxRetries) {
                     try {
                         stopConnecting?.let { latch ->
-                            // On tente la connexion
                             omnipodManager.connect(latch)
                                 .ignoreElements()
                                 .doOnComplete { podStateManager.incrementSuccessfulConnectionAttemptsAfterRetries() }
                                 .blockingAwait()
                         }
-                        // Succès : on sort
                         break
                     } catch (e: Exception) {
                         if (e is BusyException) {
@@ -317,7 +315,6 @@ class OmnipodDashPumpPlugin @Inject constructor(
                             Thread.sleep(1000)
                             retries++
                         } else {
-                            // Autre erreur : fermer complètement le GATT et retenter
                             aapsLogger.error(LTag.PUMPCOMM, "Error in connect loop: $e, forcing BLE reset")
                             omnipodManager.disconnect(true)  // <— ferme le BluetoothGatt
                             Thread.sleep(2000)
@@ -327,7 +324,6 @@ class OmnipodDashPumpPlugin @Inject constructor(
                 }
                 if (retries >= maxRetries) {
                     aapsLogger.error(LTag.PUMPCOMM, "Maximum retries reached, forcing BLE reset")
-                    // On ferme le GATT une dernière fois pour libérer la pile Bluetooth
                     omnipodManager.disconnect(true)
                 }
             } finally {
