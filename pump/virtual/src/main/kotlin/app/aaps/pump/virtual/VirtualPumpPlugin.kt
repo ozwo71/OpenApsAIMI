@@ -189,7 +189,7 @@ open class VirtualPumpPlugin @Inject constructor(
         // Insulin value must be greater than 0
         require(detailedBolusInfo.carbs == 0.0) { detailedBolusInfo.toString() }
         require(detailedBolusInfo.insulin > 0) { detailedBolusInfo.toString() }
-
+        aapsLogger.debug("xxxxx deliverTreatment detailedBolusInfo: $detailedBolusInfo")
         val result = instantiator.providePumpEnactResult()
             .success(true)
             .bolusDelivered(detailedBolusInfo.insulin)
