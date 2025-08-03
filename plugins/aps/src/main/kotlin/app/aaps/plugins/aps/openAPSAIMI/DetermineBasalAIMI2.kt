@@ -520,50 +520,124 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         recentSteps5Minutes: Int,
         currentHR: Float,
         averageHR60: Float,
-        pumpAgeDays: Float
+        pumpAgeDays: Float,
+        iob: Double = 0.0 // Ajout du paramètre IOB
     ): Double {
         val reasonBuilder = StringBuilder()
+
         // 1. Conversion du DIA de base en minutes
         var diaMinutes = baseDIAHours * 60f  // Pour 9h, 9*60 = 540 min
+        reasonBuilder.append("Base DIA: ${baseDIAHours}h = ${diaMinutes}min\n")
 
         // 2. Ajustement selon l'heure de la journée
+        // Matin (6-10h) : absorption plus rapide, réduction du DIA de 20%
         if (currentHour in 6..10) {
-            // Le matin : absorption plus rapide, on réduit le DIA de 20%
             diaMinutes *= 0.8f
-        } else if (currentHour in 22..23 || currentHour in 0..5) {
-            // Soir/Nuit : absorption plus lente, on augmente le DIA de 20%
+            reasonBuilder.append("Morning adjustment (6-10h): reduced by 20%\n")
+        }
+        // Soir/Nuit (22-23h et 0-5h) : absorption plus lente, augmentation du DIA de 20%
+        else if (currentHour in 22..23 || currentHour in 0..5) {
             diaMinutes *= 1.2f
+            reasonBuilder.append("Night adjustment (22-23h & 0-5h): increased by 20%\n")
         }
 
         // 3. Ajustement en fonction de l'activité physique
         if (recentSteps5Minutes > 200 && currentHR > averageHR60) {
-            // Exercice : absorption accélérée, réduire le DIA de 30%
+            // Exercice : absorption accélérée, réduction du DIA de 30%
             diaMinutes *= 0.7f
+            reasonBuilder.append("Physical activity detected: reduced by 30%\n")
         } else if (recentSteps5Minutes == 0 && currentHR > averageHR60) {
-            // Aucune activité mais HR élevée (stress) : absorption potentiellement plus lente, augmenter le DIA de 30%
+            // Aucune activité mais HR élevée (stress) : absorption potentiellement plus lente, augmentation du DIA de 30%
             diaMinutes *= 1.3f
+            reasonBuilder.append("High HR without activity (stress): increased by 30%\n")
         }
 
         // 4. Ajustement en fonction du niveau absolu de fréquence cardiaque
         if (currentHR > 130f) {
-            // HR très élevée : circulation rapide, réduire le DIA de 30%
+            // HR très élevée : circulation rapide, réduction du DIA de 30%
             diaMinutes *= 0.7f
+            reasonBuilder.append("High HR (>130bpm): reduced by 30%\n")
         }
 
-        // 5. Ajustement en fonction de l'IOB
-        diaMinutes = adjustDIAForIOB(diaMinutes, iob)
+        // 5. Ajustement en fonction de l'IOB (Insulin on Board)
+        // Si le patient a déjà beaucoup d'insuline active, il faut réduire le DIA pour éviter l'hypoglycémie
+        if (iob > 2.0) {
+            diaMinutes *= 0.8f
+            reasonBuilder.append("High IOB (${iob}U): reduced by 20%\n")
+        } else if (iob < 0.5) {
+            diaMinutes *= 1.1f
+            reasonBuilder.append("Low IOB (${iob}U): increased by 10%\n")
+        }
+
+        // 6. Ajustement en fonction de l'âge du site d'insuline
         // Si le site est utilisé depuis 2 jours ou plus, augmenter le DIA de 10% par jour supplémentaire.
         if (pumpAgeDays >= 2f) {
             val extraDays = pumpAgeDays - 2f
-            val ageMultiplier = 1 + 0.2f * extraDays  // par exemple, 2 jours => 1 + 0.2*1 = 1.2
+            val ageMultiplier = 1 + 0.1f * extraDays  // 10% par jour supplémentaire
             diaMinutes *= ageMultiplier
+            reasonBuilder.append("Pump age (${pumpAgeDays} days): increased by ${extraDays * 10}%\n")
         }
 
-        // 6. Contrainte de la plage finale : entre 180 min (3h) et 720 min (12h)
-        diaMinutes = diaMinutes.coerceIn(180f, 720f)
-        reasonBuilder.append("Dia in minutes : $diaMinutes")
-        return diaMinutes.toDouble()
+        // 7. Contrainte de la plage finale : entre 180 min (3h) et 720 min (12h)
+        val finalDiaMinutes = diaMinutes.coerceIn(180f, 720f)
+        reasonBuilder.append("Final DIA constrained to [180, 720] min: ${finalDiaMinutes}min")
+
+        println("DIA Calculation Details:")
+        println(reasonBuilder.toString())
+
+        return finalDiaMinutes.toDouble()
     }
+
+    // fun calculateAdjustedDIA(
+    //     baseDIAHours: Float,
+    //     currentHour: Int,
+    //     recentSteps5Minutes: Int,
+    //     currentHR: Float,
+    //     averageHR60: Float,
+    //     pumpAgeDays: Float
+    // ): Double {
+    //     val reasonBuilder = StringBuilder()
+    //     // 1. Conversion du DIA de base en minutes
+    //     var diaMinutes = baseDIAHours * 60f  // Pour 9h, 9*60 = 540 min
+    //
+    //     // 2. Ajustement selon l'heure de la journée
+    //     if (currentHour in 6..10) {
+    //         // Le matin : absorption plus rapide, on réduit le DIA de 20%
+    //         diaMinutes *= 0.8f
+    //     } else if (currentHour in 22..23 || currentHour in 0..5) {
+    //         // Soir/Nuit : absorption plus lente, on augmente le DIA de 20%
+    //         diaMinutes *= 1.2f
+    //     }
+    //
+    //     // 3. Ajustement en fonction de l'activité physique
+    //     if (recentSteps5Minutes > 200 && currentHR > averageHR60) {
+    //         // Exercice : absorption accélérée, réduire le DIA de 30%
+    //         diaMinutes *= 0.7f
+    //     } else if (recentSteps5Minutes == 0 && currentHR > averageHR60) {
+    //         // Aucune activité mais HR élevée (stress) : absorption potentiellement plus lente, augmenter le DIA de 30%
+    //         diaMinutes *= 1.3f
+    //     }
+    //
+    //     // 4. Ajustement en fonction du niveau absolu de fréquence cardiaque
+    //     if (currentHR > 130f) {
+    //         // HR très élevée : circulation rapide, réduire le DIA de 30%
+    //         diaMinutes *= 0.7f
+    //     }
+    //
+    //     // 5. Ajustement en fonction de l'IOB
+    //     diaMinutes = adjustDIAForIOB(diaMinutes, iob)
+    //     // Si le site est utilisé depuis 2 jours ou plus, augmenter le DIA de 10% par jour supplémentaire.
+    //     if (pumpAgeDays >= 2f) {
+    //         val extraDays = pumpAgeDays - 2f
+    //         val ageMultiplier = 1 + 0.2f * extraDays  // par exemple, 2 jours => 1 + 0.2*1 = 1.2
+    //         diaMinutes *= ageMultiplier
+    //     }
+    //
+    //     // 6. Contrainte de la plage finale : entre 180 min (3h) et 720 min (12h)
+    //     diaMinutes = diaMinutes.coerceIn(180f, 720f)
+    //     reasonBuilder.append("Dia in minutes : $diaMinutes")
+    //     return diaMinutes.toDouble()
+    // }
 
     // -- Méthode pour obtenir l'historique récent de BG, similaire à getRecentBGs() --
     private fun getRecentBGs(): List<Float> {
