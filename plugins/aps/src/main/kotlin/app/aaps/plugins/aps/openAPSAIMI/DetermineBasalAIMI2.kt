@@ -53,6 +53,7 @@ import kotlin.math.sqrt
 import app.aaps.plugins.aps.R
 
 import android.content.Context
+import kotlin.math.exp
 
 @Singleton
 class DetermineBasalaimiSMB2 @Inject constructor(
@@ -249,8 +250,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val drop = bgHistory.last() - bgHistory.first()  // positif si baisse
         return drop * (60f / windowMinutes)
     }
-
-    // -- Fonction de sécurité qui combine plusieurs indicateurs pour ajuster la dose d'insuline --
+    /**
+     * Ajuste la dose d'insuline (SMB) et décide éventuellement de stopper la basale.
+     *
+     * @param currentBG Glycémie actuelle (mg/dL).
+     * @param predictedBG Glycémie prédite par l'algorithme (mg/dL).
+     * @param bgHistory Historique des BG récents (pour calculer le drop/h).
+     * @param combinedDelta Delta combiné mesuré et prédit (mg/dL/5min).
+     * @param iob Insuline active (IOB).
+     * @param maxIob IOB maximum autorisé.
+     * @param tdd24Hrs Total daily dose sur 24h (U).
+     * @param tddPerHour TDD/h sur la dernière heure (U/h).
+     * @param tirInhypo Pourcentage du temps passé en hypo.
+     * @param targetBG Objectif de glycémie (mg/dL).
+     * @param zeroBasalDurationMinutes Durée cumulée en minutes pendant laquelle la basale est déjà à zéro.
+     */
     fun safetyAdjustment(
         currentBG: Float,
         predictedBG: Float,
@@ -262,95 +276,92 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         tddPerHour: Float,
         tirInhypo: Float,
         targetBG: Float,
-        zeroBasalDurationMinutes: Int  // Nouvel argument indiquant combien de minutes consécutives la basale est restée à 0
+        zeroBasalDurationMinutes: Int
     ): SafetyDecision {
         val windowMinutes = 30f
         val dropPerHour = calculateDropPerHour(bgHistory, windowMinutes)
-        val maxAllowedDropPerHour = 25f  // Ajustez si besoin
+        val maxAllowedDropPerHour = 25f  // Seuil de chute rapide à ajuster si besoin
         val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
+
         val reasonBuilder = StringBuilder()
         var stopBasal = false
         var basalLS = false
-        var bolusFactor = 1.0
 
-        // 1. Contrôle de la chute
+        // Liste des facteurs multiplicatifs proposés ; on calculera la moyenne à la fin
+        val factors = mutableListOf<Float>()
+
+        // 1. Contrôle de la chute rapide
         if (dropPerHour >= maxAllowedDropPerHour) {
-            // Option A : on arrête complètement la basale
             stopBasal = true
-            // reasonBuilder.append("BG drop élevé: $dropPerHour mg/dL/h; ")
-
-            // Option B : on réduit fortement le bolusFactor sans stopper la basale
-            bolusFactor *= 0.3
-            //reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction du bolus; ")
-            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_1,dropPerHour))
-
+            factors.add(0.3f)
+            reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction; ")
         }
+
+        // 2. Mode montée très rapide : override de toutes les réductions
         if (delta >= 20f && combinedDelta >= 15f && !honeymoon) {
-            // Mode "montée rapide" détecté, on override les réductions habituelles
-            bolusFactor = 1.0
-            //reasonBuilder.append("Montée rapide détectée (delta ${delta} mg/dL), application du mode d'urgence; ")
-            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_2,delta))
-
-        }
-        // 2. Palier sur le combinedDelta
-        when {
-            combinedDelta < 1f -> {
-                bolusFactor *= 0.6
-                //reasonBuilder.append("combinedDelta très faible ($combinedDelta), réduction x0.6; ")
-                reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_3,combinedDelta))
+            // on passe outre toutes les réductions ; bolusFactor sera 1.0
+            reasonBuilder.append("Montée rapide détectée (delta $delta mg/dL), application du mode d'urgence; ")
+        } else {
+            // 3. Ajustement selon combinedDelta
+            when {
+                combinedDelta < 1f -> {
+                    factors.add(0.6f)
+                    reasonBuilder.append("combinedDelta très faible ($combinedDelta), réduction x0.6; ")
+                }
+                combinedDelta < 2f -> {
+                    factors.add(0.8f)
+                    reasonBuilder.append("combinedDelta modéré ($combinedDelta), réduction x0.8; ")
+                }
+                else -> {
+                    // Appel au multiplicateur lissé
+                    factors.add(computeDynamicBolusMultiplier(combinedDelta))
+                    reasonBuilder.append("combinedDelta élevé ($combinedDelta), multiplicateur dynamique appliqué; ")
+                }
             }
-            combinedDelta < 2f -> {
-                bolusFactor *= 0.8
-                //reasonBuilder.append("combinedDelta modéré ($combinedDelta), réduction x0.8; ")
-                reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_4,combinedDelta))
+
+            // 4. Plateau BG élevé + combinedDelta très faible
+            if (currentBG > 160f && combinedDelta < 1f) {
+                factors.add(0.8f)
+                reasonBuilder.append("Plateau BG>160 & combinedDelta<1, réduction x0.8; ")
             }
-            else -> {
-                bolusFactor *= computeDynamicBolusMultiplier(combinedDelta)
-                //reasonBuilder.append("combinedDelta élevé ($combinedDelta), pas de réduction; ")
-                reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_5,combinedDelta))
+
+            // 5. Contrôle IOB
+            if (iob >= maxIob * 0.85f) {
+                factors.add(0.85f)
+                reasonBuilder.append("IOB élevé ($iob U), réduction x0.85; ")
+            }
+
+            // 6. Contrôle du TDD par heure
+            val tddThreshold = tdd24Hrs / 24f
+            if (tddPerHour > tddThreshold) {
+                factors.add(0.8f)
+                reasonBuilder.append("TDD/h élevé ($tddPerHour U/h), réduction x0.8; ")
+            }
+
+            // 7. TIR élevé
+            if (tirInhypo >= 8f) {
+                factors.add(0.5f)
+                reasonBuilder.append("TIR élevé ($tirInhypo%), réduction x0.5; ")
+            }
+
+            // 8. BG prédit proche de la cible
+            if (predictedBG < targetBG + 10) {
+                factors.add(0.5f)
+                reasonBuilder.append("BG prédit ($predictedBG) proche de la cible ($targetBG), réduction x0.5; ")
             }
         }
 
-        // 3. Plateau si BG élevé + combinedDelta très faible
-        if (currentBG > 160f && combinedDelta < 1f) {
-            bolusFactor *= 0.8
-            //reasonBuilder.append("Plateau BG>180 & combinedDelta<2 => réduction x0.8; ")
-            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_6))
+        // Calcul du bolusFactor : 1.0 si aucune réduction, sinon moyenne des facteurs collectés
+        var bolusFactor = if (factors.isNotEmpty()) {
+            factors.average().toFloat().toDouble()
+        } else {
+            1.0
         }
 
-        // 4. Contrôle IOB
-        if (iob >= maxIob * 0.85f) {
-            bolusFactor *= 0.85
-            //reasonBuilder.append("IOB élevé ($iob U), réduction x0.8; ")
-            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_7,iob))
-        }
+        // 9. Zéro basal prolongé : on force le bolusFactor à 1 et on désactive l'arrêt basale
 
-        // 5. Contrôle du TDD par heure
-        val tddThreshold = tdd24Hrs / 24f
-        if (tddPerHour > tddThreshold) {
-            bolusFactor *= 0.8
-            //reasonBuilder.append("TDD/h élevé ($tddPerHour U/h), réduction x0.8; ")
-            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_8,tddPerHour))
-        }
-
-        // 6. TIR élevé
-        if (tirInhypo >= 8f) {
-            bolusFactor *= 0.5
-            //reasonBuilder.append("TIR élevé ($tirInhypo%), réduction x0.5; ")
-            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_9,tirInhypo))
-        }
-
-        // 7. BG prédit proche de la cible
-        if (predictedBG < targetBG + 10) {
-            bolusFactor *= 0.5
-            //reasonBuilder.append("BG prédit ($predictedBG) proche de la cible ($targetBG), réduction x0.5; ")
-            reasonBuilder.appendLine(context.getString(R.string.safety_adjustments_10,predictedBG,targetBG))
-        }
-        // ---- Intégration du suivi de durée zéro basal ----
-        // Si nous avons déjà trop longtemps de basal à 0, on ne souhaite pas stopper la basale.
-        // Par exemple, si la durée cumulée dépasse 60 minutes, on force l'arrêt de la réduction (i.e. on ne stoppe pas la basale)
         if (zeroBasalDurationMinutes >= MAX_ZERO_BASAL_DURATION) {
-            // On annule la demande de stopper la basale et on force le bolusFactor à 1 (aucune réduction)
+
             stopBasal = false
             basalLS = true
             bolusFactor = 1.0
@@ -365,6 +376,110 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             basalLS = basalLS
         )
     }
+
+    // -- Fonction de sécurité qui combine plusieurs indicateurs pour ajuster la dose d'insuline --
+    // fun safetyAdjustment(
+    //     currentBG: Float,
+    //     predictedBG: Float,
+    //     bgHistory: List<Float>,
+    //     combinedDelta: Float,
+    //     iob: Float,
+    //     maxIob: Float,
+    //     tdd24Hrs: Float,
+    //     tddPerHour: Float,
+    //     tirInhypo: Float,
+    //     targetBG: Float,
+    //     zeroBasalDurationMinutes: Int  // Nouvel argument indiquant combien de minutes consécutives la basale est restée à 0
+    // ): SafetyDecision {
+    //     val windowMinutes = 30f
+    //     val dropPerHour = calculateDropPerHour(bgHistory, windowMinutes)
+    //     val maxAllowedDropPerHour = 25f  // Ajustez si besoin
+    //     val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
+    //     val reasonBuilder = StringBuilder()
+    //     var stopBasal = false
+    //     var basalLS = false
+    //     var bolusFactor = 1.0
+    //
+    //     // 1. Contrôle de la chute
+    //     if (dropPerHour >= maxAllowedDropPerHour) {
+    //         // Option A : on arrête complètement la basale
+    //         stopBasal = true
+    //         // reasonBuilder.append("BG drop élevé: $dropPerHour mg/dL/h; ")
+    //
+    //         // Option B : on réduit fortement le bolusFactor sans stopper la basale
+    //         bolusFactor *= 0.3
+    //         reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction du bolus; ")
+    //     }
+    //     if (delta >= 20f && combinedDelta >= 15f && !honeymoon) {
+    //         // Mode "montée rapide" détecté, on override les réductions habituelles
+    //         bolusFactor = 1.0
+    //         reasonBuilder.append("Montée rapide détectée (delta ${delta} mg/dL), application du mode d'urgence; ")
+    //     }
+    //     // 2. Palier sur le combinedDelta
+    //     when {
+    //         combinedDelta < 1f -> {
+    //             bolusFactor *= 0.6
+    //             reasonBuilder.append("combinedDelta très faible ($combinedDelta), réduction x0.6; ")
+    //         }
+    //         combinedDelta < 2f -> {
+    //             bolusFactor *= 0.8
+    //             reasonBuilder.append("combinedDelta modéré ($combinedDelta), réduction x0.8; ")
+    //         }
+    //         else -> {
+    //             bolusFactor *= computeDynamicBolusMultiplier(combinedDelta)
+    //             reasonBuilder.append("combinedDelta élevé ($combinedDelta), pas de réduction; ")
+    //         }
+    //     }
+    //
+    //     // 3. Plateau si BG élevé + combinedDelta très faible
+    //     if (currentBG > 160f && combinedDelta < 1f) {
+    //         bolusFactor *= 0.8
+    //         reasonBuilder.append("Plateau BG>180 & combinedDelta<2 => réduction x0.8; ")
+    //     }
+    //
+    //     // 4. Contrôle IOB
+    //     if (iob >= maxIob * 0.85f) {
+    //         bolusFactor *= 0.85
+    //         reasonBuilder.append("IOB élevé ($iob U), réduction x0.8; ")
+    //     }
+    //
+    //     // 5. Contrôle du TDD par heure
+    //     val tddThreshold = tdd24Hrs / 24f
+    //     if (tddPerHour > tddThreshold) {
+    //         bolusFactor *= 0.8
+    //         reasonBuilder.append("TDD/h élevé ($tddPerHour U/h), réduction x0.8; ")
+    //     }
+    //
+    //     // 6. TIR élevé
+    //     if (tirInhypo >= 8f) {
+    //         bolusFactor *= 0.5
+    //         reasonBuilder.append("TIR élevé ($tirInhypo%), réduction x0.5; ")
+    //     }
+    //
+    //     // 7. BG prédit proche de la cible
+    //     if (predictedBG < targetBG + 10) {
+    //         bolusFactor *= 0.5
+    //         reasonBuilder.append("BG prédit ($predictedBG) proche de la cible ($targetBG), réduction x0.5; ")
+    //     }
+    //     // ---- Intégration du suivi de durée zéro basal ----
+    //     // Si nous avons déjà trop longtemps de basal à 0, on ne souhaite pas stopper la basale.
+    //     // Par exemple, si la durée cumulée dépasse 60 minutes, on force l'arrêt de la réduction (i.e. on ne stoppe pas la basale)
+    //     if (zeroBasalDurationMinutes >= MAX_ZERO_BASAL_DURATION) {
+    //         // On annule la demande de stopper la basale et on force le bolusFactor à 1 (aucune réduction)
+    //         stopBasal = false
+    //         basalLS = true
+    //         bolusFactor = 1.0
+    //         reasonBuilder.append("Zero basal duration ($zeroBasalDurationMinutes min) dépassé, forçant basal minimal; ")
+    //     }
+    //
+    //     return SafetyDecision(
+    //         stopBasal = stopBasal,
+    //         bolusFactor = bolusFactor,
+    //         reason = reasonBuilder.toString(),
+    //         basalLS = basalLS
+    //     )
+    // }
+
     /**
      * Ajuste le DIA (en minutes) en fonction du niveau d'IOB.
      *
@@ -409,50 +524,124 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         recentSteps5Minutes: Int,
         currentHR: Float,
         averageHR60: Float,
-        pumpAgeDays: Float
+        pumpAgeDays: Float,
+        iob: Double = 0.0 // Ajout du paramètre IOB
     ): Double {
         val reasonBuilder = StringBuilder()
+
         // 1. Conversion du DIA de base en minutes
         var diaMinutes = baseDIAHours * 60f  // Pour 9h, 9*60 = 540 min
+        reasonBuilder.append("Base DIA: ${baseDIAHours}h = ${diaMinutes}min\n")
 
         // 2. Ajustement selon l'heure de la journée
+        // Matin (6-10h) : absorption plus rapide, réduction du DIA de 20%
         if (currentHour in 6..10) {
-            // Le matin : absorption plus rapide, on réduit le DIA de 20%
             diaMinutes *= 0.8f
-        } else if (currentHour in 22..23 || currentHour in 0..5) {
-            // Soir/Nuit : absorption plus lente, on augmente le DIA de 20%
+            reasonBuilder.append("Morning adjustment (6-10h): reduced by 20%\n")
+        }
+        // Soir/Nuit (22-23h et 0-5h) : absorption plus lente, augmentation du DIA de 20%
+        else if (currentHour in 22..23 || currentHour in 0..5) {
             diaMinutes *= 1.2f
+            reasonBuilder.append("Night adjustment (22-23h & 0-5h): increased by 20%\n")
         }
 
         // 3. Ajustement en fonction de l'activité physique
         if (recentSteps5Minutes > 200 && currentHR > averageHR60) {
-            // Exercice : absorption accélérée, réduire le DIA de 30%
+            // Exercice : absorption accélérée, réduction du DIA de 30%
             diaMinutes *= 0.7f
+            reasonBuilder.append("Physical activity detected: reduced by 30%\n")
         } else if (recentSteps5Minutes == 0 && currentHR > averageHR60) {
-            // Aucune activité mais HR élevée (stress) : absorption potentiellement plus lente, augmenter le DIA de 30%
+            // Aucune activité mais HR élevée (stress) : absorption potentiellement plus lente, augmentation du DIA de 30%
             diaMinutes *= 1.3f
+            reasonBuilder.append("High HR without activity (stress): increased by 30%\n")
         }
 
         // 4. Ajustement en fonction du niveau absolu de fréquence cardiaque
         if (currentHR > 130f) {
-            // HR très élevée : circulation rapide, réduire le DIA de 30%
+            // HR très élevée : circulation rapide, réduction du DIA de 30%
             diaMinutes *= 0.7f
+            reasonBuilder.append("High HR (>130bpm): reduced by 30%\n")
         }
 
-        // 5. Ajustement en fonction de l'IOB
-        diaMinutes = adjustDIAForIOB(diaMinutes, iob)
+        // 5. Ajustement en fonction de l'IOB (Insulin on Board)
+        // Si le patient a déjà beaucoup d'insuline active, il faut réduire le DIA pour éviter l'hypoglycémie
+        if (iob > 2.0) {
+            diaMinutes *= 0.8f
+            reasonBuilder.append("High IOB (${iob}U): reduced by 20%\n")
+        } else if (iob < 0.5) {
+            diaMinutes *= 1.1f
+            reasonBuilder.append("Low IOB (${iob}U): increased by 10%\n")
+        }
+
+        // 6. Ajustement en fonction de l'âge du site d'insuline
         // Si le site est utilisé depuis 2 jours ou plus, augmenter le DIA de 10% par jour supplémentaire.
         if (pumpAgeDays >= 2f) {
             val extraDays = pumpAgeDays - 2f
-            val ageMultiplier = 1 + 0.2f * extraDays  // par exemple, 2 jours => 1 + 0.2*1 = 1.2
+            val ageMultiplier = 1 + 0.1f * extraDays  // 10% par jour supplémentaire
             diaMinutes *= ageMultiplier
+            reasonBuilder.append("Pump age (${pumpAgeDays} days): increased by ${extraDays * 10}%\n")
         }
 
-        // 6. Contrainte de la plage finale : entre 180 min (3h) et 720 min (12h)
-        diaMinutes = diaMinutes.coerceIn(180f, 720f)
-        reasonBuilder.append("Dia in minutes : $diaMinutes")
-        return diaMinutes.toDouble()
+        // 7. Contrainte de la plage finale : entre 180 min (3h) et 720 min (12h)
+        val finalDiaMinutes = diaMinutes.coerceIn(180f, 720f)
+        reasonBuilder.append("Final DIA constrained to [180, 720] min: ${finalDiaMinutes}min")
+
+        println("DIA Calculation Details:")
+        println(reasonBuilder.toString())
+
+        return finalDiaMinutes.toDouble()
     }
+
+    // fun calculateAdjustedDIA(
+    //     baseDIAHours: Float,
+    //     currentHour: Int,
+    //     recentSteps5Minutes: Int,
+    //     currentHR: Float,
+    //     averageHR60: Float,
+    //     pumpAgeDays: Float
+    // ): Double {
+    //     val reasonBuilder = StringBuilder()
+    //     // 1. Conversion du DIA de base en minutes
+    //     var diaMinutes = baseDIAHours * 60f  // Pour 9h, 9*60 = 540 min
+    //
+    //     // 2. Ajustement selon l'heure de la journée
+    //     if (currentHour in 6..10) {
+    //         // Le matin : absorption plus rapide, on réduit le DIA de 20%
+    //         diaMinutes *= 0.8f
+    //     } else if (currentHour in 22..23 || currentHour in 0..5) {
+    //         // Soir/Nuit : absorption plus lente, on augmente le DIA de 20%
+    //         diaMinutes *= 1.2f
+    //     }
+    //
+    //     // 3. Ajustement en fonction de l'activité physique
+    //     if (recentSteps5Minutes > 200 && currentHR > averageHR60) {
+    //         // Exercice : absorption accélérée, réduire le DIA de 30%
+    //         diaMinutes *= 0.7f
+    //     } else if (recentSteps5Minutes == 0 && currentHR > averageHR60) {
+    //         // Aucune activité mais HR élevée (stress) : absorption potentiellement plus lente, augmenter le DIA de 30%
+    //         diaMinutes *= 1.3f
+    //     }
+    //
+    //     // 4. Ajustement en fonction du niveau absolu de fréquence cardiaque
+    //     if (currentHR > 130f) {
+    //         // HR très élevée : circulation rapide, réduire le DIA de 30%
+    //         diaMinutes *= 0.7f
+    //     }
+    //
+    //     // 5. Ajustement en fonction de l'IOB
+    //     diaMinutes = adjustDIAForIOB(diaMinutes, iob)
+    //     // Si le site est utilisé depuis 2 jours ou plus, augmenter le DIA de 10% par jour supplémentaire.
+    //     if (pumpAgeDays >= 2f) {
+    //         val extraDays = pumpAgeDays - 2f
+    //         val ageMultiplier = 1 + 0.2f * extraDays  // par exemple, 2 jours => 1 + 0.2*1 = 1.2
+    //         diaMinutes *= ageMultiplier
+    //     }
+    //
+    //     // 6. Contrainte de la plage finale : entre 180 min (3h) et 720 min (12h)
+    //     diaMinutes = diaMinutes.coerceIn(180f, 720f)
+    //     reasonBuilder.append("Dia in minutes : $diaMinutes")
+    //     return diaMinutes.toDouble()
+    // }
 
     // -- Méthode pour obtenir l'historique récent de BG, similaire à getRecentBGs() --
     private fun getRecentBGs(): List<Float> {
@@ -1562,14 +1751,22 @@ private fun neuralnetwork5(
     return blendedSMB
 }
     private fun computeDynamicBolusMultiplier(delta: Float): Float {
-        return when {
-            delta > 20f -> 1.2f  // Montée très rapide : augmenter la dose corrective
-            delta > 15f -> 1.1f  // Montée rapide
-            delta > 10f -> 1.0f  // Montée modérée : pas de réduction
-            delta in 5f..10f -> 0.9f // Légère réduction pour des changements moins brusques
-            else -> 0.8f // Pour des variations faibles ou des baisses, appliquer une réduction standard
-        }
+        // Centrer la sigmoïde autour de 5 mg/dL, avec une pente modérée (échelle 10)
+        val x = (delta - 5f) / 10f
+        val sig = (1f / (1f + exp(-x))).toFloat()  // sigmoïde entre 0 et 1
+        return 0.5f + sig * 0.7f  // multipliateur lissé entre 0,5 et 1,2
     }
+
+    // private fun computeDynamicBolusMultiplier(delta: Float): Float {
+    //     return when {
+    //         delta > 20f -> 1.2f  // Montée très rapide : augmenter la dose corrective
+    //         delta > 15f -> 1.1f  // Montée rapide
+    //         delta > 10f -> 1.0f  // Montée modérée : pas de réduction
+    //         delta in 5f..10f -> 0.9f // Légère réduction pour des changements moins brusques
+    //         else -> 0.8f // Pour des variations faibles ou des baisses, appliquer une réduction standard
+    //     }
+    // }
+
     private fun calculateDynamicThreshold(
         iterationCount: Int,
         delta: Float,
