@@ -1247,36 +1247,7 @@ fun appendCompactLog(
 
         return bolusesLastHour.any { Math.abs(it.amount - pbolusA) < epsilon }
     }
-    // private fun isAutodriveModeCondition(
-    //     delta: Float,
-    //     autodrive: Boolean,
-    //     slopeFromMinDeviation: Double,
-    //     bg: Float,
-    //     predictedBg: Float
-    // ): Boolean {
-    //     // Récupération de la valeur de pbolusMeal depuis les préférences
-    //     val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
-    //     val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
-    //     val autodriveminDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
-    //     //val autodriveISF: Int = preferences.get(IntKey.OApsAIMIautodriveISF)
-    //     val autodriveTarget: Int = preferences.get(IntKey.OApsAIMIAutodriveTarget)
-    //     val autodriveBG: Int = preferences.get(IntKey.OApsAIMIAutodriveBG)
-    //     // Récupération des deltas récents et calcul du delta prédit
-    //     val recentDeltas = getRecentDeltas()
-    //     val predicted = predictedDelta(recentDeltas)
-    //     // Calcul du delta combiné : combine le delta mesuré et le delta prédit
-    //     val combinedDelta = (delta + predicted) / 2.0f
-    //     // Si un bolus de pbolusA a déjà été administré dans la dernière heure, on ne le ré-administrera pas
-    //     if (hasReceivedPbolusMInLastHour(pbolusA)) {
-    //         return false
-    //     }
-    //
-    //     return combinedDelta >= autodriveDelta &&
-    //         predictedBg > 140 &&
-    //         autodrive &&
-    //         slopeFromMinDeviation >= autodriveminDeviation &&
-    //         bg >= autodriveBG
-    // }
+
     private fun isAutodriveModeCondition(
         delta: Float,
         autodrive: Boolean,
@@ -1325,16 +1296,6 @@ fun appendCompactLog(
             bg >= autodriveBG.toFloat()
     }
 
-    // private fun adjustAutodriveCondition(bgTrend: Float, predictedBg: Float, combinedDelta: Float): Boolean {
-    //     // Ajuster les conditions d'autodrive en fonction de la tendance des BG
-    //     val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
-    //     val autodriveCondition = when {
-    //         bgTrend < 0.0f -> false // Diminution significative, pas besoin d'insuline supplémentaire
-    //         predictedBg > 140 && combinedDelta >= autodriveDelta -> true // Besoin accru en insuline
-    //         else -> false // Autre cas par défaut
-    //     }
-    //     return autodriveCondition
-    // }
     private fun adjustAutodriveCondition(
         bgTrend: Float,
         predictedBg: Float,
