@@ -359,9 +359,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         // 9. Zéro basal prolongé : on force le bolusFactor à 1 et on désactive l'arrêt basale
-
         if (zeroBasalDurationMinutes >= MAX_ZERO_BASAL_DURATION) {
-
             stopBasal = false
             basalLS = true
             bolusFactor = 1.0
@@ -479,7 +477,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     //         basalLS = basalLS
     //     )
     // }
-
     /**
      * Ajuste le DIA (en minutes) en fonction du niveau d'IOB.
      *
@@ -662,23 +659,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         return recentBGs
     }
-    fun appendCompactLog(
-        reason: StringBuilder,
-        peakTime: Double,
-        bg: Double,
-        delta: Float,
-        stepCount: Int?,
-        heartRate: Double?
-    ) {
-        val bgStr = "%.0f".format(bg)
-        val deltaStr = "%.1f".format(delta)
-        val peakStr = "%.1f".format(peakTime)
+fun appendCompactLog(
+    reason: StringBuilder,
+    peakTime: Double,
+    bg: Double,
+    delta: Float,
+    stepCount: Int?,
+    heartRate: Double?
+) {
+    val bgStr = "%.0f".format(bg)
+    val deltaStr = "%.1f".format(delta)
+    val peakStr = "%.1f".format(peakTime)
 
-        reason.append("🕒 PeakTime=$peakStr min | BG=$bgStr Δ$deltaStr")
-        stepCount?.let { reason.append(" | Steps=$it") }
-        heartRate?.let { reason.append(" | HR=$it bpm") }
-        reason.append("\n")
-    }
+    reason.append("🕒 PeakTime=$peakStr min | BG=$bgStr Δ$deltaStr")
+    stepCount?.let { reason.append(" | Steps=$it") }
+    heartRate?.let { reason.append(" | HR=$it bpm") }
+    reason.append("\n")
+}
     // Rounds value to 'digits' decimal places
     // different for negative numbers fun round(value: Double, digits: Int): Double = BigDecimal(value).setScale(digits, RoundingMode.HALF_EVEN).toDouble()
     fun round(value: Double, digits: Int): Double {
@@ -1003,8 +1000,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT.rate = rate
         return rT
     }
-
-    //     fun setTempBasal(
+//     fun setTempBasal(
 //         _rate: Double,
 //         duration: Int,
 //         profile: OapsProfileAimi,
@@ -1467,8 +1463,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (interval) conditionsTrue.add(context.getString(R.string.safety_adjustments_28))
         val targetinterval = targetBg >= 120 && delta > 0 && iob >= maxSMB/2 && lastsmbtime < 12 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime && !snackTime
         if (targetinterval) conditionsTrue.add(context.getString(R.string.safety_adjustments_29))
-            //val stablebg = delta>-3 && delta<3 && shortAvgDelta>-3 && shortAvgDelta<3 && longAvgDelta>-3 && longAvgDelta<3 && bg < 120 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
-            //if (stablebg) conditionsTrue.add("stablebg")
+        //val stablebg = delta>-3 && delta<3 && shortAvgDelta>-3 && shortAvgDelta<3 && longAvgDelta>-3 && longAvgDelta<3 && bg < 120 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+        //if (stablebg) conditionsTrue.add("stablebg")
         val acceleratingDown = delta < -2 && delta - longAvgDelta < -2 && lastsmbtime < 15
         if (acceleratingDown) conditionsTrue.add(context.getString(R.string.safety_adjustments_30))
         val decceleratingdown = delta < 0 && (delta > shortAvgDelta || delta > longAvgDelta) && lastsmbtime < 15
@@ -1842,13 +1838,6 @@ private fun neuralnetwork5(
     val blendedSMB = alpha * finalRefinedSMB + (1 - alpha) * predictedSMB
     return blendedSMB
 }
-    private fun computeDynamicBolusMultiplier(delta: Float): Float {
-        // Centrer la sigmoïde autour de 5 mg/dL, avec une pente modérée (échelle 10)
-        val x = (delta - 5f) / 10f
-        val sig = (1f / (1f + exp(-x))).toFloat()  // sigmoïde entre 0 et 1
-        return 0.5f + sig * 0.7f  // multipliateur lissé entre 0,5 et 1,2
-    }
-
     // private fun computeDynamicBolusMultiplier(delta: Float): Float {
     //     return when {
     //         delta > 20f -> 1.2f  // Montée très rapide : augmenter la dose corrective
@@ -1858,6 +1847,12 @@ private fun neuralnetwork5(
     //         else -> 0.8f // Pour des variations faibles ou des baisses, appliquer une réduction standard
     //     }
     // }
+    private fun computeDynamicBolusMultiplier(delta: Float): Float {
+        // Centrer la sigmoïde autour de 5 mg/dL, avec une pente modérée (échelle 10)
+        val x = (delta - 5f) / 10f
+        val sig = (1f / (1f + exp(-x))).toFloat()  // sigmoïde entre 0 et 1
+        return 0.5f + sig * 0.7f  // multipliateur lissé entre 0,5 et 1,2
+    }
 
     private fun calculateDynamicThreshold(
         iterationCount: Int,
@@ -2735,7 +2730,6 @@ private fun calculateDynamicPeakTime(
             combinedDelta.toDouble(),
             reasonAimi
         )
-
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
 
         val calendarInstance = Calendar.getInstance()
@@ -3639,26 +3633,26 @@ private fun calculateDynamicPeakTime(
         //rT.reason.append("TIRBelow: $currentTIRLow, TIRinRange: $currentTIRRange, TIRAbove: $currentTIRAbove")
         //rT.reason.append(reasonAimi.toString())
         rT.reason.appendLine(
-            "📈 DIA ajusté: ${"%.1f".format(adjustedDIAInMinutes)} min | " +
-                "Morning: ${"%.1f".format(adjustedMorningFactor)}, " +
-                "Afternoon: ${"%.1f".format(adjustedAfternoonFactor)}, " +
-                "Evening: ${"%.1f".format(adjustedEveningFactor)}"
-        )
+    "📈 DIA ajusté: ${"%.1f".format(adjustedDIAInMinutes)} min | " +
+    "Morning: ${"%.1f".format(adjustedMorningFactor)}, " +
+    "Afternoon: ${"%.1f".format(adjustedAfternoonFactor)}, " +
+    "Evening: ${"%.1f".format(adjustedEveningFactor)}"
+)
 
-        rT.reason.appendLine(
-            "🚗 Autodrive: $autodrive | Mode actif: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
-                "AutodriveCondition: $autodriveCondition"
-        )
+rT.reason.appendLine(
+    "🚗 Autodrive: $autodrive | Mode actif: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
+    "AutodriveCondition: $autodriveCondition"
+)
 
-        rT.reason.appendLine(
-            "🔍 BGTrend: ${"%.2f".format(bgTrend)} | ΔCombiné: ${"%.2f".format(combinedDelta)} | " +
-                "Predicted BG: ${"%.0f".format(predictedBg)} | Accélération: ${"%.2f".format(bgacc)} | " +
-                "Slope Min Dev.: ${"%.2f".format(mealData.slopeFromMinDeviation)}"
-        )
+rT.reason.appendLine(
+    "🔍 BGTrend: ${"%.2f".format(bgTrend)} | ΔCombiné: ${"%.2f".format(combinedDelta)} | " +
+    "Predicted BG: ${"%.0f".format(predictedBg)} | Accélération: ${"%.2f".format(bgacc)} | " +
+    "Slope Min Dev.: ${"%.2f".format(mealData.slopeFromMinDeviation)}"
+)
 
-        rT.reason.appendLine(
-            "📊 TIR: <70: ${"%.1f".format(currentTIRLow)}% | 70–180: ${"%.1f".format(currentTIRRange)}% | >180: ${"%.1f".format(currentTIRAbove)}%"
-        )
+rT.reason.appendLine(
+    "📊 TIR: <70: ${"%.1f".format(currentTIRLow)}% | 70–180: ${"%.1f".format(currentTIRRange)}% | >180: ${"%.1f".format(currentTIRAbove)}%"
+)
         appendCompactLog(reasonAimi, tp, bg, delta, recentSteps5Minutes, averageBeatsPerMinute)
         rT.reason.append(reasonAimi.toString())
         val csf = sens / profile.carb_ratio
