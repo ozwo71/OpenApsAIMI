@@ -859,6 +859,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     //     rT.rate = rate
     //     return rT
     // }
+    private fun isBgDataAvailable(): Boolean {
+        // Vérifie si les données BG sont valides et récentes
+        if (bg <= 0.0 || delta <= 0.0 || bgacc <= 0.0) {
+            return false
+        }
+
+        try {
+            // Utilise directement lastBg() comme dans le code existant
+            val lastBg = iobCobCalculator.ads.lastBg()
+            if (lastBg == null) {
+                return false
+            }
+
+            // Vérifie que le dernier BG est récent (moins de 30 minutes)
+            val timeDiff = System.currentTimeMillis() - lastBg.timestamp
+            return timeDiff < 30 * 60 * 1000
+
+        } catch (e: Exception) {
+            consoleError.add("Erreur dans isBgDataAvailable : ${e.message}")
+            return false
+        }
+    }
     fun setTempBasal(
         _rate: Double,
         duration: Int,
@@ -876,8 +898,33 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             || therapy.lunchTime
             || therapy.dinnerTime
             || therapy.bfastTime
-val reason = StringBuilder()
-        // 2️⃣ On recalcule le mode “early autodrive”
+
+        val reason = StringBuilder()
+
+        // ────────────────────────────────────────────────────────────────
+        // 2️⃣ Vérification de la disponibilité des données BG
+        val recentBGs = getRecentBGs()
+        val hasBgData = recentBGs.isNotEmpty() && isBgDataAvailable()
+
+        // ────────────────────────────────────────────────────────────────
+        // 3️⃣ Gestion spéciale pour les nouveaux capteurs (pas de données BG)
+        if (!hasBgData) {
+            println("⚠️ Aucune donnée BG disponible - utilisation stratégie de secours")
+
+            // Utiliser le taux de base sans ajustement
+            val rate = _rate.coerceIn(0.0, profile.max_basal)
+
+            // Logging
+            rT.reason.append("💡 Capteur nouveau ou données indisponibles - utilisation taux de base\n")
+            rT.reason.append("Pose temp à ${"%.2f".format(rate)} U/h pour $duration minutes.\n")
+            rT.duration = duration
+            rT.rate = rate
+
+            return rT
+        }
+
+        // ────────────────────────────────────────────────────────────────
+        // 4️⃣ On recalcule le mode “early autodrive”
         val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
         val night = hour <= 7
         val predDelta = predictedDelta(getRecentDeltas()).toFloat()
@@ -890,26 +937,25 @@ val reason = StringBuilder()
             && detectMealOnset(delta, predDelta, bgacc.toFloat())
 
         // ────────────────────────────────────────────────────────────────
-        // Utilisation des valeurs récentes de BG pour ajuster le taux basal ou prendre d'autres décisions
-        val recentBGs = getRecentBGs()
+        // 5️⃣ Utilisation des valeurs récentes de BG pour ajuster le taux basal
         var rateAdjustment = _rate
 
-        if (recentBGs.isNotEmpty()) {
+        if (hasBgData) {
             val bgTrend = calculateBgTrend(recentBGs, reason)
             println("BG Trend: $bgTrend")
 
             // Ajuster le taux basal en fonction de la tendance des BG
             rateAdjustment = adjustRateBasedOnBgTrend(_rate, bgTrend)
-
         } else {
             println("No recent BG values available.")
         }
 
-        // 3️⃣ On décide de bypasser la limite de sécurité si override ou mode spécial
+        // ────────────────────────────────────────────────────────────────
+        // 6️⃣ On décide de bypasser la limite de sécurité si override ou mode spécial
         val bypassSafety = overrideSafetyLimits || isMealMode || isEarlyAutodrive
 
         // ────────────────────────────────────────────────────────────────
-        // 4️⃣ Calcul du maxSafeBasal standard
+        // 7️⃣ Calcul du maxSafeBasal standard
         val maxSafe = min(
             profile.max_basal,
             min(
@@ -918,7 +964,8 @@ val reason = StringBuilder()
             )
         )
 
-        // 5️⃣ Choix du rate effectif : bypass ou clamp
+        // ────────────────────────────────────────────────────────────────
+        // 8️⃣ Choix du rate effectif : bypass ou clamp
         val rate = if (bypassSafety) {
             rateAdjustment
         } else {
@@ -926,7 +973,7 @@ val reason = StringBuilder()
         }
 
         // ────────────────────────────────────────────────────────────────
-        // 6️⃣ Logging des raisons
+        // 9️⃣ Logging des raisons
         when {
             bypassSafety -> {
                 //rT.reason.append("→ bypass sécurité${if (isMealMode) " (meal mode)" else if (isEarlyAutodrive) " (early autodrive)" else ""}: rate = ${rate} U/h\n")
@@ -949,53 +996,98 @@ val reason = StringBuilder()
         }
 
         // ────────────────────────────────────────────────────────────────
-        // 7️⃣ Si pas de changement utile, on sort
-        if (currenttemp.duration > (duration - 10)
-            && currenttemp.duration <= 120
-            && rate <= currenttemp.rate * 1.2
-            && rate >= currenttemp.rate * 0.8
-            && duration > 0
-        ) {
-            //rT.reason.append("${currenttemp.duration}m restants & ${currenttemp.rate} ~ req $rate U/h : pas de temp.\n")
-            val formattedDuration = "${currenttemp.duration}m"
-            val formattedRate = "%.2f".format(currenttemp.rate)
-            val formattedRequestedRate = "%.2f".format(rate)
-
-            rT.reason.appendLine(context.getString(R.string.safety_adjustments_14, formattedDuration, formattedRate, formattedRequestedRate))
-            return rT
-        }
-
-        // ────────────────────────────────────────────────────────────────
-        // 8️⃣ Gestion du “neutral temp” = profil.current_basal
-        val profileBasal = profile.current_basal
-        if (rate == profileBasal) {
-            if (profile.skip_neutral_temps) {
-                if (currenttemp.duration > 0) {
-                    //rT.reason.append("Taux neutre = profil & temp actif → annulation du temp.\n")
-                    rT.reason.appendLine(context.getString(R.string.basal_arguments_1))
-                    rT.duration = 0
-                    rT.rate = 0.0
-                } else {
-                    //rT.reason.append("Taux neutre = profil & pas de temp → rien à faire.\n")
-                    rT.reason.appendLine(context.getString(R.string.basal_arguments_2))
-                }
-            } else {
-                //rT.reason.append("Taux neutre = profil → pose d’un temp à $rate U/h.\n")
-                rT.reason.appendLine(context.getString(R.string.basal_arguments_3, rate))
-                rT.duration = duration
-                rT.rate = rate
-            }
-            return rT
-        }
-
-        // ────────────────────────────────────────────────────────────────
-        // 9️⃣ Pose “standard” du temp basal
+        // 🔟 Pose “standard” du temp basal
         //rT.reason.append("Pose temp à ${"%.2f".format(rate)} U/h pour $duration minutes.\n")
         rT.reason.append(context.getString(R.string.basal_arguments_4, rate,duration))
         rT.duration = duration
         rT.rate = rate
         return rT
     }
+
+    //     fun setTempBasal(
+//         _rate: Double,
+//         duration: Int,
+//         profile: OapsProfileAimi,
+//         rT: RT,
+//         currenttemp: CurrentTemp,
+//         overrideSafetyLimits: Boolean = false
+//     ): RT {
+//         // ────────────────────────────────────────────────────────────────
+//         // 1️⃣ On recalcule le mode “meal” / “highCarb” / “snack” / etc.
+//         val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
+//         val isMealMode = therapy.snackTime
+//             || therapy.highCarbTime
+//             || therapy.mealTime
+//             || therapy.lunchTime
+//             || therapy.dinnerTime
+//             || therapy.bfastTime
+// val reason = StringBuilder()
+//         // 2️⃣ On recalcule le mode “early autodrive”
+//         val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
+//         val night = hour <= 7
+//         val predDelta = predictedDelta(getRecentDeltas()).toFloat()
+//         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
+//
+//         val isEarlyAutodrive = !night
+//             && !isMealMode
+//             && autodrive
+//             && bg > 110
+//             && detectMealOnset(delta, predDelta, bgacc.toFloat())
+//
+//         // ────────────────────────────────────────────────────────────────
+//         // Utilisation des valeurs récentes de BG pour ajuster le taux basal ou prendre d'autres décisions
+//         val recentBGs = getRecentBGs()
+//         var rateAdjustment = _rate
+//
+//         if (recentBGs.isNotEmpty()) {
+//             val bgTrend = calculateBgTrend(recentBGs, reason)
+//             println("BG Trend: $bgTrend")
+//
+//             // Ajuster le taux basal en fonction de la tendance des BG
+//             rateAdjustment = adjustRateBasedOnBgTrend(_rate, bgTrend)
+//
+//         } else {
+//             println("No recent BG values available.")
+//         }
+//
+//         // 3️⃣ On décide de bypasser la limite de sécurité si override ou mode spécial
+//         val bypassSafety = overrideSafetyLimits || isMealMode || isEarlyAutodrive
+//
+//         // ────────────────────────────────────────────────────────────────
+//         // 4️⃣ Calcul du maxSafeBasal standard
+//         val maxSafe = min(
+//             profile.max_basal,
+//             min(
+//                 profile.max_daily_safety_multiplier * profile.max_daily_basal,
+//                 profile.current_basal_safety_multiplier * profile.current_basal
+//             )
+//         )
+//
+//         // 5️⃣ Choix du rate effectif : bypass ou clamp
+//         val rate = if (bypassSafety) {
+//             rateAdjustment
+//         } else {
+//             rateAdjustment.coerceIn(0.0, maxSafe)
+//         }
+//
+//         // ────────────────────────────────────────────────────────────────
+//         // 6️⃣ Logging des raisons
+//         when {
+//             bypassSafety -> {
+//                 rT.reason.append("→ bypass sécurité${if (isMealMode) " (meal mode)" else if (isEarlyAutodrive) " (early autodrive)" else ""}\n")
+//             }
+//             rate != _rate -> {
+//                 rT.reason.append("→ rate adjusted based on BG trend\n")
+//             }
+//         }
+//
+//         // ────────────────────────────────────────────────────────────────
+//         // 9️⃣ Pose “standard” du temp basal
+//         rT.reason.append("Pose temp à ${"%.2f".format(rate)} U/h pour $duration minutes.\n")
+//         rT.duration = duration
+//         rT.rate = rate
+//         return rT
+//     }
 
     // private fun calculateBgTrend(recentBGs: List<Float>): Float {
     //     // Calculer la tendance des BG en fonction de la différence entre les dernières valeurs
