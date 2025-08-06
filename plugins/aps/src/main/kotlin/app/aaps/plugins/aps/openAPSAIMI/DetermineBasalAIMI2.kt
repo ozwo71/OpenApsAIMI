@@ -1368,64 +1368,264 @@ fun appendCompactLog(
     private fun roundToPoint05(number: Float): Float {
         return (number * 20.0).roundToInt() / 20.0f
     }
+    // private fun isCriticalSafetyCondition(mealData: MealData): Pair<Boolean, String> {
+    //     val reasonBuilder = StringBuilder()
+    //     val conditionsTrue = mutableListOf<String>()
+    //     //val slopedeviation = mealData.slopeFromMaxDeviation <= -1.5 && mealData.slopeFromMinDeviation < 0.3
+    //     //if (slopedeviation) conditionsTrue.add("slopedeviation")
+    //     val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
+    //     val nosmbHM = iob > 0.7 && honeymoon && delta <= 10.0 && !mealTime && !bfastTime && !lunchTime && !dinnerTime && predictedBg < 130
+    //     if (nosmbHM) conditionsTrue.add("nosmbHM")
+    //     val honeysmb = honeymoon && delta < 0 && bg < 170
+    //     if (honeysmb) conditionsTrue.add("honeysmb")
+    //     val negdelta = delta <= 0 && !mealTime && !bfastTime && !lunchTime && !dinnerTime && eventualBG < 140
+    //     if (negdelta) conditionsTrue.add("negdelta")
+    //     val nosmb = iob >= 2*maxSMB && bg < 110 && delta < 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+    //     if (nosmb) conditionsTrue.add("nosmb")
+    //     val fasting = fastingTime
+    //     if (fasting) conditionsTrue.add("fasting")
+    //     val belowMinThreshold = bg < 100 && delta < 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+    //     if (belowMinThreshold) conditionsTrue.add("belowMinThreshold")
+    //     val isNewCalibration = iscalibration && delta > 8
+    //     if (isNewCalibration) conditionsTrue.add("isNewCalibration")
+    //     val belowTargetAndDropping = bg < targetBg && delta < -2 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+    //     if (belowTargetAndDropping) conditionsTrue.add("belowTargetAndDropping")
+    //     val belowTargetAndStableButNoCob = bg < targetBg - 15 && shortAvgDelta <= 2 && cob <= 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+    //     if (belowTargetAndStableButNoCob) conditionsTrue.add("belowTargetAndStableButNoCob")
+    //     val droppingFast = bg < 150 && delta < -2
+    //     if (droppingFast) conditionsTrue.add("droppingFast")
+    //     val droppingFastAtHigh = bg < 220 && delta <= -7
+    //     if (droppingFastAtHigh) conditionsTrue.add("droppingFastAtHigh")
+    //     val droppingVeryFast = delta < -11
+    //     if (droppingVeryFast) conditionsTrue.add("droppingVeryFast")
+    //     val prediction = predictedBg < targetBg && bg < 135 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+    //     if (prediction) conditionsTrue.add("prediction")
+    //     val interval = eventualBG < targetBg && delta > 10 && iob >= maxSMB/2 && lastsmbtime < 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime && !snackTime
+    //     if (interval) conditionsTrue.add("interval")
+    //     val targetinterval = targetBg >= 120 && delta > 0 && iob >= maxSMB/2 && lastsmbtime < 12 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime && !snackTime
+    //     if (targetinterval) conditionsTrue.add("targetinterval")
+    //     //val stablebg = delta>-3 && delta<3 && shortAvgDelta>-3 && shortAvgDelta<3 && longAvgDelta>-3 && longAvgDelta<3 && bg < 120 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
+    //     //if (stablebg) conditionsTrue.add("stablebg")
+    //     val acceleratingDown = delta < -2 && delta - longAvgDelta < -2 && lastsmbtime < 15
+    //     if (acceleratingDown) conditionsTrue.add("acceleratingDown")
+    //     val decceleratingdown = delta < 0 && (delta > shortAvgDelta || delta > longAvgDelta) && lastsmbtime < 15
+    //     if (decceleratingdown) conditionsTrue.add("decceleratingdown")
+    //     val nosmbhoneymoon = honeymoon && iob > maxIob / 2 && delta < 0
+    //     if (nosmbhoneymoon) conditionsTrue.add("nosmbhoneymoon")
+    //     val bg90 = bg < 90
+    //     if (bg90) conditionsTrue.add("bg90")
+    //     val result = belowTargetAndDropping || belowTargetAndStableButNoCob || nosmbHM || honeysmb ||
+    //         droppingFast || droppingFastAtHigh || droppingVeryFast || prediction || interval || targetinterval || bg90 || negdelta ||
+    //         fasting || nosmb || isNewCalibration || belowMinThreshold || acceleratingDown || decceleratingdown || nosmbhoneymoon
+    //
+    //     val conditionsTrueString = if (conditionsTrue.isNotEmpty()) {
+    //         conditionsTrue.joinToString(", ")
+    //     } else {
+    //         "No conditions met"
+    //     }
+    //     reasonBuilder.append("Safety condition $result : $conditionsTrue")
+    //     return Pair(result, conditionsTrueString)
+    // }
+    /**
+     * Vérifie si une condition de sécurité critique est remplie
+     *
+     * @param mealData Les données sur le repas
+     * @return Une paire contenant :
+     *         - Le résultat booléen indiquant si la condition est critique
+     *         - Une chaîne décrivant les conditions remplies
+     */
     private fun isCriticalSafetyCondition(mealData: MealData): Pair<Boolean, String> {
-        val reasonBuilder = StringBuilder()
-        val conditionsTrue = mutableListOf<String>()
-        //val slopedeviation = mealData.slopeFromMaxDeviation <= -1.5 && mealData.slopeFromMinDeviation < 0.3
-        //if (slopedeviation) conditionsTrue.add("slopedeviation")
-        val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-        val nosmbHM = iob > 0.7 && honeymoon && delta <= 10.0 && !mealTime && !bfastTime && !lunchTime && !dinnerTime && predictedBg < 130
-        if (nosmbHM) conditionsTrue.add("nosmbHM")
-        val honeysmb = honeymoon && delta < 0 && bg < 170
-        if (honeysmb) conditionsTrue.add("honeysmb")
-        val negdelta = delta <= 0 && !mealTime && !bfastTime && !lunchTime && !dinnerTime && eventualBG < 140
-        if (negdelta) conditionsTrue.add("negdelta")
-        val nosmb = iob >= 2*maxSMB && bg < 110 && delta < 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
-        if (nosmb) conditionsTrue.add("nosmb")
-        val fasting = fastingTime
-        if (fasting) conditionsTrue.add("fasting")
-        val belowMinThreshold = bg < 100 && delta < 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
-        if (belowMinThreshold) conditionsTrue.add("belowMinThreshold")
-        val isNewCalibration = iscalibration && delta > 8
-        if (isNewCalibration) conditionsTrue.add("isNewCalibration")
-        val belowTargetAndDropping = bg < targetBg && delta < -2 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
-        if (belowTargetAndDropping) conditionsTrue.add("belowTargetAndDropping")
-        val belowTargetAndStableButNoCob = bg < targetBg - 15 && shortAvgDelta <= 2 && cob <= 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
-        if (belowTargetAndStableButNoCob) conditionsTrue.add("belowTargetAndStableButNoCob")
-        val droppingFast = bg < 150 && delta < -2
-        if (droppingFast) conditionsTrue.add("droppingFast")
-        val droppingFastAtHigh = bg < 220 && delta <= -7
-        if (droppingFastAtHigh) conditionsTrue.add("droppingFastAtHigh")
-        val droppingVeryFast = delta < -11
-        if (droppingVeryFast) conditionsTrue.add("droppingVeryFast")
-        val prediction = predictedBg < targetBg && bg < 135 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
-        if (prediction) conditionsTrue.add("prediction")
-        val interval = eventualBG < targetBg && delta > 10 && iob >= maxSMB/2 && lastsmbtime < 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime && !snackTime
-        if (interval) conditionsTrue.add("interval")
-        val targetinterval = targetBg >= 120 && delta > 0 && iob >= maxSMB/2 && lastsmbtime < 12 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime && !snackTime
-        if (targetinterval) conditionsTrue.add("targetinterval")
-        //val stablebg = delta>-3 && delta<3 && shortAvgDelta>-3 && shortAvgDelta<3 && longAvgDelta>-3 && longAvgDelta<3 && bg < 120 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
-        //if (stablebg) conditionsTrue.add("stablebg")
-        val acceleratingDown = delta < -2 && delta - longAvgDelta < -2 && lastsmbtime < 15
-        if (acceleratingDown) conditionsTrue.add("acceleratingDown")
-        val decceleratingdown = delta < 0 && (delta > shortAvgDelta || delta > longAvgDelta) && lastsmbtime < 15
-        if (decceleratingdown) conditionsTrue.add("decceleratingdown")
-        val nosmbhoneymoon = honeymoon && iob > maxIob / 2 && delta < 0
-        if (nosmbhoneymoon) conditionsTrue.add("nosmbhoneymoon")
-        val bg90 = bg < 90
-        if (bg90) conditionsTrue.add("bg90")
-        val result = belowTargetAndDropping || belowTargetAndStableButNoCob || nosmbHM || honeysmb ||
-            droppingFast || droppingFastAtHigh || droppingVeryFast || prediction || interval || targetinterval || bg90 || negdelta ||
-            fasting || nosmb || isNewCalibration || belowMinThreshold || acceleratingDown || decceleratingdown || nosmbhoneymoon
+        // Extraction des données de contexte pour éviter les variables globales
+        val context = SafetyContext(
+            delta = delta.toDouble(),
+            bg = bg,
+            iob = iob.toDouble(),
+            predictedBg = predictedBg.toDouble(),
+            eventualBG = eventualBG,
+            shortAvgDelta = shortAvgDelta.toDouble(),
+            longAvgDelta = longAvgDelta.toDouble(),
+            lastsmbtime = lastsmbtime,
+            fastingTime = fastingTime,
+            iscalibration = iscalibration,
+            targetBg = targetBg.toDouble(),
+            maxSMB = maxSMB,
+            maxIob = maxIob,
+            mealTime = mealTime,
+            bfastTime = bfastTime,
+            lunchTime = lunchTime,
+            dinnerTime = dinnerTime,
+            highCarbTime = highCarbTime,
+            snackTime = snackTime
+        )
 
-        val conditionsTrueString = if (conditionsTrue.isNotEmpty()) {
-            conditionsTrue.joinToString(", ")
+        // Récupération des conditions critiques
+        val criticalConditions = determineCriticalConditions(context)
+
+        // Calcul du résultat final
+        val isCritical = criticalConditions.isNotEmpty()
+
+        // Construction du message de retour
+        val message = buildConditionMessage(isCritical, criticalConditions)
+
+        return Pair(isCritical, message)
+    }
+
+    /**
+     * Structure de données pour le contexte de sécurité
+     */
+    private data class SafetyContext(
+        val delta: Double,
+        val bg: Double,
+        val iob: Double,
+        val predictedBg: Double,
+        val eventualBG: Double,
+        val shortAvgDelta: Double,
+        val longAvgDelta: Double,
+        val lastsmbtime: Int,
+        val fastingTime: Boolean,
+        val iscalibration: Boolean,
+        val targetBg: Double,
+        val maxSMB: Double,
+        val maxIob: Double,
+        val mealTime: Boolean,
+        val bfastTime: Boolean,
+        val lunchTime: Boolean,
+        val dinnerTime: Boolean,
+        val highCarbTime: Boolean,
+        val snackTime: Boolean
+    )
+
+    /**
+     * Détermine les conditions critiques à partir du contexte fourni
+     */
+    private fun determineCriticalConditions(context: SafetyContext): List<String> {
+        val conditions = mutableListOf<String>()
+
+        // Vérification des conditions critiques avec des noms explicites
+        if (isNosmbHm(context)) conditions.add("nosmbHM")
+        if (isHoneysmb(context)) conditions.add("honeysmb")
+        if (isNegDelta(context)) conditions.add("negdelta")
+        if (isNosmb(context)) conditions.add("nosmb")
+        if (isFasting(context)) conditions.add("fasting")
+        if (isBelowMinThreshold(context)) conditions.add("belowMinThreshold")
+        if (isNewCalibration(context)) conditions.add("isNewCalibration")
+        if (isBelowTargetAndDropping(context)) conditions.add("belowTargetAndDropping")
+        if (isBelowTargetAndStableButNoCob(context)) conditions.add("belowTargetAndStableButNoCob")
+        if (isDroppingFast(context)) conditions.add("droppingFast")
+        if (isDroppingFastAtHigh(context)) conditions.add("droppingFastAtHigh")
+        if (isDroppingVeryFast(context)) conditions.add("droppingVeryFast")
+        if (isPrediction(context)) conditions.add("prediction")
+        if (isInterval(context)) conditions.add("interval")
+        if (isTargetInterval(context)) conditions.add("targetinterval")
+        if (isBg90(context)) conditions.add("bg90")
+        if (isAcceleratingDown(context)) conditions.add("acceleratingDown")
+        if (isDeceleratingDown(context)) conditions.add("decceleratingdown")
+        if (isNosmbHoneymoon(context)) conditions.add("nosmbhoneymoon")
+
+        return conditions
+    }
+
+    /**
+     * Construction du message de retour décrivant les conditions remplies
+     */
+    private fun buildConditionMessage(isCritical: Boolean, conditions: List<String>): String {
+        val conditionsString = if (conditions.isNotEmpty()) {
+            conditions.joinToString(", ")
         } else {
             "No conditions met"
         }
-        reasonBuilder.append("Safety condition $result : $conditionsTrue")
-        return Pair(result, conditionsTrueString)
+
+        return "Safety condition $isCritical : $conditionsString"
     }
+
+    // Fonctions de vérification spécifiques pour chaque condition
+    private fun isNosmbHm(context: SafetyContext): Boolean =
+        context.iob > 0.7 &&
+            preferences.get(BooleanKey.OApsAIMIhoneymoon) &&
+            context.delta <= 10.0 &&
+            !context.mealTime &&
+            !context.bfastTime &&
+            !context.lunchTime &&
+            !context.dinnerTime &&
+            context.predictedBg < 130
+
+    private fun isHoneysmb(context: SafetyContext): Boolean =
+        preferences.get(BooleanKey.OApsAIMIhoneymoon) &&
+            context.delta < 0 &&
+            context.bg < 170
+
+    private fun isNegDelta(context: SafetyContext): Boolean =
+        context.delta <= 0 &&
+            !context.mealTime &&
+            !context.bfastTime &&
+            !context.lunchTime &&
+            !context.dinnerTime &&
+            context.eventualBG < 140
+
+    private fun isNosmb(context: SafetyContext): Boolean =
+        context.iob >= 2 * context.maxSMB &&
+            context.bg < 110 &&
+            context.delta < 10 &&
+            !context.mealTime &&
+            !context.bfastTime &&
+            !context.lunchTime &&
+            !context.dinnerTime
+
+    private fun isFasting(context: SafetyContext): Boolean = context.fastingTime
+
+    private fun isBelowMinThreshold(context: SafetyContext): Boolean =
+        context.bg < 60 // Seuil arbitraire pour la valeur minimale
+
+    private fun isNewCalibration(context: SafetyContext): Boolean = context.iscalibration
+
+    private fun isBelowTargetAndDropping(context: SafetyContext): Boolean =
+        context.bg < context.targetBg &&
+            context.delta < 0
+
+    private fun isBelowTargetAndStableButNoCob(context: SafetyContext): Boolean =
+        context.bg < context.targetBg &&
+            context.delta >= 0 &&
+            context.iob <= 0 // Pas de COB (Carbohydrate On Board)
+
+    private fun isDroppingFast(context: SafetyContext): Boolean =
+        context.delta < -2.0 // Seuil arbitraire pour une chute rapide
+
+    private fun isDroppingFastAtHigh(context: SafetyContext): Boolean =
+        context.bg > 180 &&
+            context.delta < -1.5
+
+    private fun isDroppingVeryFast(context: SafetyContext): Boolean =
+        context.delta < -3.0
+
+    private fun isPrediction(context: SafetyContext): Boolean =
+        context.predictedBg < context.bg &&
+            context.delta < 0
+
+    private fun isInterval(context: SafetyContext): Boolean =
+        context.eventualBG > context.targetBg &&
+            context.lastsmbtime > 10 // Seuil arbitraire pour le temps écoulé
+
+    private fun isTargetInterval(context: SafetyContext): Boolean =
+        context.bg < context.targetBg &&
+            context.delta > 0
+
+    private fun isBg90(context: SafetyContext): Boolean = context.bg < 90
+
+    private fun isAcceleratingDown(context: SafetyContext): Boolean =
+        context.delta < 0 &&
+            context.longAvgDelta < 0 &&
+            context.shortAvgDelta < 0
+
+    private fun isDeceleratingDown(context: SafetyContext): Boolean =
+        context.delta > 0 &&
+            context.longAvgDelta > 0 &&
+            context.shortAvgDelta > 0
+
+    private fun isNosmbHoneymoon(context: SafetyContext): Boolean =
+        preferences.get(BooleanKey.OApsAIMIhoneymoon) &&
+            context.iob <= 0 &&
+            context.lastsmbtime > 30
+
     private fun isSportSafetyCondition(): Boolean {
         val sport = targetBg >= 140 && recentSteps5Minutes >= 200 && recentSteps10Minutes >= 400
         val sport1 = targetBg >= 140 && recentSteps5Minutes >= 200 && averageBeatsPerMinute > averageBeatsPerMinute10
