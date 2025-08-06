@@ -142,7 +142,7 @@ class EquilPairAirFragment : EquilPairFragmentBase() {
     }
 
     private fun setProfile() {
-        val profile = profileFunction.getProfile()?.toPumpProfile(activePlugin)
+        val profile = profileFunction.getProfile()?.toPump(activePlugin)
         if (profile == null) {
             setTime()
             return

@@ -326,7 +326,7 @@ sealed class ProfileSealed(
             timeZone = TimeZone.getDefault()
         )
 
-    override fun toPumpProfile(activePlugin: ActivePlugin): Profile =
+    override fun toPump(activePlugin: ActivePlugin): Profile =
         Pure(
             PureProfile(
                 jsonObject = JSONObject(),

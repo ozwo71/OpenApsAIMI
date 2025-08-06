@@ -47,6 +47,8 @@ class PumpSyncImplementation @Inject constructor(
 ) : PumpSync {
 
     private val disposable = CompositeDisposable()
+    private val concentration: Double
+        get()= activePlugin.activeInsulin.concentration
 
     override fun connectNewPump(endRunning: Boolean) {
         if (endRunning) {
@@ -145,7 +147,7 @@ class PumpSyncImplementation @Inject constructor(
                     amount = bolus.amount
                 )
             },
-            profile = profileFunction.getProfile(),
+            profile = profileFunction.getProfile()?.toPump(activePlugin),
             serialNumber = preferences.get(StringNonKey.ActivePumpSerialNumber)
         )
     }
@@ -154,7 +156,7 @@ class PumpSyncImplementation @Inject constructor(
         if (!confirmActivePump(timestamp, pumpType, pumpSerial)) return false
         val bolus = BS(
             timestamp = timestamp,
-            amount = amount,
+            amount = amount * concentration,
             type = type,
             ids = IDs(
                 temporaryId = temporaryId,
@@ -171,7 +173,7 @@ class PumpSyncImplementation @Inject constructor(
         if (!confirmActivePump(timestamp, pumpType, pumpSerial)) return false
         val bolus = BS(
             timestamp = timestamp,
-            amount = amount,
+            amount = amount * concentration,
             type = BS.Type.NORMAL, // not used for update
             ids = IDs(
                 temporaryId = temporaryId,
@@ -189,7 +191,7 @@ class PumpSyncImplementation @Inject constructor(
         if (!confirmActivePump(timestamp, pumpType, pumpSerial)) return false
         val bolus = BS(
             timestamp = timestamp,
-            amount = amount,
+            amount = amount * concentration,
             type = type ?: BS.Type.NORMAL,
             ids = IDs(
                 pumpId = pumpId,
@@ -306,7 +308,7 @@ class PumpSyncImplementation @Inject constructor(
         if (!confirmActivePump(timestamp, pumpType, pumpSerial)) return false
         val temporaryBasal = TB(
             timestamp = timestamp,
-            rate = rate,
+            rate = if (isAbsolute) rate  * concentration else rate,
             duration = duration,
             type = type?.toDbType() ?: TB.Type.NORMAL,
             isAbsolute = isAbsolute,
@@ -341,7 +343,7 @@ class PumpSyncImplementation @Inject constructor(
         if (!confirmActivePump(timestamp, pumpType, pumpSerial)) return false
         val temporaryBasal = TB(
             timestamp = timestamp,
-            rate = rate,
+            rate = if(isAbsolute) rate * concentration else rate,
             duration = duration,
             type = type.toDbType(),
             isAbsolute = isAbsolute,
@@ -370,7 +372,7 @@ class PumpSyncImplementation @Inject constructor(
         if (!confirmActivePump(timestamp, pumpType, pumpSerial)) return false
         val temporaryBasal = TB(
             timestamp = timestamp,
-            rate = rate,
+            rate = if(isAbsolute) rate * concentration else rate,
             duration = duration,
             type = TB.Type.NORMAL, // not used for update
             isAbsolute = isAbsolute,
@@ -410,7 +412,7 @@ class PumpSyncImplementation @Inject constructor(
         if (!confirmActivePump(timestamp, pumpType, pumpSerial)) return false
         val extendedBolus = EB(
             timestamp = timestamp,
-            amount = amount,
+            amount = amount * concentration,
             duration = duration,
             isEmulatingTempBasal = isEmulatingTB,
             ids = IDs(
@@ -436,9 +438,9 @@ class PumpSyncImplementation @Inject constructor(
         if (!confirmActivePump(timestamp, pumpType, pumpSerial, showNotification = false)) return false
         val tdd = TDD(
             timestamp = timestamp,
-            bolusAmount = bolusAmount,
-            basalAmount = basalAmount,
-            totalAmount = totalAmount,
+            bolusAmount = bolusAmount * concentration,
+            basalAmount = basalAmount * concentration,
+            totalAmount = totalAmount * concentration,
             ids = IDs(
                 pumpId = pumpId,
                 pumpType = pumpType,

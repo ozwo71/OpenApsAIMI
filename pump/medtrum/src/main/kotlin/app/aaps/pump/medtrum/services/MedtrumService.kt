@@ -226,7 +226,7 @@ class MedtrumService : DaggerService(), BLECommCallback {
     }
 
     fun startActivate(): Boolean {
-        val profile = profileFunction.getProfile()?.toPumpProfile(activePlugin)?.let { medtrumPump.buildMedtrumProfileArray(it) }
+        val profile = profileFunction.getProfile()?.toPump(activePlugin)?.let { medtrumPump.buildMedtrumProfileArray(it) }
         val packet = profile?.let { ActivatePacket(injector, it) }
         return packet?.let { sendPacketAndGetResponse(it) } == true
     }

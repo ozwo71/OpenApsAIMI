@@ -29,7 +29,8 @@ class CommandExtendedBolus(
     override val commandType: Command.CommandType = Command.CommandType.EXTENDEDBOLUS
 
     override fun execute() {
-        val r = activePlugin.activePump.setExtendedBolus(insulin / activePlugin.activeInsulin.concentration, durationInMinutes)
+        val concentration = activePlugin.activeInsulin.concentration
+        val r = activePlugin.activePump.setExtendedBolus(insulin / concentration, durationInMinutes).insulinConvertion(concentration)
         aapsLogger.debug(LTag.PUMPQUEUE, "Result rate: $insulin durationInMinutes: $durationInMinutes success: ${r.success} enacted: ${r.enacted}")
         callback?.result(r)?.run()
     }

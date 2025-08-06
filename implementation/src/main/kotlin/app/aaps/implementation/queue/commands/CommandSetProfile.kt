@@ -40,12 +40,13 @@ class CommandSetProfile(
     override val commandType: Command.CommandType = Command.CommandType.BASAL_PROFILE
 
     override fun execute() {
-        if (commandQueue.isThisProfileSet(profile) && persistenceLayer.getEffectiveProfileSwitchActiveAt(dateUtil.now()) != null) {
+        if (commandQueue.isThisProfileSet(profile.toPump(activePlugin)) && persistenceLayer.getEffectiveProfileSwitchActiveAt(dateUtil.now()) != null) {
             aapsLogger.debug(LTag.PUMPQUEUE, "Correct profile already set. profile: $profile")
             callback?.result(instantiator.providePumpEnactResult().success(true).enacted(false))?.run()
             return
         }
-        val r = activePlugin.activePump.setNewBasalProfile(profile.toPumpProfile(activePlugin))
+        aapsLogger.debug("xxxx isThisProfileSet: ${commandQueue.isThisProfileSet(profile.toPump(activePlugin))}")
+        val r = activePlugin.activePump.setNewBasalProfile(profile.toPump(activePlugin))
         aapsLogger.debug(LTag.PUMPQUEUE, "Result success: ${r.success} enacted: ${r.enacted} profile: $profile")
         callback?.result(r)?.run()
         // Send SMS notification if ProfileSwitch is coming from NS

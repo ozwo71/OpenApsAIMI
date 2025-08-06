@@ -175,7 +175,7 @@ open class VirtualPumpPlugin @Inject constructor(
     override fun lastDataTime(): Long = lastDataTime
 
     override val baseBasalRate: Double
-        get() = profileFunction.getProfile()?.toPumpProfile(activePlugin)?.getBasal() ?: 0.0
+        get() = profileFunction.getProfile()?.toPump(activePlugin)?.getBasal() ?: 0.0
 
     override val reservoirLevel: Double
         get() =
@@ -189,7 +189,6 @@ open class VirtualPumpPlugin @Inject constructor(
         // Insulin value must be greater than 0
         require(detailedBolusInfo.carbs == 0.0) { detailedBolusInfo.toString() }
         require(detailedBolusInfo.insulin > 0) { detailedBolusInfo.toString() }
-        aapsLogger.debug("xxxxx deliverTreatment detailedBolusInfo: $detailedBolusInfo")
         val result = instantiator.providePumpEnactResult()
             .success(true)
             .bolusDelivered(detailedBolusInfo.insulin)

@@ -1173,7 +1173,7 @@ class OmnipodDashPumpPlugin @Inject constructor(
     }
 
     private fun resumeDelivery(): PumpEnactResult {
-        return profileFunction.getProfile()?.toPumpProfile(activePlugin)?.let {
+        return profileFunction.getProfile()?.toPump(activePlugin)?.let {
             executeProgrammingCommand(
                 pre = observeDeliverySuspended(),
                 historyEntry = history.createRecord(OmnipodCommandType.RESUME_DELIVERY, basalProfileRecord = BasalValuesRecord(it.getBasalValues().toList())),
@@ -1210,7 +1210,7 @@ class OmnipodDashPumpPlugin @Inject constructor(
     }
 
     private fun handleTimeChange(): PumpEnactResult {
-        return profileFunction.getProfile()?.toPumpProfile(activePlugin)?.let {
+        return profileFunction.getProfile()?.toPump(activePlugin)?.let {
             setNewBasalProfile(it, OmnipodCommandType.SET_TIME)
         } ?: instantiator.providePumpEnactResult().success(false).enacted(false).comment("No profile active")
     }

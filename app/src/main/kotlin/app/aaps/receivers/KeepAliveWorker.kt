@@ -205,7 +205,7 @@ class KeepAliveWorker(
         }
         if (loop.runningMode == RM.Mode.DISCONNECTED_PUMP) {
             // do nothing if pump is disconnected
-        } else if (runningProfile == null || ((!pump.isThisProfileSet(requestedProfile.toPumpProfile(activePlugin)) || !requestedProfile.isEqual(runningProfile)
+        } else if (runningProfile == null || ((!pump.isThisProfileSet(requestedProfile.toPump(activePlugin)) || !requestedProfile.isEqual(runningProfile)
                 || (runningProfile is ProfileSealed.EPS && runningProfile.value.originalEnd < dateUtil.now() && runningProfile.value.originalDuration != 0L))
                 && !commandQueue.isRunning(Command.CommandType.BASAL_PROFILE))
         ) {

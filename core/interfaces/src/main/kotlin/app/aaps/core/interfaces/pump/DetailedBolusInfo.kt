@@ -7,6 +7,7 @@ import app.aaps.core.data.model.CA
 import app.aaps.core.data.model.IDs
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.pump.defs.PumpType
+import app.aaps.core.interfaces.plugin.ActivePlugin
 
 class DetailedBolusInfo {
 
@@ -85,5 +86,9 @@ class DetailedBolusInfo {
         n.bolusPumpId = bolusPumpId
         n.carbsTimestamp = carbsTimestamp
         return n
+    }
+
+    fun toPump(activePlugin: ActivePlugin): DetailedBolusInfo = copy().also {
+        it.insulin = it.insulin / activePlugin.activeInsulin.concentration
     }
 }

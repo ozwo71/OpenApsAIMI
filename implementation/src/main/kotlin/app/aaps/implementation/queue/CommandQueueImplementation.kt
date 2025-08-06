@@ -450,13 +450,13 @@ class CommandQueueImplementation @Inject constructor(
             callback?.result(instantiator.providePumpEnactResult().success(true).enacted(false))?.run()
             return false
         }
-        if (isThisProfileSet(profile) && persistenceLayer.getEffectiveProfileSwitchActiveAt(dateUtil.now()) != null) {
+        if (isThisProfileSet(profile.toPump(activePlugin)) && persistenceLayer.getEffectiveProfileSwitchActiveAt(dateUtil.now()) != null) {
             aapsLogger.debug(LTag.PUMPQUEUE, "Correct profile already set")
             callback?.result(instantiator.providePumpEnactResult().success(true).enacted(false))?.run()
             return false
         }
         // Compare with pump limits
-        val basalValues = profile.getBasalValues()
+        val basalValues = profile.toPump(activePlugin).getBasalValues()
         for (basalValue in basalValues) {
             if (basalValue.value < activePlugin.activePump.pumpDescription.basalMinimumRate) {
                 val notification = Notification(Notification.BASAL_VALUE_BELOW_MINIMUM, rh.gs(R.string.basal_value_below_minimum), Notification.URGENT)
@@ -663,7 +663,7 @@ class CommandQueueImplementation @Inject constructor(
 
     override fun isThisProfileSet(requestedProfile: Profile): Boolean {
         val runningProfile = profileFunction.getProfile() ?: return false
-        val result = activePlugin.activePump.isThisProfileSet(requestedProfile.toPumpProfile(activePlugin)) && requestedProfile.isEqual(runningProfile)
+        val result = activePlugin.activePump.isThisProfileSet(requestedProfile.toPump(activePlugin)) && requestedProfile.isEqual(runningProfile)
         if (!result) {
             aapsLogger.debug(LTag.PUMPQUEUE, "Current profile: ${profileFunction.getProfile()}")
             aapsLogger.debug(LTag.PUMPQUEUE, "New profile: $requestedProfile")
