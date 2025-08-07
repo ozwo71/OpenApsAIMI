@@ -1639,118 +1639,86 @@ fun appendCompactLog(
     }
     private fun calculateSMBInterval(): Int {
         val reasonBuilder = StringBuilder()
-        // Récupération des intervalles configurés
-        val intervalSnack = preferences.get(IntKey.OApsAIMISnackinterval)
-        val intervalMeal = preferences.get(IntKey.OApsAIMImealinterval)
-        val intervalBF = preferences.get(IntKey.OApsAIMIBFinterval)
-        val intervalLunch = preferences.get(IntKey.OApsAIMILunchinterval)
-        val intervalDinner = preferences.get(IntKey.OApsAIMIDinnerinterval)
-        val intervalSleep = preferences.get(IntKey.OApsAIMISleepinterval)
-        val intervalHC = preferences.get(IntKey.OApsAIMIHCinterval)
-        val intervalHighBG = preferences.get(IntKey.OApsAIMIHighBGinterval)
+
+        // Récupération préalable des intervalles depuis les préférences
+        val intervals = SMBIntervals(
+            snack = preferences.get(IntKey.OApsAIMISnackinterval),
+            meal = preferences.get(IntKey.OApsAIMImealinterval),
+            bfast = preferences.get(IntKey.OApsAIMIBFinterval),
+            lunch = preferences.get(IntKey.OApsAIMILunchinterval),
+            dinner = preferences.get(IntKey.OApsAIMIDinnerinterval),
+            sleep = preferences.get(IntKey.OApsAIMISleepinterval),
+            hc = preferences.get(IntKey.OApsAIMIHCinterval),
+            highBG = preferences.get(IntKey.OApsAIMIHighBGinterval)
+        )
+
+        // Condition critique : si delta > 15, intervalle fixe à 1
         if (delta > 15f) {
+            reasonBuilder.append("Interval : 1 (delta > 15)")
             return 1
         }
-        // Par défaut, on part d'un intervalle de base (par exemple 5 minutes)
-        var interval = 5
 
-        // Si une des conditions d'intervalle est satisfaite, annuler l'intervalle (0 minute)
-        if (shouldApplyIntervalAdjustment(
-                intervalSnack, intervalMeal, intervalBF,
-                intervalLunch, intervalDinner, intervalSleep,
-                intervalHC, intervalHighBG
-            )) {
+        var interval = 5 // Intervalle de base
+
+        // Vérification des ajustements basés sur les intervalles configurés
+        if (shouldApplyIntervalAdjustment(intervals)) {
             interval = 0
-        }
-        // Sinon, si une condition de sécurité s'applique, forcer un intervalle de 10 minutes
-        else if (shouldApplySafetyAdjustment()) {
+        } else if (shouldApplySafetyAdjustment()) {
             interval = 10
-        }
-        // Sinon, si une condition temporelle (ex. heure inappropriée) s'applique, fixer l'intervalle à 10 minutes
-        else if (shouldApplyTimeAdjustment()) {
+        } else if (shouldApplyTimeAdjustment()) {
             interval = 10
         }
 
-        // Si une forte activité est détectée via les pas, l'intervalle devient 0 (on annule toute nouvelle administration)
+        // Ajustement basé sur l'activité physique
         if (shouldApplyStepAdjustment()) {
             interval = 0
         }
 
         // Ajustements supplémentaires :
-        // Si BG est en dessous de la cible (et donc en chute), augmenter l'intervalle (attendre plus longtemps)
         if (bg < targetBg) {
             interval = (interval * 2).coerceAtMost(20)
         }
-        // En mode honeymoon avec BG < 170 et delta faible, attendre plus longtemps
-        if (preferences.get(BooleanKey.OApsAIMIhoneymoon) && bg < 170 && delta < 5) {
+
+        val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
+        if (honeymoon && bg < 170 && delta < 5) {
             interval = (interval * 2).coerceAtMost(20)
         }
-        // Si c'est la nuit (par exemple à 23h) et que delta est faible et IOB bas, on réduit légèrement l'intervalle
+
         val currentHour = LocalTime.now().hour
         if (preferences.get(BooleanKey.OApsAIMInight) && currentHour == 23 && delta < 10 && iob < maxSMB) {
             interval = (interval * 0.8).toInt()
         }
+
         reasonBuilder.append("Interval : $interval")
         return interval
     }
 
-    private fun applySpecificAdjustments(smbToGive: Float): Float {
-        var result = smbToGive
-        val intervalSMBsnack = preferences.get(IntKey.OApsAIMISnackinterval)
-        val intervalSMBmeal = preferences.get(IntKey.OApsAIMImealinterval)
-        val intervalSMBbfast = preferences.get(IntKey.OApsAIMIBFinterval)
-        val intervalSMBlunch = preferences.get(IntKey.OApsAIMILunchinterval)
-        val intervalSMBdinner = preferences.get(IntKey.OApsAIMIDinnerinterval)
-        val intervalSMBsleep = preferences.get(IntKey.OApsAIMISleepinterval)
-        val intervalSMBhc = preferences.get(IntKey.OApsAIMIHCinterval)
-        val intervalSMBhighBG = preferences.get(IntKey.OApsAIMIHighBGinterval)
-        val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-        val belowTargetAndDropping = bg < targetBg
-        val night = preferences.get(BooleanKey.OApsAIMInight)
-        val currentHour = LocalTime.now().hour
+    // Structure pour regrouper les intervalles
+    data class SMBIntervals(
+        val snack: Int,
+        val meal: Int,
+        val bfast: Int,
+        val lunch: Int,
+        val dinner: Int,
+        val sleep: Int,
+        val hc: Int,
+        val highBG: Int
+    )
 
-        when {
-            shouldApplyIntervalAdjustment(intervalSMBsnack, intervalSMBmeal, intervalSMBbfast, intervalSMBlunch, intervalSMBdinner, intervalSMBsleep, intervalSMBhc, intervalSMBhighBG) -> {
-                result = 0.0f
-            }
-            shouldApplySafetyAdjustment() -> {
-                result *= 0.75f
-                this.intervalsmb = 10
-            }
-            shouldApplyTimeAdjustment() -> {
-                result = 0.0f
-                this.intervalsmb = 10
-            }
-        }
-
-        if (shouldApplyStepAdjustment()) result = 0.0f
-        if (belowTargetAndDropping) result /= 2
-        if (honeymoon && bg < 170 && delta < 5) result /= 2
-        if (night && currentHour in 23..23 && delta < 10 && iob < maxSMB) result *= 0.8f
-        if (currentHour in 0..7 && delta < 10 && iob < maxSMB) result *= 0.8f // Ajout d'une réduction pendant la période de minuit à 5h du matin
-
-        return result
-    }
-
-
-    private fun shouldApplyIntervalAdjustment(
-        intervalSMBsnack: Int, intervalSMBmeal: Int, intervalSMBbfast: Int,
-        intervalSMBlunch: Int, intervalSMBdinner: Int, intervalSMBsleep: Int,
-        intervalSMBhc: Int, intervalSMBhighBG: Int
-    ): Boolean {
+    // Refacto des fonctions de vérification conditionnelles
+    private fun shouldApplyIntervalAdjustment(intervals: SMBIntervals): Boolean {
         val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
 
-        return (lastsmbtime < intervalSMBsnack && snackTime)
-            || (lastsmbtime < intervalSMBmeal && mealTime)
-            || (lastsmbtime < intervalSMBbfast && bfastTime)
-            || (lastsmbtime < intervalSMBlunch && lunchTime)
-            || (lastsmbtime < intervalSMBdinner && dinnerTime)
-            || (lastsmbtime < intervalSMBsleep && sleepTime)
-            || (lastsmbtime < intervalSMBhc && highCarbTime)
-            || (!honeymoon && lastsmbtime < intervalSMBhighBG && bg > 120)
-            || (honeymoon && lastsmbtime < intervalSMBhighBG && bg > 180)
+        return (lastsmbtime < intervals.snack && snackTime)
+            || (lastsmbtime < intervals.meal && mealTime)
+            || (lastsmbtime < intervals.bfast && bfastTime)
+            || (lastsmbtime < intervals.lunch && lunchTime)
+            || (lastsmbtime < intervals.dinner && dinnerTime)
+            || (lastsmbtime < intervals.sleep && sleepTime)
+            || (lastsmbtime < intervals.hc && highCarbTime)
+            || (!honeymoon && lastsmbtime < intervals.highBG && bg > 120)
+            || (honeymoon && lastsmbtime < intervals.highBG && bg > 180)
     }
-
 
     private fun shouldApplySafetyAdjustment(): Boolean {
         val safetysmb = recentSteps180Minutes > 1500 && bg < 120
@@ -1765,6 +1733,181 @@ fun appendCompactLog(
     private fun shouldApplyStepAdjustment(): Boolean {
         return recentSteps5Minutes > 100 && recentSteps30Minutes > 500 && lastsmbtime < 20
     }
+
+    // Fonction modifiée pour utiliser les nouvelles structures
+    private fun applySpecificAdjustments(smbAmount: Float): Float {
+        val intervals = SMBIntervals(
+            snack = preferences.get(IntKey.OApsAIMISnackinterval),
+            meal = preferences.get(IntKey.OApsAIMImealinterval),
+            bfast = preferences.get(IntKey.OApsAIMIBFinterval),
+            lunch = preferences.get(IntKey.OApsAIMILunchinterval),
+            dinner = preferences.get(IntKey.OApsAIMIDinnerinterval),
+            sleep = preferences.get(IntKey.OApsAIMISleepinterval),
+            hc = preferences.get(IntKey.OApsAIMIHCinterval),
+            highBG = preferences.get(IntKey.OApsAIMIHighBGinterval)
+        )
+
+        val currentHour = LocalTime.now().hour
+        val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
+
+        when {
+            shouldApplyIntervalAdjustment(intervals) -> return 0.0f
+            shouldApplySafetyAdjustment() -> {
+                this.intervalsmb = 10
+                return smbAmount / 2
+            }
+            shouldApplyTimeAdjustment() -> {
+                this.intervalsmb = 10
+                return 0.0f
+            }
+        }
+
+        if (shouldApplyStepAdjustment()) return 0.0f
+
+        val belowTargetAndDropping = bg < targetBg
+        if (belowTargetAndDropping) return smbAmount / 2
+
+        if (honeymoon && bg < 170 && delta < 5) return smbAmount / 2
+
+        if (preferences.get(BooleanKey.OApsAIMInight) && currentHour in 23..23 && delta < 10 && iob < maxSMB) {
+            return smbAmount * 0.8f
+        }
+
+        if (currentHour in 0..7 && delta < 10 && iob < maxSMB) {
+            return smbAmount * 0.8f
+        }
+
+        return smbAmount
+    }
+
+    // private fun calculateSMBInterval(): Int {
+    //     val reasonBuilder = StringBuilder()
+    //     // Récupération des intervalles configurés
+    //     val intervalSnack = preferences.get(IntKey.OApsAIMISnackinterval)
+    //     val intervalMeal = preferences.get(IntKey.OApsAIMImealinterval)
+    //     val intervalBF = preferences.get(IntKey.OApsAIMIBFinterval)
+    //     val intervalLunch = preferences.get(IntKey.OApsAIMILunchinterval)
+    //     val intervalDinner = preferences.get(IntKey.OApsAIMIDinnerinterval)
+    //     val intervalSleep = preferences.get(IntKey.OApsAIMISleepinterval)
+    //     val intervalHC = preferences.get(IntKey.OApsAIMIHCinterval)
+    //     val intervalHighBG = preferences.get(IntKey.OApsAIMIHighBGinterval)
+    //     if (delta > 15f) {
+    //         return 1
+    //     }
+    //     // Par défaut, on part d'un intervalle de base (par exemple 5 minutes)
+    //     var interval = 5
+    //
+    //     // Si une des conditions d'intervalle est satisfaite, annuler l'intervalle (0 minute)
+    //     if (shouldApplyIntervalAdjustment(
+    //             intervalSnack, intervalMeal, intervalBF,
+    //             intervalLunch, intervalDinner, intervalSleep,
+    //             intervalHC, intervalHighBG
+    //         )) {
+    //         interval = 0
+    //     }
+    //     // Sinon, si une condition de sécurité s'applique, forcer un intervalle de 10 minutes
+    //     else if (shouldApplySafetyAdjustment()) {
+    //         interval = 10
+    //     }
+    //     // Sinon, si une condition temporelle (ex. heure inappropriée) s'applique, fixer l'intervalle à 10 minutes
+    //     else if (shouldApplyTimeAdjustment()) {
+    //         interval = 10
+    //     }
+    //
+    //     // Si une forte activité est détectée via les pas, l'intervalle devient 0 (on annule toute nouvelle administration)
+    //     if (shouldApplyStepAdjustment()) {
+    //         interval = 0
+    //     }
+    //
+    //     // Ajustements supplémentaires :
+    //     // Si BG est en dessous de la cible (et donc en chute), augmenter l'intervalle (attendre plus longtemps)
+    //     if (bg < targetBg) {
+    //         interval = (interval * 2).coerceAtMost(20)
+    //     }
+    //     // En mode honeymoon avec BG < 170 et delta faible, attendre plus longtemps
+    //     if (preferences.get(BooleanKey.OApsAIMIhoneymoon) && bg < 170 && delta < 5) {
+    //         interval = (interval * 2).coerceAtMost(20)
+    //     }
+    //     // Si c'est la nuit (par exemple à 23h) et que delta est faible et IOB bas, on réduit légèrement l'intervalle
+    //     val currentHour = LocalTime.now().hour
+    //     if (preferences.get(BooleanKey.OApsAIMInight) && currentHour == 23 && delta < 10 && iob < maxSMB) {
+    //         interval = (interval * 0.8).toInt()
+    //     }
+    //     reasonBuilder.append("Interval : $interval")
+    //     return interval
+    // }
+    //
+    // private fun applySpecificAdjustments(smbToGive: Float): Float {
+    //     var result = smbToGive
+    //     val intervalSMBsnack = preferences.get(IntKey.OApsAIMISnackinterval)
+    //     val intervalSMBmeal = preferences.get(IntKey.OApsAIMImealinterval)
+    //     val intervalSMBbfast = preferences.get(IntKey.OApsAIMIBFinterval)
+    //     val intervalSMBlunch = preferences.get(IntKey.OApsAIMILunchinterval)
+    //     val intervalSMBdinner = preferences.get(IntKey.OApsAIMIDinnerinterval)
+    //     val intervalSMBsleep = preferences.get(IntKey.OApsAIMISleepinterval)
+    //     val intervalSMBhc = preferences.get(IntKey.OApsAIMIHCinterval)
+    //     val intervalSMBhighBG = preferences.get(IntKey.OApsAIMIHighBGinterval)
+    //     val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
+    //     val belowTargetAndDropping = bg < targetBg
+    //     val night = preferences.get(BooleanKey.OApsAIMInight)
+    //     val currentHour = LocalTime.now().hour
+    //
+    //     when {
+    //         shouldApplyIntervalAdjustment(intervalSMBsnack, intervalSMBmeal, intervalSMBbfast, intervalSMBlunch, intervalSMBdinner, intervalSMBsleep, intervalSMBhc, intervalSMBhighBG) -> {
+    //             result = 0.0f
+    //         }
+    //         shouldApplySafetyAdjustment() -> {
+    //             result *= 0.75f
+    //             this.intervalsmb = 10
+    //         }
+    //         shouldApplyTimeAdjustment() -> {
+    //             result = 0.0f
+    //             this.intervalsmb = 10
+    //         }
+    //     }
+    //
+    //     if (shouldApplyStepAdjustment()) result = 0.0f
+    //     if (belowTargetAndDropping) result /= 2
+    //     if (honeymoon && bg < 170 && delta < 5) result /= 2
+    //     if (night && currentHour in 23..23 && delta < 10 && iob < maxSMB) result *= 0.8f
+    //     if (currentHour in 0..7 && delta < 10 && iob < maxSMB) result *= 0.8f // Ajout d'une réduction pendant la période de minuit à 5h du matin
+    //
+    //     return result
+    // }
+    //
+    //
+    // private fun shouldApplyIntervalAdjustment(
+    //     intervalSMBsnack: Int, intervalSMBmeal: Int, intervalSMBbfast: Int,
+    //     intervalSMBlunch: Int, intervalSMBdinner: Int, intervalSMBsleep: Int,
+    //     intervalSMBhc: Int, intervalSMBhighBG: Int
+    // ): Boolean {
+    //     val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
+    //
+    //     return (lastsmbtime < intervalSMBsnack && snackTime)
+    //         || (lastsmbtime < intervalSMBmeal && mealTime)
+    //         || (lastsmbtime < intervalSMBbfast && bfastTime)
+    //         || (lastsmbtime < intervalSMBlunch && lunchTime)
+    //         || (lastsmbtime < intervalSMBdinner && dinnerTime)
+    //         || (lastsmbtime < intervalSMBsleep && sleepTime)
+    //         || (lastsmbtime < intervalSMBhc && highCarbTime)
+    //         || (!honeymoon && lastsmbtime < intervalSMBhighBG && bg > 120)
+    //         || (honeymoon && lastsmbtime < intervalSMBhighBG && bg > 180)
+    // }
+    //
+    //
+    // private fun shouldApplySafetyAdjustment(): Boolean {
+    //     val safetysmb = recentSteps180Minutes > 1500 && bg < 120
+    //     return (safetysmb || lowCarbTime) && lastsmbtime >= 15
+    // }
+    //
+    // private fun shouldApplyTimeAdjustment(): Boolean {
+    //     val safetysmb = recentSteps180Minutes > 1500 && bg < 120
+    //     return (safetysmb || lowCarbTime) && lastsmbtime < 15
+    // }
+    //
+    // private fun shouldApplyStepAdjustment(): Boolean {
+    //     return recentSteps5Minutes > 100 && recentSteps30Minutes > 500 && lastsmbtime < 20
+    // }
     private fun finalizeSmbToGive(smbToGive: Float): Float {
         var result = smbToGive
         // Assurez-vous que smbToGive n'est pas négatif
