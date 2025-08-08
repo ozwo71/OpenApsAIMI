@@ -65,13 +65,13 @@ class StatusLightHandler @Inject constructor(
             handlePatchReservoirLevel(
                 reservoirLevel,
                 IntKey.OverviewResCritical, IntKey.OverviewResWarning,
-                pump.reservoirLevel,
+                pump.reservoirLevel * activePlugin.activeInsulin.concentration,
                 insulinUnit,
                 pump.pumpDescription.maxResorvoirReading.toDouble()
             )
         } else {
             if (cannulaUsage != null) scope.launch { handleUsage(cannulaUsage, insulinUnit) }
-            handleLevel(reservoirLevel, IntKey.OverviewResCritical, IntKey.OverviewResWarning, pump.reservoirLevel, insulinUnit)
+            handleLevel(reservoirLevel, IntKey.OverviewResCritical, IntKey.OverviewResWarning, pump.reservoirLevel * activePlugin.activeInsulin.concentration, insulinUnit)
         }
         if (!config.AAPSCLIENT) {
             if (bgSource.sensorBatteryLevel != -1)
