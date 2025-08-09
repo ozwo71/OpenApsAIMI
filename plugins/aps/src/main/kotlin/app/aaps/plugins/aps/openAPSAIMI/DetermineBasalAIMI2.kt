@@ -53,6 +53,7 @@ import kotlin.math.sqrt
 import app.aaps.plugins.aps.R
 
 import android.content.Context
+import com.google.common.cache.CacheBuilder
 import kotlin.math.exp
 
 @Singleton
@@ -1920,46 +1921,216 @@ fun appendCompactLog(
         return result
     }
     private fun calculateSMBFromModel(): Float {
-        val selectedModelFile: File?
-        val modelInputs: FloatArray
+        // Définir les deux modèles possibles avec leurs fichiers respectifs
+        val modelFiles = listOf(
+            ModelFile("main", modelFile),
+            ModelFile("UAM", modelFileUAM)
+        )
 
-        when {
-            cob > 0 && lastCarbAgeMin < 240 && modelFile.exists() -> {
-                selectedModelFile = modelFile
-                modelInputs = floatArrayOf(
-                    hourOfDay.toFloat(), weekend.toFloat(),
-                    bg.toFloat(), targetBg, iob, cob, lastCarbAgeMin.toFloat(), futureCarbs, delta, shortAvgDelta, longAvgDelta
-                )
-            }
-
-            modelFileUAM.exists()   -> {
-                selectedModelFile = modelFileUAM
-                modelInputs = floatArrayOf(
-                    hourOfDay.toFloat(), weekend.toFloat(),
-                    bg.toFloat(), targetBg, iob, delta, shortAvgDelta, longAvgDelta,
-                    tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour,
-                    recentSteps5Minutes.toFloat(),recentSteps10Minutes.toFloat(),recentSteps15Minutes.toFloat(),recentSteps30Minutes.toFloat(),recentSteps60Minutes.toFloat(),recentSteps180Minutes.toFloat()
-                )
-            }
-
-            else                 -> {
-                return 0.0F
-            }
+        // Sélectionner le modèle à utiliser selon la logique existante
+        val selectedModel = when {
+            cob > 0 && lastCarbAgeMin < 240 && modelFile.exists() -> modelFiles[0] // Modèle principal
+            modelFileUAM.exists() -> modelFiles[1] // Modèle UAM
+            else -> return 0.0F // Aucun modèle disponible
         }
 
-        val interpreter = Interpreter(selectedModelFile)
+        // Préparer les données d'entrée selon le modèle sélectionné
+        val modelInputs = when (selectedModel.name) {
+            "main" -> floatArrayOf(
+                hourOfDay.toFloat(), weekend.toFloat(),
+                bg.toFloat(), targetBg, iob, cob, lastCarbAgeMin.toFloat(), futureCarbs, delta, shortAvgDelta, longAvgDelta
+            )
+            "UAM" -> floatArrayOf(
+                hourOfDay.toFloat(), weekend.toFloat(),
+                bg.toFloat(), targetBg, iob, delta, shortAvgDelta, longAvgDelta,
+                tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour,
+                recentSteps5Minutes.toFloat(), recentSteps10Minutes.toFloat(), recentSteps15Minutes.toFloat(),
+                recentSteps30Minutes.toFloat(), recentSteps60Minutes.toFloat(), recentSteps180Minutes.toFloat()
+            )
+            else -> throw IllegalArgumentException("Modèle inconnu: ${selectedModel.name}")
+        }
+
+        // Utiliser le cache pour éviter les calculs redondants
+        val cacheKey = generateCacheKey(selectedModel.name, modelInputs)
+        val cachedResult = cache.getIfPresent(cacheKey)
+
+        if (cachedResult != null) {
+            return cachedResult
+        }
+
+        // Exécuter le modèle avec la logique existante
+        val interpreter = Interpreter(selectedModel.file)
         val output = arrayOf(floatArrayOf(0.0F))
         interpreter.run(modelInputs, output)
         interpreter.close()
+
+        // Traiter le résultat comme dans l'original
         var smbToGive = output[0][0].toString().replace(',', '.').toDouble()
 
         val formatter = DecimalFormat("#.####", DecimalFormatSymbols(Locale.US))
         smbToGive = formatter.format(smbToGive).toDouble()
 
-        return smbToGive.toFloat()
+        val finalResult = smbToGive.toFloat()
+
+        // Mettre en cache le résultat pour les appels futurs avec les mêmes paramètres
+        cache.put(cacheKey, finalResult)
+
+        return finalResult
     }
 
-private fun neuralnetwork5(
+    // Classe pour encapsuler les fichiers de modèle
+    private data class ModelFile(val name: String, val file: File)
+
+    // Générer une clé unique pour le cache basée sur le nom du modèle et les paramètres
+    private fun generateCacheKey(modelName: String, inputs: FloatArray): String {
+        return "${modelName}_${inputs.joinToString("_")}"
+    }
+
+    // Cache global pour stocker les résultats (peut être remplacé par un cache plus sophistiqué)
+    private val cache = CacheBuilder.newBuilder()
+        .maximumSize(1000) // Limiter le nombre de résultats mis en cache
+        .expireAfterWrite(30, TimeUnit.MINUTES) // Expire après 30 minutes
+        .build<String, Float>()
+
+    // private fun calculateSMBFromModel(): Float {
+    //     val selectedModelFile: File?
+    //     val modelInputs: FloatArray
+    //
+    //     when {
+    //         cob > 0 && lastCarbAgeMin < 240 && modelFile.exists() -> {
+    //             selectedModelFile = modelFile
+    //             modelInputs = floatArrayOf(
+    //                 hourOfDay.toFloat(), weekend.toFloat(),
+    //                 bg.toFloat(), targetBg, iob, cob, lastCarbAgeMin.toFloat(), futureCarbs, delta, shortAvgDelta, longAvgDelta
+    //             )
+    //         }
+    //
+    //         modelFileUAM.exists()   -> {
+    //             selectedModelFile = modelFileUAM
+    //             modelInputs = floatArrayOf(
+    //                 hourOfDay.toFloat(), weekend.toFloat(),
+    //                 bg.toFloat(), targetBg, iob, delta, shortAvgDelta, longAvgDelta,
+    //                 tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour,
+    //                 recentSteps5Minutes.toFloat(),recentSteps10Minutes.toFloat(),recentSteps15Minutes.toFloat(),recentSteps30Minutes.toFloat(),recentSteps60Minutes.toFloat(),recentSteps180Minutes.toFloat()
+    //             )
+    //         }
+    //
+    //         else                 -> {
+    //             return 0.0F
+    //         }
+    //     }
+    //
+    //     val interpreter = Interpreter(selectedModelFile)
+    //     val output = arrayOf(floatArrayOf(0.0F))
+    //     interpreter.run(modelInputs, output)
+    //     interpreter.close()
+    //     var smbToGive = output[0][0].toString().replace(',', '.').toDouble()
+    //
+    //     val formatter = DecimalFormat("#.####", DecimalFormatSymbols(Locale.US))
+    //     smbToGive = formatter.format(smbToGive).toDouble()
+    //
+    //     return smbToGive.toFloat()
+    // }
+    /**
+     * Calcul du SMB en utilisant le modèle mis en cache
+     */
+    // private fun calculateSMBFromModel(): Float {
+    //     // Utilisation du modèle mis en cache pour éviter les rechargements fréquents
+    //     val interpreter = cachedModel
+    //
+    //     // Sélection du modèle et des paramètres selon les conditions
+    //     val (selectedModelFile, inputValues) = selectModelAndInputs()
+    //
+    //     // Si aucun modèle n'est disponible, retourner 0
+    //     if (selectedModelFile == null || inputValues.isEmpty()) {
+    //         return 0.0F
+    //     }
+    //
+    //     try {
+    //         // Création du tableau de sortie
+    //         val output = floatArrayOf(0.0F)
+    //
+    //         // Exécution du modèle avec les paramètres sélectionnés
+    //         interpreter.run(inputValues, arrayOf(output))
+    //
+    //         // Récupération de la valeur calculée
+    //         val smbToGive = output[0]
+    //
+    //         // Validation des valeurs sensibles (vérification NaN, Infini, négatif)
+    //         return when {
+    //             smbToGive.isNaN() || smbToGive.isInfinite() -> 0.0F
+    //             smbToGive < 0 -> 0.0F // Insuline négative non valide
+    //             else -> {
+    //                 // Formatage avec précision contrôlée, éviter les conversions inutiles
+    //                 smbToGive
+    //             }
+    //         }
+    //     } catch (e: Exception) {
+    //         // Gestion d'erreur robuste en cas de problème d'exécution du modèle
+    //         e.printStackTrace()
+    //         return 0.0F
+    //     }
+    // }
+    //
+    // /**
+    //  * Sélection du modèle et des paramètres d'entrée selon les conditions métier
+    //  */
+    // private fun selectModelAndInputs(): Pair<File?, FloatArray> {
+    //     return when {
+    //         cob > 0 && lastCarbAgeMin < 240 && modelFile.exists() -> {
+    //             val inputs = floatArrayOf(
+    //                 hourOfDay.toFloat(), weekend.toFloat(),
+    //                 bg.toFloat(), targetBg, iob, cob, lastCarbAgeMin.toFloat(),
+    //                 futureCarbs, delta, shortAvgDelta, longAvgDelta
+    //             )
+    //             modelFile to inputs
+    //         }
+    //
+    //         modelFileUAM.exists() -> {
+    //             val inputs = floatArrayOf(
+    //                 hourOfDay.toFloat(), weekend.toFloat(),
+    //                 bg.toFloat(), targetBg, iob, delta, shortAvgDelta, longAvgDelta,
+    //                 tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour,
+    //                 recentSteps5Minutes.toFloat(), recentSteps10Minutes.toFloat(),
+    //                 recentSteps15Minutes.toFloat(), recentSteps30Minutes.toFloat(),
+    //                 recentSteps60Minutes.toFloat(), recentSteps180Minutes.toFloat()
+    //             )
+    //             modelFileUAM to inputs
+    //         }
+    //
+    //         else -> null to floatArrayOf() // Aucun modèle disponible
+    //     }
+    // }
+    //
+    // /**
+    //  * Initialisation du modèle TensorFlow Lite avec lazy loading pour éviter les rechargements
+    //  */
+    // private val cachedModel: Interpreter by lazy {
+    //     try {
+    //         val model = loadModelFile(modelFileUAM)
+    //         val options = Interpreter.Options()
+    //         Interpreter(model, options)
+    //     } catch (e: Exception) {
+    //         e.printStackTrace()
+    //         throw RuntimeException("Impossible de charger le modèle TensorFlow Lite", e)
+    //     }
+    // }
+    //
+    // private fun loadModelFile(file: File): ByteBuffer {
+    //     return try {
+    //         val inputStream = FileInputStream(file)
+    //         val fileDescriptor = inputStream.fd
+    //         val startOffset = 0L
+    //         val declaredLength = file.length()
+    //         FileChannel.open(Paths.get(file.absolutePath), StandardOpenOption.READ)
+    //             .map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
+    //     } catch (e: Exception) {
+    //         throw RuntimeException("Erreur lors du chargement du fichier modèle", e)
+    //     }
+    // }
+
+
+    private fun neuralnetwork5(
     delta: Float,
     shortAvgDelta: Float,
     longAvgDelta: Float,
