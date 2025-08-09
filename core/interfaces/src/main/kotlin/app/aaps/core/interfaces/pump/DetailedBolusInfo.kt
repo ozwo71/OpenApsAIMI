@@ -87,8 +87,4 @@ class DetailedBolusInfo {
         n.carbsTimestamp = carbsTimestamp
         return n
     }
-
-    fun toPump(activePlugin: ActivePlugin): DetailedBolusInfo = copy().also {
-        it.insulin = it.insulin / activePlugin.activeInsulin.concentration
-    }
 }

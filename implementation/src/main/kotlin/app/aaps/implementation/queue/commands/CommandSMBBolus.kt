@@ -39,7 +39,7 @@ class CommandSMBBolus(
     override val commandType: Command.CommandType = Command.CommandType.SMB_BOLUS
 
     override fun execute() {
-        val concentration = activePlugin.activeInsulin.concentration
+        detailedBolusInfo.insulin = detailedBolusInfo.insulin / activePlugin.activeInsulin.concentration
         val r: PumpEnactResult
         val lastBolusTime = persistenceLayer.getNewestBolus()?.timestamp ?: 0L
         aapsLogger.debug(LTag.PUMPQUEUE, "Last bolus: $lastBolusTime ${dateUtil.dateAndTimeAndSecondsString(lastBolusTime)}")
@@ -47,7 +47,7 @@ class CommandSMBBolus(
             aapsLogger.debug(LTag.APS, "SMB requested but still in ${preferences.get(IntKey.ApsMaxSmbFrequency)} min interval")
             r = instantiator.providePumpEnactResult().enacted(false).success(false).comment("SMB requested but still in ${preferences.get(IntKey.ApsMaxSmbFrequency)} min interval")
         } else if (detailedBolusInfo.deliverAtTheLatest != 0L && detailedBolusInfo.deliverAtTheLatest + T.mins(1).msecs() > System.currentTimeMillis()) {
-            r = activePlugin.activePump.deliverTreatment(detailedBolusInfo.toPump(activePlugin)).insulinConvertion(concentration)
+            r = activePlugin.activePump.deliverTreatment(detailedBolusInfo)
         } else {
             r = instantiator.providePumpEnactResult().enacted(false).success(false).comment("SMB request too old")
             aapsLogger.debug(LTag.PUMPQUEUE, "SMB bolus canceled. deliverAt: " + dateUtil.dateAndTimeString(detailedBolusInfo.deliverAtTheLatest))

@@ -29,15 +29,14 @@ class CommandBolus(
     @Inject lateinit var instantiator: Instantiator
 
     override var commandType: Command.CommandType
-
     init {
         injector.androidInjector().inject(this)
         this.commandType = type
     }
 
     override fun execute() {
-        val concentration = activePlugin.activeInsulin.concentration
-        val r = activePlugin.activePump.deliverTreatment(detailedBolusInfo.toPump(activePlugin)).insulinConvertion(concentration)
+        detailedBolusInfo.insulin = detailedBolusInfo.insulin / activePlugin.activeInsulin.concentration
+        val r = activePlugin.activePump.deliverTreatment(detailedBolusInfo)
 
         if (r.success) carbsRunnable.run()
         BolusProgressData.bolusEnded = true
