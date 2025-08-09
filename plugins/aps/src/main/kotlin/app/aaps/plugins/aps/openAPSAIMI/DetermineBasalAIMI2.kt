@@ -485,7 +485,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * @param threshold Le seuil d'IOB à partir duquel on commence à augmenter le DIA (par défaut 7 U).
      * @return Le DIA ajusté en minutes tenant compte de l'impact de l'IOB.
      */
-    fun adjustDIAForIOB(diaMinutes: Float, currentIOB: Float, threshold: Float = 5f): Float {
+    fun adjustDIAForIOB(diaMinutes: Float, currentIOB: Float, threshold: Float = 2f): Float {
         // Si l'IOB est inférieur ou égal au seuil, pas d'ajustement.
         if (currentIOB <= threshold) return diaMinutes
 
@@ -562,13 +562,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 5. Ajustement en fonction de l'IOB (Insulin on Board)
         // Si le patient a déjà beaucoup d'insuline active, il faut réduire le DIA pour éviter l'hypoglycémie
-        if (iob > 2.0) {
-            diaMinutes *= 0.8f
-            reasonBuilder.append("High IOB (${iob}U): reduced by 20%\n")
-        } else if (iob < 0.5) {
-            diaMinutes *= 1.1f
-            reasonBuilder.append("Low IOB (${iob}U): increased by 10%\n")
-        }
+        diaMinutes = adjustDIAForIOB(diaMinutes, iob.toFloat())
+        // if (iob > 2.0) {
+        //     diaMinutes *= 0.8f
+        //     reasonBuilder.append("High IOB (${iob}U): reduced by 20%\n")
+        // } else if (iob < 0.5) {
+        //     diaMinutes *= 1.1f
+        //     reasonBuilder.append("Low IOB (${iob}U): increased by 10%\n")
+        // }
 
         // 6. Ajustement en fonction de l'âge du site d'insuline
         // Si le site est utilisé depuis 2 jours ou plus, augmenter le DIA de 10% par jour supplémentaire.
