@@ -654,7 +654,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun getRecentBGs(): List<Float> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
         if (data.isEmpty()) return emptyList()
-        val intervalMinutes = if (bg < 130) 60f else 30f
+        val intervalMinutes = if (bg < 130) 50f else 25f
         val nowTimestamp = data.first().timestamp
         val recentBGs = mutableListOf<Float>()
 
