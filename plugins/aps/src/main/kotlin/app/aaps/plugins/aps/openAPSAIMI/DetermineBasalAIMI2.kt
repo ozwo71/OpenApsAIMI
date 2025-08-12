@@ -29,7 +29,6 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.Preferences
-import org.tensorflow.lite.Interpreter
 import java.io.File
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
@@ -50,17 +49,7 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import app.aaps.plugins.aps.R
-
 import android.content.Context
-import android.util.Log
-import com.google.common.cache.CacheBuilder
-import java.io.FileInputStream
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import java.nio.MappedByteBuffer
-import java.nio.channels.FileChannel
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 import kotlin.math.exp
 
 
@@ -79,12 +68,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var iobCobCalculator: IobCobCalculator
     @Inject lateinit var activePlugin: ActivePlugin
 
-    private fun Float.cleanF(): Float  = if (this.isFinite()) this else 0f
     private val consoleError = mutableListOf<String>()
     private val consoleLog = mutableListOf<String>()
     private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
-    private val modelFile = File(externalDir, "ml/model.tflite")
-    private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
     private val csvfile = File(externalDir, "oapsaimiML2_records.csv")
     private val csvfile2 = File(externalDir, "oapsaimi2_records.csv")
     //private val tempFile = File(externalDir, "temp.csv")
@@ -897,72 +883,62 @@ fun appendCompactLog(
         overrideSafetyLimits: Boolean = false
     ): RT {
         // ────────────────────────────────────────────────────────────────
-        // 1️⃣ On recalcule le mode “meal” / “highCarb” / “snack” / etc.
-        val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
-        val isMealMode = therapy.snackTime
-            || therapy.highCarbTime
-            || therapy.mealTime
-            || therapy.lunchTime
-            || therapy.dinnerTime
-            || therapy.bfastTime
+        // 0️⃣ LGS / Hypo kill-switch (avant tout)
+        // profile.lgsThreshold est en mg/dL. On peut forcer un plancher à 80 si tu le souhaites.
+        val lgs = profile.lgsThreshold?.toDouble()
+        val hypoGuard = maxOf(lgs!!.toDouble(), 80.0)     // <- si tu veux “toujours couper” sous 80
+        val bgNow = bg.toDouble()            // <- ta variable de classe utilisée déjà plus bas
 
-        val reason = StringBuilder()
-
-        // ────────────────────────────────────────────────────────────────
-        // 2️⃣ Vérification de la disponibilité des données BG
-        val recentBGs = getRecentBGs()
-        val hasBgData = recentBGs.isNotEmpty() && isBgDataAvailable()
-
-        // ────────────────────────────────────────────────────────────────
-        // 3️⃣ Gestion spéciale pour les nouveaux capteurs (pas de données BG)
-        if (!hasBgData) {
-            println("⚠️ Aucune donnée BG disponible - utilisation stratégie de secours")
-
-            // Utiliser le taux de base sans ajustement
-            val rate = _rate.coerceIn(0.0, profile.max_basal)
-
-            // Logging
-            rT.reason.append("💡 Capteur nouveau ou données indisponibles - utilisation taux de base\n")
-            rT.reason.append("Pose temp à ${"%.2f".format(rate)} U/h pour $duration minutes.\n")
-            rT.duration = duration
-            rT.rate = rate
-
+        if (bgNow <= hypoGuard) {
+            rT.reason.append("🛑 LGS: BG=${"%.0f".format(bgNow)} ≤ ${"%.0f".format(hypoGuard)} mg/dL → TBR 0U/h (30m)\n")
+            rT.duration = maxOf(duration, 30)
+            rT.rate = 0.0
             return rT
         }
 
-        // ────────────────────────────────────────────────────────────────
-        // 4️⃣ On recalcule le mode “early autodrive”
+        // 1️⃣ Recalcule des modes
+        val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
+        val isMealMode = therapy.snackTime || therapy.highCarbTime || therapy.mealTime
+            || therapy.lunchTime || therapy.dinnerTime || therapy.bfastTime
+
+        val reason = StringBuilder()
+
+        // 2️⃣ Disponibilité BG
+        val recentBGs = getRecentBGs()
+        // ✔︎ FIX: considérer qu’on a des BG si on a une valeur courante plausible
+        val hasBgData = (bgNow > 39.0) && recentBGs.isNotEmpty() // ne dépend plus uniquement d’un flag global
+
+        // 3️⃣ Cas capteur / données insuffisantes
+        if (!hasBgData) {
+            // ✔︎ FIX: même en fallback, ne jamais poser de basale > 0 si proche ou sous hypoGuard
+            val safeRate = if (bgNow <= hypoGuard) 0.0 else _rate.coerceIn(0.0, profile.max_basal)
+
+            rT.reason.append("⚠️ Données BG insuffisantes ou invalides → fallback\n")
+            rT.reason.append("Pose temp à ${"%.2f".format(safeRate)} U/h pour $duration minutes.\n")
+            rT.duration = duration
+            rT.rate = safeRate
+            return rT
+        }
+
+        // 4️⃣ Early autodrive
         val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
         val night = hour <= 7
         val predDelta = predictedDelta(getRecentDeltas()).toFloat()
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
 
-        val isEarlyAutodrive = !night
-            && !isMealMode
-            && autodrive
-            && bg > 110
-            && detectMealOnset(delta, predDelta, bgacc.toFloat())
+        val isEarlyAutodrive = !night && !isMealMode && autodrive && bgNow > 110 && detectMealOnset(
+            delta, predDelta, bgacc.toFloat()
+        )
 
-        // ────────────────────────────────────────────────────────────────
-        // 5️⃣ Utilisation des valeurs récentes de BG pour ajuster le taux basal
+        // 5️⃣ Ajustement sur tendance BG
         var rateAdjustment = _rate
+        val bgTrend = calculateBgTrend(recentBGs, reason)
+        rateAdjustment = adjustRateBasedOnBgTrend(_rate, bgTrend)
 
-        if (hasBgData) {
-            val bgTrend = calculateBgTrend(recentBGs, reason)
-            println("BG Trend: $bgTrend")
+        // 6️⃣ Bypass sécurité (✔︎ FIX: jamais en hypo)
+        val bypassSafety = (overrideSafetyLimits || isMealMode || isEarlyAutodrive) && bgNow > hypoGuard
 
-            // Ajuster le taux basal en fonction de la tendance des BG
-            rateAdjustment = adjustRateBasedOnBgTrend(_rate, bgTrend)
-        } else {
-            println("No recent BG values available.")
-        }
-
-        // ────────────────────────────────────────────────────────────────
-        // 6️⃣ On décide de bypasser la limite de sécurité si override ou mode spécial
-        val bypassSafety = overrideSafetyLimits || isMealMode || isEarlyAutodrive
-
-        // ────────────────────────────────────────────────────────────────
-        // 7️⃣ Calcul du maxSafeBasal standard
+        // 7️⃣ Max safe basale
         val maxSafe = min(
             profile.max_basal,
             min(
@@ -971,32 +947,27 @@ fun appendCompactLog(
             )
         )
 
-        // ────────────────────────────────────────────────────────────────
-        // 8️⃣ Choix du rate effectif : bypass ou clamp
-        val rate = if (bypassSafety) {
-            rateAdjustment
-        } else {
-            rateAdjustment.coerceIn(0.0, maxSafe)
+        // 8️⃣ Choix du rate effectif (✔︎ FIX: guard hypo)
+        val rate = when {
+            bgNow <= hypoGuard -> 0.0
+            bypassSafety       -> rateAdjustment
+            else               -> rateAdjustment.coerceIn(0.0, maxSafe)
         }
 
-        // ────────────────────────────────────────────────────────────────
-        // 9️⃣ Logging des raisons
+        // 9️⃣ Logging
         when {
-            bypassSafety -> {
-                rT.reason.append("→ bypass sécurité${if (isMealMode) " (meal mode)" else if (isEarlyAutodrive) " (early autodrive)" else ""}\n")
-            }
-            rate != _rate -> {
-                rT.reason.append("→ rate adjusted based on BG trend\n")
-            }
+            bgNow <= hypoGuard -> rT.reason.append("🛑 LGS override → TBR 0U/h\n")
+            bypassSafety       -> rT.reason.append("→ bypass sécurité${if (isMealMode) " (meal mode)" else if (isEarlyAutodrive) " (early autodrive)" else ""}\n")
+            rate != _rate      -> rT.reason.append("→ rate adjusted based on BG trend\n")
         }
 
-        // ────────────────────────────────────────────────────────────────
-        // 🔟 Pose “standard” du temp basal
+        // 🔟 Pose
         rT.reason.append("Pose temp à ${"%.2f".format(rate)} U/h pour $duration minutes.\n")
         rT.duration = duration
         rT.rate = rate
         return rT
     }
+
 //     fun setTempBasal(
 //         _rate: Double,
 //         duration: Int,
@@ -1113,10 +1084,14 @@ fun appendCompactLog(
 }
 
     private fun adjustRateBasedOnBgTrend(_rate: Double, bgTrend: Float): Double {
-        // Ajuster le taux basal en fonction de la tendance des BG
+        // Si la BG est accessible dans le scope, on peut aussi y jeter un œil ici :
+        val bgNow = bg.toDouble()
+        // Si on s’approche du seuil hypo et que la tendance est négative, coupe à 0
+        if (bgNow <=  (80.0 + 10.0) && bgTrend < 0f) return 0.0
         val adjustmentFactor = if (bgTrend < 0.0f) 0.8 else 1.2
         return _rate * adjustmentFactor
     }
+
 
     private fun logDataMLToCsv(predictedSMB: Float, smbToGive: Float) {
         val usFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm")
