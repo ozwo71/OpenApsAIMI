@@ -32,7 +32,6 @@ import app.aaps.core.keys.Preferences
 import org.tensorflow.lite.Interpreter
 import java.io.File
 import java.text.DecimalFormat
-import java.text.DecimalFormatSymbols
 import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.time.LocalTime
@@ -53,8 +52,17 @@ import kotlin.math.sqrt
 import app.aaps.plugins.aps.R
 
 import android.content.Context
+import android.util.Log
 import com.google.common.cache.CacheBuilder
+import java.io.FileInputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.MappedByteBuffer
+import java.nio.channels.FileChannel
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import kotlin.math.exp
+
 
 @Singleton
 class DetermineBasalaimiSMB2 @Inject constructor(
@@ -70,7 +78,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var profileFunction: ProfileFunction
     @Inject lateinit var iobCobCalculator: IobCobCalculator
     @Inject lateinit var activePlugin: ActivePlugin
-    private var aimilog = StringBuilder()
+
+    private fun Float.cleanF(): Float  = if (this.isFinite()) this else 0f
     private val consoleError = mutableListOf<String>()
     private val consoleLog = mutableListOf<String>()
     private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
@@ -1921,77 +1930,142 @@ fun appendCompactLog(
         }
         return result
     }
-    private fun calculateSMBFromModel(): Float {
-        // Définir les deux modèles possibles avec leurs fichiers respectifs
-        val modelFiles = listOf(
-            ModelFile("main", modelFile),
-            ModelFile("UAM", modelFileUAM)
-        )
+    // À placer dans ta classe (par ex. AimiModelHandler ou similaire)
 
-        // Sélectionner le modèle à utiliser selon la logique existante
-        val selectedModel = when {
-            cob > 0 && lastCarbAgeMin < 240 && modelFile.exists() -> modelFiles[0] // Modèle principal
-            modelFileUAM.exists() -> modelFiles[1] // Modèle UAM
-            else -> return 0.0F // Aucun modèle disponible
-        }
-
-        // Préparer les données d'entrée selon le modèle sélectionné
-        val modelInputs = when (selectedModel.name) {
-            "main" -> floatArrayOf(
-                hourOfDay.toFloat(), weekend.toFloat(),
-                bg.toFloat(), targetBg, iob, cob, lastCarbAgeMin.toFloat(), futureCarbs, delta, shortAvgDelta, longAvgDelta
-            )
-            "UAM" -> floatArrayOf(
-                hourOfDay.toFloat(), weekend.toFloat(),
-                bg.toFloat(), targetBg, iob, delta, shortAvgDelta, longAvgDelta,
-                tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour,
-                recentSteps5Minutes.toFloat(), recentSteps10Minutes.toFloat(), recentSteps15Minutes.toFloat(),
-                recentSteps30Minutes.toFloat(), recentSteps60Minutes.toFloat(), recentSteps180Minutes.toFloat()
-            )
-            else -> throw IllegalArgumentException("Modèle inconnu: ${selectedModel.name}")
-        }
-
-        // Utiliser le cache pour éviter les calculs redondants
-        val cacheKey = generateCacheKey(selectedModel.name, modelInputs)
-        val cachedResult = cache.getIfPresent(cacheKey)
-
-        if (cachedResult != null) {
-            return cachedResult
-        }
-
-        // Exécuter le modèle avec la logique existante
-        val interpreter = Interpreter(selectedModel.file)
-        val output = arrayOf(floatArrayOf(0.0F))
-        interpreter.run(modelInputs, output)
-        interpreter.close()
-
-        // Traiter le résultat comme dans l'original
-        var smbToGive = output[0][0].toString().replace(',', '.').toDouble()
-
-        val formatter = DecimalFormat("#.####", DecimalFormatSymbols(Locale.US))
-        smbToGive = formatter.format(smbToGive).toDouble()
-
-        val finalResult = smbToGive.toFloat()
-
-        // Mettre en cache le résultat pour les appels futurs avec les mêmes paramètres
-        cache.put(cacheKey, finalResult)
-
-        return finalResult
-    }
-
-    // Classe pour encapsuler les fichiers de modèle
     private data class ModelFile(val name: String, val file: File)
 
-    // Générer une clé unique pour le cache basée sur le nom du modèle et les paramètres
-    private fun generateCacheKey(modelName: String, inputs: FloatArray): String {
-        return "${modelName}_${inputs.joinToString("_")}"
+    @Volatile private var interpreterMeal: Interpreter? = null
+    @Volatile private var interpreterUAM: Interpreter? = null
+
+    // Cache Guava: entrées -> résultat SMB
+    private val smbCache = CacheBuilder.newBuilder()
+        .maximumSize(1000)
+        .expireAfterWrite(30, TimeUnit.MINUTES)
+        .build<String, Float>()
+
+    // Utilitaire: charger un MappedByteBuffer (meilleure perf/stabilité)
+    private fun loadModel(file: File): MappedByteBuffer =
+        FileInputStream(file).channel.map(FileChannel.MapMode.READ_ONLY, 0, file.length())
+
+    // Lazy init thread-safe des interpréteurs
+    private fun getMealInterpreter(): Interpreter? {
+        if (!modelFile.exists()) return null
+        return interpreterMeal ?: synchronized(this) {
+            interpreterMeal ?: Interpreter(loadModel(modelFile)).also { interpreterMeal = it }
+        }
+    }
+    private fun getUamInterpreter(): Interpreter? {
+        if (!modelFileUAM.exists()) return null
+        return interpreterUAM ?: synchronized(this) {
+            interpreterUAM ?: Interpreter(loadModel(modelFileUAM)).also { interpreterUAM = it }
+        }
     }
 
-    // Cache global pour stocker les résultats (peut être remplacé par un cache plus sophistiqué)
-    private val cache = CacheBuilder.newBuilder()
-        .maximumSize(1000) // Limiter le nombre de résultats mis en cache
-        .expireAfterWrite(30, TimeUnit.MINUTES) // Expire après 30 minutes
-        .build<String, Float>()
+    // Nettoyage des features: remplace NaN/Inf par 0f
+    private fun Float.clean(): Float = if (this.isFinite()) this else 0f
+    private fun Double.cleanF(): Float = if (this.isFinite()) this.toFloat() else 0f
+
+    // Clé de cache stable: hash SHA‑256 (modèle + bytes des floats)
+    private fun cacheKey(modelName: String, inputs: FloatArray): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        md.update(modelName.toByteArray(StandardCharsets.UTF_8))
+        val bb = ByteBuffer.allocate(inputs.size * 4).order(ByteOrder.LITTLE_ENDIAN)
+        inputs.forEach { bb.putFloat(it) }
+        md.update(bb.array())
+        return modelName + "_" + md.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    // Exécution TFLite (entrée 1xN, sortie 1x1)
+    private fun runModel(interpreter: Interpreter, features: FloatArray): Float {
+        val input = arrayOf(features)
+        val out = Array(1) { FloatArray(1) }
+        interpreter.run(input, out)
+        return out[0][0]
+    }
+
+    private fun selectModel(): Pair<String, Interpreter?> {
+        return if (cob > 0 && lastCarbAgeMin < 240 && modelFile.exists()) {
+            "main" to getMealInterpreter()
+        } else if (modelFileUAM.exists()) {
+            "UAM" to getUamInterpreter()
+        } else {
+            "none" to null
+        }
+    }
+
+    private fun buildInputs(modelName: String): FloatArray {
+        return when (modelName) {
+            "main" -> floatArrayOf(
+                hourOfDay.toFloat().clean(), weekend.toFloat().clean(),
+                bg.toFloat().clean(), targetBg.cleanF(), iob.cleanF(), cob.cleanF(),
+                lastCarbAgeMin.toFloat().clean(), futureCarbs.cleanF(),
+                delta.cleanF(), shortAvgDelta.cleanF(), longAvgDelta.cleanF()
+            )
+            "UAM" -> floatArrayOf(
+                hourOfDay.toFloat().clean(), weekend.toFloat().clean(),
+                bg.toFloat().clean(), targetBg.cleanF(), iob.cleanF(),
+                delta.cleanF(), shortAvgDelta.cleanF(), longAvgDelta.cleanF(),
+                tdd7DaysPerHour.cleanF(), tdd2DaysPerHour.cleanF(), tddPerHour.cleanF(), tdd24HrsPerHour.cleanF(),
+                recentSteps5Minutes.toFloat().clean(), recentSteps10Minutes.toFloat().clean(),
+                recentSteps15Minutes.toFloat().clean(), recentSteps30Minutes.toFloat().clean(),
+                recentSteps60Minutes.toFloat().clean(), recentSteps180Minutes.toFloat().clean()
+            )
+            else -> floatArrayOf()
+        }
+    }
+
+    private fun isUsable(value: Float): Boolean = value.isFinite() && !value.isNaN()
+
+    private fun round4(v: Float): Float = ((v * 10000f).toInt() / 10000f)
+
+    // === Méthode principale ===
+    private fun calculateSMBFromModel(): Float {
+        val (modelName, interpreter) = selectModel()
+        if (interpreter == null) {
+            // log si besoin
+            Log.w("AIMI", "No model available (name=$modelName). Returning 0.")
+            return 0f
+        }
+
+        val inputs = buildInputs(modelName)
+        // Si tout est zéro (ex: pas de données), éviter le cache/exec
+        if (inputs.isEmpty()) return 0f
+
+        val key = cacheKey(modelName, inputs)
+        smbCache.getIfPresent(key)?.let { cached ->
+            if (isUsable(cached)) {
+                Log.d("AIMI", "SMB cache HIT ($modelName) -> $cached")
+                return cached
+            } else {
+                // Valeur poison en cache, on l’ignore et on continue
+                Log.w("AIMI", "SMB cache HIT but unusable ($modelName) -> $cached; recompute")
+            }
+        }
+
+        val raw = try {
+            runModel(interpreter, inputs)
+        } catch (e: Throwable) {
+            Log.e("AIMI", "TFLite run failed ($modelName): ${e.message}")
+            return 0f
+        }
+
+        val result = if (isUsable(raw)) round4(raw) else 0f
+        // On ne met en cache que si la valeur est exploitable
+        if (isUsable(result)) {
+            smbCache.put(key, result)
+            Log.d("AIMI", "SMB cache PUT ($modelName) -> $result")
+        } else {
+            Log.w("AIMI", "Unusable SMB result ($modelName): $raw (stored? no)")
+        }
+        return result
+    }
+
+    // À appeler quand tu quittes l’app ou changes de modèle
+    private fun closeInterpreters() {
+        interpreterMeal?.close(); interpreterMeal = null
+        interpreterUAM?.close(); interpreterUAM = null
+    }
+
 
     // private fun calculateSMBFromModel(): Float {
     //     val selectedModelFile: File?
