@@ -1930,142 +1930,29 @@ fun appendCompactLog(
         }
         return result
     }
-    // À placer dans ta classe (par ex. AimiModelHandler ou similaire)
 
-    private data class ModelFile(val name: String, val file: File)
-
-    @Volatile private var interpreterMeal: Interpreter? = null
-    @Volatile private var interpreterUAM: Interpreter? = null
-
-    // Cache Guava: entrées -> résultat SMB
-    private val smbCache = CacheBuilder.newBuilder()
-        .maximumSize(1000)
-        .expireAfterWrite(30, TimeUnit.MINUTES)
-        .build<String, Float>()
-
-    // Utilitaire: charger un MappedByteBuffer (meilleure perf/stabilité)
-    private fun loadModel(file: File): MappedByteBuffer =
-        FileInputStream(file).channel.map(FileChannel.MapMode.READ_ONLY, 0, file.length())
-
-    // Lazy init thread-safe des interpréteurs
-    private fun getMealInterpreter(): Interpreter? {
-        if (!modelFile.exists()) return null
-        return interpreterMeal ?: synchronized(this) {
-            interpreterMeal ?: Interpreter(loadModel(modelFile)).also { interpreterMeal = it }
-        }
-    }
-    private fun getUamInterpreter(): Interpreter? {
-        if (!modelFileUAM.exists()) return null
-        return interpreterUAM ?: synchronized(this) {
-            interpreterUAM ?: Interpreter(loadModel(modelFileUAM)).also { interpreterUAM = it }
-        }
-    }
-
-    // Nettoyage des features: remplace NaN/Inf par 0f
-    private fun Float.clean(): Float = if (this.isFinite()) this else 0f
-    private fun Double.cleanF(): Float = if (this.isFinite()) this.toFloat() else 0f
-
-    // Clé de cache stable: hash SHA‑256 (modèle + bytes des floats)
-    private fun cacheKey(modelName: String, inputs: FloatArray): String {
-        val md = MessageDigest.getInstance("SHA-256")
-        md.update(modelName.toByteArray(StandardCharsets.UTF_8))
-        val bb = ByteBuffer.allocate(inputs.size * 4).order(ByteOrder.LITTLE_ENDIAN)
-        inputs.forEach { bb.putFloat(it) }
-        md.update(bb.array())
-        return modelName + "_" + md.digest().joinToString("") { "%02x".format(it) }
-    }
-
-    // Exécution TFLite (entrée 1xN, sortie 1x1)
-    private fun runModel(interpreter: Interpreter, features: FloatArray): Float {
-        val input = arrayOf(features)
-        val out = Array(1) { FloatArray(1) }
-        interpreter.run(input, out)
-        return out[0][0]
-    }
-
-    private fun selectModel(): Pair<String, Interpreter?> {
-        return if (cob > 0 && lastCarbAgeMin < 240 && modelFile.exists()) {
-            "main" to getMealInterpreter()
-        } else if (modelFileUAM.exists()) {
-            "UAM" to getUamInterpreter()
-        } else {
-            "none" to null
-        }
-    }
-
-    private fun buildInputs(modelName: String): FloatArray {
-        return when (modelName) {
-            "main" -> floatArrayOf(
-                hourOfDay.toFloat().clean(), weekend.toFloat().clean(),
-                bg.toFloat().clean(), targetBg.cleanF(), iob.cleanF(), cob.cleanF(),
-                lastCarbAgeMin.toFloat().clean(), futureCarbs.cleanF(),
-                delta.cleanF(), shortAvgDelta.cleanF(), longAvgDelta.cleanF()
-            )
-            "UAM" -> floatArrayOf(
-                hourOfDay.toFloat().clean(), weekend.toFloat().clean(),
-                bg.toFloat().clean(), targetBg.cleanF(), iob.cleanF(),
-                delta.cleanF(), shortAvgDelta.cleanF(), longAvgDelta.cleanF(),
-                tdd7DaysPerHour.cleanF(), tdd2DaysPerHour.cleanF(), tddPerHour.cleanF(), tdd24HrsPerHour.cleanF(),
-                recentSteps5Minutes.toFloat().clean(), recentSteps10Minutes.toFloat().clean(),
-                recentSteps15Minutes.toFloat().clean(), recentSteps30Minutes.toFloat().clean(),
-                recentSteps60Minutes.toFloat().clean(), recentSteps180Minutes.toFloat().clean()
-            )
-            else -> floatArrayOf()
-        }
-    }
-
-    private fun isUsable(value: Float): Boolean = value.isFinite() && !value.isNaN()
-
-    private fun round4(v: Float): Float = ((v * 10000f).toInt() / 10000f)
-
-    // === Méthode principale ===
     private fun calculateSMBFromModel(): Float {
-        val (modelName, interpreter) = selectModel()
-        if (interpreter == null) {
-            // log si besoin
-            Log.w("AIMI", "No model available (name=$modelName). Returning 0.")
-            return 0f
+        val smb = AimiModelHandler.predictSmb(
+            cob.toDouble(),
+            lastCarbAgeMin
+        ) { modelName ->
+            if (modelName == "main") floatArrayOf(
+                hourOfDay.toFloat(), weekend.toFloat(),
+                bg.toFloat(), targetBg.toFloat(), iob.toFloat(), cob.toFloat(),
+                lastCarbAgeMin.toFloat(), futureCarbs.toFloat(),
+                delta.toFloat(), shortAvgDelta.toFloat(), longAvgDelta.toFloat()
+            ) else floatArrayOf(
+                hourOfDay.toFloat(), weekend.toFloat(),
+                bg.toFloat(), targetBg.toFloat(), iob.toFloat(),
+                delta.toFloat(), shortAvgDelta.toFloat(), longAvgDelta.toFloat(),
+                tdd7DaysPerHour.toFloat(), tdd2DaysPerHour.toFloat(), tddPerHour.toFloat(), tdd24HrsPerHour.toFloat(),
+                recentSteps5Minutes.toFloat(), recentSteps10Minutes.toFloat(),
+                recentSteps15Minutes.toFloat(), recentSteps30Minutes.toFloat(),
+                recentSteps60Minutes.toFloat(), recentSteps180Minutes.toFloat()
+            )
         }
-
-        val inputs = buildInputs(modelName)
-        // Si tout est zéro (ex: pas de données), éviter le cache/exec
-        if (inputs.isEmpty()) return 0f
-
-        val key = cacheKey(modelName, inputs)
-        smbCache.getIfPresent(key)?.let { cached ->
-            if (isUsable(cached)) {
-                Log.d("AIMI", "SMB cache HIT ($modelName) -> $cached")
-                return cached
-            } else {
-                // Valeur poison en cache, on l’ignore et on continue
-                Log.w("AIMI", "SMB cache HIT but unusable ($modelName) -> $cached; recompute")
-            }
-        }
-
-        val raw = try {
-            runModel(interpreter, inputs)
-        } catch (e: Throwable) {
-            Log.e("AIMI", "TFLite run failed ($modelName): ${e.message}")
-            return 0f
-        }
-
-        val result = if (isUsable(raw)) round4(raw) else 0f
-        // On ne met en cache que si la valeur est exploitable
-        if (isUsable(result)) {
-            smbCache.put(key, result)
-            Log.d("AIMI", "SMB cache PUT ($modelName) -> $result")
-        } else {
-            Log.w("AIMI", "Unusable SMB result ($modelName): $raw (stored? no)")
-        }
-        return result
+        return smb.coerceAtLeast(0f)
     }
-
-    // À appeler quand tu quittes l’app ou changes de modèle
-    private fun closeInterpreters() {
-        interpreterMeal?.close(); interpreterMeal = null
-        interpreterUAM?.close(); interpreterUAM = null
-    }
-
 
     // private fun calculateSMBFromModel(): Float {
     //     val selectedModelFile: File?
@@ -2106,104 +1993,6 @@ fun appendCompactLog(
     //
     //     return smbToGive.toFloat()
     // }
-    /**
-     * Calcul du SMB en utilisant le modèle mis en cache
-     */
-    // private fun calculateSMBFromModel(): Float {
-    //     // Utilisation du modèle mis en cache pour éviter les rechargements fréquents
-    //     val interpreter = cachedModel
-    //
-    //     // Sélection du modèle et des paramètres selon les conditions
-    //     val (selectedModelFile, inputValues) = selectModelAndInputs()
-    //
-    //     // Si aucun modèle n'est disponible, retourner 0
-    //     if (selectedModelFile == null || inputValues.isEmpty()) {
-    //         return 0.0F
-    //     }
-    //
-    //     try {
-    //         // Création du tableau de sortie
-    //         val output = floatArrayOf(0.0F)
-    //
-    //         // Exécution du modèle avec les paramètres sélectionnés
-    //         interpreter.run(inputValues, arrayOf(output))
-    //
-    //         // Récupération de la valeur calculée
-    //         val smbToGive = output[0]
-    //
-    //         // Validation des valeurs sensibles (vérification NaN, Infini, négatif)
-    //         return when {
-    //             smbToGive.isNaN() || smbToGive.isInfinite() -> 0.0F
-    //             smbToGive < 0 -> 0.0F // Insuline négative non valide
-    //             else -> {
-    //                 // Formatage avec précision contrôlée, éviter les conversions inutiles
-    //                 smbToGive
-    //             }
-    //         }
-    //     } catch (e: Exception) {
-    //         // Gestion d'erreur robuste en cas de problème d'exécution du modèle
-    //         e.printStackTrace()
-    //         return 0.0F
-    //     }
-    // }
-    //
-    // /**
-    //  * Sélection du modèle et des paramètres d'entrée selon les conditions métier
-    //  */
-    // private fun selectModelAndInputs(): Pair<File?, FloatArray> {
-    //     return when {
-    //         cob > 0 && lastCarbAgeMin < 240 && modelFile.exists() -> {
-    //             val inputs = floatArrayOf(
-    //                 hourOfDay.toFloat(), weekend.toFloat(),
-    //                 bg.toFloat(), targetBg, iob, cob, lastCarbAgeMin.toFloat(),
-    //                 futureCarbs, delta, shortAvgDelta, longAvgDelta
-    //             )
-    //             modelFile to inputs
-    //         }
-    //
-    //         modelFileUAM.exists() -> {
-    //             val inputs = floatArrayOf(
-    //                 hourOfDay.toFloat(), weekend.toFloat(),
-    //                 bg.toFloat(), targetBg, iob, delta, shortAvgDelta, longAvgDelta,
-    //                 tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour,
-    //                 recentSteps5Minutes.toFloat(), recentSteps10Minutes.toFloat(),
-    //                 recentSteps15Minutes.toFloat(), recentSteps30Minutes.toFloat(),
-    //                 recentSteps60Minutes.toFloat(), recentSteps180Minutes.toFloat()
-    //             )
-    //             modelFileUAM to inputs
-    //         }
-    //
-    //         else -> null to floatArrayOf() // Aucun modèle disponible
-    //     }
-    // }
-    //
-    // /**
-    //  * Initialisation du modèle TensorFlow Lite avec lazy loading pour éviter les rechargements
-    //  */
-    // private val cachedModel: Interpreter by lazy {
-    //     try {
-    //         val model = loadModelFile(modelFileUAM)
-    //         val options = Interpreter.Options()
-    //         Interpreter(model, options)
-    //     } catch (e: Exception) {
-    //         e.printStackTrace()
-    //         throw RuntimeException("Impossible de charger le modèle TensorFlow Lite", e)
-    //     }
-    // }
-    //
-    // private fun loadModelFile(file: File): ByteBuffer {
-    //     return try {
-    //         val inputStream = FileInputStream(file)
-    //         val fileDescriptor = inputStream.fd
-    //         val startOffset = 0L
-    //         val declaredLength = file.length()
-    //         FileChannel.open(Paths.get(file.absolutePath), StandardOpenOption.READ)
-    //             .map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
-    //     } catch (e: Exception) {
-    //         throw RuntimeException("Erreur lors du chargement du fichier modèle", e)
-    //     }
-    // }
-
 
     private fun neuralnetwork5(
     delta: Float,
@@ -3873,6 +3662,9 @@ private fun calculateDynamicPeakTime(
 
         //val expectedDelta = calculateExpectedDelta(target_bg, eventualBG, bgi)
         val modelcal = calculateSMBFromModel()
+        rT.reason.appendLine(
+            "💉 SMB (modèle): ${"%.2f".format(modelcal)} U"
+        )
         // min_bg of 90 -> threshold of 65, 100 -> 70 110 -> 75, and 130 -> 85
         var threshold = min_bg - 0.5 * (min_bg - 40)
         if (profile.lgsThreshold != null) {

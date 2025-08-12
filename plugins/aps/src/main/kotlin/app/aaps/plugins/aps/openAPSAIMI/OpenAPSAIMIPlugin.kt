@@ -79,8 +79,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.floor
-import kotlin.math.ln
-import kotlin.math.min
+import app.aaps.plugins.aps.openAPSAIMI.AimiModelHandler
 
 @Singleton
 open class OpenAPSAIMIPlugin  @Inject constructor(
@@ -119,6 +118,22 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         .setDefault(),
     aapsLogger, rh
 ), APS, PluginConstraints {
+
+    override fun onEnable() {
+        super.onEnable()
+        // Optionnel, mais utile après une MAJ de l'app ou des modèles
+        AimiModelHandler.clearCache()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        AimiModelHandler.closeInterpreters()
+    }
+
+    override fun onDisable() {
+        super.onDisable()
+        AimiModelHandler.closeInterpreters()
+    }
 
     override fun onStart() {
         super.onStart()
