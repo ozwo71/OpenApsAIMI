@@ -1910,68 +1910,64 @@ fun appendCompactLog(
         return result
     }
 
-    // private fun calculateSMBFromModel(): Float {
-    //     val smb = AimiModelHandler.predictSmb(
-    //         cob.toDouble(),
-    //         lastCarbAgeMin
-    //     ) { modelName ->
-    //         if (modelName == "main") floatArrayOf(
-    //             hourOfDay.toFloat(), weekend.toFloat(),
-    //             bg.toFloat(), targetBg.toFloat(), iob.toFloat(), cob.toFloat(),
-    //             lastCarbAgeMin.toFloat(), futureCarbs.toFloat(),
-    //             delta.toFloat(), shortAvgDelta.toFloat(), longAvgDelta.toFloat()
-    //         ) else floatArrayOf(
-    //             hourOfDay.toFloat(), weekend.toFloat(),
-    //             bg.toFloat(), targetBg.toFloat(), iob.toFloat(),
-    //             delta.toFloat(), shortAvgDelta.toFloat(), longAvgDelta.toFloat(),
-    //             tdd7DaysPerHour.toFloat(), tdd2DaysPerHour.toFloat(), tddPerHour.toFloat(), tdd24HrsPerHour.toFloat(),
-    //             recentSteps5Minutes.toFloat(), recentSteps10Minutes.toFloat(),
-    //             recentSteps15Minutes.toFloat(), recentSteps30Minutes.toFloat(),
-    //             recentSteps60Minutes.toFloat(), recentSteps180Minutes.toFloat()
-    //         )
-    //     }
-    //     return smb.coerceAtLeast(0f)
-    // }
-
-    private fun calculateSMBFromModel(): Float {
-        val selectedModelFile: File?
-        val modelInputs: FloatArray
-
-        when {
-            cob > 0 && lastCarbAgeMin < 240 && modelFile.exists() -> {
-                selectedModelFile = modelFile
-                modelInputs = floatArrayOf(
-                    hourOfDay.toFloat(), weekend.toFloat(),
-                    bg.toFloat(), targetBg, iob, cob, lastCarbAgeMin.toFloat(), futureCarbs, delta, shortAvgDelta, longAvgDelta
-                )
-            }
-
-            modelFileUAM.exists()   -> {
-                selectedModelFile = modelFileUAM
-                modelInputs = floatArrayOf(
-                    hourOfDay.toFloat(), weekend.toFloat(),
-                    bg.toFloat(), targetBg, iob, delta, shortAvgDelta, longAvgDelta,
-                    tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour,
-                    recentSteps5Minutes.toFloat(),recentSteps10Minutes.toFloat(),recentSteps15Minutes.toFloat(),recentSteps30Minutes.toFloat(),recentSteps60Minutes.toFloat(),recentSteps180Minutes.toFloat()
-                )
-            }
-
-            else                 -> {
-                return 0.0F
-            }
-        }
-
-        val interpreter = Interpreter(selectedModelFile)
-        val output = arrayOf(floatArrayOf(0.0F))
-        interpreter.run(modelInputs, output)
-        interpreter.close()
-        var smbToGive = output[0][0].toString().replace(',', '.').toDouble()
-
-        val formatter = DecimalFormat("#.####", DecimalFormatSymbols(Locale.US))
-        smbToGive = formatter.format(smbToGive).toDouble()
-
-        return smbToGive.toFloat()
+    // DetermineBasalAIMI2.kt
+    private fun calculateSMBFromModel(reason: StringBuilder? = null): Float {
+        val smb = AimiUamHandler.predictSmbUam(
+            floatArrayOf(
+                hourOfDay.toFloat(), weekend.toFloat(),
+                bg.toFloat(), targetBg.toFloat(), iob.toFloat(),
+                delta.toFloat(), shortAvgDelta.toFloat(), longAvgDelta.toFloat(),
+                tdd7DaysPerHour.toFloat(), tdd2DaysPerHour.toFloat(), tddPerHour.toFloat(), tdd24HrsPerHour.toFloat(),
+                recentSteps5Minutes.toFloat(), recentSteps10Minutes.toFloat(),
+                recentSteps15Minutes.toFloat(), recentSteps30Minutes.toFloat(),
+                recentSteps60Minutes.toFloat(), recentSteps180Minutes.toFloat()
+            ),
+            reason // 👈 logs visibles si non-null
+        )
+        return smb.coerceAtLeast(0f)
     }
+
+
+
+    // private fun calculateSMBFromModel(): Float {
+    //     val selectedModelFile: File?
+    //     val modelInputs: FloatArray
+    //
+    //     when {
+    //         cob > 0 && lastCarbAgeMin < 240 && modelFile.exists() -> {
+    //             selectedModelFile = modelFile
+    //             modelInputs = floatArrayOf(
+    //                 hourOfDay.toFloat(), weekend.toFloat(),
+    //                 bg.toFloat(), targetBg, iob, cob, lastCarbAgeMin.toFloat(), futureCarbs, delta, shortAvgDelta, longAvgDelta
+    //             )
+    //         }
+    //
+    //         modelFileUAM.exists()   -> {
+    //             selectedModelFile = modelFileUAM
+    //             modelInputs = floatArrayOf(
+    //                 hourOfDay.toFloat(), weekend.toFloat(),
+    //                 bg.toFloat(), targetBg, iob, delta, shortAvgDelta, longAvgDelta,
+    //                 tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour,
+    //                 recentSteps5Minutes.toFloat(),recentSteps10Minutes.toFloat(),recentSteps15Minutes.toFloat(),recentSteps30Minutes.toFloat(),recentSteps60Minutes.toFloat(),recentSteps180Minutes.toFloat()
+    //             )
+    //         }
+    //
+    //         else                 -> {
+    //             return 0.0F
+    //         }
+    //     }
+    //
+    //     val interpreter = Interpreter(selectedModelFile)
+    //     val output = arrayOf(floatArrayOf(0.0F))
+    //     interpreter.run(modelInputs, output)
+    //     interpreter.close()
+    //     var smbToGive = output[0][0].toString().replace(',', '.').toDouble()
+    //
+    //     val formatter = DecimalFormat("#.####", DecimalFormatSymbols(Locale.US))
+    //     smbToGive = formatter.format(smbToGive).toDouble()
+    //
+    //     return smbToGive.toFloat()
+    // }
 
     private fun neuralnetwork5(
     delta: Float,
@@ -3640,19 +3636,17 @@ private fun calculateDynamicPeakTime(
         }
 
         //val expectedDelta = calculateExpectedDelta(target_bg, eventualBG, bgi)
-        val modelcal = calculateSMBFromModel()
-        rT.reason.appendLine(
-            "💉 SMB (modèle): ${"%.2f".format(modelcal)} U"
-        )
+        val modelcal = calculateSMBFromModel(rT.reason)
+
+
         // min_bg of 90 -> threshold of 65, 100 -> 70 110 -> 75, and 130 -> 85
         var threshold = min_bg - 0.5 * (min_bg - 40)
-        if (profile.lgsThreshold != null) {
-            val lgsThreshold = profile.lgsThreshold ?: error("lgsThreshold missing")
-            if (lgsThreshold > threshold) {
-                consoleError.add("Threshold set from ${convertBG(threshold)} to ${convertBG(lgsThreshold.toDouble())}; ")
-                threshold = lgsThreshold.toDouble()
-            }
+        val lgsThreshold = profile.lgsThreshold
+        if (lgsThreshold != null && lgsThreshold > threshold) {
+            consoleError.add("Threshold set from ${convertBG(threshold)} to ${convertBG(lgsThreshold.toDouble())}; ")
+            threshold = lgsThreshold.toDouble()
         }
+        rT.reason.appendLine("💉 SMB (UAM): ${"%.2f".format(modelcal)} U")
         this.predictedSMB = modelcal
 
         if (preferences.get(BooleanKey.OApsAIMIMLtraining) && csvfile.exists()) {
@@ -3661,10 +3655,13 @@ private fun calculateDynamicPeakTime(
             val linesToConsider = (minutesToConsider / 5).toInt()
             if (allLines.size > linesToConsider) {
                 val refinedSMB = neuralnetwork5(combinedDelta.toFloat(), shortAvgDelta, longAvgDelta, predictedSMB, profile)
+                rT.reason.appendLine("🧠 NN5 (avant boost): ${"%.2f".format(refinedSMB)} U")
                 this.predictedSMB = refinedSMB
                 if (bg > 200 && delta > 4 && iob < preferences.get(DoubleKey.ApsSmbMaxIob)) {
+                    rT.reason.appendLine("⚡ Boost hyper: x1.7 (BG=${bg.toInt()}, Δ=${"%.1f".format(delta)})")
                     this.predictedSMB *= 1.7f // Augmente de 70% si montée très rapide
                 } else if (bg > 180 && delta > 3 && iob < preferences.get(DoubleKey.ApsSmbMaxIob)) {
+                    rT.reason.appendLine("⚡ Boost hyper: x1.5 (BG=${bg.toInt()}, Δ=${"%.1f".format(delta)})")
                     this.predictedSMB *= 1.5f // Augmente de 50% si montée modérée
                 }
 
@@ -3677,7 +3674,7 @@ private fun calculateDynamicPeakTime(
             }
             rT.reason.append("csvfile ${csvfile.exists()}")
         } else {
-            rT.reason.append("ML Decision data training", "ML decision has no enough data to refine the decision")
+            rT.reason.appendLine("🗃️ ML training: dataset insuffisant — pas d’affinage")
         }
 
         var smbToGive = if (bg > 130 && delta > 2 && predictedSMB == 0.0f) modelcal else predictedSMB
@@ -3804,8 +3801,10 @@ private fun calculateDynamicPeakTime(
 
 // On peut maintenant utiliser cette dose pour ajuster la décision.
         smbToGive = optimalBasalMPC.toFloat()
+        rT.reason.appendLine("🎛️ Facteur appliqué → ${"%.2f".format(smbToGive)} U")
 // ===== Fin de l’intégration du module MPC =====
         smbToGive = applySafetyPrecautions(mealData, finalInsulinDose.toFloat())
+        rT.reason.appendLine("✅ SMB final: ${"%.2f".format(smbToGive)} U")
         smbToGive = roundToPoint05(smbToGive)
 
         logDataMLToCsv(predictedSMB, smbToGive)
@@ -3813,7 +3812,7 @@ private fun calculateDynamicPeakTime(
 
         //logDataToCsv(predictedSMB, smbToGive)
         //logDataToCsvHB(predictedSMB, smbToGive)
-
+        val savedReason = rT.reason.toString()
         rT = RT(
             algorithm = APSResult.Algorithm.AIMI,
             runningDynamicIsf = dynIsfMode,
@@ -3829,6 +3828,7 @@ private fun calculateDynamicPeakTime(
             consoleError = consoleError,
             variable_sens = variableSensitivity.toDouble()
         )
+        rT.reason.append(savedReason)
         //rT.reason.append(", DIA ajusté (en minutes) : $adjustedDIAInMinutes, ")
         //rT.reason.append("adjustedMorningFactor ${adjustedMorningFactor}, ")
         //rT.reason.append("adjustedAfternoonFactor ${adjustedAfternoonFactor}, ")
