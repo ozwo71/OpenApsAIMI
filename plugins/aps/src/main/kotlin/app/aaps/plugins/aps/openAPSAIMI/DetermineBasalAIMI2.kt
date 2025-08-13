@@ -50,8 +50,6 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import app.aaps.plugins.aps.R
 import android.content.Context
-import org.tensorflow.lite.Interpreter
-import java.text.DecimalFormatSymbols
 import kotlin.math.exp
 
 
@@ -73,8 +71,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val consoleError = mutableListOf<String>()
     private val consoleLog = mutableListOf<String>()
     private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
-    private val modelFile = File(externalDir, "ml/model.tflite")
-    private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
+    //private val modelFile = File(externalDir, "ml/model.tflite")
+    //private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
     private val csvfile = File(externalDir, "oapsaimiML2_records.csv")
     private val csvfile2 = File(externalDir, "oapsaimi2_records.csv")
     //private val tempFile = File(externalDir, "temp.csv")
@@ -172,18 +170,52 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * @param insulinSensitivity La sensibilité insulinique (mg/dL/U)
      * @return Une liste de glycémies prédites pour chaque pas de 5 minutes.
      */
-    private fun predictGlycemia(currentBG: Double, basalCandidate: Double, horizonMinutes: Int, insulinSensitivity: Double): List<Double> {
-        val predictions = mutableListOf<Double>()
-        var bgSimulated = currentBG
-        // Supposons un pas de 5 minutes, et une action linéaire de l'insuline
-        val steps = horizonMinutes / 5
-        for (i in 1..steps) {
-            // Par exemple, on soustrait une quantité proportionnelle à la dose basale et à la sensibilité
-            bgSimulated -= insulinSensitivity * basalCandidate * (5.0 / 60.0)
-            predictions.add(bgSimulated)
+    private fun predictGlycemia(
+        currentBG: Double,
+        basalCandidateUph: Double,
+        horizonMinutes: Int,
+        insulinSensitivityMgdlPerU: Double,
+        stepMinutes: Int = 5,
+        minBgClamp: Double = 40.0,
+        maxBgClamp: Double = 400.0,
+        // ↓ nouveaux paramètres optionnels (par défaut 5h de DIA, pic à 75 min)
+        diaMinutes: Int = 300,
+        timeToPeakMinutes: Int = 75
+    ): List<Double> {
+        val predictions = ArrayList<Double>(maxOf(0, horizonMinutes / stepMinutes))
+        if (horizonMinutes <= 0 || stepMinutes <= 0) return predictions
+
+        var bg = currentBG
+        val steps = horizonMinutes / stepMinutes
+        val uPerStep = basalCandidateUph * (stepMinutes / 60.0)
+
+        fun triangularActivity(tMin: Int, tp: Int, dia: Int): Double {
+            if (tMin <= 0 || tMin >= dia) return 0.0
+            val tpClamped = tp.coerceIn(1, dia - 1)
+            val rise = if (tMin <= tpClamped) (2.0 / tpClamped) * tMin else 0.0
+            val fall = if (tMin > tpClamped) 2.0 * (1.0 - (tMin - tpClamped).toDouble() / (dia - tpClamped)) else 0.0
+            // Hauteur max = 2.0 → aire totale sur [0, DIA] ≈ DIA (même “dose” qu’activité = 1)
+            return if (tMin <= tpClamped) rise else fall
+        }
+
+        repeat(steps) { k ->
+            val tMin = (k + 1) * stepMinutes
+
+            // activité réaliste (pic à tp, s’éteint à DIA)
+            val activity = triangularActivity(tMin, timeToPeakMinutes, diaMinutes)
+
+            // effet du pas courant (pas de convolution pour rester simple comme ton code)
+            val delta = insulinSensitivityMgdlPerU * uPerStep * activity
+
+            bg = (bg - delta).coerceIn(minBgClamp, maxBgClamp)
+            predictions.add(bg)
+
+            // early stop en hypo profonde
+            if (bg <= minBgClamp) return predictions
         }
         return predictions
     }
+
     /**
      * Calcule la fonction de coût, ici la somme des carrés des écarts entre les glycémies prédites et la glycémie cible.
      *
@@ -3634,10 +3666,8 @@ private fun calculateDynamicPeakTime(
                 consoleError.add("max_bg unchanged: $max_bg")
             }
         }
-
         //val expectedDelta = calculateExpectedDelta(target_bg, eventualBG, bgi)
         val modelcal = calculateSMBFromModel(rT.reason)
-
 
         // min_bg of 90 -> threshold of 65, 100 -> 70 110 -> 75, and 130 -> 85
         var threshold = min_bg - 0.5 * (min_bg - 40)
