@@ -123,7 +123,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
     override fun onStart() {
         super.onStart()
-        //AimiModelHandler.clearCache()
+        AimiUamHandler.clearCache()
 
         var count = 0
         val apsResults = persistenceLayer.getApsResults(dateUtil.now() - T.days(1).msecs(), dateUtil.now())
@@ -138,10 +138,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         aapsLogger.debug(LTag.APS, "Loaded $count variable sensitivity values from database")
     }
 
-    // override fun onStop() {
-    //     super.onStop()
-    //     AimiModelHandler.closeInterpreters()
-    // }
+    override fun onStop() {
+        super.onStop()
+        AimiUamHandler.close()
+    }
     // last values
     override var lastAPSRun: Long = 0
     override val algorithm = APSResult.Algorithm.AIMI

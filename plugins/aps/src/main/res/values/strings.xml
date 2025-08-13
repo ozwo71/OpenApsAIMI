@@ -259,7 +259,7 @@
     <string name="openapsaimi_maxsmb_summary">Value of max smb size</string>
     <string name="openapsaimi_maxsmb_title">OpenapsAIMI Max SMB</string>
     <string name="description_openapsaimi">Small micro boluses based on Artificial Intelligence and Machine Learning.</string>
-    <string name="oaps_aimi_shortname">OpenApsAIMI</string>
+    <string name="oaps_aimi_shortname">AIMI</string>
     <string name="count_steps_watch">count_steps_watch</string>
     <string name="oaps_aimi_evening_factor_summary">% of Reactivity of the plugin between 6 pm and midnight</string>
     <string name="oaps_aimi_evening_factor_title">Evening Reactivity Percentage</string>
@@ -496,7 +496,7 @@
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION TITLE - FILE DetermineBasalAIMI2.kt -->
 
     <string name="table_plugin_main_title_1">AAPS-MASTER-AIMI</string>
-    <string name="table_plugin_main_title_2">OpenApsAIMI Settings</string>
+    <string name="table_plugin_main_title_2">AIMI Settings</string>
     <string name="table_plugin_main_title_3">06 August 2025</string>
     <string name="table_plugin_request_title">Request</string>
     <string name="table_plugin_smb_prediction_title">SMB Prediction</string>
