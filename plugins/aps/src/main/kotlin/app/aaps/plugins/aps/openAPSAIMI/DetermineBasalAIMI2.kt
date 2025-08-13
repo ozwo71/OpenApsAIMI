@@ -777,139 +777,6 @@ fun appendCompactLog(
         consoleError.add(msg)
     }
 
-
-    /**
-     * Pose un temp basal en respectant — ou non — la limite de sécurité.
-     *
-     * @param _rate Taux souhaité (U/h).
-     * @param duration Durée du temp basal (en minutes).
-     * @param profile Profil utilisateur contenant les paramètres de sécurité.
-     * @param rT Objet RT pour accumuler la raison.
-     * @param currenttemp Temp actuel pour comparaison.
-     * @param overrideSafetyLimits Si vrai, bypass explicite de la limite maxSafeBasal.
-     */
-    // fun setTempBasal(
-    //     _rate: Double,
-    //     duration: Int,
-    //     profile: OapsProfileAimi,
-    //     rT: RT,
-    //     currenttemp: CurrentTemp,
-    //     overrideSafetyLimits: Boolean = false
-    // ): RT {
-    //     // ────────────────────────────────────────────────────────────────
-    //     // 1️⃣ On recalcule le mode “meal” / “highCarb” / “snack” / etc.
-    //     val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
-    //     val isMealMode = therapy.snackTime
-    //         || therapy.highCarbTime
-    //         || therapy.mealTime
-    //         || therapy.lunchTime
-    //         || therapy.dinnerTime
-    //         || therapy.bfastTime
-    //
-    //     // 2️⃣ On recalcule le mode “early autodrive”
-    //     val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
-    //     val night = hour <= 7
-    //     val predDelta = predictedDelta(getRecentDeltas()).toFloat()
-    //     val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
-    //
-    //     val isEarlyAutodrive = !night
-    //         && !isMealMode
-    //         && autodrive
-    //         && bg > 110
-    //         && detectMealOnset(delta, predDelta, bgacc.toFloat())
-    //
-    //     // 3️⃣ On décide de bypasser la limite de sécurité si override ou mode spécial
-    //     val bypassSafety = overrideSafetyLimits || isMealMode || isEarlyAutodrive
-    //
-    //     // ────────────────────────────────────────────────────────────────
-    //     // 4️⃣ Calcul du maxSafeBasal standard
-    //     val maxSafe = min(
-    //         profile.max_basal,
-    //         min(
-    //             profile.max_daily_safety_multiplier * profile.max_daily_basal,
-    //             profile.current_basal_safety_multiplier * profile.current_basal
-    //         )
-    //     )
-    //
-    //     // 5️⃣ Choix du rate effectif : bypass ou clamp
-    //     val rate = if (bypassSafety) {
-    //         _rate
-    //     } else {
-    //         _rate.coerceIn(0.0, maxSafe)
-    //     }
-    //
-    //     // ────────────────────────────────────────────────────────────────
-    //     // 6️⃣ Logging des raisons
-    //     when {
-    //         bypassSafety -> {
-    //             rT.reason.append("→ bypass sécurité${if (isMealMode) " (meal mode)" else if (isEarlyAutodrive) " (early autodrive)" else ""}: rate = ${rate} U/h\n")
-    //         }
-    //         rate != _rate -> {
-    //             rT.reason.append("→ clamped à maxSafeBasal ${"%.2f".format(maxSafe)} U/h (demandé: ${"%.2f".format(_rate)} U/h)\n")
-    //         }
-    //     }
-    //
-    //     // ────────────────────────────────────────────────────────────────
-    //     // 7️⃣ Si pas de changement utile, on sort
-    //     if (currenttemp.duration > (duration - 10)
-    //         && currenttemp.duration <= 120
-    //         && rate <= currenttemp.rate * 1.2
-    //         && rate >= currenttemp.rate * 0.8
-    //         && duration > 0
-    //     ) {
-    //         rT.reason.append("${currenttemp.duration}m restants & ${currenttemp.rate} ~ req $rate U/h : pas de temp.\n")
-    //         return rT
-    //     }
-    //
-    //     // ────────────────────────────────────────────────────────────────
-    //     // 8️⃣ Gestion du “neutral temp” = profil.current_basal
-    //     val profileBasal = profile.current_basal
-    //     if (rate == profileBasal) {
-    //         if (profile.skip_neutral_temps) {
-    //             if (currenttemp.duration > 0) {
-    //                 rT.reason.append("Taux neutre = profil & temp actif → annulation du temp.\n")
-    //                 rT.duration = 0
-    //                 rT.rate = 0.0
-    //             } else {
-    //                 rT.reason.append("Taux neutre = profil & pas de temp → rien à faire.\n")
-    //             }
-    //         } else {
-    //             rT.reason.append("Taux neutre = profil → pose d’un temp à $rate U/h.\n")
-    //             rT.duration = duration
-    //             rT.rate = rate
-    //         }
-    //         return rT
-    //     }
-    //
-    //     // ────────────────────────────────────────────────────────────────
-    //     // 9️⃣ Pose “standard” du temp basal
-    //     rT.reason.append("Pose temp à ${"%.2f".format(rate)} U/h pour $duration minutes.\n")
-    //     rT.duration = duration
-    //     rT.rate = rate
-    //     return rT
-    // }
-    private fun isBgDataAvailable(): Boolean {
-        // Vérifie si les données BG sont valides et récentes
-        if (bg <= 0.0 || delta <= 0.0 || bgacc <= 0.0) {
-            return false
-        }
-
-        try {
-            // Utilise directement lastBg() comme dans le code existant
-            val lastBg = iobCobCalculator.ads.lastBg()
-            if (lastBg == null) {
-                return false
-            }
-
-            // Vérifie que le dernier BG est récent (moins de 30 minutes)
-            val timeDiff = System.currentTimeMillis() - lastBg.timestamp
-            return timeDiff < 30 * 60 * 1000
-
-        } catch (e: Exception) {
-            consoleError.add("Erreur dans isBgDataAvailable : ${e.message}")
-            return false
-        }
-    }
     fun setTempBasal(
         _rate: Double,
         duration: Int,
@@ -920,18 +787,15 @@ fun appendCompactLog(
     ): RT {
         // ────────────────────────────────────────────────────────────────
         // 0️⃣ LGS / Hypo kill-switch (avant tout)
-        // profile.lgsThreshold est en mg/dL. On peut forcer un plancher à 80 si tu le souhaites.
         val lgs = profile.lgsThreshold?.toDouble()
-        val hypoGuard = maxOf(lgs!!.toDouble(), 80.0)     // <- si tu veux “toujours couper” sous 80
-        val bgNow = bg.toDouble()            // <- ta variable de classe utilisée déjà plus bas
-
+        val hypoGuard = maxOf(lgs!!, 80.0)
+        val bgNow = bg
         if (bgNow <= hypoGuard) {
             rT.reason.append("🛑 LGS: BG=${"%.0f".format(bgNow)} ≤ ${"%.0f".format(hypoGuard)} mg/dL → TBR 0U/h (30m)\n")
             rT.duration = maxOf(duration, 30)
             rT.rate = 0.0
             return rT
         }
-
         // 1️⃣ Recalcule des modes
         val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
         val isMealMode = therapy.snackTime || therapy.highCarbTime || therapy.mealTime
@@ -941,12 +805,10 @@ fun appendCompactLog(
 
         // 2️⃣ Disponibilité BG
         val recentBGs = getRecentBGs()
-        // ✔︎ FIX: considérer qu’on a des BG si on a une valeur courante plausible
         val hasBgData = (bgNow > 39.0) && recentBGs.isNotEmpty() // ne dépend plus uniquement d’un flag global
 
         // 3️⃣ Cas capteur / données insuffisantes
         if (!hasBgData) {
-            // ✔︎ FIX: même en fallback, ne jamais poser de basale > 0 si proche ou sous hypoGuard
             val safeRate = if (bgNow <= hypoGuard) 0.0 else _rate.coerceIn(0.0, profile.max_basal)
 
             rT.reason.append("⚠️ Données BG insuffisantes ou invalides → fallback\n")
@@ -971,7 +833,7 @@ fun appendCompactLog(
         val bgTrend = calculateBgTrend(recentBGs, reason)
         rateAdjustment = adjustRateBasedOnBgTrend(_rate, bgTrend)
 
-        // 6️⃣ Bypass sécurité (✔︎ FIX: jamais en hypo)
+        // 6️⃣ Bypass sécurité
         val bypassSafety = (overrideSafetyLimits || isMealMode || isEarlyAutodrive) && bgNow > hypoGuard
 
         // 7️⃣ Max safe basale
@@ -983,7 +845,7 @@ fun appendCompactLog(
             )
         )
 
-        // 8️⃣ Choix du rate effectif (✔︎ FIX: guard hypo)
+        // 8️⃣ Choix du rate effectif
         val rate = when {
             bgNow <= hypoGuard -> 0.0
             bypassSafety       -> rateAdjustment
@@ -1004,97 +866,6 @@ fun appendCompactLog(
         return rT
     }
 
-//     fun setTempBasal(
-//         _rate: Double,
-//         duration: Int,
-//         profile: OapsProfileAimi,
-//         rT: RT,
-//         currenttemp: CurrentTemp,
-//         overrideSafetyLimits: Boolean = false
-//     ): RT {
-//         // ────────────────────────────────────────────────────────────────
-//         // 1️⃣ On recalcule le mode “meal” / “highCarb” / “snack” / etc.
-//         val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
-//         val isMealMode = therapy.snackTime
-//             || therapy.highCarbTime
-//             || therapy.mealTime
-//             || therapy.lunchTime
-//             || therapy.dinnerTime
-//             || therapy.bfastTime
-// val reason = StringBuilder()
-//         // 2️⃣ On recalcule le mode “early autodrive”
-//         val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
-//         val night = hour <= 7
-//         val predDelta = predictedDelta(getRecentDeltas()).toFloat()
-//         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
-//
-//         val isEarlyAutodrive = !night
-//             && !isMealMode
-//             && autodrive
-//             && bg > 110
-//             && detectMealOnset(delta, predDelta, bgacc.toFloat())
-//
-//         // ────────────────────────────────────────────────────────────────
-//         // Utilisation des valeurs récentes de BG pour ajuster le taux basal ou prendre d'autres décisions
-//         val recentBGs = getRecentBGs()
-//         var rateAdjustment = _rate
-//
-//         if (recentBGs.isNotEmpty()) {
-//             val bgTrend = calculateBgTrend(recentBGs, reason)
-//             println("BG Trend: $bgTrend")
-//
-//             // Ajuster le taux basal en fonction de la tendance des BG
-//             rateAdjustment = adjustRateBasedOnBgTrend(_rate, bgTrend)
-//
-//         } else {
-//             println("No recent BG values available.")
-//         }
-//
-//         // 3️⃣ On décide de bypasser la limite de sécurité si override ou mode spécial
-//         val bypassSafety = overrideSafetyLimits || isMealMode || isEarlyAutodrive
-//
-//         // ────────────────────────────────────────────────────────────────
-//         // 4️⃣ Calcul du maxSafeBasal standard
-//         val maxSafe = min(
-//             profile.max_basal,
-//             min(
-//                 profile.max_daily_safety_multiplier * profile.max_daily_basal,
-//                 profile.current_basal_safety_multiplier * profile.current_basal
-//             )
-//         )
-//
-//         // 5️⃣ Choix du rate effectif : bypass ou clamp
-//         val rate = if (bypassSafety) {
-//             rateAdjustment
-//         } else {
-//             rateAdjustment.coerceIn(0.0, maxSafe)
-//         }
-//
-//         // ────────────────────────────────────────────────────────────────
-//         // 6️⃣ Logging des raisons
-//         when {
-//             bypassSafety -> {
-//                 rT.reason.append("→ bypass sécurité${if (isMealMode) " (meal mode)" else if (isEarlyAutodrive) " (early autodrive)" else ""}\n")
-//             }
-//             rate != _rate -> {
-//                 rT.reason.append("→ rate adjusted based on BG trend\n")
-//             }
-//         }
-//
-//         // ────────────────────────────────────────────────────────────────
-//         // 9️⃣ Pose “standard” du temp basal
-//         rT.reason.append("Pose temp à ${"%.2f".format(rate)} U/h pour $duration minutes.\n")
-//         rT.duration = duration
-//         rT.rate = rate
-//         return rT
-//     }
-
-    // private fun calculateBgTrend(recentBGs: List<Float>): Float {
-    //     // Calculer la tendance des BG en fonction de la différence entre les dernières valeurs
-    //     val lastValue = recentBGs.last()
-    //     val firstValue = recentBGs.first()
-    //     return (lastValue - firstValue) / recentBGs.size.toFloat()
-    // }
     private fun calculateBgTrend(recentBGs: List<Float>, reason: StringBuilder): Float {
     if (recentBGs.isEmpty()) {
         reason.append("✘ Aucun historique de glycémie disponible.\n")
@@ -1121,7 +892,7 @@ fun appendCompactLog(
 
     private fun adjustRateBasedOnBgTrend(_rate: Double, bgTrend: Float): Double {
         // Si la BG est accessible dans le scope, on peut aussi y jeter un œil ici :
-        val bgNow = bg.toDouble()
+        val bgNow = bg
         // Si on s’approche du seuil hypo et que la tendance est négative, coupe à 0
         if (bgNow <=  (80.0 + 10.0) && bgTrend < 0f) return 0.0
         val adjustmentFactor = if (bgTrend < 0.0f) 0.8 else 1.2
@@ -1231,17 +1002,44 @@ fun appendCompactLog(
         }
     }
 
-    private fun applySafetyPrecautions(mealData: MealData, smbToGiveParam: Float): Float {
+    private fun applySafetyPrecautions(
+        mealData: MealData,
+        smbToGiveParam: Float,
+        reason: StringBuilder? = null
+    ): Float {
         var smbToGive = smbToGiveParam
-        val (conditionResult, _) = isCriticalSafetyCondition(mealData)
-        if (conditionResult) return 0.0f
-        if (isSportSafetyCondition()) return 0.0f
-        // Ajustements basés sur des conditions spécifiques
-        smbToGive = applySpecificAdjustments(smbToGive)
 
+        val (isCrit, critMsg) = isCriticalSafetyCondition(mealData)
+        if (isCrit) {
+            reason?.appendLine("🛑 $critMsg → SMB=0")
+            return 0f
+        }
+
+        if (isSportSafetyCondition()) {
+            reason?.appendLine("🏃‍♂️ Safety sport → SMB=0")
+            return 0f
+        }
+
+        // Ajustements spécifiques
+        val beforeAdj = smbToGive
+        smbToGive = applySpecificAdjustments(smbToGive)
+        if (smbToGive != beforeAdj) {
+            reason?.appendLine("🎛️ Ajustements: ${"%.2f".format(beforeAdj)} → ${"%.2f".format(smbToGive)} U")
+        }
+
+        // Finalisation
+        val beforeFinalize = smbToGive
         smbToGive = finalizeSmbToGive(smbToGive)
-        // Appliquer les limites maximum
+        if (smbToGive != beforeFinalize) {
+            reason?.appendLine("🧩 Finalisation: ${"%.2f".format(beforeFinalize)} → ${"%.2f".format(smbToGive)} U")
+        }
+
+        // Limites max
+        val beforeLimits = smbToGive
         smbToGive = applyMaxLimits(smbToGive)
+        if (smbToGive != beforeLimits) {
+            reason?.appendLine("🧱 Limites: ${"%.2f".format(beforeLimits)} → ${"%.2f".format(smbToGive)} U")
+        }
 
         return smbToGive
     }
@@ -1276,46 +1074,55 @@ fun appendCompactLog(
         slopeFromMinDeviation: Double,
         bg: Float,
         predictedBg: Float,
-        reason: StringBuilder
+        reason: StringBuilder // ← on utilise CE builder-là
     ): Boolean {
-        val reason = StringBuilder()
-        // Récupération de la valeur de pbolusMeal depuis les préférences
+        // ⚙️ Prefs
         val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
-        val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
-        val autodriveminDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
-        //val autodriveISF: Int = preferences.get(IntKey.OApsAIMIautodriveISF)
+        val autodriveDelta: Float = preferences.get(DoubleKey.OApsAIMIcombinedDelta).toFloat()
+        val autodriveMinDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
         val autodriveTarget: Int = preferences.get(IntKey.OApsAIMIAutodriveTarget)
         val autodriveBG: Int = preferences.get(IntKey.OApsAIMIAutodriveBG)
-        // Récupération des deltas récents et calcul du delta prédit
-        val recentDeltas = getRecentDeltas()
-        val predicted = predictedDelta(recentDeltas)
-        // Calcul du delta combiné : combine le delta mesuré et le delta prédit
-        val combinedDelta = (delta + predicted) / 2.0f
 
-        // Utilisation des valeurs récentes de BG pour ajuster les conditions d'autodrive
+        // 📈 Deltas récents & delta combiné
+        val recentDeltas = getRecentDeltas()
+        val predicted = predictedDelta(recentDeltas).toFloat()
+        val combinedDelta = (delta + predicted) / 2f
+
+        // 🔍 Tendance BG
         val recentBGs = getRecentBGs()
         var autodriveCondition = true
-
         if (recentBGs.isNotEmpty()) {
             val bgTrend = calculateBgTrend(recentBGs, reason)
-            println("BG Trend: $bgTrend")
-
-            // Ajuster les conditions d'autodrive en fonction de la tendance des BG
-            autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(), reason)
-
+            reason.appendLine(
+                "📈 BGTrend=${"%.2f".format(bgTrend)} | Δcomb=${"%.2f".format(combinedDelta)} | predBG=${"%.0f".format(predictedBg)}"
+            )
+            autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta, reason)
         } else {
-            println("No recent BG values available.")
+            reason.appendLine("⚠️ Aucune BG récente — conditions par défaut conservées")
         }
 
-        // Si un bolus de pbolusA a déjà été administré dans la dernière heure, on ne le ré-administrera pas
+        // ⛔ Ne pas relancer si pbolus récent
         if (hasReceivedPbolusMInLastHour(pbolusA)) {
+            reason.appendLine("⛔ Pbolus ${"%.2f".format(pbolusA)}U < 60 min → autodrive=OFF")
             return false
         }
 
-        return autodriveCondition && combinedDelta >= autodriveDelta && autodrive &&
-            predictedBg > 140 &&
-            slopeFromMinDeviation >= autodriveminDeviation &&
-            bg >= autodriveBG.toFloat()
+        // ✅ Décision finale
+        val ok =
+            autodriveCondition &&
+                combinedDelta >= autodriveDelta &&
+                autodrive &&
+                predictedBg > 140 &&
+                slopeFromMinDeviation >= autodriveMinDeviation &&
+                bg >= autodriveBG.toFloat()
+
+        reason.appendLine(
+            "🚗 Autodrive: ${if (ok) "✅ ON" else "❌ OFF"} | " +
+                "cond=$autodriveCondition, Δc≥${"%.2f".format(autodriveDelta)}, " +
+                "predBG>${autodriveTarget}, slope≥${"%.2f".format(autodriveMinDeviation)}, bg≥${autodriveBG}"
+        )
+
+        return ok
     }
 
     private fun adjustAutodriveCondition(
@@ -1390,73 +1197,14 @@ fun appendCompactLog(
     private fun roundToPoint05(number: Float): Float {
         return (number * 20.0).roundToInt() / 20.0f
     }
-    // private fun isCriticalSafetyCondition(mealData: MealData): Pair<Boolean, String> {
-    //     val reasonBuilder = StringBuilder()
-    //     val conditionsTrue = mutableListOf<String>()
-    //     //val slopedeviation = mealData.slopeFromMaxDeviation <= -1.5 && mealData.slopeFromMinDeviation < 0.3
-    //     //if (slopedeviation) conditionsTrue.add("slopedeviation")
-    //     val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-    //     val nosmbHM = iob > 0.7 && honeymoon && delta <= 10.0 && !mealTime && !bfastTime && !lunchTime && !dinnerTime && predictedBg < 130
-    //     if (nosmbHM) conditionsTrue.add("nosmbHM")
-    //     val honeysmb = honeymoon && delta < 0 && bg < 170
-    //     if (honeysmb) conditionsTrue.add("honeysmb")
-    //     val negdelta = delta <= 0 && !mealTime && !bfastTime && !lunchTime && !dinnerTime && eventualBG < 140
-    //     if (negdelta) conditionsTrue.add("negdelta")
-    //     val nosmb = iob >= 2*maxSMB && bg < 110 && delta < 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
-    //     if (nosmb) conditionsTrue.add("nosmb")
-    //     val fasting = fastingTime
-    //     if (fasting) conditionsTrue.add("fasting")
-    //     val belowMinThreshold = bg < 100 && delta < 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
-    //     if (belowMinThreshold) conditionsTrue.add("belowMinThreshold")
-    //     val isNewCalibration = iscalibration && delta > 8
-    //     if (isNewCalibration) conditionsTrue.add("isNewCalibration")
-    //     val belowTargetAndDropping = bg < targetBg && delta < -2 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
-    //     if (belowTargetAndDropping) conditionsTrue.add("belowTargetAndDropping")
-    //     val belowTargetAndStableButNoCob = bg < targetBg - 15 && shortAvgDelta <= 2 && cob <= 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
-    //     if (belowTargetAndStableButNoCob) conditionsTrue.add("belowTargetAndStableButNoCob")
-    //     val droppingFast = bg < 150 && delta < -2
-    //     if (droppingFast) conditionsTrue.add("droppingFast")
-    //     val droppingFastAtHigh = bg < 220 && delta <= -7
-    //     if (droppingFastAtHigh) conditionsTrue.add("droppingFastAtHigh")
-    //     val droppingVeryFast = delta < -11
-    //     if (droppingVeryFast) conditionsTrue.add("droppingVeryFast")
-    //     val prediction = predictedBg < targetBg && bg < 135 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
-    //     if (prediction) conditionsTrue.add("prediction")
-    //     val interval = eventualBG < targetBg && delta > 10 && iob >= maxSMB/2 && lastsmbtime < 10 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime && !snackTime
-    //     if (interval) conditionsTrue.add("interval")
-    //     val targetinterval = targetBg >= 120 && delta > 0 && iob >= maxSMB/2 && lastsmbtime < 12 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime && !snackTime
-    //     if (targetinterval) conditionsTrue.add("targetinterval")
-    //     //val stablebg = delta>-3 && delta<3 && shortAvgDelta>-3 && shortAvgDelta<3 && longAvgDelta>-3 && longAvgDelta<3 && bg < 120 && !mealTime && !bfastTime && !highCarbTime && !lunchTime && !dinnerTime
-    //     //if (stablebg) conditionsTrue.add("stablebg")
-    //     val acceleratingDown = delta < -2 && delta - longAvgDelta < -2 && lastsmbtime < 15
-    //     if (acceleratingDown) conditionsTrue.add("acceleratingDown")
-    //     val decceleratingdown = delta < 0 && (delta > shortAvgDelta || delta > longAvgDelta) && lastsmbtime < 15
-    //     if (decceleratingdown) conditionsTrue.add("decceleratingdown")
-    //     val nosmbhoneymoon = honeymoon && iob > maxIob / 2 && delta < 0
-    //     if (nosmbhoneymoon) conditionsTrue.add("nosmbhoneymoon")
-    //     val bg90 = bg < 90
-    //     if (bg90) conditionsTrue.add("bg90")
-    //     val result = belowTargetAndDropping || belowTargetAndStableButNoCob || nosmbHM || honeysmb ||
-    //         droppingFast || droppingFastAtHigh || droppingVeryFast || prediction || interval || targetinterval || bg90 || negdelta ||
-    //         fasting || nosmb || isNewCalibration || belowMinThreshold || acceleratingDown || decceleratingdown || nosmbhoneymoon
-    //
-    //     val conditionsTrueString = if (conditionsTrue.isNotEmpty()) {
-    //         conditionsTrue.joinToString(", ")
-    //     } else {
-    //         "No conditions met"
-    //     }
-    //     reasonBuilder.append("Safety condition $result : $conditionsTrue")
-    //     return Pair(result, conditionsTrueString)
-    // }
-    /**
-     * Vérifie si une condition de sécurité critique est remplie
-     *
-     * @param mealData Les données sur le repas
-     * @return Une paire contenant :
-     *         - Le résultat booléen indiquant si la condition est critique
-     *         - Une chaîne décrivant les conditions remplies
-     */
+
     private fun isCriticalSafetyCondition(mealData: MealData): Pair<Boolean, String> {
+        val cobFromMeal = try {
+            // Adapte le nom selon ta classe (souvent mealData.cob ou mealData.mealCOB)
+            mealData.mealCOB
+        } catch (_: Throwable) {
+            cob // variable globale déjà existante
+        }.toDouble()
         // Extraction des données de contexte pour éviter les variables globales
         val context = SafetyContext(
             delta = delta.toDouble(),
@@ -1477,7 +1225,8 @@ fun appendCompactLog(
             lunchTime = lunchTime,
             dinnerTime = dinnerTime,
             highCarbTime = highCarbTime,
-            snackTime = snackTime
+            snackTime = snackTime,
+            cob = cobFromMeal
         )
 
         // Récupération des conditions critiques
@@ -1489,7 +1238,7 @@ fun appendCompactLog(
         // Construction du message de retour
         val message = buildConditionMessage(isCritical, criticalConditions)
 
-        return Pair(isCritical, message)
+        return isCritical to message
     }
 
     /**
@@ -1514,7 +1263,8 @@ fun appendCompactLog(
         val lunchTime: Boolean,
         val dinnerTime: Boolean,
         val highCarbTime: Boolean,
-        val snackTime: Boolean
+        val snackTime: Boolean,
+        val cob: Double
     )
 
     /**
@@ -1607,7 +1357,7 @@ fun appendCompactLog(
     private fun isBelowTargetAndStableButNoCob(context: SafetyContext): Boolean =
         context.bg < context.targetBg &&
             context.delta >= 0 &&
-            context.iob <= 0 // Pas de COB (Carbohydrate On Board)
+            context.cob <= 0 // Pas de COB (Carbohydrate On Board)
 
     private fun isDroppingFast(context: SafetyContext): Boolean =
         context.delta < -2.0 // Seuil arbitraire pour une chute rapide
@@ -3833,7 +3583,7 @@ private fun calculateDynamicPeakTime(
         smbToGive = optimalBasalMPC.toFloat()
         rT.reason.appendLine("🎛️ Facteur appliqué → ${"%.2f".format(smbToGive)} U")
 // ===== Fin de l’intégration du module MPC =====
-        smbToGive = applySafetyPrecautions(mealData, finalInsulinDose.toFloat())
+        smbToGive = applySafetyPrecautions(mealData, finalInsulinDose.toFloat(), rT.reason)
         rT.reason.appendLine("✅ SMB final: ${"%.2f".format(smbToGive)} U")
         smbToGive = roundToPoint05(smbToGive)
 
