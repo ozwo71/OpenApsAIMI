@@ -50,6 +50,8 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import app.aaps.plugins.aps.R
 import android.content.Context
+import org.tensorflow.lite.Interpreter
+import java.text.DecimalFormatSymbols
 import kotlin.math.exp
 
 
@@ -71,6 +73,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val consoleError = mutableListOf<String>()
     private val consoleLog = mutableListOf<String>()
     private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
+    private val modelFile = File(externalDir, "ml/model.tflite")
+    private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
     private val csvfile = File(externalDir, "oapsaimiML2_records.csv")
     private val csvfile2 = File(externalDir, "oapsaimi2_records.csv")
     //private val tempFile = File(externalDir, "temp.csv")
@@ -1906,68 +1910,68 @@ fun appendCompactLog(
         return result
     }
 
-    private fun calculateSMBFromModel(): Float {
-        val smb = AimiModelHandler.predictSmb(
-            cob.toDouble(),
-            lastCarbAgeMin
-        ) { modelName ->
-            if (modelName == "main") floatArrayOf(
-                hourOfDay.toFloat(), weekend.toFloat(),
-                bg.toFloat(), targetBg.toFloat(), iob.toFloat(), cob.toFloat(),
-                lastCarbAgeMin.toFloat(), futureCarbs.toFloat(),
-                delta.toFloat(), shortAvgDelta.toFloat(), longAvgDelta.toFloat()
-            ) else floatArrayOf(
-                hourOfDay.toFloat(), weekend.toFloat(),
-                bg.toFloat(), targetBg.toFloat(), iob.toFloat(),
-                delta.toFloat(), shortAvgDelta.toFloat(), longAvgDelta.toFloat(),
-                tdd7DaysPerHour.toFloat(), tdd2DaysPerHour.toFloat(), tddPerHour.toFloat(), tdd24HrsPerHour.toFloat(),
-                recentSteps5Minutes.toFloat(), recentSteps10Minutes.toFloat(),
-                recentSteps15Minutes.toFloat(), recentSteps30Minutes.toFloat(),
-                recentSteps60Minutes.toFloat(), recentSteps180Minutes.toFloat()
-            )
-        }
-        return smb.coerceAtLeast(0f)
-    }
-
     // private fun calculateSMBFromModel(): Float {
-    //     val selectedModelFile: File?
-    //     val modelInputs: FloatArray
-    //
-    //     when {
-    //         cob > 0 && lastCarbAgeMin < 240 && modelFile.exists() -> {
-    //             selectedModelFile = modelFile
-    //             modelInputs = floatArrayOf(
-    //                 hourOfDay.toFloat(), weekend.toFloat(),
-    //                 bg.toFloat(), targetBg, iob, cob, lastCarbAgeMin.toFloat(), futureCarbs, delta, shortAvgDelta, longAvgDelta
-    //             )
-    //         }
-    //
-    //         modelFileUAM.exists()   -> {
-    //             selectedModelFile = modelFileUAM
-    //             modelInputs = floatArrayOf(
-    //                 hourOfDay.toFloat(), weekend.toFloat(),
-    //                 bg.toFloat(), targetBg, iob, delta, shortAvgDelta, longAvgDelta,
-    //                 tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour,
-    //                 recentSteps5Minutes.toFloat(),recentSteps10Minutes.toFloat(),recentSteps15Minutes.toFloat(),recentSteps30Minutes.toFloat(),recentSteps60Minutes.toFloat(),recentSteps180Minutes.toFloat()
-    //             )
-    //         }
-    //
-    //         else                 -> {
-    //             return 0.0F
-    //         }
+    //     val smb = AimiModelHandler.predictSmb(
+    //         cob.toDouble(),
+    //         lastCarbAgeMin
+    //     ) { modelName ->
+    //         if (modelName == "main") floatArrayOf(
+    //             hourOfDay.toFloat(), weekend.toFloat(),
+    //             bg.toFloat(), targetBg.toFloat(), iob.toFloat(), cob.toFloat(),
+    //             lastCarbAgeMin.toFloat(), futureCarbs.toFloat(),
+    //             delta.toFloat(), shortAvgDelta.toFloat(), longAvgDelta.toFloat()
+    //         ) else floatArrayOf(
+    //             hourOfDay.toFloat(), weekend.toFloat(),
+    //             bg.toFloat(), targetBg.toFloat(), iob.toFloat(),
+    //             delta.toFloat(), shortAvgDelta.toFloat(), longAvgDelta.toFloat(),
+    //             tdd7DaysPerHour.toFloat(), tdd2DaysPerHour.toFloat(), tddPerHour.toFloat(), tdd24HrsPerHour.toFloat(),
+    //             recentSteps5Minutes.toFloat(), recentSteps10Minutes.toFloat(),
+    //             recentSteps15Minutes.toFloat(), recentSteps30Minutes.toFloat(),
+    //             recentSteps60Minutes.toFloat(), recentSteps180Minutes.toFloat()
+    //         )
     //     }
-    //
-    //     val interpreter = Interpreter(selectedModelFile)
-    //     val output = arrayOf(floatArrayOf(0.0F))
-    //     interpreter.run(modelInputs, output)
-    //     interpreter.close()
-    //     var smbToGive = output[0][0].toString().replace(',', '.').toDouble()
-    //
-    //     val formatter = DecimalFormat("#.####", DecimalFormatSymbols(Locale.US))
-    //     smbToGive = formatter.format(smbToGive).toDouble()
-    //
-    //     return smbToGive.toFloat()
+    //     return smb.coerceAtLeast(0f)
     // }
+
+    private fun calculateSMBFromModel(): Float {
+        val selectedModelFile: File?
+        val modelInputs: FloatArray
+
+        when {
+            cob > 0 && lastCarbAgeMin < 240 && modelFile.exists() -> {
+                selectedModelFile = modelFile
+                modelInputs = floatArrayOf(
+                    hourOfDay.toFloat(), weekend.toFloat(),
+                    bg.toFloat(), targetBg, iob, cob, lastCarbAgeMin.toFloat(), futureCarbs, delta, shortAvgDelta, longAvgDelta
+                )
+            }
+
+            modelFileUAM.exists()   -> {
+                selectedModelFile = modelFileUAM
+                modelInputs = floatArrayOf(
+                    hourOfDay.toFloat(), weekend.toFloat(),
+                    bg.toFloat(), targetBg, iob, delta, shortAvgDelta, longAvgDelta,
+                    tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour,
+                    recentSteps5Minutes.toFloat(),recentSteps10Minutes.toFloat(),recentSteps15Minutes.toFloat(),recentSteps30Minutes.toFloat(),recentSteps60Minutes.toFloat(),recentSteps180Minutes.toFloat()
+                )
+            }
+
+            else                 -> {
+                return 0.0F
+            }
+        }
+
+        val interpreter = Interpreter(selectedModelFile)
+        val output = arrayOf(floatArrayOf(0.0F))
+        interpreter.run(modelInputs, output)
+        interpreter.close()
+        var smbToGive = output[0][0].toString().replace(',', '.').toDouble()
+
+        val formatter = DecimalFormat("#.####", DecimalFormatSymbols(Locale.US))
+        smbToGive = formatter.format(smbToGive).toDouble()
+
+        return smbToGive.toFloat()
+    }
 
     private fun neuralnetwork5(
     delta: Float,
