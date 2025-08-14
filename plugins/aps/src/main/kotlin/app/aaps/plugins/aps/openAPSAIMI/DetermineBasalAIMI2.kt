@@ -1563,9 +1563,9 @@ fun appendCompactLog(
         val smb = AimiUamHandler.predictSmbUam(
             floatArrayOf(
                 hourOfDay.toFloat(), weekend.toFloat(),
-                bg.toFloat(), targetBg.toFloat(), iob.toFloat(),
-                delta.toFloat(), shortAvgDelta.toFloat(), longAvgDelta.toFloat(),
-                tdd7DaysPerHour.toFloat(), tdd2DaysPerHour.toFloat(), tddPerHour.toFloat(), tdd24HrsPerHour.toFloat(),
+                bg.toFloat(), targetBg, iob,
+                delta, shortAvgDelta, longAvgDelta,
+                tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour,
                 recentSteps5Minutes.toFloat(), recentSteps10Minutes.toFloat(),
                 recentSteps15Minutes.toFloat(), recentSteps30Minutes.toFloat(),
                 recentSteps60Minutes.toFloat(), recentSteps180Minutes.toFloat()
@@ -1791,7 +1791,7 @@ fun appendCompactLog(
     private fun computeDynamicBolusMultiplier(delta: Float): Float {
         // Centrer la sigmoïde autour de 5 mg/dL, avec une pente modérée (échelle 10)
         val x = (delta - 5f) / 10f
-        val sig = (1f / (1f + exp(-x))).toFloat()  // sigmoïde entre 0 et 1
+        val sig = (1f / (1f + exp(-x)))  // sigmoïde entre 0 et 1
         return 0.5f + sig * 0.7f  // multipliateur lissé entre 0,5 et 1,2
     }
 
@@ -2082,7 +2082,7 @@ fun appendCompactLog(
             val netCarbImpact = max(0.0, bgDifference - (cob * csf)) // Ajuster avec COB
 
             // 7. Calculer les glucides nécessaires pour combler la différence de glycémie
-            val carbsReq = round(netCarbImpact / csf).toInt()
+            val carbsReq = round(netCarbImpact / csf)
 
             // Debug info
             consoleError.add("Future BG: $futureBG, Projected Drop: $projectedDrop, Insulin Effect: $insulinEffect, COB Impact: ${cob * csf}, Carbs Required: $carbsReq")
@@ -2292,8 +2292,8 @@ fun appendCompactLog(
         val polyY = arrayOf(0.5, 1.0, 2.0, 3.0, 5.0, 7.0, 9.0, 10.0, 10.0, 10.0, 10.0, 10.0) // Ajustement des valeurs pour la basale
 
         // Constants for basal adjustment weights
-        val higherBasalRangeWeight: Double = 1.5 // Facteur pour les glycémies supérieures à 100 mg/dL
-        val lowerBasalRangeWeight: Double = 0.8 // Facteur pour les glycémies inférieures à 100 mg/dL mais supérieures ou égales à 80
+        val higherBasalRangeWeight = 1.5 // Facteur pour les glycémies supérieures à 100 mg/dL
+        val lowerBasalRangeWeight = 0.8 // Facteur pour les glycémies inférieures à 100 mg/dL mais supérieures ou égales à 80
 
         val polymax = polyX.size - 1
         var step = polyX[0]
@@ -2667,7 +2667,7 @@ private fun calculateDynamicPeakTime(
             recentSteps15Minutes,
             averageBeatsPerMinute.toInt(),
             bg,
-            combinedDelta.toDouble(),
+            combinedDelta,
             reasonAimi
         )
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
@@ -3355,9 +3355,9 @@ private fun calculateDynamicPeakTime(
             dinnerTime                                                                                                                        -> smbToGive * dinnerfactor.toFloat()
             snackTime                                                                                                                         -> smbToGive * snackfactor.toFloat()
             sleepTime                                                                                                                         -> smbToGive * sleepfactor.toFloat()
-            hourOfDay in 1..11                                                                                                                -> smbToGive * adjustedMorningFactor.toFloat()
-            hourOfDay in 12..18                                                                                                               -> smbToGive * adjustedAfternoonFactor.toFloat()
-            hourOfDay in 19..23                                                                                                               -> smbToGive * adjustedEveningFactor.toFloat()
+            hourOfDay in 1..11                                                                                                                -> smbToGive * adjustedMorningFactor
+            hourOfDay in 12..18                                                                                                               -> smbToGive * adjustedAfternoonFactor
+            hourOfDay in 19..23                                                                                                               -> smbToGive * adjustedEveningFactor
             bg > 120 && delta > 7 && !honeymoon                                                                                               -> smbToGive * hyperfactor.toFloat()
             bg > 180 && delta > 5 && iob < 1.2 && honeymoon                                                                                   -> smbToGive * hyperfactor.toFloat()
             else                                                                                                                              -> smbToGive
@@ -3387,71 +3387,143 @@ private fun calculateDynamicPeakTime(
             pumpAgeDays = pumpAgeDays
         )
         consoleLog.add("DIA ajusté (en minutes) : $adjustedDIAInMinutes")
+//         val actCurr = profile.sensorLagActivity
+//         val actFuture = profile.futureActivity
+//         val td = adjustedDIAInMinutes
+//         val deltaGross = round((glucose_status.delta + actCurr * sens).coerceIn(0.0, 35.0), 1)
+//         val actTarget = deltaGross / sens * factors.toFloat()
+//         var actMissing = 0.0
+//         var deltaScore = 0.5
+//
+//         if (glucose_status.delta <= 4.0) {
+//
+//             actMissing = round((actCurr * smbToGive - Math.max(actFuture, 0.0)) / 5, 4)
+//             deltaScore = ((bg - target_bg) / 100).coerceIn(0.0, 1.0)
+//         } else {
+//             actMissing = round((actTarget - Math.max(actFuture, 0.0)) / 5, 4)
+//         }
+//
+//         val tau = tp * (1 - tp / td) / (1 - 2 * tp / td)
+//         val a = 2 * tau / td
+//         val S = 1 / (1 - a + (1 + a) * Math.exp((-td / tau)))
+//         var AimiInsReq = actMissing / (S / Math.pow(tau, 2.0) * tp * (1 - tp / td) * Math.exp((-tp / tau)))
+//
+//         AimiInsReq = if (AimiInsReq < smbToGive) AimiInsReq else smbToGive.toDouble()
+//
+//         val finalInsulinDose = round(AimiInsReq, 2)
+//         // ===== Intégration du module MPC et du correctif PI =====
+// // Exemple d’optimisation simple sur la dose basale candidate
+//
+// // Définition des bornes (par exemple de 0.0 à la basale courante maximale ou une valeur fixée)
+//         val doseMin = 0.0
+//         val doseMax = maxSMB
+// // Paramètres pour le module prédictif
+//         val horizon = 30  // horizon en minutes
+//         val insulinSensitivity = variableSensitivity.toDouble()  // conversion si nécessaire
+//
+// // On utilise une recherche itérative simple pour trouver la dose qui minimise le coût
+//         var optimalDose = doseMin
+//         var bestCost = Double.MAX_VALUE
+//         val nSteps = 20  // nombre de pas d’échantillonnage entre doseMin et doseMax
+//
+//         for (i in 0..nSteps) {
+//             val candidate = doseMin + i * (doseMax - doseMin) / nSteps
+//             val cost = costFunction(basal, bg.toDouble(), targetBg.toDouble(), horizon, insulinSensitivity, smbToGive.toDouble())
+//             if (cost < bestCost) {
+//                 bestCost = cost
+//                 optimalDose = candidate
+//             }
+//         }
+//
+// // Correction en boucle fermée avec un simple contrôleur PI
+//         val error = bg.toDouble() - targetBg.toDouble()  // erreur actuelle
+//         val Kp = 0.1  // gain proportionnel (à calibrer)
+//         val correction = -Kp * error
+//
+//         val optimalBasalMPC = optimalDose + correction
+//
+// // On loggue ces valeurs pour debug
+//         consoleLog.add("Module MPC: dose candidate = ${optimalDose}, correction = ${correction}, optimalBasalMPC = ${optimalBasalMPC}")
+//
+// // On peut maintenant utiliser cette dose pour ajuster la décision.
+//         smbToGive = optimalBasalMPC.toFloat()
+//         rT.reason.appendLine("🎛️ Facteur appliqué → ${"%.2f".format(smbToGive)} U")
+// // ===== Fin de l’intégration du module MPC =====
+//         smbToGive = applySafetyPrecautions(mealData, finalInsulinDose.toFloat(), rT.reason)
+//         rT.reason.appendLine("✅ SMB final: ${"%.2f".format(smbToGive)} U")
+//         smbToGive = roundToPoint05(smbToGive)
         val actCurr = profile.sensorLagActivity
         val actFuture = profile.futureActivity
         val td = adjustedDIAInMinutes
         val deltaGross = round((glucose_status.delta + actCurr * sens).coerceIn(0.0, 35.0), 1)
         val actTarget = deltaGross / sens * factors.toFloat()
         var actMissing = 0.0
-        var deltaScore: Double = 0.5
+        var deltaScore = 0.5  // 0..1 : 0 proche/sous target, 1 très au-dessus
 
         if (glucose_status.delta <= 4.0) {
-
-            actMissing = round((actCurr * smbToGive - Math.max(actFuture, 0.0)) / 5, 4)
-            deltaScore = ((bg - target_bg) / 100).coerceIn(0.0, 1.0)
+            actMissing = round((actCurr * smbToGive - max(actFuture, 0.0)) / 5, 4)
+            // échelle 0..1 en fonction de l’écart à la cible
+            deltaScore = ((bg - target_bg) / 100.0).coerceIn(0.0, 1.0)
         } else {
-            actMissing = round((actTarget - Math.max(actFuture, 0.0)) / 5, 4)
+            actMissing = round((actTarget - max(actFuture, 0.0)) / 5, 4)
         }
 
-        val tau = tp * (1 - tp / td) / (1 - 2 * tp / td)
-        val a = 2 * tau / td
-        val S = 1 / (1 - a + (1 + a) * Math.exp((-td / tau)))
-        var AimiInsReq = actMissing / (S / Math.pow(tau, 2.0) * tp * (1 - tp / td) * Math.exp((-tp / tau)))
+// Sécurisation du calcul des constantes (éviter divisions/exp instables)
+        val tpD = tp.toDouble()
+        val tdD = td.toDouble().coerceAtLeast(tpD * 2.1) // td doit être > 2*tp
+        val tau = tpD * (1 - tpD / tdD) / (1 - 2 * tpD / tdD)
+        val a = 2 * tau / tdD
+        val S = 1 / (1 - a + (1 + a) * Math.exp(-tdD / tau))
+        var AimiInsReq = actMissing / (S / (tau * tau) * tpD * (1 - tpD / tdD) * Math.exp(-tpD / tau))
 
         AimiInsReq = if (AimiInsReq < smbToGive) AimiInsReq else smbToGive.toDouble()
-
         val finalInsulinDose = round(AimiInsReq, 2)
-        // ===== Intégration du module MPC et du correctif PI =====
-// Exemple d’optimisation simple sur la dose basale candidate
 
-// Définition des bornes (par exemple de 0.0 à la basale courante maximale ou une valeur fixée)
+// ===== Module MPC + correctif PI =====
         val doseMin = 0.0
         val doseMax = maxSMB
-// Paramètres pour le module prédictif
-        val horizon = 30  // horizon en minutes
-        val insulinSensitivity = variableSensitivity.toDouble()  // conversion si nécessaire
+        val horizon = 30 // minutes
+        val insulinSensitivity = variableSensitivity.toDouble()
 
-// On utilise une recherche itérative simple pour trouver la dose qui minimise le coût
         var optimalDose = doseMin
         var bestCost = Double.MAX_VALUE
-        val nSteps = 20  // nombre de pas d’échantillonnage entre doseMin et doseMax
+        val nSteps = 20
 
         for (i in 0..nSteps) {
             val candidate = doseMin + i * (doseMax - doseMin) / nSteps
-            val cost = costFunction(basal, bg.toDouble(), targetBg.toDouble(), horizon, insulinSensitivity, smbToGive.toDouble())
+            // ⚠️ corriger : évaluer le coût avec "candidate", pas "smbToGive"
+            val cost = costFunction(basal, bg.toDouble(), targetBg.toDouble(), horizon, insulinSensitivity, candidate)
             if (cost < bestCost) {
                 bestCost = cost
                 optimalDose = candidate
             }
         }
 
-// Correction en boucle fermée avec un simple contrôleur PI
-        val error = bg.toDouble() - targetBg.toDouble()  // erreur actuelle
-        val Kp = 0.1  // gain proportionnel (à calibrer)
+// PI : on module Kp par deltaScore (0.5× à 1.5×)
+        val baseKp = 0.1
+        val Kp = baseKp * (0.5 + deltaScore) // si très haut au-dessus de target ⇒ correction plus énergique
+        val error = bg.toDouble() - targetBg.toDouble()
         val correction = -Kp * error
 
-        val optimalBasalMPC = optimalDose + correction
+        val optimalBasalMPC = (optimalDose + correction).coerceIn(doseMin, doseMax)
 
-// On loggue ces valeurs pour debug
-        consoleLog.add("Module MPC: dose candidate = ${optimalDose}, correction = ${correction}, optimalBasalMPC = ${optimalBasalMPC}")
+// Log
+        consoleLog.add("Module MPC: dose=${"%.2f".format(optimalDose)}, Kp=${"%.3f".format(Kp)}, corr=${"%.2f".format(correction)}, out=${"%.2f".format(optimalBasalMPC)}")
 
-// On peut maintenant utiliser cette dose pour ajuster la décision.
-        smbToGive = optimalBasalMPC.toFloat()
-        rT.reason.appendLine("🎛️ Facteur appliqué → ${"%.2f".format(smbToGive)} U")
-// ===== Fin de l’intégration du module MPC =====
-        smbToGive = applySafetyPrecautions(mealData, finalInsulinDose.toFloat(), rT.reason)
-        rT.reason.appendLine("✅ SMB final: ${"%.2f".format(smbToGive)} U")
-        smbToGive = roundToPoint05(smbToGive)
+// Mix final entre modèle MPC et estimation "physio" (pondéré par deltaScore)
+        val alpha = 0.3 + 0.5 * deltaScore // 0.3..0.8
+        var smbDecision = (alpha * optimalBasalMPC + (1 - alpha) * finalInsulinDose).toFloat()
+
+        rT.reason.appendLine("🎛️ MPC/PI → ${"%.2f".format(optimalBasalMPC)} U | physio=${"%.2f".format(finalInsulinDose)} U | α=${"%.2f".format(alpha)}")
+
+// ===== Fin MPC =====
+
+// ⚠️ passer la DECISION courante à la safety (pas finalInsulinDose)
+        smbDecision = applySafetyPrecautions(mealData, smbDecision, rT.reason)
+        rT.reason.appendLine("✅ SMB final: ${"%.2f".format(smbDecision)} U")
+
+        smbToGive = roundToPoint05(smbDecision)
+
 
         logDataMLToCsv(predictedSMB, smbToGive)
         logDataToCsv(predictedSMB, smbToGive)
