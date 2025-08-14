@@ -292,10 +292,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     // -- Calcul de la chute de BG par heure sur une fenêtre donnée (en minutes) --
     fun calculateDropPerHour(bgHistory: List<Float>, windowMinutes: Float): Float {
-        if (bgHistory.isEmpty()) return 0f
-        val drop = bgHistory.last() - bgHistory.first()  // positif si baisse
+        if (bgHistory.size < 2) return 0f
+        val first = bgHistory.first()  // plus ancien
+        val last  = bgHistory.last()   // plus récent
+        val drop  = (first - last)     // positif si baisse
         return drop * (60f / windowMinutes)
     }
+
     /**
      * Ajuste la dose d'insuline (SMB) et décide éventuellement de stopper la basale.
      *
@@ -801,11 +804,11 @@ fun appendCompactLog(
     ): RT {
         // ────────────────────────────────────────────────────────────────
         // 0️⃣ LGS / Hypo kill-switch (avant tout)
-        val lgs = profile.lgsThreshold?.toDouble()
-        val hypoGuard = maxOf(lgs!!, 80.0)
+        val lgsPref = profile.lgsThreshold
+        val hypoGuard = computeHypoThreshold(minBg = profile.min_bg, lgsThreshold = lgsPref)
         val bgNow = bg
         if (bgNow <= hypoGuard) {
-            rT.reason.append("🛑 LGS: BG=${"%.0f".format(bgNow)} ≤ ${"%.0f".format(hypoGuard)} mg/dL → TBR 0U/h (30m)\n")
+            rT.reason.append("🛑 LGS: BG=${"%.0f".format(bgNow)} ≤ ${"%.0f".format(hypoGuard)} → TBR 0U/h (30m)\n")
             rT.duration = maxOf(duration, 30)
             rT.rate = 0.0
             return rT
@@ -1055,7 +1058,7 @@ fun appendCompactLog(
         if (smbToGive != beforeLimits) {
             reason?.appendLine("🧱 Limites: ${"%.2f".format(beforeLimits)} → ${"%.2f".format(smbToGive)} U")
         }
-
+        smbToGive = smbToGive.coerceAtLeast(0f)
         return smbToGive
     }
     private fun applyMaxLimits(smbToGive: Float): Float {
@@ -1095,7 +1098,6 @@ fun appendCompactLog(
         val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
         val autodriveDelta: Float = preferences.get(DoubleKey.OApsAIMIcombinedDelta).toFloat()
         val autodriveMinDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
-        val autodriveTarget: Int = preferences.get(IntKey.OApsAIMIAutodriveTarget)
         val autodriveBG: Int = preferences.get(IntKey.OApsAIMIAutodriveBG)
 
         // 📈 Deltas récents & delta combiné
@@ -1134,7 +1136,7 @@ fun appendCompactLog(
         reason.appendLine(
             "🚗 Autodrive: ${if (ok) "✅ ON" else "❌ OFF"} | " +
                 "cond=$autodriveCondition, Δc≥${"%.2f".format(autodriveDelta)}, " +
-                "predBG>${autodriveTarget}, slope≥${"%.2f".format(autodriveMinDeviation)}, bg≥${autodriveBG}"
+                "predBG>140, slope≥${"%.2f".format(autodriveMinDeviation)}, bg≥${autodriveBG}"
         )
 
         return ok
@@ -1283,7 +1285,14 @@ fun appendCompactLog(
         val cob: Double,
         val hypoThreshold: Double
     )
-
+    private fun isHypoBlocked(context: SafetyContext): Boolean =
+        shouldBlockHypoWithHysteresis(
+            bg = context.bg,
+            predictedBg = context.predictedBg,
+            eventualBg = context.eventualBG,
+            threshold = context.hypoThreshold,
+            deltaMgdlPer5min = context.delta
+        )
     /**
      * Détermine les conditions critiques à partir du contexte fourni
      */
@@ -1291,6 +1300,7 @@ fun appendCompactLog(
         val conditions = mutableListOf<String>()
 
         // Vérification des conditions critiques avec des noms explicites
+        if (isHypoBlocked(context)) conditions.add("hypoGuard")
         if (isNosmbHm(context)) conditions.add("nosmbHM")
         if (isHoneysmb(context)) conditions.add("honeysmb")
         if (isNegDelta(context)) conditions.add("negdelta")
@@ -2198,8 +2208,8 @@ fun appendCompactLog(
         insulinEffect *= physicalActivityFactor
         // Calculer le facteur de retard ajusté en fonction de l'activité physique
         val adjustedDelayFactor = calculateAdjustedDelayFactor(
-            normalBgThreshold,
-            recentSteps180Min,
+            bg,
+            recentSteps180Minutes,
             averageBeatsPerMinute,
             averageBeatsPerMinute10
         )
