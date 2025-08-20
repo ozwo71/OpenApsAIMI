@@ -4,7 +4,6 @@ import android.os.StrictMode
 import androidx.annotation.VisibleForTesting
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.utils.pump.ThreadUtil
 import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
 import java.io.Closeable
@@ -166,7 +165,7 @@ class HttpServer internal constructor(private var aapsLogger: AAPSLogger, val po
             val socket = serverSocket!!.accept()
             aapsLogger.info(LTag.GARMIN, "accept " + socket.remoteSocketAddress)
             workerExecutor.execute {
-                Thread.currentThread().name = "worker" + ThreadUtil.threadId()
+                Thread.currentThread().name = "worker" + Thread.currentThread().id
                 try {
                     socket.use { s ->
                         s.soTimeout = 10_000

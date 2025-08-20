@@ -4,9 +4,8 @@ import androidx.annotation.VisibleForTesting
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.HR
-import app.aaps.core.data.model.RM
+import app.aaps.core.data.model.OE
 import app.aaps.core.data.model.TE
-import app.aaps.core.data.model.TT
 import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.data.ue.ValueWithUnit
@@ -23,16 +22,14 @@ import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.queue.CommandQueue
-import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.keys.Preferences
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.UnitDoubleKey
-import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.objects.extensions.convertedToPercent
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.kotlin.plusAssign
 import java.time.Clock
 import java.time.Instant
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -51,8 +48,7 @@ class LoopHubImpl @Inject constructor(
     private val persistenceLayer: PersistenceLayer,
     private val userEntryLogger: UserEntryLogger,
     private val preferences: Preferences,
-    private val processedTbrEbData: ProcessedTbrEbData,
-    private val dateUtil: DateUtil
+    private val processedTbrEbData: ProcessedTbrEbData
 ) : LoopHub {
 
     val disposable = CompositeDisposable()
@@ -76,15 +72,15 @@ class LoopHubImpl @Inject constructor(
         get() = iobCobCalculator.calculateIobFromBolus().iob
 
     /** Returns the remaining bolus and basal insulin on board. */
-    override val insulinBasalOnboard: Double
+    override val insulinBasalOnboard :Double
         get() = iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended().basaliob
 
     /** Returns the remaining carbs on board. */
     override val carbsOnboard: Double?
-        get() = iobCobCalculator.getCobInfo("LoopHubImpl").displayCob
+       get() = iobCobCalculator.getCobInfo("LoopHubImpl").displayCob
 
     /** Returns true if the pump is connected. */
-    override val isConnected: Boolean get() = loop.runningMode != RM.Mode.DISCONNECTED_PUMP
+    override val isConnected: Boolean get() = !loop.isDisconnected
 
     /** Returns true if the current profile is set of a limited amount of time. */
     override val isTemporaryProfile: Boolean
@@ -102,19 +98,15 @@ class LoopHubImpl @Inject constructor(
             } ?: Double.NaN
         }
 
-    override val lowGlucoseMark
-        get() = profileUtil.convertToMgdl(
-            preferences.get(UnitDoubleKey.OverviewLowMark), glucoseUnit
-        )
+    override val lowGlucoseMark get() = profileUtil.convertToMgdl(
+        preferences.get(UnitDoubleKey.OverviewLowMark), glucoseUnit)
 
-    override val highGlucoseMark
-        get() = profileUtil.convertToMgdl(
-            preferences.get(UnitDoubleKey.OverviewHighMark), glucoseUnit
-        )
+    override val highGlucoseMark get() = profileUtil.convertToMgdl(
+        preferences.get(UnitDoubleKey.OverviewHighMark), glucoseUnit)
 
     /** Tells the loop algorithm that the pump is physically connected. */
     override fun connectPump() {
-        disposable += persistenceLayer.cancelCurrentRunningMode(clock.millis(), Action.RECONNECT, Sources.Garmin).subscribe()
+        disposable += persistenceLayer.cancelCurrentOfflineEvent(clock.millis(), Action.RECONNECT, Sources.Garmin).subscribe()
         commandQueue.cancelTempBasal(true, null)
     }
 
@@ -122,10 +114,10 @@ class LoopHubImpl @Inject constructor(
      *  for the given number of minutes. */
     override fun disconnectPump(minutes: Int) {
         currentProfile?.let { p ->
-            loop.handleRunningModeChange(
+            loop.goToZeroTemp(
                 durationInMinutes = minutes,
                 profile = p,
-                newRM = RM.Mode.DISCONNECTED_PUMP,
+                reason = OE.Reason.DISCONNECT_PUMP,
                 action = Action.DISCONNECT,
                 source = Sources.Garmin,
                 listValues = listOf(ValueWithUnit.Minute(minutes))
@@ -156,54 +148,6 @@ class LoopHubImpl @Inject constructor(
         }
         commandQueue.bolus(detailedBolusInfo, null)
     }
-
-    // mod Bolus and temp target
-    /** Triggers a bolus. */
-    override fun postBolus(bolus: Double) {
-        aapsLogger.info(LTag.GARMIN, "trigger a bolus of $bolus U")
-        userEntryLogger.log(
-            action = Action.BOLUS,
-            source = Sources.Garmin,
-            note = null,
-            ValueWithUnit.Insulin(bolus)
-        )
-        val detailedBolusInfo = DetailedBolusInfo().apply {
-            eventType = TE.Type.SNACK_BOLUS
-            insulin = bolus
-        }
-        commandQueue.bolus(detailedBolusInfo, null)
-    }
-
-    override fun postTempTarget(target: Double, duration: Int) {
-        if (target == 0.0 || duration == 0) {
-            disposable += persistenceLayer.cancelCurrentTemporaryTargetIfAny(
-                timestamp = dateUtil.now(),
-                action = Action.TT,
-                source = Sources.TTDialog,
-                note = null,
-                listValues = listOf()
-            ).subscribe()
-        } else {
-            disposable += persistenceLayer.insertAndCancelCurrentTemporaryTarget(
-                temporaryTarget = TT(
-                    timestamp = dateUtil.now(),
-                    duration = TimeUnit.MINUTES.toMillis(duration.toLong()),
-                    reason = TT.Reason.WEAR,
-                    lowTarget = profileUtil.convertToMgdl(target, profileUtil.units),
-                    highTarget = profileUtil.convertToMgdl(target, profileUtil.units)
-                ),
-                action = Action.TT,
-                source = Sources.Garmin,
-                note = null,
-                listValues = listOf(
-                    ValueWithUnit.TETTReason(TT.Reason.AUTOMATION),
-                    ValueWithUnit.Mgdl(target),
-                    ValueWithUnit.Minute(duration)
-                ).filterNotNull()
-            ).subscribe()
-        }
-    }
-    // end mod
 
     /** Stores hear rate readings that a taken and averaged of the given interval. */
     override fun storeHeartRate(

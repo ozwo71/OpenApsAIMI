@@ -10,21 +10,22 @@ import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.plugin.PluginBaseWithPreferences
+import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventNewBG
 import app.aaps.core.interfaces.rx.events.EventPreferenceChange
-import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.interfaces.sharedPreferences.SP
+import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.IntKey
+import app.aaps.core.keys.Preferences
+import app.aaps.core.keys.StringKey
 import app.aaps.core.validators.DefaultEditTextValidator
 import app.aaps.core.validators.preferences.AdaptiveIntPreference
 import app.aaps.core.validators.preferences.AdaptiveStringPreference
 import app.aaps.core.validators.preferences.AdaptiveSwitchPreference
 import app.aaps.plugins.sync.R
-import app.aaps.plugins.sync.garmin.keys.GarminBooleanKey
-import app.aaps.plugins.sync.garmin.keys.GarminIntKey
-import app.aaps.plugins.sync.garmin.keys.GarminStringKey
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import io.reactivex.rxjava3.disposables.CompositeDisposable
@@ -56,25 +57,24 @@ import kotlin.math.roundToInt
 class GarminPlugin @Inject constructor(
     aapsLogger: AAPSLogger,
     resourceHelper: ResourceHelper,
-    preferences: Preferences,
     private val context: Context,
     private val loopHub: LoopHub,
-    private val rxBus: RxBus
-) : PluginBaseWithPreferences(
-    pluginDescription = PluginDescription()
+    private val rxBus: RxBus,
+    private val sp: SP,
+    private val preferences: Preferences
+) : PluginBase(
+    PluginDescription()
         .mainType(PluginType.SYNC)
         .pluginIcon(app.aaps.core.objects.R.drawable.ic_watch)
         .pluginName(R.string.garmin)
         .shortName(R.string.garmin)
         .description(R.string.garmin_description)
         .preferencesId(PluginDescription.PREFERENCE_SCREEN),
-    ownPreferences = listOf(GarminStringKey::class.java, GarminBooleanKey::class.java, GarminIntKey::class.java),
-    aapsLogger, resourceHelper, preferences
+    aapsLogger, resourceHelper
 ) {
 
     /** HTTP Server for local HTTP server communication (device app requests values) .*/
     private var server: HttpServer? = null
-
     @VisibleForTesting
     var garminMessengerField: GarminMessenger? = null
     val garminMessenger: GarminMessenger
@@ -113,13 +113,13 @@ class GarminPlugin @Inject constructor(
     var newValue: Condition = valueLock.newCondition()
     private var lastGlucoseValueTimestamp: Long? = null
     private val glucoseUnitStr get() = if (loopHub.glucoseUnit == GlucoseUnit.MGDL) "mgdl" else "mmoll"
-    private val garminAapsKey get() = preferences.get(GarminStringKey.RequestKey)
+    private val garminAapsKey get() = preferences.get(StringKey.GarminRequestKey) ?: ""
 
     private fun onPreferenceChange(event: EventPreferenceChange) {
         when (event.changedKey) {
-            "communication_ciq_debug_mode"                                       -> setupGarminMessenger()
-            GarminBooleanKey.LocalHttpServer.key, GarminIntKey.LocalHttpPort.key -> setupHttpServer()
-            GarminStringKey.RequestKey.key                                       -> sendPhoneAppMessage()
+            "communication_debug_mode"                                           -> setupGarminMessenger()
+            BooleanKey.GarminLocalHttpServer.key, IntKey.GarminLocalHttpPort.key -> setupHttpServer()
+            StringKey.GarminRequestKey.key                                       -> sendPhoneAppMessage()
         }
     }
 
@@ -129,7 +129,7 @@ class GarminPlugin @Inject constructor(
     }
 
     private fun createGarminMessenger(): GarminMessenger {
-        val enableDebug = false // sp.getBoolean("communication_ciq_debug_mode", false)
+        val enableDebug = sp.getBoolean("communication_ciq_debug_mode", false)
         aapsLogger.info(LTag.GARMIN, "initialize IQ messenger in debug=$enableDebug")
         return GarminMessenger(
             aapsLogger, context, glucoseAppIds, { _, _ -> }, true, enableDebug
@@ -164,16 +164,14 @@ class GarminPlugin @Inject constructor(
 
     @VisibleForTesting
     fun setupHttpServer(wait: Duration) {
-        if (preferences.get(GarminBooleanKey.LocalHttpServer)) {
-            val port = preferences.get(GarminIntKey.LocalHttpPort)
+        if (preferences.get(BooleanKey.GarminLocalHttpServer)) {
+            val port = preferences.get(IntKey.GarminLocalHttpPort)
             if (server != null && server?.port == port) return
             aapsLogger.info(LTag.GARMIN, "starting HTTP server on $port")
             server?.close()
             server = HttpServer(aapsLogger, port).apply {
                 registerEndpoint("/get", requestHandler(::onGetBloodGlucose))
                 registerEndpoint("/carbs", requestHandler(::onPostCarbs))
-                registerEndpoint("/bolus", requestHandler(::onPostBolus))
-                registerEndpoint("/temptarget", requestHandler(::onPostTempTarget))
                 registerEndpoint("/connect", requestHandler(::onConnectPump))
                 registerEndpoint("/sgv.json", requestHandler(::onSgv))
                 awaitReady(wait)
@@ -347,40 +345,11 @@ class GarminPlugin @Inject constructor(
         val value = getQueryParameter(uri, name)
         return try {
             if (value.isNullOrEmpty()) defaultValue else value.toLong()
-        } catch (_: NumberFormatException) {
-            aapsLogger.error(LTag.GARMIN, "invalid $name value '$value'")
-            defaultValue
-        }
-    }
-
-
-    // mod Bolus and temp target
-    private fun getQueryParameter(
-        uri: URI, name: String,
-        @Suppress("SameParameterValue") defaultValue: Int
-    ): Int {
-        val value = getQueryParameter(uri, name)
-        return try {
-            if (value.isNullOrEmpty()) defaultValue else value.toInt()
         } catch (e: NumberFormatException) {
             aapsLogger.error(LTag.GARMIN, "invalid $name value '$value'")
             defaultValue
         }
     }
-
-    private fun getQueryParameter(
-        uri: URI, name: String,
-        @Suppress("SameParameterValue") defaultValue: Double
-    ): Double {
-        val value = getQueryParameter(uri, name)
-        return try {
-            if (value.isNullOrEmpty()) defaultValue else value.toDouble()
-        } catch (e: NumberFormatException) {
-            aapsLogger.error(LTag.GARMIN, "invalid $name value '$value'")
-            defaultValue
-        }
-    }
-    // end mod
 
     private fun toLong(v: Any?) = (v as? Number?)?.toLong() ?: 0L
 
@@ -433,22 +402,6 @@ class GarminPlugin @Inject constructor(
             loopHub.postCarbs(carbs)
         }
     }
-
-    // mod Post bolus and temp targets
-    private fun onPostBolus(uri: URI): CharSequence {
-        val bolus: Double = getQueryParameter(uri, "bolus", 0.0)
-        loopHub.postBolus(bolus)
-        return ""
-    }
-
-    /** Handles temp targets from the device. */
-    fun onPostTempTarget(uri: URI): CharSequence {
-        val target: Double = getQueryParameter(uri, "target", 0.0)
-        val duration: Int = getQueryParameter(uri, "duration", 0)
-        loopHub.postTempTarget(target, duration)
-        return ""
-    }
-    // end mod
 
     /** Handles pump connected notification that the user entered on the Garmin device. */
     @VisibleForTesting
@@ -531,17 +484,14 @@ class GarminPlugin @Inject constructor(
             key = "garmin_settings"
             title = rh.gs(R.string.garmin)
             initialExpandedChildrenCount = 0
-            addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = GarminBooleanKey.LocalHttpServer, title = R.string.garmin_local_http_server))
-            addPreference(AdaptiveIntPreference(ctx = context, intKey = GarminIntKey.LocalHttpPort, title = R.string.garmin_local_http_server_port))
-            addPreference(
-                AdaptiveStringPreference(
-                    ctx = context,
-                    stringKey = GarminStringKey.RequestKey,
-                    title = R.string.garmin_request_key,
-                    summary = R.string.garmin_request_key_summary,
-                    validatorParams = DefaultEditTextValidator.Parameters(emptyAllowed = true)
-                )
-            )
+            addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.GarminLocalHttpServer, title = R.string.garmin_local_http_server))
+            addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.GarminLocalHttpPort, title = R.string.garmin_local_http_server_port))
+            addPreference(AdaptiveStringPreference(
+                ctx = context,
+                stringKey = StringKey.GarminRequestKey,
+                title = R.string.garmin_request_key,
+                summary = R.string.garmin_request_key_summary,
+                validatorParams = DefaultEditTextValidator.Parameters(emptyAllowed = true)))
         }
     }
 }
