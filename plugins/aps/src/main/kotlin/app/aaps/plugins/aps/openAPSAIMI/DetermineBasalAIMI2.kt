@@ -720,9 +720,12 @@ fun appendCompactLog(
     val deltaStr = "%.1f".format(delta)
     val peakStr = "%.1f".format(peakTime)
 
-    reason.append("🕒 PeakTime=$peakStr min | BG=$bgStr Δ$deltaStr")
-    stepCount?.let { reason.append(" | Steps=$it") }
-    heartRate?.let { reason.append(" | HR=$it bpm") }
+//  reason.append("🕒 PeakTime=$peakStr min | BG=$bgStr Δ$deltaStr")
+    reason.append("🕒 Picco azione Insulina Dinamico=$peakStr min | BG=$bgStr Δ$deltaStr")
+//    stepCount?.let { reason.append(" | Steps=$it") }
+    stepCount?.let { reason.append(" | Passi=$it") }
+//   heartRate?.let { reason.append(" | HR=$it bpm") }
+    heartRate?.let { reason.append(" | Freq.Card.=$it bpm") }
     reason.append("\n")
 }
     // Rounds value to 'digits' decimal places
@@ -2594,8 +2597,11 @@ private fun calculateDynamicPeakTime(
     var dynamicPeakTime = profile.peakTime
     val activityRatio = futureActivity / (currentActivity + 0.0001)
 
-    reasonBuilder.append("🧠 Calcul Dynamic PeakTime\n")
-    reasonBuilder.append("  • PeakTime initial: ${profile.peakTime}\n")
+    //reasonBuilder.append("🧠 Calcul Dynamic PeakTime\n")
+    reasonBuilder.append("🧠 Calcolo Picco azione insulina Dinamico\n")
+//  reasonBuilder.append("  • PeakTime initial: ${profile.peakTime}\n")
+    reasonBuilder.append("  • Picco azione insulina profilo: ${profile.peakTime}\n")
+//    reasonBuilder.append("  • BG: $bg, Delta: ${round(delta, 2)}\n")
     reasonBuilder.append("  • BG: $bg, Delta: ${round(delta, 2)}\n")
 
     // 1️⃣ Facteur de correction hyperglycémique
@@ -2605,13 +2611,15 @@ private fun calculateDynamicPeakTime(
         else -> 0.3
     }
     dynamicPeakTime *= hyperCorrectionFactor
-    reasonBuilder.append("  • Facteur hyperglycémie: $hyperCorrectionFactor\n")
+//    reasonBuilder.append("  • Facteur hyperglycémie: $hyperCorrectionFactor\n")
+      reasonBuilder.append("  • Fattore iperglicemia: $hyperCorrectionFactor\n")
 
     // 2️⃣ Basé sur currentActivity (IOB)
     if (currentActivity > 0.1) {
         val adjustment = currentActivity * 20 + 5
         dynamicPeakTime += adjustment
-        reasonBuilder.append("  • Ajout lié IOB: +$adjustment\n")
+//      reasonBuilder.append("  • Ajout lié IOB: +$adjustment\n")
+        reasonBuilder.append("  • Aggiustamento IOB: +$adjustment\n")
     }
 
     // 3️⃣ Ratio d'activité
@@ -2621,7 +2629,8 @@ private fun calculateDynamicPeakTime(
         else -> 1.0
     }
     dynamicPeakTime *= ratioFactor
-    reasonBuilder.append("  • Ratio activité: ${round(activityRatio,2)} ➝ facteur $ratioFactor\n")
+//    reasonBuilder.append("  • Ratio activité: ${round(activityRatio,2)} ➝ facteur $ratioFactor\n")
+      reasonBuilder.append("  • Rapporto attività: ${round(activityRatio,2)} ➝ fattore $ratioFactor\n")
 
     // 4️⃣ Nombre de pas
     stepCount?.let {
@@ -2629,11 +2638,13 @@ private fun calculateDynamicPeakTime(
             it > 500 -> {
                 val stepAdj = it * 0.015
                 dynamicPeakTime += stepAdj
-                reasonBuilder.append("  • Pas ($it) ➝ +$stepAdj\n")
+//              reasonBuilder.append("  • Pas ($it) ➝ +$stepAdj\n")
+                reasonBuilder.append("  • Passi ($it) ➝ +$stepAdj\n")
             }
             it < 100 -> {
                 dynamicPeakTime *= 0.9
-                reasonBuilder.append("  • Peu de pas ($it) ➝ x0.9\n")
+//              reasonBuilder.append("  • Peu de pas ($it) ➝ x0.9\n")
+                reasonBuilder.append("  • Pochi passi ($it) ➝ x0.9\n")
             }
         }
     }
@@ -2643,11 +2654,13 @@ private fun calculateDynamicPeakTime(
         when {
             it > 110 -> {
                 dynamicPeakTime *= 1.15
-                reasonBuilder.append("  • FC élevée ($it) ➝ x1.15\n")
+//              reasonBuilder.append("  • FC élevée ($it) ➝ x1.15\n")
+                reasonBuilder.append("  • FC elevata ($it) ➝ x1.15\n")
             }
             it < 55 -> {
                 dynamicPeakTime *= 0.85
-                reasonBuilder.append("  • FC basse ($it) ➝ x0.85\n")
+//              reasonBuilder.append("  • FC basse ($it) ➝ x0.85\n")
+                reasonBuilder.append("  • FC bassa ($it) ➝ x0.85\n")
             }
         }
     }
@@ -2656,10 +2669,12 @@ private fun calculateDynamicPeakTime(
     if (stepCount != null && heartRate != null) {
         if (stepCount > 1000 && heartRate > 110) {
             dynamicPeakTime *= 1.2
-            reasonBuilder.append("  • Activité intense ➝ x1.2\n")
+//          reasonBuilder.append("  • Activité intense ➝ x1.2\n")
+            reasonBuilder.append("  • Attività intensa ➝ x1.2\n")
         } else if (stepCount < 200 && heartRate < 50) {
             dynamicPeakTime *= 0.75
-            reasonBuilder.append("  • Repos total ➝ x0.75\n")
+//          reasonBuilder.append("  • Repos total ➝ x0.75\n")
+            reasonBuilder.append("  • Riposo totale ➝ x0.75\n")
         }
     }
 
@@ -2669,16 +2684,19 @@ private fun calculateDynamicPeakTime(
     if (dynamicPeakTime > 40) {
         if (sensorLagActivity > historicActivity) {
             dynamicPeakTime *= 0.85
-            reasonBuilder.append("  • SensorLag > Historic ➝ x0.85\n")
+//          reasonBuilder.append("  • SensorLag > Historic ➝ x0.85\n")
+            reasonBuilder.append("  • Ritardo lettura sensore > Storico ➝ x0.85\n")
         } else if (sensorLagActivity < historicActivity) {
             dynamicPeakTime *= 1.2
-            reasonBuilder.append("  • SensorLag < Historic ➝ x1.2\n")
+//          reasonBuilder.append("  • SensorLag < Historic ➝ x1.2\n")
+            reasonBuilder.append("  • Ritardo lettura sensore < Storico ➝ x1.2\n")
         }
     }
 
     // 🔚 Clamp entre 35 et 120
     val finalPeak = dynamicPeakTime.coerceIn(35.0, 120.0)
-    reasonBuilder.append("  → Résultat PeakTime final : $finalPeak\n")
+//  reasonBuilder.append("  → Résultat PeakTime final : $finalPeak\n")
+    reasonBuilder.append("  → Picco azione insulina finale : $finalPeak\n")
     return finalPeak
 }
 
@@ -3656,21 +3674,30 @@ private fun calculateDynamicPeakTime(
         //rT.reason.append("TIRBelow: $currentTIRLow, TIRinRange: $currentTIRRange, TIRAbove: $currentTIRAbove")
         //rT.reason.append(reasonAimi.toString())
         rT.reason.appendLine(
-    "📈 DIA ajusté: ${"%.1f".format(adjustedDIAInMinutes)} min | " +
-    "Morning: ${"%.1f".format(adjustedMorningFactor)}, " +
-    "Afternoon: ${"%.1f".format(adjustedAfternoonFactor)}, " +
-    "Evening: ${"%.1f".format(adjustedEveningFactor)}"
+    //"📈 DIA ajusté: ${"%.1f".format(adjustedDIAInMinutes)} min | " +
+"📈 DIA ricalcolo: ${"%.1f".format(adjustedDIAInMinutes)} min | " +
+//    "Morning: ${"%.1f".format(adjustedMorningFactor)}, " +
+      "Mattina: ${"%.1f".format(adjustedMorningFactor)}, " +
+//    "Afternoon: ${"%.1f".format(adjustedAfternoonFactor)}, " +
+      "Pomeriggio: ${"%.1f".format(adjustedAfternoonFactor)}, " +
+//    "Evening: ${"%.1f".format(adjustedEveningFactor)}"
+      "Sera: ${"%.1f".format(adjustedEveningFactor)}"
 )
 
 rT.reason.appendLine(
-    "🚗 Autodrive: $autodrive | Mode actif: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
-    "AutodriveCondition: $autodriveCondition"
+    //"🚗 Autodrive: $autodrive | Mode actif: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
+    "🚗 Autodrive: $autodrive | Modalità manuale attiva: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
+    //"AutodriveCondition: $autodriveCondition"
+    "Autodrive prebolo condizioni: $autodriveCondition"
 )
 
 rT.reason.appendLine(
-    "🔍 BGTrend: ${"%.2f".format(bgTrend)} | ΔCombiné: ${"%.2f".format(combinedDelta)} | " +
-    "Predicted BG: ${"%.0f".format(predictedBg)} | Accélération: ${"%.2f".format(bgacc)} | " +
-    "Slope Min Dev.: ${"%.2f".format(mealData.slopeFromMinDeviation)}"
+//    "🔍 BGTrend: ${"%.2f".format(bgTrend)} | ΔCombiné: ${"%.2f".format(combinedDelta)} | " +
+    "🔍 BG Trend: ${"%.2f".format(bgTrend)} | Δ Combinato: ${"%.2f".format(combinedDelta)} | " +
+//    "Predicted BG: ${"%.0f".format(predictedBg)} | Accélération: ${"%.2f".format(bgacc)} | " +
+      "BG previsto: ${"%.0f".format(predictedBg)} | Accellerazione: ${"%.2f".format(bgacc)} | " +
+//    "Slope Min Dev.: ${"%.2f".format(mealData.slopeFromMinDeviation)}"
+      "Pendenza Min Dev.: ${"%.2f".format(mealData.slopeFromMinDeviation)}"
 )
 
 rT.reason.appendLine(
@@ -4077,10 +4104,12 @@ rT.reason.appendLine(
                 if (lastBolusAge > smbInterval) {
                     if (microBolus > 0) {
                         rT.units = microBolus
-                        rT.reason.append("Microbolusing ${microBolus}U. ")
+                        //rT.reason.append("Microbolusing ${microBolus}U. ")
+                        rT.reason.append("Microbolo ${microBolus}U. ")
                     }
                 } else {
-                    rT.reason.append("Waiting " + nextBolusMins + "m " + nextBolusSeconds + "s to microbolus again. ")
+                    //rT.reason.append("Waiting " + nextBolusMins + "m " + nextBolusSeconds + "s to microbolus again. ")
+                    rT.reason.append("Attesa " + nextBolusMins + "m " + nextBolusSeconds + "s per un altro microbolo. ")
                 }
 
             }
@@ -4179,7 +4208,8 @@ rT.reason.appendLine(
             ) {
                 chosenRate = 0.0
                 overrideSafety = false
-                rT.reason.append("Safety cut: predictedBg<100 ou IOB>$maxIob → basale à 0.\n")
+                //rT.reason.append("Safety cut: predictedBg<100 ou IOB>$maxIob → basale à 0.\n")
+                rT.reason.append("Sicurezza taglio: BG previsto<100 o IOB>$maxIob → basale a 0.\n")
             }
 
 // ------------------------------
@@ -4188,13 +4218,15 @@ rT.reason.appendLine(
                 when {
                     bg < 80.0                                                  -> {
                         chosenRate = 0.0
-                        rT.reason.append("BG<80 → basale à 0.\n")
+                        //rT.reason.append("BG<80 → basale à 0.\n")
+                        rT.reason.append("BG<80 → basale a 0.\n")
                     }
 
                     bg in 80.0..90.0 &&
                         slopeFromMaxDeviation <= 0 && iob > 0.1f && !sportTime -> {
                         chosenRate = 0.0
-                        rT.reason.append("BG 80-90 & chute → basale à 0.\n")
+                        //rT.reason.append("BG 80-90 & chute → basale à 0.\n")
+                        rT.reason.append("BG 80-90 & caduta libera → basale a 0.\n")
                     }
 
                     bg in 80.0..90.0 &&
@@ -4202,21 +4234,24 @@ rT.reason.appendLine(
                         combinedDelta in -1.0..2.0 && !sportTime &&
                         bgAcceleration.toFloat() > 0.0f                        -> {
                         chosenRate = profile_current_basal * 0.2
-                        rT.reason.append("BG 80-90 stable → basale x0.2.\n")
+                        //rT.reason.append("BG 80-90 stable → basale x0.2.\n")
+                        rT.reason.append("BG 80-90 stabile → basale x0.2.\n")
                     }
 
                     bg in 90.0..100.0 &&
                         slopeFromMinDeviation <= 0.3 && iob > 0.1f && !sportTime &&
                         bgAcceleration.toFloat() > 0.0f                        -> {
                         chosenRate = 0.0
-                        rT.reason.append("BG 90-100 & risque modéré → basale à 0.\n")
+                        //rT.reason.append("BG 90-100 & risque modéré → basale à 0.\n")
+                        rT.reason.append("BG 90-100 & rischio moderato → basale a 0.\n")
                     }
 
                     bg in 90.0..100.0 &&
                         slopeFromMinDeviation >= 0.3 && combinedDelta in -1.0..2.0 && !sportTime &&
                         bgAcceleration.toFloat() > 0.0f                        -> {
                         chosenRate = profile_current_basal * 0.5
-                        rT.reason.append("BG 90-100 gain léger → basale x0.5.\n")
+                        //rT.reason.append("BG 90-100 gain léger → basale x0.5.\n")
+                        rT.reason.append("BG 90-100 & aumento leggero → basale x0.5.\n")
                     }
                 }
             }
@@ -4230,13 +4265,15 @@ rT.reason.appendLine(
                     bgAcceleration.toFloat() > 1.0f
                 ) {
                     chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, combinedDelta.toDouble())
-                    rT.reason.append("Montée lente → ajustement proportionnel.\n")
+                    //rT.reason.append("Montée lente → ajustement proportionnel.\n")
+                    rT.reason.append("Rialzo lento → aggiustamento proporzionale.\n")
                 } else if (eventualBG > 110 && !sportTime && bg > 150 &&
                     combinedDelta in -2.0..15.0 &&
                     bgAcceleration.toFloat() > 0.0f
                 ) {
                     chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor)
-                    rT.reason.append("EventualBG>110 & hyper → ajustement par facteur.\n")
+//                  rT.reason.append("EventualBG>110 & hyper → ajustement par facteur.\n")
+                    rT.reason.append("BG eventuale>110 & iper → aggiustamento per fattore.\n")
                 }
             }
 
@@ -4249,13 +4286,16 @@ rT.reason.appendLine(
                     bgAcceleration.toFloat() > 0.0f
                 ) {
                     chosenRate = profile_current_basal * 1.5
-                    rT.reason.append("Repas calme & horaire → basale x1.5.\n")
+                    //rT.reason.append("Repas calme & horaire → basale x1.5.\n")
+                    rT.reason.append("Pasto tranquillo & orario → basale x1.5.\n")
                 } else if (timenow > sixAMHour && recentSteps5Minutes > 100) {
                     chosenRate = 0.0
-                    rT.reason.append("Activité matinale → basale à 0.\n")
+                    //rT.reason.append("Activité matinale → basale à 0.\n")
+                    rT.reason.append("Attività mattutina → basale a 0.\n")
                 } else if (timenow <= sixAMHour && delta > 0 && bgAcceleration.toFloat() > 0.0f) {
                     chosenRate = profile_current_basal.toDouble()
-                    rT.reason.append("Matinée montante → basale de profil.\n")
+                    //rT.reason.append("Matinée montante → basale de profil.\n")
+                    rT.reason.append("Rialzo mattutino → basale del profilo.\n")
                 }
             }
 
@@ -4273,11 +4313,13 @@ rT.reason.appendLine(
                 for ((meal, runtime) in mealConditions) {
                     if (meal && runtime in 0..30) {
                         chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, 10.0)
-                        rT.reason.append("Repas/snack <30m → basale x10.\n")
+                        //rT.reason.append("Repas/snack <30m → basale x10.\n")
+                        rT.reason.append("Pasto/snack <30m → basale x10.\n")
                         break
                     } else if (meal && runtime in 30..60 && delta > 0) {
                         chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, delta.toDouble())
-                        rT.reason.append("Repas/snack 30-60m & montée → basale Δ.\n")
+                        //rT.reason.append("Repas/snack 30-60m & montée → basale Δ.\n")
+                        rT.reason.append("Pasto/snack 30-60m & rialzo → basale Δ.\n")
                         break
                     }
                 }
@@ -4289,12 +4331,14 @@ rT.reason.appendLine(
                 when {
                     eventualBG > 180 && delta > 3  ->
                         chosenRate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, basalAdjustmentFactor).also {
-                            rT.reason.append("EventualBG>180 & hyper → ajustement basalaimi.\n")
+//                          rT.reason.append("EventualBG>180 & hyper → ajustement basalaimi.\n")
+                            rT.reason.append("BG eventuale>180 & iper → aggiustamento basalaimi.\n")
                         }
 
                     bg > 180 && delta in -5.0..1.0 ->
                         chosenRate = (profile_current_basal * basalAdjustmentFactor).also {
-                            rT.reason.append("BG>180 stable → basale x facteur.\n")
+//                          rT.reason.append("BG>180 stable → basale x facteur.\n")
+                            rT.reason.append("BG>180 stabile → basale x fattore aggiustamento.\n")
                         }
                 }
             }
