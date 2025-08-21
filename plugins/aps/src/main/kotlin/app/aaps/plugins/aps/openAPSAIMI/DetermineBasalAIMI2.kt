@@ -831,8 +831,10 @@ fun appendCompactLog(
         if (!hasBgData) {
             val safeRate = if (bgNow <= hypoGuard) 0.0 else _rate.coerceIn(0.0, profile.max_basal)
 
-            rT.reason.append("⚠️ Données BG insuffisantes ou invalides → fallback\n")
-            rT.reason.append("Pose temp à ${"%.2f".format(safeRate)} U/h pour $duration minutes.\n")
+//          rT.reason.append("⚠️ Données BG insuffisantes ou invalides → fallback\n")
+            rT.reason.append("⚠️ Dati BG insufficienti o invalidi → fallback\n")
+//          rT.reason.append("Pose temp à ${"%.2f".format(safeRate)} U/h pour $duration minutes.\n")
+            rT.reason.append("Basale temporanea ${"%.2f".format(safeRate)} U/h per $duration minuti.\n")
             rT.duration = duration
             rT.rate = safeRate
             return rT
@@ -875,12 +877,15 @@ fun appendCompactLog(
         // 9️⃣ Logging
         when {
             bgNow <= hypoGuard -> rT.reason.append("🛑 LGS override → TBR 0U/h\n")
-            bypassSafety       -> rT.reason.append("→ bypass sécurité${if (isMealMode) " (meal mode)" else if (isEarlyAutodrive) " (early autodrive)" else ""}\n")
-            rate != _rate      -> rT.reason.append("→ rate adjusted based on BG trend\n")
+//          bypassSafety       -> rT.reason.append("→ bypass sécurité${if (isMealMode) " (meal mode)" else if (isEarlyAutodrive) " (early autodrive)" else ""}\n")
+            bypassSafety       -> rT.reason.append("→ bypass sicurezza${if (isMealMode) " (modalità pasto)" else if (isEarlyAutodrive) " (early autodrive)" else ""}\n")
+//          rate != _rate      -> rT.reason.append("→ rate adjusted based on BG trend\n")
+            rate != _rate      -> rT.reason.append("→ tasso basale aggiustato in base al trend BG\n")
         }
 
         // 🔟 Pose
-        rT.reason.append("Pose temp à ${"%.2f".format(rate)} U/h pour $duration minutes.\n")
+//      rT.reason.append("Pose temp à ${"%.2f".format(rate)} U/h pour $duration minutes.\n")
+        rT.reason.append("Basale temporanea ${"%.2f".format(rate)} U/h per $duration minuti.\n")
         rT.duration = duration
         rT.rate = rate
         return rT
