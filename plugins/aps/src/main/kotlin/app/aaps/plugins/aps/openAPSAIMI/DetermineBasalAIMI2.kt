@@ -1311,20 +1311,27 @@ fun appendCompactLog(
         if (isHypoBlocked(context)) conditions.add("hypoGuard")
         if (isNosmbHm(context)) conditions.add("nosmbHM")
         if (isHoneysmb(context)) conditions.add("honeysmb")
-        if (isNegDelta(context)) conditions.add("negdelta")
+      //if (isNegDelta(context)) conditions.add("negdelta")
+        if (isNegDelta(context)) conditions.add("delta Negativo")
         if (isNosmb(context)) conditions.add("nosmb")
         if (isFasting(context)) conditions.add("fasting")
         if (isBelowMinThreshold(context)) conditions.add("belowMinThreshold")
         if (isNewCalibration(context)) conditions.add("isNewCalibration")
-        if (isBelowTargetAndDropping(context)) conditions.add("belowTargetAndDropping")
-        if (isBelowTargetAndStableButNoCob(context)) conditions.add("belowTargetAndStableButNoCob")
-        if (isDroppingFast(context)) conditions.add("droppingFast")
-        if (isDroppingFastAtHigh(context)) conditions.add("droppingFastAtHigh")
-        if (isDroppingVeryFast(context)) conditions.add("droppingVeryFast")
-        if (isPrediction(context)) conditions.add("prediction")
+      //if (isBelowTargetAndDropping(context)) conditions.add("belowTargetAndDropping")
+        if (isBelowTargetAndDropping(context)) conditions.add("BG sotto al Target e in calo")
+      //if (isBelowTargetAndStableButNoCob(context)) conditions.add("belowTargetAndStableButNoCob")
+        if (isBelowTargetAndStableButNoCob(context)) conditions.add("BG sotto al Target stabile senza COB")
+      //if (isDroppingFast(context)) conditions.add("droppingFast")
+        if (isDroppingFast(context)) conditions.add("BG discesa rapida")
+      //if (isDroppingFastAtHigh(context)) conditions.add("droppingFastAtHigh")
+        if (isDroppingFastAtHigh(context)) conditions.add("discesa rapida da BG>180")
+      //if (isDroppingVeryFast(context)) conditions.add("droppingVeryFast")
+        if (isDroppingVeryFast(context)) conditions.add("BG forte discesa")
+      //if (isPrediction(context)) conditions.add("prediction")
+        if (isPrediction(context)) conditions.add("BG predizione")
         if (isBg90(context)) conditions.add("bg90")
-        if (isAcceleratingDown(context)) conditions.add("acceleratingDown")
-
+      //if (isAcceleratingDown(context)) conditions.add("acceleratingDown")
+        if (isAcceleratingDown(context)) conditions.add("BG accellerazione in calo")
         return conditions
     }
 
@@ -1335,10 +1342,12 @@ fun appendCompactLog(
         val conditionsString = if (conditions.isNotEmpty()) {
             conditions.joinToString(", ")
         } else {
-            "No conditions met"
+//          "No conditions met"
+            "Nessuna condizione soddisfatta"
         }
 
-        return "Safety condition $isCritical : $conditionsString"
+//      return "Safety condition $isCritical : $conditionsString"
+        return "Sicurezza attiva per $isCritical : $conditionsString"
     }
 
     // Fonctions de vérification spécifiques pour chaque condition
@@ -2616,8 +2625,8 @@ private fun calculateDynamicPeakTime(
         else -> 0.3
     }
     dynamicPeakTime *= hyperCorrectionFactor
-//    reasonBuilder.append("  • Facteur hyperglycémie: $hyperCorrectionFactor\n")
-      reasonBuilder.append("  • Fattore iperglicemia: $hyperCorrectionFactor\n")
+//  reasonBuilder.append("  • Facteur hyperglycémie: $hyperCorrectionFactor\n")
+    reasonBuilder.append("  • Fattore iperglicemia: $hyperCorrectionFactor\n")
 
     // 2️⃣ Basé sur currentActivity (IOB)
     if (currentActivity > 0.1) {
@@ -2634,8 +2643,8 @@ private fun calculateDynamicPeakTime(
         else -> 1.0
     }
     dynamicPeakTime *= ratioFactor
-//    reasonBuilder.append("  • Ratio activité: ${round(activityRatio,2)} ➝ facteur $ratioFactor\n")
-      reasonBuilder.append("  • Rapporto attività: ${round(activityRatio,2)} ➝ fattore $ratioFactor\n")
+//  reasonBuilder.append("  • Ratio activité: ${round(activityRatio,2)} ➝ facteur $ratioFactor\n")
+    reasonBuilder.append("  • Rapporto attività: ${round(activityRatio,2)} ➝ fattore $ratioFactor\n")
 
     // 4️⃣ Nombre de pas
     stepCount?.let {
@@ -3644,7 +3653,8 @@ private fun calculateDynamicPeakTime(
 
 // ⚠️ passer la DECISION courante à la safety (pas finalInsulinDose)
         smbDecision = applySafetyPrecautions(mealData, smbDecision, threshold,rT.reason)
-        rT.reason.appendLine("✅ SMB final: ${"%.2f".format(smbDecision)} U")
+//      rT.reason.appendLine("✅ SMB final: ${"%.2f".format(smbDecision)} U")
+        rT.reason.appendLine("✅ SMB finale: ${"%.2f".format(smbDecision)} U")
 
         smbToGive = roundToPoint05(smbDecision)
 
@@ -3680,7 +3690,7 @@ private fun calculateDynamicPeakTime(
         //rT.reason.append(reasonAimi.toString())
         rT.reason.appendLine(
     //"📈 DIA ajusté: ${"%.1f".format(adjustedDIAInMinutes)} min | " +
-"📈 DIA ricalcolo: ${"%.1f".format(adjustedDIAInMinutes)} min | " +
+"📈 DIA ricalcolata: ${"%.1f".format(adjustedDIAInMinutes)} min | " +
 //    "Morning: ${"%.1f".format(adjustedMorningFactor)}, " +
       "Mattina: ${"%.1f".format(adjustedMorningFactor)}, " +
 //    "Afternoon: ${"%.1f".format(adjustedAfternoonFactor)}, " +
@@ -3691,7 +3701,7 @@ private fun calculateDynamicPeakTime(
 
 rT.reason.appendLine(
     //"🚗 Autodrive: $autodrive | Mode actif: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
-    "🚗 Autodrive: $autodrive | Modalità manuale attiva: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
+    "🚗 Autodrive: $autodrive | Modalità attiva: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
     //"AutodriveCondition: $autodriveCondition"
     "Autodrive prebolo condizioni: $autodriveCondition"
 )
@@ -4049,7 +4059,8 @@ rT.reason.appendLine(
         // eventual BG is at/above target
         // if iob is over max, just cancel any temps
         if (eventualBG >= max_bg) {
-            rT.reason.append("Eventual BG " + convertBG(eventualBG) + " >= " + convertBG(max_bg) + ", ")
+         //rT.reason.append("Eventual BG " + convertBG(eventualBG) + " >= " + convertBG(max_bg) + ", ")
+            rT.reason.append("BG eventuale " + convertBG(eventualBG) + " >= " + convertBG(max_bg) + ", ")
         }
         if (iob_data.iob > max_iob) {
             rT.reason.append("IOB ${round(iob_data.iob, 2)} > max_iob $max_iob")
