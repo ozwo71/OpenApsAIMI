@@ -4065,7 +4065,8 @@ rT.reason.appendLine(
         if (iob_data.iob > max_iob) {
             rT.reason.append("IOB ${round(iob_data.iob, 2)} > max_iob $max_iob")
             if (delta < 0) {
-                rT.reason.append(", BG is dropping (delta $delta), setting basal to 0. ")
+              //rT.reason.append(", BG is dropping (delta $delta), setting basal to 0. ")
+                rT.reason.append(", BG sta calando (delta $delta), imposto basale a 0. ")
                 return setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = false) // Basal à 0 pendant 30 minutes
             }
             return if (currenttemp.duration > 15 && (roundBasal(basal) == roundBasal(currenttemp.rate))) {
