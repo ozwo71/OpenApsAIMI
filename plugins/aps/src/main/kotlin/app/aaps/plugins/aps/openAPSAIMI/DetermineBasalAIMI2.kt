@@ -343,60 +343,70 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (dropPerHour >= maxAllowedDropPerHour) {
             stopBasal = true
             factors.add(0.3f)
-            reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction; ")
+          //reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction; ")
+            reasonBuilder.append("BG calo elevato ($dropPerHour mg/dL/h), forte riduzione; ")
         }
 
         // 2. Mode montée très rapide : override de toutes les réductions
         if (delta >= 20f && combinedDelta >= 15f && !honeymoon) {
             // on passe outre toutes les réductions ; bolusFactor sera 1.0
-            reasonBuilder.append("Montée rapide détectée (delta $delta mg/dL), application du mode d'urgence; ")
+          //reasonBuilder.append("Montée rapide détectée (delta $delta mg/dL), application du mode d'urgence; ")
+            reasonBuilder.append("Rapido aumento rilevato (delta $delta mg/dL), applicazione della modalità di emergenza; ")
         } else {
             // 3. Ajustement selon combinedDelta
             when {
                 combinedDelta < 1f -> {
                     factors.add(0.6f)
-                    reasonBuilder.append("combinedDelta très faible ($combinedDelta), réduction x0.6; ")
+                  //reasonBuilder.append("combinedDelta très faible ($combinedDelta), réduction x0.6; ")
+                    reasonBuilder.append("Delta combinato molto debole ($combinedDelta), riduzione x0.6; ")
                 }
                 combinedDelta < 2f -> {
                     factors.add(0.8f)
-                    reasonBuilder.append("combinedDelta modéré ($combinedDelta), réduction x0.8; ")
+                  //reasonBuilder.append("combinedDelta modéré ($combinedDelta), réduction x0.8; ")
+                    reasonBuilder.append("Delta combinato moderato ($combinedDelta), riduzione x0.8; ")
                 }
                 else -> {
                     // Appel au multiplicateur lissé
                     factors.add(computeDynamicBolusMultiplier(combinedDelta))
-                    reasonBuilder.append("combinedDelta élevé ($combinedDelta), multiplicateur dynamique appliqué; ")
+                  //reasonBuilder.append("combinedDelta élevé ($combinedDelta), multiplicateur dynamique appliqué; ")
+                    reasonBuilder.append("Delta combinato elevato ($combinedDelta), moltiplicatore dinamico applicato; ")
                 }
             }
 
             // 4. Plateau BG élevé + combinedDelta très faible
             if (currentBG > 160f && combinedDelta < 1f) {
                 factors.add(0.8f)
-                reasonBuilder.append("Plateau BG>160 & combinedDelta<1, réduction x0.8; ")
+              //reasonBuilder.append("Plateau BG>160 & combinedDelta<1, réduction x0.8; ")
+                reasonBuilder.append("BG stabile >160 & Delta combinato<1, riduzione x0.8; ")
             }
 
             // 5. Contrôle IOB
             if (iob >= maxIob * 0.85f) {
                 factors.add(0.85f)
-                reasonBuilder.append("IOB élevé ($iob U), réduction x0.85; ")
+              //reasonBuilder.append("IOB élevé ($iob U), réduction x0.85; ")
+                reasonBuilder.append("IOB elevata ($iob U), riduzione x0.85; ")
             }
 
             // 6. Contrôle du TDD par heure
             val tddThreshold = tdd24Hrs / 24f
             if (tddPerHour > tddThreshold) {
                 factors.add(0.8f)
-                reasonBuilder.append("TDD/h élevé ($tddPerHour U/h), réduction x0.8; ")
+              //reasonBuilder.append("TDD/h élevé ($tddPerHour U/h), réduction x0.8; ")
+                reasonBuilder.append("TDD/h elevato ($tddPerHour U/h), riduzione x0.8; ")
             }
 
             // 7. TIR élevé
             if (tirInhypo >= 8f) {
                 factors.add(0.5f)
-                reasonBuilder.append("TIR élevé ($tirInhypo%), réduction x0.5; ")
+              //reasonBuilder.append("TIR élevé ($tirInhypo%), réduction x0.5; ")
+                reasonBuilder.append("TIR elevato ($tirInhypo%), réduction x0.5; ")
             }
 
             // 8. BG prédit proche de la cible
             if (predictedBG < targetBG + 10) {
                 factors.add(0.5f)
-                reasonBuilder.append("BG prédit ($predictedBG) proche de la cible ($targetBG), réduction x0.5; ")
+              //reasonBuilder.append("BG prédit ($predictedBG) proche de la cible ($targetBG), réduction x0.5; ")
+                reasonBuilder.append("BG previsto ($predictedBG) vicino al target ($targetBG), riduzione x0.5; ")
             }
         }
 
@@ -412,7 +422,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             stopBasal = false
             basalLS = true
             bolusFactor = 1.0
-            reasonBuilder.append("Zero basal duration ($zeroBasalDurationMinutes min) dépassé, forçant basal minimal; ")
+          //reasonBuilder.append("Zero basal duration ($zeroBasalDurationMinutes min) dépassé, forçant basal minimal; ")
+            reasonBuilder.append("Durata basale zero ($zeroBasalDurationMinutes min) superata, forzo basale minima; ")
         }
 
         return SafetyDecision(
@@ -594,18 +605,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (recentSteps5Minutes > 200 && currentHR > averageHR60) {
             // Exercice : absorption accélérée, réduction du DIA de 30%
             diaMinutes *= 0.7f
-            reasonBuilder.append("Physical activity detected: reduced by 30%\n")
+          //reasonBuilder.append("Physical activity detected: reduced by 30%\n")
+            reasonBuilder.append("Attività fisica rilevata: ridotto del 30%\n")
         } else if (recentSteps5Minutes == 0 && currentHR > averageHR60) {
             // Aucune activité mais HR élevée (stress) : absorption potentiellement plus lente, augmentation du DIA de 30%
             diaMinutes *= 1.3f
-            reasonBuilder.append("High HR without activity (stress): increased by 30%\n")
+          //reasonBuilder.append("High HR without activity (stress): increased by 30%\n")
+            reasonBuilder.append("FC alta senza attività (stress): aumento del 30%\n")
         }
 
         // 4. Ajustement en fonction du niveau absolu de fréquence cardiaque
         if (currentHR > 130f) {
             // HR très élevée : circulation rapide, réduction du DIA de 30%
             diaMinutes *= 0.7f
-            reasonBuilder.append("High HR (>130bpm): reduced by 30%\n")
+          //reasonBuilder.append("High HR (>130bpm): reduced by 30%\n")
+            reasonBuilder.append("FC alta (>130bpm): ridotto del 30%\n")
         }
 
         // 5. Ajustement en fonction de l'IOB (Insulin on Board)
@@ -625,14 +639,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val extraDays = pumpAgeDays - 2f
             val ageMultiplier = 1 + 0.1f * extraDays  // 10% par jour supplémentaire
             diaMinutes *= ageMultiplier
-            reasonBuilder.append("Pump age (${pumpAgeDays} days): increased by ${extraDays * 10}%\n")
+          //reasonBuilder.append("Pump age (${pumpAgeDays} days): increased by ${extraDays * 10}%\n")
+            reasonBuilder.append("Età micro (${pumpAgeDays} giorni): aumento di ${extraDays * 10}%\n")
         }
 
         // 7. Contrainte de la plage finale : entre 180 min (3h) et 720 min (12h)
         val finalDiaMinutes = diaMinutes.coerceIn(180f, 720f)
         reasonBuilder.append("Final DIA constrained to [180, 720] min: ${finalDiaMinutes}min")
 
-        println("DIA Calculation Details:")
+      //println("DIA Calculation Details:")
+        println("DIA Calcolo Dettagli:")
         println(reasonBuilder.toString())
 
         return finalDiaMinutes.toDouble()
@@ -744,6 +760,7 @@ fun appendCompactLog(
     }
     private fun calculateRate(basal: Double, currentBasal: Double, multiplier: Double, reason: String, currenttemp: CurrentTemp, rT: RT): Double {
         rT.reason.append("${currenttemp.duration}m@${(currenttemp.rate).toFixed2()} $reason")
+
         return if (basal == 0.0) currentBasal * multiplier else roundBasal(basal * multiplier)
     }
     private fun calculateBasalRate(basal: Double, currentBasal: Double, multiplier: Double): Double =
@@ -906,11 +923,16 @@ fun appendCompactLog(
 
     val bgTrend = (lastValue - firstValue) / count.toFloat()
 
-    reason.append("→ Analyse BG Trend\n")
-    reason.append("  • Première glycémie : $firstValue mg/dL\n")
-    reason.append("  • Dernière glycémie : $lastValue mg/dL\n")
-    reason.append("  • Nombre de valeurs : $count\n")
-    reason.append("  • Tendance calculée : $bgTrend mg/dL/intervalle\n")
+  //reason.append("→ Analyse BG Trend\n")
+    reason.append("→ Analisi BG Trend\n")
+  //reason.append("  • Première glycémie : $firstValue mg/dL\n")
+    reason.append("  • Precedente glicemia : $firstValue mg/dL\n")
+  //reason.append("  • Dernière glycémie : $lastValue mg/dL\n")
+    reason.append("  • Ultima glicemia : $lastValue mg/dL\n")
+  //reason.append("  • Nombre de valeurs : $count\n")
+    reason.append("  • Numero di valori : $count\n")
+  //reason.append("  • Tendance calculée : $bgTrend mg/dL/intervalle\n")
+    reason.append("  • Tendenza calcolata: $bgTrend mg/dL/intervalle\n")
 
     return bgTrend
 }
@@ -1042,7 +1064,8 @@ fun appendCompactLog(
         }
 
         if (isSportSafetyCondition()) {
-            reason?.appendLine("🏃‍♂️ Safety sport → SMB=0")
+          //reason?.appendLine("🏃‍♂️ Safety sport → SMB=0")
+            reason?.appendLine("🏃‍♂️ Sicurezza sport → SMB=0")
             return 0f
         }
 
@@ -1050,21 +1073,24 @@ fun appendCompactLog(
         val beforeAdj = smbToGive
         smbToGive = applySpecificAdjustments(smbToGive)
         if (smbToGive != beforeAdj) {
-            reason?.appendLine("🎛️ Ajustements: ${"%.2f".format(beforeAdj)} → ${"%.2f".format(smbToGive)} U")
+          //reason?.appendLine("🎛️ Ajustements: ${"%.2f".format(beforeAdj)} → ${"%.2f".format(smbToGive)} U")
+            reason?.appendLine("🎛️ Aggiustamenti: ${"%.2f".format(beforeAdj)} → ${"%.2f".format(smbToGive)} U")
         }
 
         // Finalisation
         val beforeFinalize = smbToGive
         smbToGive = finalizeSmbToGive(smbToGive)
         if (smbToGive != beforeFinalize) {
-            reason?.appendLine("🧩 Finalisation: ${"%.2f".format(beforeFinalize)} → ${"%.2f".format(smbToGive)} U")
+          //reason?.appendLine("🧩 Finalisation: ${"%.2f".format(beforeFinalize)} → ${"%.2f".format(smbToGive)} U")
+            reason?.appendLine("🧩 Finalizzazione: ${"%.2f".format(beforeFinalize)} → ${"%.2f".format(smbToGive)} U")
         }
 
         // Limites max
         val beforeLimits = smbToGive
         smbToGive = applyMaxLimits(smbToGive)
         if (smbToGive != beforeLimits) {
-            reason?.appendLine("🧱 Limites: ${"%.2f".format(beforeLimits)} → ${"%.2f".format(smbToGive)} U")
+          //reason?.appendLine("🧱 Limites: ${"%.2f".format(beforeLimits)} → ${"%.2f".format(smbToGive)} U")
+            reason?.appendLine("🧱 Limiti: ${"%.2f".format(beforeLimits)} → ${"%.2f".format(smbToGive)} U")
         }
         smbToGive = smbToGive.coerceAtLeast(0f)
         return smbToGive
@@ -1308,7 +1334,8 @@ fun appendCompactLog(
         val conditions = mutableListOf<String>()
 
         // Vérification des conditions critiques avec des noms explicites
-        if (isHypoBlocked(context)) conditions.add("hypoGuard")
+      //if (isHypoBlocked(context)) conditions.add("hypoGuard")
+        if (isHypoBlocked(context)) conditions.add("protezioneIpoglicemia")
         if (isNosmbHm(context)) conditions.add("nosmbHM")
         if (isHoneysmb(context)) conditions.add("honeysmb")
       //if (isNegDelta(context)) conditions.add("negdelta")
@@ -1329,7 +1356,8 @@ fun appendCompactLog(
         if (isDroppingVeryFast(context)) conditions.add("BG forte discesa")
       //if (isPrediction(context)) conditions.add("prediction")
         if (isPrediction(context)) conditions.add("BG predizione")
-        if (isBg90(context)) conditions.add("bg90")
+      //if (isBg90(context)) conditions.add("bg90")
+        if (isBg90(context)) conditions.add("BG<90")
       //if (isAcceleratingDown(context)) conditions.add("acceleratingDown")
         if (isAcceleratingDown(context)) conditions.add("BG accellerazione in calo")
         return conditions
@@ -1347,7 +1375,7 @@ fun appendCompactLog(
         }
 
 //      return "Safety condition $isCritical : $conditionsString"
-        return "Sicurezza attiva per $isCritical : $conditionsString"
+        return "Sicurezza attiva $isCritical : $conditionsString"
     }
 
     // Fonctions de vérification spécifiques pour chaque condition
@@ -1483,7 +1511,8 @@ fun appendCompactLog(
             interval = (interval * 0.8).toInt()
         }
 
-        reasonBuilder.append("Interval : $interval")
+      //reasonBuilder.append("Interval : $interval")
+        reasonBuilder.append("Intervallo : $interval")
         return interval
     }
 
@@ -1740,9 +1769,11 @@ fun appendCompactLog(
     var finalRefinedSMB: Float = calculateSMBFromModel()
 
     val allLines = csvfile.readLines()
-    println("CSV file path: \${csvfile.absolutePath}")
+  //println("CSV file path: \${csvfile.absolutePath}")
+    println("CSV file percorso: \${csvfile.absolutePath}")
     if (allLines.isEmpty()) {
-        println("CSV file is empty.")
+      //println("CSV file is empty.")
+        println("CSV file è vuoto.")
         return predictedSMB
     }
 
@@ -3418,9 +3449,12 @@ private fun calculateDynamicPeakTime(
                 deltaMgdlPer5min = delta.toDouble()
             )
         ) {
+            //rT.reason.appendLine(
+            //    "🛑 Hypo guard+hystérèse: BG=${convertBG(bg)} " +
+            //        "≤ Th=${convertBG(threshold)} → SMB=0 (attente > ${HYPO_RELEASE_MARGIN.toInt()} mg/dL pendant ${HYPO_RELEASE_HOLD_MIN} min)"
             rT.reason.appendLine(
-                "🛑 Hypo guard+hystérèse: BG=${convertBG(bg)} " +
-                    "≤ Th=${convertBG(threshold)} → SMB=0 (attente > ${HYPO_RELEASE_MARGIN.toInt()} mg/dL pendant ${HYPO_RELEASE_HOLD_MIN} min)"
+                "🛑 Protezione ipo + margine sicurezza: BG=${convertBG(bg)} " +
+                    "≤ Soglia=${convertBG(threshold)} → SMB=0 (attendere > ${HYPO_RELEASE_MARGIN.toInt()} mg/dL per ${HYPO_RELEASE_HOLD_MIN} min)"
             )
             this.predictedSMB = 0f
         } else {
@@ -3434,7 +3468,8 @@ private fun calculateDynamicPeakTime(
             val linesToConsider = (minutesToConsider / 5).toInt()
             if (allLines.size > linesToConsider) {
                 val refinedSMB = neuralnetwork5(combinedDelta.toFloat(), shortAvgDelta, longAvgDelta, predictedSMB, profile)
-                rT.reason.appendLine("🧠 NN5 (avant boost): ${"%.2f".format(refinedSMB)} U")
+              //rT.reason.appendLine("🧠 NN5 (avant boost): ${"%.2f".format(refinedSMB)} U")
+                rT.reason.appendLine("🧠 Predizione A.I.(prima di eventuale aumento BG): ${"%.2f".format(refinedSMB)} U")
                 this.predictedSMB = refinedSMB
                 if (bg > 200 && delta > 4 && iob < preferences.get(DoubleKey.ApsSmbMaxIob)) {
                     rT.reason.appendLine("⚡ Boost hyper: x1.7 (BG=${bg.toInt()}, Δ=${"%.1f".format(delta)})")
@@ -3641,13 +3676,15 @@ private fun calculateDynamicPeakTime(
         val optimalBasalMPC = (optimalDose + correction).coerceIn(doseMin, doseMax)
 
 // Log
-        consoleLog.add("Module MPC: dose=${"%.2f".format(optimalDose)}, Kp=${"%.3f".format(Kp)}, corr=${"%.2f".format(correction)}, out=${"%.2f".format(optimalBasalMPC)}")
+      //consoleLog.add("Module MPC: dose=${"%.2f".format(optimalDose)}, Kp=${"%.3f".format(Kp)}, corr=${"%.2f".format(correction)}, out=${"%.2f".format(optimalBasalMPC)}")
+        consoleLog.add("Modulo MPC (modello predittivo): dose=${"%.2f".format(optimalDose)}, Kp=${"%.3f".format(Kp)}, corr=${"%.2f".format(correction)}, out=${"%.2f".format(optimalBasalMPC)}")
 
 // Mix final entre modèle MPC et estimation "physio" (pondéré par deltaScore)
         val alpha = 0.3 + 0.5 * deltaScore // 0.3..0.8
         var smbDecision = (alpha * optimalBasalMPC + (1 - alpha) * finalInsulinDose).toFloat()
 
-        rT.reason.appendLine("🎛️ MPC/PI → ${"%.2f".format(optimalBasalMPC)} U | physio=${"%.2f".format(finalInsulinDose)} U | α=${"%.2f".format(alpha)}")
+      //rT.reason.appendLine("🎛️ MPC/PI → ${"%.2f".format(optimalBasalMPC)} U | physio=${"%.2f".format(finalInsulinDose)} U | α=${"%.2f".format(alpha)}")
+        rT.reason.appendLine("🎛️ MPC (modello predittivo)/PI (modello fisiologico) → ${"%.2f".format(optimalBasalMPC)} U | physio=${"%.2f".format(finalInsulinDose)} U | α=${"%.2f".format(alpha)}")
 
 // ===== Fin MPC =====
 
@@ -3701,7 +3738,7 @@ private fun calculateDynamicPeakTime(
 
 rT.reason.appendLine(
     //"🚗 Autodrive: $autodrive | Mode actif: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
-    "🚗 Autodrive: $autodrive | Modalità attiva: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
+    "🚗 Autodrive: $autodrive | Autodrive Modalità: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
     //"AutodriveCondition: $autodriveCondition"
     "Autodrive prebolo condizioni: $autodriveCondition"
 )
@@ -3889,7 +3926,8 @@ rT.reason.appendLine(
         if (carbsRequired >= profile.carbsReqThreshold && minutesAboveThreshold <= 45 && !lunchTime && !dinnerTime && !bfastTime && !highCarbTime && !mealTime) {
             rT.carbsReq = carbsRequired
             rT.carbsReqWithin = minutesAboveThreshold
-            rT.reason.append("$carbsRequired add\'l carbs req w/in ${minutesAboveThreshold}m; ")
+          //rT.reason.append("$carbsRequired add\'l carbs req w/in ${minutesAboveThreshold}m; ")
+            rT.reason.append("$carbsRequired carboidrati aggiuntivi richiesti entro ${minutesAboveThreshold}min; ")
         }
 
         val forcedBasalmealmodes = preferences.get(DoubleKey.meal_modes_MaxBasal)
@@ -4395,7 +4433,8 @@ rT.reason.appendLine(
 // 1️⃣1️⃣ Cas grossesse
             if (chosenRate == null && pregnancyEnable && delta > 0 && bg > 110 && !honeymoon) {
                 chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor)
-                rT.reason.append("Grossesse & Δ>0 → ajustement.\n")
+              //rT.reason.append("Grossesse & Δ>0 → ajustement.\n")
+                rT.reason.append("Gravidanza & Δ>0 → aggiustamento.\n")
             }
 
 // ------------------------------
