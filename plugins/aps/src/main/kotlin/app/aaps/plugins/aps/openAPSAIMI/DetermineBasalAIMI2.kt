@@ -2966,13 +2966,15 @@ private fun calculateDynamicPeakTime(
         val autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta.toFloat(),reason)
         if (bg > 100 && predictedBg > 140 && !nightbis && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && modesCondition) {
             rT.units = pbolusAS
-            rT.reason.append("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
+          //rT.reason.append("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
+            rT.reason.append("Autodrive rilevamento precoce pasto/snack: Prebolo ${pbolusAS}U, Delta Combinato : ${combinedDelta}, BG Previsto : ${predicted}, BG Accellerazione : ${bgAcceleration}.")
             return rT
         }
         if (isMealModeCondition()) {
             val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
             rT.units = pbolusM
-            rT.reason.append("Microbolusing Meal Mode ${pbolusM}U.")
+          //rT.reason.append(" Microbolusing Meal Mode ${pbolusM}U.")
+            rT.reason.append(" Prebolo Modalità manuale Pasto genarico ${pbolusM}U.")
             return rT
         }
         if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason) && modesCondition) {
@@ -2991,52 +2993,60 @@ private fun calculateDynamicPeakTime(
         if (isbfastModeCondition()) {
             val pbolusbfast: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
             rT.units = pbolusbfast
-            rT.reason.append("Microbolusing 1/2 Breakfast Mode ${pbolusbfast}U.")
+          //rT.reason.append(" Microbolusing 1/2 Breakfast Mode ${pbolusbfast}U.")
+            rT.reason.append(" Prebolo 1/2 Modalità manuale Colazione ${pbolusbfast}U.")
             return rT
         }
         if (isbfast2ModeCondition()) {
             val pbolusbfast2: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus2)
             this.maxSMB = pbolusbfast2
             rT.units = pbolusbfast2
-            rT.reason.append("Microbolusing 2/2 Breakfast Mode ${pbolusbfast2}U. ")
+          //rT.reason.append(" Microbolusing 2/2 Breakfast Mode ${pbolusbfast2}U. ")
+            rT.reason.append(" Prebolo 2/2 Modalità manuale Colazione ${pbolusbfast2}U. ")
             return rT
         }
         if (isLunchModeCondition()) {
             val pbolusLunch: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
             rT.units = pbolusLunch
-            rT.reason.append("Microbolusing 1/2 Lunch Mode ${pbolusLunch}U.")
+          //rT.reason.append(" Microbolusing 1/2 Lunch Mode ${pbolusLunch}U.")
+            rT.reason.append(" Prebolo 1/2 Modalità manuale Pranzo ${pbolusLunch}U.")
             return rT
         }
         if (isLunch2ModeCondition()) {
             val pbolusLunch2: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
             this.maxSMB = pbolusLunch2
             rT.units = pbolusLunch2
-            rT.reason.append("Microbolusing 2/2 Lunch Mode ${pbolusLunch2}U.")
+          //rT.reason.append(" Microbolusing 2/2 Lunch Mode ${pbolusLunch2}U.")
+            rT.reason.append(" Prebolo 2/2 Modalità manuale Pranzo ${pbolusLunch2}U.")
             return rT
         }
         if (isDinnerModeCondition()) {
             val pbolusDinner: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
             rT.units = pbolusDinner
-            rT.reason.append("Microbolusing 1/2 Dinner Mode ${pbolusDinner}U.")
+          //rT.reason.append(" Microbolusing 1/2 Dinner Mode ${pbolusDinner}U.")
+            rT.reason.append(" Prebolo 1/2 Modalità manuale Cena ${pbolusDinner}U.")
             return rT
         }
         if (isDinner2ModeCondition()) {
             val pbolusDinner2: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
             this.maxSMB = pbolusDinner2
             rT.units = pbolusDinner2
-            rT.reason.append("Microbolusing 2/2 Dinner Mode ${pbolusDinner2}U.")
+          //rT.reason.append(" Microbolusing 2/2 Dinner Mode ${pbolusDinner2}U.")
+            rT.reason.append(" Prebolo 2/2 Modalità manuale Cena ${pbolusDinner2}U.")
             return rT
         }
         if (isHighCarbModeCondition()) {
             val pbolusHC: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
             rT.units = pbolusHC
-            rT.reason.append("Microbolusing High Carb Mode ${pbolusHC}U.")
+          //rT.reason.append(" Microbolusing High Carb Mode ${pbolusHC}U.")
+            rT.reason.append(" Prebolo Modalità manuale High Carb ${pbolusHC}U.")
             return rT
         }
         if (issnackModeCondition()) {
             val pbolussnack: Double = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
             rT.units = pbolussnack
-            rT.reason.append("Microbolusing snack Mode ${pbolussnack}U.")
+          //rT.reason.append(" Microbolusing snack Mode ${pbolussnack}U.")
+            rT.reason.append(" Prebolo Modalità manuale Snack ${pbolussnack}U.")
             return rT
         }
         rT.reason.append(", MaxSMB: $maxSMB")
@@ -4197,7 +4207,8 @@ rT.reason.appendLine(
             ) {
                 chosenRate = forcedBasal.toDouble()
                 overrideSafety = true
-                rT.reason.append("Early meal detected → TBR forcée à ${forcedBasal}U/h x30 (override).\n")
+              //rT.reason.append("Early meal detected → TBR forcée à ${forcedBasal}U/h x30 (override).\n")
+                rT.reason.append("Pasto precoce rilevato → TBR forzata a ${forcedBasal}U/h x30 (override).\n")
             } else {
                 // ------------------------------
                 // 3️⃣ Cas snack / meal / bfast / lunch / dinner / highCarb / fasting / sport
