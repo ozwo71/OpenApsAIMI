@@ -608,12 +608,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Exercice : absorption accélérée, réduction du DIA de 30%
             diaMinutes *= 0.7f
           //reasonBuilder.append("Physical activity detected: reduced by 30%\n")
-            reasonBuilder.append("Attività fisica rilevata: ridotto del 30%\n")
+            reasonBuilder.append("Attività fisica rilevata: DIA ridotta del 30%\n")
         } else if (recentSteps5Minutes == 0 && currentHR > averageHR60) {
             // Aucune activité mais HR élevée (stress) : absorption potentiellement plus lente, augmentation du DIA de 30%
             diaMinutes *= 1.3f
           //reasonBuilder.append("High HR without activity (stress): increased by 30%\n")
-            reasonBuilder.append("FC alta senza attività (stress): aumento del 30%\n")
+            reasonBuilder.append("FC alta senza attività (stress): DIA aumento del 30%\n")
         }
 
         // 4. Ajustement en fonction du niveau absolu de fréquence cardiaque
@@ -621,7 +621,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // HR très élevée : circulation rapide, réduction du DIA de 30%
             diaMinutes *= 0.7f
           //reasonBuilder.append("High HR (>130bpm): reduced by 30%\n")
-            reasonBuilder.append("FC alta (>130bpm): ridotto del 30%\n")
+            reasonBuilder.append("FC alta (>130bpm): DIA ridotta del 30%\n")
         }
 
         // 5. Ajustement en fonction de l'IOB (Insulin on Board)
@@ -642,7 +642,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val ageMultiplier = 1 + 0.1f * extraDays  // 10% par jour supplémentaire
             diaMinutes *= ageMultiplier
           //reasonBuilder.append("Pump age (${pumpAgeDays} days): increased by ${extraDays * 10}%\n")
-            reasonBuilder.append("Età micro (${pumpAgeDays} giorni): aumento di ${extraDays * 10}%\n")
+            reasonBuilder.append("Età micro (${pumpAgeDays} giorni): DIA aumento del ${extraDays * 10}%\n")
         }
 
         // 7. Contrainte de la plage finale : entre 180 min (3h) et 720 min (12h)
@@ -775,39 +775,47 @@ fun appendCompactLog(
     private fun enablesmb(profile: OapsProfileAimi, microBolusAllowed: Boolean, mealData: MealData, targetbg: Double): Boolean {
         // disable SMB when a high temptarget is set
         if (!microBolusAllowed) {
-            consoleError.add("SMB disabled (!microBolusAllowed)")
+          //consoleError.add("SMB disabled (!microBolusAllowed)")
+            consoleError.add("SMB disabilitati con target temporanei alti - preferenza disabilita")
             return false
         } else if (!profile.allowSMB_with_high_temptarget && profile.temptargetSet && targetbg > 100) {
-            consoleError.add("SMB disabled due to high temptarget of $targetbg")
+          //consoleError.add("SMB disabled due to high temptarget of $targetbg")
+            consoleError.add("SMB disabilitati  con target temporanei alti - impostato target temporaneo alto di $targetbg")
             return false
         }
 
         // enable SMB/UAM if always-on (unless previously disabled for high temptarget)
         if (profile.enableSMB_always) {
-            consoleError.add("SMB enabled due to enableSMB_always")
+          //consoleError.add("SMB enabled due to enableSMB_always")
+            consoleError.add("SMB abilitati SEMPRE causa preferenza abilitata")
+
             return true
         }
 
         // enable SMB/UAM (if enabled in preferences) while we have COB
         if (profile.enableSMB_with_COB && mealData.mealCOB != 0.0) {
-            consoleError.add("SMB enabled for COB of ${mealData.mealCOB}")
+          //consoleError.add("SMB enabled for COB of ${mealData.mealCOB}")
+            consoleError.add("SMB abilitati con CHO di ${mealData.mealCOB}")
             return true
         }
 
         // enable SMB/UAM (if enabled in preferences) for a full 6 hours after any carb entry
         // (6 hours is defined in carbWindow in lib/meal/total.js)
         if (profile.enableSMB_after_carbs && mealData.carbs != 0.0) {
-            consoleError.add("SMB enabled for 6h after carb entry")
+          //consoleError.add("SMB enabled for 6h after carb entry")
+            consoleError.add("SMB abilitati 6h dopo inserimento CHO.")
             return true
         }
 
         // enable SMB/UAM (if enabled in preferences) if a low temptarget is set
         if (profile.enableSMB_with_temptarget && (profile.temptargetSet && targetbg < 100)) {
-            consoleError.add("SMB enabled for temptarget of ${convertBG(targetbg)}")
+          //consoleError.add("SMB enabled for temptarget of ${convertBG(targetbg)}")
+            consoleError.add("SMB abilitati per target temporaneo di ${convertBG(targetbg)}")
             return true
         }
 
-        consoleError.add("SMB disabled (no enableSMB preferences active or no condition satisfied)")
+      //consoleError.add("SMB disabled (no enableSMB preferences active or no condition satisfied)")
+        consoleError.add("SMB disabilitati (Abilita SMB preferenza disabilitata o nessuna condizione soddisfatta)")
         return false
     }
 
@@ -831,7 +839,8 @@ fun appendCompactLog(
         val hypoGuard = computeHypoThreshold(minBg = profile.min_bg, lgsThreshold = lgsPref)
         val bgNow = bg
         if (bgNow <= hypoGuard) {
-            rT.reason.append("🛑 LGS: BG=${"%.0f".format(bgNow)} ≤ ${"%.0f".format(hypoGuard)} → TBR 0U/h (30m)\n")
+          //rT.reason.append("🛑 LGS: BG=${"%.0f".format(bgNow)} ≤ ${"%.0f".format(hypoGuard)} → TBR 0U/h (30m)\n")
+            rT.reason.append("🛑 Basso Glucosio Sospensione: BG=${"%.0f".format(bgNow)} ≤ ${"%.0f".format(hypoGuard)} → TBR 0U/h (30m)\n")
             rT.duration = maxOf(duration, 30)
             rT.rate = 0.0
             return rT
@@ -896,7 +905,8 @@ fun appendCompactLog(
 
         // 9️⃣ Logging
         when {
-            bgNow <= hypoGuard -> rT.reason.append("🛑 LGS override → TBR 0U/h\n")
+          //bgNow <= hypoGuard -> rT.reason.append("🛑 LGS override → TBR 0U/h\n")
+            bgNow <= hypoGuard -> rT.reason.append("🛑 Basso Glucosio Sospensione override → TBR 0U/h\n")
 //          bypassSafety       -> rT.reason.append("→ bypass sécurité${if (isMealMode) " (meal mode)" else if (isEarlyAutodrive) " (early autodrive)" else ""}\n")
             bypassSafety       -> rT.reason.append("→ bypass sicurezza${if (isMealMode) " (modalità pasto)" else if (isEarlyAutodrive) " (early autodrive)" else ""}\n")
 //          rate != _rate      -> rT.reason.append("→ rate adjusted based on BG trend\n")
@@ -936,7 +946,7 @@ fun appendCompactLog(
   //reason.append("  • Nombre de valeurs : $count\n")
     reason.append("  • Numero di valori : $count\n")
   //reason.append("  • Tendance calculée : $bgTrend mg/dL/intervalle\n")
-    reason.append("  • Tendenza calcolata: $bgTrend mg/dL/intervalle\n")
+    reason.append("  • Tendenza calcolata: $bgTrend mg/dL/intervallo\n")
 
     return bgTrend
 }
@@ -1196,25 +1206,33 @@ fun appendCompactLog(
         val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
 
         reason.append("→ Autodrive Debug\n")
-        reason.append("  • BG Trend: $bgTrend\n")
-        reason.append("  • Predicted BG: $predictedBg\n")
-        reason.append("  • Combined Delta: $combinedDelta\n")
-        reason.append("  • Required Combined Delta: $autodriveDelta\n")
+      //reason.append("  • BG Trend: $bgTrend\n")
+        reason.append("  • BG Tendenza: $bgTrend\n")
+      //reason.append("  • Predicted BG: $predictedBg\n")
+        reason.append("  • BG Previsto: $predictedBg\n")
+      //reason.append("  • Combined Delta: $combinedDelta\n")
+        reason.append("  • Delta combinato: $combinedDelta\n")
+      //reason.append("  • Required Combined Delta: $autodriveDelta\n")
+        reason.append("  • Delta combinato richiesto: $autodriveDelta\n")
+
 
         // Cas 1 : glycémie baisse => désactivation
         if (bgTrend < -0.15f) {
-            reason.append("  ✘ Autodrive désactivé : tendance glycémie en baisse\n")
+          //reason.append("  ✘ Autodrive désactivé : tendance glycémie en baisse\n")
+            reason.append("  ✘ Autodrive disattivato : glicemia in calo\n")
             return false
         }
 
         // Cas 2 : glycémie monte ou conditions fortes
         if ((bgTrend >= 0f && combinedDelta >= autodriveDelta) || (predictedBg > 140 && combinedDelta >= autodriveDelta)) {
-            reason.append("  ✔ Autodrive activé : conditions favorables\n")
+          //reason.append("  ✔ Autodrive activé : conditions favorables\n")
+            reason.append("  ✔ Autodrive attivato : condizioni favorevoli\n")
             return true
         }
 
         // Cas 3 : conditions non remplies
-        reason.append("  ✘ Autodrive désactivé : conditions insuffisantes\n")
+      //reason.append("  ✘ Autodrive désactivé : conditions insuffisantes\n")
+        reason.append("  ✘ Autodrive disattivato : condizioni insufficienti\n")
         return false
     }
 
@@ -1346,11 +1364,11 @@ fun appendCompactLog(
 
         // Vérification des conditions critiques avec des noms explicites
       //if (isHypoBlocked(context)) conditions.add("hypoGuard")
-        if (isHypoBlocked(context)) conditions.add("protezioneIpoglicemia")
+        if (isHypoBlocked(context)) conditions.add("protezione ipoglicemia")
         if (isNosmbHm(context)) conditions.add("nosmbHM")
         if (isHoneysmb(context)) conditions.add("honeysmb")
       //if (isNegDelta(context)) conditions.add("negdelta")
-        if (isNegDelta(context)) conditions.add("delta Negativo")
+        if (isNegDelta(context)) conditions.add("delta negativo")
         if (isNosmb(context)) conditions.add("nosmb")
         if (isFasting(context)) conditions.add("fasting")
         if (isBelowMinThreshold(context)) conditions.add("belowMinThreshold")
@@ -1797,7 +1815,8 @@ fun appendCompactLog(
         "predictedSMB", "smbGiven"
     )
     if (!requiredColumns.all { headers.contains(it) }) {
-        println("CSV file is missing required columns.")
+      //println("CSV file is missing required columns.")
+        println("Nel file CSV mancano le colonne richieste.")
         return predictedSMB
     }
 
@@ -1831,7 +1850,7 @@ fun appendCompactLog(
 
     if (inputs.isEmpty() || targets.isEmpty()) {
       //println("Insufficient data for training.")
-        println("Dati insufficienti per l'apprendimento A.I.")
+        println("Dati insufficienti per addestrare il modello AI")
         return predictedSMB
     }
 
@@ -1872,7 +1891,9 @@ fun appendCompactLog(
     val epochs = if (bestFoldValLoss < 0.01) 100 else 200
 
     if (bestNetwork != null) {
-        println("Réentraînement final avec les meilleurs hyperparamètres sur toutes les données...")
+      //println("Réentraînement final avec les meilleurs hyperparamètres sur toutes les données...")
+        println("Nuovo addestramento finale del modello AI con i migliori iperparametri su tutti i dati...")
+
         val finalNetwork = AimiNeuralNetwork(
             inputSize = inputs.first().size,
             hiddenSize = 5,
@@ -1913,7 +1934,8 @@ fun appendCompactLog(
             AimiNeuralNetwork.refineSMB(finalRefinedSMB, it, normalizedInput)
         } ?: finalRefinedSMB
 
-        println("→ Iteration $iterationCount | SMB=$finalRefinedSMB → $refinedSMB | Δ=${abs(finalRefinedSMB - refinedSMB)} | threshold=$dynamicThreshold")
+      //println("→ Iteration $iterationCount | SMB=$finalRefinedSMB → $refinedSMB | Δ=${abs(finalRefinedSMB - refinedSMB)} | threshold=$dynamicThreshold")
+        println("→ Iterazione  $iterationCount | SMB=$finalRefinedSMB → $refinedSMB | Δ=${abs(finalRefinedSMB - refinedSMB)} | Soglia=$dynamicThreshold")
 
         if (abs(finalRefinedSMB - refinedSMB) <= dynamicThreshold) {
             finalRefinedSMB = max(0.05f, refinedSMB)
@@ -1923,7 +1945,8 @@ fun appendCompactLog(
     } while (iterationCount < maxIterations)
 
     if (finalRefinedSMB > predictedSMB && bg > 150 && delta > 5) {
-        println("Modèle prédictif plus élevé, ajustement retenu.")
+      //println("Modèle prédictif plus élevé, ajustement retenu.")
+        println("Modello predittivo indica SMB più grande, l’aggiustamento viene confermato.")
         return finalRefinedSMB
     }
 
@@ -2237,7 +2260,7 @@ fun appendCompactLog(
             val carbsReq = round(netCarbImpact / csf)
 
             // Debug info
-            consoleError.add("Future BG: $futureBG, Projected Drop: $projectedDrop, Insulin Effect: $insulinEffect, COB Impact: ${cob * csf}, Carbs Required: $carbsReq")
+          //consoleError.add("Future BG: $futureBG, Projected Drop: $projectedDrop, Insulin Effect: $insulinEffect, COB Impact: ${cob * csf}, Carbs Required: $carbsReq")
             consoleError.add("BG previsto: $futureBG, BG calo previsto: $projectedDrop, Insulina Effetto: $insulinEffect, COB Impatto: ${cob * csf}, Carb. Richiesti: $carbsReq")
 
             return carbsReq
@@ -2285,7 +2308,8 @@ fun appendCompactLog(
         if (currentHour in 0..5) {
             insulinEffect *= 0.8f
         }
-        reasonBuilder.append("insulin effect : $insulinEffect")
+      //reasonBuilder.append("insulin effect : $insulinEffect")
+        reasonBuilder.append("insulina effetto : $insulinEffect")
         return insulinEffect
     }
     private fun calculateTrendIndicator(
@@ -2546,11 +2570,16 @@ fun appendCompactLog(
 
     private fun determineNoteBasedOnBg(bg: Double): String {
         return when {
-            bg > 170 -> "more aggressive"
-            bg in 90.0..100.0 -> "less aggressive"
-            bg in 80.0..89.9 -> "too aggressive" // Vous pouvez ajuster ces valeurs selon votre logique
-            bg < 80 -> "low treatment"
-            else -> "normal" // Vous pouvez définir un autre message par défaut pour les cas non couverts
+          //bg > 170 -> "more aggressive"
+            bg > 170 -> "più aggressivo"
+          //bg in 90.0..100.0 -> "less aggressive"
+            bg in 90.0..100.0 -> "meno aggressivo"
+          //bg in 80.0..89.9 -> "too aggressive" // Vous pouvez ajuster ces valeurs selon votre logique
+            bg in 80.0..89.9 -> "troppo aggressivo" // Vous pouvez ajuster ces valeurs selon votre logique
+          //bg < 80 -> "low treatment"
+            bg < 80 -> "abbassa trattamento"
+          //else -> "normal" // Vous pouvez définir un autre message par défaut pour les cas non couverts
+            else -> "normale" // Vous pouvez définir un autre message par défaut pour les cas non couverts
         }
     }
     private fun processNotesAndCleanUp(notes: String): String {
@@ -2730,11 +2759,11 @@ private fun calculateDynamicPeakTime(
         if (stepCount > 1000 && heartRate > 110) {
             dynamicPeakTime *= 1.2
 //          reasonBuilder.append("  • Activité intense ➝ x1.2\n")
-            reasonBuilder.append("  • Attività intensa ➝ x1.2\n")
+            reasonBuilder.append("  • Attività fisica intensa ➝ x1.2\n")
         } else if (stepCount < 200 && heartRate < 50) {
             dynamicPeakTime *= 0.75
 //          reasonBuilder.append("  • Repos total ➝ x0.75\n")
-            reasonBuilder.append("  • Riposo totale ➝ x0.75\n")
+            reasonBuilder.append("  • Corpo a riposo ➝ x0.75\n")
         }
     }
 
@@ -2995,10 +3024,13 @@ private fun calculateDynamicPeakTime(
         if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason) && modesCondition) {
             val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
             rT.units = pbolusA
-            reason.append("→ Microbolusing Autodrive Mode ${pbolusA}U\n")
-            reason.append("  • Target BG: $targetBg\n")
+          //reason.append("→ Microbolusing Autodrive Mode ${pbolusA}U\n")
+            reason.append("→ Prebolo modalità Autodrive ${pbolusA}U\n")
+          //reason.append("  • Target BG: $targetBg\n")
+            reason.append("  • BG Target: $targetBg\n")
             reason.append("  • Slope from min deviation: ${mealData.slopeFromMinDeviation}\n")
-            reason.append("  • BG acceleration: $bgAcceleration\n")
+            //reason.append("  • BG acceleration: $bgAcceleration\n")
+            reason.append("  • BG accellerazionen: $bgAcceleration\n")
 
             rT.reason.append(reason.toString()) // une seule fois à la fin
             return rT
@@ -3786,13 +3818,15 @@ rT.reason.appendLine(
         appendCompactLog(reasonAimi, tp, bg, delta, recentSteps5Minutes, averageBeatsPerMinute)
         rT.reason.append(reasonAimi.toString())
         val csf = sens / profile.carb_ratio
-        consoleError.add("profile.sens: ${profile.sens}, sens: $sens, CSF: $csf")
+      //consoleError.add("profile.sens: ${profile.sens}, sens: $sens, CSF: $csf")
+        consoleError.add("Profilo sensibilità: ${profile.sens}, sens: $sens, CSF: $csf")
 
         val maxCarbAbsorptionRate = 30 // g/h; maximum rate to assume carbs will absorb if no CI observed
         // limit Carb Impact to maxCarbAbsorptionRate * csf in mg/dL per 5m
         val maxCI = round(maxCarbAbsorptionRate * csf * 5 / 60, 1)
         if (ci > maxCI) {
-            consoleError.add("Limiting carb impact from $ci to $maxCI mg/dL/5m ( $maxCarbAbsorptionRate g/h )")
+          //consoleError.add("Limiting carb impact from $ci to $maxCI mg/dL/5m ( $maxCarbAbsorptionRate g/h )")
+            consoleError.add("Limitazione impatto carb. da $ci to $maxCI mg/dL/5m ( $maxCarbAbsorptionRate g/h )")
             ci = maxCI.toFloat()
         }
         var remainingCATimeMin = 2.0
