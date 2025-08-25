@@ -351,7 +351,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (delta >= 20f && combinedDelta >= 15f && !honeymoon) {
             // on passe outre toutes les réductions ; bolusFactor sera 1.0
           //reasonBuilder.append("Montée rapide détectée (delta $delta mg/dL), application du mode d'urgence; ")
-            reasonBuilder.append("Rapido aumento rilevato (delta $delta mg/dL), applicazione della modalità di emergenza; ")
+            reasonBuilder.append("Rapido aumento rilevato (delta $delta mg/dL), applicazione modalità di emergenza; ")
         } else {
             // 3. Ajustement selon combinedDelta
             when {
@@ -613,7 +613,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Aucune activité mais HR élevée (stress) : absorption potentiellement plus lente, augmentation du DIA de 30%
             diaMinutes *= 1.3f
           //reasonBuilder.append("High HR without activity (stress): increased by 30%\n")
-            reasonBuilder.append("FC alta senza attività (stress): DIA aumento del 30%\n")
+            reasonBuilder.append("FC alta no attività fisica (stress): DIA aumento del 30%\n")
         }
 
         // 4. Ajustement en fonction du niveau absolu de fréquence cardiaque
@@ -815,7 +815,7 @@ fun appendCompactLog(
         }
 
       //consoleError.add("SMB disabled (no enableSMB preferences active or no condition satisfied)")
-        consoleError.add("SMB disabilitati (Abilita SMB preferenza disabilitata o nessuna condizione soddisfatta)")
+        consoleError.add("SMB disabilitati (preferenza disabilitata o nessuna condizione soddisfatta)")
         return false
     }
 
@@ -840,7 +840,7 @@ fun appendCompactLog(
         val bgNow = bg
         if (bgNow <= hypoGuard) {
           //rT.reason.append("🛑 LGS: BG=${"%.0f".format(bgNow)} ≤ ${"%.0f".format(hypoGuard)} → TBR 0U/h (30m)\n")
-            rT.reason.append("🛑 Basso Glucosio Sospensione: BG=${"%.0f".format(bgNow)} ≤ ${"%.0f".format(hypoGuard)} → TBR 0U/h (30m)\n")
+            rT.reason.append("🛑 Sospensione Glucosio Basso (LGS) : BG=${"%.0f".format(bgNow)} ≤ ${"%.0f".format(hypoGuard)} → TBR 0U/h (30m)\n")
             rT.duration = maxOf(duration, 30)
             rT.rate = 0.0
             return rT
@@ -906,7 +906,7 @@ fun appendCompactLog(
         // 9️⃣ Logging
         when {
           //bgNow <= hypoGuard -> rT.reason.append("🛑 LGS override → TBR 0U/h\n")
-            bgNow <= hypoGuard -> rT.reason.append("🛑 Basso Glucosio Sospensione override → TBR 0U/h\n")
+            bgNow <= hypoGuard -> rT.reason.append("🛑 Sospensione Glucosio Basso (LGS) override → TBR 0U/h\n")
 //          bypassSafety       -> rT.reason.append("→ bypass sécurité${if (isMealMode) " (meal mode)" else if (isEarlyAutodrive) " (early autodrive)" else ""}\n")
             bypassSafety       -> rT.reason.append("→ bypass sicurezza${if (isMealMode) " (modalità pasto)" else if (isEarlyAutodrive) " (early autodrive)" else ""}\n")
 //          rate != _rate      -> rT.reason.append("→ rate adjusted based on BG trend\n")
@@ -2719,7 +2719,7 @@ private fun calculateDynamicPeakTime(
     }
     dynamicPeakTime *= ratioFactor
 //  reasonBuilder.append("  • Ratio activité: ${round(activityRatio,2)} ➝ facteur $ratioFactor\n")
-    reasonBuilder.append("  • Rapporto attività: ${round(activityRatio,2)} ➝ fattore $ratioFactor\n")
+    reasonBuilder.append("  • Rapporto attività fisica: ${round(activityRatio,2)} ➝ fattore $ratioFactor\n")
 
     // 4️⃣ Nombre de pas
     stepCount?.let {
@@ -3180,7 +3180,8 @@ private fun calculateDynamicPeakTime(
                 // limit sensitivityRatio to profile.autosens_max (1.2x by default)
                 sensitivityRatio = min(sensitivityRatio, profile.autosens_max)
                 sensitivityRatio = round(sensitivityRatio, 2)
-                consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
+              //consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
+                consoleLog.add("Sensibilità rapporto impostato a $sensitivityRatio in base al target temporaneo di $target_bg; ")
 
             }
 
@@ -3194,7 +3195,8 @@ private fun calculateDynamicPeakTime(
                 // limit sensitivityRatio to profile.autosens_max (1.2x by default)
                 sensitivityRatio = min(sensitivityRatio, profile.autosens_max)
                 sensitivityRatio = round(sensitivityRatio, 2)
-                consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
+              //consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
+                consoleLog.add("Sensibilità rapporto impostato a $sensitivityRatio in base al target temporaneo di $target_bg; ")
             }
 
             else                                                                                                                                                                 -> {
@@ -3214,10 +3216,12 @@ private fun calculateDynamicPeakTime(
             // limit sensitivityRatio to profile.autosens_max (1.2x by default)
             sensitivityRatio = min(sensitivityRatio, profile.autosens_max)
             sensitivityRatio = round(sensitivityRatio, 2)
-            consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
+          //consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
+            consoleLog.add("Sensibilità rapporto impostato a $sensitivityRatio in base al target temporaneo di $target_bg; ")
         } else {
             sensitivityRatio = autosens_data.ratio
-            consoleLog.add("Autosens ratio: $sensitivityRatio; ")
+          //consoleLog.add("Autosens ratio: $sensitivityRatio; ")
+            consoleLog.add("Autosens rapporto: $sensitivityRatio; ")
         }
         basal = profile.current_basal * sensitivityRatio
         basal = roundBasal(basal)
@@ -3225,7 +3229,8 @@ private fun calculateDynamicPeakTime(
           //consoleLog.add("Adjusting basal from $profile_current_basal to $basal; ")
             consoleLog.add("Aggiustamento basale da $profile_current_basal a $basal; ")
         else
-            consoleLog.add("Basal unchanged: $basal; ")
+          //consoleLog.add("Basal unchanged: $basal; ")
+            consoleLog.add("Basale invariata: $basal; ")
 
         // adjust min, max, and target BG for sensitivity, such that 50% increase in ISF raises target from 100 to 120
         if (profile.temptargetSet) {
@@ -3240,9 +3245,11 @@ private fun calculateDynamicPeakTime(
                 // don't allow target_bg below 80
                 new_target_bg = max(80.0, new_target_bg)
                 if (target_bg == new_target_bg)
-                    consoleLog.add("target_bg unchanged: $new_target_bg; ")
+                  //consoleLog.add("target_bg unchanged: $new_target_bg; ")
+                    consoleLog.add("BG target invariato: $new_target_bg; ")
                 else
-                    consoleLog.add("target_bg from $target_bg to $new_target_bg; ")
+                  //consoleLog.add("target_bg from $target_bg to $new_target_bg; ")
+                    consoleLog.add("BG target modificato da $target_bg a $new_target_bg; ")
 
                 target_bg = new_target_bg
             }
@@ -3476,24 +3483,30 @@ private fun calculateDynamicPeakTime(
             // if eventualBG, naive_eventualBG, and target_bg aren't all above adjustedMinBG, don’t use it
             //console.error("naive_eventualBG:",naive_eventualBG+", eventualBG:",eventualBG);
             if (eventualBG > adjustedMinBG && naive_eventualBG > adjustedMinBG && min_bg > adjustedMinBG) {
-                consoleLog.add("Adjusting targets for high BG: min_bg from $min_bg to $adjustedMinBG; ")
+              //consoleLog.add("Adjusting targets for high BG: min_bg from $min_bg to $adjustedMinBG; ")
+                consoleLog.add("Aggiustamento target per BG Alto: min_bg da $min_bg a $adjustedMinBG; ")
                 min_bg = adjustedMinBG
             } else {
-                consoleLog.add("min_bg unchanged: $min_bg; ")
+              //consoleLog.add("min_bg unchanged: $min_bg; ")
+                consoleLog.add("min_bg invariato: $min_bg; ")
             }
             // if eventualBG, naive_eventualBG, and target_bg aren't all above adjustedTargetBG, don’t use it
             if (eventualBG > adjustedTargetBG && naive_eventualBG > adjustedTargetBG && target_bg > adjustedTargetBG) {
-                consoleLog.add("target_bg from $target_bg to $adjustedTargetBG; ")
+              //consoleLog.add("target_bg from $target_bg to $adjustedTargetBG; ")
+                consoleLog.add("BG Target modificato da $target_bg a $adjustedTargetBG; ")
                 target_bg = adjustedTargetBG
             } else {
-                consoleLog.add("target_bg unchanged: $target_bg; ")
+              //consoleLog.add("target_bg unchanged: $target_bg; ")
+                consoleLog.add("BG target invariato: $target_bg; ")
             }
             // if eventualBG, naive_eventualBG, and max_bg aren't all above adjustedMaxBG, don’t use it
             if (eventualBG > adjustedMaxBG && naive_eventualBG > adjustedMaxBG && max_bg > adjustedMaxBG) {
-                consoleError.add("max_bg from $max_bg to $adjustedMaxBG")
+              //consoleError.add("max_bg from $max_bg to $adjustedMaxBG")
+                consoleError.add("max_bg modificato da $max_bg a $adjustedMaxBG")
                 max_bg = adjustedMaxBG
             } else {
-                consoleError.add("max_bg unchanged: $max_bg")
+              //consoleError.add("max_bg unchanged: $max_bg")
+                consoleError.add("max_bg invariato: $max_bg")
             }
         }
         //val expectedDelta = calculateExpectedDelta(target_bg, eventualBG, bgi)
@@ -3548,7 +3561,9 @@ private fun calculateDynamicPeakTime(
             }
             rT.reason.append("csvfile ${csvfile.exists()}")
         } else {
-            rT.reason.appendLine("🗃️ ML training: dataset insuffisant — pas d’affinage")
+          //rT.reason.appendLine("🗃️ ML training: dataset insuffisant — pas d’affinage")
+            rT.reason.appendLine("🗃️ Addestramento A.I: set di dati insufficiente, nessun perfezionamento")
+
         }
 
         var smbToGive = if (bg > 130 && delta > 2 && predictedSMB == 0.0f) modelcal else predictedSMB
@@ -3614,7 +3629,8 @@ private fun calculateDynamicPeakTime(
             averageHR60 = averageBeatsPerMinute60.toFloat(),
             pumpAgeDays = pumpAgeDays
         )
-        consoleLog.add("DIA ajusté (en minutes) : $adjustedDIAInMinutes")
+      //consoleLog.add("DIA ajusté (en minutes) : $adjustedDIAInMinutes")
+        consoleLog.add("DIA aggiustata (in minuti) : $adjustedDIAInMinutes")
 //         val actCurr = profile.sensorLagActivity
 //         val actFuture = profile.futureActivity
 //         val td = adjustedDIAInMinutes
@@ -3866,7 +3882,6 @@ rT.reason.appendLine(
         val acid = max(0.0, mealData.mealCOB * csf / aci)
         // duration (hours) = duration (5m) * 5 / 60 * 2 (to account for linear decay)
       //consoleError.add("Carb Impact: ${ci} mg/dL per 5m; CI Duration: ${round(cid * 5 / 60 * 2, 1)} hours; remaining CI (~2h peak): ${round(remainingCIpeak, 1)} mg/dL per 5m")
-        consoleError.add("Impatto Carb. : ${ci} mg/dL per 5m; CI Durata: ${round(cid * 5 / 60 * 2, 1)} ore; rimamenti CI (~2h picco): ${round(remainingCIpeak, 1)} mg/dL per 5m")
         consoleError.add("Impatto Carb. : ${ci} mg/dL per 5m; CI Durata: ${round(cid * 5 / 60 * 2, 1)} ore; rimamenti CI (~2h picco): ${round(remainingCIpeak, 1)} mg/dL per 5m")
         //console.error("Accel. Carb Impact:",aci,"mg/dL per 5m; ACI Duration:",round(acid*5/60*2,1),"hours");
         var minIOBPredBG = 999.0
@@ -4211,7 +4226,7 @@ rT.reason.appendLine(
             if (microBolusAllowed && enableSMB) {
                 val microBolus = insulinReq
               //rT.reason.append(" insulinReq $insulinReq")
-                rT.reason.append(" insulina Richiesta $insulinReq")
+                rT.reason.append(" insulina richiesta $insulinReq")
                 if (microBolus >= maxSMB) {
                   //rT.reason.append("; maxBolus $maxSMB")
                     rT.reason.append("; maxSMB $maxSMB")
@@ -4231,7 +4246,7 @@ rT.reason.appendLine(
                     }
                 } else {
                     //rT.reason.append("Waiting " + nextBolusMins + "m " + nextBolusSeconds + "s to microbolus again. ")
-                    rT.reason.append("Attesa " + nextBolusMins + "m " + nextBolusSeconds + "s per un altro microbolo. ")
+                    rT.reason.append("Attesa " + nextBolusMins + "m " + nextBolusSeconds + "s per un altro SMB. ")
                 }
 
             }
@@ -4278,25 +4293,29 @@ rT.reason.appendLine(
                     mealTime && mealruntime in 0..30 && delta < 10          -> {
                         // meal forcé → bypass
                         overrideSafety = true
-                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "MealTime", currenttemp, rT).toDouble()
+                      //calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "MealTime", currenttemp, rT).toDouble()
+                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Pasto generico", currenttemp, rT).toDouble()
                     }
 
                     bfastTime && bfastruntime in 0..30 && delta < 10        -> {
                         // breakfast forcé → bypass
                         overrideSafety = true
-                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Breakfast", currenttemp, rT).toDouble()
+                      //calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Breakfast", currenttemp, rT).toDouble()
+                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Colazione", currenttemp, rT).toDouble()
                     }
 
                     lunchTime && lunchruntime in 0..30 && delta < 10        -> {
                         // lunch forcé → bypass
                         overrideSafety = true
-                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Lunch", currenttemp, rT).toDouble()
+                      //calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Lunch", currenttemp, rT).toDouble()
+                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Pranzo", currenttemp, rT).toDouble()
                     }
 
                     dinnerTime && dinnerruntime in 0..30 && delta < 10      -> {
                         // dinner forcé → bypass
                         overrideSafety = true
-                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Dinner", currenttemp, rT).toDouble()
+                      //calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Dinner", currenttemp, rT).toDouble()
+                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Cena", currenttemp, rT).toDouble()
                     }
 
                     highCarbTime && highCarbrunTime in 0..30 && delta < 10  -> {
@@ -4414,7 +4433,7 @@ rT.reason.appendLine(
                 } else if (timenow > sixAMHour && recentSteps5Minutes > 100) {
                     chosenRate = 0.0
                     //rT.reason.append("Activité matinale → basale à 0.\n")
-                    rT.reason.append("Attività mattutina → basale a 0.\n")
+                    rT.reason.append("Attività fisica mattutina → basale a 0.\n")
                 } else if (timenow <= sixAMHour && delta > 0 && bgAcceleration.toFloat() > 0.0f) {
                     chosenRate = profile_current_basal.toDouble()
                     //rT.reason.append("Matinée montante → basale de profil.\n")
