@@ -587,18 +587,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 1. Conversion du DIA de base en minutes
         var diaMinutes = baseDIAHours * 60f  // Pour 9h, 9*60 = 540 min
-        reasonBuilder.append("Base DIA: ${baseDIAHours}h = ${diaMinutes}min\n")
+        reasonBuilder.append("DIA Base: ${baseDIAHours}h = ${diaMinutes}min\n")
 
         // 2. Ajustement selon l'heure de la journée
         // Matin (6-10h) : absorption plus rapide, réduction du DIA de 20%
         if (currentHour in 6..10) {
             diaMinutes *= 0.8f
-            reasonBuilder.append("Morning adjustment (6-10h): reduced by 20%\n")
+          //reasonBuilder.append("Morning adjustment (6-10h): reduced by 20%\n")
+            reasonBuilder.append("Mattina adattamento DIA (6-10h): ridotta del 20%\n")
         }
         // Soir/Nuit (22-23h et 0-5h) : absorption plus lente, augmentation du DIA de 20%
         else if (currentHour in 22..23 || currentHour in 0..5) {
             diaMinutes *= 1.2f
-            reasonBuilder.append("Night adjustment (22-23h & 0-5h): increased by 20%\n")
+          //reasonBuilder.append("Night adjustment (22-23h & 0-5h): increased by 20%\n")
+            reasonBuilder.append("Notte adattamento DIA (22-23h & 0-5h): aumentata del 20%\n")
         }
 
         // 3. Ajustement en fonction de l'activité physique
@@ -645,7 +647,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 7. Contrainte de la plage finale : entre 180 min (3h) et 720 min (12h)
         val finalDiaMinutes = diaMinutes.coerceIn(180f, 720f)
-        reasonBuilder.append("Final DIA constrained to [180, 720] min: ${finalDiaMinutes}min")
+      //reasonBuilder.append("Final DIA constrained to [180, 720] min: ${finalDiaMinutes}min")
+        reasonBuilder.append("DIA Finale compresa tra [180, 720] min: ${finalDiaMinutes}min")
 
       //println("DIA Calculation Details:")
         println("DIA Calcolo Dettagli:")
@@ -737,7 +740,7 @@ fun appendCompactLog(
     val peakStr = "%.1f".format(peakTime)
 
 //  reason.append("🕒 PeakTime=$peakStr min | BG=$bgStr Δ$deltaStr")
-    reason.append("🕒 Picco azione Insulina Dinamico=$peakStr min | BG=$bgStr Δ$deltaStr")
+    reason.append("🕒 Picco Insulina Dinamico=$peakStr min | BG=$bgStr Δ$deltaStr")
 //    stepCount?.let { reason.append(" | Steps=$it") }
     stepCount?.let { reason.append(" | Passi=$it") }
 //   heartRate?.let { reason.append(" | HR=$it bpm") }
@@ -910,7 +913,8 @@ fun appendCompactLog(
 
     private fun calculateBgTrend(recentBGs: List<Float>, reason: StringBuilder): Float {
     if (recentBGs.isEmpty()) {
-        reason.append("✘ Aucun historique de glycémie disponible.\n")
+      //reason.append("✘ Aucun historique de glycémie disponible.\n")
+        reason.append("✘ Nessuna glicemia recente disponibile.\n")
         return 0.0f
     }
 
@@ -994,7 +998,8 @@ fun appendCompactLog(
     fun removeLast200Lines(csvFile: File) {
         val reasonBuilder = StringBuilder()
         if (!csvFile.exists()) {
-            println("Le fichier original n'existe pas.")
+          //println("Le fichier original n'existe pas.")
+            println("Il file originale non esiste.")
             return
         }
 
@@ -1002,7 +1007,8 @@ fun appendCompactLog(
         val lines = csvFile.readLines(Charsets.UTF_8)
 
         if (lines.size <= 200) {
-            reasonBuilder.append("Le fichier contient moins ou égal à 200 lignes, aucune suppression effectuée.")
+          //reasonBuilder.append("Le fichier contient moins ou égal à 200 lignes, aucune suppression effectuée.")
+            reasonBuilder.append("Il file contiene meno di 200 righe, nessuna eliminazione effettuata.")
             return
         }
 
@@ -1021,7 +1027,8 @@ fun appendCompactLog(
         // Réécrire le fichier original avec les lignes restantes
         csvFile.writeText(newLines.joinToString("\n"), Charsets.UTF_8)
 
-        reasonBuilder.append("Les 200 dernières lignes ont été supprimées. Le fichier original a été sauvegardé sous '$backupFileName'.")
+      //reasonBuilder.append("Les 200 dernières lignes ont été supprimées. Le fichier original a été sauvegardé sous '$backupFileName'.")
+        reasonBuilder.append("Le ultime 200 righe sono state eliminate. Il file originale è stato salvato come '$backupFileName'.")
     }
     private fun automateDeletionIfBadDay(tir1DAYIR: Int) {
         val reasonBuilder = StringBuilder()
@@ -1040,12 +1047,15 @@ fun appendCompactLog(
                 // Appeler la méthode de suppression
                 //createFilteredAndSortedCopy(csvfile,dateToRemove)
                 removeLast200Lines(csvfile)
-                reasonBuilder.append("Les données pour la date $dateToRemove ont été supprimées car TIR1DAIIR est inférieur à 85%.")
+              //reasonBuilder.append("Les données pour la date $dateToRemove ont été supprimées car TIR1DAIIR est inférieur à 85%.")
+                reasonBuilder.append("I valori per la data $dateToRemove sono stati eliminati perché TIR1DAIIR è inferiore all'85%.")
             } else {
-                reasonBuilder.append("La suppression ne peut être exécutée qu'entre 00:05 et 00:10.")
+              //reasonBuilder.append("La suppression ne peut être exécutée qu'entre 00:05 et 00:10.")
+                reasonBuilder.append("L'eliminazione può essere eseguita solo tra le 00:05 e le 00:10..")
             }
         } else {
-            reasonBuilder.append("Aucune suppression nécessaire : tir1DAYIR est supérieur ou égal à 85%.")
+          //reasonBuilder.append("Aucune suppression nécessaire : tir1DAYIR est supérieur ou égal à 85%.")
+            reasonBuilder.append("Nessuna eliminazione necessaria: tir1DAYIR è maggiore o uguale all'85%.")
         }
     }
 
@@ -1149,7 +1159,8 @@ fun appendCompactLog(
             )
             autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta, reason)
         } else {
-            reason.appendLine("⚠️ Aucune BG récente — conditions par défaut conservées")
+          //reason.appendLine("⚠️ Aucune BG récente — conditions par défaut conservées")
+            reason.appendLine("⚠️ Nessun BG recente — impostazioni predefinite mantenute")
         }
 
         // ⛔ Ne pas relancer si pbolus récent
@@ -1375,7 +1386,7 @@ fun appendCompactLog(
         }
 
 //      return "Safety condition $isCritical : $conditionsString"
-        return "Sicurezza attiva $isCritical : $conditionsString"
+        return "Condizioni sicurezza $isCritical : $conditionsString"
     }
 
     // Fonctions de vérification spécifiques pour chaque condition
@@ -1476,7 +1487,8 @@ fun appendCompactLog(
 
         // Condition critique : si delta > 15, intervalle fixe à 1
         if (delta > 15f) {
-            reasonBuilder.append("Interval : 1 (delta > 15)")
+          //reasonBuilder.append("Interval : 1 (delta > 15)")
+            reasonBuilder.append("Intervallo : 1 (delta > 15)")
             return 1
         }
 
@@ -1818,7 +1830,8 @@ fun appendCompactLog(
     }
 
     if (inputs.isEmpty() || targets.isEmpty()) {
-        println("Insufficient data for training.")
+      //println("Insufficient data for training.")
+        println("Dati insufficienti per l'apprendimento A.I.")
         return predictedSMB
     }
 
@@ -2225,6 +2238,7 @@ fun appendCompactLog(
 
             // Debug info
             consoleError.add("Future BG: $futureBG, Projected Drop: $projectedDrop, Insulin Effect: $insulinEffect, COB Impact: ${cob * csf}, Carbs Required: $carbsReq")
+            consoleError.add("BG previsto: $futureBG, BG calo previsto: $projectedDrop, Insulina Effetto: $insulinEffect, COB Impatto: ${cob * csf}, Carb. Richiesti: $carbsReq")
 
             return carbsReq
         }
@@ -2377,7 +2391,8 @@ fun appendCompactLog(
             honeymoon && predictedBG < 50f -> 50f
             else -> predictedBG
         }
-        reasonBuilder.append("Predicted BG : $finalPredictedBG")
+      //reasonBuilder.append("Predicted BG : $finalPredictedBG")
+        reasonBuilder.append("BG Previsto : $finalPredictedBG")
         return finalPredictedBG
     }
 
@@ -2643,9 +2658,9 @@ private fun calculateDynamicPeakTime(
     val activityRatio = futureActivity / (currentActivity + 0.0001)
 
     //reasonBuilder.append("🧠 Calcul Dynamic PeakTime\n")
-    reasonBuilder.append("🧠 Calcolo Picco azione insulina Dinamico\n")
+    reasonBuilder.append("🧠 Calcolo Picco insulina Dinamico\n")
 //  reasonBuilder.append("  • PeakTime initial: ${profile.peakTime}\n")
-    reasonBuilder.append("  • Picco azione insulina profilo: ${profile.peakTime}\n")
+    reasonBuilder.append("  • Picco insulina profilo: ${profile.peakTime}\n")
 //    reasonBuilder.append("  • BG: $bg, Delta: ${round(delta, 2)}\n")
     reasonBuilder.append("  • BG: $bg, Delta: ${round(delta, 2)}\n")
 
@@ -2741,7 +2756,7 @@ private fun calculateDynamicPeakTime(
     // 🔚 Clamp entre 35 et 120
     val finalPeak = dynamicPeakTime.coerceIn(35.0, 120.0)
 //  reasonBuilder.append("  → Résultat PeakTime final : $finalPeak\n")
-    reasonBuilder.append("  → Picco azione insulina finale : $finalPeak\n")
+    reasonBuilder.append("  → Picco insulina finale : $finalPeak\n")
     return finalPeak
 }
 
@@ -3134,6 +3149,7 @@ private fun calculateDynamicPeakTime(
                 sensitivityRatio = min(sensitivityRatio, profile.autosens_max)
                 sensitivityRatio = round(sensitivityRatio, 2)
                 consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
+
             }
 
             !profile.temptargetSet && combinedDelta <= 0 && predictedBg < 120                                                                                                    -> {
@@ -3174,13 +3190,15 @@ private fun calculateDynamicPeakTime(
         basal = profile.current_basal * sensitivityRatio
         basal = roundBasal(basal)
         if (basal != profile_current_basal)
-            consoleLog.add("Adjusting basal from $profile_current_basal to $basal; ")
+          //consoleLog.add("Adjusting basal from $profile_current_basal to $basal; ")
+            consoleLog.add("Aggiustamento basale da $profile_current_basal a $basal; ")
         else
             consoleLog.add("Basal unchanged: $basal; ")
 
         // adjust min, max, and target BG for sensitivity, such that 50% increase in ISF raises target from 100 to 120
         if (profile.temptargetSet) {
-            consoleLog.add("Temp Target set, not adjusting with autosens")
+          //consoleLog.add("Temp Target set, not adjusting with autosens")
+            consoleLog.add("Target Temporaneo impostato, non regolato con autosens")
         } else {
             if (profile.sensitivity_raises_target && autosens_data.ratio < 1 || profile.resistance_lowers_target && autosens_data.ratio > 1) {
                 // with a target of 100, default 0.7-1.2 autosens min/max range would allow a 93-117 target range
@@ -4121,7 +4139,8 @@ rT.reason.appendLine(
                 rT.reason.append(", temp ${currenttemp.rate} ~ req ${round(basal, 2).withoutZeros()}U/hr. ")
                 rT
             } else {
-                rT.reason.append("; setting current basal of ${round(basal, 2)} as temp. ")
+              //rT.reason.append("; setting current basal of ${round(basal, 2)} as temp. ")
+                rT.reason.append("; imposto basale corrente di ${round(basal, 2)} come temporanea. ")
                 setTempBasal(basal, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
             }
         } else {
@@ -4155,9 +4174,11 @@ rT.reason.appendLine(
 
             if (microBolusAllowed && enableSMB) {
                 val microBolus = insulinReq
-                rT.reason.append(" insulinReq $insulinReq")
+              //rT.reason.append(" insulinReq $insulinReq")
+                rT.reason.append(" insulinaRichiesta $insulinReq")
                 if (microBolus >= maxSMB) {
-                    rT.reason.append("; maxBolus $maxSMB")
+                  //rT.reason.append("; maxBolus $maxSMB")
+                    rT.reason.append("; maxSMB $maxSMB")
                 }
                 rT.reason.append(". ")
 
