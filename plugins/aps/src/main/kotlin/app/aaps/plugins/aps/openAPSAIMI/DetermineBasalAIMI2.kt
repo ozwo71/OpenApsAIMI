@@ -787,7 +787,7 @@ fun appendCompactLog(
         // enable SMB/UAM if always-on (unless previously disabled for high temptarget)
         if (profile.enableSMB_always) {
           //consoleError.add("SMB enabled due to enableSMB_always")
-            consoleError.add("SMB abilitati SEMPRE causa preferenza abilitata")
+            consoleError.add("SMB abilitati SEMPRE causa preferenza")
 
             return true
         }
@@ -3865,7 +3865,9 @@ rT.reason.appendLine(
         }
         val acid = max(0.0, mealData.mealCOB * csf / aci)
         // duration (hours) = duration (5m) * 5 / 60 * 2 (to account for linear decay)
-        consoleError.add("Carb Impact: ${ci} mg/dL per 5m; CI Duration: ${round(cid * 5 / 60 * 2, 1)} hours; remaining CI (~2h peak): ${round(remainingCIpeak, 1)} mg/dL per 5m")
+      //consoleError.add("Carb Impact: ${ci} mg/dL per 5m; CI Duration: ${round(cid * 5 / 60 * 2, 1)} hours; remaining CI (~2h peak): ${round(remainingCIpeak, 1)} mg/dL per 5m")
+        consoleError.add("Impatto Carb. : ${ci} mg/dL per 5m; CI Durata: ${round(cid * 5 / 60 * 2, 1)} ore; rimamenti CI (~2h picco): ${round(remainingCIpeak, 1)} mg/dL per 5m")
+        consoleError.add("Impatto Carb. : ${ci} mg/dL per 5m; CI Durata: ${round(cid * 5 / 60 * 2, 1)} ore; rimamenti CI (~2h picco): ${round(remainingCIpeak, 1)} mg/dL per 5m")
         //console.error("Accel. Carb Impact:",aci,"mg/dL per 5m; ACI Duration:",round(acid*5/60*2,1),"hours");
         var minIOBPredBG = 999.0
 
@@ -4209,7 +4211,7 @@ rT.reason.appendLine(
             if (microBolusAllowed && enableSMB) {
                 val microBolus = insulinReq
               //rT.reason.append(" insulinReq $insulinReq")
-                rT.reason.append(" insulinaRichiesta $insulinReq")
+                rT.reason.append(" insulina Richiesta $insulinReq")
                 if (microBolus >= maxSMB) {
                   //rT.reason.append("; maxBolus $maxSMB")
                     rT.reason.append("; maxSMB $maxSMB")
