@@ -3135,13 +3135,16 @@ private fun calculateDynamicPeakTime(
         // 38 is an xDrip error state that usually indicates sensor failure
         // all other BG values between 11 and 37 mg/dL reflect non-error-code BG values, so we should zero temp for those
         if (bg <= 10 || bg == 38.0 || noise >= 3) {  //Dexcom is in ??? mode or calibrating, or xDrip reports high noise
-            rT.reason.append("CGM is calibrating, in ??? state, or noise is high")
+          //rT.reason.append("CGM is calibrating, in ??? state, or noise is high")
+            rT.reason.append("Sensore in calibrazione, in stato ??? o rumore valori elevato")
         }
         if (minAgo > 12 || minAgo < -5) { // Dexcom data is too old, or way in the future
-            rT.reason.append("If current system time $systemTime is correct, then BG data is too old. The last BG data was read ${minAgo}m ago at $bgTime")
+          //rT.reason.append("If current system time $systemTime is correct, then BG data is too old. The last BG data was read  ago at $bgTime")
+            rT.reason.append("Se l’orario di sistema $systemTime è corretto, allora i dati BG sono troppo vecchi. L’ultimo dato BG è stato letto ${minAgo}minuti fa alle $bgTime")
             // if BG is too old/noisy, or is changing less than 1 mg/dL/5m for 45m, cancel any high temps and shorten any long zero temps
         } else if (bg > 60 && flatBGsDetected) {
-            rT.reason.append("Error: CGM data is unchanged for the past ~45m")
+          //rT.reason.append("Error: CGM data is unchanged for the past ~45m")
+            rT.reason.append("Errore: Valori sensore non cambiati negli ultimi ~45 minuti")
         }
 
         // TODO eliminate
