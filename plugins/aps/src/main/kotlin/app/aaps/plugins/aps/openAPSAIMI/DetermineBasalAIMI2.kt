@@ -2261,7 +2261,7 @@ fun appendCompactLog(
 
             // Debug info
           //consoleError.add("Future BG: $futureBG, Projected Drop: $projectedDrop, Insulin Effect: $insulinEffect, COB Impact: ${cob * csf}, Carbs Required: $carbsReq")
-            consoleError.add("BG previsto: $futureBG, BG calo previsto: $projectedDrop, Insulina Effetto: $insulinEffect, COB Impatto: ${cob * csf}, Carb. Richiesti: $carbsReq")
+            consoleError.add("BG previsto: ${"%.0f".format(futureBG)}, BG calo previsto: ${"%.0f".format(projectedDrop)}, Insulina Effetto: ${"%.0f".format(insulinEffect)}, COB Impatto: ${cob * csf}, Carb. Richiesti: $carbsReq")
 
             return carbsReq
         }
@@ -3788,13 +3788,16 @@ private fun calculateDynamicPeakTime(
             bg = bg,
             tick = tick,
             eventualBG = eventualBG,
-            targetBG = target_bg,
+          //targetBG = target_bg,
+            targetBG = "%.0f".format(target_bg).toDouble(),
             insulinReq = 0.0,
             deliverAt = deliverAt, // The time at which the microbolus should be delivered
-            sensitivityRatio = sensitivityRatio, // autosens ratio (fraction of normal basal)
+          //sensitivityRatio = sensitivityRatio, // autosens ratio (fraction of normal basal)
+            sensitivityRatio = "%.0f".format(sensitivityRatio).toDouble(),
             consoleLog = consoleLog,
             consoleError = consoleError,
-            variable_sens = variableSensitivity.toDouble()
+          //variable_sens = variableSensitivity.toDouble()
+            variable_sens = "%.0f".format(variableSensitivity.toDouble()).toDouble()
         )
         rT.reason.append(savedReason)
         //rT.reason.append(", DIA ajusté (en minutes) : $adjustedDIAInMinutes, ")
@@ -3838,14 +3841,14 @@ rT.reason.appendLine(
         rT.reason.append(reasonAimi.toString())
         val csf = sens / profile.carb_ratio
       //consoleError.add("profile.sens: ${profile.sens}, sens: $sens, CSF: $csf")
-        consoleError.add("Profilo sensibilità: ${profile.sens}, sens: $sens, CSF: $csf")
+        consoleError.add("Profilo sensibilità: ${"%.0f".format(profile.sens)}, sens: ${"%.0f".format(sens)}, CSF: ${"%.0f".format(csf)}")
 
         val maxCarbAbsorptionRate = 30 // g/h; maximum rate to assume carbs will absorb if no CI observed
         // limit Carb Impact to maxCarbAbsorptionRate * csf in mg/dL per 5m
         val maxCI = round(maxCarbAbsorptionRate * csf * 5 / 60, 1)
         if (ci > maxCI) {
           //consoleError.add("Limiting carb impact from $ci to $maxCI mg/dL/5m ( $maxCarbAbsorptionRate g/h )")
-            consoleError.add("Limitazione impatto carb. da $ci to $maxCI mg/dL/5m ( $maxCarbAbsorptionRate g/h )")
+            consoleError.add("Limitazione impatto carb. da ${"%.0f".format(ci)} to ${"%.0f".format(maxCI)} mg/dL/5m ( $maxCarbAbsorptionRate g/h )")
             ci = maxCI.toFloat()
         }
         var remainingCATimeMin = 2.0
@@ -3885,7 +3888,7 @@ rT.reason.appendLine(
         val acid = max(0.0, mealData.mealCOB * csf / aci)
         // duration (hours) = duration (5m) * 5 / 60 * 2 (to account for linear decay)
       //consoleError.add("Carb Impact: ${ci} mg/dL per 5m; CI Duration: ${round(cid * 5 / 60 * 2, 1)} hours; remaining CI (~2h peak): ${round(remainingCIpeak, 1)} mg/dL per 5m")
-        consoleError.add("Impatto Carb. : ${ci} mg/dL per 5m; CI Durata: ${round(cid * 5 / 60 * 2, 1)} ore; rimamenti CI (~2h picco): ${round(remainingCIpeak, 1)} mg/dL per 5m")
+        consoleError.add("Impatto Carb. : ${ci} mg/dL per 5m; CI Durata: ${round(cid * 5 / 60 * 2, 1)} ore; rimanenti CI (~2h picco): ${round(remainingCIpeak, 1)} mg/dL per 5m")
         //console.error("Accel. Carb Impact:",aci,"mg/dL per 5m; ACI Duration:",round(acid*5/60*2,1),"hours");
         var minIOBPredBG = 999.0
 
