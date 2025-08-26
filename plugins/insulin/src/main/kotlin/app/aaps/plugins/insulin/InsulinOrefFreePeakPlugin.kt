@@ -1,6 +1,8 @@
 package app.aaps.plugins.insulin
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceManager
 import androidx.preference.PreferenceScreen
@@ -10,14 +12,18 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.rx.AapsSchedulers
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.HardLimits
+import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.IntKey
+import app.aaps.core.keys.IntentKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.objects.extensions.put
 import app.aaps.core.objects.extensions.store
 import app.aaps.core.validators.preferences.AdaptiveIntPreference
+import app.aaps.core.validators.preferences.AdaptiveIntentPreference
 import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -27,15 +33,17 @@ import javax.inject.Singleton
  */
 @Singleton
 class InsulinOrefFreePeakPlugin @Inject constructor(
-    private val preferences: Preferences,
     rh: ResourceHelper,
+    val preferences: Preferences,
+    aapsSchedulers: AapsSchedulers,
+    fabricPrivacy: FabricPrivacy,
     profileFunction: ProfileFunction,
     rxBus: RxBus,
     aapsLogger: AAPSLogger,
-    config: Config,
+    val config: Config,
     hardLimits: HardLimits,
     uiInteraction: UiInteraction
-) : InsulinOrefBasePlugin(rh, profileFunction, rxBus, aapsLogger, config, hardLimits, uiInteraction) {
+) : InsulinOrefBasePlugin(rh, preferences, aapsSchedulers, fabricPrivacy, profileFunction, rxBus, aapsLogger, config, hardLimits, uiInteraction) {
 
     override val id get(): Insulin.InsulinType = Insulin.InsulinType.OREF_FREE_PEAK
 
@@ -63,10 +71,11 @@ class InsulinOrefFreePeakPlugin @Inject constructor(
             .pluginName(R.string.free_peak_oref)
             .preferencesId(PluginDescription.PREFERENCE_SCREEN)
             .description(R.string.description_insulin_free_peak)
+
     }
 
     override fun addPreferenceScreen(preferenceManager: PreferenceManager, parent: PreferenceScreen, context: Context, requiredKey: String?) {
-        if (requiredKey != null) return
+        if (requiredKey != null && requiredKey != "insulin_concentration_advanced") return
         val category = PreferenceCategory(context)
         parent.addPreference(category)
         category.apply {
@@ -74,6 +83,22 @@ class InsulinOrefFreePeakPlugin @Inject constructor(
             title = rh.gs(R.string.insulin_oref_peak)
             initialExpandedChildrenCount = 0
             addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.InsulinOrefPeak, title = R.string.insulin_peak_time))
+            if(config.isEngineeringMode()) {
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "insulin_concentration_advanced"
+                    title = rh.gs(app.aaps.core.ui.R.string.advanced_settings_title)
+                    addPreference(
+                        AdaptiveIntentPreference(
+                            ctx = context,
+                            intentKey = IntentKey.ApsLinkToDocs,
+                            intent = Intent().apply { action = Intent.ACTION_VIEW; data = Uri.parse(rh.gs(R.string.insulin_concentration_doc)) },
+                            summary = R.string.insulin_concentration_doc_txt
+                        )
+                    )
+                    addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.InsulinRequestedConcentration, title = R.string.insulin_requested_concentration_title, dialogMessage = R.string.insulin_requested_concentration_summary))
+
+                })
+            }
         }
     }
 }
