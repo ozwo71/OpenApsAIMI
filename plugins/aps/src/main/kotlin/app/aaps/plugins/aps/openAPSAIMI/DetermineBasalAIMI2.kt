@@ -2897,7 +2897,8 @@ private fun calculateDynamicPeakTime(
         }
 
         this.maxIob = if (autodrive) DinMaxIob.toDouble() else maxIob
-        rT.reason.append(", MaxIob: $maxIob")
+      //rT.reason.append(", MaxIob: $maxIob")
+        rT.reason.append(", MaxIob: %.0f".format(maxIob))
         this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
         this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
         // Calcul initial avec ajustement basé sur la glycémie et le delta
@@ -3096,7 +3097,8 @@ private fun calculateDynamicPeakTime(
             rT.reason.append(" Prebolo Modalità manuale Snack ${pbolussnack}U.")
             return rT
         }
-        rT.reason.append(", MaxSMB: $maxSMB")
+      //rT.reason.append(", MaxSMB: $maxSMB")
+        rT.reason.append(", MaxSMB: %.0f".format(maxSMB))
         var nowMinutes = calendarInstance[Calendar.HOUR_OF_DAY] + calendarInstance[Calendar.MINUTE] / 60.0 + calendarInstance[Calendar.SECOND] / 3600.0
         nowMinutes = (kotlin.math.round(nowMinutes * 100) / 100)  // Arrondi à 2 décimales
         val circadianSensitivity = (0.00000379 * nowMinutes.pow(5)) -
