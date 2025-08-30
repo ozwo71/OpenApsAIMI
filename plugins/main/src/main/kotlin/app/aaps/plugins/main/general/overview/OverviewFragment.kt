@@ -247,6 +247,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
         binding.buttonsLayout.acceptTempButton.setOnClickListener(this)
         binding.buttonsLayout.treatmentButton.setOnClickListener(this)
         binding.buttonsLayout.wizardButton.setOnClickListener(this)
+        binding.buttonsLayout.mealModeButton.setOnClickListener(this)
         binding.buttonsLayout.calibrationButton.setOnClickListener(this)
         binding.buttonsLayout.cgmButton.setOnClickListener(this)
         binding.buttonsLayout.insulinButton.setOnClickListener(this)
@@ -585,6 +586,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
             binding.buttonsLayout.wizardButton.visibility = (!loop.isDisconnected && pump.isInitialized() && !pump.isSuspended() && profile != null
                 && preferences.get(BooleanKey.OverviewShowWizardButton)).toVisibility()
             binding.buttonsLayout.insulinButton.visibility = (profile != null && preferences.get(BooleanKey.OverviewShowInsulinButton)).toVisibility()
+            binding.buttonsLayout.mealModeButton.visibility = (profile != null && preferences.get(BooleanKey.OverviewShowMealModeButton)).toVisibility()
             if (loop.isDisconnected || !pump.isInitialized() || pump.isSuspended()) {
                 setRibbon(
                     binding.buttonsLayout.insulinButton,
@@ -592,12 +594,24 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
                     app.aaps.core.ui.R.attr.ribbonWarningColor,
                     rh.gs(app.aaps.core.ui.R.string.overview_insulin_label)
                 )
+                setRibbon(
+                    binding.buttonsLayout.mealModeButton,
+                    app.aaps.core.ui.R.attr.ribbonTextWarningColor,
+                    app.aaps.core.ui.R.attr.ribbonWarningColor,
+                    rh.gs(R.string.meal_mode)
+                )
             } else {
                 setRibbon(
                     binding.buttonsLayout.insulinButton,
                     app.aaps.core.ui.R.attr.icBolusColor,
                     app.aaps.core.ui.R.attr.ribbonDefaultColor,
                     rh.gs(app.aaps.core.ui.R.string.overview_insulin_label)
+                )
+                setRibbon(
+                    binding.buttonsLayout.mealModeButton,
+                    app.aaps.core.ui.R.attr.icMealModeColor,
+                    app.aaps.core.ui.R.attr.ribbonDefaultColor,
+                    rh.gs(R.string.meal_mode)
                 )
             }
 

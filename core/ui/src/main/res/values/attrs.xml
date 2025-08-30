@@ -30,6 +30,8 @@
     <attr name="scheduledColor" format="reference|color" />
     <!-- Insulin Button -->
     <attr name="insulinButtonColor" format="reference|color" />
+    <!-- Meal Mode Button -->
+    <attr name="mealModeButtonColor" format="reference|color" />
     <!-- Calculator Button -->
     <attr name="calculatorButtonColor" format="reference|color" />
     <!-- Calibration Button -->
@@ -135,6 +137,7 @@
     <attr name="icCheckboxTrendColor" format="reference|color" />
     <!-- Overview Buttons -->
     <attr name="icBolusColor" format="reference|color" />
+    <attr name="icMealModeColor" format="reference|color" />
     <attr name="icBolusCarbsColor" format="reference|color" />
     <attr name="icCalculatorColor" format="reference|color" />
     <attr name="icQuickWizardColor" format="reference|color" />

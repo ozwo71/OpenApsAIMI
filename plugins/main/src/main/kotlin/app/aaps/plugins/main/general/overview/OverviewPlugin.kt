@@ -239,6 +239,7 @@ class OverviewPlugin @Inject constructor(
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OverviewInsulinButtonIncrement1, dialogMessage = R.string.insulin_increment_button_message, title = R.string.firstinsulinincrement))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OverviewInsulinButtonIncrement2, dialogMessage = R.string.insulin_increment_button_message, title = R.string.secondinsulinincrement))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OverviewInsulinButtonIncrement3, dialogMessage = R.string.insulin_increment_button_message, title = R.string.thirdinsulinincrement))
+                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OverviewShowMealModeButton, title = R.string.meal_mode))
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OverviewShowCarbsButton, title = app.aaps.core.ui.R.string.carbs))
                 addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OverviewCarbsButtonIncrement1, dialogMessage = R.string.carb_increment_button_message, title = R.string.firstcarbsincrement))
                 addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OverviewCarbsButtonIncrement2, dialogMessage = R.string.carb_increment_button_message, title = R.string.secondcarbsincrement))

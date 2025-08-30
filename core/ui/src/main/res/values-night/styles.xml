@@ -63,6 +63,8 @@
         <item name="treatmentButton">@color/colorTreatmentButton</item>
         <!-- Insulin Button -->
         <item name="insulinButtonColor">@color/colorInsulinButton</item>
+        <!-- Meal Mode Button -->
+        <item name="mealModeButtonColor">@color/colorMealModeButton</item>
         <!-- Calculator Button -->
         <item name="calculatorButtonColor">@color/colorCalculatorButton</item>
         <!-- Calibration Button -->
@@ -155,6 +157,7 @@
         <!-- Icon Colors -->
         <!-- Overview Buttons -->
         <item name="icBolusColor">@color/colorInsulinButton</item>
+        <item name="icMealModeColor">@color/colorMealModeButton</item>
         <item name="icBolusCarbsColor">@color/colorCarbsButton</item>
         <item name="icCalculatorColor">@color/colorCalculatorButton</item>
         <item name="icQuickWizardColor">@color/colorQuickWizardButton</item>

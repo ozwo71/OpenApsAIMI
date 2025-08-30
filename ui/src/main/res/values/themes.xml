@@ -14,6 +14,7 @@
         <!-- Apply padding to avoid the content of the widget colliding with the rounded corners -->
         <item name="appWidgetPadding">16dp</item>
         <item name="icBolusColor">@color/colorInsulinButton</item>
+        <item name="icMealModeColor">@color/colorMealModeButton</item>
         <item name="icBolusCarbsColor">@color/colorCarbsButton</item>
         <item name="defaultTextColor">@color/white</item>
 
