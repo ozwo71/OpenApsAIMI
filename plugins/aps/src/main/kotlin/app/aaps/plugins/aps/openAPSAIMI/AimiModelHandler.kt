@@ -59,7 +59,8 @@ object AimiUamHandler {
         val path = lastModelPath ?: modelUamFile.absolutePath
         val flag = if (lastLoadOk) "✅" else "❌"
         val size = if (modelUamFile.exists()) "${modelUamFile.length()} B" else "missing"
-        return "📦 UAM model: $flag ($path, $size)"
+      //return "📦 UAM model: $flag ($path, $size)"
+        return "📦 UAM modello: $flag ($path, $size)"
     }
 
     /** Ajoute la ligne de statut dans un StringBuilder (ex: rT.reason) */
@@ -120,7 +121,8 @@ object AimiUamHandler {
 
         val (inputs, replaced) = sanitizeWithCount(features)
         if (replaced > 0) {
-            reason?.appendLine("🧹 Sanitize: $replaced entrées non finies -> 0")
+          //reason?.appendLine("🧹 Sanitize: $replaced entrées non finies -> 0")
+            reason?.appendLine("🧹 Pulizia: $replaced valori incompleti -> 0")
         }
 
         val key = cacheKey("UAM", inputs)
@@ -134,14 +136,16 @@ object AimiUamHandler {
         }
 
         val itp = ensureInterpreter(reason) ?: run {
-            reason?.appendLine("❌ Modèle UAM indisponible → SMB=0")
+          //reason?.appendLine("❌ Modèle UAM indisponible → SMB=0")
+            reason?.appendLine("❌ Modello UAM non disponibile → SMB=0")
             return 0f
         }
 
         val raw = try {
             runModel(itp, inputs)
         } catch (e: Throwable) {
-            reason?.appendLine("💥 TFLite run échoué: ${e.message} → SMB=0")
+          //reason?.appendLine("💥 TFLite run échoué: ${e.message} → SMB=0")
+            reason?.appendLine("💥 Esecuzione TFLite fallita: ${e.message} → SMB=0")
             Log.e(TAG, "TFLite run failed: ${e.message}")
             return 0f
         }
@@ -149,9 +153,11 @@ object AimiUamHandler {
         val result = if (isUsable(raw)) round4(raw) else 0f
         if (isUsable(result)) {
             smbCache.put(key, result)
-            reason?.appendLine("✅ UAM exécuté → ${"%.4f".format(result)} U")
+          //reason?.appendLine("✅ UAM exécuté → ${"%.4f".format(result)} U")
+            reason?.appendLine("✅ UAM esecuzione → ${"%.2f".format(result)} U")
         } else {
-            reason?.appendLine("⚠️ Résultat non exploitable (raw=$raw) → SMB=0")
+          //reason?.appendLine("⚠️ Résultat non exploitable (raw=$raw) → SMB=0")
+            reason?.appendLine("⚠️ Risultato non utilizzabile (raw=$raw) → SMB=0")
         }
         return max(0f, result)
     }
@@ -167,7 +173,8 @@ object AimiUamHandler {
             if (!file.exists()) {
                 lastLoadOk = false
                 lastLoadError = "file not found"
-                reason?.appendLine("❌ Fichier modèle introuvable : ${file.absolutePath}")
+              //reason?.appendLine("❌ Fichier modèle introuvable : ${file.absolutePath}")
+                reason?.appendLine("❌ File modello non trovato: ${file.absolutePath}")
                 Log.e(TAG, "Model file not found: ${file.absolutePath}")
                 return null
             }
@@ -179,13 +186,15 @@ object AimiUamHandler {
                     lastLoadError = null
                     lastLoadTime = System.currentTimeMillis()
                     lastModelPath = file.absolutePath
-                    reason?.appendLine("📦 Chargé ✓ : ${file.name} (${file.length()} B)")
+                  //reason?.appendLine("📦 Chargé ✓ : ${file.name} (${file.length()} B)")
+                    reason?.appendLine("📦 Caricamento modello ✓ : ${file.name} (${file.length()} B)")
                     Log.i(TAG, "Interpreter initialized from ${file.absolutePath} (${file.length()} bytes)")
                 }
             } catch (e: Throwable) {
                 lastLoadOk = false
                 lastLoadError = e.message
-                reason?.appendLine("❌ Échec chargement modèle: ${e.message}")
+              //reason?.appendLine("❌ Échec chargement modèle: ${e.message}")
+                reason?.appendLine("❌ Errore caricamento modello: ${e.message}")
                 Log.e(TAG, "Failed to init UAM model: ${e.message}")
                 null
             }
