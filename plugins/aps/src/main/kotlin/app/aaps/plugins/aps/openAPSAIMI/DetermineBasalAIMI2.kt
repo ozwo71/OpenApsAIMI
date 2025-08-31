@@ -2703,14 +2703,18 @@ private fun calculateDynamicPeakTime(
     }
     dynamicPeakTime *= hyperCorrectionFactor
 //  reasonBuilder.append("  • Facteur hyperglycémie: $hyperCorrectionFactor\n")
-    reasonBuilder.append("  • Fattore iperglicemia: $hyperCorrectionFactor\n")
+  //reasonBuilder.append("  • Fattore iperglicemia: $hyperCorrectionFactor\n")
+    reasonBuilder.append("  • Fattore iperglicemia: ${"%.2f".format(hyperCorrectionFactor)}\n")
+
+
 
     // 2️⃣ Basé sur currentActivity (IOB)
     if (currentActivity > 0.1) {
         val adjustment = currentActivity * 20 + 5
         dynamicPeakTime += adjustment
 //      reasonBuilder.append("  • Ajout lié IOB: +$adjustment\n")
-        reasonBuilder.append("  • Aggiustamento IOB: +$adjustment\n")
+      //reasonBuilder.append("  • Aggiustamento IOB: +$adjustment\n")
+        reasonBuilder.append("  • Aggiustamento IOB: +${"%.2f".format(adjustment)}\n")
     }
 
     // 3️⃣ Ratio d'activité
@@ -2748,12 +2752,15 @@ private fun calculateDynamicPeakTime(
             it > 110 -> {
                 dynamicPeakTime *= 1.15
 //              reasonBuilder.append("  • FC élevée ($it) ➝ x1.15\n")
-                reasonBuilder.append("  • FC elevata ($it) ➝ x1.15\n")
+              //reasonBuilder.append("  • FC elevata ($it) ➝ x1.15\n")
+                reasonBuilder.append("  • FC elevata (${"%.0f".format(it)}) ➝ x1.15\n")
             }
             it < 55 -> {
                 dynamicPeakTime *= 0.85
 //              reasonBuilder.append("  • FC basse ($it) ➝ x0.85\n")
-                reasonBuilder.append("  • FC bassa ($it) ➝ x0.85\n")
+              //reasonBuilder.append("  • FC bassa ($it) ➝ x0.85\n")
+                reasonBuilder.append("  • FC bassa (${"%.0f".format(it)}) ➝ x0.85\n")
+                
             }
         }
     }
@@ -4034,7 +4041,7 @@ rT.reason.appendLine(
             "COB: ${round(mealData.mealCOB, 1).withoutZeros()}, Dev: ${convertBG(deviation.toDouble())}, BGI: ${convertBG(bgi)}, ISF: ${convertBG(sens)}, CR: ${
                 round(profile.carb_ratio, 2)
                     .withoutZeros()
-            }, Target: ${convertBG(target_bg)}}"
+            }, Target: ${convertBG(target_bg)} | "
         )
         //val (conditionResult, conditionsTrue) = isCriticalSafetyCondition(mealData, hypoThreshold)
         this.zeroBasalAccumulatedMinutes = getZeroBasalDuration(persistenceLayer, 2)
