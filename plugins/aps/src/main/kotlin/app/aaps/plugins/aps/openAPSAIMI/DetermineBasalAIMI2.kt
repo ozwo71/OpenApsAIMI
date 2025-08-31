@@ -2706,7 +2706,7 @@ private fun calculateDynamicPeakTime(
   //reasonBuilder.append("  • Fattore iperglicemia: $hyperCorrectionFactor\n")
     reasonBuilder.append("  • Fattore iperglicemia: ${"%.2f".format(hyperCorrectionFactor)}\n")
 
-
+    
 
     // 2️⃣ Basé sur currentActivity (IOB)
     if (currentActivity > 0.1) {
