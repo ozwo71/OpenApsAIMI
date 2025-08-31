@@ -2719,7 +2719,7 @@ private fun calculateDynamicPeakTime(
     }
     dynamicPeakTime *= ratioFactor
 //  reasonBuilder.append("  • Ratio activité: ${round(activityRatio,2)} ➝ facteur $ratioFactor\n")
-    reasonBuilder.append("  • Rapporto attività fisica: ${round(activityRatio,2)} ➝ fattore $ratioFactor\n")
+  //reasonBuilder.append("  • Rapporto attività fisica: ${round(activityRatio,2)} ➝ fattore $ratioFactor\n")
     reasonBuilder.append("  • Rapporto attività fisica: ${round(activityRatio,2)} ➝ fattore ${"%.2f".format(ratioFactor)}\n")
 
 
