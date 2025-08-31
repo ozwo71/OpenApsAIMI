@@ -2785,7 +2785,8 @@ private fun calculateDynamicPeakTime(
     // 🔚 Clamp entre 35 et 120
     val finalPeak = dynamicPeakTime.coerceIn(35.0, 120.0)
 //  reasonBuilder.append("  → Résultat PeakTime final : $finalPeak\n")
-    reasonBuilder.append("  → Picco insulina finale : $finalPeak\n")
+  //reasonBuilder.append("  → Picco insulina finale : $finalPeak\n")
+    reasonBuilder.append("  → Picco insulina finale : ${"%.2f".format(finalPeak)}\n")
     return finalPeak
 }
 
