@@ -744,7 +744,8 @@ fun appendCompactLog(
 //    stepCount?.let { reason.append(" | Steps=$it") }
     stepCount?.let { reason.append(" | Passi=$it") }
 //   heartRate?.let { reason.append(" | HR=$it bpm") }
-    heartRate?.let { reason.append(" | Freq.Card.=$it bpm") }
+  //heartRate?.let { reason.append(" | Freq.Card.=$it bpm") }
+    heartRate?.let { reason.append(" | Freq.Card.=${"%.0f".format(it)} bpm") }
     reason.append("\n")
 }
     // Rounds value to 'digits' decimal places
