@@ -2755,13 +2755,13 @@ private fun calculateDynamicPeakTime(
                 dynamicPeakTime *= 1.15
 //              reasonBuilder.append("  • FC élevée ($it) ➝ x1.15\n")
               //reasonBuilder.append("  • FC elevata ($it) ➝ x1.15\n")
-                reasonBuilder.append("  • FC elevata (${"%.0f".format(it)}) ➝ x1.15\n")
+                reasonBuilder.append("  • FC elevata (${String.format("%.0f", it)}) ➝ x1.15\n")
             }
             it < 55 -> {
                 dynamicPeakTime *= 0.85
 //              reasonBuilder.append("  • FC basse ($it) ➝ x0.85\n")
               //reasonBuilder.append("  • FC bassa ($it) ➝ x0.85\n")
-                reasonBuilder.append("  • FC bassa (${"%.0f".format(it)}) ➝ x0.85\n")
+                reasonBuilder.append("  • FC bassa (${String.format("%.0f", it)}) ➝ x0.85\n")
                 
             }
         }
