@@ -2704,7 +2704,8 @@ private fun calculateDynamicPeakTime(
     dynamicPeakTime *= hyperCorrectionFactor
 //  reasonBuilder.append("  • Facteur hyperglycémie: $hyperCorrectionFactor\n")
   //reasonBuilder.append("  • Fattore iperglicemia: $hyperCorrectionFactor\n")
-    reasonBuilder.append("  • Fattore iperglicemia: ${"%.2f".format(hyperCorrectionFactor)}\n")
+  //reasonBuilder.append("  • Fattore iperglicemia: ${"%.2f".format(hyperCorrectionFactor)}\n")
+    reasonBuilder.append("  • Fattore iperglicemia: ${String.format("%.2f", hyperCorrectionFactor)}\n")
 
     
 
@@ -2714,7 +2715,8 @@ private fun calculateDynamicPeakTime(
         dynamicPeakTime += adjustment
 //      reasonBuilder.append("  • Ajout lié IOB: +$adjustment\n")
       //reasonBuilder.append("  • Aggiustamento IOB: +$adjustment\n")
-        reasonBuilder.append("  • Aggiustamento IOB: +${"%.2f".format(adjustment)}\n")
+      //reasonBuilder.append("  • Aggiustamento IOB: +${"%.2f".format(adjustment)}\n")
+        reasonBuilder.append("  • Aggiustamento IOB: +${String.format("%.2f", adjustment)}\n")
     }
 
     // 3️⃣ Ratio d'activité
