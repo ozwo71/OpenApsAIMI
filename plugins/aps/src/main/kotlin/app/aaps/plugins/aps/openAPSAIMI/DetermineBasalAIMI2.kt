@@ -743,12 +743,12 @@ fun appendCompactLog(
 //  reason.append("🕒 Picco Insulina Dinamico=$peakStr min | BG=$bgStr Δ$deltaStr")
     reason.append("🕒 Picco Insulina Dinamico=${"%.0f".format(peakTime)} min | BG=${"%.0f".format(bg)} Δ$deltaStr")
 //    stepCount?.let { reason.append(" | Steps=$it") }
-    stepCount?.let { reason.append(" | Passi=$it") }
+    stepCount?.let { reason.append(" | Passi $it") }
 //   heartRate?.let { reason.append(" | HR=$it bpm") }
   //heartRate?.let { reason.append(" | Freq.Card.=$it bpm") }
   //heartRate?.let { reason.append(" | Freq.Card.=${"%.0f".format(it)} bpm") }
   //heartRate?.let { reason.append(" | Freq.Card.=${"%.0f".format(if (it.isNaN()) 0.0 else it)} bpm") }
-    heartRate?.let { reason.append(" | Freq.Card.=${if (it.isNaN()) "--" else "%.0f".format(it)} bpm") }
+    heartRate?.let { reason.append(" | Freq.Card. ${if (it.isNaN()) "--" else "%.0f".format(it)} bpm") }
     reason.append("\n")
 }
     // Rounds value to 'digits' decimal places
@@ -3583,7 +3583,7 @@ private fun calculateDynamicPeakTime(
             rT.reason.append("csvfile ${csvfile.exists()}")
         } else {
           //rT.reason.appendLine("🗃️ ML training: dataset insuffisant — pas d’affinage")
-            rT.reason.appendLine("🗃️ Addestramento A.I: set di dati insufficiente, nessun perfezionamento")
+            rT.reason.appendLine("🗃️ Addestramento A.I: set di dati insufficiente, nessun aggiustamento")
 
         }
 
@@ -3781,7 +3781,9 @@ private fun calculateDynamicPeakTime(
         var smbDecision = (alpha * optimalBasalMPC + (1 - alpha) * finalInsulinDose).toFloat()
 
       //rT.reason.appendLine("🎛️ MPC/PI → ${"%.2f".format(optimalBasalMPC)} U | physio=${"%.2f".format(finalInsulinDose)} U | α=${"%.2f".format(alpha)}")
-        rT.reason.appendLine("🎛️ MPC (modello predittivo)/PI (modello fisiologico) → ${"%.2f".format(optimalBasalMPC)} U | physio=${"%.2f".format(finalInsulinDose)} U | α=${"%.2f".format(alpha)}")
+      //rT.reason.appendLine("🎛️ MPC modello predittivo ${"%.2f".format(optimalBasalMPC)} U | PI modello fisiologico=${"%.2f".format(finalInsulinDose)} U | α=${"%.2f".format(alpha)}")
+      //rT.reason.appendLine("🎛️ MPC modello predittivo ${"%.2f".format(optimalBasalMPC)} U | PI modello fisiologico=${"%.2f".format(finalInsulinDose)} U | Prob. MPC=${"%.0f".format(alpha*100)}% / Prob. PI=${"%.0f".format((1-alpha)*100)}%")
+        rT.reason.appendLine("🎛️ MPC modello predittivo: ${"%.2f".format(optimalBasalMPC)} U (${("%.0f".format(alpha*100))}%) | PI modello fisiologico: ${"%.2f".format(finalInsulinDose)} U (${("%.0f".format((1-alpha)*100))}%)")
 
 // ===== Fin MPC =====
 
