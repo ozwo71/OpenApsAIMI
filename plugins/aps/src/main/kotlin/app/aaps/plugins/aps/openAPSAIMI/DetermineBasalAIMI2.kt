@@ -2691,7 +2691,7 @@ private fun calculateDynamicPeakTime(
     val activityRatio = futureActivity / (currentActivity + 0.0001)
 
     //reasonBuilder.append("🧠 Calcul Dynamic PeakTime\n")
-    reasonBuilder.append("🧠 Calcolo Picco insulina Dinamico\n")
+    reasonBuilder.append("🧠 Calcolo picco insulina \n")
 //  reasonBuilder.append("  • PeakTime initial: ${profile.peakTime}\n")
     reasonBuilder.append("  • Picco insulina profilo: ${profile.peakTime}\n")
 //    reasonBuilder.append("  • BG: $bg, Delta: ${round(delta, 2)}\n")
@@ -2801,7 +2801,7 @@ private fun calculateDynamicPeakTime(
     val finalPeak = dynamicPeakTime.coerceIn(35.0, 120.0)
 //  reasonBuilder.append("  → Résultat PeakTime final : $finalPeak\n")
   //reasonBuilder.append("  → Picco insulina finale : $finalPeak\n")
-    reasonBuilder.append("  → Picco insulina finale : ${"%.0f".format(finalPeak)}\n")
+    reasonBuilder.append("  → Picco insulina dinamico : ${"%.0f".format(finalPeak)}\n")
     return finalPeak
 }
 
@@ -3840,9 +3840,9 @@ private fun calculateDynamicPeakTime(
 
 rT.reason.appendLine(
     //"🚗 Autodrive: $autodrive | Mode actif: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
-    "🚗 Autodrive: $autodrive | Autodrive Modalità: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
+    "🚗 Autodrive: $autodrive | Modalità snack/prebolo: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
     //"AutodriveCondition: $autodriveCondition"
-    "Autodrive prebolo condizioni: $autodriveCondition"
+    "Autodrive condizioni: $autodriveCondition"
 )
 
 rT.reason.appendLine(
@@ -4206,7 +4206,8 @@ rT.reason.appendLine(
             rT.reason.append("BG eventuale " + convertBG(eventualBG) + " >= " + convertBG(max_bg) + ", ")
         }
         if (iob_data.iob > max_iob) {
-            rT.reason.append("IOB ${round(iob_data.iob, 2)} > max_iob $max_iob")
+          //rT.reason.append("IOB ${round(iob_data.iob, 2)} > max_iob $max_iob")
+            rT.reason.append("IOB ${round(iob_data.iob, 2)} > maxIOB ${"%.2f".format(max_iob)}")
             if (delta < 0) {
               //rT.reason.append(", BG is dropping (delta $delta), setting basal to 0. ")
                 rT.reason.append(", BG sta calando (delta $delta), imposto basale a 0. ")
