@@ -2914,7 +2914,7 @@ private fun calculateDynamicPeakTime(
 
         this.maxIob = if (autodrive) DinMaxIob.toDouble() else maxIob
       //rT.reason.append(", MaxIob: $maxIob")
-        rT.reason.append(", MaxIob: %.0f".format(maxIob))
+        rT.reason.append(", MaxIob: %.2f".format(maxIob))
         this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
         this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
         // Calcul initial avec ajustement basé sur la glycémie et le delta
@@ -4377,8 +4377,9 @@ rT.reason.appendLine(
             ) {
                 chosenRate = 0.0
                 overrideSafety = false
-                //rT.reason.append("Safety cut: predictedBg<100 ou IOB>$maxIob → basale à 0.\n")
-                rT.reason.append("Sicurezza taglio: BG previsto<100 o IOB>$maxIob → basale a 0.\n")
+              //rT.reason.append("Safety cut: predictedBg<100 ou IOB>$maxIob → basale à 0.\n")
+              //rT.reason.append("Sicurezza taglio: BG previsto<100 o IOB>$maxIob → basale a 0.\n")
+                rT.reason.append("Sicurezza taglio: BG previsto<100 o IOB>${"%.2f".format(maxIob)} → basale a 0.\n")
             }
 
 // ------------------------------
