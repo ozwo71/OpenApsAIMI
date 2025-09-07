@@ -9,9 +9,11 @@ import androidx.preference.PreferenceScreen
 import app.aaps.core.data.iob.Iob
 import app.aaps.core.data.model.BS
 import app.aaps.core.data.model.ICfg
+import app.aaps.core.data.model.TE
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.configuration.Config
+import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.insulin.Insulin
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.notifications.Notification
@@ -47,6 +49,7 @@ abstract class InsulinOrefBasePlugin(
     private val preferences: Preferences,
     private val aapsSchedulers: AapsSchedulers,
     private val fabricPrivacy: FabricPrivacy,
+    private val persistenceLayer: PersistenceLayer,
     val profileFunction: ProfileFunction,
     val rxBus: RxBus,
     aapsLogger: AAPSLogger,
@@ -64,6 +67,7 @@ abstract class InsulinOrefBasePlugin(
     aapsLogger, rh
 ), Insulin {
 
+    private val millsToThePast = T.mins(15).msecs()
     private var disposable: CompositeDisposable = CompositeDisposable()
     private var lastWarned: Long = 0
     override val dia
@@ -165,22 +169,31 @@ abstract class InsulinOrefBasePlugin(
             key = "insulin_settings"
             title = rh.gs(R.string.insulin_settings)
             initialExpandedChildrenCount = 0
-            addPreference(preferenceManager.createPreferenceScreen(context).apply {
-                key = "insulin_concentration_advanced"
-                title = rh.gs(app.aaps.core.ui.R.string.advanced_settings_title)
-                addPreference(
-                    AdaptiveIntentPreference(
-                        ctx = context,
-                        intentKey = IntentKey.ApsLinkToDocs,
-                        intent = Intent().apply { action = Intent.ACTION_VIEW; data = Uri.parse(rh.gs(R.string.insulin_concentration_doc)) },
-                        summary = R.string.insulin_concentration_doc_txt
-                    )
-                )
-                // Todo adjust dialogMessage according to last Reservoir change event date (within the past 15 min or not)
-
-                addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.InsulinRequestedConcentration, title = R.string.insulin_requested_concentration_title, dialogMessage = R.string.insulin_requested_concentration_summary))
-
-            })
+            addConcentrationPreference(preferenceManager, context, this)
         }
     }
+
+    fun addConcentrationPreference(preferenceManager: PreferenceManager, context: Context, category: PreferenceCategory) {
+        category.addPreference(preferenceManager.createPreferenceScreen(context).apply {
+            key = "insulin_concentration_advanced"
+            title = rh.gs(app.aaps.core.ui.R.string.advanced_settings_title)
+            addPreference(
+                AdaptiveIntentPreference(
+                    ctx = context,
+                    intentKey = IntentKey.ApsLinkToDocs,
+                    intent = Intent().apply { action = Intent.ACTION_VIEW; data = Uri.parse(rh.gs(R.string.insulin_concentration_doc)) },
+                    summary = R.string.insulin_concentration_doc_txt
+                )
+            )
+            val summary = if (isWithinTimeRange()) R.string.insulin_requested_concentration_summary else R.string.insulin_change_concentration_summary
+            addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.InsulinRequestedConcentration, title = R.string.insulin_requested_concentration_title, dialogMessage = summary))
+        })
+    }
+
+    fun isWithinTimeRange(): Boolean {
+        val now = System.currentTimeMillis()
+        persistenceLayer.getTherapyEventDataFromTime(now - millsToThePast, false).blockingGet().lastOrNull { te -> te.type == TE.Type.INSULIN_CHANGE }?.apply { return true }
+        return false
+    }
+
 }

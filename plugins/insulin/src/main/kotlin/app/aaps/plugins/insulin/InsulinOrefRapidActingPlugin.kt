@@ -1,6 +1,7 @@
 package app.aaps.plugins.insulin
 
 import app.aaps.core.interfaces.configuration.Config
+import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.insulin.Insulin
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.plugin.PluginDescription
@@ -25,13 +26,14 @@ class InsulinOrefRapidActingPlugin @Inject constructor(
     val preferences: Preferences,
     aapsSchedulers: AapsSchedulers,
     fabricPrivacy: FabricPrivacy,
+    persistenceLayer: PersistenceLayer,
     profileFunction: ProfileFunction,
     rxBus: RxBus,
     aapsLogger: AAPSLogger,
     config: Config,
     hardLimits: HardLimits,
     uiInteraction: UiInteraction
-) : InsulinOrefBasePlugin(rh, preferences, aapsSchedulers, fabricPrivacy, profileFunction, rxBus, aapsLogger, config, hardLimits, uiInteraction) {
+) : InsulinOrefBasePlugin(rh, preferences, aapsSchedulers, fabricPrivacy, persistenceLayer, profileFunction, rxBus, aapsLogger, config, hardLimits, uiInteraction) {
 
     override val id get(): Insulin.InsulinType = Insulin.InsulinType.OREF_RAPID_ACTING
     override val friendlyName get(): String = rh.gs(R.string.rapid_acting_oref)

@@ -7,6 +7,7 @@ import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceManager
 import androidx.preference.PreferenceScreen
 import app.aaps.core.interfaces.configuration.Config
+import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.insulin.Insulin
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.plugin.PluginDescription
@@ -37,13 +38,14 @@ class InsulinOrefFreePeakPlugin @Inject constructor(
     val preferences: Preferences,
     aapsSchedulers: AapsSchedulers,
     fabricPrivacy: FabricPrivacy,
+    persistenceLayer: PersistenceLayer,
     profileFunction: ProfileFunction,
     rxBus: RxBus,
     aapsLogger: AAPSLogger,
-    val config: Config,
+    config: Config,
     hardLimits: HardLimits,
     uiInteraction: UiInteraction
-) : InsulinOrefBasePlugin(rh, preferences, aapsSchedulers, fabricPrivacy, profileFunction, rxBus, aapsLogger, config, hardLimits, uiInteraction) {
+) : InsulinOrefBasePlugin(rh, preferences, aapsSchedulers, fabricPrivacy, persistenceLayer, profileFunction, rxBus, aapsLogger, config, hardLimits, uiInteraction) {
 
     override val id get(): Insulin.InsulinType = Insulin.InsulinType.OREF_FREE_PEAK
 
@@ -84,20 +86,7 @@ class InsulinOrefFreePeakPlugin @Inject constructor(
             initialExpandedChildrenCount = 0
             addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.InsulinOrefPeak, title = R.string.insulin_peak_time))
             if(config.isEngineeringMode()) {
-                addPreference(preferenceManager.createPreferenceScreen(context).apply {
-                    key = "insulin_concentration_advanced"
-                    title = rh.gs(app.aaps.core.ui.R.string.advanced_settings_title)
-                    addPreference(
-                        AdaptiveIntentPreference(
-                            ctx = context,
-                            intentKey = IntentKey.ApsLinkToDocs,
-                            intent = Intent().apply { action = Intent.ACTION_VIEW; data = Uri.parse(rh.gs(R.string.insulin_concentration_doc)) },
-                            summary = R.string.insulin_concentration_doc_txt
-                        )
-                    )
-                    addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.InsulinRequestedConcentration, title = R.string.insulin_requested_concentration_title, dialogMessage = R.string.insulin_requested_concentration_summary))
-
-                })
+                addConcentrationPreference(preferenceManager, context, this)
             }
         }
     }
