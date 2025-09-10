@@ -33,7 +33,6 @@ import app.aaps.plugins.aps.R
 object AimiUamHandler {
     private const val TAG = "AIMI-UAM"
 
-
     // Emplacement standard du modèle
     private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
     private val modelUamFile = File(externalDir, "ml/modelUAM.tflite")
