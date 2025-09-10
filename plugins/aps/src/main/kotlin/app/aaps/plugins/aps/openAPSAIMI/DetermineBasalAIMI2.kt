@@ -57,7 +57,8 @@ import kotlin.math.exp
 class DetermineBasalaimiSMB2 @Inject constructor(
     private val profileUtil: ProfileUtil,
     private val fabricPrivacy: FabricPrivacy,
-    private val context: Context
+    context: Context
+
 ) {
     @Inject lateinit var preferences: Preferences
     @Inject lateinit var persistenceLayer: PersistenceLayer
@@ -67,6 +68,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var profileFunction: ProfileFunction
     @Inject lateinit var iobCobCalculator: IobCobCalculator
     @Inject lateinit var activePlugin: ActivePlugin
+
+    private val context: Context = context.applicationContext
 
     private val EPS_FALL = 0.3      // mg/dL/5min : seuil de baisse
     private val EPS_ACC  = 0.2      // mg/dL/5min : seuil d'écart short vs long
@@ -339,6 +342,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // Liste des facteurs multiplicatifs proposés ; on calculera la moyenne à la fin
         val factors = mutableListOf<Float>()
+
 
         // 1. Contrôle de la chute rapide
         if (dropPerHour >= maxAllowedDropPerHour) {
@@ -1743,7 +1747,8 @@ fun appendCompactLog(
                 recentSteps15Minutes.toFloat(), recentSteps30Minutes.toFloat(),
                 recentSteps60Minutes.toFloat(), recentSteps180Minutes.toFloat()
             ),
-            reason // 👈 logs visibles si non-null
+            reason, // 👈 logs visibles si non-null
+            context
         )
         return smb.coerceAtLeast(0f)
     }
