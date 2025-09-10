@@ -428,7 +428,7 @@
     <string name="model_loaded">📦 Chargé ✓ : %1$s (%2$s B)</string>
     <string name="model_load_failed">❌ Échec chargement modèle: %1$s</string>
 
-    <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE DeterminebasalAIMI.kt -->
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION DeterminebasalAIMI.kt -->
 
     <string name="bg_drop_high">BG drop élevé (%1$.2f mg/dL/h), forte réduction; </string>
     <string name="bg_rapid_rise">Montée rapide détectée (delta %1$.2f mg/dL), application du mode d\'urgence; </string>

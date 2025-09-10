@@ -657,6 +657,7 @@
     <string name="no_conditions_met">No conditions met</string>
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION AIMI MODEL HANDLER - FILE AimiModelHandler.kt -->
+
     <string name="uam_model_status">📦 UAM model: %1$s (%2$s, %3$s)</string>
     <string name="sanitize_info">🧹 Sanitize: %1$d incomplete values -> 0</string>
     <string name="cache_hit">⚡ Cache HIT → %1$s U</string>
@@ -669,8 +670,7 @@
     <string name="model_loaded">📦 Model loaded ✓ : %1$s (%2$s B)</string>
     <string name="model_load_failed">❌ Model load failed: %1$s</string>
 
-
-    <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE DeterminebasalAIMI.kt -->
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SEZIONE DeterminebasalAIMI.kt -->
 
     <string name="bg_drop_high">BG high drop (%1$.1f mg/dL/h), strong reduction;</string>
     <string name="bg_rapid_rise">Rapid rise detected (delta %1$.0f mg/dL), applying emergency mode; </string>
