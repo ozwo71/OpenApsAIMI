@@ -434,7 +434,7 @@
     <string name="log_model_file_not_found">Fichier modèle introuvable : %1$s</string>
     <string name="log_interpreter_initialized">Interpréteur initialisé depuis %1$s (%2$d octets)</string>
     <string name="log_failed_init_uam">Échec initialisation modèle UAM : %1$s</string>
-    <string name="log_error_closing_interpreter">Erreur lors de la fermeture de l'interpréteur : %1$s</string>
+    <string name="log_error_closing_interpreter">Erreur lors de la fermeture de l\'interpréteur : %1$s</string>
 
 
 
