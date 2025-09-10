@@ -597,6 +597,14 @@
     <string name="model_loaded">📦 Model loaded ✓ : %1$s (%2$d B)</string>
     <string name="model_load_failed">❌ Model load failed: %1$s</string>
 
+    <string name="log_interpreter_closed">Interpreter closed</string>
+    <string name="log_smb_cache_cleared">SMB cache cleared</string>
+    <string name="log_tflite_failed">TFLite run failed: %1$s</string>
+    <string name="log_model_file_not_found">Model file not found: %1$s</string>
+    <string name="log_interpreter_initialized">Interpreter initialized from %1$s (%2$d bytes)</string>
+    <string name="log_failed_init_uam">Failed to init UAM model: %1$s</string>
+    <string name="log_error_closing_interpreter">Error closing interpreter: %1$s</string>
+
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SEZIONE DeterminebasalAIMI.kt -->
 
     <string name="bg_drop_high">BG high drop (%1$.1f mg/dL/h), strong reduction;</string>

@@ -71,28 +71,32 @@ object AimiUamHandler {
     }
 
     /** Vide le cache des prédictions. À appeler par ex. dans onStart(). */
-    fun clearCache() {
+    fun clearCache(context: Context) {
         smbCache.invalidateAll()
-        Log.i(TAG, "SMB cache cleared")
+      //Log.i(TAG, "SMB cache cleared")
+        Log.i(TAG, context.getString(R.string.log_smb_cache_cleared))
+
     }
 
     /** Ferme l'interpréteur. À appeler dans onStop() du plugin. */
-    fun close() {
+    fun close(context: Context) {
         try {
             synchronized(lock) {
                 interpreter?.close()
                 interpreter = null
             }
-            Log.i(TAG, "Interpreter closed")
+          //Log.i(TAG, "Interpreter closed")
+            Log.i(TAG, context.getString(R.string.log_interpreter_closed))
         } catch (e: Throwable) {
-            Log.w(TAG, "Error closing interpreter: ${e.message}")
+          //Log.w(TAG, "Error closing interpreter: ${e.message}")
+            Log.w(TAG, context.getString(R.string.log_error_closing_interpreter, e.message))
         }
     }
 
     /** Force un autre fichier modèle (test / debug), puis purge et re-lazy-init au prochain run. */
-    fun configureUamModel(file: File?) {
+    fun configureUamModel(file: File?, context: Context) {
         synchronized(lock) {
-            close()
+            close(context)
             if (file != null) {
                 if (file.exists()) {
                     modelUamFile.parentFile?.mkdirs()
@@ -105,7 +109,7 @@ object AimiUamHandler {
             }
             lastLoadOk = false
             lastLoadError = null
-            clearCache()
+            clearCache(context)
         }
     }
 
@@ -150,8 +154,9 @@ object AimiUamHandler {
             runModel(itp, inputs)
         } catch (e: Throwable) {
             //reason?.appendLine("💥 TFLite run échoué: ${e.message} → SMB=0")
-            reason?.appendLine(context.getString(R.string.tflite_failed, e.message ?: "unknown"))
-            Log.e(TAG, "TFLite run failed: ${e.message}")
+            reason?.appendLine(context.getString(R.string.tflite_failed, e.message))
+          //Log.e(TAG, "TFLite run failed: ${e.message}")
+            Log.e(TAG, context.getString(R.string.log_tflite_failed, e.message))
             return 0f
         }
 
@@ -180,7 +185,8 @@ object AimiUamHandler {
                 lastLoadError = "file not found"
                 //reason?.appendLine("❌ Fichier modèle introuvable : ${file.absolutePath}")
                 reason?.appendLine(context.getString(R.string.model_missing, file.absolutePath))
-                Log.e(TAG, "Model file not found: ${file.absolutePath}")
+              //Log.e(TAG, "Model file not found: ${file.absolutePath}")
+                Log.e(TAG, context.getString(R.string.log_model_file_not_found, file.absolutePath))
                 return null
             }
             return try {
@@ -193,14 +199,16 @@ object AimiUamHandler {
                     lastModelPath = file.absolutePath
                     //reason?.appendLine("📦 Chargé ✓ : ${file.name} (${file.length()} B)")
                     reason?.appendLine(context.getString(R.string.model_loaded, file.name, file.length()))
-                    Log.i(TAG, "Interpreter initialized from ${file.absolutePath} (${file.length()} bytes)")
+                  //Log.i(TAG, "Interpreter initialized from ${file.absolutePath} (${file.length()} bytes)")
+                    Log.i(TAG, context.getString(R.string.log_interpreter_initialized, file.absolutePath, file.length()))
                 }
             } catch (e: Throwable) {
                 lastLoadOk = false
                 lastLoadError = e.message
                 //reason?.appendLine("❌ Échec chargement modèle: ${e.message}")
-                reason?.appendLine(context.getString(R.string.model_load_failed, e.message ?: "unknown"))
-                Log.e(TAG, "Failed to init UAM model: ${e.message}")
+                reason?.appendLine(context.getString(R.string.model_load_failed, e.message))
+              //Log.e(TAG, "Failed to init UAM model: ${e.message}")
+                Log.e(TAG, context.getString(R.string.log_failed_init_uam, e.message))
                 null
             }
         }
