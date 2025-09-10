@@ -104,6 +104,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val uiInteraction: UiInteraction,
     private val determineBasalaimiSMB2: DetermineBasalaimiSMB2,
     private val profiler: Profiler,
+    private val context: Context,
+
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.APS)
@@ -123,7 +125,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
     override fun onStart() {
         super.onStart()
-        AimiUamHandler.clearCache()
+        AimiUamHandler.clearCache(context)
 
         var count = 0
         val apsResults = persistenceLayer.getApsResults(dateUtil.now() - T.days(1).msecs(), dateUtil.now())
@@ -140,7 +142,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
     override fun onStop() {
         super.onStop()
-        AimiUamHandler.close()
+        AimiUamHandler.close(context)
     }
     // last values
     override var lastAPSRun: Long = 0
