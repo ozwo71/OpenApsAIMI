@@ -642,5 +642,24 @@
     <string name="safety_adjustments_32">Niente SMB luna di miele</string>
     <string name="safety_adjustments_33">BG inferiore a 90</string>
     <string name="no_conditions_met">Nessuna condizione soddisfatta</string>
+
+    <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE AIMI MODEL HANDLER - FILE AimiModelHandler.kt -->
+    <string name="uam_model_status">📦 UAM modello: %1$s (%2$s, %3$s)</string>
+    <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE DeterminebasalAIMI.kt -->
+
+    <string name="bg_drop_high">BG calo elevato (%1$.1f mg/dL/h), forte riduzione;</string>
+    <string name="bg_rapid_rise">Rapido aumento rilevato (delta %1$.0f mg/dL), applicazione modalità di emergenza; </string>
+    <string name="bg_combined_delta_weak">Delta combinato molto debole (%1$.2f), riduzione x0.6; </string>
+    <string name="bg_combined_delta_moderate">Delta combinato moderato (%1$.2f), riduzione x0.8; </string>
+    <string name="bg_combined_delta_high">Delta combinato elevato (%1$.2f), moltiplicatore dinamico applicato; </string>
+    <string name="bg_stable_high_delta_low">BG stabile &gt;160 &amp; Delta combinato&lt;1, riduzione x0.8; </string>
+    <string name="iob_high_reduction">IOB elevata (%1$.2f U), riduzione x0.85; </string>
+    <string name="tdd_per_hour_high">TDD/h elevato (%1$.2f U/h), riduzione x0.8; </string>
+    <string name="tir_high">TIR elevato (%1$.1f%%), riduzione x0.5; </string>
+    <string name="bg_near_target">BG previsto (%1$.1f) vicino al target (%2$.1f), riduzione x0.5; </string>
+    <string name="zero_basal_forced">Durata basale zero (%1$d min) superata, forzo basale minima; </string>
+    <string name="dia_base_info">DIA Base: %1$d h = %2$d min\n</string>
+
+
 </resources>
 

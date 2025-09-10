@@ -49,6 +49,7 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import android.content.Context
+import app.aaps.plugins.aps.R
 import kotlin.math.exp
 
 
@@ -344,32 +345,32 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             stopBasal = true
             factors.add(0.3f)
           //reasonBuilder.append("BG drop élevé ($dropPerHour mg/dL/h), forte réduction; ")
-            reasonBuilder.append("BG calo elevato ($dropPerHour mg/dL/h), forte riduzione; ")
+            reasonBuilder.append(context.getString(R.string.bg_drop_high, dropPerHour))
         }
 
         // 2. Mode montée très rapide : override de toutes les réductions
         if (delta >= 20f && combinedDelta >= 15f && !honeymoon) {
             // on passe outre toutes les réductions ; bolusFactor sera 1.0
           //reasonBuilder.append("Montée rapide détectée (delta $delta mg/dL), application du mode d'urgence; ")
-            reasonBuilder.append("Rapido aumento rilevato (delta $delta mg/dL), applicazione modalità di emergenza; ")
+            reasonBuilder.append(context.getString(R.string.bg_rapid_rise, delta))
         } else {
             // 3. Ajustement selon combinedDelta
             when {
                 combinedDelta < 1f -> {
                     factors.add(0.6f)
                   //reasonBuilder.append("combinedDelta très faible ($combinedDelta), réduction x0.6; ")
-                    reasonBuilder.append("Delta combinato molto debole ($combinedDelta), riduzione x0.6; ")
+                    reasonBuilder.append(context.getString(R.string.bg_combined_delta_weak, combinedDelta))
                 }
                 combinedDelta < 2f -> {
                     factors.add(0.8f)
                   //reasonBuilder.append("combinedDelta modéré ($combinedDelta), réduction x0.8; ")
-                    reasonBuilder.append("Delta combinato moderato ($combinedDelta), riduzione x0.8; ")
+                    reasonBuilder.append(context.getString(R.string.bg_combined_delta_moderate, combinedDelta))
                 }
                 else -> {
                     // Appel au multiplicateur lissé
                     factors.add(computeDynamicBolusMultiplier(combinedDelta))
                   //reasonBuilder.append("combinedDelta élevé ($combinedDelta), multiplicateur dynamique appliqué; ")
-                    reasonBuilder.append("Delta combinato elevato ($combinedDelta), moltiplicatore dinamico applicato; ")
+                    reasonBuilder.append(context.getString(R.string.bg_combined_delta_high, combinedDelta))
                 }
             }
 
@@ -377,14 +378,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (currentBG > 160f && combinedDelta < 1f) {
                 factors.add(0.8f)
               //reasonBuilder.append("Plateau BG>160 & combinedDelta<1, réduction x0.8; ")
-                reasonBuilder.append("BG stabile >160 & Delta combinato<1, riduzione x0.8; ")
+                reasonBuilder.append(context.getString(R.string.bg_stable_high_delta_low))
             }
 
             // 5. Contrôle IOB
             if (iob >= maxIob * 0.85f) {
                 factors.add(0.85f)
               //reasonBuilder.append("IOB élevé ($iob U), réduction x0.85; ")
-                reasonBuilder.append("IOB elevata ($iob U), riduzione x0.85; ")
+                reasonBuilder.append(context.getString(R.string.iob_high_reduction, iob))
             }
 
             // 6. Contrôle du TDD par heure
@@ -392,21 +393,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (tddPerHour > tddThreshold) {
                 factors.add(0.8f)
               //reasonBuilder.append("TDD/h élevé ($tddPerHour U/h), réduction x0.8; ")
-                reasonBuilder.append("TDD/h elevato ($tddPerHour U/h), riduzione x0.8; ")
+                reasonBuilder.append(context.getString(R.string.tdd_per_hour_high, tddPerHour))
             }
 
             // 7. TIR élevé
             if (tirInhypo >= 8f) {
                 factors.add(0.5f)
               //reasonBuilder.append("TIR élevé ($tirInhypo%), réduction x0.5; ")
-                reasonBuilder.append("TIR elevato ($tirInhypo%), réduction x0.5; ")
+                reasonBuilder.append(context.getString(R.string.tir_high, tirInhypo))
             }
 
             // 8. BG prédit proche de la cible
             if (predictedBG < targetBG + 10) {
                 factors.add(0.5f)
               //reasonBuilder.append("BG prédit ($predictedBG) proche de la cible ($targetBG), réduction x0.5; ")
-                reasonBuilder.append("BG previsto ($predictedBG) vicino al target ($targetBG), riduzione x0.5; ")
+                reasonBuilder.append(context.getString(R.string.bg_near_target, predictedBG, targetBG))
             }
         }
 
@@ -423,7 +424,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             basalLS = true
             bolusFactor = 1.0
           //reasonBuilder.append("Zero basal duration ($zeroBasalDurationMinutes min) dépassé, forçant basal minimal; ")
-            reasonBuilder.append("Durata basale zero ($zeroBasalDurationMinutes min) superata, forzo basale minima; ")
+            reasonBuilder.append(context.getString(R.string.zero_basal_forced, zeroBasalDurationMinutes))
         }
 
         return SafetyDecision(
@@ -587,7 +588,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 1. Conversion du DIA de base en minutes
         var diaMinutes = baseDIAHours * 60f  // Pour 9h, 9*60 = 540 min
-        reasonBuilder.append("DIA Base: ${baseDIAHours}h = ${diaMinutes}min\n")
+      //reasonBuilder.append("Base DIA: ${baseDIAHours}h = ${diaMinutes}min\n")
+        reasonBuilder.append(context.getString(R.string.dia_base_info, baseDIAHours, diaMinutes))
 
         // 2. Ajustement selon l'heure de la journée
         // Matin (6-10h) : absorption plus rapide, réduction du DIA de 20%

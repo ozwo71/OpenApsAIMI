@@ -414,5 +414,26 @@
     <string name="table_plugin_heart_title">Heart Rate Data</string>
     <string name="table_plugin_manual_modes_title">Modes</string>
     <string name="table_plugin_miscellaneous_title">Miscellaneous</string>
+
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION AIMI MODEL HANDLER - FILE AimiModelHandler.kt -->
+    <string name="uam_model_status">📦 UAM model: %1$s (%2$s, %3$s)</string>
+
+    <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE DeterminebasalAIMI.kt -->
+
+    <string name="bg_drop_high">BG drop élevé (%1$.2f mg/dL/h), forte réduction; </string>
+    <string name="bg_rapid_rise">Montée rapide détectée (delta %1$.2f mg/dL), application du mode d\'urgence; </string>
+    <string name="bg_combined_delta_weak">combinedDelta très faible (%1$.2f), réduction x0.6; </string>
+    <string name="bg_combined_delta_moderate">combinedDelta modéré (%1$.2f), réduction x0.8; </string>
+    <string name="bg_combined_delta_high">combinedDelta élevé (%1$.2f), multiplicateur dynamique appliqué; </string>
+    <string name="bg_stable_high_delta_low">Plateau BG&gt;160 &amp; combinedDelta&lt;1, réduction x0.8; </string>
+    <string name="iob_high_reduction">IOB élevé (%1$.2f U), réduction x0.85; </string>
+    <string name="tdd_per_hour_high">TDD/h élevé (%1$.2f U/h), réduction x0.8; </string>
+    <string name="tir_high">TIR élevé (%1$.1f%%), réduction x0.5;</string>
+    <string name="bg_near_target">BG prédit (%1$.1f) proche de la cible (%2$.1f), réduction x0.5; </string>
+    <string name="zero_basal_forced">Zero basal duration (%1$d min) dépassé, forçant basal minimal; </string>
+    <string name="dia_base_info">Base DIA: %1$d h = %2$d min\n</string>
+
+
+
 </resources>
 
