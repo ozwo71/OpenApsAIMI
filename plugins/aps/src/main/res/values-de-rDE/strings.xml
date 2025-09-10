@@ -186,7 +186,7 @@
     <string name="openapsaimi_maxsmb_summary">Value of max smb size</string>
     <string name="openapsaimi_maxsmb_title">OpenapsAIMI Max SMB</string>
     <string name="description_openapsaimi">Small micro boluses based on Artificial Intelligence and Machine Learning.</string>
-    <string name="oaps_aimi_shortname">OpenApsAIMI</string>
+    <string name="oaps_aimi_shortname">AIMI</string>
     <string name="count_steps_watch">count_steps_watch</string>
     <string name="oaps_aimi_evening_factor_summary">% of Reactivity of the plugin between 6 pm and midnight</string>
     <string name="oaps_aimi_evening_factor_title">Evening Reactivity Percentage</string>
@@ -313,10 +313,12 @@
     <string name="Enable_xdripOM_title">Enable xdrip bg each one minute</string>
     <string name="oaps_aimi_enableMlautoDrive_title">Experimental : Auto Drive</string>
     <string name="prebolus_autodrive_mode_summary_Morning">Autodrive will send a prebolus regarding the raise detection conditions</string>
+    <string name="prebolus_autodrive_mode_title">Autodrive prebolus</string>
     <string name="prebolus_autodrive_mode_title_Morning">Autodrive prebolus Morning</string>
     <string name="prebolus_autodrive_mode_summary_Afternoon">Autodrive will send a prebolus regarding the raise detection conditions</string>
     <string name="prebolus_autodrive_mode_title_Afternoon">Autodrive prebolus Afternoon</string>
     <string name="prebolus_autodrive_mode_summary_Evening">Autodrive will send a prebolus regarding the raise detection conditions</string>
+    <string name="prebolus_autodrive_mode_summary">Autodrive will send a prebolus regarding the raise detection conditions</string>
     <string name="prebolus_autodrive_mode_title_Evening">Autodrive prebolus Evening</string>
     <string name="oaps_aimi_AutodriveISF_summary">under this ISF value, the condition to receive the prebolus is true</string>
     <string name="oaps_aimi_AutodriveISF_title">ISF value Autodrive for prebolus</string>
@@ -330,6 +332,10 @@
     <string name="oaps_aimi_AutodriveDeviation_title">Autodrive min deviation</string>
     <string name="oaps_aimi_AutodriveAcceleration_summary">BG acceleration, if the acceleration is greater than this value, the condition for autodrive prebolus is true.</string>
     <string name="oaps_aimi_AutodriveAcceleration_title">Autodrive BG acceleration condition</string>
+    <string name="prebolussmall_autodrive_mode_summary"><![CDATA[use by an early meal detection, bg > 100, predictionBG > 180. The idea is when we get a early detection sending a small smb to avoid negative iob or late correction. can be a good approach for a small snack.]]></string>
+    <string name="prebolussmall_autodrive_mode_title">snack autodrive prebolus/early meal detection</string>
+    <string name="autodrive_max_basal_summary">Meal early detection, fix the maxbasal during 30 minutes</string>
+    <string name="autodrive_max_basal_title">Meal Early Detection TBR</string>
     <string name="prebolussmall_autodrive_mode_summaryMorning"><![CDATA[use by an early meal detection, bg > 100, predictionBG > 180. The idea is when we get a early detection sending a small smb to avoid negative iob or late correction. can be a good approach for a small snack.]]></string>
     <string name="prebolussmall_autodrive_mode_titleMorning">snack autodrive prebolus/early meal detection</string>
     <string name="prebolussmall_autodrive_mode_summaryAfternoon"><![CDATA[use by an early meal detection, bg > 100, predictionBG > 180. The idea is when we get a early detection sending a small smb to avoid negative iob or late correction. can be a good approach for a small snack.]]></string>
@@ -410,15 +416,15 @@
     <string name="reason_adjusted_morning_factor">adjusted Morning Factor %1$.2f, </string>
     <string name="reason_adjusted_afternoon_factor">adjusted Afternoon Factor %1$.2f, </string>
     <string name="reason_adjusted_evening_factor">adjusted Evening Factor %1$.2f, </string>
-    <string name="reason_autodrive_status">Autodrive: %1$s, autodrive mode: %2$s, Autodrive Condition: %3$s, BG Trend: %4$.2f, Combined Delta: %5$.2f, Predicted BG: %6$.2f, BG Acceleration: %7$.2f, SlopeMinDeviation: %8$.2f </string>
+    <string name="reason_autodrive_status"> Autodrive: %1$s, autodrive mode: %2$s, Autodrive Condition: %3$s, BG Trend: %4$.2f, Combined Delta: %5$.2f, Predicted BG: %6$.2f, BG Acceleration: %7$.2f, SlopeMinDeviation: %8$.2f</string>
     <string name="reason_tir_stats">TIR Below: %1$d, TIR In Range: %2$d, TIR Above: %3$d</string>
 
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION TITLE - FILE DetermineBasalAIMI2.kt -->
 
     <string name="table_plugin_main_title_1">AAPS-MASTER-AIMI</string>
-    <string name="table_plugin_main_title_2">OpenApsAIMI Settings</string>
-    <string name="table_plugin_main_title_3">06 Ago 2025</string>
+    <string name="table_plugin_main_title_2">AIMI Settings</string>
+    <string name="table_plugin_main_title_3">06 August 2025</string>
     <string name="table_plugin_request_title">Request</string>
     <string name="table_plugin_smb_prediction_title">SMB Prediction</string>
     <string name="table_plugin_adjusted_factors_title">Adjusted Factors</string>
@@ -576,4 +582,34 @@
     <string name="safety_adjustments_32">No SMB honeymoon</string>
     <string name="safety_adjustments_33">BG below 90</string>
     <string name="no_conditions_met">No conditions met</string>
+
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION AIMI MODEL HANDLER - FILE AimiModelHandler.kt -->
+
+    <string name="uam_model_status">📦 UAM model: %1$s (%2$s, %3$s)</string>
+    <string name="sanitize_info">🧹 Sanitize: %1$d incomplete values -> 0</string>
+    <string name="cache_hit">⚡ Cache HIT → %1$s U</string>
+    <string name="cache_hit_invalid">⚠️ Cache HIT not usable (NaN/Inf), recalculating…</string>
+    <string name="uam_unavailable">❌ UAM model unavailable → SMB=0</string>
+    <string name="tflite_failed">💥 TFLite execution failed: %1$s → SMB=0</string>
+    <string name="uam_executed">✅ UAM executed → %1$s U</string>
+    <string name="uam_invalid">⚠️ Result not usable (raw=%1$s) → SMB=0</string>
+    <string name="model_missing">❌ Model file not found: %1$s</string>
+    <string name="model_loaded">📦 Model loaded ✓ : %1$s (%2$s B)</string>
+    <string name="model_load_failed">❌ Model load failed: %1$s</string>
+
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SEZIONE DeterminebasalAIMI.kt -->
+
+    <string name="bg_drop_high">BG high drop (%1$.1f mg/dL/h), strong reduction;</string>
+    <string name="bg_rapid_rise">Rapid rise detected (delta %1$.0f mg/dL), applying emergency mode; </string>
+    <string name="bg_combined_delta_weak">Combined delta very weak (%1$.2f), reduction x0.6; </string>
+    <string name="bg_combined_delta_moderate">Combined delta moderate (%1$.2f), reduction x0.8; </string>
+    <string name="bg_combined_delta_high">Combined delta high (%1$.2f), dynamic multiplier applied; </string>
+    <string name="bg_stable_high_delta_low">BG stable &gt;160 &amp; Combined delta&lt;1, reduction x0.8; </string>
+    <string name="iob_high_reduction">High IOB (%1$.2f U), reduction x0.85; </string>
+    <string name="tdd_per_hour_high">High TDD/h (%1$.2f U/h), reduction x0.8; </string>
+    <string name="tir_high">High TIR (%1$.1f%%), reduction x0.5;</string>
+    <string name="bg_near_target">Predicted BG (%1$.1f) near target (%2$.1f), reduction x0.5; </string>
+    <string name="zero_basal_forced">Zero basal duration (%1$d min) exceeded, forcing minimal basal; </string>
+    <string name="dia_base_info">Base DIA: %1$d h = %2$d min\n</string>
+
 </resources>
