@@ -33,11 +33,7 @@ import app.aaps.plugins.aps.R
 object AimiUamHandler {
     private const val TAG = "AIMI-UAM"
 
-    private lateinit var context: Context
 
-    fun init(context: Context) {
-        this.context = context.applicationContext
-    }
     // Emplacement standard du modèle
     private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
     private val modelUamFile = File(externalDir, "ml/modelUAM.tflite")
@@ -62,7 +58,7 @@ object AimiUamHandler {
     fun getInstance(): AimiUamHandler = this
 
     /** Ligne de statut prête à logguer dans rT.reason */
-    fun statusLine(): String {
+    fun statusLine(context: Context): String {
         val path = lastModelPath ?: modelUamFile.absolutePath
         val flag = if (lastLoadOk) "✅" else "❌"
         val size = if (modelUamFile.exists()) "${modelUamFile.length()} B" else "missing"
@@ -71,8 +67,8 @@ object AimiUamHandler {
     }
 
     /** Ajoute la ligne de statut dans un StringBuilder (ex: rT.reason) */
-    fun appendStatus(to: StringBuilder?) {
-        to?.appendLine(statusLine())
+    fun appendStatus(to: StringBuilder?, context: Context) {
+        to?.appendLine(statusLine(context))
     }
 
     /** Vide le cache des prédictions. À appeler par ex. dans onStart(). */
@@ -122,9 +118,10 @@ object AimiUamHandler {
      */
     fun predictSmbUam(
         features: FloatArray,
-        reason: StringBuilder? = null
+        reason: StringBuilder? = null,
+        context: Context
     ): Float {
-        appendStatus(reason) // affiche d'entrée l'état du modèle
+        appendStatus(reason, context) // affiche d'entrée l'état du modèle
 
         val (inputs, replaced) = sanitizeWithCount(features)
         if (replaced > 0) {
@@ -144,7 +141,7 @@ object AimiUamHandler {
             }
         }
 
-        val itp = ensureInterpreter(reason) ?: run {
+        val itp = ensureInterpreter(reason, context) ?: run {
             //reason?.appendLine("❌ Modèle UAM indisponible → SMB=0")
             reason?.appendLine(context.getString(R.string.uam_unavailable))
             return 0f
@@ -173,7 +170,7 @@ object AimiUamHandler {
 
     // ────────────────────────── Privé : init & exécution ──────────────────────────
 
-    private fun ensureInterpreter(reason: StringBuilder? = null): Interpreter? {
+    private fun ensureInterpreter(reason: StringBuilder? = null, context: Context): Interpreter? {
         interpreter?.let { return it }
         synchronized(lock) {
             interpreter?.let { return it }
