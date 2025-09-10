@@ -645,6 +645,18 @@
 
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE AIMI MODEL HANDLER - FILE AimiModelHandler.kt -->
     <string name="uam_model_status">📦 UAM modello: %1$s (%2$s, %3$s)</string>
+    <string name="sanitize_info">🧹 Pulizia: %1$d valori incompleti -> 0</string>
+    <string name="cache_hit">⚡ Cache HIT → %1$s U</string>
+    <string name="cache_hit_invalid">⚠️ Cache HIT non sfruttabile (NaN/Inf), ricalcolo…</string>
+    <string name="uam_unavailable">❌ Modello UAM non disponibile → SMB=0</string>
+    <string name="tflite_failed">💥 Esecuzione TFLite fallita: %1$s → SMB=0</string>
+    <string name="uam_executed">✅ UAM esecuzione → %1$s U</string>
+    <string name="uam_invalid">⚠️ Risultato non utilizzabile (raw=%1$s) → SMB=0</string>
+    <string name="model_missing">❌ File modello non trovato: %1$s</string>
+    <string name="model_loaded">📦 Caricamento modello ✓ : %1$s (%2$s B)</string>
+    <string name="model_load_failed">❌ Errore caricamento modello: %1$s</string>
+
+
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE DeterminebasalAIMI.kt -->
 
     <string name="bg_drop_high">BG calo elevato (%1$.1f mg/dL/h), forte riduzione;</string>

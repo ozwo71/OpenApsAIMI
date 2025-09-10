@@ -15,6 +15,8 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
+import android.content.Context
+import app.aaps.plugins.aps.R
 
 /**
  * Handler UAM-only :
@@ -31,6 +33,11 @@ import kotlin.math.max
 object AimiUamHandler {
     private const val TAG = "AIMI-UAM"
 
+    private lateinit var context: Context
+
+    fun init(context: Context) {
+        this.context = context.applicationContext
+    }
     // Emplacement standard du modèle
     private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
     private val modelUamFile = File(externalDir, "ml/modelUAM.tflite")
@@ -60,7 +67,7 @@ object AimiUamHandler {
         val flag = if (lastLoadOk) "✅" else "❌"
         val size = if (modelUamFile.exists()) "${modelUamFile.length()} B" else "missing"
       //return "📦 UAM model: $flag ($path, $size)"
-        return "📦 UAM modello: $flag ($path, $size)"
+        return context.getString(R.string.uam_model_status, flag, path, size)
     }
 
     /** Ajoute la ligne de statut dans un StringBuilder (ex: rT.reason) */
@@ -121,31 +128,33 @@ object AimiUamHandler {
 
         val (inputs, replaced) = sanitizeWithCount(features)
         if (replaced > 0) {
-          //reason?.appendLine("🧹 Sanitize: $replaced entrées non finies -> 0")
-            reason?.appendLine("🧹 Pulizia: $replaced valori incompleti -> 0")
+            //reason?.appendLine("🧹 Sanitize: $replaced entrées non finies -> 0")
+            reason?.appendLine(context.getString(R.string.sanitize_info, replaced))
         }
 
         val key = cacheKey("UAM", inputs)
         smbCache.getIfPresent(key)?.let { cached ->
             if (isUsable(cached)) {
-                reason?.appendLine("⚡ Cache HIT → ${"%.4f".format(cached)} U")
+                //reason?.appendLine("⚡ Cache HIT → ${"%.4f".format(cached)} U")
+                reason?.appendLine(context.getString(R.string.cache_hit, "%.4f".format(cached)))
                 return cached
             } else {
-                reason?.appendLine("⚠️ Cache HIT non exploitable (NaN/Inf), recalcul…")
+                //reason?.appendLine("⚠️ Cache HIT non exploitable (NaN/Inf), recalcul…")
+                reason?.appendLine(context.getString(R.string.cache_hit_invalid))
             }
         }
 
         val itp = ensureInterpreter(reason) ?: run {
-          //reason?.appendLine("❌ Modèle UAM indisponible → SMB=0")
-            reason?.appendLine("❌ Modello UAM non disponibile → SMB=0")
+            //reason?.appendLine("❌ Modèle UAM indisponible → SMB=0")
+            reason?.appendLine(context.getString(R.string.uam_unavailable))
             return 0f
         }
 
         val raw = try {
             runModel(itp, inputs)
         } catch (e: Throwable) {
-          //reason?.appendLine("💥 TFLite run échoué: ${e.message} → SMB=0")
-            reason?.appendLine("💥 Esecuzione TFLite fallita: ${e.message} → SMB=0")
+            //reason?.appendLine("💥 TFLite run échoué: ${e.message} → SMB=0")
+            reason?.appendLine(context.getString(R.string.tflite_failed, e.message ?: "unknown"))
             Log.e(TAG, "TFLite run failed: ${e.message}")
             return 0f
         }
@@ -153,11 +162,11 @@ object AimiUamHandler {
         val result = if (isUsable(raw)) round4(raw) else 0f
         if (isUsable(result)) {
             smbCache.put(key, result)
-          //reason?.appendLine("✅ UAM exécuté → ${"%.4f".format(result)} U")
-            reason?.appendLine("✅ UAM esecuzione → ${"%.2f".format(result)} U")
+            //reason?.appendLine("✅ UAM exécuté → ${"%.4f".format(result)} U")
+            reason?.appendLine(context.getString(R.string.uam_executed, "%.2f".format(result)))
         } else {
-          //reason?.appendLine("⚠️ Résultat non exploitable (raw=$raw) → SMB=0")
-            reason?.appendLine("⚠️ Risultato non utilizzabile (raw=$raw) → SMB=0")
+            //reason?.appendLine("⚠️ Résultat non exploitable (raw=$raw) → SMB=0")
+            reason?.appendLine(context.getString(R.string.uam_invalid, raw))
         }
         return max(0f, result)
     }
@@ -173,8 +182,8 @@ object AimiUamHandler {
             if (!file.exists()) {
                 lastLoadOk = false
                 lastLoadError = "file not found"
-              //reason?.appendLine("❌ Fichier modèle introuvable : ${file.absolutePath}")
-                reason?.appendLine("❌ File modello non trovato: ${file.absolutePath}")
+                //reason?.appendLine("❌ Fichier modèle introuvable : ${file.absolutePath}")
+                reason?.appendLine(context.getString(R.string.model_missing, file.absolutePath))
                 Log.e(TAG, "Model file not found: ${file.absolutePath}")
                 return null
             }
@@ -186,15 +195,15 @@ object AimiUamHandler {
                     lastLoadError = null
                     lastLoadTime = System.currentTimeMillis()
                     lastModelPath = file.absolutePath
-                  //reason?.appendLine("📦 Chargé ✓ : ${file.name} (${file.length()} B)")
-                    reason?.appendLine("📦 Caricamento modello ✓ : ${file.name} (${file.length()} B)")
+                    //reason?.appendLine("📦 Chargé ✓ : ${file.name} (${file.length()} B)")
+                    reason?.appendLine(context.getString(R.string.model_loaded, file.name, file.length()))
                     Log.i(TAG, "Interpreter initialized from ${file.absolutePath} (${file.length()} bytes)")
                 }
             } catch (e: Throwable) {
                 lastLoadOk = false
                 lastLoadError = e.message
-              //reason?.appendLine("❌ Échec chargement modèle: ${e.message}")
-                reason?.appendLine("❌ Errore caricamento modello: ${e.message}")
+                //reason?.appendLine("❌ Échec chargement modèle: ${e.message}")
+                reason?.appendLine(context.getString(R.string.model_load_failed, e.message ?: "unknown"))
                 Log.e(TAG, "Failed to init UAM model: ${e.message}")
                 null
             }
