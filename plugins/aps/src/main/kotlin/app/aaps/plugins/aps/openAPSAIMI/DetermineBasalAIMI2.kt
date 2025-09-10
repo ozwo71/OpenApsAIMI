@@ -58,7 +58,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val profileUtil: ProfileUtil,
     private val fabricPrivacy: FabricPrivacy,
     context: Context
-
 ) {
     @Inject lateinit var preferences: Preferences
     @Inject lateinit var persistenceLayer: PersistenceLayer
@@ -343,7 +342,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Liste des facteurs multiplicatifs proposés ; on calculera la moyenne à la fin
         val factors = mutableListOf<Float>()
 
-
         // 1. Contrôle de la chute rapide
         if (dropPerHour >= maxAllowedDropPerHour) {
             stopBasal = true
@@ -600,13 +598,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (currentHour in 6..10) {
             diaMinutes *= 0.8f
           //reasonBuilder.append("Morning adjustment (6-10h): reduced by 20%\n")
-            reasonBuilder.append("Mattina adattamento DIA (6-10h): ridotta del 20%\n")
+            reasonBuilder.append(context.getString(R.string.morning_adjustment))
         }
         // Soir/Nuit (22-23h et 0-5h) : absorption plus lente, augmentation du DIA de 20%
         else if (currentHour in 22..23 || currentHour in 0..5) {
             diaMinutes *= 1.2f
           //reasonBuilder.append("Night adjustment (22-23h & 0-5h): increased by 20%\n")
-            reasonBuilder.append("Notte adattamento DIA (22-23h & 0-5h): aumentata del 20%\n")
+            reasonBuilder.append(context.getString(R.string.night_adjustment))
         }
 
         // 3. Ajustement en fonction de l'activité physique
@@ -614,12 +612,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Exercice : absorption accélérée, réduction du DIA de 30%
             diaMinutes *= 0.7f
           //reasonBuilder.append("Physical activity detected: reduced by 30%\n")
-            reasonBuilder.append("Attività fisica rilevata: DIA ridotta del 30%\n")
+            reasonBuilder.append(context.getString(R.string.physical_activity_detected))
         } else if (recentSteps5Minutes == 0 && currentHR > averageHR60) {
             // Aucune activité mais HR élevée (stress) : absorption potentiellement plus lente, augmentation du DIA de 30%
             diaMinutes *= 1.3f
           //reasonBuilder.append("High HR without activity (stress): increased by 30%\n")
-            reasonBuilder.append("FC alta no attività fisica (stress): DIA aumento del 30%\n")
+            reasonBuilder.append(context.getString(R.string.high_hr_no_activity))
         }
 
         // 4. Ajustement en fonction du niveau absolu de fréquence cardiaque
@@ -627,7 +625,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // HR très élevée : circulation rapide, réduction du DIA de 30%
             diaMinutes *= 0.7f
           //reasonBuilder.append("High HR (>130bpm): reduced by 30%\n")
-            reasonBuilder.append("FC alta (>130bpm): DIA ridotta del 30%\n")
+            reasonBuilder.append(context.getString(R.string.high_hr_over_130))
         }
 
         // 5. Ajustement en fonction de l'IOB (Insulin on Board)

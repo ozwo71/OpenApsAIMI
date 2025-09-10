@@ -452,6 +452,12 @@
     <string name="bg_near_target">BG prédit (%1$.1f) proche de la cible (%2$.1f), réduction x0.5; </string>
     <string name="zero_basal_forced">Zero basal duration (%1$d min) dépassé, forçant basal minimal; </string>
     <string name="dia_base_info">Base DIA: %1$d h = %2$d min\n</string>
+    <string name="morning_adjustment">Ajustement du matin (6-10h) : DIA réduit de 20%</string>
+    <string name="night_adjustment">Ajustement de nuit (22-23h &amp; 0-5h) : DIA augmenté de 20%</string>
+    <string name="physical_activity_detected">Activité physique détectée : DIA réduite de 30%</string>
+    <string name="high_hr_no_activity">FC élevée sans activité physique (stress) : DIA augmentée de 30%</string>
+    <string name="high_hr_over_130">FC élevée (&gt;130bpm) : DIA réduite de 30%</string>
+
 
 
 
