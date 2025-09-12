@@ -594,7 +594,7 @@
     <string name="uam_executed">✅ UAM executed → %1$s U</string>
     <string name="uam_invalid">⚠️ Result not usable (raw=%1$f) → SMB=0</string>
     <string name="model_missing">❌ Model file not found: %1$s</string>
-    <string name="model_loaded">📦 Model loaded ✓ : %1$s (%2$d B)</string>
+    <string name="model_loaded">📦 Model loaded ✓ : %1$s (%2$s KB)</string>
     <string name="model_load_failed">❌ Model load failed: %1$s</string>
 
     <string name="log_interpreter_closed">Interpreter closed</string>
@@ -618,7 +618,7 @@
     <string name="tir_high">High TIR (%1$.1f%%), reduction x0.5;</string>
     <string name="bg_near_target">Predicted BG (%1$.1f) near target (%2$.1f), reduction x0.5; </string>
     <string name="zero_basal_forced">Zero basal duration (%1$d min) exceeded, forcing minimal basal; </string>
-    <string name="dia_base_info">Base DIA: %1$d h = %2$d min\n</string>
+    <string name="dia_base_info">Base DIA: %1$f h = %2$f min\n</string>
     <string name="morning_adjustment">Morning adjustment (6-10h): DIA reduced by 20%</string>
     <string name="night_adjustment">Night adjustment (22-23h &amp; 0-5h): DIA increased by 20%</string>
     <string name="physical_activity_detected">Physical activity detected: DIA reduced by 30%</string>

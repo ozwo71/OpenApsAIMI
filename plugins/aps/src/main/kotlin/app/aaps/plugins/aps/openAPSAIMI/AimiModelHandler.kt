@@ -89,7 +89,7 @@ object AimiUamHandler {
             Log.i(TAG, context.getString(R.string.log_interpreter_closed))
         } catch (e: Throwable) {
           //Log.w(TAG, "Error closing interpreter: ${e.message}")
-            Log.w(TAG, context.getString(R.string.log_error_closing_interpreter, e.message))
+            Log.w(TAG, context.getString(R.string.log_error_closing_interpreter, e.message ?: "Unknown error"))
         }
     }
 
@@ -154,9 +154,9 @@ object AimiUamHandler {
             runModel(itp, inputs)
         } catch (e: Throwable) {
             //reason?.appendLine("💥 TFLite run échoué: ${e.message} → SMB=0")
-            reason?.appendLine(context.getString(R.string.tflite_failed, e.message))
+            reason?.appendLine(context.getString(R.string.tflite_failed, e.message ?: "Unknown error"))
           //Log.e(TAG, "TFLite run failed: ${e.message}")
-            Log.e(TAG, context.getString(R.string.log_tflite_failed, e.message))
+            Log.e(TAG, context.getString(R.string.log_tflite_failed, e.message ?: "Unknown error"))
             return 0f
         }
 
@@ -198,7 +198,7 @@ object AimiUamHandler {
                     lastLoadTime = System.currentTimeMillis()
                     lastModelPath = file.absolutePath
                     //reason?.appendLine("📦 Chargé ✓ : ${file.name} (${file.length()} B)")
-                    reason?.appendLine(context.getString(R.string.model_loaded, file.name, file.length()))
+                    reason?.appendLine(context.getString(R.string.model_loaded, file.name, (file.length() / 1024).toString()))
                   //Log.i(TAG, "Interpreter initialized from ${file.absolutePath} (${file.length()} bytes)")
                     Log.i(TAG, context.getString(R.string.log_interpreter_initialized, file.absolutePath, file.length()))
                 }
@@ -206,9 +206,9 @@ object AimiUamHandler {
                 lastLoadOk = false
                 lastLoadError = e.message
                 //reason?.appendLine("❌ Échec chargement modèle: ${e.message}")
-                reason?.appendLine(context.getString(R.string.model_load_failed, e.message))
+                reason?.appendLine(context.getString(R.string.model_load_failed, e.message ?: "Unknown error"))
               //Log.e(TAG, "Failed to init UAM model: ${e.message}")
-                Log.e(TAG, context.getString(R.string.log_failed_init_uam, e.message))
+                Log.e(TAG, context.getString(R.string.log_failed_init_uam, e.message ?: "Unknown error"))
                 null
             }
         }
