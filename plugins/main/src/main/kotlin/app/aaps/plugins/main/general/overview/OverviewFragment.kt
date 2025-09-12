@@ -25,9 +25,11 @@ import androidx.core.text.toSpanned
 import androidx.recyclerview.widget.LinearLayoutManager
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.model.GlucoseUnit
+import app.aaps.core.data.model.TE
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
+import app.aaps.core.data.ue.ValueWithUnit
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.automation.Automation
@@ -111,6 +113,7 @@ import dagger.android.HasAndroidInjector
 import dagger.android.support.DaggerFragment
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.kotlin.plusAssign
+import org.json.JSONObject
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -187,7 +190,9 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
     @SuppressLint("SetTextI18n")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
+        mealModeButton.setOnClickListener {
+            MealModeDialog(this).show(childFragmentManager, "MealModeDialog")
+        }
         // pre-process landscape mode
         //check screen width
         val wm = requireActivity().windowManager.currentWindowMetrics
@@ -536,6 +541,31 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
                 }
             }
         }
+    }
+    private fun saveMealModeNote(mode: String, params: MealParameters?) {
+        val json = JSONObject().apply {
+            put("mode", mode)
+            params?.let {
+                put("maxTbr", it.maxTbr)
+                put("prebolus1", it.prebolus1)
+                put("prebolus2", it.prebolus2)
+                put("reactivity", it.reactivity)
+                put("smbInterval", it.smbInterval)
+            }
+        }
+
+        val event = TE(
+            timestamp = System.currentTimeMillis(),
+            type = TE.Type.NOTE
+        ).apply { note = json.toString() }
+
+        disposable += persistenceLayer.insertPumpTherapyEventIfNewByTimestamp(
+            therapyEvent = event,
+            action = Action.CAREPORTAL,
+            source = Sources.Note,
+            note = "MealMode",
+            listValues = listOf(ValueWithUnit.SimpleString(json.toString()))
+        ).subscribe()
     }
 
     @SuppressLint("SetTextI18n")
