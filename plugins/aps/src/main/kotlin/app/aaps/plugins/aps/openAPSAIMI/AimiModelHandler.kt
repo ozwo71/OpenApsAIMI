@@ -208,7 +208,7 @@ object AimiUamHandler {
                     lastLoadTime = System.currentTimeMillis()
                     lastModelPath = file.absolutePath
                     //reason?.appendLine("📦 Chargé ✓ : ${file.name} (${file.length()} B)")
-                    reason?.appendLine(context.getString(R.string.model_loaded, file.name, (file.length() / 1024).toString()))
+                    reason?.appendLine(context.getString(R.string.model_loaded, file.name, "%.1f".format(file.length().toDouble() / 1024)))
                   //Log.i(TAG, "Interpreter initialized from ${file.absolutePath} (${file.length()} bytes)")
                   //Log.i(TAG, context.getString(R.string.log_interpreter_initialized, file.absolutePath, file.length()))
                     val sizeKb = String.format("%.1f KB", file.length().toDouble() / 1024)
