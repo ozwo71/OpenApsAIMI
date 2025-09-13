@@ -585,6 +585,7 @@
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION AIMI MODEL HANDLER - FILE AimiModelHandler.kt -->
 
+    <string name="folder_documents">Dokumente</string>
     <string name="uam_model_status">📦 UAM model: %1$s (%2$s, %3$s)</string>
     <string name="sanitize_info">🧹 Sanitize: %1$d incomplete values -> 0</string>
     <string name="cache_hit">⚡ Cache HIT → %1$s U</string>
@@ -627,7 +628,7 @@
     <string name="pump_age_adjustment">Pump age (%1$.0f days): DIA increased by %2$.0f%%</string>
     <string name="final_dia_constrained">Final DIA constrained to [180, 720] min: %1$.0fmin</string>
     <string name="dia_calculation_details">DIA Calculation Details:</string>
-    <string name="peak_time">🕒 PeakTime=%1$s min | BG=%2$s Δ%3$s</string>
+    <string name="peak_time">  → 🕒 PeakTime=%1$s min | BG=%2$s Δ%3$s</string>
     <string name="steps"> | Steps=%1$d</string>
     <string name="heart_rate"> | HR=%1$s bpm</string>
     <string name="smb_disabled">SMB disabled (!microBolusAllowed)</string>

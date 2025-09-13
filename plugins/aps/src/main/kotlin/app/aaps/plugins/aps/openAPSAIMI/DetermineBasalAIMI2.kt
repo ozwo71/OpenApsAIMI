@@ -744,8 +744,8 @@ fun appendCompactLog(
     val deltaStr = "%.1f".format(delta)
     val peakStr = "%.1f".format(peakTime)
 
-//  reason.append("🕒 PeakTime=$peakStr min | BG=$bgStr Δ$deltaStr")
-    reason.append(context.getString(R.string.peak_time, "%.0f".format(peakTime), "%.0f".format(bg), "%.1f".format(delta)))
+//  reason.append("  → 🕒 PeakTime=$peakStr min | BG=$bgStr Δ$deltaStr")
+    reason.append(context.getString(R.string.peak_time, "%.0f".format(peakStr), "%.0f".format(bgStr), "%.1f".format(deltaStr)))
 //  stepCount?.let { reason.append(" | Steps=$it") }
     stepCount?.let { reason.append(context.getString(R.string.steps, it)) }
 //  heartRate?.let { reason.append(" | HR=$it bpm") }
@@ -2801,8 +2801,7 @@ private fun calculateDynamicPeakTime(
     // 🔚 Clamp entre 35 et 120
     val finalPeak = dynamicPeakTime.coerceIn(35.0, 120.0)
 //  reasonBuilder.append("  → Résultat PeakTime final : $finalPeak\n")
-  //reasonBuilder.append("  → Picco insulina finale : $finalPeak\n")
-    reasonBuilder.append("  → Picco insulina dinamico : ${"%.0f".format(finalPeak)}\n")
+    //reasonBuilder.append("  → Picco insulina dinamico : ${"%.0f".format(finalPeak)}\n")
     return finalPeak
 }
 

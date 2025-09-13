@@ -416,6 +416,8 @@
     <string name="table_plugin_miscellaneous_title">Miscellaneous</string>
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION AIMI MODEL HANDLER - FILE AimiModelHandler.kt -->
+
+    <string name="folder_documents">Documents</string>
     <string name="uam_model_status">📦 UAM model: %1$s (%2$s, %3$s)</string>
     <string name="sanitize_info">🧹 Sanitize: %1$d entrées non finies -> 0</string>
     <string name="cache_hit">⚡ Cache HIT → %1$s U</string>
@@ -460,7 +462,7 @@
     <string name="pump_age_adjustment">Âge de la pompe (%1$.0f jours) : DIA augmentée de %2$.0f%%</string>
     <string name="final_dia_constrained">DIA finale contrainte à [180, 720] min : %1$.0fmin</string>
     <string name="dia_calculation_details">Détails du calcul de la DIA :</string>
-    <string name="peak_time">🕒 Pic insuline=%1$s min | BG=%2$s Δ%3$s</string>
+    <string name="peak_time">  → 🕒 Pic insuline=%1$s min | BG=%2$s Δ%3$s</string>
     <string name="steps"> | Pas=%1$d</string>
     <string name="heart_rate"> | FC=%1$s bpm</string>
     <string name="smb_disabled">SMB désactivés (!microBolusAllowed)</string>
