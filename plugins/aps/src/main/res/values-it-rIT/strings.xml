@@ -662,7 +662,7 @@
     <string name="log_smb_cache_cleared">Cache SMB svuotata</string>
     <string name="log_tflite_failed">Esecuzione TFLite fallita: %1$s</string>
     <string name="log_model_file_not_found">File modello non trovato: %1$s</string>
-    <string name="log_interpreter_initialized">Interpreter inizializzato da %1$s (%2$d byte)</string>
+    <string name="log_interpreter_initialized">Interpreter inizializzato da %1$s (%2$s)</string>
     <string name="log_failed_init_uam">Fallita inizializzazione modello UAM: %1$s</string>
     <string name="log_error_closing_interpreter">Errore chiusura interpreter: %1$s</string>
 
@@ -693,16 +693,6 @@
     <string name="heart_rate"> | FC=%1$s bpm</string>
     <string name="smb_disabled">SMB disabilitati nelle impostazioni</string>
     <string name="smb_disabled_high_target">SMB disabilitati con target temporanei alti - impostato target temporaneo alto di %1$.0f</string>
-
-
-
-
-
-
-
-
-
-
 
 </resources>
 

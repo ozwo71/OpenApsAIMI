@@ -210,7 +210,9 @@ object AimiUamHandler {
                     //reason?.appendLine("📦 Chargé ✓ : ${file.name} (${file.length()} B)")
                     reason?.appendLine(context.getString(R.string.model_loaded, file.name, (file.length() / 1024).toString()))
                   //Log.i(TAG, "Interpreter initialized from ${file.absolutePath} (${file.length()} bytes)")
-                    Log.i(TAG, context.getString(R.string.log_interpreter_initialized, file.absolutePath, file.length()))
+                  //Log.i(TAG, context.getString(R.string.log_interpreter_initialized, file.absolutePath, file.length()))
+                    val sizeKb = String.format("%.2f KB", file.length().toDouble() / 1024)
+                    Log.i(TAG, context.getString(R.string.log_interpreter_initialized, file.absolutePath, sizeKb))
                 }
             } catch (e: Throwable) {
                 lastLoadOk = false

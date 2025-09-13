@@ -602,7 +602,7 @@
     <string name="log_smb_cache_cleared">SMB cache cleared</string>
     <string name="log_tflite_failed">TFLite run failed: %1$s</string>
     <string name="log_model_file_not_found">Model file not found: %1$s</string>
-    <string name="log_interpreter_initialized">Interpreter initialized from %1$s (%2$d bytes)</string>
+    <string name="log_interpreter_initialized">Interpreter initialized from %1$s (%2$s)</string>
     <string name="log_failed_init_uam">Failed to init UAM model: %1$s</string>
     <string name="log_error_closing_interpreter">Error closing interpreter: %1$s</string>
 
