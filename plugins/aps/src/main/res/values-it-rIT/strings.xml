@@ -665,7 +665,7 @@
     <string name="log_failed_init_uam">Fallita inizializzazione modello UAM: %1$s</string>
     <string name="log_error_closing_interpreter">Errore chiusura interpreter: %1$s</string>
 
-    <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE DeterminebasalAIMI.kt -->
+    <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - FILE DeterminebasalAIMI.kt -->
 
     <string name="bg_drop_high">BG calo elevato (%1$.1f mg/dL/h), forte riduzione;</string>
     <string name="bg_rapid_rise">Rapido aumento rilevato (delta %1$.0f mg/dL), applicazione modalità di emergenza; </string>
@@ -684,6 +684,23 @@
     <string name="physical_activity_detected">Attività fisica rilevata: DIA ridotta del 30%</string>
     <string name="high_hr_no_activity">FC alta no attività fisica (stress): DIA aumento del 30%</string>
     <string name="high_hr_over_130">FC alta (&gt;130bpm): DIA ridotta del 30%</string>
+    <string name="pump_age_adjustment">Età micro (%1$.0f giorni): DIA aumento del %2$.0f%%</string>
+    <string name="final_dia_constrained">DIA Finale compresa tra [180, 720] min: %1$.0fmin</string>
+    <string name="dia_calculation_details">DIA Calcolo Dettagli:</string>
+    <string name="peak_time">🕒 Picco insulina=%1$s min | BG=%2$s Δ%3$s</string>
+    <string name="steps"> | Passi %1$d</string>
+    <string name="heart_rate"> | FC=%1$s bpm</string>
+    <string name="smb_disabled">SMB disabilitati nelle impostazioni</string>
+    <string name="smb_disabled_high_target">SMB disabilitati con target temporanei alti - impostato target temporaneo alto di %1$.0f</string>
+
+
+
+
+
+
+
+
+
 
 
 </resources>

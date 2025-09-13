@@ -646,16 +646,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val ageMultiplier = 1 + 0.1f * extraDays  // 10% par jour supplémentaire
             diaMinutes *= ageMultiplier
           //reasonBuilder.append("Pump age (${pumpAgeDays} days): increased by ${extraDays * 10}%\n")
-            reasonBuilder.append("Età micro (${pumpAgeDays} giorni): DIA aumento del ${extraDays * 10}%\n")
+            reasonBuilder.append(context.getString(R.string.pump_age_adjustment, pumpAgeDays, extraDays * 10))
         }
 
         // 7. Contrainte de la plage finale : entre 180 min (3h) et 720 min (12h)
         val finalDiaMinutes = diaMinutes.coerceIn(180f, 720f)
       //reasonBuilder.append("Final DIA constrained to [180, 720] min: ${finalDiaMinutes}min")
-        reasonBuilder.append("DIA Finale compresa tra [180, 720] min: ${finalDiaMinutes}min")
+        reasonBuilder.append(context.getString(R.string.final_dia_constrained, finalDiaMinutes))
 
-      //println("DIA Calculation Details:")
-        println("DIA Calcolo Dettagli:")
+
+        //println("DIA Calculation Details:")
+        println(context.getString(R.string.dia_calculation_details))
         println(reasonBuilder.toString())
 
         return finalDiaMinutes.toDouble()
@@ -744,15 +745,11 @@ fun appendCompactLog(
     val peakStr = "%.1f".format(peakTime)
 
 //  reason.append("🕒 PeakTime=$peakStr min | BG=$bgStr Δ$deltaStr")
-//  reason.append("🕒 Picco Insulina Dinamico=$peakStr min | BG=$bgStr Δ$deltaStr")
-    reason.append("🕒 Picco Insulina Dinamico=${"%.0f".format(peakTime)} min | BG=${"%.0f".format(bg)} Δ$deltaStr")
-//    stepCount?.let { reason.append(" | Steps=$it") }
-    stepCount?.let { reason.append(" | Passi $it") }
-//   heartRate?.let { reason.append(" | HR=$it bpm") }
-  //heartRate?.let { reason.append(" | Freq.Card.=$it bpm") }
-  //heartRate?.let { reason.append(" | Freq.Card.=${"%.0f".format(it)} bpm") }
-  //heartRate?.let { reason.append(" | Freq.Card.=${"%.0f".format(if (it.isNaN()) 0.0 else it)} bpm") }
-    heartRate?.let { reason.append(" | Freq.Card. ${if (it.isNaN()) "--" else "%.0f".format(it)} bpm") }
+    reason.append(context.getString(R.string.peak_time, "%.0f".format(peakTime), "%.0f".format(bg), "%.1f".format(delta)))
+//  stepCount?.let { reason.append(" | Steps=$it") }
+    stepCount?.let { reason.append(context.getString(R.string.steps, it)) }
+//  heartRate?.let { reason.append(" | HR=$it bpm") }
+    heartRate?.let { reason.append(context.getString(R.string.heart_rate, if (it.isNaN()) "--" else "%.0f".format(it))) }
     reason.append("\n")
 }
     // Rounds value to 'digits' decimal places
@@ -771,7 +768,6 @@ fun appendCompactLog(
     }
     private fun calculateRate(basal: Double, currentBasal: Double, multiplier: Double, reason: String, currenttemp: CurrentTemp, rT: RT): Double {
         rT.reason.append("${currenttemp.duration}m@${(currenttemp.rate).toFixed2()} $reason")
-
         return if (basal == 0.0) currentBasal * multiplier else roundBasal(basal * multiplier)
     }
     private fun calculateBasalRate(basal: Double, currentBasal: Double, multiplier: Double): Double =
@@ -784,11 +780,11 @@ fun appendCompactLog(
         // disable SMB when a high temptarget is set
         if (!microBolusAllowed) {
           //consoleError.add("SMB disabled (!microBolusAllowed)")
-            consoleError.add("SMB disabilitati con target temporanei alti - preferenza disabilita")
+            consoleError.add(context.getString(R.string.smb_disabled))
             return false
         } else if (!profile.allowSMB_with_high_temptarget && profile.temptargetSet && targetbg > 100) {
           //consoleError.add("SMB disabled due to high temptarget of $targetbg")
-            consoleError.add("SMB disabilitati  con target temporanei alti - impostato target temporaneo alto di $targetbg")
+            consoleError.add(context.getString(R.string.smb_disabled_high_target, targetbg))
             return false
         }
 

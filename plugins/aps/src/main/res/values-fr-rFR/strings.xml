@@ -438,7 +438,7 @@
 
 
 
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION DeterminebasalAIMI.kt -->
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - FILE DeterminebasalAIMI.kt -->
 
     <string name="bg_drop_high">BG drop élevé (%1$.2f mg/dL/h), forte réduction; </string>
     <string name="bg_rapid_rise">Montée rapide détectée (delta %1$.2f mg/dL), application du mode d\'urgence; </string>
@@ -457,6 +457,22 @@
     <string name="physical_activity_detected">Activité physique détectée : DIA réduite de 30%</string>
     <string name="high_hr_no_activity">FC élevée sans activité physique (stress) : DIA augmentée de 30%</string>
     <string name="high_hr_over_130">FC élevée (&gt;130bpm) : DIA réduite de 30%</string>
+    <string name="pump_age_adjustment">Âge de la pompe (%1$.0f jours) : DIA augmentée de %2$.0f%%</string>
+    <string name="final_dia_constrained">DIA finale contrainte à [180, 720] min : %1$.0fmin</string>
+    <string name="dia_calculation_details">Détails du calcul de la DIA :</string>
+    <string name="peak_time">🕒 Pic insuline=%1$s min | BG=%2$s Δ%3$s</string>
+    <string name="steps"> | Pas=%1$d</string>
+    <string name="heart_rate"> | FC=%1$s bpm</string>
+    <string name="smb_disabled">SMB désactivés (!microBolusAllowed)</string>
+    <string name="smb_disabled_high_target">SMB désactivé en raison d\'un target temporaire élevé de %1$.0f</string>
+
+
+
+
+
+
+
+
 
 
 
