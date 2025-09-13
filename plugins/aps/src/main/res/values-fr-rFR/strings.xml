@@ -467,6 +467,12 @@
     <string name="heart_rate"> | FC=%1$s bpm</string>
     <string name="smb_disabled">SMB désactivés (!microBolusAllowed)</string>
     <string name="smb_disabled_high_target">SMB désactivé en raison d\'un target temporaire élevé de %1$.0f</string>
+    <string name="smb_enabled_always">SMB activés en permanence en raison de la préférence</string>
+    <string name="smb_enabled_for_cob">SMB activés pour COB de %1$.1f</string>
+    <string name="smb_enabled_after_carb_entry">SMB activés pendant 6h après saisie des glucides</string>
+    <string name="smb_enabled_for_temp_target">SMB activés pour la cible temporaire de %1$s</string>
+    <string name="smb_disabled_no_pref_or_condition">SMB désactivés (aucune préférence active ou aucune condition remplie)</string>
+
 
 
 

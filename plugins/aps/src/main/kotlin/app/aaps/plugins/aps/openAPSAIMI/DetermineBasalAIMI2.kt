@@ -791,15 +791,14 @@ fun appendCompactLog(
         // enable SMB/UAM if always-on (unless previously disabled for high temptarget)
         if (profile.enableSMB_always) {
           //consoleError.add("SMB enabled due to enableSMB_always")
-            consoleError.add("SMB abilitati SEMPRE causa preferenza")
-
+            consoleError.add(context.getString(R.string.smb_enabled_always))
             return true
         }
 
         // enable SMB/UAM (if enabled in preferences) while we have COB
         if (profile.enableSMB_with_COB && mealData.mealCOB != 0.0) {
           //consoleError.add("SMB enabled for COB of ${mealData.mealCOB}")
-            consoleError.add("SMB abilitati con CHO di ${mealData.mealCOB}")
+            consoleError.add(context.getString(R.string.smb_enabled_for_cob, mealData.mealCOB))
             return true
         }
 
@@ -807,19 +806,19 @@ fun appendCompactLog(
         // (6 hours is defined in carbWindow in lib/meal/total.js)
         if (profile.enableSMB_after_carbs && mealData.carbs != 0.0) {
           //consoleError.add("SMB enabled for 6h after carb entry")
-            consoleError.add("SMB abilitati 6h dopo inserimento CHO.")
+            consoleError.add(context.getString(R.string.smb_enabled_after_carb_entry))
             return true
         }
 
         // enable SMB/UAM (if enabled in preferences) if a low temptarget is set
         if (profile.enableSMB_with_temptarget && (profile.temptargetSet && targetbg < 100)) {
           //consoleError.add("SMB enabled for temptarget of ${convertBG(targetbg)}")
-            consoleError.add("SMB abilitati per target temporaneo di ${convertBG(targetbg)}")
+            consoleError.add(context.getString(R.string.smb_enabled_for_temp_target, convertBG(targetbg)))
             return true
         }
 
       //consoleError.add("SMB disabled (no enableSMB preferences active or no condition satisfied)")
-        consoleError.add("SMB disabilitati (preferenza disabilitata o nessuna condizione soddisfatta)")
+        consoleError.add(context.getString(R.string.smb_disabled_no_pref_or_condition))
         return false
     }
 
