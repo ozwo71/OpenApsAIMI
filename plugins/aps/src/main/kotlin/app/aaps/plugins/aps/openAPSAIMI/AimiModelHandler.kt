@@ -57,12 +57,22 @@ object AimiUamHandler {
     fun getInstance(): AimiUamHandler = this
 
     /** Ligne de statut prête à logguer dans rT.reason */
-    fun statusLine(context: Context): String {
-        val path = lastModelPath ?: modelUamFile.absolutePath
-        val flag = if (lastLoadOk) "✅" else "❌"
-        val size = if (modelUamFile.exists()) "${modelUamFile.length()} B" else "missing"
-      //return "📦 UAM model: $flag ($path, $size)"
-        return context.getString(R.string.uam_model_status, flag, path, size)
+                                 fun statusLine(context: Context): String {
+
+                                     val path = lastModelPath ?: modelUamFile.absolutePath
+                                     val documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).absolutePath
+                                     val documentsFolderName = context.getString(R.string.folder_documents)
+                                     val relativePath = if (path.startsWith(documentsDir)) {
+                                         documentsFolderName  + path.removePrefix(documentsDir)
+                                     } else {
+                                        path
+                                     }
+                                     val flag = if (lastLoadOk) "✅" else "❌"
+                                     //val size = if (modelUamFile.exists()) "${modelUamFile.length()} B" else "missing"
+                                     val size = if (modelUamFile.exists()) String.format("%.2f KB", modelUamFile.length().toDouble() / 1024) else "missing"
+                                     //return "📦 UAM model: $flag ($path, $size)"
+                                     return context.getString(R.string.uam_model_status, flag, relativePath, size)
+
     }
 
     /** Ajoute la ligne de statut dans un StringBuilder (ex: rT.reason) */
@@ -200,7 +210,9 @@ object AimiUamHandler {
                     //reason?.appendLine("📦 Chargé ✓ : ${file.name} (${file.length()} B)")
                     reason?.appendLine(context.getString(R.string.model_loaded, file.name, (file.length() / 1024).toString()))
                   //Log.i(TAG, "Interpreter initialized from ${file.absolutePath} (${file.length()} bytes)")
-                    Log.i(TAG, context.getString(R.string.log_interpreter_initialized, file.absolutePath, file.length()))
+                  //Log.i(TAG, context.getString(R.string.log_interpreter_initialized, file.absolutePath, file.length()))
+                    val sizeKb = String.format("%.2f KB", file.length().toDouble() / 1024)
+                    Log.i(TAG, context.getString(R.string.log_interpreter_initialized, file.absolutePath, sizeKb))
                 }
             } catch (e: Throwable) {
                 lastLoadOk = false
