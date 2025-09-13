@@ -69,7 +69,7 @@ object AimiUamHandler {
                                      }
                                      val flag = if (lastLoadOk) "✅" else "❌"
                                      //val size = if (modelUamFile.exists()) "${modelUamFile.length()} B" else "missing"
-                                     val size = if (modelUamFile.exists()) String.format("%.2f KB", modelUamFile.length().toDouble() / 1024) else "missing"
+                                     val size = if (modelUamFile.exists()) String.format("%.1f KB", modelUamFile.length().toDouble() / 1024) else "missing"
                                      //return "📦 UAM model: $flag ($path, $size)"
                                      return context.getString(R.string.uam_model_status, flag, relativePath, size)
 
@@ -211,7 +211,7 @@ object AimiUamHandler {
                     reason?.appendLine(context.getString(R.string.model_loaded, file.name, (file.length() / 1024).toString()))
                   //Log.i(TAG, "Interpreter initialized from ${file.absolutePath} (${file.length()} bytes)")
                   //Log.i(TAG, context.getString(R.string.log_interpreter_initialized, file.absolutePath, file.length()))
-                    val sizeKb = String.format("%.2f KB", file.length().toDouble() / 1024)
+                    val sizeKb = String.format("%.1f KB", file.length().toDouble() / 1024)
                     Log.i(TAG, context.getString(R.string.log_interpreter_initialized, file.absolutePath, sizeKb))
                 }
             } catch (e: Throwable) {
