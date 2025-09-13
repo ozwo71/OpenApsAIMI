@@ -134,8 +134,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var decceleratingDown: Int = 0
     private var stable: Int = 0
     private var maxIob = 0.0
-    private var maxSMB = 1.0
-    private var maxSMBHB = 1.0
+    private var maxSMB = 0.5
+    private var maxSMBHB = 0.5
     private var lastBolusSMBUnit = 0.0f
     private var tdd7DaysPerHour = 0.0f
     private var tdd2DaysPerHour = 0.0f
@@ -745,7 +745,6 @@ fun appendCompactLog(
     val peakStr = "%.1f".format(peakTime)
 
 //  reason.append("  → 🕒 PeakTime=$peakStr min | BG=$bgStr Δ$deltaStr")
-  //reason.append(context.getString(R.string.peak_time, "%.0f".format(peakStr), "%.0f".format(bgStr), "%.1f".format(deltaStr)))
     reason.append(context.getString(R.string.peak_time, peakStr, bgStr, deltaStr))
 //  stepCount?.let { reason.append(" | Steps=$it") }
     stepCount?.let { reason.append(context.getString(R.string.steps, it)) }
@@ -2915,7 +2914,7 @@ private fun calculateDynamicPeakTime(
 
         this.maxIob = if (autodrive) DinMaxIob.toDouble() else maxIob
       //rT.reason.append(", MaxIob: $maxIob")
-        rT.reason.append(", MaxIob: %.2f".format(maxIob))
+        rT.reason.append("MaxIob: %.2f".format(maxIob))
         this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
         this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
         // Calcul initial avec ajustement basé sur la glycémie et le delta
@@ -3115,7 +3114,7 @@ private fun calculateDynamicPeakTime(
             return rT
         }
       //rT.reason.append(", MaxSMB: $maxSMB")
-        rT.reason.append(", MaxSMB: %.0f".format(maxSMB))
+        rT.reason.append(", MaxSMB: %.1f".format(maxSMB))
         var nowMinutes = calendarInstance[Calendar.HOUR_OF_DAY] + calendarInstance[Calendar.MINUTE] / 60.0 + calendarInstance[Calendar.SECOND] / 3600.0
         nowMinutes = (kotlin.math.round(nowMinutes * 100) / 100)  // Arrondi à 2 décimales
         val circadianSensitivity = (0.00000379 * nowMinutes.pow(5)) -
