@@ -843,7 +843,7 @@ fun appendCompactLog(
         val bgNow = bg
         if (bgNow <= hypoGuard) {
           //rT.reason.append("🛑 LGS: BG=${"%.0f".format(bgNow)} ≤ ${"%.0f".format(hypoGuard)} → TBR 0U/h (30m)\n")
-            rT.reason.append("🛑 Sospensione Glucosio Basso (LGS) : BG=${"%.0f".format(bgNow)} ≤ ${"%.0f".format(hypoGuard)} → TBR 0U/h (30m)\n")
+            rT.reason.append(context.getString(R.string.lgs_triggered, "%.0f".format(bgNow), "%.0f".format(hypoGuard)))
             rT.duration = maxOf(duration, 30)
             rT.rate = 0.0
             return rT
@@ -864,9 +864,9 @@ fun appendCompactLog(
             val safeRate = if (bgNow <= hypoGuard) 0.0 else _rate.coerceIn(0.0, profile.max_basal)
 
 //          rT.reason.append("⚠️ Données BG insuffisantes ou invalides → fallback\n")
-            rT.reason.append("⚠️ Dati BG insufficienti o invalidi → fallback\n")
+            rT.reason.append(context.getString(R.string.bg_insufficient_fallback))
 //          rT.reason.append("Pose temp à ${"%.2f".format(safeRate)} U/h pour $duration minutes.\n")
-            rT.reason.append("Basale temporanea ${"%.2f".format(safeRate)} U/h per $duration minuti.\n")
+            rT.reason.append(context.getString(R.string.temp_basal_info, "%.2f".format(safeRate), duration))
             rT.duration = duration
             rT.rate = safeRate
             return rT
@@ -909,11 +909,11 @@ fun appendCompactLog(
         // 9️⃣ Logging
         when {
           //bgNow <= hypoGuard -> rT.reason.append("🛑 LGS override → TBR 0U/h\n")
-            bgNow <= hypoGuard -> rT.reason.append("🛑 Sospensione Glucosio Basso (LGS) override → TBR 0U/h\n")
+            bgNow <= hypoGuard -> rT.reason.append(context.getString(R.string.lgs_override))
 //          bypassSafety       -> rT.reason.append("→ bypass sécurité${if (isMealMode) " (meal mode)" else if (isEarlyAutodrive) " (early autodrive)" else ""}\n")
-            bypassSafety       -> rT.reason.append("→ bypass sicurezza${if (isMealMode) " (modalità pasto)" else if (isEarlyAutodrive) " (early autodrive)" else ""}\n")
+            bypassSafety       -> rT.reason.append(context.getString(R.string.bypass_safety, if (isMealMode) context.getString(R.string.meal_mode) else if (isEarlyAutodrive) context.getString(R.string.early_autodrive) else ""))
 //          rate != _rate      -> rT.reason.append("→ rate adjusted based on BG trend\n")
-            rate != _rate      -> rT.reason.append("→ tasso basale aggiustato in base al trend BG\n")
+            rate != _rate      -> rT.reason.append(context.getString(R.string.rate_adjusted_bg_trend))
         }
 
         // 🔟 Pose

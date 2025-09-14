@@ -472,6 +472,17 @@
     <string name="smb_enabled_after_carb_entry">SMB activés pendant 6h après saisie des glucides</string>
     <string name="smb_enabled_for_temp_target">SMB activés pour la cible temporaire de %1$s</string>
     <string name="smb_disabled_no_pref_or_condition">SMB désactivés (aucune préférence active ou aucune condition remplie)</string>
+    <string name="lgs_triggered">🛑 Arrêt Glycémie Basse (LGS) : BG=%1$s ≤ %2$s → TBR 0U/h (30m)\n</string>
+    <string name="bg_insufficient_fallback">⚠️ Données BG insuffisantes ou invalides → fallback\n</string>
+    <string name="temp_basal_info">Pose temp à %1$s U/h pour %2$d minutes\n</string>
+    <string name="lgs_override">🛑 Arrêt Glycémie Basse (LGS) override → TBR 0U/h\n</string>
+    <string name="bypass_safety">→ contournement sécurité%1$s\n</string>
+    <string name="meal_mode"> (mode repas)</string>
+    <string name="early_autodrive"> (early autodrive)</string>
+    <string name="rate_adjusted_bg_trend">→ taux basal ajusté selon la tendance BG\n</string>
+
+
+
 
 
 
