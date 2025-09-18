@@ -863,12 +863,15 @@ fun appendCompactLog(
         )
 
         // 8️⃣ Choix du rate effectif
-        val rate = when {
+        var rate = when {
             bgNow <= hypoGuard -> 0.0
             bypassSafety       -> rateAdjustment
             else               -> rateAdjustment.coerceIn(0.0, maxSafe)
         }
-
+        // ♀️ Ajustement cycle sur la basale (si activé)
+        if (bgNow > hypoGuard) { // on n'applique pas en LGS
+            rate = applyWCycleOnBasal(rate, bypassSafety, maxSafe, profile, rT)
+        }
         // 9️⃣ Logging
         when {
             bgNow <= hypoGuard -> rT.reason.append("🛑 LGS override → TBR 0U/h\n")
@@ -1037,7 +1040,8 @@ fun appendCompactLog(
             reason?.appendLine("🏃‍♂️ Safety sport → SMB=0")
             return 0f
         }
-
+        // ♀️ Ajustement cycle sur SMB (Ovulation: -, Lutéale: +5%, etc.)
+        smbToGive = applyWCycleOnSmb(smbToGive, reason)
         // Ajustements spécifiques
         val beforeAdj = smbToGive
         smbToGive = applySpecificAdjustments(smbToGive)
@@ -2500,85 +2504,119 @@ fun appendCompactLog(
             .replace("and", " ")
             .replace("\\s+", " ")
     }
-//    private fun calculateDynamicPeakTime(
-//     currentActivity: Double,
-//     futureActivity: Double,
-//     sensorLagActivity: Double,
-//     historicActivity: Double,
-//     profile: OapsProfileAimi,
-//     stepCount: Int? = null, // Nombre de pas
-//     heartRate: Int? = null, // Rythme cardiaque
-//     bg: Double,             // Glycémie actuelle
-//     delta: Double           // Variation glycémique
-// ): Double {
-//     val reasonBuilder = StringBuilder()
-//     var dynamicPeakTime = profile.peakTime
-//     val activityRatio = futureActivity / (currentActivity + 0.0001)
-//
-//        // Calcul d'un facteur de correction hyperglycémique de façon continue
-//        val hyperCorrectionFactor = when {
-//            bg <= 130 || delta <= 4 -> 1.0
-//            bg in 130.0..240.0 -> {
-//                // Le multiplicateur passe de 0.6 à 0.3 quand bg évolue de 130 à 240
-//                0.6 - (bg - 130) * (0.6 - 0.3) / (240 - 130)
-//            }
-//            else -> 0.3
-//        }
-//        dynamicPeakTime *= hyperCorrectionFactor
-//
-//     // 2️⃣ **Ajustement basé sur l'IOB (currentActivity)**
-//     if (currentActivity > 0.1) {
-//         dynamicPeakTime += currentActivity * 20 + 5 // Ajuster proportionnellement à l'activité
-//     }
-//
-//     // 3️⃣ **Ajustement basé sur le ratio d'activité**
-//     dynamicPeakTime *= when {
-//         activityRatio > 1.5 -> 0.5 + (activityRatio - 1.5) * 0.05
-//         activityRatio < 0.5 -> 1.5 + (0.5 - activityRatio) * 0.05
-//         else -> 1.0
-//     }
-//
-//     // 4️⃣ **Ajustement basé sur le nombre de pas**
-//     stepCount?.let {
-//         if (it > 500) {
-//             dynamicPeakTime += it * 0.015 // Ajustement proportionnel plus agressif
-//         } else if (it < 100) {
-//             dynamicPeakTime *= 0.9 // Réduction du peakTime si peu de mouvement
-//         }
-//     }
-//
-//     // 5️⃣ **Ajustement basé sur le rythme cardiaque**
-//     heartRate?.let {
-//         if (it > 110) {
-//             dynamicPeakTime *= 1.15 // Augmenter le peakTime de 15% si FC élevée
-//         } else if (it < 55) {
-//             dynamicPeakTime *= 0.85 // Réduire le peakTime de 15% si FC basse
-//         }
-//     }
-//
-//     // 6️⃣ **Corrélation entre pas et rythme cardiaque**
-//     if (stepCount != null && heartRate != null) {
-//         if (stepCount > 1000 && heartRate > 110) {
-//             dynamicPeakTime *= 1.2 // Augmenter peakTime si activité intense
-//         } else if (stepCount < 200 && heartRate < 50) {
-//             dynamicPeakTime *= 0.75 // Réduction plus forte si repos total
-//         }
-//     }
-//
-//     this.peakintermediaire = dynamicPeakTime
-//
-//     // 7️⃣ **Ajustement basé sur le retard capteur (sensor lag) et historique**
-//     if (dynamicPeakTime > 40) {
-//         if (sensorLagActivity > historicActivity) {
-//             dynamicPeakTime *= 0.85
-//         } else if (sensorLagActivity < historicActivity) {
-//             dynamicPeakTime *= 1.2
-//         }
-//     }
-//        reasonBuilder.append("Dynamic Peak Time : $dynamicPeakTime")
-//     // 🔥 **Limiter le peakTime à des valeurs réalistes (35-120 min)**
-//     return dynamicPeakTime.coerceIn(35.0, 120.0)
-// }
+    // --- Cycle féminin : phases et multiplicateurs ---
+    private enum class CyclePhase { MENSTRUATION, FOLLICULAR, OVULATION, LUTEAL, UNKNOWN }
+
+    private data class WCycleInfo(
+        val dayInCycle: Int,                 // 0..27
+        val phase: CyclePhase,
+        val basalMultiplier: Double,         // multiplicateur pour TBR
+        val smbMultiplier: Double,           // multiplicateur pour SMB
+        val log: String
+    )
+
+    /**
+     * Calcule la phase courante sur un cycle fixe de 28 jours à partir du "jour du mois"
+     * saisi par l'utilisatrice (ex: 18 = 18 du mois courant). Gère le changement de mois.
+     *
+     * Les % sont lus dans Preferences :
+     *  - OApsAIMIwcyclemenstruation : -5 à -10 % (basal)
+     *  - OApsAIMIwcycleovulation    : -2 à -3 % (SMB)
+     *  - OApsAIMIwcycleluteal       : +8 à +15 % (basal)
+     *
+     * Recommandation tableau : en phase lutéale on ajoute aussi +5% au bolus → SMB ×1.05.
+     */
+    private fun computeCurrentWCycleInfo(nowDate: LocalDate = LocalDate.now()): WCycleInfo {
+        val enabled = preferences.get(BooleanKey.OApsAIMIwcycle)
+        if (!enabled) return WCycleInfo(0, CyclePhase.UNKNOWN, 1.0, 1.0, "♀️ WCycle OFF")
+
+        val startDomPref = preferences.get(DoubleKey.OApsAIMIwcycledateday).toInt()
+        if (startDomPref !in 1..31) return WCycleInfo(0, CyclePhase.UNKNOWN, 1.0, 1.0, "♀️ WCycle invalid day")
+
+        // Détermine la date du dernier début de règles (jour du mois) ≤ aujourd’hui,
+        // sinon on recule d’un mois.
+        val thisMonthStartDom = startDomPref.coerceAtMost(nowDate.lengthOfMonth())
+        val candidateThisMonth = nowDate.withDayOfMonth(thisMonthStartDom)
+        val cycleStart = if (!candidateThisMonth.isAfter(nowDate)) {
+            candidateThisMonth
+        } else {
+            val prev = nowDate.minusMonths(1)
+            prev.withDayOfMonth(startDomPref.coerceAtMost(prev.lengthOfMonth()))
+        }
+
+        // Jour dans le cycle (0..27)
+        val days = java.time.temporal.ChronoUnit.DAYS.between(cycleStart, nowDate).toInt()
+        val dayInCycle = ((days % 28) + 28) % 28
+
+        // Récup des pourcentages
+        val pctMen = preferences.get(DoubleKey.OApsAIMIwcyclemenstruation)    // ex: -5
+        val pctOvu = preferences.get(DoubleKey.OApsAIMIwcycleovulation)       // ex: -2
+        val pctLut = preferences.get(DoubleKey.OApsAIMIwcycleluteal)          // ex: +10
+
+        // Phase selon 28j
+        val phase = when (dayInCycle) {
+            in 0..4   -> CyclePhase.MENSTRUATION   // J1..J5
+            in 5..12  -> CyclePhase.FOLLICULAR     // J6..J13
+            in 13..15 -> CyclePhase.OVULATION      // J14..J16
+            in 16..27 -> CyclePhase.LUTEAL         // J17..J28
+            else      -> CyclePhase.UNKNOWN
+        }
+
+        var basalMul = 1.0
+        var smbMul   = 1.0
+        val sb = StringBuilder("♀️ Day ${dayInCycle + 1}/28 • ")
+
+        when (phase) {
+            CyclePhase.MENSTRUATION -> {
+                basalMul *= (1.0 + pctMen / 100.0)                      // basal -5..-10%
+                sb.append("Menstruation: basal ${pctMen}% ")
+            }
+            CyclePhase.FOLLICULAR -> {
+                sb.append("Follicular: neutral ")
+            }
+            CyclePhase.OVULATION -> {
+                smbMul   *= (1.0 + pctOvu / 100.0)                      // SMB -2..-3%
+                sb.append("Ovulation: SMB ${pctOvu}% ")
+            }
+            CyclePhase.LUTEAL -> {
+                basalMul *= (1.0 + pctLut / 100.0)                      // basal +8..+15%
+                smbMul   *= 1.05                                       // +5% SMB (reco tableau)
+                sb.append("Luteal: basal ${pctLut}%, SMB +5% ")
+            }
+            CyclePhase.UNKNOWN -> sb.append("Unknown")
+        }
+
+        // Garde-fous
+        basalMul = basalMul.coerceIn(0.7, 1.5)
+        smbMul   = smbMul.coerceIn(0.7, 1.5)
+
+        return WCycleInfo(dayInCycle, phase, basalMul, smbMul, sb.toString())
+    }
+
+    /** Applique le multiplicateur basal du cycle et journalise. */
+    private fun applyWCycleOnBasal(
+        rate: Double,
+        bypassSafety: Boolean,
+        maxSafe: Double,
+        profile: OapsProfileAimi,
+        rT: RT
+    ): Double {
+        val info = computeCurrentWCycleInfo()
+        if (info.basalMultiplier == 1.0) return rate
+        val limit = if (bypassSafety) profile.max_basal else maxSafe
+        val adjusted = (rate * info.basalMultiplier).coerceIn(0.0, limit)
+        rT.reason.append("${info.log}• Basal×${"%.2f".format(info.basalMultiplier)}. ")
+        return adjusted
+    }
+
+    /** Applique le multiplicateur SMB du cycle et journalise (si reason != null). */
+    private fun applyWCycleOnSmb(smb: Float, reason: StringBuilder?): Float {
+        val info = computeCurrentWCycleInfo()
+        if (info.smbMultiplier == 1.0) return smb
+        reason?.append("${info.log}• SMB×${"%.2f".format(info.smbMultiplier)}. ")
+        return (smb * info.smbMultiplier.toFloat()).coerceAtLeast(0f)
+    }
+
 private fun calculateDynamicPeakTime(
     currentActivity: Double,
     futureActivity: Double,
