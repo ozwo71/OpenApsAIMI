@@ -440,8 +440,8 @@
     <string name="table_plugin_heart_title">Heart Rate Data</string>
     <string name="table_plugin_manual_modes_title">Modes</string>
     <string name="table_plugin_miscellaneous_title">Miscellaneous</string>
-    <string name="wcycle_preferences">Women Cycle settings</string>
-    <string name="wcycle_preferences_title_menu">Women Cycle settings</string>
+    <string name="wcycle_preferences">Menstrual Cycle Adjustments</string>
+    <string name="wcycle_preferences_title_menu">Menstrual Cycle Adjustments</string>
     <string name="oaps_aimi_enablewcycle_title">Enable women cycle</string>
     <string name="wcycledateday_summary">Write only the first day of the periode, format dd</string>
     <string name="wcycledateday_title">First day of periode</string>
