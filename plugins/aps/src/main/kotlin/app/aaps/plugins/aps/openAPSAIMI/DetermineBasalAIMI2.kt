@@ -2504,6 +2504,16 @@ fun appendCompactLog(
             .replace("and", " ")
             .replace("\\s+", " ")
     }
+    /** Log cycle : affiche dans reason et dans le consoleLog (colon). */
+    private fun logWCycle(reason: StringBuilder?, msg: String) {
+        reason?.append(msg)
+        consoleLog.add(msg.replace("\n", "")) // colon : on évite les retours à la ligne
+    }
+
+    /** Format commun basique pour les multiplicateurs afin de ne pas spammer. */
+    private fun fmtMul(tag: String, mul: Double): String =
+        "$tag×${"%.2f".format(mul)}"
+
     // --- Cycle féminin : phases et multiplicateurs ---
     private enum class CyclePhase { MENSTRUATION, FOLLICULAR, OVULATION, LUTEAL, UNKNOWN }
 
@@ -2593,7 +2603,7 @@ fun appendCompactLog(
         return WCycleInfo(dayInCycle, phase, basalMul, smbMul, sb.toString())
     }
 
-    /** Applique le multiplicateur basal du cycle et journalise. */
+    /** Applique le multiplicateur basal du cycle et journalise (reason + colon). */
     private fun applyWCycleOnBasal(
         rate: Double,
         bypassSafety: Boolean,
@@ -2602,22 +2612,33 @@ fun appendCompactLog(
         rT: RT
     ): Double {
         val info = computeCurrentWCycleInfo()
-        if (info.basalMultiplier == 1.0) return rate
+        if (info.basalMultiplier == 1.0) {
+            logWCycle(rT.reason, "♀️ Cycle actif (pas d’ajustement basal).\n")
+            return rate
+        }
         val limit = if (bypassSafety) profile.max_basal else maxSafe
         val adjusted = (rate * info.basalMultiplier).coerceIn(0.0, limit)
-        rT.reason.append("${info.log}• Basal×${"%.2f".format(info.basalMultiplier)}. ")
+
+        val line = "♀️⚡ ${info.log} ${fmtMul("Basal", info.basalMultiplier)} → ${"%.2f".format(adjusted)} U/h\n"
+        logWCycle(rT.reason, line)
         return adjusted
     }
 
-    /** Applique le multiplicateur SMB du cycle et journalise (si reason != null). */
+
+    /** Applique le multiplicateur SMB du cycle et journalise (reason + colon). */
     private fun applyWCycleOnSmb(smb: Float, reason: StringBuilder?): Float {
         val info = computeCurrentWCycleInfo()
-        if (info.smbMultiplier == 1.0) return smb
-        reason?.append("${info.log}• SMB×${"%.2f".format(info.smbMultiplier)}. ")
-        return (smb * info.smbMultiplier.toFloat()).coerceAtLeast(0f)
+        if (info.smbMultiplier == 1.0f.toDouble()) {
+            logWCycle(reason, "♀️ Cycle actif (pas d’ajustement SMB).\n")
+            return smb
+        }
+        val out = (smb * info.smbMultiplier.toFloat()).coerceAtLeast(0f)
+        val line = "♀️⚡ ${info.log} ${fmtMul("SMB", info.smbMultiplier)} → ${"%.2f".format(out)} U\n"
+        logWCycle(reason, line)
+        return out
     }
 
-private fun calculateDynamicPeakTime(
+    private fun calculateDynamicPeakTime(
     currentActivity: Double,
     futureActivity: Double,
     sensorLagActivity: Double,
