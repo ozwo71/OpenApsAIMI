@@ -2518,6 +2518,7 @@ fun appendCompactLog(
     private enum class CyclePhase { MENSTRUATION, FOLLICULAR, OVULATION, LUTEAL, UNKNOWN }
 
     private data class WCycleInfo(
+        val enabled: Boolean,
         val dayInCycle: Int,                 // 0..27
         val phase: CyclePhase,
         val basalMultiplier: Double,         // multiplicateur pour TBR
@@ -2538,13 +2539,29 @@ fun appendCompactLog(
      */
     private fun computeCurrentWCycleInfo(nowDate: LocalDate = LocalDate.now()): WCycleInfo {
         val enabled = preferences.get(BooleanKey.OApsAIMIwcycle)
-        if (!enabled) return WCycleInfo(0, CyclePhase.UNKNOWN, 1.0, 1.0, "♀️ WCycle OFF")
+        if (!enabled) {
+            return WCycleInfo(
+                enabled = false,
+                dayInCycle = 0,
+                phase = CyclePhase.UNKNOWN,
+                basalMultiplier = 1.0,
+                smbMultiplier = 1.0,
+                log = "" // ✅ pas de texte => aucun log
+            )
+        }
 
         val startDomPref = preferences.get(DoubleKey.OApsAIMIwcycledateday).toInt()
-        if (startDomPref !in 1..31) return WCycleInfo(0, CyclePhase.UNKNOWN, 1.0, 1.0, "♀️ WCycle invalid day")
+        if (startDomPref !in 1..31) {
+            return WCycleInfo(
+                enabled = true,
+                dayInCycle = 0,
+                phase = CyclePhase.UNKNOWN,
+                basalMultiplier = 1.0,
+                smbMultiplier = 1.0,
+                log = "♀️ WCycle: invalid day"
+            )
+        }
 
-        // Détermine la date du dernier début de règles (jour du mois) ≤ aujourd’hui,
-        // sinon on recule d’un mois.
         val thisMonthStartDom = startDomPref.coerceAtMost(nowDate.lengthOfMonth())
         val candidateThisMonth = nowDate.withDayOfMonth(thisMonthStartDom)
         val cycleStart = if (!candidateThisMonth.isAfter(nowDate)) {
@@ -2554,21 +2571,18 @@ fun appendCompactLog(
             prev.withDayOfMonth(startDomPref.coerceAtMost(prev.lengthOfMonth()))
         }
 
-        // Jour dans le cycle (0..27)
         val days = java.time.temporal.ChronoUnit.DAYS.between(cycleStart, nowDate).toInt()
         val dayInCycle = ((days % 28) + 28) % 28
 
-        // Récup des pourcentages
-        val pctMen = preferences.get(DoubleKey.OApsAIMIwcyclemenstruation)    // ex: -5
-        val pctOvu = preferences.get(DoubleKey.OApsAIMIwcycleovulation)       // ex: -2
-        val pctLut = preferences.get(DoubleKey.OApsAIMIwcycleluteal)          // ex: +10
+        val pctMen = preferences.get(DoubleKey.OApsAIMIwcyclemenstruation)    // ex: -5 .. +30
+        val pctOvu = preferences.get(DoubleKey.OApsAIMIwcycleovulation)       // ex: -3 .. +30
+        val pctLut = preferences.get(DoubleKey.OApsAIMIwcycleluteal)          // ex: +12 .. +30
 
-        // Phase selon 28j
         val phase = when (dayInCycle) {
-            in 0..4   -> CyclePhase.MENSTRUATION   // J1..J5
-            in 5..12  -> CyclePhase.FOLLICULAR     // J6..J13
-            in 13..15 -> CyclePhase.OVULATION      // J14..J16
-            in 16..27 -> CyclePhase.LUTEAL         // J17..J28
+            in 0..4   -> CyclePhase.MENSTRUATION
+            in 5..12  -> CyclePhase.FOLLICULAR
+            in 13..15 -> CyclePhase.OVULATION
+            in 16..27 -> CyclePhase.LUTEAL
             else      -> CyclePhase.UNKNOWN
         }
 
@@ -2578,29 +2592,36 @@ fun appendCompactLog(
 
         when (phase) {
             CyclePhase.MENSTRUATION -> {
-                basalMul *= (1.0 + pctMen / 100.0)                      // basal -5..-10%
+                basalMul *= (1.0 + pctMen / 100.0)
                 sb.append("Menstruation: basal ${pctMen}% ")
             }
             CyclePhase.FOLLICULAR -> {
                 sb.append("Follicular: neutral ")
             }
             CyclePhase.OVULATION -> {
-                smbMul   *= (1.0 + pctOvu / 100.0)                      // SMB -2..-3%
+                smbMul   *= (1.0 + pctOvu / 100.0)
                 sb.append("Ovulation: SMB ${pctOvu}% ")
             }
             CyclePhase.LUTEAL -> {
-                basalMul *= (1.0 + pctLut / 100.0)                      // basal +8..+15%
-                smbMul   *= 1.05                                       // +5% SMB (reco tableau)
+                basalMul *= (1.0 + pctLut / 100.0)
+                smbMul   *= 1.05 // conserve la reco +5% (restera borné)
                 sb.append("Luteal: basal ${pctLut}%, SMB +5% ")
             }
             CyclePhase.UNKNOWN -> sb.append("Unknown")
         }
 
-        // Garde-fous
-        basalMul = basalMul.coerceIn(0.7, 1.5)
-        smbMul   = smbMul.coerceIn(0.7, 1.5)
+        // Bornes ±30%
+        basalMul = basalMul.coerceIn(0.7, 1.3)
+        smbMul   = smbMul.coerceIn(0.7, 1.3)
 
-        return WCycleInfo(dayInCycle, phase, basalMul, smbMul, sb.toString())
+        return WCycleInfo(
+            enabled = true,
+            dayInCycle = dayInCycle,
+            phase = phase,
+            basalMultiplier = basalMul,
+            smbMultiplier = smbMul,
+            log = sb.toString()
+        )
     }
 
     /** Applique le multiplicateur basal du cycle et journalise (reason + colon). */
@@ -2612,14 +2633,13 @@ fun appendCompactLog(
         rT: RT
     ): Double {
         val info = computeCurrentWCycleInfo()
-        if (info.basalMultiplier == 1.0) {
-            logWCycle(rT.reason, "♀️ Cycle actif (pas d’ajustement basal).\n")
-            return rate
-        }
+        if (!info.enabled) return rate                // ✅ option OFF → silence total
+        if (info.basalMultiplier == 1.0) return rate  // neutre → pas de log pour éviter le bruit
+
         val limit = if (bypassSafety) profile.max_basal else maxSafe
         val adjusted = (rate * info.basalMultiplier).coerceIn(0.0, limit)
 
-        val line = "♀️⚡ ${info.log} ${fmtMul("Basal", info.basalMultiplier)} → ${"%.2f".format(adjusted)} U/h\n"
+        val line = "♀️⚡ ${info.log} Basal×${"%.2f".format(info.basalMultiplier)} → ${"%.2f".format(adjusted)} U/h\n"
         logWCycle(rT.reason, line)
         return adjusted
     }
@@ -2628,12 +2648,11 @@ fun appendCompactLog(
     /** Applique le multiplicateur SMB du cycle et journalise (reason + colon). */
     private fun applyWCycleOnSmb(smb: Float, reason: StringBuilder?): Float {
         val info = computeCurrentWCycleInfo()
-        if (info.smbMultiplier == 1.0f.toDouble()) {
-            logWCycle(reason, "♀️ Cycle actif (pas d’ajustement SMB).\n")
-            return smb
-        }
+        if (!info.enabled) return smb                // ✅ option OFF → silence total
+        if (info.smbMultiplier == 1.0) return smb    // neutre → pas de log
+
         val out = (smb * info.smbMultiplier.toFloat()).coerceAtLeast(0f)
-        val line = "♀️⚡ ${info.log} ${fmtMul("SMB", info.smbMultiplier)} → ${"%.2f".format(out)} U\n"
+        val line = "♀️⚡ ${info.log} SMB×${"%.2f".format(info.smbMultiplier)} → ${"%.2f".format(out)} U\n"
         logWCycle(reason, line)
         return out
     }
