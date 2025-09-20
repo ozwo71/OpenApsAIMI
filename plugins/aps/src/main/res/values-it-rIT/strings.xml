@@ -300,6 +300,7 @@
     <string name="oaps_aimi_highcarbAdjFact_title">High Carb Mode DynISF factor</string>
     <string name="OApsAIMI_HC_Factor_summary">% of insulin required by the ai for the High Carb mode.</string>
     <string name="OApsAIMI_HC_Factor_title">Reattività</string>
+
     <string name="oaps_aimi_HC_interval_summary">Interval between SMB for the high carb mode.</string>
     <string name="oaps_aimi_HC_interval_title">SMB interval High Carb Mode</string>
     <string name="prebolus_snack_mode_summary">If you set a note in action page, with the word snack, you will receive this pre-bolus one time.</string>
@@ -373,7 +374,7 @@
     <string name="autodrive_prebolus_variablesAfternoon">Pasto 11-17:00</string>
     <string name="autodrive_prebolus_title_menuAfternoon">Autodrive - Pasto 11-17:00 impostaz.</string>
     <string name="autodrive_prebolus_variablesEvening">Pasto 18:00-00</string>
-    <string name="autodrive_prebolus_title_menuEvening">Autodrive - Pasto 18:00-00 impostaz</string>
+    <string name="autodrive_prebolus_title_menuEvening">Autodrive - Pasto 18:00-00 impostaz.</string>
 
     <string name="prebolus_autodrive_mode_summary_morning">Autodrive will send a prebolus regarding the raise detection conditions</string>
     <string name="prebolus_autodrive_mode_title">Prebolo pasto</string>
@@ -444,6 +445,7 @@
     <string name="meal_modes_max_basal_summary_snack">Modalità manuale, TBR fissa, dopo il prebolus 1 impostato 30 minuti una TBR fissa per lo spuntino</string>
     <string name="meal_modes_max_basal_title_genericmeal">Basale fissa 30 minuti inizio pasto (U/h)</string>
     <string name="meal_modes_max_basal_summary_genericmeal">Modalità manuale, TBR fissa, dopo il prebolus 1 impostato 30 minuti una TBR fissa per il pasto generico</string>
+
     <string name="wcycle_preferences">Regolazioni ciclo mestruale</string>
     <string name="wcycle_preferences_title_menu">Regolazioni ciclo mestruale - Impostazioni</string>
     <string name="oaps_aimi_enablewcycle_title">Abilita ciclo mestruale</string>
