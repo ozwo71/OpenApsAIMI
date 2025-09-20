@@ -317,6 +317,7 @@
     <string name="oaps_aimi_sleep_interval_summary">Interval between SMB for the sleep mode.</string>
     <string name="oaps_aimi_sleep_interval_title">SMB interval Sleep Mode</string>
     <string name="OApsAIMI_Enable_pregnancy">Modalità gravidanza</string>
+    <string name="OApsAIMI_Force_Limits">Forza limiti moltiplicatori AAPS</string>
     <string name="OApsAIMI_Enable_honeymoon">Modalità bambino (fabbisogno insulina inferiore ad adulto)</string>
     <string name="oaps_aimi_HIGHBG_interval_summary">High BG SMB Interval</string>
     <string name="oaps_aimi_HIGHBG_interval_title">High BG SMB Interval</string>
@@ -455,10 +456,7 @@
     <string name="wcycleluteal_summary">La fase luteale richiede circa l\'8–15% in più di insulina</string>
     <string name="wcycleluteal_title">Fase luteale, imposta la % da applicare su basale e SMB</string>
 
-
-    <string name="OApsAIMI_Force_Limits">Forza limiti moltiplicatori AAPS</string>
-
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SEZIONE BG TREND - FILE DetermineBasalAIMI2.kt -->
+     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SEZIONE BG TREND - FILE DetermineBasalAIMI2.kt -->
 
     <string name="bg_trend_1">Analisi tendenza glicemica</string>
     <string name="bg_trend_2">Prima glicemia</string>
@@ -595,7 +593,6 @@
     <string name="table_plugin_mealmodes_prebolus_7">Mod. manuale Cena - Prebolo 2/2 %1$.1fU.</string>
     <string name="table_plugin_mealmodes_prebolus_8">Mod. manuale High Carb - Prebolo %1$.1fU.</string>
     <string name="table_plugin_mealmodes_prebolus_9">Mod. manuale Snack - Prebolo %1$.1fU.</string>
-
 
 
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE RAGIONAMENTI BASALE - FILE DetermineBasalAIMI2.kt -->
