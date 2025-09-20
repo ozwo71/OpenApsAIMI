@@ -398,6 +398,18 @@
     <string name="high_carb_modes_preferences_title_menu">High Carb - Manual Mode settings</string>
     <string name="generic_meal_modes_preferences_title_menu">Generic Meal - Manual Mode settings</string>
     <string name="sleep_modes_preferences_title_menu">Sleep - Manual Mode - settings</string>
+    <string name="wcycle_preferences">Ajustements du cycle menstruel</string>
+    <string name="wcycle_preferences_title_menu">Ajustements du cycle menstruel</string>
+    <string name="oaps_aimi_enablewcycle_title">Activer le cycle menstruel</string>
+    <string name="wcycledateday_summary">Saisissez uniquement le premier jour du cycle, format jj</string>
+    <string name="wcycledateday_title">Premier jour du cycle</string>
+    <string name="wcyclemenstruation_summary">Pendant les premiers jours du cycle, ce pourcentage sera appliqué comme réduction de la basale (les études montrent une réduction moyenne de 5 à 10%)</string>
+    <string name="wcyclemenstruation_title">5 premiers jours du cycle, réduction de la basale en %</string>
+    <string name="wcycleovulation_summary">Pendant l\'ovulation, plusieurs études montrent la nécessité de réduire le SMB et la basale d'environ 5%</string>
+    <string name="wcycleovulation_title">Réduction % pour l\'ovulation</string>
+    <string name="wcycleluteal_summary">La phase lutéale nécessite environ 8 à 15 % d\'insuline en plus</string>
+    <string name="wcycleluteal_title">Phase lutéale, définir le % à appliquer sur la basale et le SMB</string>
+
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN -->
 

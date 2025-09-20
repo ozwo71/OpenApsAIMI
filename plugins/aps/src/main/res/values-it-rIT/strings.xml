@@ -443,6 +443,18 @@
     <string name="meal_modes_max_basal_summary_snack">Modalità manuale, TBR fissa, dopo il prebolus 1 impostato 30 minuti una TBR fissa per lo spuntino</string>
     <string name="meal_modes_max_basal_title_genericmeal">Basale fissa 30 minuti inizio pasto (U/h)</string>
     <string name="meal_modes_max_basal_summary_genericmeal">Modalità manuale, TBR fissa, dopo il prebolus 1 impostato 30 minuti una TBR fissa per il pasto generico</string>
+    <string name="wcycle_preferences">Regolazioni ciclo mestruale</string>
+    <string name="wcycle_preferences_title_menu">Regolazioni ciclo mestruale</string>
+    <string name="oaps_aimi_enablewcycle_title">Abilita ciclo mestruale</string>
+    <string name="wcycledateday_summary">Inserisci solo il primo giorno del ciclo, formato gg</string>
+    <string name="wcycledateday_title">Primo giorno del ciclo</string>
+    <string name="wcyclemenstruation_summary">Durante i primi giorni del ciclo, questa percentuale verrà applicata come riduzione della basale (studi mostrano una riduzione media del 5–10%)</string>
+    <string name="wcyclemenstruation_title">Primi 5 giorni del ciclo, riduzione basale in %</string>
+    <string name="wcycleovulation_summary">Durante l\'ovulazione, diversi studi mostrano la necessità di ridurre SMB e basale di circa il 5%</string>
+    <string name="wcycleovulation_title">Riduzione % per ovulazione</string>
+    <string name="wcycleluteal_summary">La fase luteale richiede circa l\'8–15% in più di insulina</string>
+    <string name="wcycleluteal_title">Fase luteale, imposta la % da applicare su basale e SMB</string>
+
 
     <string name="OApsAIMI_Force_Limits">Forza limiti moltiplicatori AAPS</string>
 
