@@ -408,7 +408,7 @@
     <string name="autodrive_max_basal_titleEvening">Basale fissa 30 minuti se pasto rilevato (U/h)</string>
     <string name="autodrive_max_basal_title">Basale fissa 30 minuti se pasto rilevato (U/h)</string>
     <string name="autodrive_max_basal_summary">Quando viene rilevato precocemente un pasto, AIMI esegue una basale fissa per 30 minuti. Inserire il valore orario di questa basale (es. 4 unità, farà 2 unità in 30 minuti)</string>
-    <string name="user_preferences_title_menu">Profilo utente AIMI</string>
+    <string name="user_preferences_title_menu">Profilo utente AIMI - Impostazioni</string>
     <string name="aimi_preferences_title_menu">AAPS impostazioni</string>
     <string name="autodrive_preferences_title_menu">Autodrive - Pasto autom. - Impostazioni</string>
     <string name="manual_modes_preferences_title_menu">Pasto / Attività manuale - Impostazioni</string>
@@ -444,7 +444,7 @@
     <string name="meal_modes_max_basal_title_genericmeal">Basale fissa 30 minuti inizio pasto (U/h)</string>
     <string name="meal_modes_max_basal_summary_genericmeal">Modalità manuale, TBR fissa, dopo il prebolus 1 impostato 30 minuti una TBR fissa per il pasto generico</string>
     <string name="wcycle_preferences">Regolazioni ciclo mestruale</string>
-    <string name="wcycle_preferences_title_menu">Regolazioni ciclo mestruale</string>
+    <string name="wcycle_preferences_title_menu">Regolazioni ciclo mestruale - Impostazioni</string>
     <string name="oaps_aimi_enablewcycle_title">Abilita ciclo mestruale</string>
     <string name="wcycledateday_summary">Inserisci solo il primo giorno del ciclo, formato gg</string>
     <string name="wcycledateday_title">Primo giorno del ciclo</string>

@@ -464,7 +464,7 @@
     <string name="meal_modes_max_basal_title_genericmeal">Fixed TBR – Generic Meal</string>
     <string name="meal_modes_max_basal_summary_genericmeal">Manual modes fixed TBR, after prebolus 1 set 30 minutes a fixed TBR for generic meal</string>
     <string name="wcycle_preferences">Menstrual Cycle Adjustments</string>
-    <string name="wcycle_preferences_title_menu">Menstrual Cycle Adjustments</string>
+    <string name="wcycle_preferences_title_menu">Menstrual Cycle Adjustments - Settings</string>
     <string name="oaps_aimi_enablewcycle_title">Enable menstrual cycle</string>
     <string name="wcycledateday_summary">Enter only the first day of the cycle, format dd</string>
     <string name="wcycledateday_title">First day of cycle</string>
