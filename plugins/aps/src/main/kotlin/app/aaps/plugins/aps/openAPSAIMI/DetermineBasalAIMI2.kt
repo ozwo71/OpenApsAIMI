@@ -3908,11 +3908,11 @@ fun appendCompactLog(
     //"📈 DIA ajusté: ${"%.1f".format(adjustedDIAInMinutes)} min | " +
 "📈 DIA ricalcolata: ${"%.1f".format(adjustedDIAInMinutes)} min | " +
 //    "Morning: ${"%.1f".format(adjustedMorningFactor)}, " +
-      "Mattina: ${"%.1f".format(adjustedMorningFactor)}, " +
+      "Mattina reattività ricalc: ${"%.1f".format(adjustedMorningFactor * 100)}%, " +
 //    "Afternoon: ${"%.1f".format(adjustedAfternoonFactor)}, " +
-      "Pomeriggio: ${"%.1f".format(adjustedAfternoonFactor)}, " +
+      "Pomeriggio reattività ricalc.: ${"%.1f".format(adjustedAfternoonFactor * 100)}%, " +
 //    "Evening: ${"%.1f".format(adjustedEveningFactor)}"
-      "Sera: ${"%.1f".format(adjustedEveningFactor)}"
+      "Sera reattività ricalc.: ${"%.1f".format(adjustedEveningFactor * 100)}%"
 )
 
 rT.reason.appendLine(
