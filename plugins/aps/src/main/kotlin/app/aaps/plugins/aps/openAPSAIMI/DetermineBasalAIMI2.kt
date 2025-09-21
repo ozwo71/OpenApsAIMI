@@ -839,7 +839,7 @@ fun appendCompactLog(
         // ────────────────────────────────────────────────────────────────
         // 0️⃣ LGS / Hypo kill-switch (avant tout)
         val lgsPref = profile.lgsThreshold
-        val hypoGuard = computeHypoThreshold(minBg = profile.min_bg, lgsThreshold = lgsPref)
+        val hypoGuard =  computeHypoThreshold(minBg = profile.min_bg, lgsThreshold = lgsPref)
         val bgNow = bg
         if (bgNow <= hypoGuard) {
           //rT.reason.append("🛑 LGS: BG=${"%.0f".format(bgNow)} ≤ ${"%.0f".format(hypoGuard)} → TBR 0U/h (30m)\n")
@@ -3606,10 +3606,11 @@ fun appendCompactLog(
                 consoleError.add("max_bg invariato: $max_bg")
             }
         }
+        fun safe(v: Double) = if (v.isFinite()) v else Double.POSITIVE_INFINITY
         //val expectedDelta = calculateExpectedDelta(target_bg, eventualBG, bgi)
         val modelcal = calculateSMBFromModel(rT.reason)
-
-        val threshold = computeHypoThreshold(min_bg, profile.lgsThreshold)
+        val minBg = minOf(safe(bg), safe(predictedBg.toDouble()), safe(eventualBG))
+        val threshold = computeHypoThreshold(minBg, profile.lgsThreshold)
 
         if (shouldBlockHypoWithHysteresis(
                 bg = bg,
