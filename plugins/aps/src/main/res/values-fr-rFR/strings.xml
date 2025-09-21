@@ -726,9 +726,5 @@
     <string name="original_file_missing">Le fichier original n\'existe pas.</string>
     <string name="file_too_short">Le fichier contient moins ou égal à 200 lignes, aucune suppression effectuée.</string>
     <string name="last_200_deleted">Les 200 dernières lignes ont été supprimées. Le fichier original a été sauvegardé sous \'%1$s\'.</string>
-
-
-
-
 </resources>
 
