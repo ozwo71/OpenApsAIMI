@@ -734,5 +734,18 @@
     <string name="meal_mode"> (meal mode)</string>
     <string name="early_autodrive"> (early autodrive)</string>
     <string name="rate_adjusted_bg_trend">→ rate adjusted based on BG trend\n</string>
+    <string name="temp_basal_pose">Temp basal %1$s U/h for %2$d minutes\n</string>
+    <string name="no_bg_history">✘ No recent glucose history available.\n</string>
+    <string name="bg_trend_analysis">→ BG Trend Analysis\n</string>
+    <string name="first_bg_value">  • First glucose : %1$.1f mg/dL\n</string>
+    <string name="last_bg_value">  • Last glucose : %1$.1f mg/dL\n</string>
+    <string name="number_of_values">  • Number of values : %1$d\n</string>
+    <string name="calculated_trend">  • Calculated trend: %1$.1f mg/dL/interval\n</string>
+    <string name="original_file_missing">The original file does not exist.</string>
+    <string name="file_too_short">The file contains 200 lines or fewer, no deletion performed.</string>
+    <string name="last_200_deleted">The last 200 lines have been deleted. The original file was saved as \'%1$s\'.</string>
+
+
+
 
 </resources>

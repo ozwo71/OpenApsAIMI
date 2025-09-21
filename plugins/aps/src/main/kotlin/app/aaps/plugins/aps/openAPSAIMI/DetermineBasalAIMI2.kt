@@ -921,7 +921,7 @@ fun appendCompactLog(
 
         // 🔟 Pose
 //      rT.reason.append("Pose temp à ${"%.2f".format(rate)} U/h pour $duration minutes.\n")
-        rT.reason.append("Basale temporanea ${"%.2f".format(rate)} U/h per $duration minuti.\n")
+        rT.reason.append(context.getString(R.string.temp_basal_pose, "%.2f".format(rate), duration))
         rT.duration = duration
         rT.rate = rate
         return rT
@@ -930,7 +930,7 @@ fun appendCompactLog(
     private fun calculateBgTrend(recentBGs: List<Float>, reason: StringBuilder): Float {
     if (recentBGs.isEmpty()) {
       //reason.append("✘ Aucun historique de glycémie disponible.\n")
-        reason.append("✘ Nessuna glicemia recente disponibile.\n")
+        reason.append(context.getString(R.string.no_bg_history))
         return 0.0f
     }
 
@@ -944,16 +944,15 @@ fun appendCompactLog(
     val bgTrend = (lastValue - firstValue) / count.toFloat()
 
   //reason.append("→ Analyse BG Trend\n")
-    reason.append("→ Analisi BG Trend\n")
+    reason.append(context.getString(R.string.bg_trend_analysis))
   //reason.append("  • Première glycémie : $firstValue mg/dL\n")
-    reason.append("  • Precedente glicemia : $firstValue mg/dL\n")
+    reason.append(context.getString(R.string.first_bg_value, firstValue))
   //reason.append("  • Dernière glycémie : $lastValue mg/dL\n")
-    reason.append("  • Ultima glicemia : $lastValue mg/dL\n")
+    reason.append(context.getString(R.string.last_bg_value, lastValue))
   //reason.append("  • Nombre de valeurs : $count\n")
-    reason.append("  • Numero di valori : $count\n")
+    reason.append(context.getString(R.string.number_of_values, count))
   //reason.append("  • Tendance calculée : $bgTrend mg/dL/intervalle\n")
-    reason.append("  • Tendenza calcolata: $bgTrend mg/dL/intervallo\n")
-
+    reason.append(context.getString(R.string.calculated_trend, bgTrend))
     return bgTrend
 }
 
@@ -1015,7 +1014,7 @@ fun appendCompactLog(
         val reasonBuilder = StringBuilder()
         if (!csvFile.exists()) {
           //println("Le fichier original n'existe pas.")
-            println("Il file originale non esiste.")
+            println(context.getString(R.string.original_file_missing))
             return
         }
 
@@ -1024,7 +1023,7 @@ fun appendCompactLog(
 
         if (lines.size <= 200) {
           //reasonBuilder.append("Le fichier contient moins ou égal à 200 lignes, aucune suppression effectuée.")
-            reasonBuilder.append("Il file contiene meno di 200 righe, nessuna eliminazione effettuata.")
+            reasonBuilder.append(context.getString(R.string.file_too_short))
             return
         }
 
@@ -1044,7 +1043,7 @@ fun appendCompactLog(
         csvFile.writeText(newLines.joinToString("\n"), Charsets.UTF_8)
 
       //reasonBuilder.append("Les 200 dernières lignes ont été supprimées. Le fichier original a été sauvegardé sous '$backupFileName'.")
-        reasonBuilder.append("Le ultime 200 righe sono state eliminate. Il file originale è stato salvato come '$backupFileName'.")
+        reasonBuilder.append(context.getString(R.string.last_200_deleted, backupFileName))
     }
     private fun automateDeletionIfBadDay(tir1DAYIR: Int) {
         val reasonBuilder = StringBuilder()
