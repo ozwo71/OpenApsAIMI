@@ -208,6 +208,7 @@
 
     <string name="key_openapsaimi_settings">key_openapsaimi_settings</string>
     <string name="key_openapsaimi_max_smb">key_openapsaimi_max_smb</string>
+    <string name="oaps_aimi_shortname">AIMI</string>
     <string name="key_aimiweight">key_aimiweight</string>
     <string name="key_tdd7">key_tdd7</string>
     <string name="key_cho">key_cho</string>
@@ -368,6 +369,7 @@
     <string name="autodrive_prebolus_title_menuEvening">Autodrive – Repas 18:00-00:00 Paramètres</string>
 
     <string name="prebolus_autodrive_mode_summary_morning">Autodrive enverra un pré-bolus selon les conditions de détection de la montée</string>
+    <string name="prebolus_autodrive_mode_summary">Autodrive enverra un pré-bolus selon les conditions de détection de la montée</string>
     <string name="prebolus_autodrive_mode_title">Pré-bolus repas</string>
     <string name="prebolus_autodrive_mode_title_Morning">Pré-bolus repas</string>
     <string name="prebolus_autodrive_mode_summary_Afternoon">Autodrive enverra un pré-bolus selon les conditions de détection de la montée</string>
@@ -394,7 +396,8 @@
     <string name="prebolussmall_autodrive_mode_titleAfternoon">Pré-bolus snack léger</string>
     <string name="prebolussmall_autodrive_mode_summaryEvening"><![CDATA[Utilisé pour la détection précoce des repas : BG > 100, BG prédit > 180. L\'idée est que lorsqu\'une détection précoce se produit, un petit SMB est envoyé pour éviter un IOB négatif ou une correction tardive. C'est une bonne approche pour un petit en-cas.]]></string>
     <string name="prebolussmall_autodrive_mode_titleEvening">Pré-bolus snack léger</string>
-
+    <string name="prebolussmall_autodrive_mode_title">Pré-bolus snack léger</string>
+    <string name="prebolussmall_autodrive_mode_summary"><![CDATA[Utilisé pour la détection précoce des repas : BG > 100, BG prédit > 180. L\'idée est que lorsqu\'une détection précoce se produit, un petit SMB est envoyé pour éviter un IOB négatif ou une correction tardive. C'est une bonne approche pour un petit en-cas.]]></string>
     <string name="autodrive_max_basal_summaryMorning">Lorsqu\'un repas est détecté tôt, AIMI exécute une basale fixe pendant 30 minutes. Saisir la valeur horaire de cette basale (ex. 4 unités délivreront 2 unités en 30 minutes)</string>
     <string name="autodrive_max_basal_titleMorning">Basale fixe 30 min si repas détecté (U/h)</string>
     <string name="autodrive_max_basal_summaryAfternoon">Lorsqu\'un repas est détecté tôt, AIMI exécute une basale fixe pendant 30 minutes. Saisir la valeur horaire de cette basale (ex. 4 unités délivreront 2 unités en 30 minutes)</string>

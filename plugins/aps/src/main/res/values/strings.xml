@@ -230,6 +230,7 @@
 
     <string name="key_openapsaimi_settings">key_openapsaimi_settings</string>
     <string name="key_openapsaimi_max_smb">key_openapsaimi_max_smb</string>
+    <string name="oaps_aimi_shortname">AIMI</string>
     <string name="key_aimiweight">key_aimiweight</string>
     <string name="key_tdd7">key_tdd7</string>
     <string name="key_cho">key_cho</string>
@@ -392,6 +393,7 @@
 
     <string name="prebolus_autodrive_mode_summary_morning">Autodrive will send a pre-bolus according to the rise detection conditions</string>
     <string name="prebolus_autodrive_mode_title">Meal Pre-bolus</string>
+    <string name="prebolus_autodrive_mode_summary">Autodrive will send a pre-bolus according to the rise detection conditions</string>
     <string name="prebolus_autodrive_mode_title_Morning">Meal Pre-bolus</string>
     <string name="prebolus_autodrive_mode_summary_Afternoon">Autodrive will send a pre-bolus according to the rise detection conditions</string>
     <string name="prebolus_autodrive_mode_title_Afternoon">Meal Pre-bolus</string>
@@ -417,7 +419,8 @@
     <string name="prebolussmall_autodrive_mode_titleAfternoon">Light snack pre-bolus</string>
     <string name="prebolussmall_autodrive_mode_summaryEvening"><![CDATA[Used for early meal detection: BG > 100, predicted BG > 180. The idea is that when early detection occurs, a small SMB is sent to avoid negative IOB or late correction. This can be a good approach for a small snack.]]></string>
     <string name="prebolussmall_autodrive_mode_titleEvening">Light snack pre-bolus</string>
-
+    <string name="prebolussmall_autodrive_mode_title">Light snack pre-bolus</string>
+    <string name="prebolussmall_autodrive_mode_summary"><![CDATA[Used for early meal detection: BG > 100, predicted BG > 180. The idea is that when early detection occurs, a small SMB is sent to avoid negative IOB or late correction. This can be a good approach for a small snack.]]></string>
     <string name="autodrive_max_basal_summaryMorning">When an early meal is detected, AIMI runs a fixed basal for 30 minutes. Enter the hourly value of this basal (e.g., 4 units will deliver 2 units in 30 minutes)</string>
     <string name="autodrive_max_basal_titleMorning">Fixed basal 30 min if meal detected (U/h)</string>
     <string name="autodrive_max_basal_summaryAfternoon">When an early meal is detected, AIMI runs a fixed basal for 30 minutes. Enter the hourly value of this basal (e.g., 4 units will deliver 2 units in 30 minutes)</string>

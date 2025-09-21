@@ -233,6 +233,7 @@
     <!--    AIMI START TRANSLATION MENU , SUBMENU AND PREFERENCES - FILE OpenAPSAIMIPlugin.kt   -->
 
     <string name="openapsaimi">"AIMI 3.3"</string>
+    <string name="oaps_aimi_shortname">AIMI</string>
     <string name="openapsaimi_maxsmb_summary">Max SMB-waarde wanneer BG lager is dan 120</string>
     <string name="openapsaimi_maxsmb_title">Max SMB LAGE BG</string>
     <string name="description_openapsaimi">Kleine micro-bolussen gebaseerd op Kunstmatige Intelligentie en Machine Learning.</string>
@@ -368,6 +369,7 @@
 
     <string name="prebolus_autodrive_mode_summary_morning">Autodrive stuurt een pre-bolus volgens de voorwaarden voor stijgingsdetectie</string>
     <string name="prebolus_autodrive_mode_title">Maaltijd Pre-bolus</string>
+    <string name="prebolus_autodrive_mode_summary">Autodrive stuurt een pre-bolus volgens de voorwaarden voor stijgingsdetectie</string>
     <string name="prebolus_autodrive_mode_title_Morning">Maaltijd Pre-bolus</string>
     <string name="prebolus_autodrive_mode_summary_Afternoon">Autodrive stuurt een pre-bolus volgens de voorwaarden voor stijgingsdetectie</string>
     <string name="prebolus_autodrive_mode_title_Afternoon">Maaltijd Pre-bolus</string>
@@ -393,6 +395,8 @@
     <string name="prebolussmall_autodrive_mode_titleAfternoon">Lichte snack pre-bolus</string>
     <string name="prebolussmall_autodrive_mode_summaryEvening"><![CDATA[Gebruikt voor vroege maaltijddetectie: BG > 100, voorspelde BG > 180. Het idee is dat wanneer vroege detectie plaatsvindt, een kleine SMB wordt verzonden om negatieve IOB of late correctie te voorkomen. Dit kan een goede aanpak zijn voor een kleine snack.]]></string>
     <string name="prebolussmall_autodrive_mode_titleEvening">Lichte snack pre-bolus</string>
+    <string name="prebolussmall_autodrive_mode_title">Lichte snack pre-bolus</string>
+    <string name="prebolussmall_autodrive_mode_summary"><![CDATA[Gebruikt voor vroege maaltijddetectie: BG > 100, voorspelde BG > 180. Het idee is dat wanneer vroege detectie plaatsvindt, een kleine SMB wordt verzonden om negatieve IOB of late correctie te voorkomen. Dit kan een goede aanpak zijn voor een kleine snack.]]></string>
 
     <string name="autodrive_max_basal_summaryMorning">Wanneer een vroege maaltijd wordt gedetecteerd, voert AIMI gedurende 30 minuten een vast basaal uit. Voer de uurwaarde van dit basaal in (bijv. 4 eenheden levert 2 eenheden in 30 minuten)</string>
     <string name="autodrive_max_basal_titleMorning">Vast basaal 30 min indien maaltijd gedetecteerd (E/u)</string>
