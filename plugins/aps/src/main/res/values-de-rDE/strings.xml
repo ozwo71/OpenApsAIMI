@@ -157,6 +157,7 @@
 
     <string name="key_openapsaimi_settings">key_openapsaimi_settings</string>
     <string name="key_openapsaimi_max_smb">key_openapsaimi_max_smb</string>
+    <string name="oaps_aimi_shortname">AIMI</string>
     <string name="key_aimiweight">key_aimiweight</string>
     <string name="key_tdd7">key_tdd7</string>
     <string name="key_cho">key_cho</string>
@@ -319,6 +320,7 @@
 
     <string name="prebolus_autodrive_mode_summary_morning">Autodrive will send a pre-bolus according to the rise detection conditions</string>
     <string name="prebolus_autodrive_mode_title">Meal Pre-bolus</string>
+    <string name="prebolus_autodrive_mode_summary">Autodrive will send a pre-bolus according to the rise detection conditions</string>
     <string name="prebolus_autodrive_mode_title_Morning">Meal Pre-bolus</string>
     <string name="prebolus_autodrive_mode_summary_Afternoon">Autodrive will send a pre-bolus according to the rise detection conditions</string>
     <string name="prebolus_autodrive_mode_title_Afternoon">Meal Pre-bolus</string>
@@ -344,7 +346,8 @@
     <string name="prebolussmall_autodrive_mode_titleAfternoon">Light snack pre-bolus</string>
     <string name="prebolussmall_autodrive_mode_summaryEvening"><![CDATA[Used for early meal detection: BG > 100, predicted BG > 180. The idea is that when early detection occurs, a small SMB is sent to avoid negative IOB or late correction. This can be a good approach for a small snack.]]></string>
     <string name="prebolussmall_autodrive_mode_titleEvening">Light snack pre-bolus</string>
-
+    <string name="prebolussmall_autodrive_mode_title">Light snack pre-bolus</string>
+    <string name="prebolussmall_autodrive_mode_summary"><![CDATA[Used for early meal detection: BG > 100, predicted BG > 180. The idea is that when early detection occurs, a small SMB is sent to avoid negative IOB or late correction. This can be a good approach for a small snack.]]></string>
     <string name="autodrive_max_basal_summaryMorning">When an early meal is detected, AIMI runs a fixed basal for 30 minutes. Enter the hourly value of this basal (e.g., 4 units will deliver 2 units in 30 minutes)</string>
     <string name="autodrive_max_basal_titleMorning">Fixed basal 30 min if meal detected (U/h)</string>
     <string name="autodrive_max_basal_summaryAfternoon">When an early meal is detected, AIMI runs a fixed basal for 30 minutes. Enter the hourly value of this basal (e.g., 4 units will deliver 2 units in 30 minutes)</string>
@@ -416,6 +419,7 @@
     <string name="bg_trend_6">No blood glucose history available</string>
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - ADJUST AUTODRIVE CONDITIONS - FILE DetermineBasalAIMI2.kt -->
+
     <string name="adjust_autodrive_condition_1">Autodrive Debug</string>
     <string name="adjust_autodrive_condition_2">BG Trend</string>
     <string name="adjust_autodrive_condition_3">Predicted BG</string>
@@ -433,7 +437,6 @@
     <string name="reason_adjusted_evening_factor">adjusted Evening Factor %1$.2f, </string>
     <string name="reason_autodrive_status"> Autodrive: %1$s, autodrive mode: %2$s, Autodrive Condition: %3$s, BG Trend: %4$.2f, Combined Delta: %5$.2f, Predicted BG: %6$.2f, BG Acceleration: %7$.2f, SlopeMinDeviation: %8$.2f</string>
     <string name="reason_tir_stats">TIR Below: %1$d, TIR In Range: %2$d, TIR Above: %3$d</string>
-
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION TITLE - FILE DetermineBasalAIMI2.kt -->
 
@@ -528,6 +531,7 @@
     <string name="table_plugin_miscellaneous_12">normal</string>
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION MEAL DETECTION - FILE DetermineBasalAIMI2.kt -->
+
     <string name="table_plugin_autodrive_1">Autodrive early meal detection/snack: Microbolusing %1$.1fU, Combined Delta: %2$.1f, Predicted: %3$.1f, Acceleration: %4$.1f.</string>
     <string name="table_plugin_autodrive_2">→ Microbolusing Autodrive Mode %1$.1fU\n  • Target BG: %2$.1f\n  • Slope from min deviation: %3$.3f\n  • BG acceleration: %4$.2f\n</string>
     <string name="table_plugin_mealmodes_prebolus_1">Microbolusing Meal Mode: %1$.1fU.</string>
@@ -539,7 +543,6 @@
     <string name="table_plugin_mealmodes_prebolus_7">Microbolusing 2/2 Dinner Mode %1$.1fU.</string>
     <string name="table_plugin_mealmodes_prebolus_8">Microbolusing High Carb Mode %1$.1fU.</string>
     <string name="table_plugin_mealmodes_prebolus_9">Microbolusing snack Mode %1$.1fU.</string>
-
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BASAL ARGUMENTS - FILE DetermineBasalAIMI2.kt -->
 
@@ -661,5 +664,16 @@
     <string name="meal_mode"> (meal mode)</string>
     <string name="early_autodrive"> (early autodrive)</string>
     <string name="rate_adjusted_bg_trend">→ rate adjusted based on BG trend\n</string>
+    <string name="temp_basal_pose">Temp basal %1$s U/h for %2$d minutes\n</string>
+    <string name="no_bg_history">✘ No recent glucose history available.\n</string>
+    <string name="bg_trend_analysis">→ BG Trend Analysis\n</string>
+    <string name="first_bg_value">  • First glucose : %1$.1f mg/dL\n</string>
+    <string name="last_bg_value">  • Last glucose : %1$.1f mg/dL\n</string>
+    <string name="number_of_values">  • Number of values : %1$d\n</string>
+    <string name="calculated_trend">  • Calculated trend: %1$.1f mg/dL/interval\n</string>
+    <string name="original_file_missing">The original file does not exist.</string>
+    <string name="file_too_short">The file contains 200 lines or fewer, no deletion performed.</string>
+    <string name="last_200_deleted">The last 200 lines have been deleted. The original file was saved as \'%1$s\'.</string>
+
 
 </resources>
