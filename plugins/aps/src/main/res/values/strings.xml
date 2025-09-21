@@ -489,6 +489,7 @@
     <string name="bg_trend_6">No blood glucose history available</string>
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - ADJUST AUTODRIVE CONDITIONS - FILE DetermineBasalAIMI2.kt -->
+
     <string name="adjust_autodrive_condition_1">Autodrive Debug</string>
     <string name="adjust_autodrive_condition_2">BG Trend</string>
     <string name="adjust_autodrive_condition_3">Predicted BG</string>
@@ -506,7 +507,6 @@
     <string name="reason_adjusted_evening_factor">adjusted Evening Factor %1$.2f, </string>
     <string name="reason_autodrive_status"> Autodrive: %1$s, autodrive mode: %2$s, Autodrive Condition: %3$s, BG Trend: %4$.2f, Combined Delta: %5$.2f, Predicted BG: %6$.2f, BG Acceleration: %7$.2f, SlopeMinDeviation: %8$.2f</string>
     <string name="reason_tir_stats">TIR Below: %1$d, TIR In Range: %2$d, TIR Above: %3$d</string>
-
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION TITLE - FILE DetermineBasalAIMI2.kt -->
 
@@ -601,6 +601,7 @@
     <string name="table_plugin_miscellaneous_12">normal</string>
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION MEAL DETECTION - FILE DetermineBasalAIMI2.kt -->
+
     <string name="table_plugin_autodrive_1">Autodrive early meal detection/snack: Microbolusing %1$.1fU, Combined Delta: %2$.1f, Predicted: %3$.1f, Acceleration: %4$.1f.</string>
     <string name="table_plugin_autodrive_2">→ Microbolusing Autodrive Mode %1$.1fU\n  • Target BG: %2$.1f\n  • Slope from min deviation: %3$.3f\n  • BG acceleration: %4$.2f\n</string>
     <string name="table_plugin_mealmodes_prebolus_1">Microbolusing Meal Mode: %1$.1fU.</string>
@@ -612,7 +613,6 @@
     <string name="table_plugin_mealmodes_prebolus_7">Microbolusing 2/2 Dinner Mode %1$.1fU.</string>
     <string name="table_plugin_mealmodes_prebolus_8">Microbolusing High Carb Mode %1$.1fU.</string>
     <string name="table_plugin_mealmodes_prebolus_9">Microbolusing snack Mode %1$.1fU.</string>
-
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BASAL ARGUMENTS - FILE DetermineBasalAIMI2.kt -->
 
