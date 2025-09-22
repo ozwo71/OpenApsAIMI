@@ -1063,14 +1063,14 @@ fun appendCompactLog(
                 //createFilteredAndSortedCopy(csvfile,dateToRemove)
                 removeLast200Lines(csvfile)
               //reasonBuilder.append("Les données pour la date $dateToRemove ont été supprimées car TIR1DAIIR est inférieur à 85%.")
-                reasonBuilder.append("I valori per la data $dateToRemove sono stati eliminati perché TIR1DAIIR è inferiore all'85%.")
+                reasonBuilder.append(context.getString(R.string.reason_data_removed, dateToRemove))
             } else {
               //reasonBuilder.append("La suppression ne peut être exécutée qu'entre 00:05 et 00:10.")
-                reasonBuilder.append("L'eliminazione può essere eseguita solo tra le 00:05 e le 00:10..")
+                reasonBuilder.append(context.getString(R.string.reason_deletion_time_restricted))
             }
         } else {
           //reasonBuilder.append("Aucune suppression nécessaire : tir1DAYIR est supérieur ou égal à 85%.")
-            reasonBuilder.append("Nessuna eliminazione necessaria: tir1DAYIR è maggiore o uguale all'85%.")
+            reasonBuilder.append(context.getString(R.string.reason_no_deletion_needed))
         }
     }
 
@@ -3909,7 +3909,7 @@ fun appendCompactLog(
 "📈 DIA ricalcolata: ${"%.1f".format(adjustedDIAInMinutes)} min | " +
 //    "Morning: ${"%.1f".format(adjustedMorningFactor)}, " +
 //      "Mattina reattività ricalc: ${"%.1f".format(adjustedMorningFactor * 100)}%, " +
-    "Reattività ricalcolata: Mattina: ${ "%.1f".format(adjustedMorningFactor * 100)}%) | " +
+    "Reattività ricalcolata: Mattina: ${ "%.1f".format(adjustedMorningFactor * 100)}% | " +
 //    "Afternoon: ${"%.1f".format(adjustedAfternoonFactor)}, " +
 //      "Pomeriggio reattività ricalc.: ${"%.1f".format(adjustedAfternoonFactor * 100)}%, " +
     "Pomeriggio: ${ "%.1f".format(adjustedAfternoonFactor * 100)}% | " +

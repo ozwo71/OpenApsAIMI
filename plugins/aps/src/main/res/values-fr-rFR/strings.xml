@@ -726,5 +726,10 @@
     <string name="original_file_missing">Le fichier original n\'existe pas.</string>
     <string name="file_too_short">Le fichier contient moins ou égal à 200 lignes, aucune suppression effectuée.</string>
     <string name="last_200_deleted">Les 200 dernières lignes ont été supprimées. Le fichier original a été sauvegardé sous \'%1$s\'.</string>
+    <string name="reason_data_removed">Les données pour la date %1$s ont été supprimées car TIR1DAIIR est inférieur à 85%.</string>
+    <string name="reason_deletion_time_restricted">La suppression ne peut être exécutée qu\'entre 00:05 et 00:10.</string>
+    <string name="reason_no_deletion_needed">Aucune suppression nécessaire : tir1DAYIR est supérieur ou égal à 85%.</string>
+
+
 </resources>
 
