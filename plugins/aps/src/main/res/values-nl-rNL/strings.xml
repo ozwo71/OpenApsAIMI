@@ -714,25 +714,23 @@
     <string name="meal_mode"> (maaltijdmodus)</string>
     <string name="early_autodrive"> (vroege autodrive)</string>
     <string name="rate_adjusted_bg_trend">→ tarief aangepast op basis van BG-trend\n</string>
-    <string name="temp_basal_pose">Temp basal %1$s U/h for %2$d minutes\n</string>
-    <string name="no_bg_history">✘ No recent glucose history available.\n</string>
-    <string name="bg_trend_analysis">→ BG Trend Analysis\n</string>
-    <string name="first_bg_value">  • First glucose : %1$.1f mg/dL\n</string>
-    <string name="last_bg_value">  • Last glucose : %1$.1f mg/dL\n</string>
-    <string name="number_of_values">  • Number of values : %1$d\n</string>
-    <string name="calculated_trend">  • Calculated trend: %1$.1f mg/dL/interval\n</string>
-    <string name="original_file_missing">The original file does not exist.</string>
-    <string name="file_too_short">The file contains 200 lines or fewer, no deletion performed.</string>
-    <string name="last_200_deleted">The last 200 lines have been deleted. The original file was saved as \'%1$s\'.</string>
-    <string name="reason_data_removed">The values for date %1$s have been deleted because TIR1DAIIR is lower than 85%.</string>
-    <string name="reason_deletion_time_restricted">The deletion can only be executed between 00:05 and 00:10.</string>
-    <string name="reason_no_deletion_needed">No deletion needed: tir1DAYIR is greater than or equal to 85%.</string>
-    <string name="safety_sport_smb_zero">🏃‍♂️ Safety sport → SMB=0</string>
-    <string name="adjustments_smb">🎛️ Adjustments: %1$.2f → %2$.2f U</string>
-    <string name="finalization_smb">🧩 Finalization: %1$.2f → %2$.2f U</string>
-    <string name="limits_smb">🧱 Limits: %1$.2f → %2$.2f U</string>
-    <string name="no_recent_bg">⚠️ No recent BG — default settings kept</string>
-
-
+    <string name="temp_basal_pose">Tijdelijk basaal %1$s E/u voor %2$d minuten\n</string>
+    <string name="no_bg_history">✘ Geen recente glucosegeschiedenis beschikbaar.\n</string>
+    <string name="bg_trend_analysis">→ BG Trendanalyse\n</string>
+    <string name="first_bg_value">  • Eerste glucose: %1$.1f mg/dL\n</string>
+    <string name="last_bg_value">  • Laatste glucose: %1$.1f mg/dL\n</string>
+    <string name="number_of_values">  • Aantal waarden: %1$d\n</string>
+    <string name="calculated_trend">  • Berekende trend: %1$.1f mg/dL/interval\n</string>
+    <string name="original_file_missing">Het originele bestand bestaat niet.</string>
+    <string name="file_too_short">Het bestand bevat 200 regels of minder, er is geen verwijdering uitgevoerd.</string>
+    <string name="last_200_deleted">De laatste 200 regels zijn verwijderd. Het originele bestand is opgeslagen als \'%1$s\'.</string>
+    <string name="reason_data_removed">De waarden voor datum %1$s zijn verwijderd omdat TIR1DAIIR lager is dan 85%.</string>
+    <string name="reason_deletion_time_restricted">De verwijdering kan alleen worden uitgevoerd tussen 00:05 en 00:10.</string>
+    <string name="reason_no_deletion_needed">Geen verwijdering nodig: tir1DAYIR is groter dan of gelijk aan 85%.</string>
+    <string name="safety_sport_smb_zero">🏃‍♂️ Veiligheid sport → SMB=0</string>
+    <string name="adjustments_smb">🎛️ Aanpassingen: %1$.2f → %2$.2f E</string>
+    <string name="finalization_smb">🧩 Afronding: %1$.2f → %2$.2f E</string>
+    <string name="limits_smb">🧱 Limieten: %1$.2f → %2$.2f E</string>
+    <string name="no_recent_bg">⚠️ Geen recente BG — standaardinstellingen behouden</string>
 
 </resources>
