@@ -1090,7 +1090,7 @@ fun appendCompactLog(
 
         if (isSportSafetyCondition()) {
           //reason?.appendLine("🏃‍♂️ Safety sport → SMB=0")
-            reason?.appendLine("🏃‍♂️ Sicurezza sport → SMB=0")
+            reason?.appendLine(context.getString(R.string.safety_sport_smb_zero))
             return 0f
         }
         // ♀️ Ajustement cycle sur SMB (Ovulation: -, Lutéale: +5%, etc.)
@@ -1100,7 +1100,7 @@ fun appendCompactLog(
         smbToGive = applySpecificAdjustments(smbToGive)
         if (smbToGive != beforeAdj) {
           //reason?.appendLine("🎛️ Ajustements: ${"%.2f".format(beforeAdj)} → ${"%.2f".format(smbToGive)} U")
-            reason?.appendLine("🎛️ Aggiustamenti: ${"%.2f".format(beforeAdj)} → ${"%.2f".format(smbToGive)} U")
+            reason?.appendLine(context.getString(R.string.adjustments_smb, beforeAdj, smbToGive))
         }
 
         // Finalisation
@@ -1108,7 +1108,7 @@ fun appendCompactLog(
         smbToGive = finalizeSmbToGive(smbToGive)
         if (smbToGive != beforeFinalize) {
           //reason?.appendLine("🧩 Finalisation: ${"%.2f".format(beforeFinalize)} → ${"%.2f".format(smbToGive)} U")
-            reason?.appendLine("🧩 Finalizzazione: ${"%.2f".format(beforeFinalize)} → ${"%.2f".format(smbToGive)} U")
+            reason?.appendLine(context.getString(R.string.finalization_smb, beforeFinalize, smbToGive))
         }
 
         // Limites max
@@ -1116,7 +1116,7 @@ fun appendCompactLog(
         smbToGive = applyMaxLimits(smbToGive)
         if (smbToGive != beforeLimits) {
           //reason?.appendLine("🧱 Limites: ${"%.2f".format(beforeLimits)} → ${"%.2f".format(smbToGive)} U")
-            reason?.appendLine("🧱 Limiti: ${"%.2f".format(beforeLimits)} → ${"%.2f".format(smbToGive)} U")
+            reason?.appendLine(context.getString(R.string.limits_smb, beforeLimits, smbToGive))
         }
         smbToGive = smbToGive.coerceAtLeast(0f)
         return smbToGive
@@ -1176,7 +1176,7 @@ fun appendCompactLog(
             autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta, reason)
         } else {
           //reason.appendLine("⚠️ Aucune BG récente — conditions par défaut conservées")
-            reason.appendLine("⚠️ Nessun BG recente — impostazioni predefinite mantenute")
+            reason.appendLine(context.getString(R.string.no_recent_bg))
         }
 
         // ⛔ Ne pas relancer si pbolus récent

@@ -733,7 +733,11 @@
     <string name="reason_data_removed">I valori per la data %1$s sono stati eliminati perché TIR1DAIIR è inferiore all\'85%.</string>
     <string name="reason_deletion_time_restricted">L\'eliminazione può essere eseguita solo tra le 00:05 e le 00:10.</string>
     <string name="reason_no_deletion_needed">Nessuna eliminazione necessaria: tir1DAYIR è maggiore o uguale all\'85%.</string>
-
+    <string name="safety_sport_smb_zero">🏃‍♂️ Sicurezza sport → SMB=0</string>
+    <string name="adjustments_smb">🎛️ Aggiustamenti: %1$.2f → %2$.2f U</string>
+    <string name="finalization_smb">🧩 Finalizzazione: %1$.2f → %2$.2f U</string>
+    <string name="limits_smb">🧱 Limiti: %1$.2f → %2$.2f U</string>
+    <string name="no_recent_bg">⚠️ Nessun BG recente — impostazioni predefinite mantenute</string>
 
 </resources>
 
