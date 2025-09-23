@@ -760,25 +760,25 @@
     <string name="autodrive_predicted_bg">  • Predicted BG: %1$.2f\n</string>
     <string name="autodrive_combined_delta">  • Combined Delta: %1$.2f\n</string>
     <string name="autodrive_required_delta">  • Required Combined Delta: %1$.2f\n</string>
-    <string name="autodrive_disabled_trend">  ✘ Autodrive disabled : blood glucose trend decreasing\n</string>
-    <string name="autodrive_enabled_conditions">  ✔ Autodrive enabled : favorable conditions\n</string>
-    <string name="autodrive_disabled_conditions">  ✘ Autodrive disabled : insufficient conditions\n</string>
-    <string name="condition_hypoguard">hypoGuard</string>
+    <string name="autodrive_disabled_trend">  ✘ Autodrive Disabled: BG dropping\n</string>
+    <string name="autodrive_enabled_conditions">  ✔ Autodrive Enabled: favorable conditions\n</string>
+    <string name="autodrive_disabled_conditions">  ✘ Autodrive Disabled: insufficient conditions\n</string>
+    <string name="condition_hypoguard">hypoglycemia protection</string>
     <string name="condition_nosmbhm">nosmbHM</string>
     <string name="condition_honeysmb">honeysmb</string>
-    <string name="condition_negdelta">negdelta</string>
+    <string name="condition_negdelta">negative delta</string>
     <string name="condition_nosmb">nosmb</string>
     <string name="condition_fasting">fasting</string>
     <string name="condition_belowminthreshold">belowMinThreshold</string>
     <string name="condition_newcalibration">isNewCalibration</string>
-    <string name="condition_belowtarget_dropping">belowTargetAndDropping</string>
-    <string name="condition_belowtarget_stable_nocob">belowTargetAndStableButNoCob</string>
-    <string name="condition_droppingfast">droppingFast</string>
-    <string name="condition_droppingfastathigh">droppingFastAtHigh</string>
-    <string name="condition_droppingveryfast">droppingVeryFast</string>
-    <string name="condition_prediction">prediction</string>
-    <string name="condition_bg90">bg90</string>
-    <string name="condition_acceleratingdown">acceleratingDown</string>
+    <string name="condition_belowtarget_dropping">BG below target and dropping</string>
+    <string name="condition_belowtarget_stable_nocob">BG below target stable without COB</string>
+    <string name="condition_droppingfast">BG dropping fast</string>
+    <string name="condition_droppingfastathigh">fast drop from BG&gt;180</string>
+    <string name="condition_droppingveryfast">BG dropping very fast</string>
+    <string name="condition_prediction">BG prediction</string>
+    <string name="condition_bg90">BG&lt;90</string>
+    <string name="condition_acceleratingdown">BG accelerating downward</string>
 
 
 

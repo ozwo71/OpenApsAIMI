@@ -734,12 +734,12 @@
     <string name="finalization_smb">🧩 Finalisation: %1$.2f → %2$.2f U</string>
     <string name="limits_smb">🧱 Limites: %1$.2f → %2$.2f U</string>
     <string name="no_recent_bg">⚠️ Aucune BG récente — conditions par défaut conservées</string>
-    <string name="autodrive_debug_header">→ Débogage Autodrive\n</string>
-    <string name="autodrive_bg_trend">  • Tendance BG: %1$.2f\n</string>
-    <string name="autodrive_predicted_bg">  • BG prédit: %1$.2f\n</string>
-    <string name="autodrive_combined_delta">  • Delta combiné: %1$.2f\n</string>
-    <string name="autodrive_required_delta">  • Delta combiné requis: %1$.2f\n</string>
-    <string name="autodrive_disabled_trend">  ✘ Autodrive désactivé : tendance glycémie en baisse\n</string>
+    <string name="autodrive_debug_header">→ Autodrive Débogage\n</string>
+    <string name="autodrive_bg_trend">  • Tendance BG : %1$.2f\n</string>
+    <string name="autodrive_predicted_bg">  • BG Prévu : %1$.2f\n</string>
+    <string name="autodrive_combined_delta">  • Delta combiné : %1$.2f\n</string>
+    <string name="autodrive_required_delta">  • Delta combiné requis : %1$.2f\n</string>
+    <string name="autodrive_disabled_trend">  ✘ Autodrive désactivé : BG en baisse\n</string>
     <string name="autodrive_enabled_conditions">  ✔ Autodrive activé : conditions favorables\n</string>
     <string name="autodrive_disabled_conditions">  ✘ Autodrive désactivé : conditions insuffisantes\n</string>
     <string name="condition_hypoguard">protection hypoglycémie</string>
@@ -748,16 +748,17 @@
     <string name="condition_negdelta">delta négatif</string>
     <string name="condition_nosmb">nosmb</string>
     <string name="condition_fasting">jeûne</string>
-    <string name="condition_belowminthreshold">en dessous du seuil minimum</string>
-    <string name="condition_newcalibration">nouvelle calibration</string>
-    <string name="condition_belowtarget_dropping">BG en dessous de la cible et en baisse</string>
-    <string name="condition_belowtarget_stable_nocob">BG en dessous de la cible, stable sans COB</string>
+    <string name="condition_belowminthreshold">belowMinThreshold</string>
+    <string name="condition_newcalibration">isNewCalibration</string>
+    <string name="condition_belowtarget_dropping">BG sous la cible et en baisse</string>
+    <string name="condition_belowtarget_stable_nocob">BG sous la cible stable sans COB</string>
     <string name="condition_droppingfast">BG chute rapide</string>
-    <string name="condition_droppingfastathigh">chute rapide depuis BG&gt;180</string>
+    <string name="condition_droppingfastathigh">chute rapide à partir de BG&gt;180</string>
     <string name="condition_droppingveryfast">BG chute très rapide</string>
     <string name="condition_prediction">prédiction BG</string>
     <string name="condition_bg90">BG&lt;90</string>
     <string name="condition_acceleratingdown">BG accélération en baisse</string>
+
 
 </resources>
 
