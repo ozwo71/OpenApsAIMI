@@ -4548,7 +4548,7 @@ rT.reason.appendLine(
                 } else if (timenow > sixAMHour && recentSteps5Minutes > 100) {
                     chosenRate = 0.0
                     //rT.reason.append("Activité matinale → basale à 0.\n")
-                    rT.reason.append("Attività fisica mattutina → basale a 0.\n")
+                    rT.reason.append("Attività fisica → basale a 0.\n")
                 } else if (timenow <= sixAMHour && delta > 0 && bgAcceleration.toFloat() > 0.0f) {
                     chosenRate = profile_current_basal.toDouble()
                     //rT.reason.append("Matinée montante → basale de profil.\n")
