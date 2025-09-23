@@ -724,7 +724,7 @@
     <string name="original_file_missing">Het originele bestand bestaat niet.</string>
     <string name="file_too_short">Het bestand bevat 200 regels of minder, er is geen verwijdering uitgevoerd.</string>
     <string name="last_200_deleted">De laatste 200 regels zijn verwijderd. Het originele bestand is opgeslagen als \'%1$s\'.</string>
-    <string name="reason_data_removed">De waarden voor datum %1$s zijn verwijderd omdat TIR1DAIIR lager is dan 85%.</string>
+    <string name="reason_data_removed">De waarden voor datum %1$s zijn verwijderd omdat TIR1DAIIR lager is dan 85%%%.</string>
     <string name="reason_deletion_time_restricted">De verwijdering kan alleen worden uitgevoerd tussen 00:05 en 00:10.</string>
     <string name="reason_no_deletion_needed">Geen verwijdering nodig: tir1DAYIR is groter dan of gelijk aan 85%.</string>
     <string name="safety_sport_smb_zero">🏃‍♂️ Veiligheid sport → SMB=0</string>
@@ -732,5 +732,30 @@
     <string name="finalization_smb">🧩 Afronding: %1$.2f → %2$.2f E</string>
     <string name="limits_smb">🧱 Limieten: %1$.2f → %2$.2f E</string>
     <string name="no_recent_bg">⚠️ Geen recente BG — standaardinstellingen behouden</string>
+    <string name="autodrive_debug_header">→ Autodrive Debug\n</string>
+    <string name="autodrive_bg_trend">  • BG Trend: %1$.2f\n</string>
+    <string name="autodrive_predicted_bg">  • Predicted BG: %1$.2f\n</string>
+    <string name="autodrive_combined_delta">  • Combined Delta: %1$.2f\n</string>
+    <string name="autodrive_required_delta">  • Required Combined Delta: %1$.2f\n</string>
+    <string name="autodrive_disabled_trend">  ✘ Autodrive disabled : blood glucose trend decreasing\n</string>
+    <string name="autodrive_enabled_conditions">  ✔ Autodrive enabled : favorable conditions\n</string>
+    <string name="autodrive_disabled_conditions">  ✘ Autodrive disabled : insufficient conditions\n</string>
+    <string name="condition_hypoguard">hypoGuard</string>
+    <string name="condition_nosmbhm">nosmbHM</string>
+    <string name="condition_honeysmb">honeysmb</string>
+    <string name="condition_negdelta">negdelta</string>
+    <string name="condition_nosmb">nosmb</string>
+    <string name="condition_fasting">fasting</string>
+    <string name="condition_belowminthreshold">belowMinThreshold</string>
+    <string name="condition_newcalibration">isNewCalibration</string>
+    <string name="condition_belowtarget_dropping">belowTargetAndDropping</string>
+    <string name="condition_belowtarget_stable_nocob">belowTargetAndStableButNoCob</string>
+    <string name="condition_droppingfast">droppingFast</string>
+    <string name="condition_droppingfastathigh">droppingFastAtHigh</string>
+    <string name="condition_droppingveryfast">droppingVeryFast</string>
+    <string name="condition_prediction">prediction</string>
+    <string name="condition_bg90">bg90</string>
+    <string name="condition_acceleratingdown">acceleratingDown</string>
+
 
 </resources>

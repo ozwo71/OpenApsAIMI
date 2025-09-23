@@ -1045,6 +1045,7 @@ fun appendCompactLog(
       //reasonBuilder.append("Les 200 dernières lignes ont été supprimées. Le fichier original a été sauvegardé sous '$backupFileName'.")
         reasonBuilder.append(context.getString(R.string.last_200_deleted, backupFileName))
     }
+    @SuppressLint("StringFormatInvalid")
     private fun automateDeletionIfBadDay(tir1DAYIR: Int) {
         val reasonBuilder = StringBuilder()
         // Vérifier si le TIR est inférieur à 85%
@@ -1082,7 +1083,7 @@ fun appendCompactLog(
     ): Float {
         var smbToGive = smbToGiveParam
 
-        val (isCrit, critMsg) = isCriticalSafetyCondition(mealData, hypoThreshold)
+        val (isCrit, critMsg) = isCriticalSafetyCondition(mealData, hypoThreshold,context)
         if (isCrit) {
             reason?.appendLine("🛑 $critMsg → SMB=0")
             return 0f
@@ -1211,34 +1212,34 @@ fun appendCompactLog(
     ): Boolean {
         val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
 
-        reason.append("→ Autodrive Debug\n")
+      //reason.append("→ Autodrive Debug\n")
+        reason.append(context.getString(R.string.autodrive_debug_header))
       //reason.append("  • BG Trend: $bgTrend\n")
-        reason.append("  • BG Tendenza: $bgTrend\n")
+        reason.append(context.getString(R.string.autodrive_bg_trend, bgTrend))
       //reason.append("  • Predicted BG: $predictedBg\n")
-        reason.append("  • BG Previsto: $predictedBg\n")
+        reason.append(context.getString(R.string.autodrive_predicted_bg, predictedBg))
       //reason.append("  • Combined Delta: $combinedDelta\n")
-        reason.append("  • Delta combinato: $combinedDelta\n")
+        reason.append(context.getString(R.string.autodrive_combined_delta, combinedDelta))
       //reason.append("  • Required Combined Delta: $autodriveDelta\n")
-        reason.append("  • Delta combinato richiesto: $autodriveDelta\n")
-
+        reason.append(context.getString(R.string.autodrive_required_delta, autodriveDelta))
 
         // Cas 1 : glycémie baisse => désactivation
         if (bgTrend < -0.15f) {
           //reason.append("  ✘ Autodrive désactivé : tendance glycémie en baisse\n")
-            reason.append("  ✘ Autodrive disattivato : glicemia in calo\n")
+            reason.append(context.getString(R.string.autodrive_disabled_trend))
             return false
         }
 
         // Cas 2 : glycémie monte ou conditions fortes
         if ((bgTrend >= 0f && combinedDelta >= autodriveDelta) || (predictedBg > 140 && combinedDelta >= autodriveDelta)) {
           //reason.append("  ✔ Autodrive activé : conditions favorables\n")
-            reason.append("  ✔ Autodrive attivato : condizioni favorevoli\n")
+            reason.append(context.getString(R.string.autodrive_enabled_conditions))
             return true
         }
 
         // Cas 3 : conditions non remplies
       //reason.append("  ✘ Autodrive désactivé : conditions insuffisantes\n")
-        reason.append("  ✘ Autodrive disattivato : condizioni insufficienti\n")
+        reason.append(context.getString(R.string.autodrive_disabled_conditions))
         return false
     }
 
@@ -1284,7 +1285,7 @@ fun appendCompactLog(
         return (number * 20.0).roundToInt() / 20.0f
     }
 
-    private fun isCriticalSafetyCondition(mealData: MealData,  hypoThreshold: Double): Pair<Boolean, String> {
+    private fun isCriticalSafetyCondition(mealData: MealData,  hypoThreshold: Double,ctx: Context): Pair<Boolean, String> {
         val cobFromMeal = try {
             // Adapte le nom selon ta classe (souvent mealData.cob ou mealData.mealCOB)
             mealData.mealCOB
@@ -1317,7 +1318,7 @@ fun appendCompactLog(
         )
 
         // Récupération des conditions critiques
-        val criticalConditions = determineCriticalConditions(context)
+        val criticalConditions = determineCriticalConditions(ctx,context)
 
         // Calcul du résultat final
         val isCritical = criticalConditions.isNotEmpty()
@@ -1365,36 +1366,42 @@ fun appendCompactLog(
     /**
      * Détermine les conditions critiques à partir du contexte fourni
      */
-    private fun determineCriticalConditions(context: SafetyContext): List<String> {
+    private fun determineCriticalConditions(ctx:Context,context: SafetyContext): List<String> {
         val conditions = mutableListOf<String>()
 
         // Vérification des conditions critiques avec des noms explicites
       //if (isHypoBlocked(context)) conditions.add("hypoGuard")
-        if (isHypoBlocked(context)) conditions.add("protezione ipoglicemia")
-        if (isNosmbHm(context)) conditions.add("nosmbHM")
-        if (isHoneysmb(context)) conditions.add("honeysmb")
+        if (isHypoBlocked(context)) conditions.add(ctx.getString(R.string.condition_hypoguard))
+      //if (isNosmbHm(context)) conditions.add("nosmbHM")
+        if (isNosmbHm(context)) conditions.add(ctx.getString(R.string.condition_nosmbhm))
+      //if (isHoneysmb(context)) conditions.add("honeysmb")
+        if (isHoneysmb(context)) conditions.add(ctx.getString(R.string.condition_honeysmb))
       //if (isNegDelta(context)) conditions.add("negdelta")
-        if (isNegDelta(context)) conditions.add("delta negativo")
-        if (isNosmb(context)) conditions.add("nosmb")
-        if (isFasting(context)) conditions.add("fasting")
-        if (isBelowMinThreshold(context)) conditions.add("belowMinThreshold")
-        if (isNewCalibration(context)) conditions.add("isNewCalibration")
+        if (isNegDelta(context)) conditions.add(ctx.getString(R.string.condition_negdelta))
+      //if (isNosmb(context)) conditions.add("nosmb")
+        if (isNosmb(context)) conditions.add(ctx.getString(R.string.condition_nosmb))
+      //if (isFasting(context)) conditions.add("fasting")
+        if (isFasting(context)) conditions.add(ctx.getString(R.string.condition_fasting))
+      //if (isBelowMinThreshold(context)) conditions.add("belowMinThreshold")
+        if (isBelowMinThreshold(context)) conditions.add(ctx.getString(R.string.condition_belowminthreshold))
+      //if (isNewCalibration(context)) conditions.add("isNewCalibration")
+        if (isNewCalibration(context)) conditions.add(ctx.getString(R.string.condition_newcalibration))
       //if (isBelowTargetAndDropping(context)) conditions.add("belowTargetAndDropping")
-        if (isBelowTargetAndDropping(context)) conditions.add("BG sotto al Target e in calo")
+        if (isBelowTargetAndDropping(context)) conditions.add(ctx.getString(R.string.condition_belowtarget_dropping))
       //if (isBelowTargetAndStableButNoCob(context)) conditions.add("belowTargetAndStableButNoCob")
-        if (isBelowTargetAndStableButNoCob(context)) conditions.add("BG sotto al Target stabile senza COB")
+        if (isBelowTargetAndStableButNoCob(context)) conditions.add(ctx.getString(R.string.condition_belowtarget_stable_nocob))
       //if (isDroppingFast(context)) conditions.add("droppingFast")
-        if (isDroppingFast(context)) conditions.add("BG discesa rapida")
+        if (isDroppingFast(context)) conditions.add(ctx.getString(R.string.condition_droppingfast))
       //if (isDroppingFastAtHigh(context)) conditions.add("droppingFastAtHigh")
-        if (isDroppingFastAtHigh(context)) conditions.add("discesa rapida da BG>180")
+        if (isDroppingFastAtHigh(context)) conditions.add(ctx.getString(R.string.condition_droppingfastathigh))
       //if (isDroppingVeryFast(context)) conditions.add("droppingVeryFast")
-        if (isDroppingVeryFast(context)) conditions.add("BG forte discesa")
+        if (isDroppingVeryFast(context)) conditions.add(ctx.getString(R.string.condition_droppingveryfast))
       //if (isPrediction(context)) conditions.add("prediction")
-        if (isPrediction(context)) conditions.add("BG predizione")
+        if (isPrediction(context)) conditions.add(ctx.getString(R.string.condition_prediction))
       //if (isBg90(context)) conditions.add("bg90")
-        if (isBg90(context)) conditions.add("BG<90")
+        if (isBg90(context)) conditions.add(ctx.getString(R.string.condition_bg90))
       //if (isAcceleratingDown(context)) conditions.add("acceleratingDown")
-        if (isAcceleratingDown(context)) conditions.add("BG accellerazione in calo")
+        if (isAcceleratingDown(context)) conditions.add(ctx.getString(R.string.condition_acceleratingdown))
         return conditions
     }
 
