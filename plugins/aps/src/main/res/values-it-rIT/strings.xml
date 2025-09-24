@@ -776,5 +776,14 @@
     <string name="console_future_bg">BG previsto: %1$s, BG calo previsto: %2$s, Effetto insulina: %3$s, COB Impatto: %4$.0f, Carb. Richiesti: %5$d</string>
     <string name="insulin_effect">Insulina effetto : %1$.2f</string>
     <string name="predicted_bg">BG Previsto : %1$.2f</string>
+    <string name="bg_note_more_aggressive">più aggressivo</string>
+    <string name="bg_note_less_aggressive">meno aggressivo</string>
+    <string name="bg_note_too_aggressive">troppo aggressivo</string>
+    <string name="bg_note_low_treatment">abbassa trattamento</string>
+    <string name="bg_note_normal">normale</string>
+    <string name="calc_dynamic_peaktime">🧠 Calcolo picco insulina\n</string>
+    <string name="profile_peak_time">  • Picco profilo: %1$.0f\n</string>
+    <string name="bg_delta">  • BG: %1$.0f, Delta: %2$.2f\n</string>
+
 </resources>
 

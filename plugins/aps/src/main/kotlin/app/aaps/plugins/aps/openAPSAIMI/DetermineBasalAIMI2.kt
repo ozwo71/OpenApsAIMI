@@ -2584,15 +2584,15 @@ fun appendCompactLog(
     private fun determineNoteBasedOnBg(bg: Double): String {
         return when {
           //bg > 170 -> "more aggressive"
-            bg > 170 -> "più aggressivo"
+            bg > 170 -> context.getString(R.string.bg_note_more_aggressive)
           //bg in 90.0..100.0 -> "less aggressive"
-            bg in 90.0..100.0 -> "meno aggressivo"
+            bg in 90.0..100.0 -> context.getString(R.string.bg_note_less_aggressive)
           //bg in 80.0..89.9 -> "too aggressive" // Vous pouvez ajuster ces valeurs selon votre logique
-            bg in 80.0..89.9 -> "troppo aggressivo" // Vous pouvez ajuster ces valeurs selon votre logique
+            bg in 80.0..89.9 -> context.getString(R.string.bg_note_too_aggressive)
           //bg < 80 -> "low treatment"
-            bg < 80 -> "abbassa trattamento"
+            bg < 80 -> context.getString(R.string.bg_note_low_treatment)
           //else -> "normal" // Vous pouvez définir un autre message par défaut pour les cas non couverts
-            else -> "normale" // Vous pouvez définir un autre message par défaut pour les cas non couverts
+            else -> context.getString(R.string.bg_note_normal)
         }
     }
     private fun processNotesAndCleanUp(notes: String): String {
@@ -2774,13 +2774,13 @@ fun appendCompactLog(
     val activityRatio = futureActivity / (currentActivity + 0.0001)
 
     //reasonBuilder.append("🧠 Calcul Dynamic PeakTime\n")
-    reasonBuilder.append("🧠 Calcolo picco insulina \n")
+    reasonBuilder.append(context.getString(R.string.calc_dynamic_peaktime))
 //  reasonBuilder.append("  • PeakTime initial: ${profile.peakTime}\n")
-    reasonBuilder.append("  • Picco insulina profilo: ${profile.peakTime}\n")
-//    reasonBuilder.append("  • BG: $bg, Delta: ${round(delta, 2)}\n")
-    reasonBuilder.append("  • BG: $bg, Delta: ${round(delta, 2)}\n")
+    reasonBuilder.append(context.getString(R.string.profile_peak_time, profile.peakTime))
+//  reasonBuilder.append("  • BG: $bg, Delta: ${round(delta, 2)}\n")
+    reasonBuilder.append(context.getString(R.string.bg_delta, bg, delta))
 
-    // 1️⃣ Facteur de correction hyperglycémique
+        // 1️⃣ Facteur de correction hyperglycémique
     val hyperCorrectionFactor = when {
         bg <= 130 || delta <= 4 -> 1.0
         bg in 130.0..240.0 -> 0.6 - (bg - 130) * (0.6 - 0.3) / (240 - 130)
@@ -2788,19 +2788,13 @@ fun appendCompactLog(
     }
     dynamicPeakTime *= hyperCorrectionFactor
 //  reasonBuilder.append("  • Facteur hyperglycémie: $hyperCorrectionFactor\n")
-  //reasonBuilder.append("  • Fattore iperglicemia: $hyperCorrectionFactor\n")
-  //reasonBuilder.append("  • Fattore iperglicemia: ${"%.2f".format(hyperCorrectionFactor)}\n")
     reasonBuilder.append("  • Fattore iperglicemia: ${String.format("%.2f", hyperCorrectionFactor)}\n")
-
-    
 
     // 2️⃣ Basé sur currentActivity (IOB)
     if (currentActivity > 0.1) {
         val adjustment = currentActivity * 20 + 5
         dynamicPeakTime += adjustment
 //      reasonBuilder.append("  • Ajout lié IOB: +$adjustment\n")
-      //reasonBuilder.append("  • Aggiustamento IOB: +$adjustment\n")
-      //reasonBuilder.append("  • Aggiustamento IOB: +${"%.2f".format(adjustment)}\n")
         reasonBuilder.append("  • Aggiustamento IOB: +${String.format("%.2f", adjustment)}\n")
     }
 
@@ -2812,9 +2806,7 @@ fun appendCompactLog(
     }
     dynamicPeakTime *= ratioFactor
 //  reasonBuilder.append("  • Ratio activité: ${round(activityRatio,2)} ➝ facteur $ratioFactor\n")
-  //reasonBuilder.append("  • Rapporto attività fisica: ${round(activityRatio,2)} ➝ fattore $ratioFactor\n")
     reasonBuilder.append("  • Rapporto attività fisica: ${round(activityRatio,2)} ➝ fattore ${"%.2f".format(ratioFactor)}\n")
-
 
     // 4️⃣ Nombre de pas
     stepCount?.let {
@@ -2839,15 +2831,12 @@ fun appendCompactLog(
             it > 110 -> {
                 dynamicPeakTime *= 1.15
 //              reasonBuilder.append("  • FC élevée ($it) ➝ x1.15\n")
-              //reasonBuilder.append("  • FC elevata ($it) ➝ x1.15\n")
                 reasonBuilder.append("  • FC elevata (${String.format("%d", it)}) ➝ x1.15\n")
             }
             it < 55 -> {
                 dynamicPeakTime *= 0.85
 //              reasonBuilder.append("  • FC basse ($it) ➝ x0.85\n")
-              //reasonBuilder.append("  • FC bassa ($it) ➝ x0.85\n")
                 reasonBuilder.append("  • FC bassa (${String.format("%d", it)}) ➝ x0.85\n")
-                
             }
         }
     }
@@ -3129,7 +3118,7 @@ fun appendCompactLog(
             reason.append("  • BG Target: $targetBg\n")
             reason.append("  • Slope from min deviation: ${mealData.slopeFromMinDeviation}\n")
             //reason.append("  • BG acceleration: $bgAcceleration\n")
-            reason.append("  • BG accellerazionen: $bgAcceleration\n")
+            reason.append("  • BG accellerazione: $bgAcceleration\n")
 
             rT.reason.append(reason.toString()) // une seule fois à la fin
             return rT
@@ -3285,7 +3274,6 @@ fun appendCompactLog(
                 sensitivityRatio = round(sensitivityRatio, 2)
               //consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
                 consoleLog.add("Sensibilità rapporto impostato a $sensitivityRatio in base al target temporaneo di $target_bg; ")
-
             }
 
             !profile.temptargetSet && combinedDelta <= 0 && predictedBg < 120                                                                                                    -> {
@@ -3667,7 +3655,6 @@ fun appendCompactLog(
         } else {
           //rT.reason.appendLine("🗃️ ML training: dataset insuffisant — pas d’affinage")
             rT.reason.appendLine("🗃️ Addestramento A.I: set di dati insufficiente, nessun aggiustamento")
-
         }
 
         var smbToGive = if (bg > 130 && delta > 2 && predictedSMB == 0.0f) modelcal else predictedSMB
@@ -3912,16 +3899,13 @@ fun appendCompactLog(
         //rT.reason.append(reasonAimi.toString())
         rT.reason.appendLine(
     //"📈 DIA ajusté: ${"%.1f".format(adjustedDIAInMinutes)} min | " +
-"📈 DIA ricalcolata: ${"%.1f".format(adjustedDIAInMinutes)} min | " +
+"📈 CALCOLO REAL-TIME - DIA : ${"%.1f".format(adjustedDIAInMinutes)} min | " +
 //    "Morning: ${"%.1f".format(adjustedMorningFactor)}, " +
-//      "Mattina reattività ricalc: ${"%.1f".format(adjustedMorningFactor * 100)}%, " +
-    "Reattività ricalcolata: Mattina: ${ "%.1f".format(adjustedMorningFactor * 100)}% | " +
+    "Reattività - Mattina: ${ "%.1f".format(adjustedMorningFactor * 100)}% | " +
 //    "Afternoon: ${"%.1f".format(adjustedAfternoonFactor)}, " +
-//      "Pomeriggio reattività ricalc.: ${"%.1f".format(adjustedAfternoonFactor * 100)}%, " +
     "Pomeriggio: ${ "%.1f".format(adjustedAfternoonFactor * 100)}% | " +
 //    "Evening: ${"%.1f".format(adjustedEveningFactor)}"
- //     "Sera reattività ricalc.: ${"%.1f".format(adjustedEveningFactor * 100)}%"
-    "Sera: ${ "%.1f".format(adjustedEveningFactor * 100)}%"
+     "Sera: ${ "%.1f".format(adjustedEveningFactor * 100)}%"
 )
 
 rT.reason.appendLine(

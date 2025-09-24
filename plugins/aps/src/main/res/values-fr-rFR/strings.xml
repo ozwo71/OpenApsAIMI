@@ -772,5 +772,13 @@
     <string name="console_future_bg">BG futur: %1$s, Chute prévue: %2$s, Effet de l\'insuline: %3$s, Impact COB: %4$.0f, Glucides nécessaires: %5$d</string>
     <string name="insulin_effect">Insulin effect: %1$.2f</string>
     <string name="predicted_bg">BG prévu : %1$.2f</string>
+    <string name="bg_note_more_aggressive">plus agressif</string>
+    <string name="bg_note_less_aggressive">moins agressif</string>
+    <string name="bg_note_too_aggressive">trop agressif</string>
+    <string name="bg_note_low_treatment">traitement réduit</string>
+    <string name="bg_note_normal">normal</string>
+    <string name="calc_dynamic_peaktime">🧠 Calcul Dynamic PeakTime\n</string>
+    <string name="profile_peak_time">  • Pic de profil: %1$.0f\n</string>
+
 </resources>
 

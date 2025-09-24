@@ -793,4 +793,15 @@
     <string name="console_future_bg">Future BG: %1$s, Projected Drop: %2$s, Insulin Effect: %3$s, COB Impact: %4$.0f, Carbs Required: %5$d</string>
     <string name="insulin_effect">Insulin effect: %1$.2f</string>
     <string name="predicted_bg">Predicted BG: %1$.2f</string>
+    <string name="bg_note_more_aggressive">more aggressive</string>
+    <string name="bg_note_less_aggressive">less aggressive</string>
+    <string name="bg_note_too_aggressive">too aggressive</string>
+    <string name="bg_note_low_treatment">low treatment</string>
+    <string name="bg_note_normal">normal</string>
+    <string name="calc_dynamic_peaktime">🧠 Calculation Dynamic PeakTime\n</string>
+    <string name="profile_peak_time">  • Profile peak: %1$.0f\n</string>
+    <string name="bg_delta">  • BG: %1$.0f, Delta: %2$.2f\n</string>
+
+
+
 </resources>
