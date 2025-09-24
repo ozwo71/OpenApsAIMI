@@ -762,7 +762,19 @@
     <string name="condition_prediction">BG predizione</string>
     <string name="condition_bg90">BG&lt;90</string>
     <string name="condition_acceleratingdown">BG accelerazione in calo</string>
-
-
+    <string name="no_conditions_met_2">Nessuna condizione soddisfatta</string>
+    <string name="safety_condition">Condizioni sicurezza %1$b : %2$s</string>
+    <string name="interval_delta_1">Intervallo : 1 (delta > 15)</string>
+    <string name="interval_value">Intervallo : %1$d</string>
+    <string name="csv_file_path">CSV file percorso: %1$s</string>
+    <string name="csv_file_empty">CSV file è vuoto.</string>
+    <string name="csv_missing_columns">Nel file CSV mancano le colonne richieste.</string>
+    <string name="insufficient_data_training">Dati insufficienti per addestrare il modello AI</string>
+    <string name="retraining_final_model">Addestramento finale del modello AI con parametri ottimali su tutti i dati...</string>
+    <string name="iteration_smb">→ Iterazione %1$d | SMB=%2$.2f → %3$.2f | Δ=%4$.2f | Soglia=%5$.2f</string>
+    <string name="predicted_smb_higher">Modello predittivo suggerisce SMB maggiore, aggiustamento confermato</string>
+    <string name="console_future_bg">BG previsto: %1$s, BG calo previsto: %2$s, Effetto insulina: %3$s, COB Impatto: %4$.0f, Carb. Richiesti: %5$d</string>
+    <string name="insulin_effect">Insulina effetto : %1$.2f</string>
+    <string name="predicted_bg">BG Previsto : %1$.2f</string>
 </resources>
 

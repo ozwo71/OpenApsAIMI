@@ -756,5 +756,18 @@
     <string name="condition_prediction">BG voorspelling</string>
     <string name="condition_bg90">BG&lt;90</string>
     <string name="condition_acceleratingdown">BG versnelt naar beneden</string>
-
+    <string name="no_conditions_met_2">No conditions met</string>
+    <string name="safety_condition">Safety condition %1$b : %2$s</string>
+    <string name="interval_delta_1">Interval : 1 (delta > 15)</string>
+    <string name="interval_value">Interval : %1$d</string>
+    <string name="csv_file_path">CSV file path: %1$s</string>
+    <string name="csv_file_empty">CSV file is empty.</string>
+    <string name="csv_missing_columns">CSV file is missing required columns.</string>
+    <string name="insufficient_data_training">Insufficient data for training.</string>
+    <string name="retraining_final_model">Final model training with optimal hyperparameters on all data...</string>
+    <string name="iteration_smb">→ Iteration %1$d | SMB=%2$.2f → %3$.2f | Δ=%4$.2f | Threshold=%5$.2f</string>
+    <string name="predicted_smb_higher">Predictive model suggests higher SMB, adjustment confirmed</string>
+    <string name="console_future_bg">Future BG: %1$s, Projected Drop: %2$s, Insulin Effect: %3$s, COB Impact: %4$.0f, Carbs Required: %5$d</string>
+    <string name="insulin_effect">Insulin effect: %1$.2f</string>
+    <string name="predicted_bg">Predicted BG: %1$.2f</string>
 </resources>

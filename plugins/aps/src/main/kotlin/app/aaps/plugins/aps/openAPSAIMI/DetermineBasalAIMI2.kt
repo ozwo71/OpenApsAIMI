@@ -1413,11 +1413,11 @@ fun appendCompactLog(
             conditions.joinToString(", ")
         } else {
 //          "No conditions met"
-            "Nessuna condizione soddisfatta"
+            context.getString(R.string.no_conditions_met_2)
         }
 
 //      return "Safety condition $isCritical : $conditionsString"
-        return "Condizioni sicurezza $isCritical : $conditionsString"
+        return context.getString(R.string.safety_condition, isCritical, conditionsString)
     }
 
     // Fonctions de vérification spécifiques pour chaque condition
@@ -1519,7 +1519,7 @@ fun appendCompactLog(
         // Condition critique : si delta > 15, intervalle fixe à 1
         if (delta > 15f) {
           //reasonBuilder.append("Interval : 1 (delta > 15)")
-            reasonBuilder.append("Intervallo : 1 (delta > 15)")
+            reasonBuilder.append(context.getString(R.string.interval_delta_1))
             return 1
         }
 
@@ -1555,7 +1555,7 @@ fun appendCompactLog(
         }
 
       //reasonBuilder.append("Interval : $interval")
-        reasonBuilder.append("Intervallo : $interval")
+        reasonBuilder.append(context.getString(R.string.interval_value, interval))
         return interval
     }
 
@@ -1814,10 +1814,10 @@ fun appendCompactLog(
 
     val allLines = csvfile.readLines()
   //println("CSV file path: \${csvfile.absolutePath}")
-    println("CSV file percorso: \${csvfile.absolutePath}")
+    println(context.getString(R.string.csv_file_path, csvfile.absolutePath))
     if (allLines.isEmpty()) {
       //println("CSV file is empty.")
-        println("CSV file è vuoto.")
+        println(context.getString(R.string.csv_file_empty))
         return predictedSMB
     }
 
@@ -1830,7 +1830,7 @@ fun appendCompactLog(
     )
     if (!requiredColumns.all { headers.contains(it) }) {
       //println("CSV file is missing required columns.")
-        println("Nel file CSV mancano le colonne richieste.")
+        println(context.getString(R.string.csv_missing_columns))
         return predictedSMB
     }
 
@@ -1864,7 +1864,7 @@ fun appendCompactLog(
 
     if (inputs.isEmpty() || targets.isEmpty()) {
       //println("Insufficient data for training.")
-        println("Dati insufficienti per addestrare il modello AI")
+        println(context.getString(R.string.insufficient_data_training))
         return predictedSMB
     }
 
@@ -1906,8 +1906,7 @@ fun appendCompactLog(
 
     if (bestNetwork != null) {
       //println("Réentraînement final avec les meilleurs hyperparamètres sur toutes les données...")
-        println("Nuovo addestramento finale del modello AI con i migliori iperparametri su tutti i dati...")
-
+        println(context.getString(R.string.retraining_final_model))
         val finalNetwork = AimiNeuralNetwork(
             inputSize = inputs.first().size,
             hiddenSize = 5,
@@ -1949,7 +1948,7 @@ fun appendCompactLog(
         } ?: finalRefinedSMB
 
       //println("→ Iteration $iterationCount | SMB=$finalRefinedSMB → $refinedSMB | Δ=${abs(finalRefinedSMB - refinedSMB)} | threshold=$dynamicThreshold")
-        println("→ Iterazione  $iterationCount | SMB=$finalRefinedSMB → $refinedSMB | Δ=${abs(finalRefinedSMB - refinedSMB)} | Soglia=$dynamicThreshold")
+        println(context.getString(R.string.iteration_smb, iterationCount, finalRefinedSMB, refinedSMB, abs(finalRefinedSMB - refinedSMB), dynamicThreshold))
 
         if (abs(finalRefinedSMB - refinedSMB) <= dynamicThreshold) {
             finalRefinedSMB = max(0.05f, refinedSMB)
@@ -1960,7 +1959,7 @@ fun appendCompactLog(
 
     if (finalRefinedSMB > predictedSMB && bg > 150 && delta > 5) {
       //println("Modèle prédictif plus élevé, ajustement retenu.")
-        println("Modello predittivo indica SMB più grande, l’aggiustamento viene confermato.")
+        println(context.getString(R.string.predicted_smb_higher))
         return finalRefinedSMB
     }
 
@@ -2275,7 +2274,7 @@ fun appendCompactLog(
 
             // Debug info
           //consoleError.add("Future BG: $futureBG, Projected Drop: $projectedDrop, Insulin Effect: $insulinEffect, COB Impact: ${cob * csf}, Carbs Required: $carbsReq")
-            consoleError.add("BG previsto: ${"%.0f".format(futureBG)}, BG calo previsto: ${"%.0f".format(projectedDrop)}, Insulina Effetto: ${"%.0f".format(insulinEffect)}, COB Impatto: ${cob * csf}, Carb. Richiesti: $carbsReq")
+            consoleError.add(context.getString(R.string.console_future_bg, "%.0f".format(futureBG), "%.0f".format(projectedDrop), "%.0f".format(insulinEffect), (cob * csf), carbsReq))
 
             return carbsReq
         }
@@ -2323,7 +2322,7 @@ fun appendCompactLog(
             insulinEffect *= 0.8f
         }
       //reasonBuilder.append("insulin effect : $insulinEffect")
-        reasonBuilder.append("insulina effetto : $insulinEffect")
+        reasonBuilder.append(context.getString(R.string.insulin_effect, insulinEffect))
         return insulinEffect
     }
     private fun calculateTrendIndicator(
@@ -2430,7 +2429,7 @@ fun appendCompactLog(
             else -> predictedBG
         }
       //reasonBuilder.append("Predicted BG : $finalPredictedBG")
-        reasonBuilder.append("BG Previsto : $finalPredictedBG")
+        reasonBuilder.append(context.getString(R.string.predicted_bg, finalPredictedBG))
         return finalPredictedBG
     }
 
