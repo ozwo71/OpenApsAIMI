@@ -3901,7 +3901,7 @@ fun appendCompactLog(
     //"📈 DIA ajusté: ${"%.1f".format(adjustedDIAInMinutes)} min | " +
 "📈 DIA : ${"%.1f".format(adjustedDIAInMinutes)} min | " +
 //    "Morning: ${"%.1f".format(adjustedMorningFactor)}, " +
-    "REATTIVITA'<120 Mattina: ${ "%.1f".format(adjustedMorningFactor * 100)}% | " +
+    "REATT. BG<120 Mattina: ${ "%.1f".format(adjustedMorningFactor * 100)}% | " +
 //    "Afternoon: ${"%.1f".format(adjustedAfternoonFactor)}, " +
     "Pomeriggio: ${ "%.1f".format(adjustedAfternoonFactor * 100)}% | " +
 //    "Evening: ${"%.1f".format(adjustedEveningFactor)}"
