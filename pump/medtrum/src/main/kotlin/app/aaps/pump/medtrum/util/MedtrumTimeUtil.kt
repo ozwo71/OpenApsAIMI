@@ -2,7 +2,9 @@ package app.aaps.pump.medtrum.util
 
 import java.time.Duration
 import java.time.Instant
+import javax.inject.Singleton
 
+@Singleton
 class MedtrumTimeUtil {
 
     fun getCurrentTimePumpSeconds(): Long {
