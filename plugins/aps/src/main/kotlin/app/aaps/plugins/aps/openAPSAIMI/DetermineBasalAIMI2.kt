@@ -3634,7 +3634,7 @@ fun appendCompactLog(
             if (allLines.size > linesToConsider) {
                 val refinedSMB = neuralnetwork5(combinedDelta.toFloat(), shortAvgDelta, longAvgDelta, predictedSMB, profile)
               //rT.reason.appendLine("🧠 NN5 (avant boost): ${"%.2f".format(refinedSMB)} U")
-                rT.reason.appendLine("🧠 Predizione A.I.(prima di incremento BG): ${"%.2f".format(refinedSMB)} U")
+                rT.reason.appendLine("🧠 Previsione A.I.: ${"%.2f".format(refinedSMB)} U")
                 this.predictedSMB = refinedSMB
                 if (bg > 200 && delta > 4 && iob < preferences.get(DoubleKey.ApsSmbMaxIob)) {
                     rT.reason.appendLine("⚡ Boost hyper: x1.7 (BG=${bg.toInt()}, Δ=${"%.1f".format(delta)})")
@@ -3899,9 +3899,9 @@ fun appendCompactLog(
         //rT.reason.append(reasonAimi.toString())
         rT.reason.appendLine(
     //"📈 DIA ajusté: ${"%.1f".format(adjustedDIAInMinutes)} min | " +
-"📈 CALCOLO REAL-TIME - DIA : ${"%.1f".format(adjustedDIAInMinutes)} min | " +
+"📈 DIA : ${"%.1f".format(adjustedDIAInMinutes)} min | " +
 //    "Morning: ${"%.1f".format(adjustedMorningFactor)}, " +
-    "Reattività - Mattina: ${ "%.1f".format(adjustedMorningFactor * 100)}% | " +
+    "REATTIVITA'<120 Mattina: ${ "%.1f".format(adjustedMorningFactor * 100)}% | " +
 //    "Afternoon: ${"%.1f".format(adjustedAfternoonFactor)}, " +
     "Pomeriggio: ${ "%.1f".format(adjustedAfternoonFactor * 100)}% | " +
 //    "Evening: ${"%.1f".format(adjustedEveningFactor)}"
