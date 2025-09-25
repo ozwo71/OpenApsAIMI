@@ -3910,16 +3910,16 @@ fun appendCompactLog(
 
 rT.reason.appendLine(
     //"🚗 Autodrive: $autodrive | Mode actif: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
-    "🚗 Autodrive: $autodrive | Modalità snack/prebolo: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
+    "🚗 Autodrive: ${if (autodrive) "ON" else "OFF"} | Modalità snack/prebolo: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
     //"AutodriveCondition: $autodriveCondition"
-    "Autodrive condizioni: $autodriveCondition"
+    "Autodrive condizioni: ${if (autodriveCondition) "ON" else "OFF"}"
 )
 
 rT.reason.appendLine(
 //    "🔍 BGTrend: ${"%.2f".format(bgTrend)} | ΔCombiné: ${"%.2f".format(combinedDelta)} | " +
     "🔍 BG Trend: ${"%.2f".format(bgTrend)} | Δ Combinato: ${"%.2f".format(combinedDelta)} | " +
 //    "Predicted BG: ${"%.0f".format(predictedBg)} | Accélération: ${"%.2f".format(bgacc)} | " +
-      "BG previsto: ${"%.0f".format(predictedBg)} | Accellerazione: ${"%.2f".format(bgacc)} | " +
+      "BG previsto: ${"%.0f".format(predictedBg)} | Accelerazione: ${"%.2f".format(bgacc)} | " +
 //    "Slope Min Dev.: ${"%.2f".format(mealData.slopeFromMinDeviation)}"
       "Pendenza Min Dev.: ${"%.2f".format(mealData.slopeFromMinDeviation)}"
 )
