@@ -3631,6 +3631,7 @@ fun appendCompactLog(
             val allLines = csvfile.readLines()
             val minutesToConsider = 2500.0
             val linesToConsider = (minutesToConsider / 5).toInt()
+            rT.reason.append("CSV file: ${if (csvfile.exists()) "✅" else "❌"}")
             if (allLines.size > linesToConsider) {
                 val refinedSMB = neuralnetwork5(combinedDelta.toFloat(), shortAvgDelta, longAvgDelta, predictedSMB, profile)
               //rT.reason.appendLine("🧠 NN5 (avant boost): ${"%.2f".format(refinedSMB)} U")
@@ -3651,7 +3652,7 @@ fun appendCompactLog(
                     }
                 basal = roundBasal(basal)
             }
-            rT.reason.append("csvfile ${csvfile.exists()}")
+          //rT.reason.append("csvfile ${csvfile.exists()}")
         } else {
           //rT.reason.appendLine("🗃️ ML training: dataset insuffisant — pas d’affinage")
             rT.reason.appendLine("🗃️ Addestramento A.I: set di dati insufficiente, nessun aggiustamento")
