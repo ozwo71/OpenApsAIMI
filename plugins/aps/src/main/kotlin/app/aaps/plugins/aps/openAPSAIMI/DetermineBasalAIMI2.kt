@@ -3911,9 +3911,9 @@ fun appendCompactLog(
 
 rT.reason.appendLine(
     //"🚗 Autodrive: $autodrive | Mode actif: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
-    "🚗 Autodrive: ${if (autodrive) "ON" else "OFF"} | Modalità snack/prebolo: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
+    "🚗 Autodrive: ${if (autodrive) "✔" else "✘"} | Modalità snack/prebolo: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
     //"AutodriveCondition: $autodriveCondition"
-    "Autodrive condizioni: ${if (autodriveCondition) "ON" else "OFF"}"
+    "Autodrive condizioni: ${if (autodriveCondition) "✔" else "✘"}"
 )
 
 rT.reason.appendLine(
