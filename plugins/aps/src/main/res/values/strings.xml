@@ -747,7 +747,7 @@
     <string name="original_file_missing">The original file does not exist.</string>
     <string name="file_too_short">The file contains 200 lines or fewer, no deletion performed.</string>
     <string name="last_200_deleted">The last 200 lines have been deleted. The original file was saved as \'%1$s\'.</string>
-    <string name="reason_data_removed">The values for date %1$s have been deleted because TIR1DAIIR is lower than 85%%%.</string>
+    <string name="reason_data_removed">The values for date %1$s have been deleted because TIR1DAYIR is lower than 85%%%.</string>
     <string name="reason_deletion_time_restricted">The deletion can only be executed between 00:05 and 00:10.</string>
     <string name="reason_no_deletion_needed">No deletion needed: tir1DAYIR is greater than or equal to 85%.</string>
     <string name="safety_sport_smb_zero">🏃‍♂️ Safety sport → SMB=0</string>
@@ -812,4 +812,15 @@
     <string name="reason_total_rest">  • Total rest ➝ x0.75\n</string>
     <string name="reason_sensor_lag">  • SensorLag > Historic ➝ x0.85\n</string>
     <string name="reason_sensor_lag_lower">  • SensorLag &lt; Historic ➝ x1.2\n</string>
+    <string name="reason_max_iob">MaxIob: %.2f\n</string>
+    <string name="reason_autodrive_early_meal">Autodrive early meal/snack detection: Microbolusing %.2fU, CombinedDelta: %.2f, Predicted: %.2f, Acceleration: %.2f.\n</string>
+    <string name="manual_meal_prebolus">Microbolusing Meal Mode %1$.2fU.</string>
+    <string name="autodrive_meal_prebolus">→ Microbolusing Autodrive Mode %1$.2fU</string>
+    <string name="target_bg">  • Target BG: %1$.0f</string>
+    <string name="slope_from_min_deviation">  • Slope from min deviation: %1$.2f</string>
+    <string name="bg_acceleration">  • BG acceleration: %1$s</string>
+
+
+
+
 </resources>

@@ -795,5 +795,17 @@
     <string name="reason_total_rest">  • Corpo a riposo ➝ x0.75\n</string>
     <string name="reason_sensor_lag">  • Ritardo lettura sensore > Storico ➝ x0.85\n</string>
     <string name="reason_sensor_lag_lower">  • Ritardo lettura sensore &lt; Storico ➝ x1.2\n</string>
+    <string name="reason_max_iob">MaxIob: %.2f\n</string>
+    <string name="reason_autodrive_early_meal">Autodrive rilevamento precoce pasto/snack: Prebolo %.2fU, Delta Combinato: %.2f, BG Previsto: %.2f, BG Accelerazione: %.2f.</string>
+    <string name="manual_meal_prebolus">Prebolo modalità manuale Pasto Generico %1$.2fU.</string>
+    <string name="autodrive_meal_prebolus">→ Prebolo modalità Autodrive %1$.2fU</string>
+    <string name="target_bg">  • BG Target: %1$.0f</string>
+    <string name="slope_from_min_deviation">  • Pendenza dalla deviazione minima: %1$.2f</string>
+    <string name="bg_acceleration">  • BG accelerazione: %1$s</string>
+
+
+
+
+
 </resources>
 

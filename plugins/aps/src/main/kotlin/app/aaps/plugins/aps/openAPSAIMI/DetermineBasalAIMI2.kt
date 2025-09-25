@@ -2780,7 +2780,7 @@ fun appendCompactLog(
 //  reasonBuilder.append("  • BG: $bg, Delta: ${round(delta, 2)}\n")
     reasonBuilder.append(context.getString(R.string.bg_delta, bg, delta))
 
-        // 1️⃣ Facteur de correction hyperglycémique
+    // 1️⃣ Facteur de correction hyperglycémique
     val hyperCorrectionFactor = when {
         bg <= 130 || delta <= 4 -> 1.0
         bg in 130.0..240.0 -> 0.6 - (bg - 130) * (0.6 - 0.3) / (240 - 130)
@@ -2788,14 +2788,14 @@ fun appendCompactLog(
     }
     dynamicPeakTime *= hyperCorrectionFactor
 //  reasonBuilder.append("  • Facteur hyperglycémie: $hyperCorrectionFactor\n")
-        reasonBuilder.append(context.getString(R.string.reason_hyper_correction, hyperCorrectionFactor))
+    reasonBuilder.append(context.getString(R.string.reason_hyper_correction, hyperCorrectionFactor))
 
-        // 2️⃣ Basé sur currentActivity (IOB)
+    // 2️⃣ Basé sur currentActivity (IOB)
     if (currentActivity > 0.1) {
         val adjustment = currentActivity * 20 + 5
         dynamicPeakTime += adjustment
+      //reasonBuilder.append("  • Ajout lié IOB: +$adjustment\n")
         reasonBuilder.append(context.getString(R.string.reason_iob_adjustment, adjustment))
-        reasonBuilder.append("  • Aggiustamento IOB: +${String.format("%.2f", adjustment)}\n")
     }
 
     // 3️⃣ Ratio d'activité
@@ -2806,9 +2806,9 @@ fun appendCompactLog(
     }
     dynamicPeakTime *= ratioFactor
 //  reasonBuilder.append("  • Ratio activité: ${round(activityRatio,2)} ➝ facteur $ratioFactor\n")
-        reasonBuilder.append(context.getString(R.string.reason_activity_ratio, round(activityRatio,2), ratioFactor))
+    reasonBuilder.append(context.getString(R.string.reason_activity_ratio, round(activityRatio,2), ratioFactor))
 
-        // 4️⃣ Nombre de pas
+    // 4️⃣ Nombre de pas
     stepCount?.let {
         when {
             it > 500 -> {
@@ -2985,7 +2985,7 @@ fun appendCompactLog(
 
         this.maxIob = if (autodrive) DinMaxIob.toDouble() else maxIob
       //rT.reason.append(", MaxIob: $maxIob")
-        rT.reason.append("MaxIob: %.2f".format(maxIob))
+        rT.reason.append(context.getString(R.string.reason_max_iob, maxIob))
         this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
         this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
         // Calcul initial avec ajustement basé sur la glycémie et le delta
@@ -3099,27 +3099,27 @@ fun appendCompactLog(
         if (bg > 100 && predictedBg > 140 && !nightbis && !hasReceivedPbolusMInLastHour(pbolusAS) && autodrive && detectMealOnset(delta, predicted.toFloat(), bgAcceleration.toFloat()) && modesCondition) {
             rT.units = pbolusAS
           //rT.reason.append("Autodrive early meal detection/snack: Microbolusing ${pbolusAS}U, CombinedDelta : ${combinedDelta}, Predicted : ${predicted}, Acceleration : ${bgAcceleration}.")
-            rT.reason.append("Autodrive rilevamento precoce pasto/snack: Prebolo ${pbolusAS}U, Delta Combinato : ${combinedDelta}, BG Previsto : ${predicted}, BG Accellerazione : ${bgAcceleration}.")
+            rT.reason.append(context.getString(R.string.reason_autodrive_early_meal, pbolusAS, combinedDelta, predicted, bgAcceleration.toDouble()))
             return rT
         }
         if (isMealModeCondition()) {
             val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
             rT.units = pbolusM
           //rT.reason.append(" Microbolusing Meal Mode ${pbolusM}U.")
-            rT.reason.append(" Prebolo Modalità manuale Pasto genarico ${pbolusM}U.")
+            rT.reason.append(context.getString(R.string.manual_meal_prebolus, pbolusM))
             return rT
         }
         if (!nightbis && isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason) && modesCondition) {
             val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
             rT.units = pbolusA
-          //reason.append("→ Microbolusing Autodrive Mode ${pbolusA}U\n")
-            reason.append("→ Prebolo modalità Autodrive ${pbolusA}U\n")
-          //reason.append("  • Target BG: $targetBg\n")
-            reason.append("  • BG Target: $targetBg\n")
-            reason.append("  • Slope from min deviation: ${mealData.slopeFromMinDeviation}\n")
+            //reason.append("→ Microbolusing Autodrive Mode ${pbolusA}U\n")
+            reason.append(context.getString(R.string.autodrive_meal_prebolus, pbolusA))
+            //reason.append("  • Target BG: $targetBg\n")
+            reason.append(context.getString(R.string.target_bg, targetBg))
+            //reason.append("  • Slope from min deviation: ${mealData.slopeFromMinDeviation}\n")
+            reason.append(context.getString(R.string.slope_from_min_deviation, mealData.slopeFromMinDeviation))
             //reason.append("  • BG acceleration: $bgAcceleration\n")
-            reason.append("  • BG accellerazione: $bgAcceleration\n")
-
+            reason.append(context.getString(R.string.bg_acceleration, bgAcceleration))
             rT.reason.append(reason.toString()) // une seule fois à la fin
             return rT
             // rT.reason.append("Microbolusing Autodrive Mode ${pbolusA}U. TargetBg : ${targetBg}, CombinedDelta : ${combinedDelta}, Slopemindeviation : ${mealData.slopeFromMinDeviation}, Acceleration : ${bgAcceleration}. ")
