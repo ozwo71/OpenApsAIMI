@@ -801,7 +801,15 @@
     <string name="calc_dynamic_peaktime">🧠 Calculation Dynamic PeakTime\n</string>
     <string name="profile_peak_time">  • Profile peak: %1$.0f\n</string>
     <string name="bg_delta">  • BG: %1$.0f, Delta: %2$.2f\n</string>
-
-
-
+    <string name="reason_hyper_correction">  • Hyperglycemia factor: %1$.2f\n</string>
+    <string name="reason_iob_adjustment">  • IOB adjustment: +%1$.2f\n</string>
+    <string name="reason_activity_ratio">  • Activity ratio: %1$.2f ➝ factor %2$.2f\n</string>
+    <string name="reason_steps_adjustment">  • Steps (%1$d) ➝ +%2$.2f\n</string>
+    <string name="reason_few_steps">  • Few steps (%1$d) ➝ x0.9\n</string>
+    <string name="reason_high_hr">  • High HR (%1$d) ➝ x1.15\n</string>
+    <string name="reason_low_hr"> • Low HR (%1$d) ➝ x0.85\n</string>
+    <string name="reason_high_activity">  • Intense activity ➝ x1.2\n</string>
+    <string name="reason_total_rest">  • Total rest ➝ x0.75\n</string>
+    <string name="reason_sensor_lag">  • SensorLag > Historic ➝ x0.85\n</string>
+    <string name="reason_sensor_lag_lower">  • SensorLag &lt; Historic ➝ x1.2\n</string>
 </resources>

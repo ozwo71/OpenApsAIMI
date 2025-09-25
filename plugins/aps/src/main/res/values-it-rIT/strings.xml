@@ -784,6 +784,16 @@
     <string name="calc_dynamic_peaktime">🧠 Calcolo picco insulina\n</string>
     <string name="profile_peak_time">  • Picco profilo: %1$.0f\n</string>
     <string name="bg_delta">  • BG: %1$.0f, Delta: %2$.2f\n</string>
-
+    <string name="reason_hyper_correction">  • Fattore iperglicemia: %1$.2f\n</string>
+    <string name="reason_iob_adjustment">  • Aggiustamento IOB: +%1$.2f\n</string>
+    <string name="reason_activity_ratio">  • Rapporto attività fisica: %1$.2f ➝ fattore %2$.2f\n</string>
+    <string name="reason_steps_adjustment">  • Passi (%1$d) ➝ +%2$.2f\n</string>
+    <string name="reason_few_steps">  • Pochi passi (%1$d) ➝ x0.9\n</string>
+    <string name="reason_high_hr">  • FC elevata (%1$d) ➝ x1.15\n</string>
+    <string name="reason_low_hr"> • FC bassa (%1$d) ➝ x0.85\n</string>
+    <string name="reason_high_activity">  • Attività fisica intensa ➝ x1.2\n</string>
+    <string name="reason_total_rest">  • Corpo a riposo ➝ x0.75\n</string>
+    <string name="reason_sensor_lag">  • Ritardo lettura sensore > Storico ➝ x0.85\n</string>
+    <string name="reason_sensor_lag_lower">  • Ritardo lettura sensore &lt; Storico ➝ x1.2\n</string>
 </resources>
 

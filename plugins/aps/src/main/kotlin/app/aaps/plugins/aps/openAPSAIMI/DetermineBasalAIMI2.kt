@@ -2788,13 +2788,13 @@ fun appendCompactLog(
     }
     dynamicPeakTime *= hyperCorrectionFactor
 //  reasonBuilder.append("  • Facteur hyperglycémie: $hyperCorrectionFactor\n")
-    reasonBuilder.append("  • Fattore iperglicemia: ${String.format("%.2f", hyperCorrectionFactor)}\n")
+        reasonBuilder.append(context.getString(R.string.reason_hyper_correction, hyperCorrectionFactor))
 
-    // 2️⃣ Basé sur currentActivity (IOB)
+        // 2️⃣ Basé sur currentActivity (IOB)
     if (currentActivity > 0.1) {
         val adjustment = currentActivity * 20 + 5
         dynamicPeakTime += adjustment
-//      reasonBuilder.append("  • Ajout lié IOB: +$adjustment\n")
+        reasonBuilder.append(context.getString(R.string.reason_iob_adjustment, adjustment))
         reasonBuilder.append("  • Aggiustamento IOB: +${String.format("%.2f", adjustment)}\n")
     }
 
@@ -2806,21 +2806,21 @@ fun appendCompactLog(
     }
     dynamicPeakTime *= ratioFactor
 //  reasonBuilder.append("  • Ratio activité: ${round(activityRatio,2)} ➝ facteur $ratioFactor\n")
-    reasonBuilder.append("  • Rapporto attività fisica: ${round(activityRatio,2)} ➝ fattore ${"%.2f".format(ratioFactor)}\n")
+        reasonBuilder.append(context.getString(R.string.reason_activity_ratio, round(activityRatio,2), ratioFactor))
 
-    // 4️⃣ Nombre de pas
+        // 4️⃣ Nombre de pas
     stepCount?.let {
         when {
             it > 500 -> {
                 val stepAdj = it * 0.015
                 dynamicPeakTime += stepAdj
 //              reasonBuilder.append("  • Pas ($it) ➝ +$stepAdj\n")
-                reasonBuilder.append("  • Passi ($it) ➝ +$stepAdj\n")
+                reasonBuilder.append(context.getString(R.string.reason_steps_adjustment, it, stepAdj))
             }
             it < 100 -> {
                 dynamicPeakTime *= 0.9
 //              reasonBuilder.append("  • Peu de pas ($it) ➝ x0.9\n")
-                reasonBuilder.append("  • Pochi passi ($it) ➝ x0.9\n")
+                reasonBuilder.append(context.getString(R.string.reason_few_steps, it))
             }
         }
     }
@@ -2831,12 +2831,12 @@ fun appendCompactLog(
             it > 110 -> {
                 dynamicPeakTime *= 1.15
 //              reasonBuilder.append("  • FC élevée ($it) ➝ x1.15\n")
-                reasonBuilder.append("  • FC elevata (${String.format("%d", it)}) ➝ x1.15\n")
+                reasonBuilder.append(context.getString(R.string.reason_high_hr, it))
             }
             it < 55 -> {
                 dynamicPeakTime *= 0.85
 //              reasonBuilder.append("  • FC basse ($it) ➝ x0.85\n")
-                reasonBuilder.append("  • FC bassa (${String.format("%d", it)}) ➝ x0.85\n")
+                reasonBuilder.append(context.getString(R.string.reason_low_hr, it))
             }
         }
     }
@@ -2846,11 +2846,11 @@ fun appendCompactLog(
         if (stepCount > 1000 && heartRate > 110) {
             dynamicPeakTime *= 1.2
 //          reasonBuilder.append("  • Activité intense ➝ x1.2\n")
-            reasonBuilder.append("  • Attività fisica intensa ➝ x1.2\n")
+            reasonBuilder.append(context.getString(R.string.reason_high_activity))
         } else if (stepCount < 200 && heartRate < 50) {
             dynamicPeakTime *= 0.75
 //          reasonBuilder.append("  • Repos total ➝ x0.75\n")
-            reasonBuilder.append("  • Corpo a riposo ➝ x0.75\n")
+            reasonBuilder.append(context.getString(R.string.reason_total_rest))
         }
     }
 
@@ -2861,11 +2861,11 @@ fun appendCompactLog(
         if (sensorLagActivity > historicActivity) {
             dynamicPeakTime *= 0.85
 //          reasonBuilder.append("  • SensorLag > Historic ➝ x0.85\n")
-            reasonBuilder.append("  • Ritardo lettura sensore > Storico ➝ x0.85\n")
+            reasonBuilder.append(context.getString(R.string.reason_sensor_lag))
         } else if (sensorLagActivity < historicActivity) {
             dynamicPeakTime *= 1.2
 //          reasonBuilder.append("  • SensorLag < Historic ➝ x1.2\n")
-            reasonBuilder.append("  • Ritardo lettura sensore < Storico ➝ x1.2\n")
+            reasonBuilder.append(context.getString(R.string.reason_sensor_lag_lower))
         }
     }
 

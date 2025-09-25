@@ -779,6 +779,17 @@
     <string name="bg_note_normal">normal</string>
     <string name="calc_dynamic_peaktime">🧠 Calcul Dynamic PeakTime\n</string>
     <string name="profile_peak_time">  • Pic de profil: %1$.0f\n</string>
+    <string name="reason_hyper_correction">  • Facteur hyperglycémie: %1$.2f\n</string>
+    <string name="reason_iob_adjustment">  • Ajout lié IOB: +%1$.2f\n</string>
+    <string name="reason_activity_ratio">  • Ratio activité: %1$.2f ➝ facteur %2$.2f\n</string>
+    <string name="reason_steps_adjustment">  • Pas (%1$d) ➝ +%2$.2f\n</string>
+    <string name="reason_few_steps">  • Peu de pas (%1$d) ➝ x0.9\n</string>
+    <string name="reason_high_hr">  • FC élevée (%1$d) ➝ x1.15\n</string>
+    <string name="reason_low_hr"> • FC basse (%1$d) ➝ x0.85\n</string>
+    <string name="reason_high_activity">  • Activité intense ➝ x1.2\n</string>
+    <string name="reason_total_rest">  • Repos total ➝ x0.75\n</string>
+    <string name="reason_sensor_lag">  • SensorLag > Historique ➝ x0.85\n</string>
+    <string name="reason_sensor_lag_lower">  • SensorLag &lt; Historique ➝ x1.2\n</string>
 
 </resources>
 
