@@ -3185,7 +3185,7 @@ fun appendCompactLog(
             return rT
         }
       //rT.reason.append(", MaxSMB: $maxSMB")
-        rT.reason.append(", MaxSMB (adeguato): %.1f".format(maxSMB))
+        rT.reason.append(", MaxSMB (adeguato): %.1f ".format(maxSMB))
         var nowMinutes = calendarInstance[Calendar.HOUR_OF_DAY] + calendarInstance[Calendar.MINUTE] / 60.0 + calendarInstance[Calendar.SECOND] / 3600.0
         nowMinutes = (kotlin.math.round(nowMinutes * 100) / 100)  // Arrondi à 2 décimales
         val circadianSensitivity = (0.00000379 * nowMinutes.pow(5)) -
@@ -3634,7 +3634,7 @@ fun appendCompactLog(
             if (allLines.size > linesToConsider) {
                 val refinedSMB = neuralnetwork5(combinedDelta.toFloat(), shortAvgDelta, longAvgDelta, predictedSMB, profile)
               //rT.reason.appendLine("🧠 NN5 (avant boost): ${"%.2f".format(refinedSMB)} U")
-                rT.reason.appendLine("🧠 A.I. | CSV file: ${if (csvfile.exists()) "✔" else "✘"} | Previsione : ${"%.2f".format(refinedSMB)} U")
+                rT.reason.appendLine("🧠 A.I. model file: ${if (csvfile.exists()) "✔" else "✘"} Previsione : ${"%.2f".format(refinedSMB)} U")
                 this.predictedSMB = refinedSMB
                 if (bg > 200 && delta > 4 && iob < preferences.get(DoubleKey.ApsSmbMaxIob)) {
                     rT.reason.appendLine("⚡ Boost hyper: x1.7 (BG=${bg.toInt()}, Δ=${"%.1f".format(delta)})")
