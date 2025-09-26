@@ -3631,11 +3631,10 @@ fun appendCompactLog(
             val allLines = csvfile.readLines()
             val minutesToConsider = 2500.0
             val linesToConsider = (minutesToConsider / 5).toInt()
-            rT.reason.append("CSV file: ${if (csvfile.exists()) "✔" else "✘"}")
             if (allLines.size > linesToConsider) {
                 val refinedSMB = neuralnetwork5(combinedDelta.toFloat(), shortAvgDelta, longAvgDelta, predictedSMB, profile)
               //rT.reason.appendLine("🧠 NN5 (avant boost): ${"%.2f".format(refinedSMB)} U")
-                rT.reason.appendLine("🧠 CSV file: ${if (csvfile.exists()) "✔" else "✘"} Previsione A.I.: ${"%.2f".format(refinedSMB)} U")
+                rT.reason.appendLine("🧠 A.I. | CSV file: ${if (csvfile.exists()) "✔" else "✘"} | Previsione : ${"%.2f".format(refinedSMB)} U")
                 this.predictedSMB = refinedSMB
                 if (bg > 200 && delta > 4 && iob < preferences.get(DoubleKey.ApsSmbMaxIob)) {
                     rT.reason.appendLine("⚡ Boost hyper: x1.7 (BG=${bg.toInt()}, Δ=${"%.1f".format(delta)})")
