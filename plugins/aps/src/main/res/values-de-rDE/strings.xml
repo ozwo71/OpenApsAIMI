@@ -604,17 +604,17 @@
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION AIMI MODEL HANDLER - FILE AimiModelHandler.kt -->
 
     <string name="folder_documents">Dokumente</string>
-    <string name="uam_model_status">📦 UAM model: %1$s (%2$s, %3$s)</string>
-    <string name="sanitize_info">🧹 Sanitize: %1$d incomplete values -> 0</string>
-    <string name="cache_hit">⚡ Cache HIT → %1$s U</string>
-    <string name="cache_hit_invalid">⚠️ Cache HIT not usable (NaN/Inf), recalculating…</string>
-    <string name="uam_unavailable">❌ UAM model unavailable → SMB=0</string>
-    <string name="tflite_failed">💥 TFLite execution failed: %1$s → SMB=0</string>
-    <string name="uam_executed">✔ UAM executed → %1$s U</string>
-    <string name="uam_invalid">⚠️ Result not usable (raw=%1$f) → SMB=0</string>
-    <string name="model_missing">❌ Model file not found: %1$s</string>
-    <string name="model_loaded">📦 Model loaded ✓ : %1$s (%2$s KB)</string>
-    <string name="model_load_failed">❌ Model load failed: %1$s</string>
+    <string name="uam_model_status"> 📦 UAM model: %1$s (%2$s, %3$s)</string>
+    <string name="sanitize_info"> 🧹 Sanitize: %1$d incomplete values -> 0</string>
+    <string name="cache_hit"> ⚡ Cache HIT → %1$s U</string>
+    <string name="cache_hit_invalid"> ⚠️ Cache HIT not usable (NaN/Inf), recalculating…</string>
+    <string name="uam_unavailable"> ❌ UAM model unavailable → SMB=0</string>
+    <string name="tflite_failed"> 💥 TFLite execution failed: %1$s → SMB=0</string>
+    <string name="uam_executed"> ✔ UAM executed → %1$s U</string>
+    <string name="uam_invalid"> ⚠️ Result not usable (raw=%1$f) → SMB=0</string>
+    <string name="model_missing"> ❌ Model file not found: %1$s</string>
+    <string name="model_loaded"> 📦 Model loaded ✓ : %1$s (%2$s KB)</string>
+    <string name="model_load_failed"> ❌ Model load failed: %1$s</string>
 
     <string name="log_interpreter_closed">Interpreter closed</string>
     <string name="log_smb_cache_cleared">SMB cache cleared</string>
