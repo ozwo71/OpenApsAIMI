@@ -4117,7 +4117,7 @@ rT.reason.appendLine(
             "COB: ${round(mealData.mealCOB, 1).withoutZeros()}, Dev: ${convertBG(deviation.toDouble())}, BGI: ${convertBG(bgi)}, ISF: ${convertBG(sens)}, CR: ${
                 round(profile.carb_ratio, 2)
                     .withoutZeros()
-            }, Target: ${convertBG(target_bg)} | "
+            }, Target: ${convertBG(target_bg)} \uD83D\uDCD2 "
         )
         //val (conditionResult, conditionsTrue) = isCriticalSafetyCondition(mealData, hypoThreshold)
         this.zeroBasalAccumulatedMinutes = getZeroBasalDuration(persistenceLayer, 2)
