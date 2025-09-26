@@ -660,7 +660,7 @@
     <string name="cache_hit_invalid">⚠️ Cache HIT niet bruikbaar (NaN/Inf), herberekenen…</string>
     <string name="uam_unavailable">❌ UAM-model niet beschikbaar → SMB=0</string>
     <string name="tflite_failed">💥 TFLite-uitvoering mislukt: %1$s → SMB=0</string>
-    <string name="uam_executed">✅ UAM uitgevoerd → %1$s E</string>
+    <string name="uam_executed">✔ UAM uitgevoerd → %1$s E</string>
     <string name="uam_invalid">⚠️ Resultaat niet bruikbaar (raw=%1$f) → SMB=0</string>
     <string name="model_missing">❌ Modelbestand niet gevonden: %1$s</string>
     <string name="model_loaded">📦 Model geladen ✓ : %1$s (%2$s KB)</string>
@@ -789,7 +789,7 @@
     <string name="reason_total_rest">  • Volledige rust ➝ x0.75\n</string>
     <string name="reason_sensor_lag">  • Sensorvertraging > Historisch ➝ x0.85\n</string>
     <string name="reason_sensor_lag_lower">  • Sensorvertraging &lt; Historisch ➝ x1.2\n</string>
-    <string name="reason_max_iob">MaxIob: %.2f\n</string>
+    <string name="reason_max_iob">MaxIob (adjusted): %.2f\n</string>
     <string name="reason_autodrive_early_meal">Autodrive vroege maaltijd/snack detectie: Microbolus van %.2fE, GecombineerdeDelta: %.2f, Voorspeld: %.2f, Versnelling: %.2f.\n</string>
     <string name="manual_meal_prebolus">Microbolus Maaltijdmodus %1$.2fE.</string>
     <string name="autodrive_meal_prebolus">→ Microbolus Autodrive Modus %1$.2fE</string>

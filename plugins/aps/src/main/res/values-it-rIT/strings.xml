@@ -666,7 +666,7 @@
     <string name="cache_hit_invalid">⚠️ Cache HIT non sfruttabile (NaN/Inf), ricalcolo…</string>
     <string name="uam_unavailable">❌ Modello UAM non disponibile → SMB=0</string>
     <string name="tflite_failed">💥 Esecuzione TFLite fallita: %1$s → SMB=0</string>
-    <string name="uam_executed">✅ UAM esecuzione → %1$s U</string>
+    <string name="uam_executed">✔ UAM esecuzione → %1$s U</string>
     <string name="uam_invalid">⚠️ Risultato non utilizzabile (raw=%1$f) → SMB=0</string>
     <string name="model_missing">❌ File modello non trovato: %1$s</string>
     <string name="model_loaded">📦 Caricamento modello ✓ : %1$s (%2$s KB)</string>
@@ -795,7 +795,7 @@
     <string name="reason_total_rest">  • Corpo a riposo ➝ x0.75\n</string>
     <string name="reason_sensor_lag">  • Ritardo lettura sensore > Storico ➝ x0.85\n</string>
     <string name="reason_sensor_lag_lower">  • Ritardo lettura sensore &lt; Storico ➝ x1.2\n</string>
-    <string name="reason_max_iob">MaxIob: %.2f\n</string>
+    <string name="reason_max_iob">MaxIob (adeguata): %.2f\n</string>
     <string name="reason_autodrive_early_meal">Autodrive rilevamento precoce pasto/snack: Prebolo %.2fU, Delta Combinato: %.2f, BG Previsto: %.2f, BG Accelerazione: %.2f.</string>
     <string name="manual_meal_prebolus">Prebolo modalità manuale Pasto Generico %1$.2fU.</string>
     <string name="autodrive_meal_prebolus">→ Prebolo modalità Autodrive %1$.2fU</string>

@@ -67,7 +67,8 @@ object AimiUamHandler {
                                      } else {
                                         path
                                      }
-                                     val flag = if (lastLoadOk) "✅" else "❌"
+                                     //val flag = if (lastLoadOk) "✅" else "❌"
+                                     val flag = if (lastLoadOk) "✔" else "✘"
                                      //val size = if (modelUamFile.exists()) "${modelUamFile.length()} B" else "missing"
                                      val size = if (modelUamFile.exists()) String.format("%.1f KB", modelUamFile.length().toDouble() / 1024) else "missing"
                                      //return "📦 UAM model: $flag ($path, $size)"

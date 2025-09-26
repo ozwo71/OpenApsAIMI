@@ -683,7 +683,7 @@
     <string name="cache_hit_invalid">⚠️ Cache HIT not usable (NaN/Inf), recalculating…</string>
     <string name="uam_unavailable">❌ UAM model unavailable → SMB=0</string>
     <string name="tflite_failed">💥 TFLite execution failed: %1$s → SMB=0</string>
-    <string name="uam_executed">✅ UAM executed → %1$s U</string>
+    <string name="uam_executed">✔ UAM executed → %1$s U</string>
     <string name="uam_invalid">⚠️ Result not usable (raw=%1$f) → SMB=0</string>
     <string name="model_missing">❌ Model file not found: %1$s</string>
     <string name="model_loaded">📦 Model loaded ✓ : %1$s (%2$s KB)</string>
@@ -812,7 +812,7 @@
     <string name="reason_total_rest">  • Total rest ➝ x0.75\n</string>
     <string name="reason_sensor_lag">  • SensorLag > Historic ➝ x0.85\n</string>
     <string name="reason_sensor_lag_lower">  • SensorLag &lt; Historic ➝ x1.2\n</string>
-    <string name="reason_max_iob">MaxIob: %.2f\n</string>
+    <string name="reason_max_iob">MaxIob (adjusted): %.2f\n</string>
     <string name="reason_autodrive_early_meal">Autodrive early meal/snack detection: Microbolusing %.2fU, CombinedDelta: %.2f, Predicted: %.2f, Acceleration: %.2f.\n</string>
     <string name="manual_meal_prebolus">Microbolusing Meal Mode %1$.2fU.</string>
     <string name="autodrive_meal_prebolus">→ Microbolusing Autodrive Mode %1$.2fU</string>

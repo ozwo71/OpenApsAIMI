@@ -3185,7 +3185,7 @@ fun appendCompactLog(
             return rT
         }
       //rT.reason.append(", MaxSMB: $maxSMB")
-        rT.reason.append(", MaxSMB: %.1f".format(maxSMB))
+        rT.reason.append(", MaxSMB (adeguato): %.1f".format(maxSMB))
         var nowMinutes = calendarInstance[Calendar.HOUR_OF_DAY] + calendarInstance[Calendar.MINUTE] / 60.0 + calendarInstance[Calendar.SECOND] / 3600.0
         nowMinutes = (kotlin.math.round(nowMinutes * 100) / 100)  // Arrondi à 2 décimales
         val circadianSensitivity = (0.00000379 * nowMinutes.pow(5)) -
@@ -3631,11 +3631,11 @@ fun appendCompactLog(
             val allLines = csvfile.readLines()
             val minutesToConsider = 2500.0
             val linesToConsider = (minutesToConsider / 5).toInt()
-            rT.reason.append("CSV file: ${if (csvfile.exists()) "✅" else "❌"}")
+            rT.reason.append("CSV file: ${if (csvfile.exists()) "✔" else "✘"}")
             if (allLines.size > linesToConsider) {
                 val refinedSMB = neuralnetwork5(combinedDelta.toFloat(), shortAvgDelta, longAvgDelta, predictedSMB, profile)
               //rT.reason.appendLine("🧠 NN5 (avant boost): ${"%.2f".format(refinedSMB)} U")
-                rT.reason.appendLine("🧠 Previsione A.I.: ${"%.2f".format(refinedSMB)} U")
+                rT.reason.appendLine("🧠 CSV file: ${if (csvfile.exists()) "✔" else "✘"} Previsione A.I.: ${"%.2f".format(refinedSMB)} U")
                 this.predictedSMB = refinedSMB
                 if (bg > 200 && delta > 4 && iob < preferences.get(DoubleKey.ApsSmbMaxIob)) {
                     rT.reason.appendLine("⚡ Boost hyper: x1.7 (BG=${bg.toInt()}, Δ=${"%.1f".format(delta)})")
@@ -3902,7 +3902,7 @@ fun appendCompactLog(
     //"📈 DIA ajusté: ${"%.1f".format(adjustedDIAInMinutes)} min | " +
 "📈 DIA : ${"%.1f".format(adjustedDIAInMinutes)} min | " +
 //    "Morning: ${"%.1f".format(adjustedMorningFactor)}, " +
-    "REATT. BG<120 Mattina: ${ "%.1f".format(adjustedMorningFactor * 100)}% | " +
+    "REATT120 Mattina: ${ "%.1f".format(adjustedMorningFactor * 100)}% | " +
 //    "Afternoon: ${"%.1f".format(adjustedAfternoonFactor)}, " +
     "Pomeriggio: ${ "%.1f".format(adjustedAfternoonFactor * 100)}% | " +
 //    "Evening: ${"%.1f".format(adjustedEveningFactor)}"
@@ -3911,7 +3911,7 @@ fun appendCompactLog(
 
 rT.reason.appendLine(
     //"🚗 Autodrive: $autodrive | Mode actif: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
-    "🚗 Autodrive: ${if (autodrive) "✔" else "✘"} | Modalità snack/prebolo: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
+    "🚗 Autodrive: ${if (autodrive) "✔" else "✘"} | Modalità snack/prebolo: ${if (isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason))"✔" else "✘"} | " +
     //"AutodriveCondition: $autodriveCondition"
     "Autodrive condizioni: ${if (autodriveCondition) "✔" else "✘"}"
 )
