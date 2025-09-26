@@ -66,7 +66,7 @@ class ConfigBuilderPlugin @Inject constructor(
     private val pumpSync: PumpSync,
     private val protectionCheck: ProtectionCheck,
     private val uiInteraction: UiInteraction,
-private val context: Context
+    private val context: Context
 ) : PluginBaseWithPreferences(
     pluginDescription = PluginDescription()
         .mainType(PluginType.GENERAL)
