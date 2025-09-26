@@ -790,7 +790,7 @@
     <string name="reason_total_rest">  • Repos total ➝ x0.75\n</string>
     <string name="reason_sensor_lag">  • SensorLag > Historique ➝ x0.85\n</string>
     <string name="reason_sensor_lag_lower">  • SensorLag &lt; Historique ➝ x1.2\n</string>
-    <string name="reason_max_iob">MaxIob (ajusté): %.2f\n</string>
+    <string name="reason_max_iob">MaxIob (ajusté): %.2f U \n</string>
     <string name="reason_autodrive_early_meal">Détection précoce repas/collation Autodrive : Microbolus %.2fU, Delta combiné: %.2f, Prévu: %.2f, Accélération: %.2f.</string>
     <string name="manual_meal_prebolus">Prébolus Mode manuel Repas générique %1$.2fU.</string>
     <string name="autodrive_meal_prebolus">→ Microbolus mode Autodrive %1$.2fU</string>

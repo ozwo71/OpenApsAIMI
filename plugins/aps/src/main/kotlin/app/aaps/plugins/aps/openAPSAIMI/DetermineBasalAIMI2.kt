@@ -3185,7 +3185,7 @@ fun appendCompactLog(
             return rT
         }
       //rT.reason.append(", MaxSMB: $maxSMB")
-        rT.reason.append(", MaxSMB (adeguato): %.1f ".format(maxSMB))
+        rT.reason.append(", MaxSMB (adeguato): %.1f U ".format(maxSMB))
         var nowMinutes = calendarInstance[Calendar.HOUR_OF_DAY] + calendarInstance[Calendar.MINUTE] / 60.0 + calendarInstance[Calendar.SECOND] / 3600.0
         nowMinutes = (kotlin.math.round(nowMinutes * 100) / 100)  // Arrondi à 2 décimales
         val circadianSensitivity = (0.00000379 * nowMinutes.pow(5)) -

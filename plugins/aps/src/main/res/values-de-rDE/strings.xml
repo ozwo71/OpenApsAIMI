@@ -739,7 +739,7 @@
     <string name="reason_total_rest">  • Total rest ➝ x0.75\n</string>
     <string name="reason_sensor_lag">  • SensorLag > Historic ➝ x0.85\n</string>
     <string name="reason_sensor_lag_lower">  • SensorLag &lt; Historic ➝ x1.2\n</string>
-    <string name="reason_max_iob">MaxIob (adjusted): %.2f\n</string>
+    <string name="reason_max_iob">MaxIob (adjusted): %.2f U \n</string>
     <string name="reason_autodrive_early_meal">Autodrive early meal/snack detection: Microbolusing %.2fU, CombinedDelta: %.2f, Predicted: %.2f, Acceleration: %.2f.\n</string>
     <string name="manual_meal_prebolus">Microbolusing Meal Mode %1$.2fU.</string>
     <string name="autodrive_meal_prebolus">→ Microbolusing Autodrive Mode %1$.2fU</string>
