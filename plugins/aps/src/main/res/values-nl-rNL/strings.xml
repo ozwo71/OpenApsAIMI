@@ -790,14 +790,10 @@
     <string name="reason_sensor_lag">  • Sensorvertraging > Historisch ➝ x0.85\n</string>
     <string name="reason_sensor_lag_lower">  • Sensorvertraging &lt; Historisch ➝ x1.2\n</string>
     <string name="reason_max_iob">MaxIob: %.2f\n</string>
-    <string name="reason_autodrive_early_meal">Autodrive early meal/snack detection: Microbolusing %.2fU, CombinedDelta: %.2f, Predicted: %.2f, Acceleration: %.2f.\n</string>
-    <string name="manual_meal_prebolus">Microbolusing Meal Mode %1$.2fU.</string>
-    <string name="autodrive_meal_prebolus">→ Microbolusing Autodrive Mode %1$.2fU</string>
-    <string name="target_bg">  • Target BG: %1$.0f</string>
-    <string name="slope_from_min_deviation">  • Slope from min deviation: %1$.2f</string>
-    <string name="bg_acceleration">  • BG acceleration: %1$s</string>
-
-
-
-
+    <string name="reason_autodrive_early_meal">Autodrive vroege maaltijd/snack detectie: Microbolus van %.2fE, GecombineerdeDelta: %.2f, Voorspeld: %.2f, Versnelling: %.2f.\n</string>
+    <string name="manual_meal_prebolus">Microbolus Maaltijdmodus %1$.2fE.</string>
+    <string name="autodrive_meal_prebolus">→ Microbolus Autodrive Modus %1$.2fE</string>
+    <string name="target_bg">  • Doel BG: %1$.0f</string>
+    <string name="slope_from_min_deviation">  • Helling van min. afwijking: %1$.2f</string>
+    <string name="bg_acceleration">  • BG versnelling: %1$s</string>
 </resources>
