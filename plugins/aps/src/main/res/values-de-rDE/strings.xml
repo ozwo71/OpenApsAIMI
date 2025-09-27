@@ -767,4 +767,5 @@
     <string name="cycle_unknown">Unknown</string>
     <string name="basal_multiplier_line">♀️⚡ %1$s Basal×%.2f → %.2f U/h\n</string>
     <string name="wcycle_invalid_day">♀️ WCycle: invalid day</string>
+
 </resources>

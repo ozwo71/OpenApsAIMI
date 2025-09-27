@@ -839,4 +839,5 @@
     <string name="cycle_luteal">Luteal: basal %1$.2f%%, SMB +5%% </string>
     <string name="cycle_unknown">Unknown</string>
     <string name="basal_multiplier_line">♀️⚡ %1$s Basal×%.2f → %.2f U/h\n</string>
+    <string name="wcycle_invalid_day">♀️ WCycle: invalid day</string>
 </resources>
