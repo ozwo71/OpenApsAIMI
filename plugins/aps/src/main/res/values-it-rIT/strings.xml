@@ -834,10 +834,5 @@
     <string name="console_target_bg_adjusted">BG Target modificato da %.2f a %.2f; </string>
     <string name="console_max_bg_adjusted">max_bg modificato da %.2f a %.2f</string>
     <string name="console_max_bg_unchanged">max_bg invariato: %.2f</string>
-
-
-
-
-
 </resources>
 

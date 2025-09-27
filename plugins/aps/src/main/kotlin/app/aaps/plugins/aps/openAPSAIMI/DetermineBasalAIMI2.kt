@@ -3282,7 +3282,7 @@ fun appendCompactLog(
                 sensitivityRatio = min(sensitivityRatio, profile.autosens_max)
                 sensitivityRatio = round(sensitivityRatio, 2)
               //consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
-                consoleLog.add(context.getString(R.string.console_sensitivity_ratio, sensitivityRatio, target_bg))
+                consoleLog.add(context.getString(R.string.sensitivity_ratio_temp_target, sensitivityRatio, target_bg))
             }
 
             !profile.temptargetSet && combinedDelta <= 0 && predictedBg < 120                                                                                                    -> {

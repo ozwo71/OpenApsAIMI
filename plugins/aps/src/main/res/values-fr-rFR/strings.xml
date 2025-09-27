@@ -809,7 +809,6 @@
     <string name="reason_cgm_calibrating">Capteur en cours d’étalonnage, en état ??? ou bruit des valeurs élevé</string>
     <string name="reason_bg_data_old">Si l’heure système %1$d est correcte, alors les données de BG sont trop anciennes. La dernière donnée BG a été lue il y a %2$.0f minutes à %3$d</string>
     <string name="reason_cgm_flat">Erreur : les valeurs du capteur n’ont pas changé depuis ~45 minutes</string>
-    <string name="console_sensitivity_ratio">Ratio de sensibilité défini à %1$d selon la cible temporaire de %2$d;</string>
     <string name="cycle_day">♀️ Jour %d/28 • </string>
     <string name="cycle_menstruation">Menstruation : basal %1$.2f%% </string>
     <string name="cycle_follicular">Folliculaire : neutre </string>
