@@ -3860,8 +3860,6 @@ fun appendCompactLog(
         var smbDecision = (alpha * optimalBasalMPC + (1 - alpha) * finalInsulinDose).toFloat()
 
       //rT.reason.appendLine("🎛️ MPC/PI → ${"%.2f".format(optimalBasalMPC)} U | physio=${"%.2f".format(finalInsulinDose)} U | α=${"%.2f".format(alpha)}")
-      //rT.reason.appendLine("🎛️ MPC modello predittivo ${"%.2f".format(optimalBasalMPC)} U | PI modello fisiologico=${"%.2f".format(finalInsulinDose)} U | α=${"%.2f".format(alpha)}")
-      //rT.reason.appendLine("🎛️ MPC modello predittivo ${"%.2f".format(optimalBasalMPC)} U | PI modello fisiologico=${"%.2f".format(finalInsulinDose)} U | Prob. MPC=${"%.0f".format(alpha*100)}% / Prob. PI=${"%.0f".format((1-alpha)*100)}%")
         rT.reason.appendLine("🎛️ MPC modello predittivo: ${"%.2f".format(optimalBasalMPC)} U (${("%.0f".format(alpha*100))}%) | PI modello fisiologico: ${"%.2f".format(finalInsulinDose)} U (${("%.0f".format((1-alpha)*100))}%)")
 
 // ===== Fin MPC =====
@@ -4457,7 +4455,6 @@ rT.reason.appendLine(
                 chosenRate = 0.0
                 overrideSafety = false
               //rT.reason.append("Safety cut: predictedBg<100 ou IOB>$maxIob → basale à 0.\n")
-              //rT.reason.append("Sicurezza taglio: BG previsto<100 o IOB>$maxIob → basale a 0.\n")
                 rT.reason.append("Sicurezza taglio: BG previsto<100 o IOB>${"%.2f".format(maxIob)} → basale a 0.\n")
             }
 
