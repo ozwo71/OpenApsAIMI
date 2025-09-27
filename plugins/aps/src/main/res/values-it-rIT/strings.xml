@@ -795,7 +795,7 @@
     <string name="reason_total_rest">  • Corpo a riposo ➝ x0.75\n</string>
     <string name="reason_sensor_lag">  • Ritardo lettura sensore > Storico ➝ x0.85\n</string>
     <string name="reason_sensor_lag_lower">  • Ritardo lettura sensore &lt; Storico ➝ x1.2\n</string>
-    <string name="reason_max_iob">MaxIob (adeguata): %.2f U \n</string>
+    <string name="reason_max_iob">Adeguamenti : MaxIob %.2f U </string>
     <string name="reason_autodrive_early_meal">Autodrive rilevamento precoce pasto/snack: Prebolo %.2fU, Delta Combinato: %.2f, BG Previsto: %.2f, BG Accelerazione: %.2f.</string>
     <string name="manual_meal_prebolus">Prebolo modalità manuale Pasto Generico %1$.2fU.</string>
     <string name="autodrive_meal_prebolus">→ Prebolo modalità Autodrive %1$.2fU</string>
@@ -810,7 +810,7 @@
     <string name="reason_prebolus_dinner2"> Prebolo 2/2 Modalità manuale Cena %.2fU.</string>
     <string name="reason_prebolus_highcarb"> Prebolo Modalità manuale High Carb %.2fU.</string>
     <string name="reason_prebolus_snack"> Prebolo Modalità manuale Snack %.2fU.</string>
-    <string name="reason_maxsmb">, MaxSMB (adeguato): %.1f U </string>
+    <string name="reason_maxsmb"> | MaxSMB %.1f U \n</string>
     <string name="reason_cgm_calibrating">Sensore in calibrazione, in stato ??? o rumore valori elevato</string>
     <string name="reason_bg_data_old">Se l’orario di sistema %1$d è corretto, allora i dati BG sono troppo vecchi. L’ultimo dato BG è stato letto %2$.0f minuti fa alle %3$d</string>
     <string name="reason_cgm_flat">Errore: Valori sensore non cambiati negli ultimi ~45 minuti</string>
