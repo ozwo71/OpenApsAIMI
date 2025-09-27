@@ -818,7 +818,6 @@
     <string name="cycle_unknown">Inconnu</string>
     <string name="basal_multiplier_line">♀️⚡ %1$s Basal×%.2f → %.2f U/h\n</string>
     <string name="wcycle_invalid_day">♀️ WCycle: jour invalide</string>
-    <string name="sensitivity_ratio_set">Rapport de sensibilité réglé à %.2f selon la cible temporaire de %.0f; </string>
     <string name="sensitivity_ratio_temp_target">Ratio de sensibilité défini à %.2f selon la cible temporaire de %.0f;</string>
     <string name="autosens_ratio_log">Autosens ratio: %.2f;</string>
     <string name="console_adjust_basal">Ajustement basal de %.2f à %.2f; </string>

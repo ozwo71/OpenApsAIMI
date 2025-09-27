@@ -814,7 +814,6 @@
     <string name="reason_cgm_calibrating">Sensore in calibrazione, in stato ??? o rumore valori elevato</string>
     <string name="reason_bg_data_old">Se l’orario di sistema %1$d è corretto, allora i dati BG sono troppo vecchi. L’ultimo dato BG è stato letto %2$.0f minuti fa alle %3$d</string>
     <string name="reason_cgm_flat">Errore: Valori sensore non cambiati negli ultimi ~45 minuti</string>
-    <string name="console_sensitivity_ratio">Sensibilità rapporto impostato a %1$d in base al target temporaneo di %2$d;</string>
     <string name="cycle_day">♀️ Giorno %d/28 • </string>
     <string name="cycle_menstruation">Mestruazione: basale %1$.2f%% </string>
     <string name="cycle_follicular">Fase follicolare: neutrale </string>

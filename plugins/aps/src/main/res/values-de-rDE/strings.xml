@@ -758,7 +758,6 @@
     <string name="reason_cgm_calibrating">CGM is calibrating, in ??? state, or noise is high</string>
     <string name="reason_bg_data_old">If current system time %1$d is correct, then BG data is too old. The last BG data was read %2$.0f minutes ago at %3$d</string>
     <string name="reason_cgm_flat">Error: CGM data is unchanged for the past ~45m</string>
-    <string name="console_sensitivity_ratio">Sensitivity ratio set to %1$d based on temp target of %2$d;</string>
     <string name="cycle_day">♀️ Day %d/28 • </string>
     <string name="cycle_menstruation">Menstruation: basal %1$.2f%% </string>
     <string name="cycle_follicular">Follicular: neutral </string>
@@ -767,7 +766,6 @@
     <string name="cycle_unknown">Unknown</string>
     <string name="basal_multiplier_line">♀️⚡ %1$s Basal×%.2f → %.2f U/h\n</string>
     <string name="wcycle_invalid_day">♀️ WCycle: invalid day</string>
-    <string name="sensitivity_ratio_set">Sensitivity ratio set to %.2f based on temp target of %.0f; </string>
     <string name="sensitivity_ratio_temp_target">Sensitivity ratio set to %.2f based on temp target of %.0f;</string>
     <string name="autosens_ratio_log">Autosense ratio: %.2f;</string>
     <string name="console_adjust_basal">Adjusting basal from %.2f to %.2f; </string>
