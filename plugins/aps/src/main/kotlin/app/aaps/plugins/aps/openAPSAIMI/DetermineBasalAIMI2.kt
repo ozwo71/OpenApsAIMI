@@ -2659,7 +2659,8 @@ fun appendCompactLog(
                 phase = CyclePhase.UNKNOWN,
                 basalMultiplier = 1.0,
                 smbMultiplier = 1.0,
-                log = "♀️ WCycle: invalid day"
+              //log = "♀️ WCycle: invalid day"
+                log = context.getString(R.string.wcycle_invalid_day)
             )
         }
 
@@ -2689,26 +2690,33 @@ fun appendCompactLog(
 
         var basalMul = 1.0
         var smbMul   = 1.0
-        val sb = StringBuilder("♀️ Day ${dayInCycle + 1}/28 • ")
+      //val sb = StringBuilder("♀️ Day ${dayInCycle + 1}/28 • ")
+        val sb = StringBuilder("♀️ " + context.getString(R.string.cycle_day, dayInCycle + 1))
 
         when (phase) {
             CyclePhase.MENSTRUATION -> {
                 basalMul *= (1.0 + pctMen / 100.0)
-                sb.append("Menstruation: basal ${pctMen}% ")
+                // sb.append("Menstruation: basal ${pctMen}% ")
+                sb.append(context.getString(R.string.cycle_menstruation, pctMen))
             }
             CyclePhase.FOLLICULAR -> {
-                sb.append("Follicular: neutral ")
+                // sb.append("Follicular: neutral ")
+                sb.append(context.getString(R.string.cycle_follicular))
             }
             CyclePhase.OVULATION -> {
                 smbMul   *= (1.0 + pctOvu / 100.0)
-                sb.append("Ovulation: SMB ${pctOvu}% ")
+                // sb.append("Ovulation: SMB ${pctOvu}% ")
+                sb.append(context.getString(R.string.cycle_ovulation, pctOvu))
             }
             CyclePhase.LUTEAL -> {
                 basalMul *= (1.0 + pctLut / 100.0)
                 smbMul   *= 1.05 // conserve la reco +5% (restera borné)
-                sb.append("Luteal: basal ${pctLut}%, SMB +5% ")
+                // sb.append("Luteal: basal ${pctLut}%, SMB +5% ")
+                sb.append(context.getString(R.string.cycle_luteal, pctLut))
             }
-            CyclePhase.UNKNOWN -> sb.append("Unknown")
+            CyclePhase.UNKNOWN ->
+                // sb.append("Unknown")
+                sb.append(context.getString(R.string.cycle_unknown))
         }
 
         // Bornes ±30%
@@ -2740,7 +2748,8 @@ fun appendCompactLog(
         val limit = if (bypassSafety) profile.max_basal else maxSafe
         val adjusted = (rate * info.basalMultiplier).coerceIn(0.0, limit)
 
-        val line = "♀️⚡ ${info.log} Basal×${"%.2f".format(info.basalMultiplier)} → ${"%.2f".format(adjusted)} U/h\n"
+      //val line = "♀️⚡ ${info.log} Basal×${"%.2f".format(info.basalMultiplier)} → ${"%.2f".format(adjusted)} U/h\n"
+        val line = context.getString(R.string.basal_multiplier_line, info.log, info.basalMultiplier, adjusted)
         logWCycle(rT.reason, line)
         return adjusted
     }
@@ -3128,64 +3137,64 @@ fun appendCompactLog(
         if (isbfastModeCondition()) {
             val pbolusbfast: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
             rT.units = pbolusbfast
-          //rT.reason.append(" Microbolusing 1/2 Breakfast Mode ${pbolusbfast}U.")
-            rT.reason.append(" Prebolo 1/2 Modalità manuale Colazione ${pbolusbfast}U.")
+            //rT.reason.append(" Microbolusing 1/2 Breakfast Mode ${pbolusbfast}U.")
+            rT.reason.append(context.getString(R.string.reason_prebolus_bfast1, pbolusbfast))
             return rT
         }
         if (isbfast2ModeCondition()) {
             val pbolusbfast2: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus2)
             this.maxSMB = pbolusbfast2
             rT.units = pbolusbfast2
-          //rT.reason.append(" Microbolusing 2/2 Breakfast Mode ${pbolusbfast2}U. ")
-            rT.reason.append(" Prebolo 2/2 Modalità manuale Colazione ${pbolusbfast2}U. ")
+            //rT.reason.append(" Microbolusing 2/2 Breakfast Mode ${pbolusbfast2}U. ")
+            rT.reason.append(context.getString(R.string.reason_prebolus_bfast2, pbolusbfast2))
             return rT
         }
         if (isLunchModeCondition()) {
             val pbolusLunch: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
             rT.units = pbolusLunch
-          //rT.reason.append(" Microbolusing 1/2 Lunch Mode ${pbolusLunch}U.")
-            rT.reason.append(" Prebolo 1/2 Modalità manuale Pranzo ${pbolusLunch}U.")
+            //rT.reason.append(" Microbolusing 1/2 Lunch Mode ${pbolusLunch}U.")
+            rT.reason.append(context.getString(R.string.reason_prebolus_lunch1, pbolusLunch))
             return rT
         }
         if (isLunch2ModeCondition()) {
             val pbolusLunch2: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
             this.maxSMB = pbolusLunch2
             rT.units = pbolusLunch2
-          //rT.reason.append(" Microbolusing 2/2 Lunch Mode ${pbolusLunch2}U.")
-            rT.reason.append(" Prebolo 2/2 Modalità manuale Pranzo ${pbolusLunch2}U.")
+            //rT.reason.append(" Microbolusing 2/2 Lunch Mode ${pbolusLunch2}U.")
+            rT.reason.append(context.getString(R.string.reason_prebolus_lunch2, pbolusLunch2))
             return rT
         }
         if (isDinnerModeCondition()) {
             val pbolusDinner: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
             rT.units = pbolusDinner
-          //rT.reason.append(" Microbolusing 1/2 Dinner Mode ${pbolusDinner}U.")
-            rT.reason.append(" Prebolo 1/2 Modalità manuale Cena ${pbolusDinner}U.")
+            //rT.reason.append(" Microbolusing 1/2 Dinner Mode ${pbolusDinner}U.")
+            rT.reason.append(context.getString(R.string.reason_prebolus_dinner1, pbolusDinner))
             return rT
         }
         if (isDinner2ModeCondition()) {
             val pbolusDinner2: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
             this.maxSMB = pbolusDinner2
             rT.units = pbolusDinner2
-          //rT.reason.append(" Microbolusing 2/2 Dinner Mode ${pbolusDinner2}U.")
-            rT.reason.append(" Prebolo 2/2 Modalità manuale Cena ${pbolusDinner2}U.")
+            //rT.reason.append(" Microbolusing 2/2 Dinner Mode ${pbolusDinner2}U.")
+            rT.reason.append(context.getString(R.string.reason_prebolus_dinner2, pbolusDinner2))
             return rT
         }
         if (isHighCarbModeCondition()) {
             val pbolusHC: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
             rT.units = pbolusHC
-          //rT.reason.append(" Microbolusing High Carb Mode ${pbolusHC}U.")
-            rT.reason.append(" Prebolo Modalità manuale High Carb ${pbolusHC}U.")
+            //rT.reason.append(" Microbolusing High Carb Mode ${pbolusHC}U.")
+            rT.reason.append(context.getString(R.string.reason_prebolus_highcarb, pbolusHC))
             return rT
         }
         if (issnackModeCondition()) {
             val pbolussnack: Double = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
             rT.units = pbolussnack
-          //rT.reason.append(" Microbolusing snack Mode ${pbolussnack}U.")
-            rT.reason.append(" Prebolo Modalità manuale Snack ${pbolussnack}U.")
+            //rT.reason.append(" Microbolusing snack Mode ${pbolussnack}U.")
+            rT.reason.append(context.getString(R.string.reason_prebolus_snack, pbolussnack))
             return rT
         }
       //rT.reason.append(", MaxSMB: $maxSMB")
-        rT.reason.append(", MaxSMB (adeguato): %.1f U ".format(maxSMB))
+        rT.reason.append(context.getString(R.string.reason_maxsmb, maxSMB))
         var nowMinutes = calendarInstance[Calendar.HOUR_OF_DAY] + calendarInstance[Calendar.MINUTE] / 60.0 + calendarInstance[Calendar.SECOND] / 3600.0
         nowMinutes = (kotlin.math.round(nowMinutes * 100) / 100)  // Arrondi à 2 décimales
         val circadianSensitivity = (0.00000379 * nowMinutes.pow(5)) -
@@ -3224,16 +3233,16 @@ fun appendCompactLog(
         // 38 is an xDrip error state that usually indicates sensor failure
         // all other BG values between 11 and 37 mg/dL reflect non-error-code BG values, so we should zero temp for those
         if (bg <= 10 || bg == 38.0 || noise >= 3) {  //Dexcom is in ??? mode or calibrating, or xDrip reports high noise
-          //rT.reason.append("CGM is calibrating, in ??? state, or noise is high")
-            rT.reason.append("Sensore in calibrazione, in stato ??? o rumore valori elevato")
+            //rT.reason.append("CGM is calibrating, in ??? state, or noise is high")
+            rT.reason.append(context.getString(R.string.reason_cgm_calibrating))
         }
         if (minAgo > 12 || minAgo < -5) { // Dexcom data is too old, or way in the future
-          //rT.reason.append("If current system time $systemTime is correct, then BG data is too old. The last BG data was read  ago at $bgTime")
-            rT.reason.append("Se l’orario di sistema $systemTime è corretto, allora i dati BG sono troppo vecchi. L’ultimo dato BG è stato letto ${minAgo}minuti fa alle $bgTime")
+            //rT.reason.append("If current system time $systemTime is correct, then BG data is too old. The last BG data was read  ago at $bgTime")
+            rT.reason.append(context.getString(R.string.reason_bg_data_old, systemTime, minAgo, bgTime))
             // if BG is too old/noisy, or is changing less than 1 mg/dL/5m for 45m, cancel any high temps and shorten any long zero temps
         } else if (bg > 60 && flatBGsDetected) {
-          //rT.reason.append("Error: CGM data is unchanged for the past ~45m")
-            rT.reason.append("Errore: Valori sensore non cambiati negli ultimi ~45 minuti")
+            //rT.reason.append("Error: CGM data is unchanged for the past ~45m")
+            rT.reason.append(context.getString(R.string.reason_cgm_flat))
         }
 
         // TODO eliminate
@@ -3273,7 +3282,7 @@ fun appendCompactLog(
                 sensitivityRatio = min(sensitivityRatio, profile.autosens_max)
                 sensitivityRatio = round(sensitivityRatio, 2)
               //consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
-                consoleLog.add("Sensibilità rapporto impostato a $sensitivityRatio in base al target temporaneo di $target_bg; ")
+                consoleLog.add(context.getString(R.string.console_sensitivity_ratio, sensitivityRatio, target_bg))
             }
 
             !profile.temptargetSet && combinedDelta <= 0 && predictedBg < 120                                                                                                    -> {
@@ -3634,7 +3643,7 @@ fun appendCompactLog(
             if (allLines.size > linesToConsider) {
                 val refinedSMB = neuralnetwork5(combinedDelta.toFloat(), shortAvgDelta, longAvgDelta, predictedSMB, profile)
               //rT.reason.appendLine("🧠 NN5 (avant boost): ${"%.2f".format(refinedSMB)} U")
-                rT.reason.appendLine("🧠 A.I. model file: ${if (csvfile.exists()) "✔" else "✘"} Previsione : ${"%.2f".format(refinedSMB)} U")
+                rT.reason.appendLine("🧠 A.I. file: ${if (csvfile.exists()) "✔" else "✘"} Previsione : ${"%.2f".format(refinedSMB)} U")
                 this.predictedSMB = refinedSMB
                 if (bg > 200 && delta > 4 && iob < preferences.get(DoubleKey.ApsSmbMaxIob)) {
                     rT.reason.appendLine("⚡ Boost hyper: x1.7 (BG=${bg.toInt()}, Δ=${"%.1f".format(delta)})")

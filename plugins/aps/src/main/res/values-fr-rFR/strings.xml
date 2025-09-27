@@ -797,8 +797,26 @@
     <string name="target_bg">  • BG cible : %1$.0f</string>
     <string name="slope_from_min_deviation">  • Pente depuis la déviation minimale : %1$.2f</string>
     <string name="bg_acceleration">  • Accélération de la glycémie : %1$s</string>
-
-
-
+    <string name="reason_prebolus_bfast1"> Prébolus 1/2 Mode manuel Petit-déjeuner %.2fU.</string>
+    <string name="reason_prebolus_bfast2"> Prébolus 2/2 Mode manuel Petit-déjeuner %.2fU. </string>
+    <string name="reason_prebolus_lunch1"> Prébolus 1/2 Mode manuel Déjeuner %.2fU.</string>
+    <string name="reason_prebolus_lunch2"> Prébolus 2/2 Mode manuel Déjeuner %.2fU.</string>
+    <string name="reason_prebolus_dinner1"> Prébolus 1/2 Mode manuel Dîner %.2fU.</string>
+    <string name="reason_prebolus_dinner2"> Prébolus 2/2 Mode manuel Dîner %.2fU.</string>
+    <string name="reason_prebolus_highcarb"> Prébolus Mode manuel High Carb %.2fU.</string>
+    <string name="reason_prebolus_snack"> Prébolus Mode manuel Collation %.2fU.</string>
+    <string name="reason_maxsmb">, MaxSMB (ajusté): %.1f U </string>
+    <string name="reason_cgm_calibrating">Capteur en cours d’étalonnage, en état ??? ou bruit des valeurs élevé</string>
+    <string name="reason_bg_data_old">Si l’heure système %1$d est correcte, alors les données de BG sont trop anciennes. La dernière donnée BG a été lue il y a %2$.0f minutes à %3$d</string>
+    <string name="reason_cgm_flat">Erreur : les valeurs du capteur n’ont pas changé depuis ~45 minutes</string>
+    <string name="console_sensitivity_ratio">Ratio de sensibilité défini à %1$d selon la cible temporaire de %2$d;</string>
+    <string name="cycle_day">♀️ Jour %d/28 • </string>
+    <string name="cycle_menstruation">Menstruation : basal %1$.2f%% </string>
+    <string name="cycle_follicular">Folliculaire : neutre </string>
+    <string name="cycle_ovulation">Ovulation : SMB %1$.2f%% </string>
+    <string name="cycle_luteal">Lutéale : basal %1$.2f%%, SMB +5%% </string>
+    <string name="cycle_unknown">Inconnu</string>
+    <string name="basal_multiplier_line">♀️⚡ %1$s Basal×%.2f → %.2f U/h\n</string>
+    <string name="wcycle_invalid_day">♀️ WCycle: jour invalide</string>
 </resources>
 
