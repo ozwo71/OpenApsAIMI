@@ -823,6 +823,22 @@
     <string name="cycle_unknown">Sconosciuto</string>
     <string name="basal_multiplier_line">♀️⚡ %1$s Basale×%.2f → %.2f U/h\n</string>
     <string name="wcycle_invalid_day">♀️ WCycle: giorno non valido</string>
+    <string name="sensitivity_ratio_temp_target">Sensibilità rapporto impostato a %.2f in base al target temporaneo di %.0f;</string>
+    <string name="autosens_ratio_log">Autosense rapporto: %.2f;</string>
+    <string name="console_adjust_basal">Aggiustamento basale da %.2f a %.2f; </string>
+    <string name="console_basal_unchanged">Basale invariata: %.2f; </string>
+    <string name="console_temp_target_set">Target Temporaneo impostato, non regolato con autosens</string>
+    <string name="console_target_bg_unchanged">BG target invariato: %.2f; </string>
+    <string name="console_target_bg_changed">BG target modificato da %.2f a %.2f; </string>
+    <string name="console_min_bg_adjusted">Aggiustamento target per BG Alto: min_bg da %.2f a %.2f; </string>
+    <string name="console_min_bg_unchanged">min_bg invariato: %.2f; </string>
+    <string name="console_target_bg_adjusted">BG Target modificato da %.2f a %.2f; </string>
+    <string name="console_max_bg_adjusted">max_bg modificato da %.2f a %.2f</string>
+    <string name="console_max_bg_unchanged">max_bg invariato: %.2f</string>
+
+
+
+
 
 </resources>
 

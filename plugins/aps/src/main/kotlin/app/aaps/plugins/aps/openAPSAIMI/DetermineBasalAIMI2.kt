@@ -3296,7 +3296,7 @@ fun appendCompactLog(
                 sensitivityRatio = min(sensitivityRatio, profile.autosens_max)
                 sensitivityRatio = round(sensitivityRatio, 2)
               //consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
-                consoleLog.add("Sensibilità rapporto impostato a $sensitivityRatio in base al target temporaneo di $target_bg; ")
+                consoleLog.add(context.getString(R.string.sensitivity_ratio_set, sensitivityRatio, target_bg))
             }
 
             else                                                                                                                                                                 -> {
@@ -3317,25 +3317,25 @@ fun appendCompactLog(
             sensitivityRatio = min(sensitivityRatio, profile.autosens_max)
             sensitivityRatio = round(sensitivityRatio, 2)
           //consoleLog.add("Sensitivity ratio set to $sensitivityRatio based on temp target of $target_bg; ")
-            consoleLog.add("Sensibilità rapporto impostato a $sensitivityRatio in base al target temporaneo di $target_bg; ")
+            consoleLog.add(context.getString(R.string.sensitivity_ratio_temp_target, sensitivityRatio, target_bg))
         } else {
             sensitivityRatio = autosens_data.ratio
           //consoleLog.add("Autosens ratio: $sensitivityRatio; ")
-            consoleLog.add("Autosens rapporto: $sensitivityRatio; ")
+            consoleLog.add(context.getString(R.string.autosens_ratio_log, sensitivityRatio))
         }
         basal = profile.current_basal * sensitivityRatio
         basal = roundBasal(basal)
         if (basal != profile_current_basal)
-          //consoleLog.add("Adjusting basal from $profile_current_basal to $basal; ")
-            consoleLog.add("Aggiustamento basale da $profile_current_basal a $basal; ")
+        //consoleLog.add("Adjusting basal from $profile_current_basal to $basal; ")
+            consoleLog.add(context.getString(R.string.console_adjust_basal, profile_current_basal, basal))
         else
-          //consoleLog.add("Basal unchanged: $basal; ")
-            consoleLog.add("Basale invariata: $basal; ")
+        //consoleLog.add("Basal unchanged: $basal; ")
+            consoleLog.add(context.getString(R.string.console_basal_unchanged, basal))
 
-        // adjust min, max, and target BG for sensitivity, such that 50% increase in ISF raises target from 100 to 120
+// adjust min, max, and target BG for sensitivity, such that 50% increase in ISF raises target from 100 to 120
         if (profile.temptargetSet) {
-          //consoleLog.add("Temp Target set, not adjusting with autosens")
-            consoleLog.add("Target Temporaneo impostato, non regolato con autosens")
+            //consoleLog.add("Temp Target set, not adjusting with autosens")
+            consoleLog.add(context.getString(R.string.console_temp_target_set))
         } else {
             if (profile.sensitivity_raises_target && autosens_data.ratio < 1 || profile.resistance_lowers_target && autosens_data.ratio > 1) {
                 // with a target of 100, default 0.7-1.2 autosens min/max range would allow a 93-117 target range
@@ -3345,11 +3345,11 @@ fun appendCompactLog(
                 // don't allow target_bg below 80
                 new_target_bg = max(80.0, new_target_bg)
                 if (target_bg == new_target_bg)
-                  //consoleLog.add("target_bg unchanged: $new_target_bg; ")
-                    consoleLog.add("BG target invariato: $new_target_bg; ")
+                //consoleLog.add("target_bg unchanged: $new_target_bg; ")
+                    consoleLog.add(context.getString(R.string.console_target_bg_unchanged, new_target_bg))
                 else
-                  //consoleLog.add("target_bg from $target_bg to $new_target_bg; ")
-                    consoleLog.add("BG target modificato da $target_bg a $new_target_bg; ")
+                //consoleLog.add("target_bg from $target_bg to $new_target_bg; ")
+                    consoleLog.add(context.getString(R.string.console_target_bg_changed, target_bg, new_target_bg))
 
                 target_bg = new_target_bg
             }
@@ -3583,30 +3583,30 @@ fun appendCompactLog(
             // if eventualBG, naive_eventualBG, and target_bg aren't all above adjustedMinBG, don’t use it
             //console.error("naive_eventualBG:",naive_eventualBG+", eventualBG:",eventualBG);
             if (eventualBG > adjustedMinBG && naive_eventualBG > adjustedMinBG && min_bg > adjustedMinBG) {
-              //consoleLog.add("Adjusting targets for high BG: min_bg from $min_bg to $adjustedMinBG; ")
-                consoleLog.add("Aggiustamento target per BG Alto: min_bg da $min_bg a $adjustedMinBG; ")
+                //consoleLog.add("Adjusting targets for high BG: min_bg from $min_bg to $adjustedMinBG; ")
+                consoleLog.add(context.getString(R.string.console_min_bg_adjusted, min_bg, adjustedMinBG))
                 min_bg = adjustedMinBG
             } else {
-              //consoleLog.add("min_bg unchanged: $min_bg; ")
-                consoleLog.add("min_bg invariato: $min_bg; ")
+                //consoleLog.add("min_bg unchanged: $min_bg; ")
+                consoleLog.add(context.getString(R.string.console_min_bg_unchanged, min_bg))
             }
             // if eventualBG, naive_eventualBG, and target_bg aren't all above adjustedTargetBG, don’t use it
             if (eventualBG > adjustedTargetBG && naive_eventualBG > adjustedTargetBG && target_bg > adjustedTargetBG) {
-              //consoleLog.add("target_bg from $target_bg to $adjustedTargetBG; ")
-                consoleLog.add("BG Target modificato da $target_bg a $adjustedTargetBG; ")
+                //consoleLog.add("target_bg from $target_bg to $adjustedTargetBG; ")
+                consoleLog.add(context.getString(R.string.console_target_bg_adjusted, target_bg, adjustedTargetBG))
                 target_bg = adjustedTargetBG
             } else {
-              //consoleLog.add("target_bg unchanged: $target_bg; ")
-                consoleLog.add("BG target invariato: $target_bg; ")
+                //consoleLog.add("target_bg unchanged: $target_bg; ")
+                consoleLog.add(context.getString(R.string.console_target_bg_unchanged, target_bg))
             }
             // if eventualBG, naive_eventualBG, and max_bg aren't all above adjustedMaxBG, don’t use it
             if (eventualBG > adjustedMaxBG && naive_eventualBG > adjustedMaxBG && max_bg > adjustedMaxBG) {
-              //consoleError.add("max_bg from $max_bg to $adjustedMaxBG")
-                consoleError.add("max_bg modificato da $max_bg a $adjustedMaxBG")
+                //consoleError.add("max_bg from $max_bg to $adjustedMaxBG")
+                consoleError.add(context.getString(R.string.console_max_bg_adjusted, max_bg, adjustedMaxBG))
                 max_bg = adjustedMaxBG
             } else {
-              //consoleError.add("max_bg unchanged: $max_bg")
-                consoleError.add("max_bg invariato: $max_bg")
+                //consoleError.add("max_bg unchanged: $max_bg")
+                consoleError.add(context.getString(R.string.console_max_bg_unchanged, max_bg))
             }
         }
         fun safe(v: Double) = if (v.isFinite()) v else Double.POSITIVE_INFINITY
