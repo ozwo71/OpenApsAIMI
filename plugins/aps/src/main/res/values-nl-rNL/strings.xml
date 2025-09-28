@@ -838,4 +838,10 @@
     <string name="reason_mpc_pi">🎛️ MPC predictive model: %.2f U (%.0f%%) | PI physiological model: %.2f U (%.0f%%)</string>
     <string name="smb_final">✅ Final SMB: %1$s U</string>
     <string name="reason_dia_reattivity">📈 DIA: %1$.1f mins | REACT◁120 Morning: %2$.1f%% | Afternoon: %3$.1f%% | Evening: %4$.1f%%</string>
+    <string name="autodrive_status">🚗 Autodrive: %1$s | Snack/prebolus mode: %2$s | </string>
+    <string name="autodrive_condition">Autodrive conditions: %1$s</string>
+    <string name="reason_bg_trend">🔍 BG Trend: %.2f | Combined Δ: %.2f | </string>
+    <string name="reason_predicted_bg">Predicted BG: %.0f | Acceleration: %.2f | </string>
+    <string name="reason_slope_min_dev">Slope Min Dev.: %.2f</string>
+
 </resources>

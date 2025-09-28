@@ -3918,20 +3918,19 @@ fun appendCompactLog(
     (adjustedEveningFactor * 100))
 )
 
-rT.reason.appendLine(
-    //"🚗 Autodrive: $autodrive | Mode actif: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
-    "🚗 Autodrive: ${if (autodrive) "✔" else "✘"} | Modalità snack/prebolo: ${if (isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason))"✔" else "✘"} | " +
-    //"AutodriveCondition: $autodriveCondition"
-    "Autodrive condizioni: ${if (autodriveCondition) "✔" else "✘"}"
+rT.reason.appendLine( //"🚗 Autodrive: $autodrive | Mode actif: ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)} | " +
+context.getString(R.string.autodrive_status, if (autodrive) "✔" else "✘", if (isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(), predictedBg, reason)) "✔" else "✘") +
+//"AutodriveCondition: $autodriveCondition"
+context.getString(R.string.autodrive_condition, if (autodriveCondition) "✔" else "✘")
 )
 
 rT.reason.appendLine(
 //    "🔍 BGTrend: ${"%.2f".format(bgTrend)} | ΔCombiné: ${"%.2f".format(combinedDelta)} | " +
-    "🔍 BG Trend: ${"%.2f".format(bgTrend)} | Δ Combinato: ${"%.2f".format(combinedDelta)} | " +
+            context.getString(R.string.reason_bg_trend, bgTrend, combinedDelta) +
 //    "Predicted BG: ${"%.0f".format(predictedBg)} | Accélération: ${"%.2f".format(bgacc)} | " +
-      "BG previsto: ${"%.0f".format(predictedBg)} | Accelerazione: ${"%.2f".format(bgacc)} | " +
+                context.getString(R.string.reason_predicted_bg, predictedBg, bgacc) +
 //    "Slope Min Dev.: ${"%.2f".format(mealData.slopeFromMinDeviation)}"
-      "Pendenza Min Dev.: ${"%.2f".format(mealData.slopeFromMinDeviation)}"
+                context.getString(R.string.reason_slope_min_dev, mealData.slopeFromMinDeviation)
 )
 
 rT.reason.appendLine(
