@@ -838,6 +838,8 @@
     <string name="reason_ai_file">🧠 A.I. file: %1$s Previsione : %.2f U</string>
     <string name="reason_boost_hyper">⚡ Boost iperglicemia: x1.7 (BG=%1$d, Δ=%2$.1f)</string>
     <string name="reason_boost_hyper_2">⚡ Boost iperglicemia: x1.5 (BG=%1$d, Δ=%2$.1f)</string>
+    <string name="reason_ml_training">🗃️ Addestramento A.I: set di dati insufficiente, nessun aggiustamento</string>
+
 
 
 </resources>

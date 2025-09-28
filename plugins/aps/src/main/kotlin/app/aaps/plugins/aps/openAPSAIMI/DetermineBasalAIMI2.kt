@@ -3663,7 +3663,7 @@ fun appendCompactLog(
           //rT.reason.append("csvfile ${csvfile.exists()}")
         } else {
           //rT.reason.appendLine("🗃️ ML training: dataset insuffisant — pas d’affinage")
-            rT.reason.appendLine("🗃️ Addestramento A.I: set di dati insufficiente, nessun aggiustamento")
+            rT.reason.appendLine(context.getString(R.string.reason_ml_training))
         }
 
         var smbToGive = if (bg > 130 && delta > 2 && predictedSMB == 0.0f) modelcal else predictedSMB
