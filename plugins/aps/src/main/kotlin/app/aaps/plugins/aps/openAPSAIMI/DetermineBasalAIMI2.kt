@@ -3648,7 +3648,8 @@ fun appendCompactLog(
                     rT.reason.appendLine(context.getString(R.string.reason_boost_hyper, bg.toInt(), delta))
                     this.predictedSMB *= 1.7f // Augmente de 70% si montée très rapide
                 } else if (bg > 180 && delta > 3 && iob < preferences.get(DoubleKey.ApsSmbMaxIob)) {
-                    rT.reason.appendLine("⚡ Boost hyper: x1.5 (BG=${bg.toInt()}, Δ=${"%.1f".format(delta)})")
+                  //rT.reason.appendLine("⚡ Boost hyper: x1.5 (BG=${bg.toInt()}, Δ=${"%.1f".format(delta)})")
+                    rT.reason.appendLine(context.getString(R.string.reason_boost_hyper_2, bg.toInt(), delta))
                     this.predictedSMB *= 1.5f // Augmente de 50% si montée modérée
                 }
 
