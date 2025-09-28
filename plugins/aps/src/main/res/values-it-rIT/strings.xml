@@ -843,6 +843,6 @@
     <string name="console_mpc_log">MPC modello predittivo: dose=%.2f, Kp=%.3f, corr=%.2f, out=%.2f</string>
     <string name="reason_mpc_pi">🎛️ MPC modello predittivo: %.2f U (%.0f%%) | PI modello fisiologico: %.2f U (%.0f%%)</string>
     <string name="smb_final">✅ SMB finale: %1$s U</string>
-    <string name="reason_dia_reattivity">📈 DIA: %1$.1f min | REATT&lt;120 Mattina: %2$.1f%% | Pomeriggio: %3$.1f%% | Sera: %4$.1f%%</string>
+    <string name="reason_dia_reattivity">📈 DIA: %1$.1f min | REATT◁120 Mattina: %2$.1f%% | Pomeriggio: %3$.1f%% | Sera: %4$.1f%%</string>
 </resources>
 
