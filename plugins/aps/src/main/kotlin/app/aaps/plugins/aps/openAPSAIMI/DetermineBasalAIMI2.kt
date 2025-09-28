@@ -3626,9 +3626,7 @@ fun appendCompactLog(
             //rT.reason.appendLine(
             //    "🛑 Hypo guard+hystérèse: minBG=${convertBG(minBg)} " +
             //        "≤ Th=${convertBG(threshold)} (BG=${convertBG(bg)}, pred=${convertBG(predictedBg.toDouble())}, ev=${convertBG(eventualBG)}) → SMB=0"
-            rT.reason.appendLine(
-                "🛑 Protezione ipo + margine sicurezza: minBG=${convertBG(minBg)} " +
-                    "≤ Soglia=${convertBG(threshold)} (BG=${convertBG(bg)}, previsto=${convertBG(predictedBg.toDouble())}, eventuale=${convertBG(eventualBG)}) → SMB=0"
+            rT.reason.appendLine(context.getString(R.string.reason_hypo_guard, convertBG(minBg), convertBG(threshold), convertBG(bg), convertBG(predictedBg.toDouble()), convertBG(eventualBG))
             )
             this.predictedSMB = 0f
         } else {
@@ -3643,10 +3641,11 @@ fun appendCompactLog(
             if (allLines.size > linesToConsider) {
                 val refinedSMB = neuralnetwork5(combinedDelta.toFloat(), shortAvgDelta, longAvgDelta, predictedSMB, profile)
               //rT.reason.appendLine("🧠 NN5 (avant boost): ${"%.2f".format(refinedSMB)} U")
-                rT.reason.appendLine("🧠 A.I. file: ${if (csvfile.exists()) "✔" else "✘"} Previsione : ${"%.2f".format(refinedSMB)} U")
+                rT.reason.appendLine(context.getString(R.string.reason_ai_file, if (csvfile.exists()) "✔" else "✘", refinedSMB))
                 this.predictedSMB = refinedSMB
                 if (bg > 200 && delta > 4 && iob < preferences.get(DoubleKey.ApsSmbMaxIob)) {
-                    rT.reason.appendLine("⚡ Boost hyper: x1.7 (BG=${bg.toInt()}, Δ=${"%.1f".format(delta)})")
+                  //rT.reason.appendLine("⚡ Boost hyper: x1.7 (BG=${bg.toInt()}, Δ=${"%.1f".format(delta)})")
+                    rT.reason.appendLine(context.getString(R.string.reason_boost_hyper, bg.toInt(), delta))
                     this.predictedSMB *= 1.7f // Augmente de 70% si montée très rapide
                 } else if (bg > 180 && delta > 3 && iob < preferences.get(DoubleKey.ApsSmbMaxIob)) {
                     rT.reason.appendLine("⚡ Boost hyper: x1.5 (BG=${bg.toInt()}, Δ=${"%.1f".format(delta)})")

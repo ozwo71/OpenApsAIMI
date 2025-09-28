@@ -828,4 +828,9 @@
     <string name="console_target_bg_adjusted">target_bg from %.2f to %.2f; </string>
     <string name="console_max_bg_adjusted">max_bg from %.2f to %.2f</string>
     <string name="console_max_bg_unchanged">max_bg unchanged: %.2f</string>
+    <string name="reason_hypo_guard">🛑 Hypo protection + safety margin: minBG=%1$s ≤ Threshold=%2$s (BG=%3$s, predicted=%4$s, eventual=%5$s) → SMB=0</string>
+    <string name="reason_ai_file">🧠 A.I. file: %1$s Prediction : %.2f U</string>
+    <string name="reason_boost_hyper">⚡ Hyper boost: x1.7 (BG=%d, Δ=%1$.1f)\n</string>
+
+
 </resources>
