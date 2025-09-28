@@ -3730,7 +3730,7 @@ fun appendCompactLog(
             pumpAgeDays = pumpAgeDays
         )
       //consoleLog.add("DIA ajusté (en minutes) : $adjustedDIAInMinutes")
-        consoleLog.add("DIA aggiustata (in minuti) : $adjustedDIAInMinutes")
+        consoleLog.add(context.getString(R.string.console_dia_adjusted, adjustedDIAInMinutes))
 //         val actCurr = profile.sensorLagActivity
 //         val actFuture = profile.futureActivity
 //         val td = adjustedDIAInMinutes
@@ -3853,7 +3853,7 @@ fun appendCompactLog(
 
 // Log
       //consoleLog.add("Module MPC: dose=${"%.2f".format(optimalDose)}, Kp=${"%.3f".format(Kp)}, corr=${"%.2f".format(correction)}, out=${"%.2f".format(optimalBasalMPC)}")
-        consoleLog.add("Modulo MPC (modello predittivo): dose=${"%.2f".format(optimalDose)}, Kp=${"%.3f".format(Kp)}, corr=${"%.2f".format(correction)}, out=${"%.2f".format(optimalBasalMPC)}")
+        consoleLog.add("MPC modello predittivo: dose=${"%.2f".format(optimalDose)}, Kp=${"%.3f".format(Kp)}, corr=${"%.2f".format(correction)}, out=${"%.2f".format(optimalBasalMPC)}")
 
 // Mix final entre modèle MPC et estimation "physio" (pondéré par deltaScore)
         val alpha = 0.3 + 0.5 * deltaScore // 0.3..0.8
