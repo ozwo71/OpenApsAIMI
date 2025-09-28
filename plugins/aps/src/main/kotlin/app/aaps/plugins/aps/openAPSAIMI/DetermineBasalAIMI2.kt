@@ -3853,21 +3853,21 @@ fun appendCompactLog(
 
 // Log
       //consoleLog.add("Module MPC: dose=${"%.2f".format(optimalDose)}, Kp=${"%.3f".format(Kp)}, corr=${"%.2f".format(correction)}, out=${"%.2f".format(optimalBasalMPC)}")
-        consoleLog.add("MPC modello predittivo: dose=${"%.2f".format(optimalDose)}, Kp=${"%.3f".format(Kp)}, corr=${"%.2f".format(correction)}, out=${"%.2f".format(optimalBasalMPC)}")
+        consoleLog.add(context.getString(R.string.console_mpc_log, optimalDose, Kp, correction, optimalBasalMPC))
 
 // Mix final entre modèle MPC et estimation "physio" (pondéré par deltaScore)
         val alpha = 0.3 + 0.5 * deltaScore // 0.3..0.8
         var smbDecision = (alpha * optimalBasalMPC + (1 - alpha) * finalInsulinDose).toFloat()
 
       //rT.reason.appendLine("🎛️ MPC/PI → ${"%.2f".format(optimalBasalMPC)} U | physio=${"%.2f".format(finalInsulinDose)} U | α=${"%.2f".format(alpha)}")
-        rT.reason.appendLine("🎛️ MPC modello predittivo: ${"%.2f".format(optimalBasalMPC)} U (${("%.0f".format(alpha*100))}%) | PI modello fisiologico: ${"%.2f".format(finalInsulinDose)} U (${("%.0f".format((1-alpha)*100))}%)")
+        rT.reason.appendLine(context.getString(R.string.reason_mpc_pi, optimalBasalMPC, alpha*100, finalInsulinDose, (1-alpha)*100))
 
 // ===== Fin MPC =====
 
 // ⚠️ passer la DECISION courante à la safety (pas finalInsulinDose)
         smbDecision = applySafetyPrecautions(mealData, smbDecision, threshold,rT.reason)
 //      rT.reason.appendLine("✅ SMB final: ${"%.2f".format(smbDecision)} U")
-        rT.reason.appendLine("✅ SMB finale: ${"%.2f".format(smbDecision)} U")
+        rT.reason.appendLine(context.getString(R.string.smb_final, "%.2f".format(smbDecision)))
 
         smbToGive = roundToPoint05(smbDecision)
 
@@ -3904,15 +3904,18 @@ fun appendCompactLog(
         //rT.reason.append("Autodrive: $autodrive, autodrivemode : ${isAutodriveModeCondition(delta, autodrive, mealData.slopeFromMinDeviation, bg.toFloat(),predictedBg, reason)}, AutodriveCondition: $autodriveCondition, bgTrend:$bgTrend, Combined Delta: $combinedDelta, PredictedBg: $predictedBg, bgAcceleration: $bgacc, SlopeMinDeviation: ${mealData.slopeFromMinDeviation}")
         //rT.reason.append("TIRBelow: $currentTIRLow, TIRinRange: $currentTIRRange, TIRAbove: $currentTIRAbove")
         //rT.reason.append(reasonAimi.toString())
-        rT.reason.appendLine(
+       // rT.reason.appendLine(
     //"📈 DIA ajusté: ${"%.1f".format(adjustedDIAInMinutes)} min | " +
-"📈 DIA : ${"%.1f".format(adjustedDIAInMinutes)} min | " +
-//    "Morning: ${"%.1f".format(adjustedMorningFactor)}, " +
-    "REATT120 Mattina: ${ "%.1f".format(adjustedMorningFactor * 100)}% | " +
-//    "Afternoon: ${"%.1f".format(adjustedAfternoonFactor)}, " +
-    "Pomeriggio: ${ "%.1f".format(adjustedAfternoonFactor * 100)}% | " +
-//    "Evening: ${"%.1f".format(adjustedEveningFactor)}"
-     "Sera: ${ "%.1f".format(adjustedEveningFactor * 100)}%"
+    //"Morning: ${"%.1f".format(adjustedMorningFactor)}, " +
+    //"Afternoon: ${"%.1f".format(adjustedAfternoonFactor)}, " +
+    //"Evening: ${"%.1f".format(adjustedEveningFactor)}"
+//)
+
+        rT.reason.appendLine(
+    context.getString(R.string.reason_dia_reattivity,(adjustedDIAInMinutes),
+    (adjustedMorningFactor * 100),
+    (adjustedAfternoonFactor * 100),
+    (adjustedEveningFactor * 100))
 )
 
 rT.reason.appendLine(

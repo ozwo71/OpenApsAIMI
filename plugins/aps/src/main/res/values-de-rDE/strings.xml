@@ -784,4 +784,8 @@
     <string name="reason_boost_hyper_2">⚡ Hyper boost: x1.5 (BG=%1$d, Δ=%2$.1f)</string>
     <string name="reason_ml_training">🗃️ ML training: dataset insufficient, no refinement\n</string>
     <string name="console_dia_adjusted">DIA Adjusted (in minutes) : %.0f</string>
+    <string name="console_mpc_log">MPC module: dose=%.2f, Kp=%.3f, corr=%.2f, out=%.2f</string>
+    <string name="reason_mpc_pi">🎛️ MPC predictive model: %.2f U (%.0f%%) | PI physiological model: %.2f U (%.0f%%)</string>
+    <string name="smb_final">✅ Final SMB: %1$s U</string>
+    <string name="reason_dia_reattivity">📈 DIA: %1$.1f mins | REACT&lt;120 Morning: %2$.1f%% | Afternoon: %3$.1f%% | Evening: %4$.1f%%</string>
 </resources>

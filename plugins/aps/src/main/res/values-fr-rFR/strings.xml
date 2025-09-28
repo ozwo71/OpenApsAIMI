@@ -835,5 +835,9 @@
     <string name="reason_boost_hyper_2">⚡ Hyperglycémie boost: x1.5 (BG=%1$d, Δ=%2$.1f)</string>
     <string name="reason_ml_training">🗃️ ML training: dataset insuffisant — pas d’affinage\n</string>
     <string name="console_dia_adjusted">DIA ajusté (en minutes) : %.0f</string>
+    <string name="console_mpc_log">Module MPC : dose=%.2f, Kp=%.3f, corr=%.2f, out=%.2f</string>
+    <string name="reason_mpc_pi">🎛️ MPC modèle prédictif: %.2f U (%.0f%%) | PI modèle physiologique: %.2f U (%.0f%%)</string>
+    <string name="smb_final">✅ SMB final: %1$s U</string>
+    <string name="reason_dia_reattivity">📈 DIA: %1$.1f mins | REACT&lt;120 Matin: %2$.1f%% | Après-midi: %3$.1f%% | Soir: %4$.1f%%</string>
 </resources>
 
