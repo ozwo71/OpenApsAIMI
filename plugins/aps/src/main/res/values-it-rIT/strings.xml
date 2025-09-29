@@ -850,6 +850,22 @@
     <string name="reason_bg_trend">🔍 BG Trend: %.2f | Δ Combinato: %.2f | </string>
     <string name="reason_predicted_bg">BG previsto: %.0f | Accelerazione: %.2f | </string>
     <string name="reason_slope_min_dev">Pendenza Min Dev.: %.2f</string>
+    <string name="console_profile_sens">Profilo sensibilità: %.0f, sens: %.0f, CSF: %.0f</string>
+    <string name="console_limiting_carb_impact">Limitazione impatto carb. da %.0f a %.0f mg/dL/5m ( %d g/h )</string>
+    <string name="console_carb_impact">Impatto Carb.: %.0f mg/dL per 5m; CI Durata: %.1f ore; rimanenti CI (~2h picco): %.1f mg/dL per 5m</string>
+    <string name="reason_additional_carbs">%d carboidrati aggiuntivi richiesti entro %dmin;</string>
+    <string name="reason_eventual_bg">BG eventuale %1$s >= %2$s, </string>
+    <string name="reason_iob_max">IOB %1$s > maxIOB %2$s</string>
+    <string name="reason_bg_dropping">, BG sta calando (delta %1$.0f), imposto basale a 0.</string>
+    <string name="reason_set_temp_basal">; imposto basale corrente di %1$.2f come temporanea.</string>
+    <string name="reason_insulin_required"> insulina richiesta %1$.2f</string>
+
+
+
+
+
+
+
 
 
 </resources>

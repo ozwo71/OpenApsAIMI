@@ -3940,14 +3940,14 @@ rT.reason.appendLine(
         rT.reason.append(reasonAimi.toString())
         val csf = sens / profile.carb_ratio
       //consoleError.add("profile.sens: ${profile.sens}, sens: $sens, CSF: $csf")
-        consoleError.add("Profilo sensibilità: ${"%.0f".format(profile.sens)}, sens: ${"%.0f".format(sens)}, CSF: ${"%.0f".format(csf)}")
+        consoleError.add(context.getString(R.string.console_profile_sens, profile.sens, sens, csf))
 
         val maxCarbAbsorptionRate = 30 // g/h; maximum rate to assume carbs will absorb if no CI observed
         // limit Carb Impact to maxCarbAbsorptionRate * csf in mg/dL per 5m
         val maxCI = round(maxCarbAbsorptionRate * csf * 5 / 60, 1)
         if (ci > maxCI) {
           //consoleError.add("Limiting carb impact from $ci to $maxCI mg/dL/5m ( $maxCarbAbsorptionRate g/h )")
-            consoleError.add("Limitazione impatto carb. da ${"%.0f".format(ci)} to ${"%.0f".format(maxCI)} mg/dL/5m ( $maxCarbAbsorptionRate g/h )")
+            consoleError.add(context.getString(R.string.console_limiting_carb_impact, ci, maxCI, maxCarbAbsorptionRate))
             ci = maxCI.toFloat()
         }
         var remainingCATimeMin = 2.0
@@ -3987,7 +3987,7 @@ rT.reason.appendLine(
         val acid = max(0.0, mealData.mealCOB * csf / aci)
         // duration (hours) = duration (5m) * 5 / 60 * 2 (to account for linear decay)
       //consoleError.add("Carb Impact: ${ci} mg/dL per 5m; CI Duration: ${round(cid * 5 / 60 * 2, 1)} hours; remaining CI (~2h peak): ${round(remainingCIpeak, 1)} mg/dL per 5m")
-        consoleError.add("Impatto Carb. : ${ci} mg/dL per 5m; CI Durata: ${round(cid * 5 / 60 * 2, 1)} ore; rimanenti CI (~2h picco): ${round(remainingCIpeak, 1)} mg/dL per 5m")
+        consoleError.add(context.getString(R.string.console_carb_impact, ci, round(cid * 5 / 60 * 2, 1), round(remainingCIpeak, 1)))
         //console.error("Accel. Carb Impact:",aci,"mg/dL per 5m; ACI Duration:",round(acid*5/60*2,1),"hours");
         var minIOBPredBG = 999.0
 
@@ -4111,7 +4111,7 @@ rT.reason.appendLine(
             rT.carbsReq = carbsRequired
             rT.carbsReqWithin = minutesAboveThreshold
           //rT.reason.append("$carbsRequired add\'l carbs req w/in ${minutesAboveThreshold}m; ")
-            rT.reason.append("$carbsRequired carboidrati aggiuntivi richiesti entro ${minutesAboveThreshold}min; ")
+            rT.reason.append(context.getString(R.string.reason_additional_carbs, carbsRequired, minutesAboveThreshold))
         }
 
         val forcedBasalmealmodes = preferences.get(DoubleKey.meal_modes_MaxBasal)
@@ -4282,14 +4282,14 @@ rT.reason.appendLine(
         // if iob is over max, just cancel any temps
         if (eventualBG >= max_bg) {
          //rT.reason.append("Eventual BG " + convertBG(eventualBG) + " >= " + convertBG(max_bg) + ", ")
-            rT.reason.append("BG eventuale " + convertBG(eventualBG) + " >= " + convertBG(max_bg) + ", ")
+            rT.reason.append(context.getString(R.string.reason_eventual_bg, convertBG(eventualBG), convertBG(max_bg)))
         }
         if (iob_data.iob > max_iob) {
           //rT.reason.append("IOB ${round(iob_data.iob, 2)} > max_iob $max_iob")
-            rT.reason.append("IOB ${round(iob_data.iob, 2)} > maxIOB ${"%.2f".format(max_iob)}")
+            rT.reason.append(context.getString(R.string.reason_iob_max, round(iob_data.iob, 2), "%.2f".format(max_iob)))
             if (delta < 0) {
               //rT.reason.append(", BG is dropping (delta $delta), setting basal to 0. ")
-                rT.reason.append(", BG sta calando (delta $delta), imposto basale a 0. ")
+                rT.reason.append(context.getString(R.string.reason_bg_dropping, delta))
                 return setTempBasal(0.0, 30, profile, rT, currenttemp, overrideSafetyLimits = false) // Basal à 0 pendant 30 minutes
             }
             return if (currenttemp.duration > 15 && (roundBasal(basal) == roundBasal(currenttemp.rate))) {
@@ -4297,7 +4297,7 @@ rT.reason.appendLine(
                 rT
             } else {
               //rT.reason.append("; setting current basal of ${round(basal, 2)} as temp. ")
-                rT.reason.append("; imposto basale corrente di ${round(basal, 2)} come temporanea. ")
+                rT.reason.append(context.getString(R.string.reason_set_temp_basal, round(basal, 2)))
                 setTempBasal(basal, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
             }
         } else {
@@ -4332,7 +4332,7 @@ rT.reason.appendLine(
             if (microBolusAllowed && enableSMB) {
                 val microBolus = insulinReq
               //rT.reason.append(" insulinReq $insulinReq")
-                rT.reason.append(" insulina richiesta $insulinReq")
+                rT.reason.append(context.getString(R.string.reason_insulin_required, insulinReq))
                 if (microBolus >= maxSMB) {
                   //rT.reason.append("; maxBolus $maxSMB")
                     rT.reason.append("; maxSMB $maxSMB")

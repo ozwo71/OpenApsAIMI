@@ -867,6 +867,16 @@
     <string name="reason_bg_trend">🔍 BG Trend: %.2f | Combined Δ: %.2f | </string>
     <string name="reason_predicted_bg">Predicted BG: %.0f | Acceleration: %.2f | </string>
     <string name="reason_slope_min_dev">Slope Min Dev.: %.2f</string>
+    <string name="console_profile_sens">Sensitivity profile: %.0f, sens: %.0f, CSF: %.0f</string>
+    <string name="console_limiting_carb_impact">Limiting carb impact from %.0f to %.0f mg/dL/5m ( %d g/h )</string>
+    <string name="console_carb_impact">Carb Impact: %.0f mg/dL per 5m; CI Duration: %.1f hours; remaining CI (~2h peak): %.1f mg/dL per 5m</string>
+    <string name="reason_additional_carbs">%d add\'l carbs req w/in %dmin;</string>
+    <string name="reason_eventual_bg">Eventual BG %1$s >= %2$s, </string>
+    <string name="reason_iob_max">IOB %1$s > maxIOB %2$s</string>
+    <string name="reason_bg_dropping">, BG is dropping (delta %1$.0f), setting basal to 0.</string>
+    <string name="reason_set_temp_basal">; setting current basal of %1$.2f as temp.</string>
+    <string name="reason_insulin_required"> insulin required %1$.2f</string>
+
 
 
 </resources>
