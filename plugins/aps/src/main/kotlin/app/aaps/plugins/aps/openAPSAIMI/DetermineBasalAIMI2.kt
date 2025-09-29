@@ -4400,29 +4400,27 @@ rT.reason.appendLine(
                         // meal forcé → bypass
                         overrideSafety = true
                       //calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "MealTime", currenttemp, rT).toDouble()
-                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Pasto generico", currenttemp, rT).toDouble()
+                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, context.getString(R.string.meal_generic), currenttemp, rT).toDouble()
                     }
 
                     bfastTime && bfastruntime in 0..30 && delta < 10        -> {
                         // breakfast forcé → bypass
                         overrideSafety = true
                       //calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Breakfast", currenttemp, rT).toDouble()
-                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Colazione", currenttemp, rT).toDouble()
+                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, context.getString(R.string.meal_breakfast), currenttemp, rT).toDouble()
                     }
 
                     lunchTime && lunchruntime in 0..30 && delta < 10        -> {
                         // lunch forcé → bypass
                         overrideSafety = true
                       //calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Lunch", currenttemp, rT).toDouble()
-                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Pranzo", currenttemp, rT).toDouble()
-                    }
+                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, context.getString(R.string.meal_lunch), currenttemp, rT).toDouble()                    }
 
                     dinnerTime && dinnerruntime in 0..30 && delta < 10      -> {
                         // dinner forcé → bypass
                         overrideSafety = true
                       //calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Dinner", currenttemp, rT).toDouble()
-                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, "Cena", currenttemp, rT).toDouble()
-                    }
+                        calculateRate(forcedBasalmealmodes, profile_current_basal, 1.0, context.getString(R.string.meal_dinner), currenttemp, rT).toDouble()                    }
 
                     highCarbTime && highCarbrunTime in 0..30 && delta < 10  -> {
                         // highCarb forcé → bypass
@@ -4457,7 +4455,7 @@ rT.reason.appendLine(
                 chosenRate = 0.0
                 overrideSafety = false
               //rT.reason.append("Safety cut: predictedBg<100 ou IOB>$maxIob → basale à 0.\n")
-                rT.reason.append("Sicurezza taglio: BG previsto<100 o IOB>${"%.2f".format(maxIob)} → basale a 0.\n")
+                rT.reason.append(context.getString(R.string.safety_cut_tbr, maxIob))
             }
 
 // ------------------------------
@@ -4467,14 +4465,14 @@ rT.reason.appendLine(
                     bg < 80.0                                                  -> {
                         chosenRate = 0.0
                         //rT.reason.append("BG<80 → basale à 0.\n")
-                        rT.reason.append("BG<80 → basale a 0.\n")
+                        rT.reason.append(context.getString(R.string.bg_below_80))
                     }
 
                     bg in 80.0..90.0 &&
                         slopeFromMaxDeviation <= 0 && iob > 0.1f && !sportTime -> {
                         chosenRate = 0.0
                         //rT.reason.append("BG 80-90 & chute → basale à 0.\n")
-                        rT.reason.append("BG 80-90 & caduta libera → basale a 0.\n")
+                        rT.reason.append(context.getString(R.string.bg_80_90_fall))
                     }
 
                     bg in 80.0..90.0 &&
@@ -4483,7 +4481,7 @@ rT.reason.appendLine(
                         bgAcceleration.toFloat() > 0.0f                        -> {
                         chosenRate = profile_current_basal * 0.2
                         //rT.reason.append("BG 80-90 stable → basale x0.2.\n")
-                        rT.reason.append("BG 80-90 stabile → basale x0.2.\n")
+                        rT.reason.append(context.getString(R.string.bg_80_90_stable))
                     }
 
                     bg in 90.0..100.0 &&
@@ -4491,7 +4489,7 @@ rT.reason.appendLine(
                         bgAcceleration.toFloat() > 0.0f                        -> {
                         chosenRate = 0.0
                         //rT.reason.append("BG 90-100 & risque modéré → basale à 0.\n")
-                        rT.reason.append("BG 90-100 & rischio moderato → basale a 0.\n")
+                        rT.reason.append(context.getString(R.string.bg_90_100_moderate))
                     }
 
                     bg in 90.0..100.0 &&
@@ -4499,7 +4497,7 @@ rT.reason.appendLine(
                         bgAcceleration.toFloat() > 0.0f                        -> {
                         chosenRate = profile_current_basal * 0.5
                         //rT.reason.append("BG 90-100 gain léger → basale x0.5.\n")
-                        rT.reason.append("BG 90-100 & aumento leggero → basale x0.5.\n")
+                        rT.reason.append(context.getString(R.string.bg_90_100_slight_gain))
                     }
                 }
             }

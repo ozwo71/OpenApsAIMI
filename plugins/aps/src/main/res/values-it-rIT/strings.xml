@@ -863,5 +863,15 @@
     <string name="reason_microbolus">Microbolo %1$.2fU.</string>
     <string name="reason_wait_microbolus">Attesa %1$.0fmin %2$.0fs per un altro SMB.</string>
     <string name="reason_early_meal">Pasto precoce rilevato → TBR forzata a %1$.2fU/h x30 (override).\n</string>
+    <string name="meal_generic">Pasto generico</string>
+    <string name="meal_breakfast">Colazione</string>
+    <string name="meal_lunch">Pranzo</string>
+    <string name="meal_dinner">Cena</string>
+    <string name="safety_cut_tbr">Sicurezza : BG previsto&lt;100 o IOB;%1$.2f → basale a 0.\n</string>
+    <string name="bg_below_80">BG&lt;80 → basale a 0.\n</string>
+    <string name="bg_80_90_fall">BG 80-90 &amp; caduta libera → basale a 0.\n</string>
+    <string name="bg_80_90_stable">BG 80-90 stabile → basale x0.2.\n</string>
+    <string name="bg_90_100_moderate">BG 90-100 &amp; rischio moderato → basale a 0.\n</string>
+    <string name="bg_90_100_slight_gain">BG 90-100 &amp; aumento leggero → basale x0.5.\n</string>
 </resources>
 
