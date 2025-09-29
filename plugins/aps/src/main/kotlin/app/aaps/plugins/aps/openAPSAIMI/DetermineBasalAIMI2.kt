@@ -4286,7 +4286,7 @@ rT.reason.appendLine(
         }
         if (iob_data.iob > max_iob) {
           //rT.reason.append("IOB ${round(iob_data.iob, 2)} > max_iob $max_iob")
-            rT.reason.append(context.getString(R.string.reason_iob_max, round(iob_data.iob, 2), "%.2f".format(max_iob)))
+            rT.reason.append(context.getString(R.string.reason_iob_max, round(iob_data.iob, 2), round(max_iob, 2)))
             if (delta < 0) {
               //rT.reason.append(", BG is dropping (delta $delta), setting basal to 0. ")
                 rT.reason.append(context.getString(R.string.reason_bg_dropping, delta))

@@ -850,7 +850,7 @@
     <string name="console_carb_impact">Impact Glucides : %.0f mg/dL pour 5m; Durée CI: %.1f heures; CI restant (~2h pic): %.1f mg/dL pour 5m</string>
     <string name="reason_additional_carbs">%d glucides supplémentaires requis dans %dmin;</string>
     <string name="reason_eventual_bg">BG éventuel %1$s >= %2$s, </string>
-    <string name="reason_iob_max">IOB %1$s > maxIOB %2$s</string>
+    <string name="reason_iob_max">IOB %.2f > maxIOB %.2f</string>
     <string name="reason_bg_dropping">, BG diminue (delta %1$.0f), basal mis à 0.</string>
     <string name="reason_set_temp_basal">; basale courant de %1$.2f défini comme temporaire.</string>
     <string name="reason_insulin_required"> insuline requise %1$.2f</string>
