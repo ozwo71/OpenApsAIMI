@@ -12,6 +12,7 @@ enum class Sources {
     LoopDialog,
     TempBasalDialog,
     CalibrationDialog,
+    ConcentrationDialog,
     FillDialog,
     BgCheck,
     SensorInsert,

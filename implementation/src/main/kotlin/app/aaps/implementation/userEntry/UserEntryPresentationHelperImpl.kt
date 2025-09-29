@@ -52,6 +52,7 @@ class UserEntryPresentationHelperImpl @Inject constructor(
         Sources.LoopDialog          -> R.drawable.ic_loop_closed
         Sources.TempBasalDialog     -> R.drawable.ic_actions_start_temp_basal
         Sources.CalibrationDialog   -> R.drawable.ic_calibration
+        Sources.ConcentrationDialog -> R.drawable.ic_insulin
         Sources.FillDialog          -> R.drawable.ic_cp_pump_cannula
         Sources.BgCheck             -> R.drawable.ic_cp_bgcheck
         Sources.SensorInsert        -> R.drawable.ic_cp_cgm_insert
@@ -134,6 +135,7 @@ class UserEntryPresentationHelperImpl @Inject constructor(
         is ValueWithUnit.Minute       -> "${valueWithUnit.value}${translator.translate(valueWithUnit)}"
         is ValueWithUnit.Percent      -> "${valueWithUnit.value}${translator.translate(valueWithUnit)}"
         is ValueWithUnit.Insulin      -> decimalFormatter.to2Decimal(valueWithUnit.value) + translator.translate(valueWithUnit)
+        is ValueWithUnit.InsulinConcentration -> "${rh.gs(app.aaps.core.ui.R.string.ins_concentration_confirmed, valueWithUnit.value)}"
         is ValueWithUnit.UnitPerHour  -> decimalFormatter.to2Decimal(valueWithUnit.value) + translator.translate(valueWithUnit)
         is ValueWithUnit.SimpleInt    -> valueWithUnit.value.toString()
         is ValueWithUnit.SimpleString -> valueWithUnit.value
@@ -209,6 +211,7 @@ class UserEntryPresentationHelperImpl @Inject constructor(
                 is ValueWithUnit.Minute       -> minute = valueWithUnit.value.toString()
                 is ValueWithUnit.Percent      -> percent = valueWithUnit.value.toString()
                 is ValueWithUnit.Insulin      -> insulin = decimalFormatter.to2Decimal(valueWithUnit.value)
+                is ValueWithUnit.InsulinConcentration -> simpleString = simpleString.addWithSeparator(rh.gs(app.aaps.core.ui.R.string.ins_concentration_confirmed, valueWithUnit.value))
                 is ValueWithUnit.UnitPerHour  -> unitPerHour = decimalFormatter.to2Decimal(valueWithUnit.value)
                 is ValueWithUnit.SimpleInt    -> noUnit = noUnit.addWithSeparator(valueWithUnit.value)
                 is ValueWithUnit.SimpleString -> simpleString = simpleString.addWithSeparator(valueWithUnit.value)

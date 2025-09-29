@@ -25,7 +25,6 @@ import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.AapsSchedulers
 import app.aaps.core.interfaces.rx.bus.RxBus
-import app.aaps.core.interfaces.rx.events.EventPreferenceChange
 import app.aaps.core.interfaces.rx.events.EventTherapyEventChange
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.HardLimits
@@ -35,6 +34,7 @@ import app.aaps.core.keys.IntNonKey
 import app.aaps.core.keys.IntentKey
 import app.aaps.core.keys.LongNonKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.ui.extensions.runOnUiThread
 import app.aaps.core.validators.preferences.AdaptiveIntPreference
 import app.aaps.core.validators.preferences.AdaptiveIntentPreference
 import io.reactivex.rxjava3.disposables.CompositeDisposable
@@ -59,7 +59,8 @@ abstract class InsulinOrefBasePlugin(
     aapsLogger: AAPSLogger,
     val config: Config,
     val hardLimits: HardLimits,
-    val uiInteraction: UiInteraction
+    val uiInteraction: UiInteraction,
+    val context: Context
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.INSULIN)
@@ -70,13 +71,19 @@ abstract class InsulinOrefBasePlugin(
         .neverVisible(config.AAPSCLIENT),
     aapsLogger, rh
 ), Insulin, PluginConstraints {
-    val MAX_INSULIN = T.days(15).msecs()
-    private val millsToThePast = T.mins(15).msecs()
-    private val concentrationConfirmed: Boolean
-        get()= lastInsulinChange?.let { it.timestamp < preferences.get(LongNonKey.LastInsulinConfirmation) } ?: false
-    private var disposable: CompositeDisposable = CompositeDisposable()
     private var lastWarned: Long = 0
-    private var lastInsulinChange: TE? = null
+    private var disposable: CompositeDisposable = CompositeDisposable()
+    private val currentInsulin: Int
+        get()= preferences.get(IntNonKey.InsulinConcentration)
+    private val targetInsulin: Int
+        get()= preferences.get(IntKey.InsulinRequestedConcentration)
+    private val concentrationConfirmed: Boolean
+        get()= preferences.get(LongNonKey.LastInsulinChange) < preferences.get(LongNonKey.LastInsulinConfirmation) || currentInsulin == 100
+    val MAX_INSULIN = T.days(7).msecs()
+    private val recentUpdate: Boolean
+        get()=preferences.get(LongNonKey.LastInsulinChange) > System.currentTimeMillis() - millsToThePast
+    private val millsToThePast = T.mins(15).msecs()
+
     override val dia
         get(): Double {
             val dia = userDefinedDia
@@ -144,15 +151,11 @@ abstract class InsulinOrefBasePlugin(
     override fun onStart() {
         super.onStart()
         disposable += rxBus
-            .toObservable(EventPreferenceChange::class.java)
-            .observeOn(aapsSchedulers.io)
-            .subscribe({ updateConcentration() }, fabricPrivacy::logException)
-        disposable += rxBus
             .toObservable(EventTherapyEventChange::class.java)
             .observeOn(aapsSchedulers.main)
             .subscribe({ swapAdapter() }, fabricPrivacy::logException)
         swapAdapter()
-        if (preferences.simpleMode || !config.isEngineeringMode()) { // Concentration not allowed without engineering mode or in simple mode
+        if (!config.isEngineeringMode()) { // Concentration not allowed without engineering mode
             preferences.put(IntKey.InsulinRequestedConcentration, 100)
         }
     }
@@ -165,14 +168,20 @@ abstract class InsulinOrefBasePlugin(
     override val concentration: Double
         get() = preferences.get(IntNonKey.InsulinConcentration) / 100.0
 
-    fun updateConcentration() {
-        // Todo: Compare InsulinConcentration and Requested, Check Reservoir change (in the past 15min), and include update within a confirmation popup
-        // Check if Insulin Concentration is different to U100, a confirmation popup should be rised once after each Reservoir change
-        preferences.put(IntNonKey.InsulinConcentration, preferences.get(IntKey.InsulinRequestedConcentration))
-    }
+    fun swapAdapter() { // Launch Popup to confirm Insulin concentration on Reservoir change
+        val now = System.currentTimeMillis()
+        disposable += persistenceLayer
+            .getTherapyEventDataFromTime(now - MAX_INSULIN, false)
+            .observeOn(aapsSchedulers.main)
+            .subscribe { list ->
+                list.filter { te -> te.type == TE.Type.INSULIN_CHANGE }.firstOrNull()?.let {
+                    preferences.put(LongNonKey.LastInsulinChange, it.timestamp)
+                }
+                val showOnUpdateRequest = (currentInsulin != targetInsulin) && recentUpdate
 
-    fun concentrationPopup() {
-
+                if (!concentrationConfirmed || showOnUpdateRequest)
+                    runOnUiThread { uiInteraction.runInsulinConfirmation() }
+            }
     }
 
     override fun addPreferenceScreen(preferenceManager: PreferenceManager, parent: PreferenceScreen, context: Context, requiredKey: String?) {
@@ -187,19 +196,6 @@ abstract class InsulinOrefBasePlugin(
         }
     }
 
-    fun swapAdapter() { // Launch Popup to confirm Insulin concentration on Reservoir change
-        val now = System.currentTimeMillis()
-        disposable += persistenceLayer
-            .getTherapyEventDataFromTime(now - MAX_INSULIN,false)
-            .observeOn(aapsSchedulers.main)
-            .subscribe { list -> lastInsulinChange = list.filter { te -> te.type == TE.Type.INSULIN_CHANGE }.lastOrNull()
-                lastInsulinChange?.timestamp?.let {
-                    if (it >= now - millsToThePast && !concentrationConfirmed)
-                        concentrationPopup()
-                }
-            }
-    }
-
     fun addConcentrationPreference(preferenceManager: PreferenceManager, context: Context, category: PreferenceCategory) {
         category.addPreference(preferenceManager.createPreferenceScreen(context).apply {
             key = "insulin_concentration_advanced"
@@ -212,23 +208,16 @@ abstract class InsulinOrefBasePlugin(
                     summary = R.string.insulin_concentration_doc_txt
                 )
             )
-            val summary = if (isWithinTimeRange()) R.string.insulin_requested_concentration_summary else R.string.insulin_change_concentration_summary
-            addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.InsulinRequestedConcentration, title = R.string.insulin_requested_concentration_title, dialogMessage = summary))
+            addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.InsulinRequestedConcentration, title = R.string.insulin_requested_concentration_title, dialogMessage = R.string.insulin_change_concentration_summary))
         })
     }
 
-    fun isWithinTimeRange(): Boolean {
-        val now = System.currentTimeMillis()
-        persistenceLayer.getTherapyEventDataFromTime(now - millsToThePast, TE.Type.INSULIN_CHANGE,false).lastOrNull()?.apply { return true }
-        return false
-    }
-
     override fun isClosedLoopAllowed(value: Constraint<Boolean>): Constraint<Boolean> {
-        if (!config.isEngineeringMode()) {
-            if (value.value()) {
-                //uiInteraction.addNotification(Notification.TOAST_ALARM, rh.gs(app.aaps.plugins.constraints.R.string.closed_loop_disabled_on_dev_branch), Notification.NORMAL)
+        if (!concentrationConfirmed) {
+            if (value.value() && !recentUpdate) {
+                uiInteraction.addNotification(Notification.TOAST_ALARM, rh.gs(app.aaps.core.ui.R.string.concentration_not_confirmed), Notification.NORMAL)
             }
-            //value.set(false, rh.gs(app.aaps.plugins.constraints.R.string.closed_loop_disabled_on_dev_branch), this)
+            value.set(false, rh.gs(app.aaps.core.ui.R.string.concentration_not_confirmed), this)
         }
         return value
     }

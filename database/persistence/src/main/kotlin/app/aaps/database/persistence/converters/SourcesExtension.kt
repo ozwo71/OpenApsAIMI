@@ -16,6 +16,7 @@ fun UserEntry.Sources.fromDb(): Sources =
         UserEntry.Sources.LoopDialog          -> Sources.LoopDialog
         UserEntry.Sources.TempBasalDialog     -> Sources.TempBasalDialog
         UserEntry.Sources.CalibrationDialog   -> Sources.CalibrationDialog
+        UserEntry.Sources.ConcentrationDialog -> Sources.ConcentrationDialog
         UserEntry.Sources.FillDialog          -> Sources.FillDialog
         UserEntry.Sources.BgCheck             -> Sources.BgCheck
         UserEntry.Sources.SensorInsert        -> Sources.SensorInsert
@@ -95,6 +96,7 @@ fun Sources.toDb(): UserEntry.Sources =
         Sources.LoopDialog          -> UserEntry.Sources.LoopDialog
         Sources.TempBasalDialog     -> UserEntry.Sources.TempBasalDialog
         Sources.CalibrationDialog   -> UserEntry.Sources.CalibrationDialog
+        Sources.ConcentrationDialog -> UserEntry.Sources.ConcentrationDialog
         Sources.FillDialog          -> UserEntry.Sources.FillDialog
         Sources.BgCheck             -> UserEntry.Sources.BgCheck
         Sources.SensorInsert        -> UserEntry.Sources.SensorInsert

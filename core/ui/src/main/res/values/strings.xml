@@ -113,6 +113,13 @@
     <string name="wrong_pump_data">Data is coming from different pump. Change pump driver to reset pump state.</string>
     <string name="bg_label">BG</string>
     <string name="calibration">Calibration</string>
+    <string name="ins_concentration_confirmed">Insulin U%1$d confirmed</string>
+    <string name="ins_concentration_unchanged">Insulin U%1$d confirmed, Target Insulin concentration U%2$d has been cancelled</string>
+    <string name="concentration">Insulin Concentration</string>
+    <string name="concentration_label">Insulin: U</string>
+    <string name="concentration_title">Previous Insulin concentration used within your pump was U%1$d.\nYou should confirm Insulin concentration put within your pump to enable close loop.</string>
+    <string name="concentration_title2">Previous Insulin used within your pump was U%1$d, but new default Insulin Concentration has been set to U%2$d.\nThis is a safety parameter which can lead to under or overdosing!\nCan you please confirm Insulin concentration put within your pump?</string>
+    <string name="concentration_not_confirmed">Insulin concentration is not confirmed or incorrect.\nClosed Loop is disabled</string>
     <string name="alarminxmin">Run alarm in %1$d min</string>
     <string name="treatmentdeliveryerror">Bolus reported an error. Manually check real delivered insulin and carb amount</string>
     <string name="bolus_reminder">Bolus reminder</string>

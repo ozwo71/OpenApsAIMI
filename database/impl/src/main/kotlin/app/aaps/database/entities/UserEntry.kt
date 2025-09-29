@@ -130,6 +130,7 @@ data class UserEntry(
         LoopDialog,
         TempBasalDialog,
         CalibrationDialog,
+        ConcentrationDialog,
         FillDialog,
         BgCheck,
         SensorInsert,

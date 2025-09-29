@@ -1,5 +1,6 @@
 package app.aaps.plugins.insulin
 
+import android.content.Context
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.insulin.Insulin
@@ -32,8 +33,9 @@ class InsulinOrefUltraRapidActingPlugin @Inject constructor(
     aapsLogger: AAPSLogger,
     config: Config,
     hardLimits: HardLimits,
-    uiInteraction: UiInteraction
-) : InsulinOrefBasePlugin(rh, preferences, aapsSchedulers, fabricPrivacy, persistenceLayer, profileFunction, rxBus, aapsLogger, config, hardLimits, uiInteraction) {
+    uiInteraction: UiInteraction,
+    context: Context
+) : InsulinOrefBasePlugin(rh, preferences, aapsSchedulers, fabricPrivacy, persistenceLayer, profileFunction, rxBus, aapsLogger, config, hardLimits, uiInteraction, context) {
 
     override val id get(): Insulin.InsulinType = Insulin.InsulinType.OREF_ULTRA_RAPID_ACTING
     override val friendlyName get(): String = rh.gs(R.string.ultra_rapid_oref)
