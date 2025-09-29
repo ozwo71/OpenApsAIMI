@@ -844,17 +844,17 @@
     <string name="reason_bg_trend">🔍 BG Trend: %.2f | Gecombineerde Δ: %.2f | </string>
     <string name="reason_predicted_bg">Voorspelde BG: %.0f | Versnelling: %.2f | </string>
     <string name="reason_slope_min_dev">Helling Min Dev.: %.2f</string>
-    <string name="console_profile_sens">Sensitivity profile: %.0f, sens: %.0f, CSF: %.0f</string>
-    <string name="console_limiting_carb_impact">Limiting carb impact from %.0f to %.0f mg/dL/5m ( %d g/h )</string>
-    <string name="console_carb_impact">Carb Impact: %.0f mg/dL per 5m; CI Duration: %.1f hours; remaining CI (~2h peak): %.1f mg/dL per 5m</string>
-    <string name="reason_additional_carbs">%d add\'l carbs req w/in %dmin;</string>
-    <string name="reason_eventual_bg">Eventual BG %1$s >= %2$s, </string>
+    <string name="console_profile_sens">Gevoeligheidsprofiel: %.0f, gev: %.0f, KGF: %.0f</string>
+    <string name="console_limiting_carb_impact">Koolhydraatimpact beperken van %.0f tot %.0f mg/dL/5m ( %d g/u )</string>
+    <string name="console_carb_impact">Koolhydraatimpact: %.0f mg/dL per 5m; KI Duur: %.1f uur; resterende KI (~2u piek): %.1f mg/dL per 5m</string>
+    <string name="reason_additional_carbs">%d extra koolhydraten nodig binnen %dmin;</string>
+    <string name="reason_eventual_bg">Uiteindelijke BG %1$s >= %2$s, </string>
     <string name="reason_iob_max">IOB %.2f > maxIOB %.2f</string>
-    <string name="reason_bg_dropping">, BG is dropping (delta %1$.0f), setting basal to 0.</string>
-    <string name="reason_set_temp_basal">; setting current basal of %1$.2f as temp.</string>
-    <string name="reason_insulin_required"> insulin required %1$.2f</string>
+    <string name="reason_bg_dropping">, BG daalt (delta %1$.0f), basaal op 0 gezet.</string>
+    <string name="reason_set_temp_basal">; huidige basaal van %1$.2f als tijdelijk ingesteld.</string>
+    <string name="reason_insulin_required"> insuline vereist %1$.2f</string>
     <string name="reason_max_smb">; maxBolus %1$.2f</string>
-    <string name="reason_microbolus">Microbolusing %1$.2fU.</string>
-    <string name="reason_wait_microbolus">Waiting %1$.0fmin %2$.0fs to microbolus again.</string>
-    <string name="reason_early_meal">Early meal detected → TBR forced to %1$.2fU/h x30 (override).\n</string>
+    <string name="reason_microbolus">Microbolus van %1$.2fE.</string>
+    <string name="reason_wait_microbolus">Wachten %1$.0fmin %2$.0fs om opnieuw een microbolus te geven.</string>
+    <string name="reason_early_meal">Vroege maaltijd gedetecteerd → TBR geforceerd naar %1$.2fE/u x30 (overschrijven).\n</string>
 </resources>
