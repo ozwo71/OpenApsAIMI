@@ -1,20 +1,21 @@
 package app.aaps.plugins.main.general.overview
 
-import java.util.Locale
+import android.content.Context
+import androidx.annotation.StringRes
+import app.aaps.plugins.main.R
 
-enum class MealMode(val keyword: String) {
-    BFAST("bfast"),
-    LUNCH("lunch"),
-    DINNER("dinner"),
-    SNACK("snack"),
-    HIGHCARB("highcarb"),
-    LOWCARB("lowcarb");
+enum class MealMode(@StringRes val labelResId: Int, val noteKeyword: String) {
+    SNACK(R.string.meal_mode_snack, "snack"),
+    HIGH_CARB(R.string.meal_mode_high_carb, "highcarb"),
+    MEAL(R.string.meal_mode_meal, "meal"),
+    BREAKFAST(R.string.meal_mode_breakfast, "bfast"),
+    LUNCH(R.string.meal_mode_lunch, "lunch"),
+    DINNER(R.string.meal_mode_dinner, "dinner");
 
     companion object {
-        fun fromSpinnerIndex(index: Int): MealMode? = entries.getOrNull(index)
+        private val orderedValues = values()
 
-        fun fromKeyword(keyword: String?): MealMode? = keyword
-            ?.lowercase(Locale.ROOT)
-            ?.let { key -> entries.firstOrNull { it.keyword == key } }
+        fun fromPosition(position: Int): MealMode? = orderedValues.getOrNull(position)
+        fun labels(context: Context): List<String> = orderedValues.map { context.getString(it.labelResId) }
     }
 }

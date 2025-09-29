@@ -120,7 +120,10 @@ import javax.inject.Inject
 import kotlin.math.abs
 import kotlin.math.min
 
-class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickListener {
+class OverviewFragment : DaggerFragment(),
+    View.OnClickListener,
+    OnLongClickListener,
+    MealModeDialog.MealModeListener {
 
     @Inject lateinit var injector: HasAndroidInjector
     @Inject lateinit var aapsLogger: AAPSLogger
@@ -542,15 +545,16 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
             }
         }
     }
-    private fun saveMealModeNote(mode: String, params: MealParameters?) {
+    private fun saveMealModeNote(mode: MealMode, params: MealParameters) {
+        val modeLabel = context?.getString(mode.labelResId) ?: mode.name
         val json = JSONObject().apply {
-            put("mode", mode)
-            params?.let {
-                put("maxTbr", it.maxTbr)
-                put("prebolus1", it.prebolus1)
-                put("prebolus2", it.prebolus2)
-                put("reactivity", it.reactivity)
-                put("smbInterval", it.smbInterval)
+            put("mode", mode.noteKeyword)
+            put("label", modeLabel)
+            put("maxTbr", params.maxTbr)
+            put("prebolus1", params.prebolus1)
+            put("prebolus2", params.prebolus2)
+            put("reactivity", params.reactivity)
+            put("smbInterval", params.smbInterval)
             }
         }
 
@@ -560,11 +564,11 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, OnLongClickList
         ).apply { note = json.toString() }
 
         disposable += persistenceLayer.insertPumpTherapyEventIfNewByTimestamp(
-            therapyEvent = event,
-            action = Action.CAREPORTAL,
-            source = Sources.Note,
-            note = "MealMode",
-            listValues = listOf(ValueWithUnit.SimpleString(json.toString()))
+        therapyEvent = event,
+        action = Action.CAREPORTAL,
+        source = Sources.Note,
+        note = "MealMode",
+        listValues = listOf(ValueWithUnit.SimpleString(json.toString()))
         ).subscribe()
     }
 
