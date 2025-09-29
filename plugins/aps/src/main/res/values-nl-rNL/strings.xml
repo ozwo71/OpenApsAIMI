@@ -867,7 +867,4 @@
     <string name="bg_80_90_stable">BG 80-90 stable → basal x0.2.\n</string>
     <string name="bg_90_100_moderate">BG 90-100 &amp; moderate risk → basal to 0.\n</string>
     <string name="bg_90_100_slight_gain">BG 90-100 &amp; slight increase → basal x0.5.\n</string>
-
-
-
 </resources>
