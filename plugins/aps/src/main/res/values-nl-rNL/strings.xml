@@ -838,7 +838,7 @@
     <string name="console_mpc_log">MPC-module: dosis=%.2f, Kp=%.3f, corr=%.2f, uit=%.2f</string>
     <string name="reason_mpc_pi">🎛️ MPC voorspellend model: %.2f E (%.0f%%) | PI fysiologisch model: %.2f E (%.0f%%)</string>
     <string name="smb_final">✅ Definitieve SMB: %1$s E</string>
-    <string name="reason_dia_reattivity">📈 DIA: %1$.1f min | REACT&lt;120 Ochtend: %2$.1f%% | Middag: %3$.1f%% | Avond: %4$.1f%%</string>
+    <string name="reason_dia_reattivity">📈 DIA: %1$.1f min | REACT◁120 Ochtend: %2$.1f%% | Middag: %3$.1f%% | Avond: %4$.1f%%</string>
     <string name="autodrive_status">🚗 Autodrive: %1$s | Snack/prebolus modus: %2$s | </string>
     <string name="autodrive_condition">Autodrive voorwaarden: %1$s</string>
     <string name="reason_bg_trend">🔍 BG Trend: %.2f | Gecombineerde Δ: %.2f | </string>
