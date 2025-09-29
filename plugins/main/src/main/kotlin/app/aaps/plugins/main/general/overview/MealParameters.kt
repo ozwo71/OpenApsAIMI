@@ -5,5 +5,6 @@ data class MealParameters(
     val prebolus1: Double,
     val prebolus2: Double,
     val reactivity: Double,
-    val smbInterval: Double
+    val smbInterval: Double,
+    val duration: Int
 )

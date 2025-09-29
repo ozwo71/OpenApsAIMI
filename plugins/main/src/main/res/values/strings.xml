@@ -188,6 +188,17 @@
 
     <!-- Overview -->
     <string name="meal_mode">Meal mode</string>
+    <string name="meal_parameters_hint_max_tbr">Max TBR (%)</string>
+    <string name="meal_parameters_hint_prebolus_1">Pre-bolus 1 (U)</string>
+    <string name="meal_parameters_hint_prebolus_2">Pre-bolus 2 (U)</string>
+    <string name="meal_parameters_hint_reactivity">Reactivity</string>
+    <string name="meal_parameters_hint_smb_interval">SMB interval (min)</string>
+    <string name="meal_parameters_hint_duration">Duration (min)</string>
+    <string name="meal_parameters_error_required">Please enter a value</string>
+    <string name="meal_parameters_error_prebolus">Pre-bolus must be ≥ 0</string>
+    <string name="meal_parameters_error_reactivity">Reactivity must be between 0 and 2</string>
+    <string name="meal_parameters_error_smb_interval">SMB interval must be at least 5 min</string>
+    <string name="meal_parameters_error_duration">Duration must be between 0 and 480 min</string>
     <string name="show_statuslights">Show status lights on home screen</string>
     <string name="statuslights_cage_warning">Threshold warning cannula age [h]</string>
     <string name="statuslights_cage_critical">Threshold critical cannula age [h]</string>

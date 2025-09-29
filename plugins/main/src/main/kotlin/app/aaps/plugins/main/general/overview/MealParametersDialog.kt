@@ -26,14 +26,69 @@ class MealParametersDialog(
         val pre2 = view.findViewById<EditText>(R.id.prebolus_2)
         val reactivity = view.findViewById<EditText>(R.id.reactivity)
         val smbInterval = view.findViewById<EditText>(R.id.smb_interval)
+        val duration = view.findViewById<EditText>(R.id.duration)
 
         view.findViewById<View>(R.id.ok_button).setOnClickListener {
-            val params = MealParameters(
-                maxTbr.text.toString().toDoubleOrNull() ?: 0.0,
-                pre1.text.toString().toDoubleOrNull() ?: 0.0,
-                pre2.text.toString().toDoubleOrNull() ?: 0.0,
-                reactivity.text.toString().toDoubleOrNull() ?: 0.0,
-                smbInterval.text.toString().toDoubleOrNull() ?: 0.0
+            val maxTbrValue = maxTbr.text.toString().toDoubleOrNull()
+            val pre1Value = pre1.text.toString().toDoubleOrNull()
+            val pre2Value = pre2.text.toString().toDoubleOrNull()
+            val reactivityValue = reactivity.text.toString().toDoubleOrNull()
+            val smbIntervalValue = smbInterval.text.toString().toDoubleOrNull()
+            val durationValue = duration.text.toString().toIntOrNull()
+
+            var isValid = true
+
+            if (maxTbrValue == null) {
+                maxTbr.error = getString(R.string.meal_parameters_error_required)
+                isValid = false
+            } else {
+                maxTbr.error = null
+            }
+
+            if (pre1Value == null || pre1Value < 0.0) {
+                pre1.error = getString(R.string.meal_parameters_error_prebolus)
+                isValid = false
+            } else {
+                pre1.error = null
+            }
+
+            if (pre2Value == null || pre2Value < 0.0) {
+                pre2.error = getString(R.string.meal_parameters_error_prebolus)
+                isValid = false
+            } else {
+                pre2.error = null
+            }
+
+            if (reactivityValue == null || reactivityValue < 0.0 || reactivityValue > 2.0) {
+                reactivity.error = getString(R.string.meal_parameters_error_reactivity)
+                isValid = false
+            } else {
+                reactivity.error = null
+            }
+
+            if (smbIntervalValue == null || smbIntervalValue < 5.0) {
+                smbInterval.error = getString(R.string.meal_parameters_error_smb_interval)
+                isValid = false
+            } else {
+                smbInterval.error = null
+            }
+
+            if (durationValue == null || durationValue < 0 || durationValue > 480) {
+                duration.error = getString(R.string.meal_parameters_error_duration)
+                isValid = false
+            } else {
+                duration.error = null
+            }
+
+            if (!isValid) {
+                return@setOnClickListener
+            }
+            val params = MealParameters(maxTbrValue,
+                                        pre1Value,
+                                        pre2Value,
+                                        reactivityValue,
+                                        smbIntervalValue,
+                                        durationValue
             )
             onParamsSet(params)
             dismiss()
