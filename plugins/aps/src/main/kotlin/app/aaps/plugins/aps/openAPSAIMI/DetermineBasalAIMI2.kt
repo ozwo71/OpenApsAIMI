@@ -4335,7 +4335,7 @@ rT.reason.appendLine(
                 rT.reason.append(context.getString(R.string.reason_insulin_required, insulinReq))
                 if (microBolus >= maxSMB) {
                   //rT.reason.append("; maxBolus $maxSMB")
-                    rT.reason.append("; maxSMB $maxSMB")
+                    rT.reason.append(context.getString(R.string.reason_max_smb, maxSMB))
                 }
                 rT.reason.append(". ")
 
@@ -4348,11 +4348,11 @@ rT.reason.appendLine(
                     if (microBolus > 0) {
                         rT.units = microBolus
                         //rT.reason.append("Microbolusing ${microBolus}U. ")
-                        rT.reason.append("Microbolo ${microBolus}U. ")
+                        rT.reason.append(context.getString(R.string.reason_microbolus, microBolus))
                     }
                 } else {
                     //rT.reason.append("Waiting " + nextBolusMins + "m " + nextBolusSeconds + "s to microbolus again. ")
-                    rT.reason.append("Attesa " + nextBolusMins + "m " + nextBolusSeconds + "s per un altro SMB. ")
+                    rT.reason.append(context.getString(R.string.reason_wait_microbolus, nextBolusMins, nextBolusSeconds))
                 }
 
             }
@@ -4386,7 +4386,7 @@ rT.reason.appendLine(
                 chosenRate = forcedBasal.toDouble()
                 overrideSafety = true
               //rT.reason.append("Early meal detected → TBR forcée à ${forcedBasal}U/h x30 (override).\n")
-                rT.reason.append("Pasto precoce rilevato → TBR forzata a ${forcedBasal}U/h x30 (override).\n")
+                rT.reason.append(context.getString(R.string.reason_early_meal, forcedBasal))
             } else {
                 // ------------------------------
                 // 3️⃣ Cas snack / meal / bfast / lunch / dinner / highCarb / fasting / sport

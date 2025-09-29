@@ -876,7 +876,8 @@
     <string name="reason_bg_dropping">, BG is dropping (delta %1$.0f), setting basal to 0.</string>
     <string name="reason_set_temp_basal">; setting current basal of %1$.2f as temp.</string>
     <string name="reason_insulin_required"> insulin required %1$.2f</string>
-
-
-
+    <string name="reason_max_smb">; maxBolus %1$.2f</string>
+    <string name="reason_microbolus">Microbolusing %1$.2fU.</string>
+    <string name="reason_wait_microbolus">Waiting %1$.0fmin %2$.0fs to microbolus again.</string>
+    <string name="reason_early_meal">Early meal detected → TBR forced to %1$.2fU/h x30 (override).\n</string>
 </resources>

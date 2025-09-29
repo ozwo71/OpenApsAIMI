@@ -859,14 +859,9 @@
     <string name="reason_bg_dropping">, BG sta calando (delta %1$.0f), imposto basale a 0.</string>
     <string name="reason_set_temp_basal">; imposto basale corrente di %1$.2f come temporanea.</string>
     <string name="reason_insulin_required"> insulina richiesta %1$.2f</string>
-
-
-
-
-
-
-
-
-
+    <string name="reason_max_smb">; maxSMB %1$.2f</string>
+    <string name="reason_microbolus">Microbolo %1$.2fU.</string>
+    <string name="reason_wait_microbolus">Attesa %1$.0fmin %2$.0fs per un altro SMB.</string>
+    <string name="reason_early_meal">Pasto precoce rilevato → TBR forzata a %1$.2fU/h x30 (override).\n</string>
 </resources>
 

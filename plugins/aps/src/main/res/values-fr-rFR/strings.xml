@@ -854,6 +854,9 @@
     <string name="reason_bg_dropping">, BG diminue (delta %1$.0f), basal mis à 0.</string>
     <string name="reason_set_temp_basal">; basale courant de %1$.2f défini comme temporaire.</string>
     <string name="reason_insulin_required"> insuline requise %1$.2f</string>
-
+    <string name="reason_max_smb">; SMB maximum %1$.2f</string>
+    <string name="reason_microbolus">Microbolus %1$.2fU.</string>
+    <string name="reason_wait_microbolus">Attente %1$.0fmin %2$.0fs pour un autre SMB.</string>
+    <string name="reason_early_meal">Repas précoce détecté → TBR forcée à %1$.2fU/h x30 (override).\n</string>
 </resources>
 
