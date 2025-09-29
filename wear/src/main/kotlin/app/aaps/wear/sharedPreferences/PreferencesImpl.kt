@@ -8,6 +8,7 @@ import app.aaps.core.keys.DoublePreferenceKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.IntPreferenceKey
 import app.aaps.core.keys.IntentKey
+import app.aaps.core.keys.LongKey
 import app.aaps.core.keys.LongPreferenceKey
 import app.aaps.core.keys.NonPreferenceKey
 import app.aaps.core.keys.PreferenceKey
@@ -37,6 +38,7 @@ class PreferencesImpl @Inject constructor(
             IntKey::class.java,
             DoubleKey::class.java,
             UnitDoubleKey::class.java,
+            LongKey::class.java,
             StringKey::class.java,
             IntentKey::class.java,
         )

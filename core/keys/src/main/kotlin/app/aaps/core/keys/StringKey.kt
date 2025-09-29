@@ -52,4 +52,5 @@ enum class StringKey(
     TidepoolPassword("tidepool_password", "", isPassword = true),
     TidepoolTestLogin(key = "tidepool_test_login", ""),
     GarminRequestKey(key = "garmin_aaps_key", defaultValue = ""),
+    AIMI_MEAL_MODE_ACTIVE("key_aimi_meal_mode_active", ""),
 }

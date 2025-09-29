@@ -10,6 +10,7 @@ import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.HardLimits
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.BooleanPreferenceKey
+import app.aaps.core.keys.LongKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.DoublePreferenceKey
 import app.aaps.core.keys.IntKey
@@ -53,6 +54,7 @@ class PreferencesImpl @Inject constructor(
             IntKey::class.java,
             DoubleKey::class.java,
             UnitDoubleKey::class.java,
+            LongKey::class.java,
             StringKey::class.java,
             IntentKey::class.java,
         )
