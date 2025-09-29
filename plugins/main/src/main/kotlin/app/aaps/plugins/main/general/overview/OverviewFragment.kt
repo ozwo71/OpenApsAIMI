@@ -121,9 +121,8 @@ import kotlin.math.abs
 import kotlin.math.min
 
 class OverviewFragment : DaggerFragment(),
-    View.OnClickListener,
-    OnLongClickListener,
-    MealModeDialog.MealModeListener {
+    MealModeDialog.MealModeListener,
+    OnLongClickListener {
 
     @Inject lateinit var injector: HasAndroidInjector
     @Inject lateinit var aapsLogger: AAPSLogger
@@ -154,6 +153,7 @@ class OverviewFragment : DaggerFragment(),
     @Inject lateinit var dateUtil: DateUtil
     @Inject lateinit var uel: UserEntryLogger
     @Inject lateinit var persistenceLayer: PersistenceLayer
+    @Inject lateinit var mealModeRepository: MealModeRepository
     @Inject lateinit var glucoseStatusProvider: GlucoseStatusProvider
     @Inject lateinit var overviewData: OverviewData
     @Inject lateinit var overview: Overview
@@ -523,7 +523,25 @@ class OverviewFragment : DaggerFragment(),
         }
         return false
     }
+    override fun onMealModeSelected(mode: MealMode, params: MealParameters?) {
+        val safeParams = params ?: run {
+            aapsLogger.warn(LTag.OVERVIEW, "Meal mode $mode selected without parameters")
+            return
+        }
 
+        disposable += mealModeRepository
+            .setActive(mode, safeParams)
+            .subscribeOn(aapsSchedulers.io)
+            .subscribe(
+                {
+                    saveMealModeNote(mode, safeParams)
+                },
+                {
+                    aapsLogger.error(LTag.OVERVIEW, "Failed to activate meal mode $mode", it)
+                    fabricPrivacy.logException(it)
+                }
+            )
+    }
     private fun onClickQuickWizard() {
         val actualBg = iobCobCalculator.ads.actualBg()
         val profile = profileFunction.getProfile()
