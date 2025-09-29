@@ -213,7 +213,7 @@
     <string name="openapsama_iob_threshold_percent_summary" formatted="false">Percentuale di maxIOB al di sopra del quale gli SMB sono disabilitati.\nValore predefinito: 100%\nCon 100% questa funzione Ã¨ effettivamente disabilitata.</string>
     <string name="openapsama_iob_threshold_percent">soglia maxIOB percentuale per SMB\n(iob_threshold_percent)</string>
 
-    <!--    AIMI INIZIO TRADUZIONE CUORE OPERATIVO  -->
+    <!--    AIMI INIZIO TRADUZIONE CUORE OPERATIVO - NON TRADURRE MAI QUESTA SEZIONE!!!!!!!!!!!!!!!!!  -->
     <string name="key_openapsaimi_settings">key_openapsaimi_settings</string>
     <string name="key_openapsaimi_fixed_tbr_rise">key_openapsaimi_fixed_tbr_rise</string>
     <string name="key_openapsaimi_max_smb">key_openapsaimi_max_smb</string>
@@ -241,6 +241,7 @@
     <string name="key_nb_learningrate_ML_training">key_nb_learningrate_ML_training</string>
 
     <!--    AIMI INIZIO TRADUZIONE MENU, SOTTOMENU e PREFERENZE - FILE OpenAPSAIMIPlugin.kt   -->
+
     <string name="openapsaimi">"AIMI 3.3"</string>
     <string name="openapsaimi_maxsmb_summary">Max SMB value quando BG è minore di 120</string>
     <string name="openapsaimi_maxsmb_title">Max SMB LOW BG</string>

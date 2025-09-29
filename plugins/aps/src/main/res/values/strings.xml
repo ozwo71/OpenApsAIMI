@@ -226,7 +226,7 @@
     <string name="openapsama_iob_threshold_percent_summary" formatted="false">Percentage of maxIOB above which SMBs are disabled.\nDefault value: 100%\nWith 100% this feature is effectively disabled.</string>
     <string name="openapsama_iob_threshold_percent">maxIOB threshold percent for SMB\n(iob_threshold_percent)</string>
 
-    <!-- AIMI START TRANSLATION CORE - FILE OpenAPSAIMIPlugin.kt -->
+    <!-- AIMI START TRANSLATION CORE - FILE OpenAPSAIMIPlugin.kt - DO NOT TRANSLATE THIS SECTION!!!!!!!!! -->
 
     <string name="key_openapsaimi_settings">key_openapsaimi_settings</string>
     <string name="key_openapsaimi_max_smb">key_openapsaimi_max_smb</string>
@@ -907,5 +907,4 @@
     <string name="honeymoon_small_slope">Honeymoon small slope.</string>
     <string name="honeymoon_meal_slope">Honeymoon meal slope.</string>
     <string name="pregnancy_delta_over_0_adjustment">Pregnancy &amp; Δ&gt;0 → adjustment.</string>
-
 </resources>

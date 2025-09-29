@@ -204,7 +204,8 @@
     <string name="enableSMB_EvenOn_OddOff_always_summary">\nactivé ...\nsi la Cible active (mmol/L) a son chiffre décimal pair\nou si la Cible active (mg/dL) est un nombre pair\n\ndésactivé sinon</string>
     <string name="openapsama_iob_threshold_percent_summary" formatted="false">Pourcentage de maxIA au-dessus de laquelle les SMB sont désactivés.\nValeur par défaut : 100%\nAvec 100% cette fonctionnalité est désactivée.</string>
     <string name="openapsama_iob_threshold_percent">seuil maxIA pour SMB\n(iob_threshold_pourcent)</string>
-    <!-- AIMI START TRANSLATION CORE -->
+
+    <!-- AIMI START TRANSLATION CORE - FILE OpenAPSAIMIPlugin.kt - DO NOT TRANSLATE THIS SECTION!!!!!!!!! -->
 
     <string name="key_openapsaimi_settings">key_openapsaimi_settings</string>
     <string name="key_openapsaimi_max_smb">key_openapsaimi_max_smb</string>

@@ -153,7 +153,7 @@
     <string name="autotune_profile_invalid">Profil ungültig</string>
     <!--    autoISF -->
 
-    <!-- AIMI START TRANSLATION CORE - FILE OpenAPSAIMIPlugin.kt -->
+    <!-- AIMI START TRANSLATION CORE - FILE OpenAPSAIMIPlugin.kt - DO NOT TRANSLATE THIS SECTION!!!!!!!!! -->
 
     <string name="key_openapsaimi_settings">key_openapsaimi_settings</string>
     <string name="key_openapsaimi_max_smb">key_openapsaimi_max_smb</string>

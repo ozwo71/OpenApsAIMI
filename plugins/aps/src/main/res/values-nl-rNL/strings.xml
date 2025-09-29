@@ -204,7 +204,8 @@
     <string name="enableSMB_EvenOn_OddOff_always_summary">\ningeschakeld...\nals actief doel (mmol/L) een even decimaal\nheeft of het actieve doel (mg/dL) een even getal is\n\nanders uitgeschakeld</string>
     <string name="openapsama_iob_threshold_percent_summary" formatted="false">Percentage van maxIOB waarbij SMB\'s worden uitgeschakeld.\nStandaardwaarde: 100%\nMet 100% wordt deze functie effectief uitgeschakeld.</string>
     <string name="openapsama_iob_threshold_percent">maxIOB drempelpercentage voor SMB\n(iob_threshold_percent)</string>
-    <!-- AIMI START TRANSLATION CORE -->
+
+    <!-- AIMI START TRANSLATION CORE - FILE OpenAPSAIMIPlugin.kt - DO NOT TRANSLATE THIS SECTION!!!!!!!!! -->
 
     <string name="key_openapsaimi_settings">key_openapsaimi_settings</string>
     <string name="key_openapsaimi_max_smb">key_openapsaimi_max_smb</string>
