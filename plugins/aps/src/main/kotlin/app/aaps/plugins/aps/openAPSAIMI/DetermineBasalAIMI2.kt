@@ -69,7 +69,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var activePlugin: ActivePlugin
 
     private val context: Context = context.applicationContext
-
     private val EPS_FALL = 0.3      // mg/dL/5min : seuil de baisse
     private val EPS_ACC  = 0.2      // mg/dL/5min : seuil d'écart short vs long
     // — Hypo guard —
@@ -1402,6 +1401,7 @@ fun appendCompactLog(
         if (isBg90(context)) conditions.add(ctx.getString(R.string.condition_bg90))
       //if (isAcceleratingDown(context)) conditions.add("acceleratingDown")
         if (isAcceleratingDown(context)) conditions.add(ctx.getString(R.string.condition_acceleratingdown))
+
         return conditions
     }
 
@@ -2617,7 +2617,7 @@ fun appendCompactLog(
 
     // --- Cycle féminin : phases et multiplicateurs ---
     private enum class CyclePhase { MENSTRUATION, FOLLICULAR, OVULATION, LUTEAL, UNKNOWN }
-
+    private inline fun Double.isUnity(eps: Double = 1e-6) = kotlin.math.abs(this - 1.0) < eps
     private data class WCycleInfo(
         val enabled: Boolean,
         val dayInCycle: Int,                 // 0..27
@@ -2676,9 +2676,10 @@ fun appendCompactLog(
         val days = java.time.temporal.ChronoUnit.DAYS.between(cycleStart, nowDate).toInt()
         val dayInCycle = ((days % 28) + 28) % 28
 
-        val pctMen = preferences.get(DoubleKey.OApsAIMIwcyclemenstruation)    // ex: -5 .. +30
-        val pctOvu = preferences.get(DoubleKey.OApsAIMIwcycleovulation)       // ex: -3 .. +30
-        val pctLut = preferences.get(DoubleKey.OApsAIMIwcycleluteal)          // ex: +12 .. +30
+        val pctMen = preferences.get(DoubleKey.OApsAIMIwcyclemenstruation)    // 1..30 (ex: 10) => appliqué en -pctMen% sur basal en menstruation
+        val pctOvu = preferences.get(DoubleKey.OApsAIMIwcycleovulation)       // 1..30 (ex: 5)  => appliqué en -pctOvu% sur SMB en ovulation
+        val pctLut = preferences.get(DoubleKey.OApsAIMIwcycleluteal)          // 1..30 (ex: 15) => appliqué en +pctLut% sur basal en lutéale
+
 
         val phase = when (dayInCycle) {
             in 0..4   -> CyclePhase.MENSTRUATION
@@ -2690,29 +2691,29 @@ fun appendCompactLog(
 
         var basalMul = 1.0
         var smbMul   = 1.0
-      //val sb = StringBuilder("♀️ Day ${dayInCycle + 1}/28 • ")
+        //val sb = StringBuilder("♀️ Day ${dayInCycle + 1}/28 • ")
         val sb = StringBuilder("♀️ " + context.getString(R.string.cycle_day, dayInCycle + 1))
 
         when (phase) {
             CyclePhase.MENSTRUATION -> {
-                basalMul *= (1.0 + pctMen / 100.0)
-                // sb.append("Menstruation: basal ${pctMen}% ")
+                basalMul *= (1.0 - pctMen / 100.0)
+                //sb.append("Menstruation: basal -${pctMen}% ")
                 sb.append(context.getString(R.string.cycle_menstruation, pctMen))
             }
             CyclePhase.FOLLICULAR -> {
-                // sb.append("Follicular: neutral ")
+                //sb.append("Follicular: neutral ")
                 sb.append(context.getString(R.string.cycle_follicular))
             }
             CyclePhase.OVULATION -> {
-                smbMul   *= (1.0 + pctOvu / 100.0)
-                // sb.append("Ovulation: SMB ${pctOvu}% ")
+                smbMul   *= (1.0 - pctOvu / 100.0)
+                //sb.append("Ovulation: SMB -${pctOvu}% ")
                 sb.append(context.getString(R.string.cycle_ovulation, pctOvu))
             }
             CyclePhase.LUTEAL -> {
                 basalMul *= (1.0 + pctLut / 100.0)
-                smbMul   *= 1.05 // conserve la reco +5% (restera borné)
-                // sb.append("Luteal: basal ${pctLut}%, SMB +5% ")
-                sb.append(context.getString(R.string.cycle_luteal, pctLut))
+                smbMul   *= (1.0 + pctLut / 100.0)
+              //sb.append("Luteal: basal +${pctLut}%, SMB +${pctLut}% ")
+                sb.append(context.getString(R.string.cycle_luteal, pctLut, pctLut))
             }
             CyclePhase.UNKNOWN ->
                 // sb.append("Unknown")
@@ -2742,14 +2743,13 @@ fun appendCompactLog(
         rT: RT
     ): Double {
         val info = computeCurrentWCycleInfo()
-        if (!info.enabled) return rate                // ✅ option OFF → silence total
+        if (!info.enabled || info.basalMultiplier.isUnity()) return rate               // ✅ option OFF → silence total
         if (info.basalMultiplier == 1.0) return rate  // neutre → pas de log pour éviter le bruit
 
         val limit = if (bypassSafety) profile.max_basal else maxSafe
         val adjusted = (rate * info.basalMultiplier).coerceIn(0.0, limit)
-
-      //val line = "♀️⚡ ${info.log} Basal×${"%.2f".format(info.basalMultiplier)} → ${"%.2f".format(adjusted)} U/h\n"
-        val line = context.getString(R.string.basal_multiplier_line, info.log, info.basalMultiplier, adjusted)
+      //val line = "♀️⚡ ${info.log} ${fmtMul("Basal", info.basalMultiplier)} → ${"%.2f".format(adjusted)} U/h\n"
+        val line = context.getString(R.string.basal_multiplier_line, info.log, context.getString(R.string.basal_fmt, info.basalMultiplier), adjusted)
         logWCycle(rT.reason, line)
         return adjusted
     }
@@ -2758,11 +2758,11 @@ fun appendCompactLog(
     /** Applique le multiplicateur SMB du cycle et journalise (reason + colon). */
     private fun applyWCycleOnSmb(smb: Float, reason: StringBuilder?): Float {
         val info = computeCurrentWCycleInfo()
-        if (!info.enabled) return smb                // ✅ option OFF → silence total
+        if (!info.enabled || info.smbMultiplier.isUnity())   return smb               // ✅ option OFF → silence total
         if (info.smbMultiplier == 1.0) return smb    // neutre → pas de log
 
         val out = (smb * info.smbMultiplier.toFloat()).coerceAtLeast(0f)
-        val line = "♀️⚡ ${info.log} SMB×${"%.2f".format(info.smbMultiplier)} → ${"%.2f".format(out)} U\n"
+        val line = "♀️⚡ ${info.log} ${fmtMul("SMB", info.smbMultiplier)} → ${"%.2f".format(out)} U\n"
         logWCycle(reason, line)
         return out
     }

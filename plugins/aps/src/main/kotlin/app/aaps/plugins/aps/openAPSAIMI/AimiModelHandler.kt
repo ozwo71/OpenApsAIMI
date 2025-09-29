@@ -57,23 +57,21 @@ object AimiUamHandler {
     fun getInstance(): AimiUamHandler = this
 
     /** Ligne de statut prête à logguer dans rT.reason */
-                                 fun statusLine(context: Context): String {
-
-                                     val path = lastModelPath ?: modelUamFile.absolutePath
-                                     val documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).absolutePath
-                                     val documentsFolderName = context.getString(R.string.folder_documents)
-                                     val relativePath = if (path.startsWith(documentsDir)) {
-                                         documentsFolderName  + path.removePrefix(documentsDir)
-                                     } else {
-                                        path
-                                     }
-                                     //val flag = if (lastLoadOk) "✅" else "❌"
-                                     val flag = if (lastLoadOk) "✔" else "✘"
-                                     //val size = if (modelUamFile.exists()) "${modelUamFile.length()} B" else "missing"
-                                     val size = if (modelUamFile.exists()) String.format("%.1f KB", modelUamFile.length().toDouble() / 1024) else "missing"
-                                     //return "📦 UAM model: $flag ($path, $size)"
-                                     return context.getString(R.string.uam_model_status, flag, relativePath, size)
-
+    fun statusLine(context: Context): String {
+        val path = lastModelPath ?: modelUamFile.absolutePath
+        val documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).absolutePath
+        val documentsFolderName = context.getString(R.string.folder_documents)
+        val relativePath = if (path.startsWith(documentsDir)) {
+            documentsFolderName  + path.removePrefix(documentsDir)
+        } else {
+           path
+        }
+        //val flag = if (lastLoadOk) "✅" else "❌"
+        val flag = if (lastLoadOk) "✔" else "✘"
+        //val size = if (modelUamFile.exists()) "${modelUamFile.length()} B" else "missing"
+        val size = if (modelUamFile.exists()) String.format("%.1f KB", modelUamFile.length().toDouble() / 1024) else "missing"
+        //return "📦 UAM model: $flag ($path, $size)"
+        return context.getString(R.string.uam_model_status, flag, relativePath, size)
     }
 
     /** Ajoute la ligne de statut dans un StringBuilder (ex: rT.reason) */
@@ -86,7 +84,6 @@ object AimiUamHandler {
         smbCache.invalidateAll()
       //Log.i(TAG, "SMB cache cleared")
         Log.i(TAG, context.getString(R.string.log_smb_cache_cleared))
-
     }
 
     /** Ferme l'interpréteur. À appeler dans onStop() du plugin. */

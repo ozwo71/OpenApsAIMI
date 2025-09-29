@@ -837,7 +837,8 @@
     <string name="cycle_ovulation">Ovulation: SMB %1$.2f%% </string>
     <string name="cycle_luteal">Luteal: basal %1$.2f%%, SMB +5%% </string>
     <string name="cycle_unknown">Unknown</string>
-    <string name="basal_multiplier_line">♀️⚡ %1$s Basal×%.2f → %.2f U/h\n</string>
+    <string name="basal_multiplier_line">♀️⚡ %1$s %2$s → %.2f U/h\n</string>
+    <string name="basal_fmt">Basal×%.2f</string>
     <string name="wcycle_invalid_day">♀️ WCycle: invalid day</string>
     <string name="sensitivity_ratio_temp_target">Sensitivity ratio set to %.2f based on temp target of %.0f;</string>
     <string name="autosens_ratio_log">Autosense ratio: %.2f;</string>

@@ -105,7 +105,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val determineBasalaimiSMB2: DetermineBasalaimiSMB2,
     private val profiler: Profiler,
     private val context: Context,
-
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.APS)
@@ -792,8 +791,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             })
             })
 
-
-
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "Reactivity"
                 //title = "Reactivity BG < 120"
@@ -921,8 +918,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.autodriveMaxBasal, dialogMessage = R.string.autodrive_max_basal_summary, title = R.string.autodrive_max_basal_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolus, dialogMessage = R.string.prebolussmall_autodrive_mode_summary, title = R.string.prebolussmall_autodrive_mode_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivePrebolus, dialogMessage = R.string.prebolus_autodrive_mode_summary, title = R.string.prebolus_autodrive_mode_title))
-
-
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "Autodrive prebolus variables"
                     //title = "Autodrive prebolus variables"
@@ -935,8 +930,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIcombinedDelta, dialogMessage = R.string.OApsAIMI_CombinedDelta_summary, title = R.string.OApsAIMI_CombinedDelta_title))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodriveDeviation, dialogMessage = R.string.oaps_aimi_AutodriveDeviation_summary, title = R.string.oaps_aimi_AutodriveDeviation_title))
                     //addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodriveAcceleration, dialogMessage = R.string.oaps_aimi_AutodriveAcceleration_summary, title = R.string.oaps_aimi_AutodriveAcceleration_title))
-
-
                 })
             })
             addPreference(PreferenceCategory(context).apply {
@@ -950,7 +943,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(PreferenceCategory(context).apply {
                     title = rh.gs(R.string.aaps_preferences_title_menu)
                 })
-
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseDynamicSensitivity, summary = R.string.use_dynamic_sensitivity_summary, title = R.string.use_dynamic_sensitivity_title))
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseAutosens, title = R.string.openapsama_use_autosens))
                 addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.ApsDynIsfAdjustmentFactor, dialogMessage = R.string.dyn_isf_adjust_summary, title = R.string.dyn_isf_adjust_title))
@@ -983,8 +975,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     )
                     addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsAlwaysUseShortDeltas, summary = R.string.always_use_short_avg_summary, title = R.string.always_use_short_avg))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsMaxDailyMultiplier, dialogMessage = R.string.openapsama_max_daily_safety_multiplier_summary, title = R.string.openapsama_max_daily_safety_multiplier))
-                    addPreference(
-                        AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsMaxCurrentBasalMultiplier, dialogMessage = R.string.openapsama_current_basal_safety_multiplier_summary, title = R.string.openapsama_current_basal_safety_multiplier)
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsMaxCurrentBasalMultiplier, dialogMessage = R.string.openapsama_current_basal_safety_multiplier_summary, title = R.string.openapsama_current_basal_safety_multiplier)
                     )
                 })
             })

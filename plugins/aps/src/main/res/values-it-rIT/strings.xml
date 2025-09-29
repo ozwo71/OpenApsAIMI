@@ -815,12 +815,12 @@
     <string name="reason_bg_data_old">Se l’orario di sistema %1$d è corretto, allora i dati BG sono troppo vecchi. L’ultimo dato BG è stato letto %2$.0f minuti fa alle %3$d</string>
     <string name="reason_cgm_flat">Errore: Valori sensore non cambiati negli ultimi ~45 minuti</string>
     <string name="cycle_day">♀️ Giorno %d/28 • </string>
-    <string name="cycle_menstruation">Mestruazione: basale %1$.2f%% </string>
+    <string name="cycle_menstruation">Mestruazione: basale -%1$.0f%% </string>
     <string name="cycle_follicular">Fase follicolare: neutrale </string>
-    <string name="cycle_ovulation">Ovulazione: SMB %1$.2f%% </string>
-    <string name="cycle_luteal">Fase luteale: basale %1$.2f%%, SMB +5%% </string>
-    <string name="cycle_unknown">Sconosciuto</string>
-    <string name="basal_multiplier_line">♀️⚡ %1$s Basale×%.2f → %.2f U/h\n</string>
+    <string name="cycle_ovulation">Ovulazione: SMB -%1$.0f%% </string>
+    <string name="cycle_luteal">Fase luteale: basale +%.0f%%, SMB +%.0f%%</string>
+    <string name="basal_multiplier_line">♀️⚡ %1$s %2$s → %.2f U/h\n</string>
+    <string name="basal_fmt">Basale×%.2f</string>
     <string name="wcycle_invalid_day">♀️ WCycle: giorno non valido</string>
     <string name="sensitivity_ratio_temp_target">Sensibilità rapporto impostato a %.2f in base al target temporaneo di %.0f;</string>
     <string name="autosens_ratio_log">Autosense rapporto: %.2f;</string>
