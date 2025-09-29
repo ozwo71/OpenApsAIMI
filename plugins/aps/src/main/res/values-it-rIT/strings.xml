@@ -873,5 +873,23 @@
     <string name="bg_80_90_stable">BG 80-90 stabile → basale x0.2.\n</string>
     <string name="bg_90_100_moderate">BG 90-100 &amp; rischio moderato → basale a 0.\n</string>
     <string name="bg_90_100_slight_gain">BG 90-100 &amp; aumento leggero → basale x0.5.\n</string>
+    <string name="slow_rise_proportional_adjustment">Rialzo lento → aggiustamento proporzionale.</string>
+    <string name="eventual_bg_over_110_hyper_factor">BG eventuale&gt;110 &amp; iper → aggiustamento per fattore.</string>
+    <string name="calm_meal_and_timing">Pasto tranquillo &amp; orario → basale x1.5.</string>
+    <string name="morning_activity_basal_zero">Attività fisica → basale a 0.</string>
+    <string name="morning_rise_profile_basal">Rialzo mattutino → basale del profilo.</string>
+    <string name="meal_snack_under_30m_basal_10">Pasto/snack &lt;30m → basale x10.</string>
+    <string name="meal_snack_30_60m_rising_basal_delta">Pasto/snack 30-60m &amp; rialzo → basale Δ.</string>
+    <string name="eventual_bg_over_180_hyper_basalaimi">BG eventuale&gt;180 &amp; iper → aggiustamento basalaimi.</string>
+    <string name="bg_over_180_stable_basal_factor">BG&gt;180 stabile → basale x fattore aggiustamento.</string>
+    <string name="honeymoon_bg_140_169_profile">Luna di miele BG 140-169 → profilo.</string>
+    <string name="honeymoon_bg_over_170_adjustment">Luna di miele BG&gt;170 → aggiustamento.</string>
+    <string name="honeymoon_delta_over_2_bg_90_119_profile">Luna di miele Δ&gt;2 &amp; BG 90-119 → profilo.</string>
+    <string name="honeymoon_mixed_correction">Luna di miele correzione mista.</string>
+    <string name="honeymoon_plus_meal_detection">Luna di miele + rilevazione pasto.</string>
+    <string name="honeymoon_small_slope">Luna di miele piccola pendenza.</string>
+    <string name="honeymoon_meal_slope">Luna di miele pendenza pasto.</string>
+    <string name="pregnancy_delta_over_0_adjustment">Gravidanza &amp; Δ&gt;0 → aggiustamento.</string>
+
 </resources>
 

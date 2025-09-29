@@ -4512,14 +4512,14 @@ rT.reason.appendLine(
                 ) {
                     chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, combinedDelta.toDouble())
                     //rT.reason.append("Montée lente → ajustement proportionnel.\n")
-                    rT.reason.append("Rialzo lento → aggiustamento proporzionale.\n")
+                    rT.reason.append(context.getString(R.string.slow_rise_proportional_adjustment))
                 } else if (eventualBG > 110 && !sportTime && bg > 150 &&
                     combinedDelta in -2.0..15.0 &&
                     bgAcceleration.toFloat() > 0.0f
                 ) {
                     chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor)
 //                  rT.reason.append("EventualBG>110 & hyper → ajustement par facteur.\n")
-                    rT.reason.append("BG eventuale>110 & iper → aggiustamento per fattore.\n")
+                    rT.reason.append(context.getString(R.string.eventual_bg_over_110_hyper_factor))
                 }
             }
 
@@ -4533,15 +4533,15 @@ rT.reason.appendLine(
                 ) {
                     chosenRate = profile_current_basal * 1.5
                     //rT.reason.append("Repas calme & horaire → basale x1.5.\n")
-                    rT.reason.append("Pasto tranquillo & orario → basale x1.5.\n")
+                    rT.reason.append(context.getString(R.string.calm_meal_and_timing))
                 } else if (timenow > sixAMHour && recentSteps5Minutes > 100) {
                     chosenRate = 0.0
                     //rT.reason.append("Activité matinale → basale à 0.\n")
-                    rT.reason.append("Attività fisica → basale a 0.\n")
+                    rT.reason.append(context.getString(R.string.morning_activity_basal_zero))
                 } else if (timenow <= sixAMHour && delta > 0 && bgAcceleration.toFloat() > 0.0f) {
                     chosenRate = profile_current_basal.toDouble()
                     //rT.reason.append("Matinée montante → basale de profil.\n")
-                    rT.reason.append("Rialzo mattutino → basale del profilo.\n")
+                    rT.reason.append(context.getString(R.string.morning_rise_profile_basal))
                 }
             }
 
@@ -4560,12 +4560,12 @@ rT.reason.appendLine(
                     if (meal && runtime in 0..30) {
                         chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, 10.0)
                         //rT.reason.append("Repas/snack <30m → basale x10.\n")
-                        rT.reason.append("Pasto/snack <30m → basale x10.\n")
+                        rT.reason.append(context.getString(R.string.meal_snack_under_30m_basal_10))
                         break
                     } else if (meal && runtime in 30..60 && delta > 0) {
                         chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, delta.toDouble())
                         //rT.reason.append("Repas/snack 30-60m & montée → basale Δ.\n")
-                        rT.reason.append("Pasto/snack 30-60m & rialzo → basale Δ.\n")
+                        rT.reason.append(context.getString(R.string.meal_snack_30_60m_rising_basal_delta))
                         break
                     }
                 }
@@ -4578,13 +4578,13 @@ rT.reason.appendLine(
                     eventualBG > 180 && delta > 3  ->
                         chosenRate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, basalAdjustmentFactor).also {
 //                          rT.reason.append("EventualBG>180 & hyper → ajustement basalaimi.\n")
-                            rT.reason.append("BG eventuale>180 & iper → aggiustamento basalaimi.\n")
+                            rT.reason.append(context.getString(R.string.eventual_bg_over_180_hyper_basalaimi))
                         }
 
                     bg > 180 && delta in -5.0..1.0 ->
                         chosenRate = (profile_current_basal * basalAdjustmentFactor).also {
 //                          rT.reason.append("BG>180 stable → basale x facteur.\n")
-                            rT.reason.append("BG>180 stabile → basale x fattore aggiustamento.\n")
+                            rT.reason.append(context.getString(R.string.bg_over_180_stable_basal_factor))
                         }
                 }
             }
@@ -4594,29 +4594,48 @@ rT.reason.appendLine(
             if (chosenRate == null && honeymoon) {
                 when {
                     bg in 140.0..169.0 && delta > 0                                                                           ->
-                        chosenRate = profile_current_basal.toDouble().also { rT.reason.append("Honeymoon BG 140-169 → profil.\n") }
+                        chosenRate = profile_current_basal.toDouble().also {
+                          //rT.reason.append("Honeymoon BG 140-169 → profil.\n")
+                            rT.reason.append(context.getString(R.string.honeymoon_bg_140_169_profile))
+                        }
 
                     bg > 170 && delta > 0                                                                                     ->
                         chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor).also {
-                            rT.reason.append("Honeymoon BG>170 → ajustement.\n")
+                          //rT.reason.append("Honeymoon BG>170 → ajustement.\n")
+                            rT.reason.append(context.getString(R.string.honeymoon_bg_over_170_adjustment))
                         }
 
                     combinedDelta > 2 && bg in 90.0..119.0                                                                    ->
-                        chosenRate = profile_current_basal.toDouble().also { rT.reason.append("Honeymoon Δ>2 & BG 90-119 → profil.\n") }
+                        chosenRate = profile_current_basal.toDouble().also {
+                          //rT.reason.append("Honeymoon Δ>2 & BG 90-119 → profil.\n")
+                            rT.reason.append(context.getString(R.string.honeymoon_delta_over_2_bg_90_119_profile))
+                        }
 
                     combinedDelta > 0 && bg > 110 && eventualBG > 120 && bg < 160                                             ->
-                        chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.append("Honeymoon corr. mixte.\n") }
+                        chosenRate = profile_current_basal * basalAdjustmentFactor.also {
+                          //rT.reason.append("Honeymoon corr. mixte.\n")
+                            rT.reason.append(context.getString(R.string.honeymoon_mixed_correction))
+                        }
 
                     mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 && bg > 110 && combinedDelta > 0 ->
-                        chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.append("Honeymoon + repas détection.\n") }
+                        chosenRate = profile_current_basal * basalAdjustmentFactor.also {
+                          //rT.reason.append("Honeymoon + repas détection.\n")
+                            rT.reason.append(context.getString(R.string.honeymoon_plus_meal_detection))
+                        }
 
                     mealData.slopeFromMaxDeviation in 0.0..0.2 && mealData.slopeFromMinDeviation in 0.0..0.5 &&
                         bg in 120.0..150.0 && delta > 0                                                                       ->
-                        chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.append("Honeymoon petit slope.\n") }
+                        chosenRate = profile_current_basal * basalAdjustmentFactor.also {
+                          //rT.reason.append("Honeymoon petit slope.\n")
+                            rT.reason.append(context.getString(R.string.honeymoon_small_slope))
+                        }
 
                     mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 &&
                         bg in 100.0..120.0 && delta > 0                                                                       ->
-                        chosenRate = profile_current_basal * basalAdjustmentFactor.also { rT.reason.append("Honeymoon slope repas.\n") }
+                        chosenRate = profile_current_basal * basalAdjustmentFactor.also {
+                          //rT.reason.append("Honeymoon slope repas.\n")
+                            rT.reason.append(context.getString(R.string.honeymoon_meal_slope))
+                        }
                 }
             }
 
@@ -4625,7 +4644,7 @@ rT.reason.appendLine(
             if (chosenRate == null && pregnancyEnable && delta > 0 && bg > 110 && !honeymoon) {
                 chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor)
               //rT.reason.append("Grossesse & Δ>0 → ajustement.\n")
-                rT.reason.append("Gravidanza & Δ>0 → aggiustamento.\n")
+                rT.reason.append(context.getString(R.string.pregnancy_delta_over_0_adjustment))
             }
 
 // ------------------------------
