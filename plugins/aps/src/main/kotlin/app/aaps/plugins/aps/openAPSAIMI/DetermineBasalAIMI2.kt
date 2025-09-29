@@ -3926,11 +3926,11 @@ context.getString(R.string.autodrive_condition, if (autodriveCondition) "✔" el
 
 rT.reason.appendLine(
 //    "🔍 BGTrend: ${"%.2f".format(bgTrend)} | ΔCombiné: ${"%.2f".format(combinedDelta)} | " +
-            context.getString(R.string.reason_bg_trend, bgTrend, combinedDelta) +
+context.getString(R.string.reason_bg_trend, bgTrend, combinedDelta) +
 //    "Predicted BG: ${"%.0f".format(predictedBg)} | Accélération: ${"%.2f".format(bgacc)} | " +
-                context.getString(R.string.reason_predicted_bg, predictedBg, bgacc) +
+context.getString(R.string.reason_predicted_bg, predictedBg, bgacc) +
 //    "Slope Min Dev.: ${"%.2f".format(mealData.slopeFromMinDeviation)}"
-                context.getString(R.string.reason_slope_min_dev, mealData.slopeFromMinDeviation)
+context.getString(R.string.reason_slope_min_dev, mealData.slopeFromMinDeviation)
 )
 
 rT.reason.appendLine(
