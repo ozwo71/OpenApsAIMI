@@ -810,10 +810,10 @@
     <string name="reason_bg_data_old">Si l’heure système %1$d est correcte, alors les données de BG sont trop anciennes. La dernière donnée BG a été lue il y a %2$.0f minutes à %3$d</string>
     <string name="reason_cgm_flat">Erreur : les valeurs du capteur n’ont pas changé depuis ~45 minutes</string>
     <string name="cycle_day">♀️ Jour %d/28 • </string>
-    <string name="cycle_menstruation">Menstruation : basal %1$.2f%% </string>
+    <string name="cycle_menstruation">Menstruation : basal -%1$.0f%% </string>
     <string name="cycle_follicular">Folliculaire : neutre </string>
-    <string name="cycle_ovulation">Ovulation : SMB %1$.2f%% </string>
-    <string name="cycle_luteal">Lutéale : basal %1$.2f%%, SMB +5%% </string>
+    <string name="cycle_ovulation">Ovulation : SMB -%1$.0f%% </string>
+    <string name="cycle_luteal">Lutéale : basal +%.0f%%, SMB +%.0f%% </string>
     <string name="cycle_unknown">Inconnu</string>
     <string name="basal_multiplier_line">♀️⚡ %1$s %2$s → %.2f U/h\n</string>
     <string name="basal_fmt">Basale×%.2f</string>

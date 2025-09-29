@@ -818,7 +818,8 @@
     <string name="cycle_menstruation">Mestruazione: basale -%1$.0f%% </string>
     <string name="cycle_follicular">Fase follicolare: neutrale </string>
     <string name="cycle_ovulation">Ovulazione: SMB -%1$.0f%% </string>
-    <string name="cycle_luteal">Fase luteale: basale +%.0f%%, SMB +%.0f%%</string>
+    <string name="cycle_luteal">Fase luteale: basale +%.0f%%, SMB +%.0f%% </string>
+    <string name="cycle_unknown">Sconosciuto</string>
     <string name="basal_multiplier_line">♀️⚡ %1$s %2$s → %.2f U/h\n</string>
     <string name="basal_fmt">Basale×%.2f</string>
     <string name="wcycle_invalid_day">♀️ WCycle: giorno non valido</string>
