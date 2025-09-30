@@ -151,7 +151,56 @@
     <string name="autotune_update_local_profile_message">Anpassen %1$s Profile mit dem Autotune Profile?</string>
     <string name="autotune_revert_local_profile_message">%1$s Profil mit Eingabeprofil zurücksetzen?</string>
     <string name="autotune_profile_invalid">Profil ungültig</string>
+
+    <string name="autotune_log_title" translatable="false">|Param|Profile|Tuned|%/Miss.\n</string>
+    <string name="autotune_log_separator" translatable="false">+------------------------------------------\n</string>
+    <string name="autotune_log_peak" translatable="false">| %1$4.4s |\t%2$d |\t%3$d |\n</string>
+    <string name="autotune_log_dia" translatable="false">| %1$4.4s |\t%2$3.1f |\t%3$3.1f |\n</string>
+    <string name="autotune_log_ic_isf" translatable="false">| %1$4.4s | %2$3.3f |\t%3$3.3f |\n</string>
+    <string name="autotune_log_basal" translatable="false">|\t%1$02.0f\t| %2$3.3f |%3$3.3f\t| %5$.0f%% / %4$d\n</string>
+    <string name="autotune_log_sum_basal" translatable="false">|\t∑\t|\t%1$3.1f |\t%2$3.1f |\n</string>
+    <string name="not_available_full">Not available</string>
+    <string name="pump_disconnected">Pump disconnected</string>
+
+
     <!--    autoISF -->
+    <string name="half_basal_exercise_target_title">Half basal exercise target</string>
+    <string name="half_basal_exercise_target_summary">Set to a number, e.g. 160, which means when temp target is 160 mg/dL and High temptarget raises sensitivity=true, run 50%% basal at this level (120 = 75%%; 140 = 60%%).</string>
+    <string name="autoISF_settings_title">AutoISF settings</string>
+    <string name="autoISF_settings_summary">AutoISF allows to adapt the insulin sensitivity factor (ISF) in various scenarios of glucose behaviour\n\nIt can also adapt SMB delivery settings</string>
+    <string name="smb_delivery_settings_title">SMB delivery settings</string>
+    <string name="smb_delivery_settings_summary">Set of options to increase the actual SMB size which can be delivered in situations where ISF was strengthened, i.e. fairly low ISF figure.\n\nUSE WITH CAUTION</string>
+    <string name="openapsama_enable_autoISF">Enable ISF adaptation by glucose behaviour</string>
+    <string name="openapsama_autoISF_max_summary">Similar to autosens_max this defines how strong ISF can become.\n\nThe default value 1.0 effectively shuts off this effect.\n\nWARNING: Be extremely careful when using values above 2.5</string>
+    <string name="openapsama_autoISF_min_summary">Similar to autosens_min this defines how weak ISF can become.\n\nThe default value 1.0 effectively shuts off this effect.</string>
+    <string name="openapsama_dura_ISF_weight_summary">This is the weight applied during longer lasting, elevated glucose plateaus and which strengthens ISF thereby potentially increasing insulin delivery.\n\nThe default value 0.0 effectively shuts off this effect.</string>
+    <string name="openapsama_lower_ISFrange_weight_summary">This is the weight applied while glucose is below target and which weakens ISF thereby potentially reducing insulin delivery.\n\nThe default value 0.0 effectively shuts off this effect.</string>
+    <string name="openapsama_higher_ISFrange_weight_summary">This is the weight applied while glucose is above target and which strengthens ISF thereby potentially increasing insulin delivery.\n\nThe default value 0.0 effectively shuts off this effect.</string>
+    <string name="openapsama_pp_ISF_weight_summary">This is the weight applied while glucose is rising and which strengthens ISF thereby potentially increasing insulin delivery.\n\nThe default value 0.0 effectively shuts off this effect.</string>
+    <string name="openapsama_bgAccel_ISF_weight_summary">This is the weight applied while glucose accelerates and which strengthens ISF thereby potentially increasing insulin delivery.\n\nThe default value 0.0 effectively shuts off this effect.</string>
+    <string name="openapsama_bgBrake_ISF_weight_summary">This is the weight applied while glucose decelerates and which weakens ISF thereby potentially reducing insulin delivery.\n\nThe default value 0.0 effectively shuts off this effect.</string>
+    <string name="openapsama_autoISF_max">Max autoISF ratio\n(autoISF_max)</string>
+    <string name="openapsama_autoISF_min">Min autoISF ratio\n(autoISF_min)</string>
+    <string name="openapsama_lower_ISFrange_weight">lower ISF-range weight\n(lower_ISFrange_weight)</string>
+    <string name="openapsama_higher_ISFrange_weight">higher ISF-range weight\n(higher_ISFrange_weight)</string>
+    <string name="openapsama_pp_ISF_weight">postprandial ISF weight\n(pp_ISF_weight)</string>
+    <string name="openapsama_bgAccel_ISF_weight">Weight while BG accelerates\n(bgAccel_ISF_weight)</string>
+    <string name="openapsama_bgBrake_ISF_weight">Weight while BG decelerates\n(bgBrake_ISF_weight)</string>
+    <string name="openapsama_dura_ISF_weight">dura_ISF weight\n(dura_ISF_weight)</string>
+    <string name="openapsama_smb_delivery_ratio">fixed SMB delivery ratio\n(smb_delivery_ratio)</string>
+    <string name="openapsama_smb_delivery_ratio_min">variable SMB delivery ratio, lower end\n(smb_delivery_ratio_min)</string>
+    <string name="openapsama_smb_delivery_ratio_max">variable SMB delivery ratio, upper end\n(smb_delivery_ratio_max)</string>
+    <string name="openapsama_smb_delivery_ratio_bg_range">variable SMB delivery ratio, mapped glucose range\n(smb_delivery_ratio_bg_range)</string>
+    <string name="openapsama_smb_max_range_extension">SMB/UAM max range extension\n(smb_max_range_extension)</string>
+    <string name="openapsama_smb_delivery_ratio_summary">Default value: 0.5 This is another key OpenAPS safety cap, and specifies what share of the total insulin required can be delivered as SMB. This is to prevent people from getting into dangerous territory by setting SMB requests from the caregivers phone at the same time. Increase this experimental value slowly and with caution.</string>
+    <string name="openapsama_smb_delivery_ratio_min_summary">Default value: 0.5 This is the lower end of a linearly increasing ratio rather than the fix value above.</string>
+    <string name="openapsama_smb_delivery_ratio_max_summary">Default value: 0.5 This is the upper end of a linearly increasing ratio rather than the fix value above.</string>
+    <string name="openapsama_smb_delivery_ratio_bg_range_summary">Default value: 0. The linearly increasing SMB delivery ratio is mapped to the glucose range [target_bg, target_bg+bg_range].\nAt target_bg the SMB ratio is smb_delivery_ratio_min, at target_bg+bg_range it is smb_delivery_ratio_max\nWith 0 the linearly increasing SMB ratio is disabled and the fixed smb_delivery_ratio is used.</string>
+    <string name="openapsama_smb_max_range_extension_summary">Default value: 1 This is another key OpenAPS safety cap, and specifies by what factor you can exceed the regular 120 maxSMB/maxUAM minutes. Increase this experimental value slowly and with caution.</string>
+    <string name="enableSMB_EvenOn_OddOff_always">Enable alternative activation of SMB depending on active target being even number</string>
+    <string name="enableSMB_EvenOn_OddOff_always_summary">\nenabled &#8230;\nif active target(mmol/L) has even decimal\nor active target(mg/dL) is even number\n\ndisabled otherwise</string>
+    <string name="openapsama_iob_threshold_percent_summary" formatted="false">Percentage of maxIOB above which SMBs are disabled.\nDefault value: 100%\nWith 100% this feature is effectively disabled.</string>
+    <string name="openapsama_iob_threshold_percent">maxIOB threshold percent for SMB\n(iob_threshold_percent)</string>
 
     <!-- AIMI START TRANSLATION CORE - FILE OpenAPSAIMIPlugin.kt - DO NOT TRANSLATE THIS SECTION!!!!!!!!! -->
 
@@ -188,9 +237,9 @@
     <string name="openapsaimi_maxsmb_title">Max SMB LOW BG</string>
     <string name="description_openapsaimi">Small micro-boluses based on Artificial Intelligence and Machine Learning.</string>
     <string name="oaps_aimi_evening_factor_summary">% of plugin reactivity between 6 PM and midnight</string>
-    <string name="oaps_aimi_evening_factor_title">Evening Reactivity 18:00-24:00</string>
-    <string name="oaps_aimi_afternoon_factor_title">Afternoon Reactivity 12:00-18:00</string>
-    <string name="oaps_aimi_morning_factor_title">Morning Reactivity 00:00-11:00</string>
+    <string name="oaps_aimi_evening_factor_title">Evening Reactivity 18:00&#8211;24:00</string>
+    <string name="oaps_aimi_afternoon_factor_title">Afternoon Reactivity 12:00&#8211;18:00</string>
+    <string name="oaps_aimi_morning_factor_title">Morning Reactivity 00:00&#8211;11:00</string>
     <string name="oaps_aimi_morning_factor_summary">Morning Reactivity Percentage between midnight and 11 AM</string>
     <string name="oaps_aimi_afternoon_factor_summary">Afternoon Reactivity Percentage between 12 PM and 6 PM</string>
     <string name="oaps_aimi_hyper_factor_summary"><![CDATA[Reactivity when BG > 120]]></string>
@@ -311,12 +360,12 @@
     <string name="oaps_aimi_enableMlautoDrive_title">Enable Auto Drive – automatic meal detection – EXPERIMENTAL</string>
     <string name="autodrive_prebolus_variables">Prebolus limits and conditions</string>
     <string name="autodrive_prebolus_title_menu">Autodrive – Prebolus Settings</string>
-    <string name="autodrive_prebolus_variablesMorning">Meal 00:00-10:00</string>
-    <string name="autodrive_prebolus_title_menuMorning">Autodrive – Meal 00:00-10:00 Settings</string>
-    <string name="autodrive_prebolus_variablesAfternoon">Meal 11:00-17:00</string>
-    <string name="autodrive_prebolus_title_menuAfternoon">Autodrive – Meal 11:00-17:00 Settings</string>
-    <string name="autodrive_prebolus_variablesEvening">Meal 18:00-00:00</string>
-    <string name="autodrive_prebolus_title_menuEvening">Autodrive – Meal 18:00-00:00 Settings</string>
+    <string name="autodrive_prebolus_variablesMorning">Meal 00:00&#8211;10:00</string>
+    <string name="autodrive_prebolus_title_menuMorning">Autodrive &#8211; Meal 00:00&#8211;10:00 Settings</string>
+    <string name="autodrive_prebolus_variablesAfternoon">Meal 11:00&#8211;17:00</string>
+    <string name="autodrive_prebolus_title_menuAfternoon">Autodrive &#8211; Meal 11:00&#8211;17:00 Settings</string>
+    <string name="autodrive_prebolus_variablesEvening">Meal 18:00&#8211;00:00</string>
+    <string name="autodrive_prebolus_title_menuEvening">Autodrive &#8211; Meal 18:00&#8211;v00:00 Settings</string>
 
     <string name="prebolus_autodrive_mode_summary_morning">Autodrive will send a pre-bolus according to the rise detection conditions</string>
     <string name="prebolus_autodrive_mode_title">Meal Pre-bolus</string>
@@ -520,10 +569,10 @@
     <string name="table_plugin_miscellaneous_1">Last SMB</string>
     <string name="table_plugin_miscellaneous_2">Hour</string>
     <string name="table_plugin_miscellaneous_3">Weekend</string>
-    <string name="table_plugin_miscellaneous_4">tags0-60m</string>
-    <string name="table_plugin_miscellaneous_5">tags60-120m</string>
-    <string name="table_plugin_miscellaneous_6">tags120-180m</string>
-    <string name="table_plugin_miscellaneous_7">tags180-240m</string>
+    <string name="table_plugin_miscellaneous_4">tags0&#8211;60m</string>
+    <string name="table_plugin_miscellaneous_5">tags60&#8211;120m</string>
+    <string name="table_plugin_miscellaneous_6">tags120&#8211;180m</string>
+    <string name="table_plugin_miscellaneous_7">tags180&#8211;240m</string>
     <string name="table_plugin_miscellaneous_8">more aggressive</string>
     <string name="table_plugin_miscellaneous_9">less aggressive</string>
     <string name="table_plugin_miscellaneous_10">too aggressive</string>
@@ -638,8 +687,8 @@
     <string name="bg_near_target">Predicted BG (%1$.1f) near target (%2$.1f), reduction x0.5; </string>
     <string name="zero_basal_forced">Zero basal duration (%1$d min) exceeded, forcing minimal basal; </string>
     <string name="dia_base_info">Base DIA: %1$f h = %2$f min\n</string>
-    <string name="morning_adjustment">Morning adjustment (6-10h): DIA reduced by 20%</string>
-    <string name="night_adjustment">Night adjustment (22-23h &amp; 0-5h): DIA increased by 20%</string>
+    <string name="morning_adjustment">Morning adjustment (6&#8211;10h): DIA reduced by 20%</string>
+    <string name="night_adjustment">Night adjustment (22&#8211;23h &amp; 0&#8211;5h): DIA increased by 20%</string>
     <string name="physical_activity_detected">Physical activity detected: DIA reduced by 30%</string>
     <string name="high_hr_no_activity">High HR without activity (stress): DIA increased by 30%</string>
     <string name="high_hr_over_130">High HR (&gt;130bpm): DIA reduced by 30%</string>
@@ -714,7 +763,7 @@
     <string name="csv_file_empty">CSV file is empty.</string>
     <string name="csv_missing_columns">CSV file is missing required columns.</string>
     <string name="insufficient_data_training">Insufficient data for training.</string>
-    <string name="retraining_final_model">Final model training with optimal hyperparameters on all data...</string>
+    <string name="retraining_final_model">Final model training with optimal hyperparameters on all data&#8230;</string>
     <string name="iteration_smb">→ Iteration %1$d | SMB=%2$.2f → %3$.2f | Δ=%4$.2f | Threshold=%5$.2f</string>
     <string name="predicted_smb_higher">Predictive model suggests higher SMB, adjustment confirmed</string>
     <string name="console_future_bg">Future BG: %1$s, Projected Drop: %2$s, Insulin Effect: %3$s, COB Impact: %4$.0f, Carbs Required: %5$d</string>
@@ -810,22 +859,22 @@
     <string name="meal_mode_first30">Meal mode &lt;30m → forced basal at %1$.2fU/h (override).\n</string>
     <string name="safety_cut_tbr">Safety cut: predicted BG&lt;100 or IOB;%1$.2f → basal to 0.\n</string>
     <string name="bg_below_80">BG&lt;80 → basal to 0.\n</string>
-    <string name="bg_80_90_fall">BG 80-90 &amp; free fall → basal to 0.\n</string>
-    <string name="bg_80_90_stable">BG 80-90 stable → basal x0.2.\n</string>
-    <string name="bg_90_100_moderate">BG 90-100 &amp; moderate risk → basal to 0.\n</string>
-    <string name="bg_90_100_slight_gain">BG 90-100 &amp; slight increase → basal x0.5.\n</string>
+    <string name="bg_80_90_fall">BG 80&#8211;90 &amp; free fall → basal to 0.\n</string>
+    <string name="bg_80_90_stable">BG 80&#8211;-90 stable → basal x0.2.\n</string>
+    <string name="bg_90_100_moderate">BG 90&#8211;100 &amp; moderate risk → basal to 0.\n</string>
+    <string name="bg_90_100_slight_gain">BG 90&#8211;100 &amp; slight increase → basal x0.5.\n</string>
     <string name="slow_rise_proportional_adjustment">Slow rise → proportional adjustment.</string>
     <string name="eventual_bg_over_110_hyper_factor">Eventual BG&gt;110 &amp; hyper → factor adjustment.</string>
     <string name="calm_meal_and_timing">Calm meal &amp; timing → basal x1.5.</string>
     <string name="morning_activity_basal_zero">Physical activity → basal 0.</string>
     <string name="morning_rise_profile_basal">Morning rise → profile basal.</string>
     <string name="meal_snack_under_30m_basal_10">Meal/snack &lt;30m → basal x10.</string>
-    <string name="meal_snack_30_60m_rising_basal_delta">Meal/snack 30-60m &amp; rising → basal Δ.</string>
+    <string name="meal_snack_30_60m_rising_basal_delta">Meal/snack 30&#8211;60m &amp; rising → basal Δ.</string>
     <string name="eventual_bg_over_180_hyper_basalaimi">Eventual BG&gt;180 &amp; hyper → basalaimi adjustment.</string>
     <string name="bg_over_180_stable_basal_factor">BG&gt;180 stable → basal x adjustment factor.</string>
-    <string name="honeymoon_bg_140_169_profile">Honeymoon BG 140-169 → profile.</string>
+    <string name="honeymoon_bg_140_169_profile">Honeymoon BG 140&#8211;169 → profile.</string>
     <string name="honeymoon_bg_over_170_adjustment">Honeymoon BG&gt;170 → adjustment.</string>
-    <string name="honeymoon_delta_over_2_bg_90_119_profile">Honeymoon Δ&gt;2 &amp; BG 90-119 → profile.</string>
+    <string name="honeymoon_delta_over_2_bg_90_119_profile">Honeymoon Δ&gt;2 &amp; BG 90&#8211;119 → profile.</string>
     <string name="honeymoon_mixed_correction">Honeymoon mixed correction.</string>
     <string name="honeymoon_plus_meal_detection">Honeymoon + meal detection.</string>
     <string name="honeymoon_small_slope">Honeymoon small slope.</string>

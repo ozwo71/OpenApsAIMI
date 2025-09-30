@@ -209,7 +209,7 @@
     <string name="openapsama_smb_delivery_ratio_bg_range_summary">Valore predefinito: 0. Il rapporto di erogazione SMB che aumenta linearmente è mappato sull\'intervallo di glucosio [target_bg, target_bg+bg_range].\nA target_bg il rapporto SMB Ã¨ smb_delivery_ratio_min, a target_bg+bg_range Ã¨ smb_delivery_ratio_max\nCon 0 il rapporto SMB che aumenta linearmente Ã¨ disattivato e viene utilizzato il rapporto fisso smb_delivery_ratio.</string>
     <string name="openapsama_smb_max_range_extension_summary">Valore predefinito: 1 Questo è un altro parametro chiave della sicurezza OpenAPS, che specifica per quale fattore è possibile superare i soliti 120 minuti maxSMB/maxUAM. Aumentare lentamente questo valore sperimentale con cautela.</string>
     <string name="enableSMB_EvenOn_OddOff_always">Abilita l\'attivazione alternativa di SMB a seconda che il target attivo sia un numero pari</string>
-    <string name="enableSMB_EvenOn_OddOff_always_summary">\nenabled ...\nif il target attivo(mmol/L) ha una cifra decimale pari\no il bersaglio attivo(mg/dL) è un numero pari\n\nnon abilitato altrimenti</string>
+    <string name="enableSMB_EvenOn_OddOff_always_summary">\nenabled &#8230;\nif il target attivo(mmol/L) ha una cifra decimale pari\no il bersaglio attivo(mg/dL) è un numero pari\n\nnon abilitato altrimenti</string>
     <string name="openapsama_iob_threshold_percent_summary" formatted="false">Percentuale di maxIOB al di sopra del quale gli SMB sono disabilitati.\nValore predefinito: 100%\nCon 100% questa funzione Ã¨ effettivamente disabilitata.</string>
     <string name="openapsama_iob_threshold_percent">soglia maxIOB percentuale per SMB\n(iob_threshold_percent)</string>
 
@@ -247,9 +247,9 @@
     <string name="openapsaimi_maxsmb_title">Max SMB LOW BG</string>
     <string name="description_openapsaimi">Piccoli micro-bolus basati su Intelligenza Artificiale e Apprendimento Automatico.</string>
     <string name="oaps_aimi_evening_factor_summary">% of Reactivity of the plugin between 6 pm and midnight</string>
-    <string name="oaps_aimi_evening_factor_title">Reattività Sera 18:00-24:00</string>
-    <string name="oaps_aimi_afternoon_factor_title">Reattività Pomeriggio 12:00-18:00</string>
-    <string name="oaps_aimi_morning_factor_title">Reattività Mattina 00-11:00</string>
+    <string name="oaps_aimi_evening_factor_title">Reattività Sera 18:00&#8211;24:00</string>
+    <string name="oaps_aimi_afternoon_factor_title">Reattività Pomeriggio 12:00&#8211;18:00</string>
+    <string name="oaps_aimi_morning_factor_title">Reattività Mattina 00&#8211;11:00</string>
     <string name="oaps_aimi_morning_factor_summary">Morning Reactivity Percentage between midnight and 11 am</string>
     <string name="oaps_aimi_afternoon_factor_summary">Afternoon reactivity percentage between 12pm and 6 pm</string>
     <string name="oaps_aimi_hyper_factor_summary"><![CDATA[Reattività quando  bg > 120]]></string>
@@ -370,12 +370,12 @@
     <string name="oaps_aimi_enableMlautoDrive_title">Abilita Auto Drive - rilevamento automatico pasti - SPERIMENTALE</string>
     <string name="autodrive_prebolus_variables">Prebolo limiti e condizioni</string>
     <string name="autodrive_prebolus_title_menu">Autodrive - Prebolo - Impostazioni</string>
-    <string name="autodrive_prebolus_variablesMorning">Pasto 00-10:00</string>
-    <string name="autodrive_prebolus_title_menuMorning">Autodrive- Pasto 00-10:00 impostaz.</string>
-    <string name="autodrive_prebolus_variablesAfternoon">Pasto 11-17:00</string>
-    <string name="autodrive_prebolus_title_menuAfternoon">Autodrive - Pasto 11-17:00 impostaz.</string>
-    <string name="autodrive_prebolus_variablesEvening">Pasto 18:00-00</string>
-    <string name="autodrive_prebolus_title_menuEvening">Autodrive - Pasto 18:00-00 impostaz.</string>
+    <string name="autodrive_prebolus_variablesMorning">Pasto 00&#8211;11:00</string>
+    <string name="autodrive_prebolus_title_menuMorning">Autodrive &#8211; Pasto 00&#8211;11:00 impostaz.</string>
+    <string name="autodrive_prebolus_variablesAfternoon">Pasto 11&#8211;18:00</string>
+    <string name="autodrive_prebolus_title_menuAfternoon">Autodrive &#8211; Pasto 11&#8211;18:00 impostaz.</string>
+    <string name="autodrive_prebolus_variablesEvening">Pasto 18:00&#8211;00</string>
+    <string name="autodrive_prebolus_title_menuEvening">Autodrive &#8211; Pasto 18:00&#8211;00 impostaz.</string>
 
     <string name="prebolus_autodrive_mode_summary_morning">Autodrive will send a prebolus regarding the raise detection conditions</string>
     <string name="prebolus_autodrive_mode_title">Prebolo pasto</string>
@@ -577,9 +577,9 @@
     <string name="table_plugin_miscellaneous_2">Ora attuale</string>
     <string name="table_plugin_miscellaneous_3">Festivo</string>
     <string name="table_plugin_miscellaneous_4">ultimi 60m</string>
-    <string name="table_plugin_miscellaneous_5">1-2 ore prec.</string>
-    <string name="table_plugin_miscellaneous_6">2-3 ore prec.</string>
-    <string name="table_plugin_miscellaneous_7">3-4 ore prec.</string>
+    <string name="table_plugin_miscellaneous_5">1&#8211;2 ore prec.</string>
+    <string name="table_plugin_miscellaneous_6">2&#8211;3 ore prec.</string>
+    <string name="table_plugin_miscellaneous_7">3&#8211;4 ore prec.</string>
     <string name="table_plugin_miscellaneous_8">più aggressivo</string>
     <string name="table_plugin_miscellaneous_9">meno aggressivo</string>
     <string name="table_plugin_miscellaneous_10">troppo aggressivo</string>
@@ -591,14 +591,14 @@
     <string name="table_plugin_autodrive_1">Autodrive - Rilevamento precoce pasto/spuntino : microbolo %1$.1fU, Delta combinato: %2$.1f, Previsto: %3$.1f, Accelerazione: %4$.1f.</string>
     <string name="table_plugin_autodrive_2">→ Microbolo in modalità Autodrive %1$.1fU\n  • Target BG: %2$.1f\n  • Slope min deviazione: %3$.3f\n  • Accelerazione BG: %4$.2f\n</string>
     <string name="table_plugin_mealmodes_prebolus_1">Mod. manuale Pasto Generico - Prebolo %1$.1fU.</string>
-    <string name="table_plugin_mealmodes_prebolus_2">Mod. manuale Colazione - Prebolo 1/2 %1$.1fU.</string>
-    <string name="table_plugin_mealmodes_prebolus_3">Mod. manuale Colazione - Prebolo 2/2 %1$.1fU.</string>
-    <string name="table_plugin_mealmodes_prebolus_4">Mod. manuale Pranzo - Prebolo 1/2 %1$.1fU.</string>
-    <string name="table_plugin_mealmodes_prebolus_5">Mod. manuale Pranzo - Prebolo 2/2 %1$.1fU.</string>
-    <string name="table_plugin_mealmodes_prebolus_6">Mod. manuale Cena - Prebolo 1/2 %1$.1fU.</string>
-    <string name="table_plugin_mealmodes_prebolus_7">Mod. manuale Cena - Prebolo 2/2 %1$.1fU.</string>
-    <string name="table_plugin_mealmodes_prebolus_8">Mod. manuale High Carb - Prebolo %1$.1fU.</string>
-    <string name="table_plugin_mealmodes_prebolus_9">Mod. manuale Snack - Prebolo %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_2">Mod. manuale Colazione &#8211; Prebolo 1/2 %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_3">Mod. manuale Colazione &#8211; Prebolo 2/2 %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_4">Mod. manuale Pranzo &#8211; Prebolo 1/2 %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_5">Mod. manuale Pranzo &#8211; Prebolo 2/2 %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_6">Mod. manuale Cena &#8211; Prebolo 1/2 %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_7">Mod. manuale Cena &#8211; Prebolo 2/2 %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_8">Mod. manuale High Carb &#8211; Prebolo %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_9">Mod. manuale Snack &#8211; Prebolo %1$.1fU.</string>
 
 
     <!--    AIMI INIZIO TRADUZIONE TABELLA PLUGIN - SEZIONE RAGIONAMENTI BASALE - FILE DetermineBasalAIMI2.kt -->
@@ -695,8 +695,8 @@
     <string name="bg_near_target">BG previsto (%1$.1f) vicino al target (%2$.1f), riduzione x0.5; </string>
     <string name="zero_basal_forced">Durata basale zero (%1$d min) superata, forzo basale minima; </string>
     <string name="dia_base_info">DIA Base: %1$f h = %2$f min\n</string>
-    <string name="morning_adjustment">Mattina adattamento DIA (6-10h): ridotta del 20%</string>
-    <string name="night_adjustment">Notte adattamento DIA (22-23h &amp; 0-5h): aumentata del 20%</string>
+    <string name="morning_adjustment">Mattina adattamento DIA (6&#8211;10h): ridotta del 20%</string>
+    <string name="night_adjustment">Notte adattamento DIA (22&#8211;23h &amp; 0&#8211;5h): aumentata del 20%</string>
     <string name="physical_activity_detected">Attività fisica rilevata: DIA ridotta del 30%</string>
     <string name="high_hr_no_activity">FC alta no attività fisica (stress): DIA aumento del 30%</string>
     <string name="high_hr_over_130">FC alta (&gt;130bpm): DIA ridotta del 30%</string>
@@ -771,7 +771,7 @@
     <string name="csv_file_empty">CSV file è vuoto.</string>
     <string name="csv_missing_columns">Nel file CSV mancano le colonne richieste.</string>
     <string name="insufficient_data_training">Dati insufficienti per addestrare il modello AI</string>
-    <string name="retraining_final_model">Addestramento finale del modello AI con parametri ottimali su tutti i dati...</string>
+    <string name="retraining_final_model">Addestramento finale del modello AI con parametri ottimali su tutti i dati&#8230;</string>
     <string name="iteration_smb">→ Iterazione %1$d | SMB=%2$.2f → %3$.2f | Δ=%4$.2f | Soglia=%5$.2f</string>
     <string name="predicted_smb_higher">Modello predittivo suggerisce SMB maggiore, aggiustamento confermato</string>
     <string name="console_future_bg">BG previsto: %1$s, BG calo previsto: %2$s, Effetto insulina: %3$s, COB Impatto: %4$.0f, Carb. Richiesti: %5$d</string>
@@ -867,31 +867,26 @@
     <string name="meal_mode_first30">Modalità pasto &lt;30m → basale forzata a %1$.2fU/h (override).\n</string>
     <string name="safety_cut_tbr">Sicurezza : BG previsto&lt;100 o IOB;%1$.2f → basale a 0.\n</string>
     <string name="bg_below_80">BG&lt;80 → basale a 0.\n</string>
-    <string name="bg_80_90_fall">BG 80-90 &amp; caduta libera → basale a 0.\n</string>
-    <string name="bg_80_90_stable">BG 80-90 stabile → basale x0.2.\n</string>
-    <string name="bg_90_100_moderate">BG 90-100 &amp; rischio moderato → basale a 0.\n</string>
-    <string name="bg_90_100_slight_gain">BG 90-100 &amp; aumento leggero → basale x0.5.\n</string>
+    <string name="bg_80_90_fall">BG 80&#8211;90 &amp; caduta libera → basale a 0.\n</string>
+    <string name="bg_80_90_stable">BG 80&#8211;90 stabile → basale x0.2.\n</string>
+    <string name="bg_90_100_moderate">BG 90&#8211;100 &amp; rischio moderato → basale a 0.\n</string>
+    <string name="bg_90_100_slight_gain">BG 90&#8211;100 &amp; aumento leggero → basale x0.5.\n</string>
     <string name="slow_rise_proportional_adjustment">Rialzo lento → aggiustamento proporzionale.</string>
     <string name="eventual_bg_over_110_hyper_factor">BG eventuale&gt;110 &amp; iper → aggiustamento per fattore.</string>
     <string name="calm_meal_and_timing">Pasto tranquillo &amp; orario → basale x1.5.</string>
     <string name="morning_activity_basal_zero">Attività fisica → basale a 0.</string>
     <string name="morning_rise_profile_basal">Rialzo mattutino → basale del profilo.</string>
     <string name="meal_snack_under_30m_basal_10">Pasto/snack &lt;30m → basale x10.</string>
-    <string name="meal_snack_30_60m_rising_basal_delta">Pasto/snack 30-60m &amp; rialzo → basale Δ.</string>
+    <string name="meal_snack_30_60m_rising_basal_delta">Pasto/snack 30&#8211;60m &amp; rialzo → basale Δ.</string>
     <string name="eventual_bg_over_180_hyper_basalaimi">BG eventuale&gt;180 &amp; iper → aggiustamento basalaimi.</string>
     <string name="bg_over_180_stable_basal_factor">BG&gt;180 stabile → basale x fattore aggiustamento.</string>
-    <string name="honeymoon_bg_140_169_profile">Luna di miele BG 140-169 → profilo.</string>
+    <string name="honeymoon_bg_140_169_profile">Luna di miele BG 140&#8211;169 → profilo.</string>
     <string name="honeymoon_bg_over_170_adjustment">Luna di miele BG&gt;170 → aggiustamento.</string>
-    <string name="honeymoon_delta_over_2_bg_90_119_profile">Luna di miele Δ&gt;2 &amp; BG 90-119 → profilo.</string>
+    <string name="honeymoon_delta_over_2_bg_90_119_profile">Luna di miele Δ&gt;2 &amp; BG 90&#8211;119 → profilo.</string>
     <string name="honeymoon_mixed_correction">Luna di miele correzione mista.</string>
     <string name="honeymoon_plus_meal_detection">Luna di miele + rilevazione pasto.</string>
     <string name="honeymoon_small_slope">Luna di miele piccola pendenza.</string>
     <string name="honeymoon_meal_slope">Luna di miele pendenza pasto.</string>
     <string name="pregnancy_delta_over_0_adjustment">Gravidanza &amp; Δ&gt;0 → aggiustamento.</string>
-
-
-
-
-
 </resources>
 
