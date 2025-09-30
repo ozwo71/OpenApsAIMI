@@ -864,10 +864,7 @@
     <string name="reason_microbolus">Microbolo %1$.2fU.</string>
     <string name="reason_wait_microbolus">Attesa %1$.0fmin %2$.0fs per un altro SMB.</string>
     <string name="reason_early_meal">Pasto precoce rilevato → TBR forzata a %1$.2fU/h x30 (override).\n</string>
-    <string name="meal_generic">Pasto generico</string>
-    <string name="meal_breakfast">Colazione</string>
-    <string name="meal_lunch">Pranzo</string>
-    <string name="meal_dinner">Cena</string>
+    <string name="meal_mode_first30">Modalità pasto &lt;30m → basale forzata a %1$.2fU/h (override).\n</string>
     <string name="safety_cut_tbr">Sicurezza : BG previsto&lt;100 o IOB;%1$.2f → basale a 0.\n</string>
     <string name="bg_below_80">BG&lt;80 → basale a 0.\n</string>
     <string name="bg_80_90_fall">BG 80-90 &amp; caduta libera → basale a 0.\n</string>
@@ -891,6 +888,10 @@
     <string name="honeymoon_small_slope">Luna di miele piccola pendenza.</string>
     <string name="honeymoon_meal_slope">Luna di miele pendenza pasto.</string>
     <string name="pregnancy_delta_over_0_adjustment">Gravidanza &amp; Δ&gt;0 → aggiustamento.</string>
+
+
+
+
 
 </resources>
 

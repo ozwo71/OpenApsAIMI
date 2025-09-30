@@ -858,10 +858,7 @@
     <string name="reason_microbolus">Microbolus van %1$.2fE.</string>
     <string name="reason_wait_microbolus">Wachten %1$.0fmin %2$.0fs om opnieuw een microbolus te geven.</string>
     <string name="reason_early_meal">Vroege maaltijd gedetecteerd → TBR geforceerd naar %1$.2fE/u x30 (overschrijven).\n</string>
-    <string name="meal_generic">Algemene maaltijd</string>
-    <string name="meal_breakfast">Ontbijt</string>
-    <string name="meal_lunch">Lunch</string>
-    <string name="meal_dinner">Diner</string>
+    <string name="meal_mode_first30">Meal mode &lt;30m → forced basal at %1$.2fU/h (override).\n</string>
     <string name="safety_cut_tbr">Veiligheidsstop: voorspelde BG&lt;100 of IOB;%1$.2f → basaal naar 0.\n</string>
     <string name="bg_below_80">BG&lt;80 → basaal naar 0.\n</string>
     <string name="bg_80_90_fall">BG 80-90 &amp; vrije val → basaal naar 0.\n</string>
