@@ -4388,7 +4388,7 @@ rT.reason.appendLine(
                 }
                 val forced = forcedBasalmealmodes.toDouble().coerceAtLeast(0.0)
               //rT.reason.append("FORCE-MEAL 0–30 min [$activeMeal] → $forced U/h (override).\n")
-                rT.reason.append(context.getString(R.string.meal_mode_first30,activeMeal))
+                rT.reason.append(context.getString(R.string.meal_mode_first30,activeMeal,forced))
                 return setTempBasal(
                     _rate = forced,
                     duration = 30,

@@ -868,7 +868,7 @@
     <string name="meal_mode_lunch">pranzo(%1$dm)</string>
     <string name="meal_mode_dinner">cena(%1$dm)</string>
     <string name="meal_mode_highcarb">high-carb(%1$dm)</string>
-    <string name="meal_mode_first30">Mod.manuale pasto 0&#8211;30m [%1$s] → basale forzata a %2$.2f U/h (override).\n</string>
+    <string name="meal_mode_first30">Mod.manuale pasto 0-30m [%1$s] → basale forzata a %2$f U/h (override).</string>
     <string name="reason_early_meal">Pasto precoce rilevato → TBR forzata a %1$.2fU/h x30 (override).\n</string>
     <string name="safety_cut_tbr">Sicurezza : BG previsto&lt;100 o IOB;%1$.2f → basale a 0.\n</string>
     <string name="bg_below_80">BG&lt;80 → basale a 0.\n</string>
