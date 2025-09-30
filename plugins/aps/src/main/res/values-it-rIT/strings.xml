@@ -863,8 +863,13 @@
     <string name="reason_max_smb">; maxSMB %1$.2f</string>
     <string name="reason_microbolus">Microbolo %1$.2fU.</string>
     <string name="reason_wait_microbolus">Attesa %1$.0fmin %2$.0fs per un altro SMB.</string>
+    <string name="meal_mode_meal">pasto generico(%1$dm)</string>
+    <string name="meal_mode_bfast">colazione(%1$dm)</string>
+    <string name="meal_mode_lunch">pranzo(%1$dm)</string>
+    <string name="meal_mode_dinner">cena(%1$dm)</string>
+    <string name="meal_mode_highcarb">high-carb(%1$dm)</string>
+    <string name="meal_mode_first30">Mod.manuale pasto 0&#8211;30m [%1$s] → basale forzata a %2$.2f U/h (override).\n</string>
     <string name="reason_early_meal">Pasto precoce rilevato → TBR forzata a %1$.2fU/h x30 (override).\n</string>
-    <string name="meal_mode_first30">Modalità pasto &lt;30m → basale forzata a %1$.2fU/h (override).\n</string>
     <string name="safety_cut_tbr">Sicurezza : BG previsto&lt;100 o IOB;%1$.2f → basale a 0.\n</string>
     <string name="bg_below_80">BG&lt;80 → basale a 0.\n</string>
     <string name="bg_80_90_fall">BG 80&#8211;90 &amp; caduta libera → basale a 0.\n</string>
