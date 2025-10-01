@@ -10,6 +10,8 @@ import app.aaps.core.data.ue.ValueWithUnit
 import app.aaps.core.interfaces.logging.UserEntryLogger
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.rx.events.EventInsulinChange
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.IntNonKey
 import app.aaps.core.keys.LongNonKey
@@ -27,6 +29,7 @@ class ConcentrationDialog : DialogFragmentWithDate() {
     @Inject lateinit var rh: ResourceHelper
     @Inject lateinit var activePlugin: ActivePlugin
     @Inject lateinit var uel: UserEntryLogger
+    @Inject lateinit var rxBus: RxBus
 
     var helperActivity: TranslatedDaggerAppCompatActivity? = null
     private var _binding: DialogConcentrationBinding? = null
@@ -77,8 +80,6 @@ class ConcentrationDialog : DialogFragmentWithDate() {
 
     override fun submit(): Boolean {
         if (_binding == null) return false
-        //val actions: LinkedList<String?> = LinkedList()
-        //HtmlHelper.fromHtml(Joiner.on("<br/>").join(actions))
         val concentration = binding.concentration.value.toInt()
         val now = System.currentTimeMillis()
         when(concentration) {
@@ -89,6 +90,7 @@ class ConcentrationDialog : DialogFragmentWithDate() {
                     })
                     preferences.put(IntNonKey.InsulinConcentration, targetInsulin)
                     preferences.put(LongNonKey.LastInsulinConfirmation, now)
+                    rxBus.send(EventInsulinChange())
                 }
             }
             currentInsulin -> {
@@ -98,6 +100,7 @@ class ConcentrationDialog : DialogFragmentWithDate() {
                     })
                     preferences.put(IntKey.InsulinRequestedConcentration, concentration)
                     preferences.put(LongNonKey.LastInsulinConfirmation, now)
+                    rxBus.send(EventInsulinChange())
                 }
             }
             else    -> {

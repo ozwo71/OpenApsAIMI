@@ -34,7 +34,6 @@ import app.aaps.core.keys.IntNonKey
 import app.aaps.core.keys.IntentKey
 import app.aaps.core.keys.LongNonKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.core.ui.extensions.runOnUiThread
 import app.aaps.core.validators.preferences.AdaptiveIntPreference
 import app.aaps.core.validators.preferences.AdaptiveIntentPreference
 import io.reactivex.rxjava3.disposables.CompositeDisposable
@@ -81,8 +80,7 @@ abstract class InsulinOrefBasePlugin(
         get()= preferences.get(LongNonKey.LastInsulinChange) < preferences.get(LongNonKey.LastInsulinConfirmation) || currentInsulin == 100
     val MAX_INSULIN = T.days(7).msecs()
     private val recentUpdate: Boolean
-        get()=preferences.get(LongNonKey.LastInsulinChange) > System.currentTimeMillis() - millsToThePast
-    private val millsToThePast = T.mins(15).msecs()
+        get()=preferences.get(LongNonKey.LastInsulinChange) > System.currentTimeMillis() - T.mins(15).msecs()
 
     override val dia
         get(): Double {
@@ -168,6 +166,7 @@ abstract class InsulinOrefBasePlugin(
     override val concentration: Double
         get() = preferences.get(IntNonKey.InsulinConcentration) / 100.0
 
+    @Synchronized
     fun swapAdapter() { // Launch Popup to confirm Insulin concentration on Reservoir change
         val now = System.currentTimeMillis()
         disposable += persistenceLayer
@@ -178,9 +177,9 @@ abstract class InsulinOrefBasePlugin(
                     preferences.put(LongNonKey.LastInsulinChange, it.timestamp)
                 }
                 val showOnUpdateRequest = (currentInsulin != targetInsulin) && recentUpdate
-
-                if (!concentrationConfirmed || showOnUpdateRequest)
-                    runOnUiThread { uiInteraction.runInsulinConfirmation() }
+                if (!concentrationConfirmed || showOnUpdateRequest) {
+                    uiInteraction.runInsulinConfirmation()
+                }
             }
     }
 
