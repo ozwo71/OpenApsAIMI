@@ -700,8 +700,8 @@
     <string name="final_dia_constrained">DIA finale contrainte à [180, 720] min : %1$.0fmin</string>
     <string name="dia_calculation_details">Détails du calcul de la DIA :</string>
     <string name="peak_time">  → 🕒 Pic insuline=%1$s min | BG=%2$s Δ%3$s</string>
-    <string name="steps"> | Pas=%1$d</string>
-    <string name="heart_rate"> | FC=%1$s bpm</string>
+    <string name="steps">&#160;| Pas=%1$d</string>
+    <string name="heart_rate">&#160;| FC=%1$s bpm</string>
     <string name="smb_disabled">SMB désactivés (!microBolusAllowed)</string>
     <string name="smb_disabled_high_target">SMB désactivé en raison d\'un target temporaire élevé de %1$.0f</string>
     <string name="smb_enabled_always">SMB activés en permanence en raison de la préférence</string>
@@ -797,7 +797,7 @@
     <string name="autodrive_meal_prebolus">→ Microbolus mode Autodrive %1$.2fU</string>
     <string name="target_bg">  • BG cible : %1$.0f</string>
     <string name="slope_from_min_deviation">  • Pente depuis la déviation minimale : %1$.2f</string>
-    <string name="bg_acceleration">  • Accélération de la glycémie : %1$s</string>
+    <string name="bg_acceleration">&#160;• Accélération de la glycémie : %1$s</string>
     <string name="reason_prebolus_bfast1"> Prébolus 1/2 Mode manuel Petit&#8211;déjeuner %.2fU.</string>
     <string name="reason_prebolus_bfast2"> Prébolus 2/2 Mode manuel Petit&#8211;déjeuner %.2fU. </string>
     <string name="reason_prebolus_lunch1"> Prébolus 1/2 Mode manuel Déjeuner %.2fU.</string>
@@ -841,11 +841,11 @@
     <string name="reason_mpc_pi">🎛️ MPC modèle prédictif: %.2f U (%.0f%%) | PI modèle physiologique: %.2f U (%.0f%%)</string>
     <string name="smb_final">✅ SMB final: %1$s U</string>
     <string name="reason_dia_reattivity">📈 DIA: %1$.1f mins | REACT◁120 Matin: %2$.1f%% | Après-midi: %3$.1f%% | Soir: %4$.1f%%</string>
-    <string name="autodrive_status">🚗 Autodrive: %1$s | Mode collation / pré-bolus: %2$s | </string>
-    <string name="autodrive_condition">Autodrive Conditions: %1$s</string>
+    <string name="autodrive_status">🚗 Autodrive: %1$s |&#160;Mode collation / pré-bolus: %2$s | </string>
+    <string name="autodrive_condition">&#160;Autodrive Conditions: %1$s</string>
     <string name="reason_bg_trend">🔍 BGTrend: %.2f | ΔCombiné: %.2f | </string>
-    <string name="reason_predicted_bg">BG prévu: %.0f | Accélération: %.2f | </string>
-    <string name="reason_slope_min_dev">Pente Min Dev.: %.2f</string>
+    <string name="reason_predicted_bg">&#160;BG prévu: %.0f | Accélération: %.2f | </string>
+    <string name="reason_slope_min_dev">&#160;Pente Min Dev.: %.2f</string>
     <string name="console_profile_sens">Profil de sensibilité: %.0f, sens: %.0f, CSF: %.0f</string>
     <string name="console_limiting_carb_impact">Limitation impact glucides de %.0f à %.0f mg/dL/5m ( %d g/h )</string>
     <string name="console_carb_impact">Impact Glucides : %.0f mg/dL pour 5m; Durée CI: %.1f heures; CI restant (~2h pic): %.1f mg/dL pour 5m</string>
@@ -865,7 +865,7 @@
     <string name="meal_mode_highcarb">repas riche en glucides(%1$dm)</string>
     <string name="meal_mode_first_30">Mode repas manuel 0&#8211;30m [%1$s] → basal forcée à %2$.2f U/h (override).\n</string>
     <string name="reason_early_meal">Repas précoce détecté → TBR forcée à %1$.2fU/h x30 (override).\n</string>
-    <string name="safety_cut_tbr">Sécurité : BG prévu&lt;100 ou IOB;%1$.2f → basale à 0.\n</string>
+    <string name="safety_cut_tbr">Sécurité : BG prévu&lt;100 ou IOB>%1$.2f → basale à 0.\n</string>
     <string name="bg_below_80">BG&lt;80 → taux basal à 0.\n</string>
     <string name="bg_80_90_fall">BG &#8211;90 &amp; chute libre → taux basal à 0.\n</string>
     <string name="bg_80_90_stable">BG 80&#8211;90 stable → taux basal x0.2.\n</string>
