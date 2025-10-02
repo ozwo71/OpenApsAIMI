@@ -126,9 +126,9 @@
     <string name="openapsaimi_maxsmb_title">Max SMB LOW BG</string>
     <string name="description_openapsaimi">Small micro-boluses based on Artificial Intelligence and Machine Learning.</string>
     <string name="oaps_aimi_evening_factor_summary">% of plugin reactivity between 6 PM and midnight</string>
-    <string name="oaps_aimi_evening_factor_title">Evening Reactivity 18:00-24:00</string>
-    <string name="oaps_aimi_afternoon_factor_title">Afternoon Reactivity 12:00-18:00</string>
-    <string name="oaps_aimi_morning_factor_title">Morning Reactivity 00:00-11:00</string>
+    <string name="oaps_aimi_evening_factor_title">Evening Reactivity 18:00&#8211;24:00</string>
+    <string name="oaps_aimi_afternoon_factor_title">Afternoon Reactivity 12:00&#8211;18:00</string>
+    <string name="oaps_aimi_morning_factor_title">Morning Reactivity 00:00&#8211;11:00</string>
     <string name="oaps_aimi_morning_factor_summary">Morning Reactivity Percentage between midnight and 11 AM</string>
     <string name="oaps_aimi_afternoon_factor_summary">Afternoon Reactivity Percentage between 12 PM and 6 PM</string>
     <string name="oaps_aimi_hyper_factor_summary"><![CDATA[Reactivity when BG > 120]]></string>
@@ -249,12 +249,12 @@
     <string name="oaps_aimi_enableMlautoDrive_title">Enable Auto Drive – automatic meal detection – EXPERIMENTAL</string>
     <string name="autodrive_prebolus_variables">Prebolus limits and conditions</string>
     <string name="autodrive_prebolus_title_menu">Autodrive – Prebolus Settings</string>
-    <string name="autodrive_prebolus_variablesMorning">Meal 00:00-10:00</string>
-    <string name="autodrive_prebolus_title_menuMorning">Autodrive – Meal 00:00-10:00 Settings</string>
-    <string name="autodrive_prebolus_variablesAfternoon">Meal 11:00-17:00</string>
-    <string name="autodrive_prebolus_title_menuAfternoon">Autodrive – Meal 11:00-17:00 Settings</string>
-    <string name="autodrive_prebolus_variablesEvening">Meal 18:00-00:00</string>
-    <string name="autodrive_prebolus_title_menuEvening">Autodrive – Meal 18:00-00:00 Settings</string>
+    <string name="autodrive_prebolus_variablesMorning">Meal 00:00&#8211;11:00</string>
+    <string name="autodrive_prebolus_title_menuMorning">Autodrive &#8211; Meal 00:00&#8211;11:00 Settings</string>
+    <string name="autodrive_prebolus_variablesAfternoon">Meal 11:00&#8211;18:00</string>
+    <string name="autodrive_prebolus_title_menuAfternoon">Autodrive &#8211; Meal 11:00&#8211;18:00 Settings</string>
+    <string name="autodrive_prebolus_variablesEvening">Meal 18:00&#8211;00:00</string>
+    <string name="autodrive_prebolus_title_menuEvening">Autodrive &#8211; Meal 18:00&#8211;00:00 Settings</string>
 
     <string name="prebolus_autodrive_mode_summary_morning">Autodrive will send a pre-bolus according to the rise detection conditions</string>
     <string name="prebolus_autodrive_mode_title">Meal Pre-bolus</string>
@@ -458,10 +458,10 @@
     <string name="table_plugin_miscellaneous_1">Last SMB</string>
     <string name="table_plugin_miscellaneous_2">Hour</string>
     <string name="table_plugin_miscellaneous_3">Weekend</string>
-    <string name="table_plugin_miscellaneous_4">tags0-60m</string>
-    <string name="table_plugin_miscellaneous_5">tags60-120m</string>
-    <string name="table_plugin_miscellaneous_6">tags120-180m</string>
-    <string name="table_plugin_miscellaneous_7">tags180-240m</string>
+    <string name="table_plugin_miscellaneous_4">tags0&#8211;60m</string>
+    <string name="table_plugin_miscellaneous_5">tags60&#8211;120m</string>
+    <string name="table_plugin_miscellaneous_6">tags120&#8211;180m</string>
+    <string name="table_plugin_miscellaneous_7">tags180&#8211;240m</string>
     <string name="table_plugin_miscellaneous_8">more aggressive</string>
     <string name="table_plugin_miscellaneous_9">less aggressive</string>
     <string name="table_plugin_miscellaneous_10">too aggressive</string>
@@ -576,8 +576,8 @@
     <string name="bg_near_target">Predicted BG (%1$.1f) near target (%2$.1f), reduction x0.5; </string>
     <string name="zero_basal_forced">Zero basal duration (%1$d min) exceeded, forcing minimal basal; </string>
     <string name="dia_base_info">Base DIA: %1$f h = %2$f min\n</string>
-    <string name="morning_adjustment">Morning adjustment (6-10h): DIA reduced by 20%</string>
-    <string name="night_adjustment">Night adjustment (22-23h &amp; 0-5h): DIA increased by 20%</string>
+    <string name="morning_adjustment">Morning adjustment (6&#8211;10h): DIA reduced by 20%</string>
+    <string name="night_adjustment">Night adjustment (22&#8211;23h &amp; 0&#8211;5h): DIA increased by 20%</string>
     <string name="physical_activity_detected">Physical activity detected: DIA reduced by 30%</string>
     <string name="high_hr_no_activity">High HR without activity (stress): DIA increased by 30%</string>
     <string name="high_hr_over_130">High HR (&gt;130bpm): DIA reduced by 30%</string>
@@ -585,8 +585,8 @@
     <string name="final_dia_constrained">Final DIA constrained to [180, 720] min: %1$.0fmin</string>
     <string name="dia_calculation_details">DIA Calculation Details:</string>
     <string name="peak_time">  → 🕒 PeakTime=%1$s min | BG=%2$s Δ%3$s</string>
-    <string name="steps"> | Steps=%1$d</string>
-    <string name="heart_rate"> | HR=%1$s bpm</string>
+    <string name="steps">&#160;| Steps=%1$d</string>
+    <string name="heart_rate">&#160;| HR=%1$s bpm</string>
     <string name="smb_disabled">SMB disabled (!microBolusAllowed)</string>
     <string name="smb_disabled_high_target">SMB disabled due to high temptarget of %1$.0f</string>
     <string name="smb_enabled_always">SMB enabled due to enableSMB_always</string>
@@ -645,14 +645,14 @@
     <string name="condition_bg90">BG&lt;90</string>
     <string name="condition_acceleratingdown">BG accelerating downward</string>
     <string name="no_conditions_met_2">No conditions met</string>
-    <string name="safety_condition">Safety condition %1$b : %2$s</string>
+    <string name="safety_condition">Safety condition %1$s : %2$s</string>
     <string name="interval_delta_1">Interval : 1 (delta > 15)</string>
     <string name="interval_value">Interval : %1$d</string>
     <string name="csv_file_path">CSV file path: %1$s</string>
     <string name="csv_file_empty">CSV file is empty.</string>
     <string name="csv_missing_columns">CSV file is missing required columns.</string>
     <string name="insufficient_data_training">Insufficient data for training.</string>
-    <string name="retraining_final_model">Final model training with optimal hyperparameters on all data...</string>
+    <string name="retraining_final_model">Final model training with optimal hyperparameters on all data&#8230;</string>
     <string name="iteration_smb">→ Iteration %1$d | SMB=%2$.2f → %3$.2f | Δ=%4$.2f | Threshold=%5$.2f</string>
     <string name="predicted_smb_higher">Predictive model suggests higher SMB, adjustment confirmed</string>
     <string name="console_future_bg">Future BG: %1$s, Projected Drop: %2$s, Insulin Effect: %3$s, COB Impact: %4$.0f, Carbs Required: %5$d</string>
@@ -683,7 +683,7 @@
     <string name="autodrive_meal_prebolus">→ Microbolusing Autodrive Mode %1$.2fU</string>
     <string name="target_bg">  • Target BG: %1$.0f</string>
     <string name="slope_from_min_deviation">  • Slope from min deviation: %1$.2f</string>
-    <string name="bg_acceleration">  • BG acceleration: %1$s</string>
+    <string name="bg_acceleration">&#160;• BG acceleration: %1$s</string>
     <string name="reason_prebolus_bfast1"> Microbolusing 1/2 Breakfast Mode %.2fU.</string>
     <string name="reason_prebolus_bfast2"> Microbolusing 2/2 Breakfast Mode %.2fU. </string>
     <string name="reason_prebolus_lunch1"> Microbolusing 1/2 Lunch Mode %.2fU.</string>
@@ -692,7 +692,7 @@
     <string name="reason_prebolus_dinner2"> Microbolusing 2/2 Dinner Mode %.2fU.</string>
     <string name="reason_prebolus_highcarb"> Microbolusing High Carb Mode %.2fU.</string>
     <string name="reason_prebolus_snack"> Microbolusing Snack Mode %.2fU.</string>
-    <string name="reason_maxsmb"> | MaxSMB %.1f U \n</string>
+    <string name="reason_maxsmb">&#160;| MaxSMB %.1f U \n</string>
     <string name="reason_cgm_calibrating">CGM is calibrating, in ??? state, or noise is high</string>
     <string name="reason_bg_data_old">If current system time %1$d is correct, then BG data is too old. The last BG data was read %2$.0f minutes ago at %3$d</string>
     <string name="reason_cgm_flat">Error: CGM data is unchanged for the past ~45m</string>
@@ -727,11 +727,11 @@
     <string name="reason_mpc_pi">🎛️ MPC predictive model: %.2f U (%.0f%%) | PI physiological model: %.2f U (%.0f%%)</string>
     <string name="smb_final">✅ Final SMB: %1$s U</string>
     <string name="reason_dia_reattivity">📈 DIA: %1$.1f mins | REACT◁120 Morning: %2$.1f%% | Afternoon: %3$.1f%% | Evening: %4$.1f%%</string>
-    <string name="autodrive_status">🚗 Autodrive: %1$s | Snack/prebolus mode: %2$s | </string>
-    <string name="autodrive_condition">Autodrive conditions: %1$s</string>
+    <string name="autodrive_status">🚗 Autodrive: %1$s |&#160;Snack/prebolus mode: %2$s | </string>
+    <string name="autodrive_condition">&#160;Autodrive conditions: %1$s</string>
     <string name="reason_bg_trend">🔍 BG Trend: %.2f | Combined Δ: %.2f | </string>
-    <string name="reason_predicted_bg">Predicted BG: %.0f | Acceleration: %.2f | </string>
-    <string name="reason_slope_min_dev">Slope Min Dev.: %.2f</string>
+    <string name="reason_predicted_bg">&#160;Predicted BG: %.0f | Acceleration: %.2f | </string>
+    <string name="reason_slope_min_dev">&#160;Slope Min Dev.: %.2f</string>
     <string name="console_profile_sens">Sensitivity profile: %.0f, sens: %.0f, CSF: %.0f</string>
     <string name="console_limiting_carb_impact">Limiting carb impact from %.0f to %.0f mg/dL/5m ( %d g/h )</string>
     <string name="console_carb_impact">Carb Impact: %.0f mg/dL per 5m; CI Duration: %.1f hours; remaining CI (~2h peak): %.1f mg/dL per 5m</string>
@@ -749,9 +749,9 @@
     <string name="meal_mode_lunch">lunch(%1$dm)</string>
     <string name="meal_mode_dinner">dinner(%1$dm)</string>
     <string name="meal_mode_highcarb">high-carb(%1$dm)</string>
-    <string name="meal_mode_first_30">Manual modes meal 0&#8211;30m [%1$s] → forced basal at %2$f U/h (override).\n</string>
+    <string name="meal_mode_first_30">Manual modes meal 0&#8211;30m [%1$s] → forced basal at %2$.2f U/h (override).\n</string>
     <string name="reason_early_meal">Early meal detected → TBR forced to %1$.2fU/h x30 (override).\n</string>
-    <string name="safety_cut_tbr">Safety cut: predicted BG&lt;100 or IOB;%1$.2f → basal to 0.\n</string>
+    <string name="safety_cut_tbr">Safety cut: predicted BG&lt;100 or IOB>%1$.2f → basal to 0.\n</string>
     <string name="bg_below_80">BG&lt;80 → basal to 0.\n</string>
     <string name="bg_80_90_fall">BG 80&#8211;90 &amp; free fall → basal to 0.\n</string>
     <string name="bg_80_90_stable">BG 80&#8211;90 stable → basal x0.2.\n</string>

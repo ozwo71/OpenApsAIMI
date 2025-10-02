@@ -764,7 +764,7 @@
     <string name="condition_bg90">BG&lt;90</string>
     <string name="condition_acceleratingdown">BG accelerazione in calo</string>
     <string name="no_conditions_met_2">Nessuna condizione soddisfatta</string>
-    <string name="safety_condition">Condizioni sicurezza %1$b : %2$s</string>
+    <string name="safety_condition">Condizioni sicurezza %1$s : %2$s</string>
     <string name="interval_delta_1">Intervallo : 1 (delta > 15)</string>
     <string name="interval_value">Intervallo : %1$d</string>
     <string name="csv_file_path">CSV file percorso: %1$s</string>
@@ -811,7 +811,7 @@
     <string name="reason_prebolus_dinner2"> Prebolo 2/2 Modalità manuale Cena %.2fU.</string>
     <string name="reason_prebolus_highcarb"> Prebolo Modalità manuale High Carb %.2fU.</string>
     <string name="reason_prebolus_snack"> Prebolo Modalità manuale Snack %.2fU.</string>
-    <string name="reason_maxsmb">&#160;| MaxSMB %.1f U \n</string>
+    <string name="reason_maxsmb">&#160;| MaxSMB %.1f U&#160;\n</string>
     <string name="reason_cgm_calibrating">Sensore in calibrazione, in stato ??? o rumore valori elevato</string>
     <string name="reason_bg_data_old">Se l’orario di sistema %1$d è corretto, allora i dati BG sono troppo vecchi. L’ultimo dato BG è stato letto %2$.0f minuti fa alle %3$d</string>
     <string name="reason_cgm_flat">Errore: Valori sensore non cambiati negli ultimi ~45 minuti</string>

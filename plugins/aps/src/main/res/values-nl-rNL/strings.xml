@@ -758,7 +758,7 @@
     <string name="condition_bg90">BG&lt;90</string>
     <string name="condition_acceleratingdown">BG versnelt naar beneden</string>
     <string name="no_conditions_met_2">Aan geen voorwaarden voldaan</string>
-    <string name="safety_condition">Veiligheidsvoorwaarde %1$b : %2$s</string>
+    <string name="safety_condition">Veiligheidsvoorwaarde %1$s : %2$s</string>
     <string name="interval_delta_1">Interval : 1 (delta > 15)</string>
     <string name="interval_value">Interval : %1$d</string>
     <string name="csv_file_path">CSV-bestandspad: %1$s</string>

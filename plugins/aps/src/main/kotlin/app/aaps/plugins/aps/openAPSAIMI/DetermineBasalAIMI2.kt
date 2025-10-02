@@ -1417,7 +1417,8 @@ fun appendCompactLog(
         }
 
 //      return "Safety condition $isCritical : $conditionsString"
-        return context.getString(R.string.safety_condition, isCritical, conditionsString)
+        val critical = if (isCritical) "✔"  else ""
+        return context.getString(R.string.safety_condition, critical, conditionsString)
     }
 
     // Fonctions de vérification spécifiques pour chaque condition

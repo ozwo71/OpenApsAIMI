@@ -780,7 +780,7 @@
     <string name="condition_bg90">BG&lt;90</string>
     <string name="condition_acceleratingdown">BG accelerating downward</string>
     <string name="no_conditions_met_2">No conditions met</string>
-    <string name="safety_condition">Safety condition %1$b : %2$s</string>
+    <string name="safety_condition">Safety condition %1$s : %2$s</string>
     <string name="interval_delta_1">Interval : 1 (delta > 15)</string>
     <string name="interval_value">Interval : %1$d</string>
     <string name="csv_file_path">CSV file path: %1$s</string>
