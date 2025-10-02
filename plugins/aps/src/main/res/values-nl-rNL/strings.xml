@@ -862,7 +862,7 @@
     <string name="meal_mode_lunch">lunch(%1$dm)</string>
     <string name="meal_mode_dinner">avondeten(%1$dm)</string>
     <string name="meal_mode_highcarb">veel-koolhydraten(%1$dm)</string>
-    <string name="meal_mode_first_30">Manual modes meal 0&#8211;30m [%1$s] → forced basal at %2$f U/h (override).\n</string>
+    <string name="meal_mode_first_30">Manual modes meal 0&#8211;30m [%1$s] → forced basal at %2$.2f U/h (override).\n</string>
     <string name="reason_early_meal">Vroege maaltijd gedetecteerd → TBR geforceerd naar %1$.2fE/u x30 (overschrijven).\n</string>
     <string name="safety_cut_tbr">Veiligheidsstop: voorspelde BG&lt;100 of IOB;%1$.2f → basaal naar 0.\n</string>
     <string name="bg_below_80">BG&lt;80 → basaal naar 0.\n</string>
