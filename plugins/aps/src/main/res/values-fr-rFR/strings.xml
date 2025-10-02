@@ -806,7 +806,7 @@
     <string name="reason_prebolus_dinner2"> Prébolus 2/2 Mode manuel Dîner %.2fU.</string>
     <string name="reason_prebolus_highcarb"> Prébolus Mode manuel High Carb %.2fU.</string>
     <string name="reason_prebolus_snack"> Prébolus Mode manuel Collation %.2fU.</string>
-    <string name="reason_maxsmb"> | MaxSMB %.1f U \n</string>
+    <string name="reason_maxsmb">&#160;| MaxSMB %.1f U \n</string>
     <string name="reason_cgm_calibrating">Capteur en cours d’étalonnage, en état ??? ou bruit des valeurs élevé</string>
     <string name="reason_bg_data_old">Si l’heure système %1$d est correcte, alors les données de BG sont trop anciennes. La dernière donnée BG a été lue il y a %2$.0f minutes à %3$d</string>
     <string name="reason_cgm_flat">Erreur : les valeurs du capteur n’ont pas changé depuis ~45 minutes</string>

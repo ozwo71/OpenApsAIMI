@@ -805,7 +805,7 @@
     <string name="reason_prebolus_dinner2"> Microbolus 2/2 Dinermodus %.2fE.</string>
     <string name="reason_prebolus_highcarb"> Microbolus Hoge Koolhydraten Modus %.2fE.</string>
     <string name="reason_prebolus_snack"> Microbolus Snackmodus %.2fE.</string>
-    <string name="reason_maxsmb"> | MaxSMB %.1f E \n</string>
+    <string name="reason_maxsmb">&#160;| MaxSMB %.1f E \n</string>
     <string name="reason_cgm_calibrating">CGM is aan het kalibreren, in ??? status, of ruis is hoog</string>
     <string name="reason_bg_data_old">Als de huidige systeemtijd %1$d correct is, zijn de BG-gegevens te oud. De laatste BG-gegevens zijn %2$.0f minuten geleden gelezen om %3$d</string>
     <string name="reason_cgm_flat">Fout: CGM-gegevens zijn de laatste ~45m ongewijzigd</string>
