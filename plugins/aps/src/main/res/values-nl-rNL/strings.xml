@@ -708,6 +708,7 @@
     <string name="smb_enabled_for_temp_target">SMB ingeschakeld voor tijdelijk doel van %1$s</string>
     <string name="smb_disabled_no_pref_or_condition">SMB uitgeschakeld (geen enableSMB-voorkeuren actief of aan geen voorwaarde voldaan)</string>
     <string name="lgs_triggered">🛑 LGS: BG=%1$s ≤ %2$s → TBR 0E/u (30m)\n</string>
+    <string name="bg_insufficient_fallback_force_exact">⚠️ Onvoldoende glucosegegevens, maar maaltijdmodus wordt geforceerd.\n</string>
     <string name="bg_insufficient_fallback">⚠️ BG-gegevens onvoldoende of ongeldig → terugval\n</string>
     <string name="temp_basal_info">Tijdelijk basaal %1$s E/u voor %2$d minuten\n</string>
     <string name="lgs_override">🛑 Lage Glucose Suspend (LGS) overschrijven → TBR 0E/u\n</string>
