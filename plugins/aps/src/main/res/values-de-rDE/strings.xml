@@ -267,7 +267,7 @@
     <string name="Enable_basal_title">Enable Basal</string>
     <string name="Enable_basal_summary">This option will enable basal from the profile when BG is greater than 80 and delta is not negative.</string>
     <string name="oaps_aimi_enableDeleteLine_title">Enable the possibility to delete one day in ML Training</string>
-    <string name="countsteps_watch_title">Aktiviere Schrittzählung über Smartwatch</string>
+    <string name="countsteps_watch_title">Step counting watch (if disable, use the phone)</string>
     <string name="countsteps_watch_summary">Ist diese Option aktiviert, werden die Daten für Schritte und Puls von einer Smartwatch empfangen. Wenn inaktiv, werden die Schritte über das Smartphone ermittelt.</string>
     <string name="oaps_aimi_weight_summary">Körpergewicht in kg für Basalratenberechnung</string>
     <string name="oaps_aimi_weight_title">Körpergewicht in kg</string>
@@ -277,6 +277,8 @@
     <string name="oaps_aimi_cho_title">Durchschnittliche KH pro Hauptmahlzeit</string>
     <string name="aimi_preferences">AIMI Einstellungen</string>
     <string name="user_preferences">Benutzerprofil</string>
+    <string name="user_modes_preferences">Modes</string>
+    <string name="user_modes_preferences_title_menu">User preferences - Modes - Settings</string>
     <string name="reactivity_preferences"><![CDATA[BZ < 120]]></string>
     <string name="high_BG_preferences">BZ > 120</string>
     <string name="training_ml_modes_preferences">Manuelle Modi</string>
@@ -356,7 +358,7 @@
     <string name="oaps_aimi_BF_interval_title">SMB Intervall Fühstück Modus</string>
     <string name="oaps_aimi_logsize_summary">Breite einer Log-Zeile im AIMI/Loop Reiter für Logging (in Vorversion)</string>
     <string name="oaps_aimi_logsize_title">Breite einer Log-Zeile im AIMI/Loop Reiter</string>
-    <string name="Enable_xdripOM_title">xDrip Sensorwerte im 1-Minuten-Intervall</string>
+    <string name="Enable_xdripOM_title">Libre3 1-minute readings</string>
     <string name="oaps_aimi_enableMlautoDrive_title">Aktiviere Autodrive – automatische Erkennung von Mahlzeiten in der Zeit von 8:00 Uhr bis und Mitternacht – EXPERIMENTELL</string>
     <string name="autodrive_prebolus_variables">Mahlzeiten Prebolus Bedingungen</string>
     <string name="autodrive_prebolus_title_menu">Autodrive – Mahlzeiten Prebolus Bedingungen</string>

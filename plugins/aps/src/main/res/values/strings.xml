@@ -291,7 +291,7 @@
     <string name="Enable_basal_title">Enable Basal</string>
     <string name="Enable_basal_summary">This option will enable basal from the profile when BG is greater than 80 and delta is not negative.</string>
     <string name="oaps_aimi_enableDeleteLine_title">Enable the possibility to delete one day in ML Training</string>
-    <string name="countsteps_watch_title">Enable step counting from watch</string>
+    <string name="countsteps_watch_title">Step counting watch (if disable, use phone)</string>
     <string name="countsteps_watch_summary">This option enables step counting by receiving data from the watch instead of the phone.</string>
     <string name="oaps_aimi_weight_summary">Weight in kg to calculate basal</string>
     <string name="oaps_aimi_weight_title">Weight in kg</string>
@@ -300,7 +300,9 @@
     <string name="oaps_aimi_cho_summary">Average carbohydrates per meal. Estimated value, not exact</string>
     <string name="oaps_aimi_cho_title">Average carbohydrate amount lunch/dinner</string>
     <string name="aimi_preferences">AIMI Settings</string>
-    <string name="user_preferences">User Profile</string>
+    <string name="user_preferences">User preferences</string>
+    <string name="user_modes_preferences">Modes</string>
+    <string name="user_modes_preferences_title_menu">User preferences - Modes - Settings</string>
     <string name="reactivity_preferences"><![CDATA[BG < 120]]></string>
     <string name="high_BG_preferences">BG > 120</string>
     <string name="training_ml_modes_preferences">Manual Mode</string>
@@ -380,7 +382,7 @@
     <string name="oaps_aimi_BF_interval_title">SMB Interval Breakfast Mode</string>
     <string name="oaps_aimi_logsize_summary">Number of AIMI analysis table lines in plugin and Loop tabs</string>
     <string name="oaps_aimi_logsize_title">Number of AIMI plugin/Loop table lines</string>
-    <string name="Enable_xdripOM_title">xDrip 1-minute sensor support</string>
+    <string name="Enable_xdripOM_title">Libre3 1-minute readings</string>
     <string name="oaps_aimi_enableMlautoDrive_title">Enable Auto Drive – automatic meal detection – EXPERIMENTAL</string>
     <string name="autodrive_prebolus_variables">Prebolus limits and conditions</string>
     <string name="autodrive_prebolus_title_menu">Autodrive – Prebolus Settings</string>

@@ -269,7 +269,7 @@
     <string name="Enable_basal_title">Activer Basal</string>
     <string name="Enable_basal_summary">Cette option activera le basal du profil lorsque BG > 80 et delta non négatif.</string>
     <string name="oaps_aimi_enableDeleteLine_title">Activer la possibilité de supprimer un jour dans l’entraînement ML</string>
-    <string name="countsteps_watch_title">Activer le comptage des pas depuis la montre</string>
+    <string name="countsteps_watch_title">Step counting watch (if disable, use phone)</string>
     <string name="countsteps_watch_summary">Cette option active le comptage des pas en recevant les données de la montre plutôt que du téléphone.</string>
     <string name="oaps_aimi_weight_summary">Poids en kg pour calculer la basale</string>
     <string name="oaps_aimi_weight_title">Poids en kg</string>
@@ -279,6 +279,8 @@
     <string name="oaps_aimi_cho_title">Quantité moyenne de glucides déjeuner/dîner</string>
     <string name="aimi_preferences">Paramètres AIMI</string>
     <string name="user_preferences">Profil utilisateur</string>
+    <string name="user_modes_preferences">Modes</string>
+    <string name="user_modes_preferences_title_menu">User preferences - Modes - Settings</string>
     <string name="reactivity_preferences"><![CDATA[Glycémie < 120]]></string>
     <string name="high_BG_preferences">Glycémie > 120</string>
     <string name="training_ml_modes_preferences">Mode manuel</string>
@@ -358,7 +360,7 @@
     <string name="oaps_aimi_BF_interval_title">Intervalle SMB Mode Petit Déjeuner</string>
     <string name="oaps_aimi_logsize_summary">Nombre de lignes du tableau d\'analyse AIMI dans les onglets plugin et Loop</string>
     <string name="oaps_aimi_logsize_title">Nombre de lignes du tableau AIMI plugin/Loop</string>
-    <string name="Enable_xdripOM_title">Support capteur xDrip 1 minute</string>
+    <string name="Enable_xdripOM_title">Libre3 1-minute readings</string>
     <string name="oaps_aimi_enableMlautoDrive_title">Activer Auto Drive – détection automatique des repas – EXPÉRIMENTAL</string>
     <string name="autodrive_prebolus_variables">Limites et conditions Pré-bolus</string>
     <string name="autodrive_prebolus_title_menu">Autodrive – Pré-bolus – Paramètres</string>

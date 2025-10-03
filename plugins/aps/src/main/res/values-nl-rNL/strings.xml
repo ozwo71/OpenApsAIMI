@@ -269,7 +269,7 @@
     <string name="Enable_basal_title">Basaal inschakelen</string>
     <string name="Enable_basal_summary">Deze optie schakelt basaal uit het profiel in wanneer BG hoger is dan 80 en de delta niet negatief is.</string>
     <string name="oaps_aimi_enableDeleteLine_title">Activeer de mogelijkheid om een dag in ML Training te verwijderen</string>
-    <string name="countsteps_watch_title">Stappentelling van horloge inschakelen</string>
+    <string name="countsteps_watch_title">Step counting watch (if disable, use phone)</string>
     <string name="countsteps_watch_summary">Deze optie schakelt stappentelling in door gegevens van het horloge te ontvangen in plaats van de telefoon.</string>
     <string name="oaps_aimi_weight_summary">Gewicht in kg om basaal te berekenen</string>
     <string name="oaps_aimi_weight_title">Gewicht in kg</string>
@@ -279,6 +279,8 @@
     <string name="oaps_aimi_cho_title">Gemiddelde hoeveelheid koolhydraten lunch/diner</string>
     <string name="aimi_preferences">AIMI Instellingen</string>
     <string name="user_preferences">Gebruikersprofiel</string>
+    <string name="user_modes_preferences">Modes</string>
+    <string name="user_modes_preferences_title_menu">User preferences - Modes - Settings</string>
     <string name="reactivity_preferences"><![CDATA[BG < 120]]></string>
     <string name="high_BG_preferences">BG > 120</string>
     <string name="training_ml_modes_preferences">Handmatige modus</string>
@@ -357,7 +359,7 @@
     <string name="oaps_aimi_BF_interval_title">SMB Interval Ontbijtmodus</string>
     <string name="oaps_aimi_logsize_summary">Aantal AIMI-analysetabelregels in plug-in en Loop-tabbladen</string>
     <string name="oaps_aimi_logsize_title">Aantal AIMI-plug-in/Loop-tabelregels</string>
-    <string name="Enable_xdripOM_title">xDrip 1-minuut sensorondersteuning</string>
+    <string name="Enable_xdripOM_title">Libre3 1-minute readings</string>
     <string name="oaps_aimi_enableMlautoDrive_title">Schakel Auto Drive in – automatische maaltijddetectie – EXPERIMENTEEL</string>
     <string name="autodrive_prebolus_variables">Prebolus limieten en voorwaarden</string>
     <string name="autodrive_prebolus_title_menu">Autodrive – Prebolus Instellingen</string>
