@@ -300,9 +300,8 @@
     <string name="oaps_aimi_cho_summary">Average carbohydrates per meal. Estimated value, not exact</string>
     <string name="oaps_aimi_cho_title">Average carbohydrate amount lunch/dinner</string>
     <string name="aimi_preferences">AIMI Settings</string>
-    <string name="user_preferences">User preferences</string>
-    <string name="user_modes_preferences">Modes</string>
-    <string name="user_modes_preferences_title_menu">User preferences - Modes - Settings</string>
+    <string name="user_preferences">Preferences user</string>
+    <string name="user_modes_preferences_title_menu">Preferences user - Modes</string>
     <string name="reactivity_preferences"><![CDATA[BG < 120]]></string>
     <string name="high_BG_preferences">BG > 120</string>
     <string name="training_ml_modes_preferences">Manual Mode</string>
@@ -432,7 +431,7 @@
     <string name="autodrive_max_basal_title">Fixed basal 30 min if meal detected (U/h)</string>
     <string name="autodrive_max_basal_summary">When an early meal is detected, AIMI runs a fixed basal for 30 minutes. Enter the hourly value of this basal (e.g., 4 units will deliver 2 units in 30 minutes)</string>
 
-    <string name="user_preferences_title_menu">AIMI User Profile - Settings</string>
+    <string name="user_preferences_title_menu">Preferences user AIMI</string>
     <string name="aimi_preferences_title_menu">AAPS Settings</string>
     <string name="autodrive_preferences_title_menu">Autodrive - Auto Meal - Settings</string>
     <string name="manual_modes_preferences_title_menu">Manual Meal / Activity - Settings</string>

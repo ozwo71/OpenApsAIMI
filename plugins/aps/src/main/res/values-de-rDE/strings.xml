@@ -275,10 +275,9 @@
     <string name="oaps_aimi_tdd7_title">TDD 7 Tage</string>
     <string name="oaps_aimi_cho_summary">Durchschnittliche Anzahl von Kohlenhydraten pro Hauptmahlzeit. Geschätzter Wert, muss nicht exakt sein.</string>
     <string name="oaps_aimi_cho_title">Durchschnittliche KH pro Hauptmahlzeit</string>
-    <string name="aimi_preferences">AIMI Einstellungen</string>
-    <string name="user_preferences">Benutzerprofil</string>
-    <string name="user_modes_preferences">Modes</string>
-    <string name="user_modes_preferences_title_menu">User preferences - Modes - Settings</string>
+    <string name="aimi_preferences">AIMI Settings</string>
+    <string name="user_preferences">Preferences user</string>
+    <string name="user_modes_preferences_title_menu">Preferences user - Modes</string>
     <string name="reactivity_preferences"><![CDATA[BZ < 120]]></string>
     <string name="high_BG_preferences">BZ > 120</string>
     <string name="training_ml_modes_preferences">Manuelle Modi</string>
@@ -408,7 +407,7 @@
     <string name="autodrive_max_basal_title">Basalrate für 30 Minuten wenn Mahlzeit erkannt wurde  (I.E./h)</string>
     <string name="autodrive_max_basal_summary">Sobald eine Mahlzeit erkannt wurde, stellt AIMI eine TBR für 30 Minuten ein. Die TBR kann hier festgelegt werden (I.E./h)</string>
 
-    <string name="user_preferences_title_menu">AIMI Benutzerprofil - Einstellungen</string>
+    <string name="user_preferences_title_menu">Preferences user AIMI</string>
     <string name="aimi_preferences_title_menu">AAPS Einstellungen</string>
     <string name="autodrive_preferences_title_menu">Autodrive - Automatischer Mahlzeitenmodus - Einstellungen</string>
     <string name="manual_modes_preferences_title_menu">Manuelle Modi Mahlzeiten / Aktivitäten - Einstellungen</string>

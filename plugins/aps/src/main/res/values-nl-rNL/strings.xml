@@ -278,9 +278,8 @@
     <string name="oaps_aimi_cho_summary">Gemiddelde koolhydraten per maaltijd. Geschatte waarde, niet exact</string>
     <string name="oaps_aimi_cho_title">Gemiddelde hoeveelheid koolhydraten lunch/diner</string>
     <string name="aimi_preferences">AIMI Instellingen</string>
-    <string name="user_preferences">Gebruikersprofiel</string>
-    <string name="user_modes_preferences">Modes</string>
-    <string name="user_modes_preferences_title_menu">User preferences - Modes - Settings</string>
+    <string name="user_preferences">Preferences user</string>
+    <string name="user_modes_preferences_title_menu">Preferences user - Modes</string>
     <string name="reactivity_preferences"><![CDATA[BG < 120]]></string>
     <string name="high_BG_preferences">BG > 120</string>
     <string name="training_ml_modes_preferences">Handmatige modus</string>
@@ -410,7 +409,7 @@
     <string name="autodrive_max_basal_title">Vast basaal 30 min indien maaltijd gedetecteerd (E/u)</string>
     <string name="autodrive_max_basal_summary">Wanneer een vroege maaltijd wordt gedetecteerd, voert AIMI gedurende 30 minuten een vast basaal uit. Voer de uurwaarde van dit basaal in (bijv. 4 eenheden levert 2 eenheden in 30 minuten)</string>
 
-    <string name="user_preferences_title_menu">AIMI Gebruikersprofiel - Instellingen</string>
+    <string name="user_preferences_title_menu">Preferences user AIMI</string>
     <string name="aimi_preferences_title_menu">AAPS Instellingen</string>
     <string name="autodrive_preferences_title_menu">Autodrive - Auto Maaltijd - Instellingen</string>
     <string name="manual_modes_preferences_title_menu">Handmatige Maaltijd / Activiteit - Instellingen</string>

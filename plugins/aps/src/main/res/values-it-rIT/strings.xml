@@ -287,7 +287,6 @@
     <string name="oaps_aimi_cho_title">Carboidrati quantità media pranzo/cena</string>
     <string name="aimi_preferences">AIMI impostazioni</string>
     <string name="user_preferences">Prefenze utente</string>
-    <string name="user_modes_preferences">Modalità</string>
     <string name="user_modes_preferences_title_menu">Preferenze utente - Modalità</string>
     <string name="reactivity_preferences"><![CDATA[Glicemia < di 120]]></string>
     <string name="high_BG_preferences">Glicemia > di 120</string>
