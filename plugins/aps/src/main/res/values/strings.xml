@@ -733,6 +733,7 @@
     <string name="bg_insufficient_fallback_force_exact">⚠️ BG data insufficient, but meal override enforced.\n</string>
     <string name="bg_insufficient_fallback">⚠️ BG data insufficient or invalid → fallback\n</string>
     <string name="temp_basal_info">Temporary basal %1$s U/h for %2$d minutes\n</string>
+    <string name="force_exact_meal_override">Manual meal mode: forced basal %1$s U/h for %2$d minutes.\n</string>
     <string name="lgs_override">🛑 Low Glucose Suspend (LGS) override → TBR 0U/h\n</string>
     <string name="bypass_safety">→ safety bypass%1$s\n</string>
     <string name="meal_mode"> (meal mode)</string>

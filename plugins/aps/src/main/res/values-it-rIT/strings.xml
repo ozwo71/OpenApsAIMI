@@ -717,6 +717,7 @@
     <string name="bg_insufficient_fallback_force_exact">⚠️ Dati glicemici insufficienti, ma la modalità pasto è forzata.\n</string>
     <string name="bg_insufficient_fallback">⚠️ Dati BG insufficienti o invalidi → fallback\n</string>
     <string name="temp_basal_info">Basale temporanea %1$s U/h per %2$d minuti\n</string>
+    <string name="force_exact_meal_override">Mod. manuale pasto : basale forzata %1$s U/h per %2$d minuti.\n</string>
     <string name="lgs_override">🛑 Sospensione Glucosio Basso (LGS) override → TBR 0 U/h\n</string>
     <string name="bypass_safety">→ bypass sicurezza%1$s\n</string>
     <string name="meal_mode"> (mod. pasto)</string>

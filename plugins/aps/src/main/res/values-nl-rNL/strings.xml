@@ -711,6 +711,7 @@
     <string name="bg_insufficient_fallback_force_exact">⚠️ Onvoldoende glucosegegevens, maar maaltijdmodus wordt geforceerd.\n</string>
     <string name="bg_insufficient_fallback">⚠️ BG-gegevens onvoldoende of ongeldig → terugval\n</string>
     <string name="temp_basal_info">Tijdelijk basaal %1$s E/u voor %2$d minuten\n</string>
+    <string name="force_exact_meal_override">Manuele maaltijd modus: geforceerde basaal %1$s U/h voor %2$d minuten.\n</string>
     <string name="lgs_override">🛑 Lage Glucose Suspend (LGS) overschrijven → TBR 0E/u\n</string>
     <string name="bypass_safety">→ veiligheidsoverbrugging%1$s\n</string>
     <string name="meal_mode"> (maaltijdmodus)</string>

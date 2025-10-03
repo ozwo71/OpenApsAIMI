@@ -887,7 +887,8 @@ fun appendCompactLog(
 
         if (forceExactMeal) {
             // Log explicite pour debug
-            rT.reason.append("FORCE-EXACT meal override → ${"%.2f".format(_rate)} U/h for $duration min.\n")
+            //rT.reason.append("FORCE-EXACT meal override → ${"%.2f".format(_rate)} U/h for $duration min.\n")
+            rT.reason.append(context.getString(R.string.force_exact_meal_override,"%.2f".format(_rate),duration))
             rT.duration = duration
             rT.rate = _rate.coerceAtLeast(0.0)
             return rT
