@@ -452,8 +452,8 @@
     <string name="meal_modes_max_basal_title_genericmeal">Basale fissa 30 minuti inizio pasto (U/h)</string>
     <string name="meal_modes_max_basal_summary_genericmeal">Modalità manuale, TBR fissa, dopo il prebolus 1 impostato 30 minuti una TBR fissa per il pasto generico</string>
 
-    <string name="wcycle_preferences">Regolazioni ciclo mestruale</string>
-    <string name="wcycle_preferences_title_menu">Regolazioni ciclo mestruale - Impostazioni</string>
+    <string name="wcycle_preferences">Modalità ciclo mestruale</string>
+    <string name="wcycle_preferences_title_menu">Modalità ciclo mestruale - Impostazioni</string>
     <string name="oaps_aimi_enablewcycle_title">Abilita ciclo mestruale</string>
     <string name="wcycledateday_summary">Inserisci solo il primo giorno del ciclo, formato gg</string>
     <string name="wcycledateday_title">Primo giorno del ciclo</string>
