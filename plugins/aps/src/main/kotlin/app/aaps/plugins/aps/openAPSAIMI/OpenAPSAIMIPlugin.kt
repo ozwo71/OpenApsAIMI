@@ -772,32 +772,30 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMITDD7, dialogMessage = R.string.oaps_aimi_tdd7_summary, title = R.string.oaps_aimi_tdd7_title))
             //addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIforcelimits, title = R.string.OApsAIMI_Force_Limits))
             //addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIlogsize, dialogMessage = R.string.oaps_aimi_logsize_summary, title = R.string.oaps_aimi_logsize_title))
-            addPreference(preferenceManager.createPreferenceScreen(context).apply {
-                    key = "User_modes_preferences_details"
-                    title = rh.gs(R.string.user_modes_preferences)
+                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIEnableStepsFromWatch, title = R.string.countsteps_watch_title))
+                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsxdriponeminute, title = R.string.Enable_xdripOM_title))
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.user_modes_preferences_title_menu)
+                })
+
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "Women_Cycle"
+                    title = rh.gs(R.string.wcycle_preferences)
                     addPreference(PreferenceCategory(context).apply {
-                        title = rh.gs(R.string.user_modes_preferences_title_menu)
+                        title = rh.gs(R.string.wcycle_preferences_title_menu)
                     })
+                    addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIwcycle, title = R.string.oaps_aimi_enablewcycle_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIwcycledateday, dialogMessage = R.string.wcycledateday_summary, title = R.string.wcycledateday_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIwcyclemenstruation, dialogMessage = R.string.wcyclemenstruation_summary, title = R.string.wcyclemenstruation_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIwcycleovulation, dialogMessage = R.string.wcycleovulation_summary, title = R.string.wcycleovulation_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIwcycleluteal, dialogMessage = R.string.wcycleluteal_summary, title = R.string.wcycleluteal_title))
+                })
                     addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIpregnancy, title = R.string.OApsAIMI_Enable_pregnancy))
                     addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIhoneymoon, title = R.string.OApsAIMI_Enable_honeymoon))
                     addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMInight, title = R.string.OApsAIMI_Enable_night_title))
-                    addPreference(preferenceManager.createPreferenceScreen(context).apply {
-                        key = "Women_Cycle"
-                        title = rh.gs(R.string.wcycle_preferences)
-                        addPreference(PreferenceCategory(context).apply {
-                            title = rh.gs(R.string.wcycle_preferences_title_menu)
-                        })
-                        addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIwcycle, title = R.string.oaps_aimi_enablewcycle_title))
-                        addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIwcycledateday, dialogMessage = R.string.wcycledateday_summary, title = R.string.wcycledateday_title))
-                        addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIwcyclemenstruation, dialogMessage = R.string.wcyclemenstruation_summary, title = R.string.wcyclemenstruation_title))
-                        addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIwcycleovulation, dialogMessage = R.string.wcycleovulation_summary, title = R.string.wcycleovulation_title))
-                        addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIwcycleluteal, dialogMessage = R.string.wcycleluteal_summary, title = R.string.wcycleluteal_title))
-                    })
 
-            })
 
-            addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIEnableStepsFromWatch, title = R.string.countsteps_watch_title))
-            addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsxdriponeminute, title = R.string.Enable_xdripOM_title))
+
             })
 
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
