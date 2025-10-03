@@ -448,11 +448,11 @@
     <string name="wcycle_preferences">Mentruationszyklus</string>
     <string name="wcycle_preferences_title_menu">Mentruationszyklus - Einstellungen</string>
     <string name="oaps_aimi_enablewcycle_title">Aktiviere Mentruationszyklus</string>
-    <string name="wcycledateday_summary">Gib den Kalendertag (1-31) des ersten Tags des Zyklus an. Hat der aktuelle Monat weniger Tage wird dies berücksichtigt.</string>
+    <string name="wcycledateday_summary">Gib den Kalendertag (1&#8211;31) des ersten Tags des Zyklus an. Hat der aktuelle Monat weniger Tage wird dies berücksichtigt.</string>
     <string name="wcycledateday_title">Erster Zyklustag</string>
-    <string name="wcyclemenstruation_summary">Während der ersten Tage des Zyklus werden die Basalwerte um diesen Prozentwert reduziert (Studien zeigen eine durchschnittlich nötige Reduktion um 5-10%)</string>
-    <string name="wcyclemenstruation_title">Zyklustage 1-5, Reduktion der Basalwerte in %</string>
-    <string name="wcycleovulation_summary">Während des Eisprungs (Ovulation, Tage 13-15), sollten SMB und Basal um eta 5% reduziert werden, zeigen verschiedene Studien</string>
+    <string name="wcyclemenstruation_summary">Während der ersten Tage des Zyklus werden die Basalwerte um diesen Prozentwert reduziert (Studien zeigen eine durchschnittlich nötige Reduktion um 5&#8211;10%)</string>
+    <string name="wcyclemenstruation_title">Zyklustage 1&#8211;5, Reduktion der Basalwerte in %</string>
+    <string name="wcycleovulation_summary">Während des Eisprungs (Ovulation, Tage 13&#8211;15), sollten SMB und Basal um eta 5% reduziert werden, zeigen verschiedene Studien</string>
     <string name="wcycleovulation_title">Ovulation, Reduktion in %</string>
     <string name="wcycleluteal_summary">The luteal phase requires about 8–15% more insulin</string>
     <string name="wcycleluteal_title">Luteal phase, set the % to apply on basal and SMB</string>
