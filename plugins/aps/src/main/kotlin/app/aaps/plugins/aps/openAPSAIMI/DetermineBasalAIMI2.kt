@@ -838,15 +838,15 @@ fun appendCompactLog(
         // ────────────────────────────────────────────────────────────────
         // 0️⃣ LGS / Hypo kill-switch (avant tout)
         val lgsPref = profile.lgsThreshold
-        val hypoGuard =  computeHypoThreshold(minBg = profile.min_bg, lgsThreshold = lgsPref)
+        val hypoGuard = computeHypoThreshold(minBg = profile.min_bg, lgsThreshold = lgsPref)
         val bgNow = bg
         if (bgNow <= hypoGuard) {
-          //rT.reason.append("🛑 LGS: BG=${"%.0f".format(bgNow)} ≤ ${"%.0f".format(hypoGuard)} → TBR 0U/h (30m)\n")
             rT.reason.append(context.getString(R.string.lgs_triggered, "%.0f".format(bgNow), "%.0f".format(hypoGuard)))
             rT.duration = maxOf(duration, 30)
             rT.rate = 0.0
             return rT
         }
+
         // 1️⃣ Recalcule des modes
         val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
         val isMealMode = therapy.snackTime || therapy.highCarbTime || therapy.mealTime
@@ -856,18 +856,40 @@ fun appendCompactLog(
 
         // 2️⃣ Disponibilité BG
         val recentBGs = getRecentBGs()
-        val hasBgData = (bgNow > 39.0) && recentBGs.isNotEmpty() // ne dépend plus uniquement d’un flag global
+        val hasBgData = (bgNow > 39.0) && recentBGs.isNotEmpty()
+
+        // 🔒 Forçage EXACT en mode repas si override actif :
+        //    - pas d'ajustement tendance
+        //    - pas de clamp "maxSafe"
+        //    - pas d'ajustement cycle
+        //    - garde LGS ci-dessus
+        val forceExactMeal = overrideSafetyLimits && isMealMode
 
         // 3️⃣ Cas capteur / données insuffisantes
         if (!hasBgData) {
-            val safeRate = if (bgNow <= hypoGuard) 0.0 else _rate.coerceIn(0.0, profile.max_basal)
+            val safeRate = if (forceExactMeal) {
+                _rate.coerceAtLeast(0.0) // on n'applique pas de clamp haut quand on force
+            } else {
+                if (bgNow <= hypoGuard) 0.0 else _rate.coerceIn(0.0, profile.max_basal)
+            }
 
-//          rT.reason.append("⚠️ Données BG insuffisantes ou invalides → fallback\n")
-            rT.reason.append(context.getString(R.string.bg_insufficient_fallback))
-//          rT.reason.append("Pose temp à ${"%.2f".format(safeRate)} U/h pour $duration minutes.\n")
+            rT.reason.append(
+                if (forceExactMeal)
+                    context.getString(R.string.bg_insufficient_fallback_force_exact)
+                else
+                    context.getString(R.string.bg_insufficient_fallback)
+            )
             rT.reason.append(context.getString(R.string.temp_basal_info, "%.2f".format(safeRate), duration))
             rT.duration = duration
             rT.rate = safeRate
+            return rT
+        }
+
+        if (forceExactMeal) {
+            // Log explicite pour debug
+            rT.reason.append("FORCE-EXACT meal override → ${"%.2f".format(_rate)} U/h for $duration min.\n")
+            rT.duration = duration
+            rT.rate = _rate.coerceAtLeast(0.0)
             return rT
         }
 
@@ -882,9 +904,8 @@ fun appendCompactLog(
         )
 
         // 5️⃣ Ajustement sur tendance BG
-        var rateAdjustment = _rate
         val bgTrend = calculateBgTrend(recentBGs, reason)
-        rateAdjustment = adjustRateBasedOnBgTrend(_rate, bgTrend)
+        var rateAdjustment = adjustRateBasedOnBgTrend(_rate, bgTrend) // ← seulement si pas forceExactMeal
 
         // 6️⃣ Bypass sécurité
         val bypassSafety = (overrideSafetyLimits || isMealMode || isEarlyAutodrive) && bgNow > hypoGuard
@@ -904,27 +925,33 @@ fun appendCompactLog(
             bypassSafety       -> rateAdjustment
             else               -> rateAdjustment.coerceIn(0.0, maxSafe)
         }
-        // ♀️ Ajustement cycle sur la basale (si activé)
-        if (bgNow > hypoGuard) { // on n'applique pas en LGS
+
+        // ♀️ Ajustement cycle sur la basale (si activé) — pas appliqué en forceExactMeal (déjà retourné plus haut)
+        if (bgNow > hypoGuard) {
             rate = applyWCycleOnBasal(rate, bypassSafety, maxSafe, profile, rT)
         }
+
         // 9️⃣ Logging
         when {
-          //bgNow <= hypoGuard -> rT.reason.append("🛑 LGS override → TBR 0U/h\n")
             bgNow <= hypoGuard -> rT.reason.append(context.getString(R.string.lgs_override))
-//          bypassSafety       -> rT.reason.append("→ bypass sécurité${if (isMealMode) " (meal mode)" else if (isEarlyAutodrive) " (early autodrive)" else ""}\n")
-            bypassSafety       -> rT.reason.append(context.getString(R.string.bypass_safety, if (isMealMode) context.getString(R.string.meal_mode) else if (isEarlyAutodrive) context.getString(R.string.early_autodrive) else ""))
-//          rate != _rate      -> rT.reason.append("→ rate adjusted based on BG trend\n")
+            bypassSafety       -> rT.reason.append(
+                context.getString(
+                    R.string.bypass_safety,
+                    if (isMealMode) context.getString(R.string.meal_mode)
+                    else if (isEarlyAutodrive) context.getString(R.string.early_autodrive)
+                    else ""
+                )
+            )
             rate != _rate      -> rT.reason.append(context.getString(R.string.rate_adjusted_bg_trend))
         }
 
         // 🔟 Pose
-//      rT.reason.append("Pose temp à ${"%.2f".format(rate)} U/h pour $duration minutes.\n")
         rT.reason.append(context.getString(R.string.temp_basal_pose, "%.2f".format(rate), duration))
         rT.duration = duration
         rT.rate = rate
         return rT
     }
+
 
     private fun calculateBgTrend(recentBGs: List<Float>, reason: StringBuilder): Float {
     if (recentBGs.isEmpty()) {

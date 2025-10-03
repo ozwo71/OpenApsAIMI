@@ -730,6 +730,7 @@
     <string name="smb_enabled_for_temp_target">SMB enabled for temp target of %1$s</string>
     <string name="smb_disabled_no_pref_or_condition">SMB disabled (no enableSMB preferences active or no condition satisfied)</string>
     <string name="lgs_triggered">🛑 LGS: BG=%1$s ≤ %2$s → TBR 0U/h (30m)\n</string>
+    <string name="bg_insufficient_fallback_force_exact">⚠️ BG data insufficient, but meal override enforced.\n</string>
     <string name="bg_insufficient_fallback">⚠️ BG data insufficient or invalid → fallback\n</string>
     <string name="temp_basal_info">Temporary basal %1$s U/h for %2$d minutes\n</string>
     <string name="lgs_override">🛑 Low Glucose Suspend (LGS) override → TBR 0U/h\n</string>

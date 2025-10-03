@@ -714,6 +714,7 @@
     <string name="smb_enabled_for_temp_target">SMB abilitati per target temporaneo di %1$s</string>
     <string name="smb_disabled_no_pref_or_condition">SMB disabilitati (preferenza disabilitata o nessuna condizione soddisfatta)</string>
     <string name="lgs_triggered">🛑 Sospensione Glucosio Basso (LGS) : BG=%1$s ≤ %2$s → TBR 0 U/h (30m)\n</string>
+    <string name="bg_insufficient_fallback_force_exact">⚠️ Dati glicemici insufficienti, ma la modalità pasto è forzata.\n</string>
     <string name="bg_insufficient_fallback">⚠️ Dati BG insufficienti o invalidi → fallback\n</string>
     <string name="temp_basal_info">Basale temporanea %1$s U/h per %2$d minuti\n</string>
     <string name="lgs_override">🛑 Sospensione Glucosio Basso (LGS) override → TBR 0 U/h\n</string>
