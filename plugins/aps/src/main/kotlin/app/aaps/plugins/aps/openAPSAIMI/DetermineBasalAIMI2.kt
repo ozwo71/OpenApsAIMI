@@ -833,10 +833,10 @@ fun appendCompactLog(
         profile: OapsProfileAimi,
         rT: RT,
         currenttemp: CurrentTemp,
-        overrideSafetyLimits: Boolean = false
+        overrideSafetyLimits: Boolean = false,
+        forceExact: Boolean = false // ← NEW
     ): RT {
-        // ────────────────────────────────────────────────────────────────
-        // 0️⃣ LGS / Hypo kill-switch (avant tout)
+        // 0) LGS kill-switch (inchangé)
         val lgsPref = profile.lgsThreshold
         val hypoGuard = computeHypoThreshold(minBg = profile.min_bg, lgsThreshold = lgsPref)
         val bgNow = bg
@@ -847,70 +847,36 @@ fun appendCompactLog(
             return rT
         }
 
-        // 1️⃣ Recalcule des modes
+        // 1) (facultatif) on peut garder Therapy pour du logging, mais on n'en dépend PAS pour le forçage
         val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
         val isMealMode = therapy.snackTime || therapy.highCarbTime || therapy.mealTime
             || therapy.lunchTime || therapy.dinnerTime || therapy.bfastTime
 
-        val reason = StringBuilder()
-
-        // 2️⃣ Disponibilité BG
+        // 2) BG disponibles ?
         val recentBGs = getRecentBGs()
         val hasBgData = (bgNow > 39.0) && recentBGs.isNotEmpty()
 
-        // 🔒 Forçage EXACT en mode repas si override actif :
-        //    - pas d'ajustement tendance
-        //    - pas de clamp "maxSafe"
-        //    - pas d'ajustement cycle
-        //    - garde LGS ci-dessus
-        val forceExactMeal = overrideSafetyLimits && isMealMode
-
-        // 3️⃣ Cas capteur / données insuffisantes
-        if (!hasBgData) {
-            val safeRate = if (forceExactMeal) {
-                _rate.coerceAtLeast(0.0) // on n'applique pas de clamp haut quand on force
-            } else {
-                if (bgNow <= hypoGuard) 0.0 else _rate.coerceIn(0.0, profile.max_basal)
-            }
-
-            rT.reason.append(
-                if (forceExactMeal)
-                    context.getString(R.string.bg_insufficient_fallback_force_exact)
-                else
-                    context.getString(R.string.bg_insufficient_fallback)
-            )
-            rT.reason.append(context.getString(R.string.temp_basal_info, "%.2f".format(safeRate), duration))
+        // 3) CAS FORCE EXACT (ignorer clamps/trends/cycle, sauf LGS)
+        if (forceExact) {
+            val rate = _rate.coerceAtLeast(0.0)
+            rT.reason.append("FORCE-EXACT → ${"%.2f".format(rate)} U/h (${duration}m). isMealMode=${isMealMode}\n")
             rT.duration = duration
-            rT.rate = safeRate
+            rT.rate = rate
             return rT
         }
 
-        if (forceExactMeal) {
-            // Log explicite pour debug
-            rT.reason.append("FORCE-EXACT meal override → ${"%.2f".format(_rate)} U/h for $duration min.\n")
-            rT.duration = duration
-            rT.rate = _rate.coerceAtLeast(0.0)
-            return rT
-        }
-
-        // 4️⃣ Early autodrive
+        // 4) (reste de ta logique standard inchangée)
         val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
         val night = hour <= 7
         val predDelta = predictedDelta(getRecentDeltas()).toFloat()
         val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
+        val isEarlyAutodrive = !night && !isMealMode && autodrive && bgNow > 110 && detectMealOnset(delta, predDelta, bgacc.toFloat())
 
-        val isEarlyAutodrive = !night && !isMealMode && autodrive && bgNow > 110 && detectMealOnset(
-            delta, predDelta, bgacc.toFloat()
-        )
+        val bgTrend = calculateBgTrend(recentBGs, StringBuilder())
+        var rateAdjustment = adjustRateBasedOnBgTrend(_rate, bgTrend)
 
-        // 5️⃣ Ajustement sur tendance BG
-        val bgTrend = calculateBgTrend(recentBGs, reason)
-        var rateAdjustment = adjustRateBasedOnBgTrend(_rate, bgTrend) // ← seulement si pas forceExactMeal
-
-        // 6️⃣ Bypass sécurité
         val bypassSafety = (overrideSafetyLimits || isMealMode || isEarlyAutodrive) && bgNow > hypoGuard
 
-        // 7️⃣ Max safe basale
         val maxSafe = min(
             profile.max_basal,
             min(
@@ -919,38 +885,22 @@ fun appendCompactLog(
             )
         )
 
-        // 8️⃣ Choix du rate effectif
         var rate = when {
             bgNow <= hypoGuard -> 0.0
             bypassSafety       -> rateAdjustment
             else               -> rateAdjustment.coerceIn(0.0, maxSafe)
         }
 
-        // ♀️ Ajustement cycle sur la basale (si activé) — pas appliqué en forceExactMeal (déjà retourné plus haut)
         if (bgNow > hypoGuard) {
             rate = applyWCycleOnBasal(rate, bypassSafety, maxSafe, profile, rT)
         }
 
-        // 9️⃣ Logging
-        when {
-            bgNow <= hypoGuard -> rT.reason.append(context.getString(R.string.lgs_override))
-            bypassSafety       -> rT.reason.append(
-                context.getString(
-                    R.string.bypass_safety,
-                    if (isMealMode) context.getString(R.string.meal_mode)
-                    else if (isEarlyAutodrive) context.getString(R.string.early_autodrive)
-                    else ""
-                )
-            )
-            rate != _rate      -> rT.reason.append(context.getString(R.string.rate_adjusted_bg_trend))
-        }
-
-        // 🔟 Pose
         rT.reason.append(context.getString(R.string.temp_basal_pose, "%.2f".format(rate), duration))
         rT.duration = duration
         rT.rate = rate
         return rT
     }
+
 
 
     private fun calculateBgTrend(recentBGs: List<Float>, reason: StringBuilder): Float {
@@ -1306,6 +1256,32 @@ fun appendCompactLog(
     private fun issnackModeCondition(): Boolean {
         val pbolussnack: Double = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
         return snackrunTime in 0..7 && lastBolusSMBUnit != pbolussnack.toFloat() && snackTime
+    }
+    // --- Helpers "fenêtre repas 30 min" ---
+    private fun runtimeToMinutes(rt: Long): Int {
+        return if (rt > 180) { // heuristique : si >180, on suppose secondes
+            (rt / 60).toInt()
+        } else {
+            rt.toInt()
+        }
+    }
+
+    /** Renvoie (label du mode, runtime en minutes) du mode repas actif, sinon null */
+    private fun activeMealRuntimeMinutes(): Pair<String, Int>? {
+        return when {
+            mealTime   -> "meal" to runtimeToMinutes(mealruntime)
+            bfastTime  -> "bfast" to runtimeToMinutes(bfastruntime)
+            lunchTime  -> "lunch" to runtimeToMinutes(lunchruntime)
+            dinnerTime -> "dinner" to runtimeToMinutes(dinnerruntime)
+            highCarbTime -> "highcarb" to runtimeToMinutes(highCarbrunTime)
+            else -> null
+        }
+    }
+
+    /** Temps restant dans la fenêtre 0..windowMin (par défaut 30) ; null si hors fenêtre */
+    private fun remainingInWindow0to(rtMin: Int, windowMin: Int = 30): Int? {
+        if (rtMin !in 0..windowMin) return null
+        return (windowMin - rtMin).coerceAtLeast(1) // au moins 1 minute pour poser une TBR
     }
     private fun roundToPoint05(number: Float): Float {
         return (number * 20.0).roundToInt() / 20.0f
@@ -4392,10 +4368,10 @@ rT.reason.appendLine(
 
             if (microBolusAllowed && enableSMB) {
                 val microBolus = insulinReq
-              //rT.reason.append(" insulinReq $insulinReq")
+                //rT.reason.append(" insulinReq $insulinReq")
                 rT.reason.append(context.getString(R.string.reason_insulin_required, insulinReq))
                 if (microBolus >= maxSMB) {
-                  //rT.reason.append("; maxBolus $maxSMB")
+                    //rT.reason.append("; maxBolus $maxSMB")
                     rT.reason.append(context.getString(R.string.reason_max_smb, maxSMB))
                 }
                 rT.reason.append(". ")
@@ -4417,6 +4393,12 @@ rT.reason.appendLine(
                 }
 
             }
+            // Helper: convertit en minutes quel que soit l’unité d’entrée (Long? -> minutes Int)
+            fun runtimeToMinutes(rt: Long?): Int {
+                if (rt == null) return Int.MAX_VALUE // "loin" de la fenêtre
+                return if (rt > 180L) (rt / 60L).toInt() else rt.toInt() // >180 ⇒ probablement secondes
+            }
+
 // Calcul du facteur d'ajustement en fonction de la glycémie (interpolation simplifiée)
             val basalAdjustmentFactor = interpolatebasal(bg)
 
@@ -4431,33 +4413,42 @@ rT.reason.appendLine(
                 return setTempBasal(0.0, 30, profile, rT, currenttemp)
             }
 
-// ---------- FORÇAGE DUR 0–30 min d'un mode repas (retour anticipé) ----------
-            val mealModeActiveFirst30 =
-                (mealTime && mealruntime in 0..30) ||
-                    (bfastTime && bfastruntime in 0..30) ||
-                    (lunchTime && lunchruntime in 0..30) ||
-                    (dinnerTime && dinnerruntime in 0..30) ||
-                    (highCarbTime && highCarbrunTime in 0..30)
+// Détection mode repas ACTIF + runtime en minutes (robuste secondes/minutes)
+            val (isMealActive, runtimeMinLabel, runtimeMinValue) = when {
+                mealTime     -> Triple(true, "meal",     runtimeToMinutes(mealruntime))
+                bfastTime    -> Triple(true, "bfast",    runtimeToMinutes(bfastruntime))
+                lunchTime    -> Triple(true, "lunch",    runtimeToMinutes(lunchruntime))
+                dinnerTime   -> Triple(true, "dinner",   runtimeToMinutes(dinnerruntime))
+                highCarbTime -> Triple(true, "highcarb", runtimeToMinutes(highCarbrunTime))
+                else         -> Triple(false, "", Int.MAX_VALUE)
+            }
 
-            if (mealModeActiveFirst30) {
-                val activeMeal = when {
-                    mealTime   -> context.getString(R.string.meal_mode_meal, mealruntime) // "meal($mealruntime)"
-                    bfastTime  -> context.getString(R.string.meal_mode_bfast, bfastruntime) // "bfast($bfastruntime)"
-                    lunchTime  -> context.getString(R.string.meal_mode_lunch, lunchruntime) // "lunch($lunchruntime)"
-                    dinnerTime -> context.getString(R.string.meal_mode_dinner, dinnerruntime) // "dinner($dinnerruntime)"
-                    else       -> context.getString(R.string.meal_mode_highcarb, highCarbrunTime) // "highcarb($highCarbrunTime)"
-                }
+// ---------- FORÇAGE IMMEDIAT A L’ACTIVATION (30 minutes pleines) ----------
+            if (isMealActive) {
                 val forced = forcedBasalmealmodes.toDouble().coerceAtLeast(0.0)
-              //rT.reason.append("FORCE-MEAL 0–30 min [$activeMeal] → $forced U/h (override).\n")
-                rT.reason.append(context.getString(R.string.meal_mode_first_30,activeMeal,forced))
-                return setTempBasal(
-                    _rate = forced,
-                    duration = 30,
-                    profile = profile,
-                    rT = rT,
-                    currenttemp = currenttemp,
-                    overrideSafetyLimits = true // important pour ne pas être clampé
-                )
+
+                // Garde anti "glissement" : si une TBR identique est déjà posée (±0.05 U/h) avec >=25 min restantes, ne pas reposer
+                val isAlreadyForced = kotlin.math.abs(currenttemp.rate - forced) < 0.05 && currenttemp.duration >= 25
+
+                // On déclenche au démarrage du mode (runtime ≤ 2 minutes) ET si pas déjà forcé
+                if (!isAlreadyForced) {
+                    rT.reason.append(
+                        context.getString(
+                            R.string.meal_mode_first_30,
+                            "$runtimeMinLabel($runtimeMinValue)",
+                            forced
+                        )
+                    )
+                    return setTempBasal(
+                        _rate = forced,
+                        duration = 30,                 // ← 30 minutes pleines à partir de maintenant
+                        profile = profile,
+                        rT = rT,
+                        currenttemp = currenttemp,
+                        overrideSafetyLimits = true,
+                        forceExact = true              // ← ignore clamps/adjust/cycle (sauf LGS)
+                    )
+                }
             }
 // ---------------------------------------------------------------------------
 
@@ -4465,14 +4456,31 @@ rT.reason.appendLine(
             var overrideSafety = false
             var chosenRate: Double? = null
 
-// ⚠️ Ne pas laisser basalLS écraser si PAS en mode repas <30 min
+// Garde: une TBR "meal" forcée est-elle déjà active ? (≈ même valeur & durée > 0)
+            val forcedMealActive =
+                kotlin.math.abs(currenttemp.rate - forcedBasalmealmodes.toDouble()) < 0.05 &&
+                    currenttemp.duration > 0
+
+// Sommes-nous dans la fenêtre repas 0–30 min ?
+            val inMealFirst30 = isMealActive && (runtimeMinValue in 0..30)
+
+// ⚠️ Autoriser basalLS uniquement si on n'est PAS en repas <30 min
+//    ET qu'aucune TBR repas forcée n'est active (pour ne pas l'écraser)
             if (safetyDecision.basalLS &&
                 combinedDelta in -1.0..3.0 &&
                 predictedBg > 130 &&
                 iob > 0.1 &&
-                !mealModeActiveFirst30
+                !inMealFirst30 &&
+                !forcedMealActive
             ) {
-                return setTempBasal(profile_current_basal, 30, profile, rT, currenttemp, overrideSafetyLimits = false)
+                return setTempBasal(
+                    _rate = profile_current_basal,
+                    duration = 30,
+                    profile = profile,
+                    rT = rT,
+                    currenttemp = currenttemp,
+                    overrideSafetyLimits = false
+                )
             }
 
 // ------------------------------
@@ -4482,33 +4490,32 @@ rT.reason.appendLine(
             ) {
                 chosenRate = forcedBasal.toDouble()
                 overrideSafety = true
-              //rT.reason.append("Early meal detected → TBR forcée à ${forcedBasal}U/h x30 (override).\n")
                 rT.reason.append(context.getString(R.string.reason_early_meal, forcedBasal))
             } else {
                 // ------------------------------
                 // 3️⃣ Cas snack / fasting / sport / honeymoon
                 chosenRate = when {
-                    // Snack : pas de bypass (on garde ta logique)
-                    snackTime && snackrunTime in 0..30 && delta < 10 -> {
+                    // Snack : aligne le test sur minutes (robuste secondes/minutes)
+                    snackTime && (runtimeToMinutes(snackrunTime) in 0..30) && delta < 10 -> {
                         calculateRate(basal, profile_current_basal, 4.0, "SnackTime", currenttemp, rT).toDouble()
                     }
 
-                    fastingTime ->
+                    fastingTime                                                          ->
                         calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "FastingTime", currenttemp, rT).toDouble()
 
-                    sportTime && bg > 169 && delta > 4 ->
+                    sportTime && bg > 169 && delta > 4                                   ->
                         calculateRate(profile_current_basal, profile_current_basal, 1.3, "SportTime", currenttemp, rT).toDouble()
 
-                    honeymoon && delta in 0.0..6.0 && bg in 99.0..141.0 ->
+                    honeymoon && delta in 0.0..6.0 && bg in 99.0..141.0                  ->
                         calculateRate(profile_current_basal, profile_current_basal, delta.toDouble(), "Honeymoon", currenttemp, rT).toDouble()
 
-                    bg in 81.0..99.0 && delta in 3.0..7.0 && honeymoon ->
+                    bg in 81.0..99.0 && delta in 3.0..7.0 && honeymoon                   ->
                         calculateRate(basal, profile_current_basal, 1.0, "Honeymoon small-rise", currenttemp, rT).toDouble()
 
-                    bg > 120 && delta > 0 && smbToGive == 0.0f && honeymoon ->
+                    bg > 120 && delta > 0 && smbToGive == 0.0f && honeymoon              ->
                         calculateRate(basal, profile_current_basal, 5.0, "Honeymoon corr.", currenttemp, rT).toDouble()
 
-                    else -> null
+                    else                                                                 -> null
                 }
             }
 
@@ -4519,7 +4526,6 @@ rT.reason.appendLine(
             ) {
                 chosenRate = 0.0
                 overrideSafety = false
-              //rT.reason.append("Safety cut: predictedBg<100 ou IOB>$maxIob → basale à 0.\n")
                 rT.reason.append(context.getString(R.string.safety_cut_tbr, maxIob))
             }
 
@@ -4527,37 +4533,36 @@ rT.reason.appendLine(
 // 5️⃣ Hypoglycémies & basale réduite
             if (chosenRate == null) {
                 when {
-                    bg < 80.0 -> {
+                    bg < 80.0                                                  -> {
                         chosenRate = 0.0
-                        //rT.reason.append("BG<80 → basale à 0.\n")
                         rT.reason.append(context.getString(R.string.bg_below_80))
                     }
+
                     bg in 80.0..90.0 &&
                         slopeFromMaxDeviation <= 0 && iob > 0.1f && !sportTime -> {
                         chosenRate = 0.0
-                        //rT.reason.append("BG 80-90 & chute → basale à 0.\n")
                         rT.reason.append(context.getString(R.string.bg_80_90_fall))
                     }
+
                     bg in 80.0..90.0 &&
                         slopeFromMinDeviation >= 0.3 && slopeFromMaxDeviation >= 0 &&
                         combinedDelta in -1.0..2.0 && !sportTime &&
-                        bgAcceleration.toFloat() > 0.0f -> {
+                        bgAcceleration.toFloat() > 0.0f                        -> {
                         chosenRate = profile_current_basal * 0.2
-                        //rT.reason.append("BG 80-90 stable → basale x0.2.\n")
                         rT.reason.append(context.getString(R.string.bg_80_90_stable))
                     }
+
                     bg in 90.0..100.0 &&
                         slopeFromMinDeviation <= 0.3 && iob > 0.1f && !sportTime &&
-                        bgAcceleration.toFloat() > 0.0f -> {
+                        bgAcceleration.toFloat() > 0.0f                        -> {
                         chosenRate = 0.0
-                        //rT.reason.append("BG 90-100 & risque modéré → basale à 0.\n")
                         rT.reason.append(context.getString(R.string.bg_90_100_moderate))
                     }
+
                     bg in 90.0..100.0 &&
                         slopeFromMinDeviation >= 0.3 && combinedDelta in -1.0..2.0 && !sportTime &&
-                        bgAcceleration.toFloat() > 0.0f -> {
+                        bgAcceleration.toFloat() > 0.0f                        -> {
                         chosenRate = profile_current_basal * 0.5
-                        //rT.reason.append("BG 90-100 gain léger → basale x0.5.\n")
                         rT.reason.append(context.getString(R.string.bg_90_100_slight_gain))
                     }
                 }
@@ -4572,14 +4577,12 @@ rT.reason.appendLine(
                     bgAcceleration.toFloat() > 1.0f
                 ) {
                     chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, combinedDelta.toDouble())
-                    //rT.reason.append("Montée lente → ajustement proportionnel.\n")
                     rT.reason.append(context.getString(R.string.slow_rise_proportional_adjustment))
                 } else if (eventualBG > 110 && !sportTime && bg > 150 &&
                     combinedDelta in -2.0..15.0 &&
                     bgAcceleration.toFloat() > 0.0f
                 ) {
                     chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor)
-//                  rT.reason.append("EventualBG>110 & hyper → ajustement par facteur.\n")
                     rT.reason.append(context.getString(R.string.eventual_bg_over_110_hyper_factor))
                 }
             }
@@ -4593,40 +4596,35 @@ rT.reason.appendLine(
                     bgAcceleration.toFloat() > 0.0f
                 ) {
                     chosenRate = profile_current_basal * 1.5
-                    //rT.reason.append("Repas calme & horaire → basale x1.5.\n")
                     rT.reason.append(context.getString(R.string.calm_meal_and_timing))
                 } else if (timenow > sixAMHour && recentSteps5Minutes > 100) {
                     chosenRate = 0.0
-                    //rT.reason.append("Activité matinale → basale à 0.\n")
                     rT.reason.append(context.getString(R.string.morning_activity_basal_zero))
                 } else if (timenow <= sixAMHour && delta > 0 && bgAcceleration.toFloat() > 0.0f) {
                     chosenRate = profile_current_basal.toDouble()
-                    //rT.reason.append("Matinée montante → basale de profil.\n")
                     rT.reason.append(context.getString(R.string.morning_rise_profile_basal))
                 }
             }
 
 // ------------------------------
-// 8️⃣ Repas & snacks (boucle)
+// 8️⃣ Repas & snacks (boucle) — aligne aussi les fenêtres sur minutes converties
             if (chosenRate == null) {
                 val mealConditions = listOf(
-                    snackTime to snackrunTime,
-                    mealTime to mealruntime,
-                    bfastTime to bfastruntime,
-                    lunchTime to lunchruntime,
-                    dinnerTime to dinnerruntime,
-                    highCarbTime to highCarbrunTime
+                    snackTime to runtimeToMinutes(snackrunTime),
+                    mealTime to runtimeToMinutes(mealruntime),
+                    bfastTime to runtimeToMinutes(bfastruntime),
+                    lunchTime to runtimeToMinutes(lunchruntime),
+                    dinnerTime to runtimeToMinutes(dinnerruntime),
+                    highCarbTime to runtimeToMinutes(highCarbrunTime)
                 )
-                for ((meal, runtime) in mealConditions) {
-                    if (meal && runtime in 0..30) {
-                        // Si on arrive ici, le forçage 0–30 n'était pas applicable (ex: pas de flag de mode actif au moment du test initial)
+                for ((meal, rtMin) in mealConditions) {
+                    if (meal && rtMin in 0..30) {
+                        // Si on arrive ici, le forçage 0–30 n'était pas applicable plus haut (ex: timing)
                         chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, 10.0)
-                        //rT.reason.append("Repas/snack <30m → basale x10.\n")
                         rT.reason.append(context.getString(R.string.meal_snack_under_30m_basal_10))
                         break
-                    } else if (meal && runtime in 30..60 && delta > 0) {
+                    } else if (meal && rtMin in 31..60 && delta > 0) {
                         chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, delta.toDouble())
-                        //rT.reason.append("Repas/snack 30-60m & montée → basale Δ.\n")
                         rT.reason.append(context.getString(R.string.meal_snack_30_60m_rising_basal_delta))
                         break
                     }
@@ -4639,13 +4637,11 @@ rT.reason.appendLine(
                 when {
                     eventualBG > 180 && delta > 3  ->
                         chosenRate = calculateBasalRate(basalaimi.toDouble(), profile_current_basal, basalAdjustmentFactor).also {
-//                          rT.reason.append("EventualBG>180 & hyper → ajustement basalaimi.\n")
                             rT.reason.append(context.getString(R.string.eventual_bg_over_180_hyper_basalaimi))
                         }
 
                     bg > 180 && delta in -5.0..1.0 ->
                         chosenRate = (profile_current_basal * basalAdjustmentFactor).also {
-//                          rT.reason.append("BG>180 stable → basale x facteur.\n")
                             rT.reason.append(context.getString(R.string.bg_over_180_stable_basal_factor))
                         }
                 }
@@ -4655,47 +4651,40 @@ rT.reason.appendLine(
 // 🔟 Mode “honeymoon”
             if (chosenRate == null && honeymoon) {
                 when {
-                    bg in 140.0..169.0 && delta > 0 ->
+                    bg in 140.0..169.0 && delta > 0                                                                           ->
                         chosenRate = profile_current_basal.toDouble().also {
-                          //rT.reason.append("Honeymoon BG 140-169 → profil.\n")
                             rT.reason.append(context.getString(R.string.honeymoon_bg_140_169_profile))
                         }
 
-                    bg > 170 && delta > 0 ->
+                    bg > 170 && delta > 0                                                                                     ->
                         chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor).also {
-                          //rT.reason.append("Honeymoon BG>170 → ajustement.\n")
                             rT.reason.append(context.getString(R.string.honeymoon_bg_over_170_adjustment))
                         }
 
-                    combinedDelta > 2 && bg in 90.0..119.0 ->
+                    combinedDelta > 2 && bg in 90.0..119.0                                                                    ->
                         chosenRate = profile_current_basal.toDouble().also {
-                          //rT.reason.append("Honeymoon Δ>2 & BG 90-119 → profil.\n")
                             rT.reason.append(context.getString(R.string.honeymoon_delta_over_2_bg_90_119_profile))
                         }
 
-                    combinedDelta > 0 && bg > 110 && eventualBG > 120 && bg < 160 ->
+                    combinedDelta > 0 && bg > 110 && eventualBG > 120 && bg < 160                                             ->
                         chosenRate = (profile_current_basal * basalAdjustmentFactor).also {
-                          //rT.reason.append("Honeymoon corr. mixte.\n")
                             rT.reason.append(context.getString(R.string.honeymoon_mixed_correction))
                         }
 
                     mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 && bg > 110 && combinedDelta > 0 ->
                         chosenRate = (profile_current_basal * basalAdjustmentFactor).also {
-                          //rT.reason.append("Honeymoon + repas détection.\n")
                             rT.reason.append(context.getString(R.string.honeymoon_plus_meal_detection))
                         }
 
                     mealData.slopeFromMaxDeviation in 0.0..0.2 && mealData.slopeFromMinDeviation in 0.0..0.5 &&
-                        bg in 120.0..150.0 && delta > 0 ->
+                        bg in 120.0..150.0 && delta > 0                                                                       ->
                         chosenRate = (profile_current_basal * basalAdjustmentFactor).also {
-                          //rT.reason.append("Honeymoon petit slope.\n")
                             rT.reason.append(context.getString(R.string.honeymoon_small_slope))
                         }
 
                     mealData.slopeFromMaxDeviation > 0 && mealData.slopeFromMinDeviation > 0 &&
-                        bg in 100.0..120.0 && delta > 0 ->
+                        bg in 100.0..120.0 && delta > 0                                                                       ->
                         chosenRate = (profile_current_basal * basalAdjustmentFactor).also {
-                          //rT.reason.append("Honeymoon slope repas.\n")
                             rT.reason.append(context.getString(R.string.honeymoon_meal_slope))
                         }
                 }
@@ -4705,7 +4694,6 @@ rT.reason.appendLine(
 // 1️⃣1️⃣ Cas grossesse
             if (chosenRate == null && pregnancyEnable && delta > 0 && bg > 110 && !honeymoon) {
                 chosenRate = calculateBasalRate(finalBasalRate, profile_current_basal, basalAdjustmentFactor)
-              //rT.reason.append("Grossesse & Δ>0 → ajustement.\n")
                 rT.reason.append(context.getString(R.string.pregnancy_delta_over_0_adjustment))
             }
 
@@ -4723,7 +4711,6 @@ rT.reason.appendLine(
                 currenttemp = currenttemp,
                 overrideSafetyLimits = overrideSafety
             )
-
         }
     }
 }
