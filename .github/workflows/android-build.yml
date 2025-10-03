@@ -3,12 +3,12 @@ name: Android Build (Signed)
 on:
   push:
     branches:
-      - master-AIMI-Test
+      - master
     tags:
       - 'v*.*.*'  # Déclenche sur les tags de version
   pull_request:
     branches:
-      - master-AIMI-Test
+      - master
 
 jobs:
   build-signed:
