@@ -3670,58 +3670,89 @@ fun appendCompactLog(
         var smbToGive = if (bg > 130 && delta > 2 && predictedSMB == 0.0f) modelcal else predictedSMB
         smbToGive = if (honeymoon && bg < 170) smbToGive * 0.8f else smbToGive
 
-        val morningfactor: Double = preferences.get(DoubleKey.OApsAIMIMorningFactor) / 100.0
+        val morningfactor: Double   = preferences.get(DoubleKey.OApsAIMIMorningFactor) / 100.0
         val afternoonfactor: Double = preferences.get(DoubleKey.OApsAIMIAfternoonFactor) / 100.0
-        val eveningfactor: Double = preferences.get(DoubleKey.OApsAIMIEveningFactor) / 100.0
-        val hyperfactor: Double = preferences.get(DoubleKey.OApsAIMIHyperFactor) / 100.0
-        val highcarbfactor: Double = preferences.get(DoubleKey.OApsAIMIHCFactor) / 100.0
-        val mealfactor: Double = preferences.get(DoubleKey.OApsAIMIMealFactor) / 100.0
-        val bfastfactor: Double = preferences.get(DoubleKey.OApsAIMIBFFactor) / 100.0
-        val lunchfactor: Double = preferences.get(DoubleKey.OApsAIMILunchFactor) / 100.0
-        val dinnerfactor: Double = preferences.get(DoubleKey.OApsAIMIDinnerFactor) / 100.0
-        val snackfactor: Double = preferences.get(DoubleKey.OApsAIMISnackFactor) / 100.0
-        val sleepfactor: Double = preferences.get(DoubleKey.OApsAIMIsleepFactor) / 100.0
+        val eveningfactor: Double   = preferences.get(DoubleKey.OApsAIMIEveningFactor) / 100.0
+        val hyperfactor: Double     = preferences.get(DoubleKey.OApsAIMIHyperFactor) / 100.0
+        val highcarbfactor: Double  = preferences.get(DoubleKey.OApsAIMIHCFactor) / 100.0
+        val mealfactor: Double      = preferences.get(DoubleKey.OApsAIMIMealFactor) / 100.0
+        val bfastfactor: Double     = preferences.get(DoubleKey.OApsAIMIBFFactor) / 100.0
+        val lunchfactor: Double     = preferences.get(DoubleKey.OApsAIMILunchFactor) / 100.0
+        val dinnerfactor: Double    = preferences.get(DoubleKey.OApsAIMIDinnerFactor) / 100.0
+        val snackfactor: Double     = preferences.get(DoubleKey.OApsAIMISnackFactor) / 100.0
+        val sleepfactor: Double     = preferences.get(DoubleKey.OApsAIMIsleepFactor) / 100.0
 
         val adjustedFactors = adjustFactorsBasedOnBgAndHypo(
             morningfactor.toFloat(), afternoonfactor.toFloat(), eveningfactor.toFloat()
         )
-
         val (adjustedMorningFactor, adjustedAfternoonFactor, adjustedEveningFactor) = adjustedFactors
 
-        // Appliquer les ajustements en fonction de l'heure de la journée
+        // --- Helpers ---
+        fun Float.atLeast(min: Float) = if (this < min) min else this
+
+// Figer la base et l'heure pour éviter l’auto-référence et garantir l’exhaustivité horaire
+        val base = smbToGive
+        val hour = hourOfDay // 0..23 (même source d’heure partout)
+
+// --- Calcul priorisé ---
+// 1) Cas spéciaux (avant tout)
+// 2) Modes (prioritaires sur les tranches horaires)
+// 3) Tranches horaires exhaustives 0..11 / 12..18 / 19..23
+// 4) Fallback sûr : 0.5 U
         smbToGive = when {
-            bg > 160 && delta > 4 && iob < 0.7 && honeymoon && smbToGive == 0.0f && LocalTime.now().run { (hour in 23..23 || hour in 0..10) } -> 0.15f
-            bg > 120 && delta > 8 && iob < 1.0 && !honeymoon && smbToGive < 0.05f                                                             -> profile_current_basal.toFloat()
-            highCarbTime                                                                                                                      -> smbToGive * highcarbfactor.toFloat()
-            mealTime                                                                                                                          -> smbToGive * mealfactor.toFloat()
-            bfastTime                                                                                                                         -> smbToGive * bfastfactor.toFloat()
-            lunchTime                                                                                                                         -> smbToGive * lunchfactor.toFloat()
-            dinnerTime                                                                                                                        -> smbToGive * dinnerfactor.toFloat()
-            snackTime                                                                                                                         -> smbToGive * snackfactor.toFloat()
-            sleepTime                                                                                                                         -> smbToGive * sleepfactor.toFloat()
-            hourOfDay in 1..11                                                                                                                -> smbToGive * adjustedMorningFactor
-            hourOfDay in 12..18                                                                                                               -> smbToGive * adjustedAfternoonFactor
-            hourOfDay in 19..23                                                                                                               -> smbToGive * adjustedEveningFactor
-            bg > 120 && delta > 7 && !honeymoon                                                                                               -> smbToGive * hyperfactor.toFloat()
-            bg > 180 && delta > 5 && iob < 1.2 && honeymoon                                                                                   -> smbToGive * hyperfactor.toFloat()
-            else                                                                                                                              -> smbToGive
-        }
+            // Nuit honeymoon : appliquer un plancher
+            honeymoon && bg > 160 && delta > 4 && iob < 0.7 && (hour == 23 || hour in 0..10) ->
+                base.atLeast(0.15f)
+
+            // Pic très rapide (non-honeymoon) sur base quasi nulle : bump sur la basale
+            !honeymoon && bg > 120 && delta > 8 && iob < 1.0 && base < 0.05f ->
+                profile_current_basal.toFloat()
+
+            // Hyper (non-honeymoon) supplémentaire (avant heures)
+            bg > 120 && delta > 7 && !honeymoon ->
+                base * hyperfactor.toFloat()
+
+            // Hyper (honeymoon) supplémentaire
+            bg > 180 && delta > 5 && iob < 1.2 && honeymoon ->
+                base * hyperfactor.toFloat()
+
+            // --- Modes (prioritaires sur tranches horaires) ---
+            highCarbTime -> base * highcarbfactor.toFloat()
+            mealTime     -> base * mealfactor.toFloat()
+            bfastTime    -> base * bfastfactor.toFloat()
+            lunchTime    -> base * lunchfactor.toFloat()
+            dinnerTime   -> base * dinnerfactor.toFloat()
+            snackTime    -> base * snackfactor.toFloat()
+            sleepTime    -> base * sleepfactor.toFloat()
+
+            // --- Tranches horaires exhaustives ---
+            hour in 0..11  -> base * adjustedMorningFactor
+            hour in 12..18 -> base * adjustedAfternoonFactor
+            hour in 19..23 -> base * adjustedEveningFactor
+
+            // --- Fallback de sécurité : cas théoriquement impossible
+            else -> 0.5f
+        }.coerceAtLeast(0f)
+
+// Facteur appliqué (pour les logs) — on reflète le fallback par 0.5
         val factors = when {
-            lunchTime                           -> lunchfactor
-            bfastTime                           -> bfastfactor
-            dinnerTime                          -> dinnerfactor
-            snackTime                           -> snackfactor
-            sleepTime                           -> sleepfactor
-            hourOfDay in 1..11                  -> adjustedMorningFactor
-            hourOfDay in 12..18                 -> adjustedAfternoonFactor
-            hourOfDay in 19..23                 -> adjustedEveningFactor
-            highCarbTime                        -> highcarbfactor
-            mealTime                            -> mealfactor
-            bg > 120 && delta > 7 && !honeymoon -> hyperfactor
-            else                                -> 1.0
+            highCarbTime -> highcarbfactor
+            mealTime     -> mealfactor
+            bfastTime    -> bfastfactor
+            lunchTime    -> lunchfactor
+            dinnerTime   -> dinnerfactor
+            snackTime    -> snackfactor
+            sleepTime    -> sleepfactor
+            hour in 0..11  -> adjustedMorningFactor
+            hour in 12..18 -> adjustedAfternoonFactor
+            hour in 19..23 -> adjustedEveningFactor
+            else -> 0.5 // fallback factor pour traçabilité : correspond à la valeur de sécurité
         }
+
+// Heure courante (si tu préfères ce mécanisme ailleurs)
         val currentHour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
-        // Calcul du DIA ajusté en minutes
+
+// Calcul du DIA ajusté en minutes
         val adjustedDIAInMinutes = calculateAdjustedDIA(
             baseDIAHours = profile.dia.toFloat(),
             currentHour = currentHour,
@@ -3730,8 +3761,10 @@ fun appendCompactLog(
             averageHR60 = averageBeatsPerMinute60.toFloat(),
             pumpAgeDays = pumpAgeDays
         )
-      //consoleLog.add("DIA ajusté (en minutes) : $adjustedDIAInMinutes")
+//consoleLog.add("DIA ajusté (en minutes) : $adjustedDIAInMinutes")
         consoleLog.add(context.getString(R.string.console_dia_adjusted, adjustedDIAInMinutes))
+
+
 //         val actCurr = profile.sensorLagActivity
 //         val actFuture = profile.futureActivity
 //         val td = adjustedDIAInMinutes
