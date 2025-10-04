@@ -802,8 +802,10 @@
 
     <string name="original_file_missing">O arquivo original não existe.</string>
     <string name="file_too_short">O arquivo contém 200 linhas ou menos, nenhuma exclusão realizada.</string>
-    <string name="last_200_deleted">As últimas 200 linhas foram excluídas. O arquivo original foi salvo como &#39;%1$s&#39;.</string>
 
+    <string name="reason_data_removed">Os valores para a data %1$s foram excluídos porque o TIR1DAYIR é menor que 85%%%.</string>
+    <string name="reason_deletion_time_restricted">A exclusão só pode ser executada entre 00:05 e 00:10.</string>
+    <string name="reason_no_deletion_needed">Nenhuma exclusão necessária: tir1DAYIR é maior ou igual a 85%.</string>
 
     <string name="safety_sport_smb_zero">🏃‍♂️ Segurança esporte → SMB=0</string>
     <string name="adjustments_smb">🎛️ Ajustes: %1$.2f → %2$.2f U</string>
