@@ -540,73 +540,125 @@
     <string name="reason_autodrive_status"> Autodrive: %1$s, modo autodrive: %2$s, Condição Autodrive: %3$s, Tendência da Glicose: %4$.2f, Delta Combinado: %5$.2f, Glicose Prevista: %6$.2f, Aceleração da Glicose: %7$.2f, SlopeMinDeviation: %8$.2f</string>
     <string name="reason_tir_stats">TIR Abaixo: %1$d, TIR na Faixa: %2$d, TIR Acima: %3$d</string>
 
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION TITLE - FILE DetermineBasalAIMI2.kt -->
 
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BASAL ARGUMENTS - FILE DetermineBasalAIMI2.kt -->
+    <string name="table_plugin_main_title_1">AAPS-MASTER-AIMI</string>
+    <string name="table_plugin_main_title_2">Configurações AIMI</string>
+    <string name="table_plugin_main_title_3">06 de agosto de 2025</string>
 
-    <string name="basal_arguments_1">Taxa neutra = perfil &amp; TBR ativa → excluir TBR.\n</string>
-    <string name="basal_arguments_2">Taxa neutra = perfil &amp; nenhuma TBR ativa → não fazer nada.\n</string>
-    <string name="basal_arguments_3">Taxa neutra = perfil → definir uma TBR de %1$.2f U/h.\n</string>
-    <string name="basal_arguments_4">Definir TBR de %1$.2f U/h por %2$d minutos.\n</string>
-    <string name="basal_arguments_5">Subida lenta → ajuste proporcional.\n</string>
-    <string name="basal_arguments_6"><![CDATA[EventualBG >110 e hiperglicemia → ajuste por fator]]></string>
+    <string name="table_plugin_request_title">Solicitação</string>
+    <string name="table_plugin_smb_prediction_title">Previsão de SMB</string>
+    <string name="table_plugin_adjusted_factors_title">Fatores Ajustados</string>
+    <string name="table_plugin_limits_title">Limites e Condições</string>
 
-    <string name="table_plugin_hours_activity_1">Refeição calma &amp; horário → basal x1.5.\n</string>
-    <string name="table_plugin_hours_activity_2">Atividade matinal → basal em 0.\n</string>
-    <string name="table_plugin_hours_activity_3">Subida matinal → basal do perfil.\n</string>
+    <string name="table_plugin_limits_1">IOB Máx.</string>
+    <string name="table_plugin_limits_2">IOB</string>
+    <string name="table_plugin_limits_3">IOB2</string>
+    <string name="table_plugin_limits_4">SMB Máx.</string>
+    <string name="table_plugin_limits_5">Segurança</string>
+    <string name="table_plugin_limits_6">Atendido</string>
+    <string name="table_plugin_limits_7">Tempo de Pico do Perfil</string>
+    <string name="table_plugin_limits_8">Atividade Atual</string>
+    <string name="table_plugin_limits_9">Após Ajuste de IOB</string>
+    <string name="table_plugin_limits_10">Proporção de Atividade</string>
+    <string name="table_plugin_limits_11">Tempo de Pico Final após coerceIn</string>
+    <string name="table_plugin_limits_12">DIA Ajustado (h)</string>
+    <string name="table_plugin_limits_13">Idade da Bomba (dias)</string>
+    <string name="table_plugin_limits_14">Basal Zero Acumulada (min)</string>
 
-    <string name="table_plugin_meal_snack_1"><![CDATA[Refeição/lanche 30 min → basal x10.\n]]></string>
-    <string name="table_plugin_meal_snack_2">Refeição/lanche 30–60 min &amp; em subida → Δ basal.\n</string>
+    <string name="table_plugin_glucose_title">Dados de Glicose</string>
+    <string name="table_plugin_glucose_1">Glicose Atual</string>
+    <string name="table_plugin_glucose_2">Glicose Prevista</string>
+    <string name="table_plugin_glucose_3">Alvo de Glicose</string>
+    <string name="table_plugin_glucose_4">Previsão</string>
+    <string name="table_plugin_glucose_5">Glicose Eventual</string>
+    <string name="table_plugin_glucose_6">Delta</string>
+    <string name="table_plugin_glucose_7">Delta Combinado</string>
+    <string name="table_plugin_glucose_8">Δ Curto</string>
+    <string name="table_plugin_glucose_9">Δ Longo</string>
+    <string name="table_plugin_glucose_10">Inclinação da Máx. Desv.</string>
+    <string name="table_plugin_glucose_11">Inclinação da Mín. Desv.</string>
+    <string name="table_plugin_glucose_12">Aceleração da Glicose</string>
 
-    <string name="table_plugin_hyperglycemia_1">EventualBG &gt;180 &amp; hiperglicemia → ajuste basal AIMI.\n</string>
-    <string name="table_plugin_hyperglycemia_2">BG &gt;180 estável → ajuste basal por fator.\n</string>
+    <string name="table_plugin_tir_title">Dados TIR</string>
+    <string name="table_plugin_tir_1">TIR Baixo</string>
+    <string name="table_plugin_tir_2">TIR na Faixa</string>
+    <string name="table_plugin_tir_3">TIR Alto</string>
+    <string name="table_plugin_tir_4">Últ. Hora TIR Baixo</string>
+    <string name="table_plugin_tir_5">Últ. Hora TIR &gt;120</string>
 
-    <string name="early_meal_tbr_forced">Refeição precoce detectada → TBR forçada para %1$1.2fU/h x30 (sobrescrever).\n</string>
+    <string name="table_plugin_steps_title">Dados de Passos</string>
+    <string name="table_plugin_steps_1">Passos (5 min)</string>
+    <string name="table_plugin_steps_2">Passos (30 min)</string>
+    <string name="table_plugin_steps_3">Passos (60 min)</string>
+    <string name="table_plugin_steps_4">Passos (180 min)</string>
 
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION SAFETY ADJUSTMENTS - FILE DetermineBasalAIMI2.kt -->
+    <string name="table_plugin_heart_title">Dados de Frequência Cardíaca</string>
+    <string name="table_plugin_heart_1">FC (5 min)</string>
+    <string name="table_plugin_heart_2">FC (60 min)</string>
 
-    <string name="safety_adjustments_1">Queda acentuada de glicose (%1$.1f mg/dL/h), forte redução do bolus;</string>
-    <string name="safety_adjustments_2">Subida rápida detectada (delta %1$.1f mg/dL), modo de emergência aplicado</string>
-    <string name="safety_adjustments_3">Delta combinado muito baixo (%1$.1f), redução x0.6;</string>
-    <string name="safety_adjustments_4">Delta combinado moderado (%1$.1f), redução x0.8;</string>
-    <string name="safety_adjustments_5">Delta combinado muito alto (%1$.1f), sem redução;</string>
-    <string name="safety_adjustments_6"><![CDATA[Glicose estável >180 e Delta Combinado <2 => redução x0.8;]]></string>
-    <string name="safety_adjustments_7">IOB alto (%1$.2f U), redução x0.8;</string>
-    <string name="safety_adjustments_8">TDD/h alto (%1$.2f U/h), redução x0.8;</string>
-    <string name="safety_adjustments_9">TIR alto (%1$.0f%%), redução x0.5;</string>
-    <string name="safety_adjustments_10">Glicose prevista (%1$.0f) próxima do alvo (%2$.0f), redução x0.5;</string>
-    <string name="safety_adjustments_11">Duração de basal zero (%1$d min) excedida, forçando basal mínima;</string>
+    <string name="table_plugin_manual_modes_title">Modos</string>
+    <string name="table_plugin_manual_modes_active">Ativo</string>
+    <string name="table_plugin_manual_modes_inactive">Inativo</string>
+    <string name="table_plugin_manual_modes_na">N/D</string>
+    <string name="table_plugin_manual_modes_1">Tempo de Exclusão</string>
+    <string name="table_plugin_manual_modes_2">Data</string>
+    <string name="table_plugin_manual_modes_3">Sono</string>
+    <string name="table_plugin_manual_modes_4">Esporte</string>
+    <string name="table_plugin_manual_modes_5">Lanche</string>
+    <string name="table_plugin_manual_modes_6">Baixo Carboidrato</string>
+    <string name="table_plugin_manual_modes_7">Alto Carboidrato</string>
+    <string name="table_plugin_manual_modes_8">Refeição</string>
+    <string name="table_plugin_manual_modes_9">Café da Manhã</string>
+    <string name="table_plugin_manual_modes_10">Almoço</string>
+    <string name="table_plugin_manual_modes_11">Jantar</string>
+    <string name="table_plugin_manual_modes_12">Jejum</string>
+    <string name="table_plugin_manual_modes_13">Calibração</string>
 
-    <string name="meal_mode_suffix">(modo refeição)</string>
-    <string name="early_autodrive_suffix">(autodrive precoce)</string>
+    <string name="table_plugin_autodrive_title">Autodrive</string>
+    <string name="table_plugin_autodrive_state">Estado</string>
+    <string name="table_plugin_autodrive_prebolus_snack">Pré-bólus Lanche</string>
+    <string name="table_plugin_autodrive_prebolus_meal">Pré-bólus Refeição</string>
+    <string name="table_plugin_autodrive_prebolus_tbr">TBR 30 min Refeição</string>
+    <string name="table_plugin_autodrive_conditions_title">Condições de Pré-bólus</string>
+    <string name="table_plugin_autodrive_combined_delta_min">Delta Combinado Mínimo</string>
+    <string name="table_plugin_autodrive_acceleration_min">Aceleração Mínima</string>
+    <string name="table_plugin_autodrive_min_deviation">Desvio Mínimo</string>
+    <string name="table_plugin_autodrive_target_bg">Alvo de Glicose</string>
+    <string name="table_plugin_autodrive_min_bg">Glicose Mínima</string>
 
-    <string name="safety_adjustments_12">→ bypass de segurança: taxa = %2$.2f U/h\n</string>
-    <string name="safety_adjustments_13">→ limitado ao basal seguro máx. %1$s U/h (solicitado: %2$s U/h)\n</string>
-    <string name="safety_adjustments_14">%1$s restante &amp; %2$s ~ solicitado %3$s U/h: sem basal temporário.\n</string>
+    <string name="table_plugin_miscellaneous_title">Diversos</string>
+    <string name="table_plugin_miscellaneous_1">Último SMB</string>
+    <string name="table_plugin_miscellaneous_2">Hora</string>
+    <string name="table_plugin_miscellaneous_3">Fim de Semana</string>
+    <string name="table_plugin_miscellaneous_4">tags 0–60 min</string>
+    <string name="table_plugin_miscellaneous_5">tags 60–120 min</string>
+    <string name="table_plugin_miscellaneous_6">tags 120–180 min</string>
+    <string name="table_plugin_miscellaneous_7">tags 180–240 min</string>
+    <string name="table_plugin_miscellaneous_8">mais agressivo</string>
+    <string name="table_plugin_miscellaneous_9">menos agressivo</string>
+    <string name="table_plugin_miscellaneous_10">muito agressivo</string>
+    <string name="table_plugin_miscellaneous_11">tratamento de hipo</string>
+    <string name="table_plugin_miscellaneous_12">normal</string>
 
-    <string name="safety_cut"><![CDATA[Corte de segurança: glicose prevista <100 ou IOB >%1$.2f → basal temp. 0.\n]]></string>
+    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION MEAL DETECTION - FILE DetermineBasalAIMI2.kt -->
 
-    <string name="safety_adjustments_15">Sem SMB durante lua de mel</string>
-    <string name="safety_adjustments_16">SMB em fase de lua de mel</string>
-    <string name="safety_adjustments_17">Delta negativo</string>
-    <string name="safety_adjustments_18">Sem SMB</string>
-    <string name="safety_adjustments_19">Jejum</string>
-    <string name="safety_adjustments_20">Abaixo do limite mínimo</string>
-    <string name="safety_adjustments_21">Nova calibração</string>
-    <string name="safety_adjustments_22">Abaixo do alvo e em queda</string>
-    <string name="safety_adjustments_23">Abaixo do alvo e estável, mas sem COB</string>
-    <string name="safety_adjustments_24">Queda rápida</string>
-    <string name="safety_adjustments_25">Queda rápida com glicose alta</string>
-    <string name="safety_adjustments_26">Queda muito rápida</string>
-    <string name="safety_adjustments_27">Previsão</string>
-    <string name="safety_adjustments_28">Intervalo</string>
-    <string name="safety_adjustments_29">Intervalo-alvo</string>
-    <string name="safety_adjustments_30">Acelerando para baixo</string>
-    <string name="safety_adjustments_31">Desacelerando para baixo</string>
-    <string name="safety_adjustments_32">Sem SMB (lua de mel)</string>
-    <string name="safety_adjustments_33">Glicose abaixo de 90</string>
-    <string name="no_conditions_met">Nenhuma condição atendida</string>
+    <string name="table_plugin_autodrive_1">Detecção precoce de refeição/lanche Autodrive: Microbolus de %1$.1fU, Delta Combinado: %2$.1f, Previsto: %3$.1f, Aceleração: %4$.1f.</string>
 
-    <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION AIMI MODEL HANDLER - FILE AimiModelHandler.kt -->
+    <string name="table_plugin_autodrive_2">→ Microbolus em Modo Autodrive %1$.1fU\n  • Alvo de Glicose: %2$.1f\n  • Inclinação da mínima desvio: %3$.3f\n  • Aceleração da glicose: %4$.2f\n</string>
+
+    <string name="table_plugin_mealmodes_prebolus_1">Microbolus no Modo Refeição: %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_2">Microbolus 1/2 no Modo Café da Manhã %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_3">Microbolus 2/2 no Modo Café da Manhã %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_4">Microbolus 1/2 no Modo Almoço %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_5">Microbolus 2/2 no Modo Almoço %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_6">Microbolus 1/2 no Modo Jantar %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_7">Microbolus 2/2 no Modo Jantar %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_8">Microbolus no Modo Alto Carboidrato %1$.1fU.</string>
+    <string name="table_plugin_mealmodes_prebolus_9">Microbolus no Modo Lanche %1$.1fU.</string>
+
+
+
 
     <string name="folder_documents">Documentos</string>
 
