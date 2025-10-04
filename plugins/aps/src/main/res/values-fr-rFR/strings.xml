@@ -269,7 +269,7 @@
     <string name="Enable_basal_title">Activer Basal</string>
     <string name="Enable_basal_summary">Cette option activera le basal du profil lorsque BG > 80 et delta non négatif.</string>
     <string name="oaps_aimi_enableDeleteLine_title">Activer la possibilité de supprimer un jour dans l’entraînement ML</string>
-    <string name="countsteps_watch_title">Activer le comptage des pas depuis la montre</string>
+    <string name="countsteps_watch_title">Step counting watch (if disable, use phone)</string>
     <string name="countsteps_watch_summary">Cette option active le comptage des pas en recevant les données de la montre plutôt que du téléphone.</string>
     <string name="oaps_aimi_weight_summary">Poids en kg pour calculer la basale</string>
     <string name="oaps_aimi_weight_title">Poids en kg</string>
@@ -278,7 +278,8 @@
     <string name="oaps_aimi_cho_summary">Moyenne de glucides par repas. Valeur estimée, non précise</string>
     <string name="oaps_aimi_cho_title">Quantité moyenne de glucides déjeuner/dîner</string>
     <string name="aimi_preferences">Paramètres AIMI</string>
-    <string name="user_preferences">Profil utilisateur</string>
+    <string name="user_preferences">Preferences user</string>
+    <string name="user_modes_preferences_title_menu">Preferences user - Modes</string>
     <string name="reactivity_preferences"><![CDATA[Glycémie < 120]]></string>
     <string name="high_BG_preferences">Glycémie > 120</string>
     <string name="training_ml_modes_preferences">Mode manuel</string>
@@ -358,7 +359,7 @@
     <string name="oaps_aimi_BF_interval_title">Intervalle SMB Mode Petit Déjeuner</string>
     <string name="oaps_aimi_logsize_summary">Nombre de lignes du tableau d\'analyse AIMI dans les onglets plugin et Loop</string>
     <string name="oaps_aimi_logsize_title">Nombre de lignes du tableau AIMI plugin/Loop</string>
-    <string name="Enable_xdripOM_title">Support capteur xDrip 1 minute</string>
+    <string name="Enable_xdripOM_title">Libre3 1-minute readings</string>
     <string name="oaps_aimi_enableMlautoDrive_title">Activer Auto Drive – détection automatique des repas – EXPÉRIMENTAL</string>
     <string name="autodrive_prebolus_variables">Limites et conditions Pré-bolus</string>
     <string name="autodrive_prebolus_title_menu">Autodrive – Pré-bolus – Paramètres</string>
@@ -408,7 +409,7 @@
     <string name="autodrive_max_basal_title">Basale fixe 30 min si repas détecté (U/h)</string>
     <string name="autodrive_max_basal_summary">Lorsqu\'un repas est détecté tôt, AIMI exécute une basale fixe pendant 30 minutes. Saisir la valeur horaire de cette basale (ex. 4 unités délivreront 2 unités en 30 minutes)</string>
 
-    <string name="user_preferences_title_menu">Profil utilisateur AIMI - Paramètres</string>
+    <string name="user_preferences_title_menu">Preferences user AIMI</string>
     <string name="aimi_preferences_title_menu">Paramètres AAPS</string>
     <string name="autodrive_preferences_title_menu">Autodrive - Repas auto - Paramètres</string>
     <string name="manual_modes_preferences_title_menu">Repas / Activité manuelle - Paramètres</string>
@@ -646,7 +647,7 @@
     <string name="safety_adjustments_27">Prediction</string>
     <string name="safety_adjustments_28">Interval</string>
     <string name="safety_adjustments_29">Target interval</string>
-    <string name="safety_adjustments_30">Accelerating down</string>
+    <string name="safety_adjustments_30">Accel. down</string>
     <string name="safety_adjustments_31">Decelerating down</string>
     <string name="safety_adjustments_32">No SMB honeymoon</string>
     <string name="safety_adjustments_33">BG below 90</string>
@@ -713,6 +714,7 @@
     <string name="bg_insufficient_fallback_force_exact">⚠️ Données BG insuffisantes, mais le mode repas est forcé.\n</string>
     <string name="bg_insufficient_fallback">⚠️ Données BG insuffisantes ou invalides → fallback\n</string>
     <string name="temp_basal_info">Pose temp à %1$s U/h pour %2$d minutes\n</string>
+    <string name="force_exact_meal_override">Mode repas manuel : basal forcé %1$s U/h pendant %2$d minutes.\n</string>
     <string name="lgs_override">🛑 Arrêt Glycémie Basse (LGS) override → TBR 0U/h\n</string>
     <string name="bypass_safety">→ contournement sécurité%1$s\n</string>
     <string name="meal_mode"> (mode repas)</string>
@@ -759,7 +761,7 @@
     <string name="condition_droppingveryfast">BG chute très rapide</string>
     <string name="condition_prediction">prédiction BG</string>
     <string name="condition_bg90">BG&lt;90</string>
-    <string name="condition_acceleratingdown">BG accélération en baisse</string>
+    <string name="condition_acceleratingdown">BG accél. en baisse</string>
     <string name="no_conditions_met_2">Aucune condition remplie</string>
     <string name="safety_condition">Condition de sécurité %1$s : %2$s</string>
     <string name="interval_delta_1">Intervalle : 1 (delta > 15)</string>
@@ -793,21 +795,21 @@
     <string name="reason_sensor_lag">  • SensorLag > Historique ➝ x0.85\n</string>
     <string name="reason_sensor_lag_lower">  • SensorLag &lt; Historique ➝ x1.2\n</string>
     <string name="reason_max_iob">Ajustements : MaxIob %.2f U </string>
-    <string name="reason_autodrive_early_meal">Détection précoce repas/collation Autodrive : Microbolus %.2fU, Delta combiné: %.2f, Prévu: %.2f, Accélération: %.2f.</string>
-    <string name="manual_meal_prebolus">Prébolus Mode manuel Repas générique %1$.2fU.</string>
+    <string name="reason_autodrive_early_meal">Détection précoce repas/collation Autodrive : Microbolus %.2fU, Delta combiné: %.2f, Prévu: %.2f, Accél.: %.2f.</string>
+    <string name="manual_meal_prebolus">&#160;Prébolus Mode manuel Repas générique %1$.2fU.</string>
     <string name="autodrive_meal_prebolus">→ Microbolus mode Autodrive %1$.2fU</string>
-    <string name="target_bg">  • BG cible : %1$.0f</string>
-    <string name="slope_from_min_deviation">  • Pente depuis la déviation minimale : %1$.2f</string>
-    <string name="bg_acceleration">&#160;• Accélération de la glycémie : %1$s</string>
-    <string name="reason_prebolus_bfast1"> Prébolus 1/2 Mode manuel Petit&#8211;déjeuner %.2fU.</string>
-    <string name="reason_prebolus_bfast2"> Prébolus 2/2 Mode manuel Petit&#8211;déjeuner %.2fU. </string>
-    <string name="reason_prebolus_lunch1"> Prébolus 1/2 Mode manuel Déjeuner %.2fU.</string>
-    <string name="reason_prebolus_lunch2"> Prébolus 2/2 Mode manuel Déjeuner %.2fU.</string>
-    <string name="reason_prebolus_dinner1"> Prébolus 1/2 Mode manuel Dîner %.2fU.</string>
-    <string name="reason_prebolus_dinner2"> Prébolus 2/2 Mode manuel Dîner %.2fU.</string>
-    <string name="reason_prebolus_highcarb"> Prébolus Mode manuel High Carb %.2fU.</string>
-    <string name="reason_prebolus_snack"> Prébolus Mode manuel Collation %.2fU.</string>
-    <string name="reason_maxsmb">&#160;| MaxSMB %.1f U \n</string>
+    <string name="target_bg">&#160;• BG cible : %1$.0f</string>
+    <string name="slope_from_min_deviation">&#160;• Pente depuis la déviation minimale : %1$.2f</string>
+    <string name="bg_acceleration">&#160;• Accél. de la glycémie : %1$s</string>
+    <string name="reason_prebolus_bfast1">&#160;Prébolus 1/2 Mode manuel Petit&#8211;déjeuner %.2fU.</string>
+    <string name="reason_prebolus_bfast2">&#160;Prébolus 2/2 Mode manuel Petit&#8211;déjeuner %.2fU. </string>
+    <string name="reason_prebolus_lunch1">&#160;Prébolus 1/2 Mode manuel Déjeuner %.2fU.</string>
+    <string name="reason_prebolus_lunch2">&#160;Prébolus 2/2 Mode manuel Déjeuner %.2fU.</string>
+    <string name="reason_prebolus_dinner1">&#160;Prébolus 1/2 Mode manuel Dîner %.2fU.</string>
+    <string name="reason_prebolus_dinner2">&#160;Prébolus 2/2 Mode manuel Dîner %.2fU.</string>
+    <string name="reason_prebolus_highcarb">&#160;Prébolus Mode manuel High Carb %.2fU.</string>
+    <string name="reason_prebolus_snack">&#160;Prébolus Mode manuel Collation %.2fU.</string>
+    <string name="reason_maxsmb">&#160;| MaxSMB %.1f U&#160;\n</string>
     <string name="reason_cgm_calibrating">Capteur en cours d’étalonnage, en état ??? ou bruit des valeurs élevé</string>
     <string name="reason_bg_data_old">Si l’heure système %1$d est correcte, alors les données de BG sont trop anciennes. La dernière donnée BG a été lue il y a %2$.0f minutes à %3$d</string>
     <string name="reason_cgm_flat">Erreur : les valeurs du capteur n’ont pas changé depuis ~45 minutes</string>
@@ -845,7 +847,7 @@
     <string name="autodrive_status">🚗 Autodrive: %1$s |&#160;Mode collation / pré-bolus: %2$s | </string>
     <string name="autodrive_condition">&#160;Autodrive Conditions: %1$s</string>
     <string name="reason_bg_trend">🔍 BGTrend: %.2f | ΔCombiné: %.2f | </string>
-    <string name="reason_predicted_bg">&#160;BG prévu: %.0f | Accélération: %.2f | </string>
+    <string name="reason_predicted_bg">&#160;BG prévu: %.0f | Accél.: %.2f | </string>
     <string name="reason_slope_min_dev">&#160;Pente Min Dev.: %.2f</string>
     <string name="console_profile_sens">Profil de sensibilité: %.0f, sens: %.0f, CSF: %.0f</string>
     <string name="console_limiting_carb_impact">Limitation impact glucides de %.0f à %.0f mg/dL/5m ( %d g/h )</string>
@@ -865,6 +867,7 @@
     <string name="meal_mode_dinner">dîner(%1$dm)</string>
     <string name="meal_mode_highcarb">repas riche en glucides(%1$dm)</string>
     <string name="meal_mode_first_30">Mode repas manuel 0&#8211;30m [%1$s] → basal forcée à %2$.2f U/h (override).\n</string>
+    <string name="manual_basal_override">Basale forcée → %1$.2f U/h (%2$dmin). Mode repas manuel %3$s\n</string>
     <string name="reason_early_meal">Repas précoce détecté → TBR forcée à %1$.2fU/h x30 (override).\n</string>
     <string name="safety_cut_tbr">Sécurité : BG prévu&lt;100 ou IOB>%1$.2f → basale à 0.\n</string>
     <string name="bg_below_80">BG&lt;80 → taux basal à 0.\n</string>

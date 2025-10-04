@@ -859,7 +859,8 @@ fun appendCompactLog(
         // 3) CAS FORCE EXACT (ignorer clamps/trends/cycle, sauf LGS)
         if (forceExact) {
             val rate = _rate.coerceAtLeast(0.0)
-            rT.reason.append("FORCE-EXACT → ${"%.2f".format(rate)} U/h (${duration}m). isMealMode=${isMealMode}\n")
+          //rT.reason.append("FORCE-EXACT → ${"%.2f".format(rate)} U/h (${duration}m). isMealMode=${isMealMode}\n")
+            rT.reason.append( context.getString(R.string.manual_basal_override,rate,duration,if (isMealMode)  "✔" else "✘"))
             rT.duration = duration
             rT.rate = rate
             return rT
