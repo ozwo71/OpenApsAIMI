@@ -793,20 +793,22 @@
     <string name="rate_adjusted_bg_trend">→ taxa ajustada com base na tendência da glicose\n</string>
     <string name="temp_basal_pose">Basal temporária %1$s U/h por %2$d minutos\n</string>
 
-    <string name="no_bg_history">✘ Sem histórico recente de glicose disponível.\n</string>
-    <string name="bg_trend_analysis">→ Análise da Tendência da Glicose\n</string>
-    <string name="first_bg_value">  • Primeira glicose: %1$.1f mg/dL\n</string>
-    <string name="last_bg_value">  • Última glicose: %1$.1f mg/dL\n</string>
-    <string name="number_of_values">  • Número de valores: %1$d\n</string>
-    <string name="calculated_trend">  • Tendência calculada: %1$.1f mg/dL/intervalo\n</string>
 
-    <string name="original_file_missing">O arquivo original não existe.</string>
-    <string name="file_too_short">O arquivo contém 200 linhas ou menos, nenhuma exclusão realizada.</string>
-    <string name="last_200_deleted">As últimas 200 linhas foram excluídas. O arquivo original foi salvo como &#39;%1$s&#39;.</string>
-    <string name="reason_data_removed">Os valores para a data %1$s foram excluídos porque o TIR1DAYIR é menor que 85%%%.</string>
-    <string name="reason_deletion_time_restricted">A exclusão só pode ser executada entre 00:05 e 00:10.</string>
-    <string name="reason_no_deletion_needed">Nenhuma exclusão necessária: tir1DAYIR é maior ou igual a 85%.</string>
 
+    <string name="safety_sport_smb_zero">🏃‍♂️ Segurança esporte → SMB=0</string>
+    <string name="adjustments_smb">🎛️ Ajustes: %1$.2f → %2$.2f U</string>
+    <string name="finalization_smb">🧩 Finalização: %1$.2f → %2$.2f U</string>
+    <string name="limits_smb">🧱 Limites: %1$.2f → %2$.2f U</string>
+    <string name="no_recent_bg">⚠️ Sem BG recente — configurações padrão mantidas</string>
+
+    <string name="autodrive_debug_header">→ Depuração do Autodrive\n</string>
+    <string name="autodrive_bg_trend">  • Tendência da Glicose: %1$.2f\n</string>
+    <string name="autodrive_predicted_bg">  • Glicose Prevista: %1$.2f\n</string>
+    <string name="autodrive_combined_delta">  • Delta Combinado: %1$.2f\n</string>
+    <string name="autodrive_required_delta">  • Delta Combinado Necessário: %1$.2f\n</string>
+    <string name="autodrive_disabled_trend">  ✘ Autodrive Desativado: glicose em queda\n</string>
+    <string name="autodrive_enabled_conditions">  ✔ Autodrive Ativado: condições favoráveis\n</string>
+    <string name="autodrive_disabled_conditions">  ✘ Autodrive Desativado: condições insuficientes\n</string>
 
     <string name="condition_hypoguard">proteção contra hipoglicemia</string>
     <string name="condition_nosmbhm">sem SMB no modo “lua de mel”</string>
