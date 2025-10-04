@@ -800,6 +800,9 @@
     <string name="number_of_values">  • Número de valores: %1$d\n</string>
     <string name="calculated_trend">  • Tendência calculada: %1$.1f mg/dL/intervalo\n</string>
 
+    <string name="original_file_missing">O arquivo original não existe.</string>
+    <string name="file_too_short">O arquivo contém 200 linhas ou menos, nenhuma exclusão realizada.</string>
+    <string name="last_200_deleted">As últimas 200 linhas foram excluídas. O arquivo original foi salvo como &#39;%1$s&#39;.</string>
 
 
     <string name="safety_sport_smb_zero">🏃‍♂️ Segurança esporte → SMB=0</string>
