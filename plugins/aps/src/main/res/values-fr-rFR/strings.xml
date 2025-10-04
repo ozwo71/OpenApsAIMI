@@ -867,6 +867,7 @@
     <string name="meal_mode_dinner">dîner(%1$dm)</string>
     <string name="meal_mode_highcarb">repas riche en glucides(%1$dm)</string>
     <string name="meal_mode_first_30">Mode repas manuel 0&#8211;30m [%1$s] → basal forcée à %2$.2f U/h (override).\n</string>
+    <string name="manual_basal_override">Basale forcée → %1$.2f U/h (%2$dmin). Mode repas manuel %3$s\n</string>
     <string name="reason_early_meal">Repas précoce détecté → TBR forcée à %1$.2fU/h x30 (override).\n</string>
     <string name="safety_cut_tbr">Sécurité : BG prévu&lt;100 ou IOB>%1$.2f → basale à 0.\n</string>
     <string name="bg_below_80">BG&lt;80 → taux basal à 0.\n</string>
