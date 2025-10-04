@@ -793,6 +793,13 @@
     <string name="rate_adjusted_bg_trend">→ taxa ajustada com base na tendência da glicose\n</string>
     <string name="temp_basal_pose">Basal temporária %1$s U/h por %2$d minutos\n</string>
 
+    <string name="no_bg_history">✘ Sem histórico recente de glicose disponível.\n</string>
+    <string name="bg_trend_analysis">→ Análise da Tendência da Glicose\n</string>
+    <string name="first_bg_value">  • Primeira glicose: %1$.1f mg/dL\n</string>
+    <string name="last_bg_value">  • Última glicose: %1$.1f mg/dL\n</string>
+    <string name="number_of_values">  • Número de valores: %1$d\n</string>
+    <string name="calculated_trend">  • Tendência calculada: %1$.1f mg/dL/intervalo\n</string>
+
 
 
     <string name="safety_sport_smb_zero">🏃‍♂️ Segurança esporte → SMB=0</string>
