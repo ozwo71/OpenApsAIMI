@@ -269,7 +269,7 @@
     <string name="Enable_basal_title">Basaal inschakelen</string>
     <string name="Enable_basal_summary">Deze optie schakelt basaal uit het profiel in wanneer BG hoger is dan 80 en de delta niet negatief is.</string>
     <string name="oaps_aimi_enableDeleteLine_title">Activeer de mogelijkheid om een dag in ML Training te verwijderen</string>
-    <string name="countsteps_watch_title">Stappentelling van horloge inschakelen</string>
+    <string name="countsteps_watch_title">Step counting watch (if disable, use phone)</string>
     <string name="countsteps_watch_summary">Deze optie schakelt stappentelling in door gegevens van het horloge te ontvangen in plaats van de telefoon.</string>
     <string name="oaps_aimi_weight_summary">Gewicht in kg om basaal te berekenen</string>
     <string name="oaps_aimi_weight_title">Gewicht in kg</string>
@@ -278,7 +278,8 @@
     <string name="oaps_aimi_cho_summary">Gemiddelde koolhydraten per maaltijd. Geschatte waarde, niet exact</string>
     <string name="oaps_aimi_cho_title">Gemiddelde hoeveelheid koolhydraten lunch/diner</string>
     <string name="aimi_preferences">AIMI Instellingen</string>
-    <string name="user_preferences">Gebruikersprofiel</string>
+    <string name="user_preferences">Preferences user</string>
+    <string name="user_modes_preferences_title_menu">Preferences user - Modes</string>
     <string name="reactivity_preferences"><![CDATA[BG < 120]]></string>
     <string name="high_BG_preferences">BG > 120</string>
     <string name="training_ml_modes_preferences">Handmatige modus</string>
@@ -357,7 +358,7 @@
     <string name="oaps_aimi_BF_interval_title">SMB Interval Ontbijtmodus</string>
     <string name="oaps_aimi_logsize_summary">Aantal AIMI-analysetabelregels in plug-in en Loop-tabbladen</string>
     <string name="oaps_aimi_logsize_title">Aantal AIMI-plug-in/Loop-tabelregels</string>
-    <string name="Enable_xdripOM_title">xDrip 1-minuut sensorondersteuning</string>
+    <string name="Enable_xdripOM_title">Libre3 1-minute readings</string>
     <string name="oaps_aimi_enableMlautoDrive_title">Schakel Auto Drive in – automatische maaltijddetectie – EXPERIMENTEEL</string>
     <string name="autodrive_prebolus_variables">Prebolus limieten en voorwaarden</string>
     <string name="autodrive_prebolus_title_menu">Autodrive – Prebolus Instellingen</string>
@@ -408,7 +409,7 @@
     <string name="autodrive_max_basal_title">Vast basaal 30 min indien maaltijd gedetecteerd (E/u)</string>
     <string name="autodrive_max_basal_summary">Wanneer een vroege maaltijd wordt gedetecteerd, voert AIMI gedurende 30 minuten een vast basaal uit. Voer de uurwaarde van dit basaal in (bijv. 4 eenheden levert 2 eenheden in 30 minuten)</string>
 
-    <string name="user_preferences_title_menu">AIMI Gebruikersprofiel - Instellingen</string>
+    <string name="user_preferences_title_menu">Preferences user AIMI</string>
     <string name="aimi_preferences_title_menu">AAPS Instellingen</string>
     <string name="autodrive_preferences_title_menu">Autodrive - Auto Maaltijd - Instellingen</string>
     <string name="manual_modes_preferences_title_menu">Handmatige Maaltijd / Activiteit - Instellingen</string>
@@ -711,6 +712,7 @@
     <string name="bg_insufficient_fallback_force_exact">⚠️ Onvoldoende glucosegegevens, maar maaltijdmodus wordt geforceerd.\n</string>
     <string name="bg_insufficient_fallback">⚠️ BG-gegevens onvoldoende of ongeldig → terugval\n</string>
     <string name="temp_basal_info">Tijdelijk basaal %1$s E/u voor %2$d minuten\n</string>
+    <string name="force_exact_meal_override">Manuele maaltijd modus: geforceerde basaal %1$s U/h voor %2$d minuten.\n</string>
     <string name="lgs_override">🛑 Lage Glucose Suspend (LGS) overschrijven → TBR 0E/u\n</string>
     <string name="bypass_safety">→ veiligheidsoverbrugging%1$s\n</string>
     <string name="meal_mode"> (maaltijdmodus)</string>
@@ -793,20 +795,20 @@
     <string name="reason_sensor_lag_lower">  • Sensorvertraging &lt; Historisch ➝ x1.2\n</string>
     <string name="reason_max_iob">Aanpassingen: MaxIob %.2f E </string>
     <string name="reason_autodrive_early_meal">Autodrive vroege maaltijd/snack detectie: Microbolus van %.2fE, GecombineerdeDelta: %.2f, Voorspeld: %.2f, Versnelling: %.2f.\n</string>
-    <string name="manual_meal_prebolus">Microbolus Maaltijdmodus %1$.2fE.</string>
+    <string name="manual_meal_prebolus">&#160;Microbolus Maaltijdmodus %1$.2fE.</string>
     <string name="autodrive_meal_prebolus">→ Microbolus Autodrive Modus %1$.2fE</string>
-    <string name="target_bg">  • Doel BG: %1$.0f</string>
-    <string name="slope_from_min_deviation">  • Helling van min. afwijking: %1$.2f</string>
+    <string name="target_bg">&#160;• Doel BG: %1$.0f</string>
+    <string name="slope_from_min_deviation">&#160;• Helling van min. afwijking: %1$.2f</string>
     <string name="bg_acceleration">&#160;• BG versnelling: %1$s</string>
-    <string name="reason_prebolus_bfast1"> Microbolus 1/2 Ontbijtmodus %.2fE.</string>
-    <string name="reason_prebolus_bfast2"> Microbolus 2/2 Ontbijtmodus %.2fE.</string>
-    <string name="reason_prebolus_lunch1"> Microbolus 1/2 Lunchmodus %.2fE.</string>
-    <string name="reason_prebolus_lunch2"> Microbolus 2/2 Lunchmodus %.2fE.</string>
-    <string name="reason_prebolus_dinner1"> Microbolus 1/2 Dinermodus %.2fE.</string>
-    <string name="reason_prebolus_dinner2"> Microbolus 2/2 Dinermodus %.2fE.</string>
-    <string name="reason_prebolus_highcarb"> Microbolus Hoge Koolhydraten Modus %.2fE.</string>
-    <string name="reason_prebolus_snack"> Microbolus Snackmodus %.2fE.</string>
-    <string name="reason_maxsmb">&#160;| MaxSMB %.1f E \n</string>
+    <string name="reason_prebolus_bfast1">&#160;Microbolus 1/2 Ontbijtmodus %.2fE.</string>
+    <string name="reason_prebolus_bfast2">&#160;Microbolus 2/2 Ontbijtmodus %.2fE.</string>
+    <string name="reason_prebolus_lunch1">&#160;Microbolus 1/2 Lunchmodus %.2fE.</string>
+    <string name="reason_prebolus_lunch2">&#160;Microbolus 2/2 Lunchmodus %.2fE.</string>
+    <string name="reason_prebolus_dinner1">&#160;Microbolus 1/2 Dinermodus %.2fE.</string>
+    <string name="reason_prebolus_dinner2">&#160;Microbolus 2/2 Dinermodus %.2fE.</string>
+    <string name="reason_prebolus_highcarb">&#160;Microbolus Hoge Koolhydraten Modus %.2fE.</string>
+    <string name="reason_prebolus_snack">&#160;Microbolus Snackmodus %.2fE.</string>
+    <string name="reason_maxsmb">&#160;| MaxSMB %.1f E&#160;\n</string>
     <string name="reason_cgm_calibrating">CGM is aan het kalibreren, in ??? status, of ruis is hoog</string>
     <string name="reason_bg_data_old">Als de huidige systeemtijd %1$d correct is, zijn de BG-gegevens te oud. De laatste BG-gegevens zijn %2$.0f minuten geleden gelezen om %3$d</string>
     <string name="reason_cgm_flat">Fout: CGM-gegevens zijn de laatste ~45m ongewijzigd</string>
@@ -864,6 +866,7 @@
     <string name="meal_mode_dinner">avondeten(%1$dm)</string>
     <string name="meal_mode_highcarb">veel-koolhydraten(%1$dm)</string>
     <string name="meal_mode_first_30">Manual modes meal 0&#8211;30m [%1$s] → forced basal at %2$.2f U/h (override).\n</string>
+    <string name="manual_basal_override">Forced basal → %1$.2f U/h (%2$dmin). Manual meal mode %3$s\n</string>
     <string name="reason_early_meal">Vroege maaltijd gedetecteerd → TBR geforceerd naar %1$.2fE/u x30 (overschrijven).\n</string>
     <string name="safety_cut_tbr">Veiligheidsstop: voorspelde BG&lt;100 of IOB>%1$.2f → basaal naar 0.\n</string>
     <string name="bg_below_80">BG&lt;80 → basaal naar 0.\n</string>
