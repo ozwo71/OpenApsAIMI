@@ -780,25 +780,25 @@
     <string name="smb_enabled_always">SMB ativado por enableSMB_always</string>
     <string name="smb_enabled_for_cob">SMB ativado por COB de %1$.1f</string>
     <string name="smb_enabled_after_carb_entry">SMB ativado por 6h após inserção de carboidratos</string>
-    <string name="smb_enabled_for_temp_target">SMB ativado por alvo temporário de %1$s</string>
+    <string name="smb_enabled_for_temp_target" formatted="false">SMB ativado por alvo temporário de %1$s</string>
     <string name="smb_disabled_no_pref_or_condition">SMB desativado (sem preferências enableSMB ativas ou sem condição atendida)</string>
 
-    <string name="lgs_triggered">🛑 LGS: BG=%1$s ≤ %2$s → TBR 0 U/h (30 min)\n</string>
+    <string name="lgs_triggered" formatted="false">🛑 LGS: BG=%1$s ≤ %2$s → TBR 0 U/h (30 min)\n</string>
     <string name="bg_insufficient_fallback">⚠️ Dados de glicose insuficientes ou inválidos → fallback\n</string>
-    <string name="temp_basal_info">Basal temporária %1$s U/h por %2$d minutos\n</string>
+    <string name="temp_basal_info" formatted="false">Basal temporária %1$s U/h por %2$d minutos\n</string>
     <string name="lgs_override">🛑 Low Glucose Suspend (LGS) override → TBR 0 U/h\n</string>
     <string name="bypass_safety">→ bypass de segurança%1$s\n</string>
     <string name="meal_mode"> (modo refeição)</string>
     <string name="early_autodrive"> (autodrive precoce)</string>
     <string name="rate_adjusted_bg_trend">→ taxa ajustada com base na tendência da glicose\n</string>
-    <string name="temp_basal_pose">Basal temporária %1$s U/h por %2$d minutos\n</string>
+    <string name="temp_basal_pose" formatted="false">Basal temporária %1$s U/h por %2$d minutos\n</string>
 
     <string name="no_bg_history">✘ Sem histórico recente de glicose disponível.\n</string>
     <string name="bg_trend_analysis">→ Análise da Tendência da Glicose\n</string>
-    <string name="first_bg_value">  • Primeira glicose: %1$.1f mg/dL\n</string>
-    <string name="last_bg_value">  • Última glicose: %1$.1f mg/dL\n</string>
-    <string name="number_of_values">  • Número de valores: %1$d\n</string>
-    <string name="calculated_trend">  • Tendência calculada: %1$.1f mg/dL/intervalo\n</string>
+    <string name="first_bg_value" formatted="false">  • Primeira glicose: %1$.1f mg/dL\n</string>
+    <string name="last_bg_value" formatted="false">  • Última glicose: %1$.1f mg/dL\n</string>
+    <string name="number_of_values" formatted="false">  • Número de valores: %1$d\n</string>
+    <string name="calculated_trend" formatted="false">  • Tendência calculada: %1$.1f mg/dL/intervalo\n</string>
 
     <string name="original_file_missing">O arquivo original não existe.</string>
     <string name="file_too_short">O arquivo contém 200 linhas ou menos, nenhuma exclusão realizada.</string>
@@ -808,9 +808,9 @@
     <string name="reason_no_deletion_needed" formatted="false">Nenhuma exclusão necessária: tir1DAYIR é maior ou igual a 85%.</string>
 
     <string name="safety_sport_smb_zero">🏃‍♂️ Segurança esporte → SMB=0</string>
-    <string name="adjustments_smb">🎛️ Ajustes: %1$.2f → %2$.2f U</string>
-    <string name="finalization_smb">🧩 Finalização: %1$.2f → %2$.2f U</string>
-    <string name="limits_smb">🧱 Limites: %1$.2f → %2$.2f U</string>
+    <string name="adjustments_smb" formatted="false">🎛️ Ajustes: %1$.2f → %2$.2f U</string>
+    <string name="finalization_smb" formatted="false">🧩 Finalização: %1$.2f → %2$.2f U</string>
+    <string name="limits_smb" formatted="false">🧱 Limites: %1$.2f → %2$.2f U</string>
     <string name="no_recent_bg">⚠️ Sem BG recente — configurações padrão mantidas</string>
 
     <string name="autodrive_debug_header">→ Depuração do Autodrive\n</string>
