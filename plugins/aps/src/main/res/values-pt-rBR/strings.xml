@@ -727,17 +727,17 @@
 
     <string name="folder_documents">Documentos</string>
 
-    <string name="uam_model_status"> 📦 Modelo UAM: %1$s (%2$s, %3$s)</string>
-    <string name="sanitize_info"> 🧹 Sanitização: %1$d valores incompletos → 0</string>
-    <string name="cache_hit"> ⚡ Cache HIT → %1$s U</string>
+    <string name="uam_model_status" formatted="false"> 📦 Modelo UAM: %1$s (%2$s, %3$s)</string>
+    <string name="sanitize_info" formatted="false"> 🧹 Sanitização: %1$d valores incompletos → 0</string>
+    <string name="cache_hit" formatted="false"> ⚡ Cache HIT → %1$s U</string>
     <string name="cache_hit_invalid"> ⚠️ Cache HIT inválido (NaN/Inf), recalculando…</string>
     <string name="uam_unavailable"> ❌ Modelo UAM indisponível → SMB=0</string>
-    <string name="tflite_failed"> 💥 Falha na execução do TFLite: %1$s → SMB=0</string>
-    <string name="uam_executed"> ✔ UAM executado → %1$s U</string>
-    <string name="uam_invalid"> ⚠️ Resultado inválido (raw=%1$f) → SMB=0</string>
-    <string name="model_missing"> ❌ Arquivo de modelo não encontrado: %1$s</string>
-    <string name="model_loaded"> 📦 Modelo carregado ✓ : %1$s (%2$s KB)</string>
-    <string name="model_load_failed"> ❌ Falha ao carregar o modelo: %1$s</string>
+    <string name="tflite_failed" formatted="false"> 💥 Falha na execução do TFLite: %1$s → SMB=0</string>
+    <string name="uam_executed" formatted="false"> ✔ UAM executado → %1$s U</string>
+    <string name="uam_invalid" formatted="false"> ⚠️ Resultado inválido (raw=%1$f) → SMB=0</string>
+    <string name="model_missing" formatted="false"> ❌ Arquivo de modelo não encontrado: %1$s</string>
+    <string name="model_loaded" formatted="false"> 📦 Modelo carregado ✓ : %1$s (%2$s KB)</string>
+    <string name="model_load_failed" formatted="false"> ❌ Falha ao carregar o modelo: %1$s</string>
 
     <string name="log_interpreter_closed">Interpretador fechado</string>
     <string name="log_smb_cache_cleared">Cache de SMB limpo</string>
@@ -749,19 +749,19 @@
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - FILE DeterminebasalAIMI.kt -->
 
-    <string name="bg_drop_high">Queda acentuada da glicose (%1$.1f mg/dL/h), forte redução;</string>
-    <string name="bg_rapid_rise">Subida rápida detectada (delta %1$.0f mg/dL), aplicando modo de emergência; </string>
-    <string name="bg_combined_delta_weak">Delta combinado muito fraco (%1$.2f), redução x0.6; </string>
-    <string name="bg_combined_delta_moderate">Delta combinado moderado (%1$.2f), redução x0.8; </string>
-    <string name="bg_combined_delta_high">Delta combinado alto (%1$.2f), multiplicador dinâmico aplicado; </string>
+    <string name="bg_drop_high" formatted="false">Queda acentuada da glicose (%1$.1f mg/dL/h), forte redução;</string>
+    <string name="bg_rapid_rise" formatted="false">Subida rápida detectada (delta %1$.0f mg/dL), aplicando modo de emergência; </string>
+    <string name="bg_combined_delta_weak" formatted="false">Delta combinado muito fraco (%1$.2f), redução x0.6; </string>
+    <string name="bg_combined_delta_moderate" formatted="false">Delta combinado moderado (%1$.2f), redução x0.8; </string>
+    <string name="bg_combined_delta_high" formatted="false">Delta combinado alto (%1$.2f), multiplicador dinâmico aplicado; </string>
     <string name="bg_stable_high_delta_low">Glicose estável &gt;160 &amp; Delta combinado&lt;1, redução x0.8; </string>
-    <string name="iob_high_reduction">IOB alto (%1$.2f U), redução x0.85; </string>
-    <string name="tdd_per_hour_high">TDD/h alto (%1$.2f U/h), redução x0.8; </string>
+    <string name="iob_high_reduction" formatted="false">IOB alto (%1$.2f U), redução x0.85; </string>
+    <string name="tdd_per_hour_high" formatted="false">TDD/h alto (%1$.2f U/h), redução x0.8; </string>
     <string name="tir_high" formatted="false">TIR alto (%1$.1f%%), redução x0.5;</string>
-    <string name="bg_near_target">Glicose prevista (%1$.1f) próxima do alvo (%2$.1f), redução x0.5; </string>
-    <string name="zero_basal_forced">Duração de basal zero (%1$d min) excedida, forçando basal mínima; </string>
+    <string name="bg_near_target" formatted="false">Glicose prevista (%1$.1f) próxima do alvo (%2$.1f), redução x0.5; </string>
+    <string name="zero_basal_forced" formatted="false">Duração de basal zero (%1$d min) excedida, forçando basal mínima; </string>
 
-    <string name="dia_base_info">DIA base: %1$f h = %2$f min\n</string>
+    <string name="dia_base_info" formatted="false">DIA base: %1$f h = %2$f min\n</string>
     <string name="morning_adjustment" formatted="false">Ajuste matinal (6&#8211;10h): DIA reduzido em 20%</string>
     <string name="night_adjustment" formatted="false">Ajuste noturno (22&#8211;23h &amp; 0&#8211;5h): DIA aumentado em 20%</string>
     <string name="physical_activity_detected" formatted="false">Atividade física detectada: DIA reduzido em 30%</string>
@@ -771,14 +771,14 @@
     <string name="final_dia_constrained" formatted="false">DIA final limitado a [180, 720] min: %1$.0f min</string>
     <string name="dia_calculation_details">Detalhes do Cálculo do DIA:</string>
 
-    <string name="peak_time">  → 🕒 PeakTime=%1$s min | BG=%2$s Δ%3$s</string>
-    <string name="steps">&#160;| Passos=%1$d</string>
-    <string name="heart_rate">&#160;| FC=%1$s bpm</string>
+    <string name="peak_time" formatted="false">  → 🕒 PeakTime=%1$s min | BG=%2$s Δ%3$s</string>
+    <string name="steps" formatted="false">&#160;| Passos=%1$d</string>
+    <string name="heart_rate" formatted="false">&#160;| FC=%1$s bpm</string>
 
     <string name="smb_disabled">SMB desativado (!microBolusAllowed)</string>
-    <string name="smb_disabled_high_target">SMB desativado devido a alvo temporário alto de %1$.0f</string>
+    <string name="smb_disabled_high_target" formatted="false">SMB desativado devido a alvo temporário alto de %1$.0f</string>
     <string name="smb_enabled_always">SMB ativado por enableSMB_always</string>
-    <string name="smb_enabled_for_cob">SMB ativado por COB de %1$.1f</string>
+    <string name="smb_enabled_for_cob" formatted="false">SMB ativado por COB de %1$.1f</string>
     <string name="smb_enabled_after_carb_entry">SMB ativado por 6h após inserção de carboidratos</string>
     <string name="smb_enabled_for_temp_target" formatted="false">SMB ativado por alvo temporário de %1$s</string>
     <string name="smb_disabled_no_pref_or_condition">SMB desativado (sem preferências enableSMB ativas ou sem condição atendida)</string>
@@ -787,7 +787,7 @@
     <string name="bg_insufficient_fallback">⚠️ Dados de glicose insuficientes ou inválidos → fallback\n</string>
     <string name="temp_basal_info" formatted="false">Basal temporária %1$s U/h por %2$d minutos\n</string>
     <string name="lgs_override">🛑 Low Glucose Suspend (LGS) override → TBR 0 U/h\n</string>
-    <string name="bypass_safety">→ bypass de segurança%1$s\n</string>
+    <string name="bypass_safety" formatted="false">→ bypass de segurança%1$s\n</string>
     <string name="meal_mode"> (modo refeição)</string>
     <string name="early_autodrive"> (autodrive precoce)</string>
     <string name="rate_adjusted_bg_trend">→ taxa ajustada com base na tendência da glicose\n</string>
@@ -802,7 +802,7 @@
 
     <string name="original_file_missing">O arquivo original não existe.</string>
     <string name="file_too_short">O arquivo contém 200 linhas ou menos, nenhuma exclusão realizada.</string>
-    <string name="last_200_deleted">As últimas 200 linhas foram excluídas. O arquivo original foi salvo como &#39;%1$s&#39;.</string>
+    <string name="last_200_deleted" formatted="false">As últimas 200 linhas foram excluídas. O arquivo original foi salvo como &#39;%1$s&#39;.</string>
     <string name="reason_data_removed" formatted="false">Os valores para a data %1$s foram excluídos porque o TIR1DAYIR é menor que 85%%.</string>
     <string name="reason_deletion_time_restricted">A exclusão só pode ser executada entre 00:05 e 00:10.</string>
     <string name="reason_no_deletion_needed" formatted="false">Nenhuma exclusão necessária: tir1DAYIR é maior ou igual a 85%.</string>
@@ -814,10 +814,10 @@
     <string name="no_recent_bg">⚠️ Sem BG recente — configurações padrão mantidas</string>
 
     <string name="autodrive_debug_header">→ Depuração do Autodrive\n</string>
-    <string name="autodrive_bg_trend">  • Tendência da Glicose: %1$.2f\n</string>
-    <string name="autodrive_predicted_bg">  • Glicose Prevista: %1$.2f\n</string>
-    <string name="autodrive_combined_delta">  • Delta Combinado: %1$.2f\n</string>
-    <string name="autodrive_required_delta">  • Delta Combinado Necessário: %1$.2f\n</string>
+    <string name="autodrive_bg_trend" formatted="false">  • Tendência da Glicose: %1$.2f\n</string>
+    <string name="autodrive_predicted_bg" formatted="false">  • Glicose Prevista: %1$.2f\n</string>
+    <string name="autodrive_combined_delta" formatted="false">  • Delta Combinado: %1$.2f\n</string>
+    <string name="autodrive_required_delta" formatted="false">  • Delta Combinado Necessário: %1$.2f\n</string>
     <string name="autodrive_disabled_trend">  ✘ Autodrive Desativado: glicose em queda\n</string>
     <string name="autodrive_enabled_conditions">  ✔ Autodrive Ativado: condições favoráveis\n</string>
     <string name="autodrive_disabled_conditions">  ✘ Autodrive Desativado: condições insuficientes\n</string>
@@ -840,21 +840,21 @@
     <string name="condition_acceleratingdown">BG acelerando para baixo</string>
     <string name="no_conditions_met_2">Nenhuma condição atendida</string>
 
-    <string name="safety_condition">Condição de segurança %1$s : %2$s</string>
+    <string name="safety_condition" formatted="false">Condição de segurança %1$s : %2$s</string>
     <string name="interval_delta_1">Intervalo : 1 (delta &gt; 15)</string>
-    <string name="interval_value">Intervalo : %1$d</string>
+    <string name="interval_value" formatted="false">Intervalo : %1$d</string>
 
-    <string name="csv_file_path">Caminho do arquivo CSV: %1$s</string>
+    <string name="csv_file_path" formatted="false">Caminho do arquivo CSV: %1$s</string>
     <string name="csv_file_empty">Arquivo CSV está vazio.</string>
     <string name="csv_missing_columns">Arquivo CSV sem colunas obrigatórias.</string>
     <string name="insufficient_data_training">Dados insuficientes para treinamento.</string>
     <string name="retraining_final_model">Treinamento do modelo final com hiperparâmetros ótimos em todos os dados&#8230;</string>
 
-    <string name="iteration_smb">→ Iteração %1$d | SMB=%2$.2f → %3$.2f | Δ=%4$.2f | Limite=%5$.2f</string>
+    <string name="iteration_smb" formatted="false">→ Iteração %1$d | SMB=%2$.2f → %3$.2f | Δ=%4$.2f | Limite=%5$.2f</string>
     <string name="predicted_smb_higher">Modelo preditivo sugere SMB maior, ajuste confirmado</string>
-    <string name="console_future_bg">BG futura: %1$s, Queda projetada: %2$s, Efeito da insulina: %3$s, Impacto do COB: %4$.0f, Carboidratos necessários: %5$d</string>
-    <string name="insulin_effect">Efeito da insulina: %1$.2f</string>
-    <string name="predicted_bg">Glicose prevista: %1$.2f</string>
+    <string name="console_future_bg" formatted="false">BG futura: %1$s, Queda projetada: %2$s, Efeito da insulina: %3$s, Impacto do COB: %4$.0f, Carboidratos necessários: %5$d</string>
+    <string name="insulin_effect" formatted="false">Efeito da insulina: %1$.2f</string>
+    <string name="predicted_bg" formatted="false">Glicose prevista: %1$.2f</string>
 
     <string name="bg_note_more_aggressive">mais agressivo</string>
     <string name="bg_note_less_aggressive">menos agressivo</string>
@@ -863,40 +863,40 @@
     <string name="bg_note_normal">normal</string>
 
     <string name="calc_dynamic_peaktime">🧠 Cálculo do PeakTime Dinâmico\n</string>
-    <string name="profile_peak_time">  • Pico do perfil: %1$.0f\n</string>
-    <string name="bg_delta">  • BG: %1$.0f, Delta: %2$.2f\n</string>
-    <string name="reason_hyper_correction">  • Fator de hiperglicemia: %1$.2f\n</string>
-    <string name="reason_iob_adjustment">  • Ajuste por IOB: +%1$.2f\n</string>
-    <string name="reason_activity_ratio">  • Proporção de atividade: %1$.2f ➝ fator %2$.2f\n</string>
-    <string name="reason_steps_adjustment">  • Passos (%1$d) ➝ +%2$.2f\n</string>
-    <string name="reason_few_steps">  • Poucos passos (%1$d) ➝ x0.9\n</string>
-    <string name="reason_high_hr">  • FC alta (%1$d) ➝ x1.15\n</string>
-    <string name="reason_low_hr"> • FC baixa (%1$d) ➝ x0.85\n</string>
+    <string name="profile_peak_time" formatted="false">• Pico do perfil: %1$.0f\n</string>
+    <string name="bg_delta" formatted="false">  • BG: %1$.0f, Delta: %2$.2f\n</string>
+    <string name="reason_hyper_correction" formatted="false">  • Fator de hiperglicemia: %1$.2f\n</string>
+    <string name="reason_iob_adjustment" formatted="false">  • Ajuste por IOB: +%1$.2f\n</string>
+    <string name="reason_activity_ratio" formatted="false">  • Proporção de atividade: %1$.2f ➝ fator %2$.2f\n</string>
+    <string name="reason_steps_adjustment" formatted="false">  • Passos (%1$d) ➝ +%2$.2f\n</string>
+    <string name="reason_few_steps" formatted="false">  • Poucos passos (%1$d) ➝ x0.9\n</string>
+    <string name="reason_high_hr" formatted="false">  • FC alta (%1$d) ➝ x1.15\n</string>
+    <string name="reason_low_hr" formatted="false"> • FC baixa (%1$d) ➝ x0.85\n</string>
     <string name="reason_high_activity">  • Atividade intensa ➝ x1.2\n</string>
     <string name="reason_total_rest">  • Repouso total ➝ x0.75\n</string>
     <string name="reason_sensor_lag">  • SensorLag &gt; Histórico ➝ x0.85\n</string>
     <string name="reason_sensor_lag_lower">  • SensorLag &lt; Histórico ➝ x1.2\n</string>
 
     <string name="reason_max_iob">Ajustes : MaxIob %.2f U </string>
-    <string name="reason_autodrive_early_meal">Detecção precoce de refeição/lanche Autodrive: Microbolus %.2fU, DeltaCombinado: %.2f, Previsto: %.2f, Aceleração: %.2f.\n</string>
-    <string name="manual_meal_prebolus">Microbolus no Modo Refeição %1$.2fU.</string>
-    <string name="autodrive_meal_prebolus">→ Microbolus em Modo Autodrive %1$.2fU</string>
-    <string name="target_bg">  • Alvo de glicose: %1$.0f</string>
-    <string name="slope_from_min_deviation">  • Inclinação da mínima desvio: %1$.2f</string>
-    <string name="bg_acceleration">&#160;• Aceleração da glicose: %1$s</string>
+    <string name="reason_autodrive_early_meal" formatted="false">Detecção precoce de refeição/lanche Autodrive: Microbolus %.2fU, DeltaCombinado: %.2f, Previsto: %.2f, Aceleração: %.2f.\n</string>
+    <string name="manual_meal_prebolus" formatted="false">>Microbolus no Modo Refeição %1$.2fU.</string>
+    <string name="autodrive_meal_prebolus" formatted="false">→ Microbolus em Modo Autodrive %1$.2fU</string>
+    <string name="target_bg" formatted="false">  • Alvo de glicose: %1$.0f</string>
+    <string name="slope_from_min_deviation" formatted="false">  • Inclinação da mínima desvio: %1$.2f</string>
+    <string name="bg_acceleration" formatted="false">&#160;• Aceleração da glicose: %1$s</string>
 
-    <string name="reason_prebolus_bfast1"> Microbolus 1/2 no Modo Café da Manhã %.2fU.</string>
-    <string name="reason_prebolus_bfast2"> Microbolus 2/2 no Modo Café da Manhã %.2fU. </string>
-    <string name="reason_prebolus_lunch1"> Microbolus 1/2 no Modo Almoço %.2fU.</string>
-    <string name="reason_prebolus_lunch2"> Microbolus 2/2 no Modo Almoço %.2fU.</string>
-    <string name="reason_prebolus_dinner1"> Microbolus 1/2 no Modo Jantar %.2fU.</string>
-    <string name="reason_prebolus_dinner2"> Microbolus 2/2 no Modo Jantar %.2fU.</string>
-    <string name="reason_prebolus_highcarb"> Microbolus no Modo Alto Carboidrato %.2fU.</string>
-    <string name="reason_prebolus_snack"> Microbolus no Modo Lanche %.2fU.</string>
+    <string name="reason_prebolus_bfast1" formatted="false"> Microbolus 1/2 no Modo Café da Manhã %.2fU.</string>
+    <string name="reason_prebolus_bfast2" formatted="false"> Microbolus 2/2 no Modo Café da Manhã %.2fU. </string>
+    <string name="reason_prebolus_lunch1" formatted="false"> Microbolus 1/2 no Modo Almoço %.2fU.</string>
+    <string name="reason_prebolus_lunch2" formatted="false"> Microbolus 2/2 no Modo Almoço %.2fU.</string>
+    <string name="reason_prebolus_dinner1" formatted="false"> Microbolus 1/2 no Modo Jantar %.2fU.</string>
+    <string name="reason_prebolus_dinner2" formatted="false"> Microbolus 2/2 no Modo Jantar %.2fU.</string>
+    <string name="reason_prebolus_highcarb" formatted="false"> Microbolus no Modo Alto Carboidrato %.2fU.</string>
+    <string name="reason_prebolus_snack" formatted="false"> Microbolus no Modo Lanche %.2fU.</string>
 
-    <string name="reason_maxsmb">&#160;| MaxSMB %.1f U \n</string>
+    <string name="reason_maxsmb" formatted="false">&#160;| MaxSMB %.1f U \n</string>
     <string name="reason_cgm_calibrating">CGM calibrando, em estado ???, ou ruído elevado</string>
-    <string name="reason_bg_data_old">Se a hora atual do sistema %1$d estiver correta, então os dados de BG estão muito antigos. O último BG foi lido há %2$.0f minutos em %3$d</string>
+    <string name="reason_bg_data_old" formatted="false">Se a hora atual do sistema %1$d estiver correta, então os dados de BG estão muito antigos. O último BG foi lido há %2$.0f minutos em %3$d</string>
     <string name="reason_cgm_flat">Erro: dados do CGM inalterados nos últimos ~45 min</string>
 
     <string name="cycle_day" formatted="false">♀️ Dia %d/28 • </string>
@@ -910,29 +910,29 @@
     <string name="basal_fmt" formatted="false">Basal×%.2f</string>
     <string name="wcycle_invalid_day">♀️ WCycle: dia inválido</string>
 
-    <string name="sensitivity_ratio_temp_target">Relação de sensibilidade definida para %.2f com base no alvo temporário de %.0f;</string>
-    <string name="autosens_ratio_log">Relação Autosens: %.2f;</string>
-    <string name="console_adjust_basal">Ajustando basal de %.2f para %.2f; </string>
-    <string name="console_basal_unchanged">Basal inalterada: %.2f; </string>
+    <string name="sensitivity_ratio_temp_target" formatted="false">Relação de sensibilidade definida para %.2f com base no alvo temporário de %.0f;</string>
+    <string name="autosens_ratio_log" formatted="false">Relação Autosens: %.2f;</string>
+    <string name="console_adjust_basal" formatted="false">Ajustando basal de %.2f para %.2f; </string>
+    <string name="console_basal_unchanged" formatted="false">Basal inalterada: %.2f; </string>
     <string name="console_temp_target_set">Alvo temporário definido, sem ajuste com autosens</string>
-    <string name="console_target_bg_unchanged">target_bg inalterado: %.2f; </string>
-    <string name="console_target_bg_changed">target_bg de %.2f para %.2f; </string>
-    <string name="console_min_bg_adjusted">Ajustando alvos para BG alta: min_bg de %.2f para %.2f; </string>
-    <string name="console_min_bg_unchanged">min_bg inalterado: %.2f; </string>
-    <string name="console_target_bg_adjusted">target_bg de %.2f para %.2f; </string>
-    <string name="console_max_bg_adjusted">max_bg de %.2f para %.2f</string>
-    <string name="console_max_bg_unchanged">max_bg inalterado: %.2f</string>
+    <string name="console_target_bg_unchanged" formatted="false">target_bg inalterado: %.2f; </string>
+    <string name="console_target_bg_changed" formatted="false">target_bg de %.2f para %.2f; </string>
+    <string name="console_min_bg_adjusted" formatted="false">Ajustando alvos para BG alta: min_bg de %.2f para %.2f; </string>
+    <string name="console_min_bg_unchanged" formatted="false">min_bg inalterado: %.2f; </string>
+    <string name="console_target_bg_adjusted" formatted="false">target_bg de %.2f para %.2f; </string>
+    <string name="console_max_bg_adjusted" formatted="false">max_bg de %.2f para %.2f</string>
+    <string name="console_max_bg_unchanged" formatted="false">max_bg inalterado: %.2f</string>
 
-    <string name="reason_hypo_guard">🛑 Proteção contra hipo + margem de segurança: minBG=%1$s ≤ Limite=%2$s (BG=%3$s, prevista=%4$s, eventual=%5$s) → SMB=0</string>
-    <string name="reason_ai_file">🧠 Arquivo de I.A.: %1$s Previsão : %2$s U</string>
-    <string name="reason_boost_hyper">⚡ Aumento por hiperglicemia: x1.7 (BG=%1$d, Δ=%2$.1f)</string>
-    <string name="reason_boost_hyper_2">⚡ Aumento por hiperglicemia: x1.5 (BG=%1$d, Δ=%2$.1f)</string>
+    <string name="reason_hypo_guard" formatted="false">🛑 Proteção contra hipo + margem de segurança: minBG=%1$s ≤ Limite=%2$s (BG=%3$s, prevista=%4$s, eventual=%5$s) → SMB=0</string>
+    <string name="reason_ai_file" formatted="false">🧠 Arquivo de I.A.: %1$s Previsão : %2$s U</string>
+    <string name="reason_boost_hyper" formatted="false">⚡ Aumento por hiperglicemia: x1.7 (BG=%1$d, Δ=%2$.1f)</string>
+    <string name="reason_boost_hyper_2" formatted="false">⚡ Aumento por hiperglicemia: x1.5 (BG=%1$d, Δ=%2$.1f)</string>
     <string name="reason_ml_training">🗃️ Treinamento de ML: conjunto de dados insuficiente, sem refinamento\n</string>
 
-    <string name="console_dia_adjusted">DIA Ajustado (em minutos) : %.0f</string>
-    <string name="console_mpc_log">Módulo MPC: dose=%.2f, Kp=%.3f, corr=%.2f, out=%.2f</string>
+    <string name="console_dia_adjusted" formatted="false">DIA Ajustado (em minutos) : %.0f</string>
+    <string name="console_mpc_log" formatted="false">Módulo MPC: dose=%.2f, Kp=%.3f, corr=%.2f, out=%.2f</string>
     <string name="reason_mpc_pi" formatted="false">🎛️ Modelo preditivo MPC: %.2f U (%.0f%%) | Modelo fisiológico PI: %.2f U (%.0f%%)</string>
-    <string name="smb_final">✅ SMB final: %1$s U</string>
+    <string name="smb_final" formatted="false">✅ SMB final: %1$s U</string>
 
     <string name="reason_dia_reattivity" formatted="false">📈 DIA: %1$.1f min | REACT◁120 Manhã: %2$.1f%% | Tarde: %3$.1f%% | Noite: %4$.1f%%</string>
     <string name="autodrive_status" formatted="false">🚗 Autodrive: %1$s |&#160;Modo lanche/pré-bólus: %2$s | </string>
@@ -941,29 +941,29 @@
     <string name="reason_predicted_bg" formatted="false">&#160;Glicose prevista: %.0f | Aceleração: %.2f | </string>
     <string name="reason_slope_min_dev" formatted="false">&#160;Inclinação Min Dev.: %.2f</string>
 
-    <string name="console_profile_sens">Perfil de sensibilidade: %.0f, sens: %.0f, CSF: %.0f</string>
-    <string name="console_limiting_carb_impact">Limitando impacto dos carbs de %.0f para %.0f mg/dL/5m ( %d g/h )</string>
-    <string name="console_carb_impact">Impacto dos carbs: %.0f mg/dL por 5m; Duração do CI: %.1f h; CI restante (~pico 2h): %.1f mg/dL por 5m</string>
-    <string name="reason_additional_carbs">%d carbs adicionais necessários em %d min;</string>
+    <string name="console_profile_sens" formatted="false">Perfil de sensibilidade: %.0f, sens: %.0f, CSF: %.0f</string>
+    <string name="console_limiting_carb_impact" formatted="false">Limitando impacto dos carbs de %.0f para %.0f mg/dL/5m ( %d g/h )</string>
+    <string name="console_carb_impact" formatted="false">Impacto dos carbs: %.0f mg/dL por 5m; Duração do CI: %.1f h; CI restante (~pico 2h): %.1f mg/dL por 5m</string>
+    <string name="reason_additional_carbs" formatted="false">%d carbs adicionais necessários em %d min;</string>
 
-    <string name="reason_eventual_bg">BG eventual %1$s &gt;= %2$s, </string>
-    <string name="reason_iob_max">IOB %.2f &gt; maxIOB %.2f</string>
-    <string name="reason_bg_dropping">, BG em queda (delta %1$.0f), ajustando basal para 0.</string>
-    <string name="reason_set_temp_basal">; definindo a basal atual de %1$.2f como temporária.</string>
-    <string name="reason_insulin_required"> insulina necessária %1$.2f</string>
-    <string name="reason_max_smb">; maxBolus %1$.2f</string>
-    <string name="reason_microbolus">Microbolus %1$.2fU.</string>
-    <string name="reason_wait_microbolus">Aguardando %1$.0fmin %2$.0fs para microbolusar novamente.</string>
+    <string name="reason_eventual_bg" formatted="false">BG eventual %1$s &gt;= %2$s, </string>
+    <string name="reason_iob_max" formatted="false">IOB %.2f &gt; maxIOB %.2f</string>
+    <string name="reason_bg_dropping" formatted="false">, BG em queda (delta %1$.0f), ajustando basal para 0.</string>
+    <string name="reason_set_temp_basal" formatted="false">; definindo a basal atual de %1$.2f como temporária.</string>
+    <string name="reason_insulin_required" formatted="false"> insulina necessária %1$.2f</string>
+    <string name="reason_max_smb" formatted="false">; maxBolus %1$.2f</string>
+    <string name="reason_microbolus" formatted="false">Microbolus %1$.2fU.</string>
+    <string name="reason_wait_microbolus" formatted="false">Aguardando %1$.0fmin %2$.0fs para microbolusar novamente.</string>
 
-    <string name="meal_mode_meal">refeição genérica(%1$dm)</string>
-    <string name="meal_mode_bfast">café da manhã(%1$dm)</string>
-    <string name="meal_mode_lunch">almoço(%1$dm)</string>
-    <string name="meal_mode_dinner">jantar(%1$dm)</string>
-    <string name="meal_mode_highcarb">alto carboidrato(%1$dm)</string>
+    <string name="meal_mode_meal" formatted="false">refeição genérica(%1$dm)</string>
+    <string name="meal_mode_bfast" formatted="false">café da manhã(%1$dm)</string>
+    <string name="meal_mode_lunch" formatted="false">almoço(%1$dm)</string>
+    <string name="meal_mode_dinner" formatted="false">jantar(%1$dm)</string>
+    <string name="meal_mode_highcarb" formatted="false">alto carboidrato(%1$dm)</string>
 
-    <string name="meal_mode_first_30">Modos manuais refeição 0&#8211;30m [%1$s] → basal forçada em %2$.2f U/h (override).\n</string>
-    <string name="reason_early_meal">Refeição precoce detectada → TBR forçada para %1$.2fU/h x30 (override).\n</string>
-    <string name="safety_cut_tbr">Corte de segurança: glicose prevista&lt;100 ou IOB&gt;%1$.2f → basal para 0.\n</string>
+    <string name="meal_mode_first_30" formatted="false">Modos manuais refeição 0&#8211;30m [%1$s] → basal forçada em %2$.2f U/h (override).\n</string>
+    <string name="reason_early_meal" formatted="false">Refeição precoce detectada → TBR forçada para %1$.2fU/h x30 (override).\n</string>
+    <string name="safety_cut_tbr" formatted="false">Corte de segurança: glicose prevista&lt;100 ou IOB&gt;%1$.2f → basal para 0.\n</string>
     <string name="bg_below_80">BG&lt;80 → basal para 0.\n</string>
     <string name="bg_80_90_fall">BG 80&#8211;90 &amp; queda livre → basal para 0.\n</string>
     <string name="bg_80_90_stable">BG 80&#8211;90 estável → basal x0.2.\n</string>
