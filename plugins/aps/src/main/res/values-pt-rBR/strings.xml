@@ -961,9 +961,11 @@
     <string name="meal_mode_dinner" formatted="false">jantar(%1$dm)</string>
     <string name="meal_mode_highcarb" formatted="false">alto carboidrato(%1$dm)</string>
 
-    <string name="meal_mode_first_30" formatted="false">Modos manuais refeição 0&#8211;30m [%1$s] → basal forçada em %2$.2f U/h (override).\n</string>
-    <string name="reason_early_meal" formatted="false">Refeição precoce detectada → TBR forçada para %1$.2fU/h x30 (override).\n</string>
-    <string name="safety_cut_tbr" formatted="false">Corte de segurança: glicose prevista&lt;100 ou IOB&gt;%1$.2f → basal para 0.\n</string>
+    <string name="meal_mode_first_30">Modos manuais refeição 0&#8211;30m [%1$s] → basal forçada em %2$.2f U/h (override).\n</string>
+    <string name="manual_basal_override">Basal forçada → %1$.2f U/h (%2$dmin). Modos manuais refeição %3$s\n</string>
+
+    <string name="reason_early_meal">Refeição precoce detectada → TBR forçada para %1$.2fU/h x30 (override).\n</string>
+    <string name="safety_cut_tbr">Corte de segurança: glicose prevista&lt;100 ou IOB&gt;%1$.2f → basal para 0.\n</string>
     <string name="bg_below_80">BG&lt;80 → basal para 0.\n</string>
     <string name="bg_80_90_fall">BG 80&#8211;90 &amp; queda livre → basal para 0.\n</string>
     <string name="bg_80_90_stable">BG 80&#8211;90 estável → basal x0.2.\n</string>
