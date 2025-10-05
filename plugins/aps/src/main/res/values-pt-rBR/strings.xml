@@ -108,7 +108,7 @@
     <string name="loop_smb_request_time_label">Hora de solicitação SMB</string>
     <string name="loop_smb_execution_time_label">Hora de execução do SMB</string>
     <string name="loop_smb_set_by_pump_label">SMB definido pela bomba</string>
-    <string name="loop_open_mode_min_change">Pedido de mudança mínima [%]</string>
+    <string name="loop_open_mode_min_change">Pedido de mudança mínima [%%]</string>
     <string name="loop_open_mode_min_change_summary" formatted="false">O Loop aberto irá apresentar uma nova solicitação de alteração apenas se a mudança for maior do que este valor em %. O valor padrão é 20%</string>
     <!-- Autotune -->
     <string name="autotune_shortname">AT</string>
@@ -234,7 +234,7 @@
     <string name="openapsaimi_maxsmb_summary">Valor máximo de SMB quando a glicose estiver abaixo de 120</string>
     <string name="openapsaimi_maxsmb_title">SMB Máx. Glicose Baixa</string>
     <string name="description_openapsaimi">Microbolus baseados em Inteligência Artificial e Aprendizado de Máquina.</string>
-    <string name="oaps_aimi_evening_factor_summary">% de reatividade do plugin entre 18h e meia-noite</string>
+    <string name="oaps_aimi_evening_factor_summary">%% de reatividade do plugin entre 18h e meia-noite</string>
     <string name="oaps_aimi_evening_factor_title">Reatividade Noturna 18h&#8211;24h</string>
     <string name="oaps_aimi_afternoon_factor_title">Reatividade à Tarde 12h&#8211;18h</string>
     <string name="oaps_aimi_morning_factor_title">Reatividade pela Manhã 00h&#8211;11h</string>
@@ -243,7 +243,7 @@
     <string name="oaps_aimi_hyper_factor_summary"><![CDATA[Reatividade quando a glicose > 120]]></string>
     <string name="oaps_aimi_hyper_factor_title"><![CDATA[Reatividade glicose > 120; para crianças glicose > 180]]></string>
     <string name="DynISFAdjusthyper_summary"><![CDATA[Aumentar este valor acelera o envio de SMB quando a glicose > 120]]></string>
-    <string name="DynISFAdjusthyper_title"><![CDATA[Fator de ajuste DynISF % glicose > 120]]></string>
+    <string name="DynISFAdjusthyper_title"><![CDATA[Fator de ajuste DynISF %% glicose > 120]]></string>
     <string name="prebolus_meal_mode_summary">Se você definir uma nota na página de ações com a palavra "meal", receberá este valor uma única vez como pré-bólus.</string>
     <string name="prebolus_meal_mode_title">Pré-bólus</string>
     <string name="prebolus_highcarb_mode_title">Pré-bólus</string>
@@ -281,13 +281,13 @@
     <string name="autodrive_preferences">Autodrive</string>
     <string name="AAPS_SMB_Settings">DynamicISF, SMB e Sensibilidade à Insulina</string>
     <string name="oaps_aimi_enableMlTraining_title">Ativar Treinamento de IA</string>
-    <string name="OApsAIMI_MealFactor_summary">% de insulina necessária pela IA para o Modo Refeição</string>
+    <string name="OApsAIMI_MealFactor_summary">%% de insulina necessária pela IA para o Modo Refeição</string>
     <string name="OApsAIMI_MealFactor_title">Reatividade</string>
     <string name="oaps_aimi_meal_interval_summary">Intervalo entre SMB para o Modo Refeição Genérico</string>
     <string name="oaps_aimi_meal_interval_title">Intervalo de SMB do Modo Refeição Genérico</string>
     <string name="oaps_aimi_highcarbAdjFact_summary">Fator de ajuste DynISF para o Modo Alto Carboidrato</string>
     <string name="oaps_aimi_highcarbAdjFact_title">Fator DynISF do Modo Alto Carboidrato</string>
-    <string name="OApsAIMI_HC_Factor_summary">% de insulina necessária pela IA para o Modo Alto Carboidrato</string>
+    <string name="OApsAIMI_HC_Factor_summary">%% de insulina necessária pela IA para o Modo Alto Carboidrato</string>
     <string name="OApsAIMI_HC_Factor_title">Reatividade</string>
 
     <string name="oaps_aimi_HC_interval_summary">Intervalo entre SMB para o Modo Alto Carboidrato</string>
@@ -299,7 +299,7 @@
     <string name="oaps_aimi_snackAdjFact_summary">Fator de ajuste DynISF para o Modo Lanche</string>
     <string name="oaps_aimi_snackAdjFact_title">Fator DynISF do Modo Lanche</string>
 
-    <string name="OApsAIMI_snack_Factor_summary">% de insulina necessária pela IA para o Modo Lanche</string>
+    <string name="OApsAIMI_snack_Factor_summary">%% de insulina necessária pela IA para o Modo Lanche</string>
     <string name="OApsAIMI_snack_Factor_title">Reatividade</string>
 
     <string name="oaps_aimi_snack_interval_summary">Intervalo entre SMB para o Modo Lanche</string>
@@ -308,7 +308,7 @@
     <string name="oaps_aimi_sleepAdjFact_summary">Fator de ajuste DynISF para o Modo Sono</string>
     <string name="oaps_aimi_sleepAdjFact_title">Fator DynISF do Modo Sono</string>
 
-    <string name="OApsAIMI_sleep_Factor_summary">% de insulina necessária pela IA para o Modo Sono</string>
+    <string name="OApsAIMI_sleep_Factor_summary">%% de insulina necessária pela IA para o Modo Sono</string>
     <string name="OApsAIMI_sleep_Factor_title">Reatividade</string>
 
     <string name="oaps_aimi_sleep_interval_summary">Intervalo entre SMB para o Modo Sono</string>
@@ -339,7 +339,7 @@
     <string name="prebolus_Dinner_mode_title">Pré-bólus 1/2</string>
     <string name="prebolus2_Dinner_mode_title">Pré-bólus 2/2</string>
 
-    <string name="OApsAIMI_LunchFactor_summary">Reatividade do Modo Almoço é a % de insulina necessária para um SMB</string>
+    <string name="OApsAIMI_LunchFactor_summary">Reatividade do Modo Almoço é a %% de insulina necessária para um SMB</string>
     <string name="OApsAIMI_lunchFactor_title">Reatividade</string>
 
     <string name="oaps_aimi_lunch_interval_summary">Intervalo de SMB para o Modo Almoço</string>
@@ -348,7 +348,7 @@
     <string name="oaps_aimi_DinnerAdjFact_summary">Fator DynISF do Modo Jantar</string>
     <string name="oaps_aimi_DinnerAdjFact_title">DynISF Modo Jantar</string>
 
-    <string name="OApsAIMI_DinnerFactor_summary">Reatividade do Modo Jantar % de insulina necessária para um SMB</string>
+    <string name="OApsAIMI_DinnerFactor_summary">Reatividade do Modo Jantar %% de insulina necessária para um SMB</string>
     <string name="OApsAIMI_DinnerFactor_title">Reatividade</string>
 
     <string name="oaps_aimi_Dinner_interval_summary">Intervalo do Modo Jantar</string>
@@ -361,7 +361,7 @@
     <string name="oaps_aimi_FCLAdjFact_summary">DynISF Loop Fechado Completo com detecção automática</string>
 
     <string name="OApsAIMI_FCLFactor_title">Reatividade FCL</string>
-    <string name="OApsAIMI_FCLFactor_summary">% de insulina necessária para SMB no Modo FCL</string>
+    <string name="OApsAIMI_FCLFactor_summary">%% de insulina necessária para SMB no Modo FCL</string>
 
     <string name="oaps_aimi_FCL_interval_summary">Intervalo de SMB no Modo FCL</string>
     <string name="oaps_aimi_FCL_interval_title">Intervalo de SMB FCL</string>
@@ -374,7 +374,7 @@
     <string name="oaps_aimi_BFdjFact_summary">DynISF Modo Café da Manhã</string>
     <string name="oaps_aimi_BFAdjFact_title">DynISF Modo Café da Manhã</string>
 
-    <string name="OApsAIMI_BFFactor_summary">% de insulina necessária para um SMB</string>
+    <string name="OApsAIMI_BFFactor_summary">%% de insulina necessária para um SMB</string>
     <string name="OApsAIMI_BFFactor_title">Reatividade</string>
 
     <string name="oaps_aimi_BF_interval_summary">Intervalo entre 2 SMB no Modo Café da Manhã</string>
@@ -803,7 +803,7 @@
     <string name="original_file_missing">O arquivo original não existe.</string>
     <string name="file_too_short">O arquivo contém 200 linhas ou menos, nenhuma exclusão realizada.</string>
     <string name="last_200_deleted">As últimas 200 linhas foram excluídas. O arquivo original foi salvo como &#39;%1$s&#39;.</string>
-    <string name="reason_data_removed">Os valores para a data %1$s foram excluídos porque o TIR1DAYIR é menor que 85%%%.</string>
+    <string name="reason_data_removed">Os valores para a data %1$s foram excluídos porque o TIR1DAYIR é menor que 85%%.</string>
     <string name="reason_deletion_time_restricted">A exclusão só pode ser executada entre 00:05 e 00:10.</string>
     <string name="reason_no_deletion_needed">Nenhuma exclusão necessária: tir1DAYIR é maior ou igual a 85%.</string>
 
