@@ -6,7 +6,6 @@ import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
-import app.aaps.core.interfaces.objects.Instantiator
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.PumpEnactResult
@@ -34,6 +33,7 @@ import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.kotlin.plusAssign
 import io.reactivex.rxjava3.kotlin.subscribeBy
 import javax.inject.Inject
+import javax.inject.Provider
 
 class DashInsertCannulaViewModel @Inject constructor(
     private val omnipodManager: OmnipodDashManager,
@@ -45,11 +45,11 @@ class DashInsertCannulaViewModel @Inject constructor(
     private val rh: ResourceHelper,
     private val fabricPrivacy: FabricPrivacy,
     private val history: DashHistory,
+    pumpEnactResultProvider: Provider<PumpEnactResult>,
     private val activePlugin: ActivePlugin,
-    instantiator: Instantiator,
     logger: AAPSLogger,
     aapsSchedulers: AapsSchedulers
-) : InsertCannulaViewModel(instantiator, logger, aapsSchedulers) {
+) : InsertCannulaViewModel(pumpEnactResultProvider, logger, aapsSchedulers) {
 
     override fun isPodInAlarm(): Boolean = false // TODO
 
@@ -100,7 +100,7 @@ class DashInsertCannulaViewModel @Inject constructor(
                 .subscribeBy(
                     onError = { throwable ->
                         logger.error(LTag.PUMP, "Error in Pod activation part 2", throwable)
-                        source.onSuccess(instantiator.providePumpEnactResult().success(false).comment(I8n.textFromException(throwable, rh)))
+                        source.onSuccess(pumpEnactResultProvider.get().success(false).comment(I8n.textFromException(throwable, rh)))
                     },
                     onComplete = {
                         logger.debug("Pod activation part 2 completed")
@@ -130,7 +130,7 @@ class DashInsertCannulaViewModel @Inject constructor(
                         )
                         rxBus.send(EventDismissNotification(Notification.OMNIPOD_POD_NOT_ATTACHED))
                         fabricPrivacy.logCustom("OmnipodDashPodActivated")
-                        source.onSuccess(instantiator.providePumpEnactResult().success(true))
+                        source.onSuccess(pumpEnactResultProvider.get().success(true))
                     }
                 )
         }
