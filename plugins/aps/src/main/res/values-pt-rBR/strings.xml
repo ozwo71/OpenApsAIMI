@@ -150,7 +150,7 @@
     <string name="autotune_update_local_profile_message">Atualizar perfil %1$s com perfil do Autotune?</string>
     <string name="autotune_revert_local_profile_message">Reverter o perfil %1$s para o perfil inicial?</string>
     <string name="autotune_profile_invalid">Perfil inválido</string>
-    <string name="autotune_log_title" translatable="false">|Param|Profile|Tuned|%/Miss.\n</string>
+    <string name="autotune_log_title" translatable="false" formatted="false">|Param|Profile|Tuned|%/Miss.\n</string>
     <string name="autotune_log_separator" translatable="false">+------------------------------------------\n</string>
     <string name="autotune_log_peak" translatable="false">| %1$4.4s |\t%2$d |\t%3$d |\n</string>
     <string name="autotune_log_dia" translatable="false">| %1$4.4s |\t%2$3.1f |\t%3$3.1f |\n</string>
@@ -503,12 +503,12 @@
     <string name="oaps_aimi_enablewcycle_title">Ativar ciclo menstrual</string>
     <string name="wcycledateday_summary">Informe apenas o primeiro dia do ciclo, formato dd</string>
     <string name="wcycledateday_title">Primeiro dia do ciclo</string>
-    <string name="wcyclemenstruation_summary">Durante os primeiros dias do ciclo, esta porcentagem será aplicada como redução da basal (estudos indicam redução média de 5–10%).</string>
-    <string name="wcyclemenstruation_title">Primeiros 5 dias do ciclo, redução da basal em %</string>
-    <string name="wcycleovulation_summary">Durante a ovulação, vários estudos apontam a necessidade de reduzir SMB e basal em cerca de 5%.</string>
-    <string name="wcycleovulation_title">Redução na ovulação (%)</string>
-    <string name="wcycleluteal_summary">A fase lútea costuma exigir cerca de 8–15% a mais de insulina.</string>
-    <string name="wcycleluteal_title">Fase lútea: defina a % a aplicar na basal e no SMB</string>
+    <string name="wcyclemenstruation_summary" formatted="false">Durante os primeiros dias do ciclo, esta porcentagem será aplicada como redução da basal (estudos indicam redução média de 5–10%).</string>
+    <string name="wcyclemenstruation_title" formatted="false">Primeiros 5 dias do ciclo, redução da basal em %</string>
+    <string name="wcycleovulation_summary" formatted="false">Durante a ovulação, vários estudos apontam a necessidade de reduzir SMB e basal em cerca de 5%.</string>
+    <string name="wcycleovulation_title" formatted="false">Redução na ovulação (%)</string>
+    <string name="wcycleluteal_summary" formatted="false">A fase lútea costuma exigir cerca de 8–15% a mais de insulina.</string>
+    <string name="wcycleluteal_title" formatted="false">Fase lútea: defina a % a aplicar na basal e no SMB</string>
 
     <!--    AIMI START TRANSLATION AIMI TABLE PLUGIN - SECTION BG TREND - FILE DetermineBasalAIMI2.kt -->
     <string name="bg_trend_1">Análise da Tendência da Glicose</string>
@@ -762,13 +762,13 @@
     <string name="zero_basal_forced">Duração de basal zero (%1$d min) excedida, forçando basal mínima; </string>
 
     <string name="dia_base_info">DIA base: %1$f h = %2$f min\n</string>
-    <string name="morning_adjustment">Ajuste matinal (6&#8211;10h): DIA reduzido em 20%</string>
-    <string name="night_adjustment">Ajuste noturno (22&#8211;23h &amp; 0&#8211;5h): DIA aumentado em 20%</string>
-    <string name="physical_activity_detected">Atividade física detectada: DIA reduzido em 30%</string>
-    <string name="high_hr_no_activity">FC alta sem atividade (estresse): DIA aumentado em 30%</string>
-    <string name="high_hr_over_130">FC alta (&gt;130 bpm): DIA reduzido em 30%</string>
+    <string name="morning_adjustment" formatted="false">Ajuste matinal (6&#8211;10h): DIA reduzido em 20%</string>
+    <string name="night_adjustment" formatted="false">Ajuste noturno (22&#8211;23h &amp; 0&#8211;5h): DIA aumentado em 20%</string>
+    <string name="physical_activity_detected" formatted="false">Atividade física detectada: DIA reduzido em 30%</string>
+    <string name="high_hr_no_activity" formatted="false">FC alta sem atividade (estresse): DIA aumentado em 30%</string>
+    <string name="high_hr_over_130" formatted="false">FC alta (&gt;130 bpm): DIA reduzido em 30%</string>
     <string name="pump_age_adjustment" formatted="false">Idade da bomba (%1$.0f dias): DIA aumentado em %2$.0f%%</string>
-    <string name="final_dia_constrained">DIA final limitado a [180, 720] min: %1$.0f min</string>
+    <string name="final_dia_constrained" formatted="false">DIA final limitado a [180, 720] min: %1$.0f min</string>
     <string name="dia_calculation_details">Detalhes do Cálculo do DIA:</string>
 
     <string name="peak_time">  → 🕒 PeakTime=%1$s min | BG=%2$s Δ%3$s</string>
@@ -805,7 +805,7 @@
     <string name="last_200_deleted">As últimas 200 linhas foram excluídas. O arquivo original foi salvo como &#39;%1$s&#39;.</string>
     <string name="reason_data_removed" formatted="false">Os valores para a data %1$s foram excluídos porque o TIR1DAYIR é menor que 85%%.</string>
     <string name="reason_deletion_time_restricted">A exclusão só pode ser executada entre 00:05 e 00:10.</string>
-    <string name="reason_no_deletion_needed">Nenhuma exclusão necessária: tir1DAYIR é maior ou igual a 85%.</string>
+    <string name="reason_no_deletion_needed" formatted="false">Nenhuma exclusão necessária: tir1DAYIR é maior ou igual a 85%.</string>
 
     <string name="safety_sport_smb_zero">🏃‍♂️ Segurança esporte → SMB=0</string>
     <string name="adjustments_smb">🎛️ Ajustes: %1$.2f → %2$.2f U</string>
