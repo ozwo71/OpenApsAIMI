@@ -108,7 +108,7 @@
     <string name="loop_smb_request_time_label">Hora de solicitação SMB</string>
     <string name="loop_smb_execution_time_label">Hora de execução do SMB</string>
     <string name="loop_smb_set_by_pump_label">SMB definido pela bomba</string>
-    <string name="loop_open_mode_min_change">Pedido de mudança mínima [%%]</string>
+    <string name="loop_open_mode_min_change" formatted="false">Pedido de mudança mínima [%%]</string>
     <string name="loop_open_mode_min_change_summary" formatted="false">O Loop aberto irá apresentar uma nova solicitação de alteração apenas se a mudança for maior do que este valor em %. O valor padrão é 20%</string>
     <!-- Autotune -->
     <string name="autotune_shortname">AT</string>
@@ -155,7 +155,7 @@
     <string name="autotune_log_peak" translatable="false">| %1$4.4s |\t%2$d |\t%3$d |\n</string>
     <string name="autotune_log_dia" translatable="false">| %1$4.4s |\t%2$3.1f |\t%3$3.1f |\n</string>
     <string name="autotune_log_ic_isf" translatable="false">| %1$4.4s | %2$3.3f |\t%3$3.3f |\n</string>
-    <string name="autotune_log_basal" translatable="false">|\t%1$02.0f\t| %2$3.3f |%3$3.3f\t| %5$.0f%% / %4$d\n</string>
+    <string name="autotune_log_basal" translatable="false" formatted="false">|\t%1$02.0f\t| %2$3.3f |%3$3.3f\t| %5$.0f%% / %4$d\n</string>
     <string name="autotune_log_sum_basal" translatable="false">|\t∑\t|\t%1$3.1f |\t%2$3.1f |\n</string>
     <string name="not_available_full">Not available</string>
     <string name="pump_disconnected">Pump disconnected</string>
@@ -163,7 +163,7 @@
 
     <!--    autoISF -->
     <string name="half_basal_exercise_target_title">Half basal exercise target</string>
-    <string name="half_basal_exercise_target_summary">Set to a number, e.g. 160, which means when temp target is 160 mg/dL and High temptarget raises sensitivity=true, run 50%% basal at this level (120 = 75%%; 140 = 60%%).</string>
+    <string name="half_basal_exercise_target_summary" formatted="false">Set to a number, e.g. 160, which means when temp target is 160 mg/dL and High temptarget raises sensitivity=true, run 50%% basal at this level (120 = 75%%; 140 = 60%%).</string>
     <string name="autoISF_settings_title">AutoISF settings</string>
     <string name="autoISF_settings_summary">AutoISF allows to adapt the insulin sensitivity factor (ISF) in various scenarios of glucose behaviour\n\nIt can also adapt SMB delivery settings</string>
     <string name="smb_delivery_settings_title">SMB delivery settings</string>
@@ -234,7 +234,7 @@
     <string name="openapsaimi_maxsmb_summary">Valor máximo de SMB quando a glicose estiver abaixo de 120</string>
     <string name="openapsaimi_maxsmb_title">SMB Máx. Glicose Baixa</string>
     <string name="description_openapsaimi">Microbolus baseados em Inteligência Artificial e Aprendizado de Máquina.</string>
-    <string name="oaps_aimi_evening_factor_summary">%% de reatividade do plugin entre 18h e meia-noite</string>
+    <string name="oaps_aimi_evening_factor_summary" formatted="false">%% de reatividade do plugin entre 18h e meia-noite</string>
     <string name="oaps_aimi_evening_factor_title">Reatividade Noturna 18h&#8211;24h</string>
     <string name="oaps_aimi_afternoon_factor_title">Reatividade à Tarde 12h&#8211;18h</string>
     <string name="oaps_aimi_morning_factor_title">Reatividade pela Manhã 00h&#8211;11h</string>
@@ -243,7 +243,7 @@
     <string name="oaps_aimi_hyper_factor_summary"><![CDATA[Reatividade quando a glicose > 120]]></string>
     <string name="oaps_aimi_hyper_factor_title"><![CDATA[Reatividade glicose > 120; para crianças glicose > 180]]></string>
     <string name="DynISFAdjusthyper_summary"><![CDATA[Aumentar este valor acelera o envio de SMB quando a glicose > 120]]></string>
-    <string name="DynISFAdjusthyper_title"><![CDATA[Fator de ajuste DynISF %% glicose > 120]]></string>
+    <string name="DynISFAdjusthyper_title" formatted="false"><![CDATA[Fator de ajuste DynISF %% glicose > 120]]></string>
     <string name="prebolus_meal_mode_summary">Se você definir uma nota na página de ações com a palavra "meal", receberá este valor uma única vez como pré-bólus.</string>
     <string name="prebolus_meal_mode_title">Pré-bólus</string>
     <string name="prebolus_highcarb_mode_title">Pré-bólus</string>
@@ -281,13 +281,13 @@
     <string name="autodrive_preferences">Autodrive</string>
     <string name="AAPS_SMB_Settings">DynamicISF, SMB e Sensibilidade à Insulina</string>
     <string name="oaps_aimi_enableMlTraining_title">Ativar Treinamento de IA</string>
-    <string name="OApsAIMI_MealFactor_summary">%% de insulina necessária pela IA para o Modo Refeição</string>
+    <string name="OApsAIMI_MealFactor_summary" formatted="false">%% de insulina necessária pela IA para o Modo Refeição</string>
     <string name="OApsAIMI_MealFactor_title">Reatividade</string>
     <string name="oaps_aimi_meal_interval_summary">Intervalo entre SMB para o Modo Refeição Genérico</string>
     <string name="oaps_aimi_meal_interval_title">Intervalo de SMB do Modo Refeição Genérico</string>
     <string name="oaps_aimi_highcarbAdjFact_summary">Fator de ajuste DynISF para o Modo Alto Carboidrato</string>
     <string name="oaps_aimi_highcarbAdjFact_title">Fator DynISF do Modo Alto Carboidrato</string>
-    <string name="OApsAIMI_HC_Factor_summary">%% de insulina necessária pela IA para o Modo Alto Carboidrato</string>
+    <string name="OApsAIMI_HC_Factor_summary" formatted="false">%% de insulina necessária pela IA para o Modo Alto Carboidrato</string>
     <string name="OApsAIMI_HC_Factor_title">Reatividade</string>
 
     <string name="oaps_aimi_HC_interval_summary">Intervalo entre SMB para o Modo Alto Carboidrato</string>
@@ -299,7 +299,7 @@
     <string name="oaps_aimi_snackAdjFact_summary">Fator de ajuste DynISF para o Modo Lanche</string>
     <string name="oaps_aimi_snackAdjFact_title">Fator DynISF do Modo Lanche</string>
 
-    <string name="OApsAIMI_snack_Factor_summary">%% de insulina necessária pela IA para o Modo Lanche</string>
+    <string name="OApsAIMI_snack_Factor_summary" formatted="false">%% de insulina necessária pela IA para o Modo Lanche</string>
     <string name="OApsAIMI_snack_Factor_title">Reatividade</string>
 
     <string name="oaps_aimi_snack_interval_summary">Intervalo entre SMB para o Modo Lanche</string>
@@ -308,7 +308,7 @@
     <string name="oaps_aimi_sleepAdjFact_summary">Fator de ajuste DynISF para o Modo Sono</string>
     <string name="oaps_aimi_sleepAdjFact_title">Fator DynISF do Modo Sono</string>
 
-    <string name="OApsAIMI_sleep_Factor_summary">%% de insulina necessária pela IA para o Modo Sono</string>
+    <string name="OApsAIMI_sleep_Factor_summary" formatted="false">%% de insulina necessária pela IA para o Modo Sono</string>
     <string name="OApsAIMI_sleep_Factor_title">Reatividade</string>
 
     <string name="oaps_aimi_sleep_interval_summary">Intervalo entre SMB para o Modo Sono</string>
@@ -339,7 +339,7 @@
     <string name="prebolus_Dinner_mode_title">Pré-bólus 1/2</string>
     <string name="prebolus2_Dinner_mode_title">Pré-bólus 2/2</string>
 
-    <string name="OApsAIMI_LunchFactor_summary">Reatividade do Modo Almoço é a %% de insulina necessária para um SMB</string>
+    <string name="OApsAIMI_LunchFactor_summary" formatted="false">Reatividade do Modo Almoço é a %% de insulina necessária para um SMB</string>
     <string name="OApsAIMI_lunchFactor_title">Reatividade</string>
 
     <string name="oaps_aimi_lunch_interval_summary">Intervalo de SMB para o Modo Almoço</string>
@@ -348,7 +348,7 @@
     <string name="oaps_aimi_DinnerAdjFact_summary">Fator DynISF do Modo Jantar</string>
     <string name="oaps_aimi_DinnerAdjFact_title">DynISF Modo Jantar</string>
 
-    <string name="OApsAIMI_DinnerFactor_summary">Reatividade do Modo Jantar %% de insulina necessária para um SMB</string>
+    <string name="OApsAIMI_DinnerFactor_summary" formatted="false">Reatividade do Modo Jantar %% de insulina necessária para um SMB</string>
     <string name="OApsAIMI_DinnerFactor_title">Reatividade</string>
 
     <string name="oaps_aimi_Dinner_interval_summary">Intervalo do Modo Jantar</string>
@@ -361,7 +361,7 @@
     <string name="oaps_aimi_FCLAdjFact_summary">DynISF Loop Fechado Completo com detecção automática</string>
 
     <string name="OApsAIMI_FCLFactor_title">Reatividade FCL</string>
-    <string name="OApsAIMI_FCLFactor_summary">%% de insulina necessária para SMB no Modo FCL</string>
+    <string name="OApsAIMI_FCLFactor_summary" formatted="false">%% de insulina necessária para SMB no Modo FCL</string>
 
     <string name="oaps_aimi_FCL_interval_summary">Intervalo de SMB no Modo FCL</string>
     <string name="oaps_aimi_FCL_interval_title">Intervalo de SMB FCL</string>
@@ -374,7 +374,7 @@
     <string name="oaps_aimi_BFdjFact_summary">DynISF Modo Café da Manhã</string>
     <string name="oaps_aimi_BFAdjFact_title">DynISF Modo Café da Manhã</string>
 
-    <string name="OApsAIMI_BFFactor_summary">%% de insulina necessária para um SMB</string>
+    <string name="OApsAIMI_BFFactor_summary" formatted="false">%% de insulina necessária para um SMB</string>
     <string name="OApsAIMI_BFFactor_title">Reatividade</string>
 
     <string name="oaps_aimi_BF_interval_summary">Intervalo entre 2 SMB no Modo Café da Manhã</string>
@@ -689,7 +689,7 @@
     <string name="safety_adjustments_6"><![CDATA[Glicose estável >180 e Delta Combinado <2 => redução x0.8;]]></string>
     <string name="safety_adjustments_7">IOB alto (%1$.2f U), redução x0.8;</string>
     <string name="safety_adjustments_8">TDD/h alto (%1$.2f U/h), redução x0.8;</string>
-    <string name="safety_adjustments_9">TIR alto (%1$.0f%%), redução x0.5;</string>
+    <string name="safety_adjustments_9" formatted="false">TIR alto (%1$.0f%%), redução x0.5;</string>
     <string name="safety_adjustments_10">Glicose prevista (%1$.0f) próxima do alvo (%2$.0f), redução x0.5;</string>
     <string name="safety_adjustments_11">Duração de basal zero (%1$d min) excedida, forçando basal mínima;</string>
 
@@ -757,7 +757,7 @@
     <string name="bg_stable_high_delta_low">Glicose estável &gt;160 &amp; Delta combinado&lt;1, redução x0.8; </string>
     <string name="iob_high_reduction">IOB alto (%1$.2f U), redução x0.85; </string>
     <string name="tdd_per_hour_high">TDD/h alto (%1$.2f U/h), redução x0.8; </string>
-    <string name="tir_high">TIR alto (%1$.1f%%), redução x0.5;</string>
+    <string name="tir_high" formatted="false">TIR alto (%1$.1f%%), redução x0.5;</string>
     <string name="bg_near_target">Glicose prevista (%1$.1f) próxima do alvo (%2$.1f), redução x0.5; </string>
     <string name="zero_basal_forced">Duração de basal zero (%1$d min) excedida, forçando basal mínima; </string>
 
@@ -767,7 +767,7 @@
     <string name="physical_activity_detected">Atividade física detectada: DIA reduzido em 30%</string>
     <string name="high_hr_no_activity">FC alta sem atividade (estresse): DIA aumentado em 30%</string>
     <string name="high_hr_over_130">FC alta (&gt;130 bpm): DIA reduzido em 30%</string>
-    <string name="pump_age_adjustment">Idade da bomba (%1$.0f dias): DIA aumentado em %2$.0f%%</string>
+    <string name="pump_age_adjustment" formatted="false">Idade da bomba (%1$.0f dias): DIA aumentado em %2$.0f%%</string>
     <string name="final_dia_constrained">DIA final limitado a [180, 720] min: %1$.0f min</string>
     <string name="dia_calculation_details">Detalhes do Cálculo do DIA:</string>
 
@@ -803,7 +803,7 @@
     <string name="original_file_missing">O arquivo original não existe.</string>
     <string name="file_too_short">O arquivo contém 200 linhas ou menos, nenhuma exclusão realizada.</string>
     <string name="last_200_deleted">As últimas 200 linhas foram excluídas. O arquivo original foi salvo como &#39;%1$s&#39;.</string>
-    <string name="reason_data_removed">Os valores para a data %1$s foram excluídos porque o TIR1DAYIR é menor que 85%%.</string>
+    <string name="reason_data_removed" formatted="false">Os valores para a data %1$s foram excluídos porque o TIR1DAYIR é menor que 85%%.</string>
     <string name="reason_deletion_time_restricted">A exclusão só pode ser executada entre 00:05 e 00:10.</string>
     <string name="reason_no_deletion_needed">Nenhuma exclusão necessária: tir1DAYIR é maior ou igual a 85%.</string>
 
@@ -900,10 +900,10 @@
     <string name="reason_cgm_flat">Erro: dados do CGM inalterados nos últimos ~45 min</string>
 
     <string name="cycle_day">♀️ Dia %d/28 • </string>
-    <string name="cycle_menstruation">Menstruação: basal -%1$.0f%% </string>
+    <string name="cycle_menstruation" formatted="false">Menstruação: basal -%1$.0f%% </string>
     <string name="cycle_follicular">Folicular: neutro </string>
-    <string name="cycle_ovulation">Ovulação: SMB -%1$.0f%% </string>
-    <string name="cycle_luteal">Lútea: basal +%.0f%%, SMB +%.0f%% </string>
+    <string name="cycle_ovulation" formatted="false">Ovulação: SMB -%1$.0f%% </string>
+    <string name="cycle_luteal" formatted="false">Lútea: basal +%.0f%%, SMB +%.0f%% </string>
     <string name="cycle_unknown">Desconhecido</string>
 
     <string name="basal_multiplier_line">♀️⚡ %1$s %2$s → %.2f U/h\n</string>
@@ -931,10 +931,10 @@
 
     <string name="console_dia_adjusted">DIA Ajustado (em minutos) : %.0f</string>
     <string name="console_mpc_log">Módulo MPC: dose=%.2f, Kp=%.3f, corr=%.2f, out=%.2f</string>
-    <string name="reason_mpc_pi">🎛️ Modelo preditivo MPC: %.2f U (%.0f%%) | Modelo fisiológico PI: %.2f U (%.0f%%)</string>
+    <string name="reason_mpc_pi" formatted="false">🎛️ Modelo preditivo MPC: %.2f U (%.0f%%) | Modelo fisiológico PI: %.2f U (%.0f%%)</string>
     <string name="smb_final">✅ SMB final: %1$s U</string>
 
-    <string name="reason_dia_reattivity">📈 DIA: %1$.1f min | REACT◁120 Manhã: %2$.1f%% | Tarde: %3$.1f%% | Noite: %4$.1f%%</string>
+    <string name="reason_dia_reattivity" formatted="false">📈 DIA: %1$.1f min | REACT◁120 Manhã: %2$.1f%% | Tarde: %3$.1f%% | Noite: %4$.1f%%</string>
     <string name="autodrive_status">🚗 Autodrive: %1$s |&#160;Modo lanche/pré-bólus: %2$s | </string>
     <string name="autodrive_condition">&#160;Condições do Autodrive: %1$s</string>
     <string name="reason_bg_trend">🔍 Tendência da glicose: %.2f | Δ combinado: %.2f | </string>
