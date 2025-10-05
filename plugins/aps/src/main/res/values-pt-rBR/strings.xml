@@ -899,15 +899,15 @@
     <string name="reason_bg_data_old">Se a hora atual do sistema %1$d estiver correta, então os dados de BG estão muito antigos. O último BG foi lido há %2$.0f minutos em %3$d</string>
     <string name="reason_cgm_flat">Erro: dados do CGM inalterados nos últimos ~45 min</string>
 
-    <string name="cycle_day">♀️ Dia %d/28 • </string>
+    <string name="cycle_day" formatted="false">♀️ Dia %d/28 • </string>
     <string name="cycle_menstruation" formatted="false">Menstruação: basal -%1$.0f%% </string>
     <string name="cycle_follicular">Folicular: neutro </string>
     <string name="cycle_ovulation" formatted="false">Ovulação: SMB -%1$.0f%% </string>
     <string name="cycle_luteal" formatted="false">Lútea: basal +%.0f%%, SMB +%.0f%% </string>
     <string name="cycle_unknown">Desconhecido</string>
 
-    <string name="basal_multiplier_line">♀️⚡ %1$s %2$s → %.2f U/h\n</string>
-    <string name="basal_fmt">Basal×%.2f</string>
+    <string name="basal_multiplier_line" formatted="false">>♀️⚡ %1$s %2$s → %.2f U/h\n</string>
+    <string name="basal_fmt" formatted="false">Basal×%.2f</string>
     <string name="wcycle_invalid_day">♀️ WCycle: dia inválido</string>
 
     <string name="sensitivity_ratio_temp_target">Relação de sensibilidade definida para %.2f com base no alvo temporário de %.0f;</string>
@@ -935,11 +935,11 @@
     <string name="smb_final">✅ SMB final: %1$s U</string>
 
     <string name="reason_dia_reattivity" formatted="false">📈 DIA: %1$.1f min | REACT◁120 Manhã: %2$.1f%% | Tarde: %3$.1f%% | Noite: %4$.1f%%</string>
-    <string name="autodrive_status">🚗 Autodrive: %1$s |&#160;Modo lanche/pré-bólus: %2$s | </string>
-    <string name="autodrive_condition">&#160;Condições do Autodrive: %1$s</string>
-    <string name="reason_bg_trend">🔍 Tendência da glicose: %.2f | Δ combinado: %.2f | </string>
-    <string name="reason_predicted_bg">&#160;Glicose prevista: %.0f | Aceleração: %.2f | </string>
-    <string name="reason_slope_min_dev">&#160;Inclinação Min Dev.: %.2f</string>
+    <string name="autodrive_status" formatted="false">🚗 Autodrive: %1$s |&#160;Modo lanche/pré-bólus: %2$s | </string>
+    <string name="autodrive_condition" formatted="false">&#160;Condições do Autodrive: %1$s</string>
+    <string name="reason_bg_trend" formatted="false">🔍 Tendência da glicose: %.2f | Δ combinado: %.2f | </string>
+    <string name="reason_predicted_bg" formatted="false">&#160;Glicose prevista: %.0f | Aceleração: %.2f | </string>
+    <string name="reason_slope_min_dev" formatted="false">&#160;Inclinação Min Dev.: %.2f</string>
 
     <string name="console_profile_sens">Perfil de sensibilidade: %.0f, sens: %.0f, CSF: %.0f</string>
     <string name="console_limiting_carb_impact">Limitando impacto dos carbs de %.0f para %.0f mg/dL/5m ( %d g/h )</string>
