@@ -24,6 +24,7 @@ import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.interfaces.utils.SafeParse
 import app.aaps.core.keys.DoubleKey
+import app.aaps.core.keys.IntNonKey
 import app.aaps.core.objects.constraints.ConstraintObject
 import app.aaps.core.objects.extensions.formatColor
 import app.aaps.core.ui.dialogs.OKDialog
@@ -117,9 +118,11 @@ class FillDialog : DialogFragmentWithDate() {
     override fun submit(): Boolean {
         if (_binding == null) return false
         val insulin = SafeParse.stringToDouble(binding.fillInsulinAmount.text)
+        val siteChange = binding.fillCatheterChange.isChecked
+        val insulinChange = binding.fillCartridgeChange.isChecked
         val actions: LinkedList<String?> = LinkedList()
 
-        val insulinAfterConstraints = constraintChecker.applyBolusConstraints(ConstraintObject(insulin, aapsLogger)).value()
+        var insulinAfterConstraints = constraintChecker.applyBolusConstraints(ConstraintObject(insulin, aapsLogger)).value()
         if (insulinAfterConstraints > 0) {
             actions.add(rh.gs(R.string.fill_warning))
             actions.add("")
@@ -131,11 +134,14 @@ class FillDialog : DialogFragmentWithDate() {
                 actions.add(
                     rh.gs(app.aaps.core.ui.R.string.bolus_constraint_applied_warn, insulin, insulinAfterConstraints).formatColor(context, rh, app.aaps.core.ui.R.attr.warningColor)
                 )
+            if (siteChange || insulinChange) {
+                insulinAfterConstraints *= activePlugin.activeInsulin.concentration
+                actions.add(rh.gs(R.string.fill_warning_concentration, preferences.get(IntNonKey.InsulinConcentration), insulinAfterConstraints).formatColor(context, rh, app.aaps.core.ui.R.attr.warningColor))
+                actions.add(rh.gs(R.string.fill_warning_concentration2, insulinAfterConstraints).formatColor(context, rh, app.aaps.core.ui.R.attr.warningColor))
+            }
         }
-        val siteChange = binding.fillCatheterChange.isChecked
         if (siteChange)
             actions.add(rh.gs(R.string.record_pump_site_change).formatColor(context, rh, app.aaps.core.ui.R.attr.actionsConfirmColor))
-        val insulinChange = binding.fillCartridgeChange.isChecked
         if (insulinChange)
             actions.add(rh.gs(R.string.record_insulin_cartridge_change).formatColor(context, rh, app.aaps.core.ui.R.attr.actionsConfirmColor))
         val notes: String = binding.notesLayout.notes.text.toString()
