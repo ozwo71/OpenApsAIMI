@@ -22,4 +22,5 @@ dependencies {
 
     api(libs.com.google.dagger.android)
     api(libs.com.google.dagger.android.support)
+    implementation(project(":core:interfaces"))
 }

@@ -2,7 +2,7 @@ package app.aaps.pump.danars.comm
 
 import app.aaps.core.interfaces.logging.LTag
 import dagger.android.HasAndroidInjector
-import info.nightscout.androidaps.danars.encryption.BleEncryption
+import app.aaps.pump.danars.encryption.BleEncryption
 
 class DanaRSPacketBolusSetBolusOption(
     injector: HasAndroidInjector,

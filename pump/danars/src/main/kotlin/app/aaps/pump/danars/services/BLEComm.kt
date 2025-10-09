@@ -47,10 +47,9 @@ import app.aaps.pump.danars.activities.PairingHelperActivity
 import app.aaps.pump.danars.comm.DanaRSMessageHashTable
 import app.aaps.pump.danars.comm.DanaRSPacket
 import app.aaps.pump.danars.comm.DanaRSPacketEtcKeepConnection
+import app.aaps.pump.danars.encryption.BleEncryption
 import app.aaps.pump.danars.encryption.EncryptionType
 import app.aaps.pump.danars.events.EventDanaRSPairingSuccess
-import dagger.android.HasAndroidInjector
-import info.nightscout.androidaps.danars.encryption.BleEncryption
 import java.util.UUID
 import java.util.concurrent.ScheduledFuture
 import javax.inject.Inject
@@ -58,7 +57,6 @@ import javax.inject.Singleton
 
 @Singleton
 class BLEComm @Inject internal constructor(
-    private val injector: HasAndroidInjector,
     private val aapsLogger: AAPSLogger,
     private val rh: ResourceHelper,
     private val context: Context,
@@ -861,7 +859,7 @@ class BLEComm @Inject internal constructor(
     // process common packet response
     private fun processMessage(decryptedBuffer: ByteArray) {
         val originalCommand = processedMessage?.command ?: 0xFFFF
-        val receivedCommand = DanaRSPacket(injector).getCommand(decryptedBuffer)
+        val receivedCommand = DanaRSPacket().getCommand(decryptedBuffer)
         val message: DanaRSPacket? = if (originalCommand == receivedCommand) {
             // it's response to last message
             processedMessage

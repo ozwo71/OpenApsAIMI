@@ -126,7 +126,6 @@ class ImplementationModule {
         @Binds fun bindLocalAlertUtilsInterface(localAlertUtils: LocalAlertUtilsImpl): LocalAlertUtils
         @Binds fun bindIconsProviderInterface(iconsProvider: IconsProviderImplementation): IconsProvider
         @Binds fun bindNotificationHolderInterface(notificationHolder: NotificationHolderImpl): NotificationHolder
-        @Binds fun bindCommandQueue(commandQueue: CommandQueueImplementation): CommandQueue
         @Binds fun bindsProfileFunction(profileFunctionImpl: ProfileFunctionImpl): ProfileFunction
         @Binds fun bindsProfileUtil(profileUtilImpl: ProfileUtilImpl): ProfileUtil
         @Binds fun bindsStorage(fileStorage: FileStorage): Storage

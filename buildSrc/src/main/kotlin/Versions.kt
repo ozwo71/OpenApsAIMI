@@ -7,8 +7,6 @@ object Versions {
     const val appVersion = "3.3.3.0-dev-b"
     const val versionCode = 1500
 
-    const val ndkVersion = "21.1.6352462"
-
     const val compileSdk = 36
     const val minSdk = 30
     const val targetSdk = 30
