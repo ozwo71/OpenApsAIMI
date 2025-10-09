@@ -130,7 +130,7 @@ class FillDialog : DialogFragmentWithDate() {
             actions.add(
                 if (siteChange || insulinChange)    // include volume information in µl
                     rh.gs(app.aaps.core.ui.R.string.bolus) + ": " + rh.gs(
-                        app.aaps.core.ui.R.string.bolus,
+                        R.string.fill_bolus_with_volume,
                         decimalFormatter.toPumpSupportedBolus(insulinAfterConstraints, activePlugin.activePump.pumpDescription.bolusStep),
                         insulinAfterConstraints * 10
                     )
@@ -147,8 +147,8 @@ class FillDialog : DialogFragmentWithDate() {
                 insulinAfterConstraints *= concentration
                 actions.add(rh.gs(R.string.fill_warning_concentration, preferences.get(IntNonKey.InsulinConcentration), insulinAfterConstraints).formatColor(context, rh, app.aaps.core.ui.R.attr.warningColor))
                 actions.add(
-                    rh.gs(app.aaps.core.ui.R.string.bolus) + ": " + rh.gs(
-                        app.aaps.core.ui.R.string.bolus,
+                    rh.gs(R.string.fill_warning_concentration2) + ": " + rh.gs(
+                        R.string.fill_bolus_with_volume,
                         decimalFormatter.toPumpSupportedBolus(insulinAfterConstraints, activePlugin.activePump.pumpDescription.bolusStep),
                         insulinAfterConstraints * 10 / concentration
                     )
