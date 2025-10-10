@@ -1,14 +1,14 @@
 # libs.versions.toml
 [versions]
 gradlePlugin = "8.13.0"
-googleServices = "4.4.3"
+googleServices = "4.4.4"
 kotlin = "2.2.20"
 wearable = "2.9.0"
 room = "2.8.2"
 dagger = "2.57.2"
 mockito = "5.20.0"
 junit = "6.0.0"
-okhttp = "5.2.0"
+okhttp = "5.2.1"
 retrofit = "3.0.0"
 kotlinx-serialization = "1.9.0"
 kotlinx-coroutines = "1.10.2"
@@ -17,10 +17,10 @@ datastorePreferences = "1.1.7"
 annotation = "1.9.1"
 
 # Compose
-activityCompose = "1.10.1"
+activityCompose = "1.11.0"
 composeBom = "2025.04.01"
-navigationCompose = "2.8.9"
-lifecycleRuntimeKtx = "2.8.7"
+navigationCompose = "2.9.5"
+lifecycleRuntimeKtx = "2.9.4"
 materialPullRefresh = "1.2.0"
 
 [plugins]
@@ -42,7 +42,7 @@ com-google-dagger-android-processor = { group = "com.google.dagger", name = "dag
 com-google-dagger-android-support = { group = "com.google.dagger", name = "dagger-android-support", version.ref = "dagger" }
 
 com-google-firebase-gradle = { group = "com.google.firebase", name = "firebase-crashlytics-gradle", version = "3.0.6" }
-com-google-firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version = "34.3.0" }
+com-google-firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version = "34.4.0" }
 com-google-firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
 com-google-firebase-crashlytics = { group = "com.google.firebase", name = "firebase-crashlytics" }
 com-google-firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
