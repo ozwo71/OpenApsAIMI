@@ -16,6 +16,7 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.logging.UserEntryLogger
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.protection.ProtectionCheck
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.queue.Callback
 import app.aaps.core.interfaces.queue.CommandQueue
@@ -52,6 +53,7 @@ class FillDialog : DialogFragmentWithDate() {
     @Inject lateinit var uiInteraction: UiInteraction
     @Inject lateinit var decimalFormatter: DecimalFormatter
     @Inject lateinit var injector: HasAndroidInjector
+    @Inject lateinit var ch: ConcentrationHelper
 
     private var queryingProtection = false
     private val disposable = CompositeDisposable()
@@ -120,7 +122,6 @@ class FillDialog : DialogFragmentWithDate() {
         val insulin = SafeParse.stringToDouble(binding.fillInsulinAmount.text)
         val siteChange = binding.fillCatheterChange.isChecked
         val insulinChange = binding.fillCartridgeChange.isChecked
-        val concentration = activePlugin.activeInsulin.concentration
         val actions: LinkedList<String?> = LinkedList()
 
         var insulinAfterConstraints = constraintChecker.applyBolusConstraints(ConstraintObject(insulin, aapsLogger)).value()
@@ -129,12 +130,7 @@ class FillDialog : DialogFragmentWithDate() {
             actions.add("")
             actions.add(
                 if (siteChange || insulinChange)    // include volume information in µl
-                    rh.gs(app.aaps.core.ui.R.string.bolus) + ": " + rh.gs(
-                        R.string.fill_bolus_with_volume,
-                        decimalFormatter.toPumpSupportedBolus(insulinAfterConstraints, activePlugin.activePump.pumpDescription.bolusStep),
-                        insulinAfterConstraints * 10
-                    )
-                        .formatColor(context, rh, app.aaps.core.ui.R.attr.insulinButtonColor)
+                    rh.gs(app.aaps.core.ui.R.string.bolus) + ": " + ch.bolusWithVolume(insulinAfterConstraints).formatColor(context, rh, app.aaps.core.ui.R.attr.insulinButtonColor)
                 else
                     rh.gs(app.aaps.core.ui.R.string.bolus) + ": " + decimalFormatter.toPumpSupportedBolus(insulinAfterConstraints, activePlugin.activePump.pumpDescription.bolusStep)
                         .formatColor(context, rh, app.aaps.core.ui.R.attr.insulinButtonColor)
@@ -143,16 +139,11 @@ class FillDialog : DialogFragmentWithDate() {
                 actions.add(
                     rh.gs(app.aaps.core.ui.R.string.bolus_constraint_applied_warn, insulin, insulinAfterConstraints).formatColor(context, rh, app.aaps.core.ui.R.attr.warningColor)
                 )
-            if ((siteChange || insulinChange) && concentration != 1.0) {    // include concentration correction and volume information
-                insulinAfterConstraints *= concentration
-                actions.add(rh.gs(R.string.fill_warning_concentration, preferences.get(IntNonKey.InsulinConcentration), insulinAfterConstraints).formatColor(context, rh, app.aaps.core.ui.R.attr.warningColor))
+            if ((siteChange || insulinChange) && !ch.isU100()) {    // include concentration correction and volume information
+                insulinAfterConstraints = ch.fromPump(insulinAfterConstraints)
+                actions.add(rh.gs(R.string.fill_warning_concentration, ch.insulinConcentrationString(), insulinAfterConstraints).formatColor(context, rh, app.aaps.core.ui.R.attr.warningColor))
                 actions.add(
-                    rh.gs(R.string.fill_warning_concentration2) + ": " + rh.gs(
-                        R.string.fill_bolus_with_volume,
-                        decimalFormatter.toPumpSupportedBolus(insulinAfterConstraints, activePlugin.activePump.pumpDescription.bolusStep),
-                        insulinAfterConstraints * 10 / concentration
-                    )
-                        .formatColor(context, rh, app.aaps.core.ui.R.attr.insulinButtonColor)
+                    rh.gs(R.string.fill_warning_concentration2) + ": " + ch.bolusWithConvertedVolume(insulinAfterConstraints).formatColor(context, rh, app.aaps.core.ui.R.attr.insulinButtonColor)
                 )
             }
         }

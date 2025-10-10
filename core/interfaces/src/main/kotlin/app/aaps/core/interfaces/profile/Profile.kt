@@ -125,6 +125,7 @@ interface Profile {
     fun getMaxDailyBasal(): Double
     fun baseBasalSum(): Double
     fun percentageBasalSum(): Double
+    fun toPump(concentration: Double): Profile
     fun toPump(activePlugin: ActivePlugin): Profile
 
     fun getBasalValues(): Array<ProfileValue>
