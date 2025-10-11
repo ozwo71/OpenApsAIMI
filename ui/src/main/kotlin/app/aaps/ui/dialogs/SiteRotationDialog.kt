@@ -287,6 +287,8 @@ class SiteRotationDialog : DialogFragmentWithDate() {
     }
 
     fun swapAdapter() {
+        if (_binding == null) return
+
         val now = System.currentTimeMillis()
         binding.recyclerview.isLoading = true
         disposable += persistenceLayer
