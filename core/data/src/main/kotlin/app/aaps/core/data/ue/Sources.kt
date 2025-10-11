@@ -14,6 +14,7 @@ enum class Sources {
     CalibrationDialog,
     ConcentrationDialog,
     FillDialog,
+    SiteRotationDialog,
     BgCheck,
     SensorInsert,
     BatteryChange,
