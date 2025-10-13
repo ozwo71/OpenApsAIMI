@@ -29,25 +29,29 @@ class ConcentrationHelperImpl @Inject constructor(
 
     override fun fromPump(amount: Double): Double = amount * concentration
 
+    override fun toPump(profile: Profile): Profile = profile.toPump(concentration)
+
     override fun getProfile(): Profile? = profileFunction.getProfile()?.toPump(concentration)
 
-    override fun basalRateString(rate: Double): String {
+    override fun basalRateString(rate: Double, toPump: Boolean): String {
         if (isU100())
             return rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, rate)
         else {
             val amountString = rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, rate)
-            val convertedString = rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, toPump(rate))
-            return rh.gs(R.string.concentration_format, amountString, convertedString)
+            val convertedStringToPump = rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, toPump(rate))
+            val convertedStringFromPump = rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, fromPump(rate))
+            return if (toPump) rh.gs(R.string.concentration_format, amountString, convertedStringToPump) else rh.gs(R.string.concentration_format, convertedStringFromPump, amountString)
         }
     }
 
-    override fun insulinAmountString(amount: Double): String {
+    override fun insulinAmountString(amount: Double, toPump: Boolean): String {
         if (isU100())
-            return decimalFormatter.toPumpSupportedBolus(amount, activePlugin.activePump.pumpDescription.bolusStep)
-        else {
-            val amountString = decimalFormatter.toPumpSupportedBolus(amount, activePlugin.activePump.pumpDescription.bolusStep)
-            val convertedValue = decimalFormatter.toPumpSupportedBolus(toPump(amount), activePlugin.activePump.pumpDescription.bolusStep)
-            return rh.gs(R.string.concentration_format, amountString, convertedValue)
+            return decimalFormatter.toPumpSupportedBolusWithUnits(amount, activePlugin.activePump.pumpDescription.bolusStep)
+        else { // app.aaps.core.ui.R.string.format_insulin_units
+            val amountString = decimalFormatter.toPumpSupportedBolusWithUnits(amount, activePlugin.activePump.pumpDescription.bolusStep)
+            val convertedValueToPump = decimalFormatter.toPumpSupportedBolusWithUnits(toPump(amount), activePlugin.activePump.pumpDescription.bolusStep)
+            val convertedValueFromPump = decimalFormatter.toPumpSupportedBolusWithUnits(fromPump(amount), activePlugin.activePump.pumpDescription.bolusStep)
+            return if (toPump) rh.gs(R.string.concentration_format, amountString, convertedValueToPump) else rh.gs(R.string.concentration_format, convertedValueFromPump, amountString)
         }
     }
 

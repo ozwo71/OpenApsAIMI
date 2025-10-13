@@ -17,6 +17,7 @@ import app.aaps.core.interfaces.alerts.LocalAlertUtils
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -58,6 +59,7 @@ class KeepAliveWorker(
     @Inject lateinit var maintenancePlugin: MaintenancePlugin
     @Inject lateinit var rh: ResourceHelper
     @Inject lateinit var preferences: Preferences
+    @Inject lateinit var ch: ConcentrationHelper
 
     companion object {
 
@@ -187,7 +189,7 @@ class KeepAliveWorker(
         val lastConnection = pump.lastDataTime()
         val now = dateUtil.now()
         val isStatusOutdated = lastConnection + STATUS_UPDATE_FREQUENCY < now
-        val isBasalOutdated = abs(requestedProfile.getBasal() - pump.baseBasalRate * activePlugin.activeInsulin.concentration) > pump.pumpDescription.basalStep * activePlugin.activeInsulin.concentration
+        val isBasalOutdated = abs(requestedProfile.getBasal() - ch.fromPump(pump.baseBasalRate)) > ch.fromPump(pump.pumpDescription.basalStep)
         aapsLogger.debug(LTag.CORE, "Last connection: " + dateUtil.dateAndTimeString(lastConnection))
         // Sometimes it can happen that keepalive is not triggered every 5 minutes as it should.
         // In some cases, it may not even have been started at all.
@@ -205,7 +207,7 @@ class KeepAliveWorker(
         }
         if (loop.runningMode == RM.Mode.DISCONNECTED_PUMP) {
             // do nothing if pump is disconnected
-        } else if (runningProfile == null || ((!pump.isThisProfileSet(requestedProfile.toPump(activePlugin)) || !requestedProfile.isEqual(runningProfile)
+        } else if (runningProfile == null || ((!pump.isThisProfileSet(ch.toPump(requestedProfile)) || !requestedProfile.isEqual(runningProfile)
                 || (runningProfile is ProfileSealed.EPS && runningProfile.value.originalEnd < dateUtil.now() && runningProfile.value.originalDuration != 0L))
                 && !commandQueue.isRunning(Command.CommandType.BASAL_PROFILE))
         ) {

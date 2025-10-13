@@ -163,9 +163,6 @@ abstract class InsulinOrefBasePlugin(
         disposable.clear()
     }
 
-    override val concentration: Double
-        get() = preferences.get(IntNonKey.InsulinConcentration) / 100.0
-
     @Synchronized
     fun swapAdapter() { // Launch Popup to confirm Insulin concentration on Reservoir change
         val now = System.currentTimeMillis()

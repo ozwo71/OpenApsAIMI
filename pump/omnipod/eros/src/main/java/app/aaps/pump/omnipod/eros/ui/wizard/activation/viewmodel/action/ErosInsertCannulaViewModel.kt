@@ -1,9 +1,8 @@
 package app.aaps.pump.omnipod.eros.ui.wizard.activation.viewmodel.action
 
 import androidx.annotation.StringRes
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
-import app.aaps.core.interfaces.plugin.ActivePlugin
-import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.core.interfaces.rx.AapsSchedulers
 import app.aaps.pump.omnipod.common.ui.wizard.activation.viewmodel.action.InsertCannulaViewModel
@@ -17,9 +16,8 @@ import javax.inject.Provider
 class ErosInsertCannulaViewModel @Inject constructor(
     private val aapsOmnipodManager: AapsOmnipodErosManager,
     private val podStateManager: AapsErosPodStateManager,
-    private val profileFunction: ProfileFunction,
     pumpEnactResultProvider: Provider<PumpEnactResult>,
-    private val activePlugin: ActivePlugin,
+    private val ch: ConcentrationHelper,
     logger: AAPSLogger,
     aapsSchedulers: AapsSchedulers
 ) : InsertCannulaViewModel(pumpEnactResultProvider, logger, aapsSchedulers) {
@@ -30,7 +28,7 @@ class ErosInsertCannulaViewModel @Inject constructor(
 
     override fun isPodDeactivatable(): Boolean = podStateManager.activationProgress.isAtLeast(ActivationProgress.PAIRING_COMPLETED)
 
-    override fun doExecuteAction(): Single<PumpEnactResult> = Single.fromCallable { aapsOmnipodManager.insertCannula(profileFunction.getProfile()?.toPump(activePlugin)) }
+    override fun doExecuteAction(): Single<PumpEnactResult> = Single.fromCallable { aapsOmnipodManager.insertCannula(ch.getProfile()) }
 
     @StringRes
     override fun getTitleId(): Int = app.aaps.pump.omnipod.common.R.string.omnipod_common_pod_activation_wizard_insert_cannula_title

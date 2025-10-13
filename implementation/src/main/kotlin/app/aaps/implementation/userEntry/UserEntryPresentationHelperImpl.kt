@@ -7,6 +7,7 @@ import app.aaps.core.data.model.UE
 import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.data.ue.ValueWithUnit
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.userEntry.UserEntryPresentationHelper
@@ -24,7 +25,8 @@ class UserEntryPresentationHelperImpl @Inject constructor(
     private val profileUtil: ProfileUtil,
     private val rh: ResourceHelper,
     private val dateUtil: DateUtil,
-    private val decimalFormatter: DecimalFormatter
+    private val decimalFormatter: DecimalFormatter,
+    private val ch: ConcentrationHelper
 ) : UserEntryPresentationHelper {
 
     override fun colorId(colorGroup: Action.ColorGroup): Int = when (colorGroup) {

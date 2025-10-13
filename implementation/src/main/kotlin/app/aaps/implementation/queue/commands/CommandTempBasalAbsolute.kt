@@ -1,5 +1,6 @@
 package app.aaps.implementation.queue.commands
 
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -27,6 +28,7 @@ class CommandTempBasalAbsolute(
     @Inject lateinit var rh: ResourceHelper
     @Inject lateinit var activePlugin: ActivePlugin
     @Inject lateinit var pumpEnactResultProvider: Provider<PumpEnactResult>
+    @Inject lateinit var ch: ConcentrationHelper
 
     init {
         injector.androidInjector().inject(this)
@@ -35,15 +37,14 @@ class CommandTempBasalAbsolute(
     override val commandType: Command.CommandType = Command.CommandType.TEMPBASAL
 
     override fun execute() {
-        val concentration = activePlugin.activeInsulin.concentration
-        val r = activePlugin.activePump.setTempBasalAbsolute(absoluteRate / concentration, durationInMinutes, profile.toPump(activePlugin), enforceNew, tbrType).insulinConvertion(concentration)
-        aapsLogger.debug(LTag.PUMPQUEUE, "Result rate: $absoluteRate durationInMinutes: $durationInMinutes success: ${r.success} enacted: ${r.enacted}")
+        val r = activePlugin.activePump.setTempBasalAbsolute(ch.toPump(absoluteRate), durationInMinutes, ch.toPump(profile), enforceNew, tbrType).insulinConvertion(ch.concentration)
+        aapsLogger.debug(LTag.PUMPQUEUE, "Result rate: ${ch.basalRateString(absoluteRate)} durationInMinutes: $durationInMinutes success: ${r.success} enacted: ${r.enacted}")
         callback?.result(r)?.run()
     }
 
     override fun status(): String = rh.gs(app.aaps.core.ui.R.string.temp_basal_absolute, absoluteRate, durationInMinutes)
 
-    override fun log(): String = "TEMP BASAL $absoluteRate U/h $durationInMinutes min"
+    override fun log(): String = "TEMP BASAL ${ch.basalRateString(absoluteRate)} $durationInMinutes min"
     override fun cancel() {
         aapsLogger.debug(LTag.PUMPQUEUE, "Result cancel")
         callback?.result(pumpEnactResultProvider.get().success(false).comment(app.aaps.core.ui.R.string.connectiontimedout))?.run()

@@ -12,14 +12,17 @@ interface ConcentrationHelper {
     // Convert values received from pump with current concentration
     fun fromPump(amount: Double): Double
 
+    // Convert values sent to pump with current concentration
+    fun toPump(profile: Profile): Profile
+
     // Get Current Profile with concentration convertion (to use within Pump Driver
     fun getProfile(): Profile?
 
     // show basalrate with units in U/h if U100: i.e. "0.6 U/h", and with both value if other concentration: i.e. for U200 "0.6 U/h (0.3 U/h)"
-    fun basalRateString(rate: Double): String
+    fun basalRateString(rate: Double, toPump: Boolean = true): String
 
     // show bolus with units in U if U100: i.e. "4 U", and with both value if other concentration: i.e. for U200 "4 U (2 U)"
-    fun insulinAmountString(amount: Double): String
+    fun insulinAmountString(amount: Double, toPump: Boolean = true): String
 
     // show insulinConcentration as a String i.e. "U100", "U200", ...
     fun insulinConcentrationString(): String

@@ -8,6 +8,7 @@ import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -59,6 +60,7 @@ class TizenPlugin @Inject constructor(
     private var receiverStatusStore: ReceiverStatusStore,
     private val config: Config,
     private val glucoseStatusProvider: GlucoseStatusProvider,
+    private val ch: ConcentrationHelper
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.SYNC)
@@ -186,7 +188,7 @@ class TizenPlugin @Inject constructor(
         val pump = activePlugin.activePump
         bundle.putLong("pumpTimeStamp", pump.lastDataTime())
         bundle.putInt("pumpBattery", pump.batteryLevel)
-        bundle.putDouble("pumpReservoir", pump.reservoirLevel * activePlugin.activeInsulin.concentration)
+        bundle.putDouble("pumpReservoir", ch.fromPump(pump.reservoirLevel))
         bundle.putString("pumpStatus", pump.shortStatus(false))
     }
 

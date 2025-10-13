@@ -1,5 +1,6 @@
 package app.aaps.implementation.queue.commands
 
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -28,6 +29,7 @@ class CommandBolus(
     @Inject lateinit var rxBus: RxBus
     @Inject lateinit var activePlugin: ActivePlugin
     @Inject lateinit var pumpEnactResultProvider: Provider<PumpEnactResult>
+    @Inject lateinit var ch: ConcentrationHelper
 
     override var commandType: Command.CommandType
     init {
@@ -36,7 +38,7 @@ class CommandBolus(
     }
 
     override fun execute() {
-        detailedBolusInfo.insulin = detailedBolusInfo.insulin / activePlugin.activeInsulin.concentration
+        detailedBolusInfo.insulin = ch.toPump(detailedBolusInfo.insulin)
         val r = activePlugin.activePump.deliverTreatment(detailedBolusInfo)
 
         if (r.success) carbsRunnable.run()
@@ -52,7 +54,7 @@ class CommandBolus(
     }
 
     override fun log(): String {
-        return (if (detailedBolusInfo.insulin > 0) "BOLUS " + rh.gs(app.aaps.core.ui.R.string.format_insulin_units, detailedBolusInfo.insulin) else "") +
+        return (if (detailedBolusInfo.insulin > 0) "BOLUS " + ch.insulinAmountString(detailedBolusInfo.insulin) else "") +
             if (detailedBolusInfo.carbs > 0) "CARBS " + rh.gs(app.aaps.core.objects.R.string.format_carbs, detailedBolusInfo.carbs.toInt()) else ""
     }
 

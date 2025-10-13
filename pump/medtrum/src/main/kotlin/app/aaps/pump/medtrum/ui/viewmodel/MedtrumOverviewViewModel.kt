@@ -2,10 +2,9 @@ package app.aaps.pump.medtrum.ui.viewmodel
 
 import androidx.lifecycle.LiveData
 import app.aaps.core.data.time.T
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.plugin.ActivePlugin
-import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.utils.DateUtil
@@ -28,12 +27,11 @@ import javax.inject.Inject
 class MedtrumOverviewViewModel @Inject constructor(
     private val aapsLogger: AAPSLogger,
     private val rh: ResourceHelper,
-    private val profileFunction: ProfileFunction,
     private val commandQueue: CommandQueue,
     private val dateUtil: DateUtil,
     private val medtrumPlugin: MedtrumPlugin,
     val medtrumPump: MedtrumPump,
-    private val activePlugin: ActivePlugin
+    private val ch: ConcentrationHelper
 ) : BaseViewModel<MedtrumBaseNavigator>() {
 
     private val scope = CoroutineScope(Dispatchers.Default)
@@ -167,7 +165,7 @@ class MedtrumOverviewViewModel @Inject constructor(
 
     fun onClickChangePatch() {
         aapsLogger.debug(LTag.PUMP, "ChangePatch Patch clicked!")
-        val profile = profileFunction.getProfile()?.toPump(activePlugin)
+        val profile = ch.getProfile()
         if (profile == null) {
             _eventHandler.postValue(UIEvent(EventType.PROFILE_NOT_SET))
         } else if (medtrumPump.pumpSN == 0L) {

@@ -18,6 +18,7 @@ import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -47,7 +48,8 @@ class DetermineBasalResult @Inject constructor(
     private val rh: ResourceHelper,
     private val decimalFormatter: DecimalFormatter,
     private val dateUtil: DateUtil,
-    private val apsResultProvider: Provider<APSResult>
+    private val apsResultProvider: Provider<APSResult>,
+    private val ch: ConcentrationHelper
 ) : APSResult {
 
     override var date: Long = 0
@@ -120,8 +122,8 @@ class DetermineBasalResult @Inject constructor(
             // rate
             var ret: String = if (rate == 0.0 && duration == 0) "${rh.gs(R.string.cancel_temp)} "
             else if (rate == -1.0) "${rh.gs(R.string.let_temp_basal_run)}\n"
-            else if (usePercent) "${rh.gs(R.string.percent_rate_duration, percent.toDouble(), percent * pump.baseBasalRate * activePlugin.activeInsulin.concentration / 100.0, duration)} "
-            else "${rh.gs(R.string.rate_percent_duration, rate, rate / (pump.baseBasalRate * activePlugin.activeInsulin.concentration) * 100.0, duration)} "
+            else if (usePercent) "${rh.gs(R.string.percent_rate_duration, percent.toDouble(), percent * ch.fromPump(pump.baseBasalRate) / 100.0, duration)} "
+            else "${rh.gs(R.string.rate_percent_duration, rate, rate / (ch.fromPump(pump.baseBasalRate)) * 100.0, duration)} "
 
             // smb
             if (smb != 0.0) ret += "SMB: ${decimalFormatter.toPumpSupportedBolus(smb, activePlugin.activePump.pumpDescription.bolusStep)} "
@@ -145,8 +147,8 @@ class DetermineBasalResult @Inject constructor(
             var ret: String =
                 if (rate == 0.0 && duration == 0) rh.gs(R.string.cancel_temp) + "<br>"
                 else if (rate == -1.0) rh.gs(R.string.let_temp_basal_run) + "<br>"
-                else if (usePercent) rh.gs(R.string.percent_rate_duration_formatted, percent.toDouble(), percent * pump.baseBasalRate * activePlugin.activeInsulin.concentration / 100.0, duration)
-                else rh.gs(R.string.rate_percent_duration_formatted, rate, rate / (pump.baseBasalRate * activePlugin.activeInsulin.concentration) * 100.0, duration)
+                else if (usePercent) rh.gs(R.string.percent_rate_duration_formatted, percent.toDouble(), percent * ch.fromPump(pump.baseBasalRate) / 100.0, duration)
+                else rh.gs(R.string.rate_percent_duration_formatted, rate, rate / (ch.fromPump(pump.baseBasalRate)) * 100.0, duration)
 
             // smb
             if (smb != 0.0) ret += "<b>" + "SMB" + "</b>: " + decimalFormatter.toPumpSupportedBolus(smb, activePlugin.activePump.pumpDescription.bolusStep) + "<br>"
@@ -283,7 +285,7 @@ class DetermineBasalResult @Inject constructor(
                     aapsLogger.debug(LTag.APS, "FALSE: No temp running, asking cancel temp")
                     return false
                 }
-                if (activeTemp != null && abs(percent - activeTemp.convertedToPercent(now, profile)) < pump.pumpDescription.basalStep) {
+                if (activeTemp != null && abs(percent - activeTemp.convertedToPercent(now, profile)) < ch.fromPump(pump.pumpDescription.basalStep)) {
                     aapsLogger.debug(LTag.APS, "FALSE: Temp equal")
                     return false
                 }
@@ -315,11 +317,11 @@ class DetermineBasalResult @Inject constructor(
                     false
                 }
             } else {
-                if (activeTemp == null && rate == pump.baseBasalRate * activePlugin.activeInsulin.concentration) {
+                if (activeTemp == null && rate == ch.fromPump(pump.baseBasalRate)) {
                     aapsLogger.debug(LTag.APS, "FALSE: No temp running, asking cancel temp")
                     return false
                 }
-                if (activeTemp != null && abs(rate - activeTemp.convertedToAbsolute(now, profile)) < pump.pumpDescription.basalStep) {
+                if (activeTemp != null && abs(rate - activeTemp.convertedToAbsolute(now, profile)) < ch.fromPump(pump.pumpDescription.basalStep)) {
                     aapsLogger.debug(LTag.APS, "FALSE: Temp equal")
                     return false
                 }

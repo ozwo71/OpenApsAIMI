@@ -18,6 +18,7 @@ import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -49,6 +50,7 @@ open class APSResultObject(protected val injector: HasAndroidInjector) : APSResu
     @Inject lateinit var profileFunction: ProfileFunction
     @Inject lateinit var rh: ResourceHelper
     @Inject lateinit var decimalFormatter: DecimalFormatter
+    @Inject lateinit var ch: ConcentrationHelper
     override fun with(result: RT): APSResult = this
 
     init {
@@ -297,7 +299,7 @@ open class APSResultObject(protected val injector: HasAndroidInjector) : APSResu
                     aapsLogger.debug(LTag.APS, "FALSE: No temp running, asking cancel temp")
                     return false
                 }
-                if (activeTemp != null && abs(percent - activeTemp.convertedToPercent(now, profile)) < pump.pumpDescription.basalStep) {
+                if (activeTemp != null && abs(percent - activeTemp.convertedToPercent(now, profile)) < ch.fromPump(pump.pumpDescription.basalStep)) {
                     aapsLogger.debug(LTag.APS, "FALSE: Temp equal")
                     return false
                 }
@@ -333,7 +335,7 @@ open class APSResultObject(protected val injector: HasAndroidInjector) : APSResu
                     aapsLogger.debug(LTag.APS, "FALSE: No temp running, asking cancel temp")
                     return false
                 }
-                if (activeTemp != null && abs(rate - activeTemp.convertedToAbsolute(now, profile)) < pump.pumpDescription.basalStep) {
+                if (activeTemp != null && abs(rate - activeTemp.convertedToAbsolute(now, profile)) < ch.fromPump(pump.pumpDescription.basalStep)) {
                     aapsLogger.debug(LTag.APS, "FALSE: Temp equal")
                     return false
                 }

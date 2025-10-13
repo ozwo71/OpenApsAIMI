@@ -126,7 +126,6 @@ interface Profile {
     fun baseBasalSum(): Double
     fun percentageBasalSum(): Double
     fun toPump(concentration: Double): Profile
-    fun toPump(activePlugin: ActivePlugin): Profile
 
     fun getBasalValues(): Array<ProfileValue>
     fun getIcsValues(): Array<ProfileValue>

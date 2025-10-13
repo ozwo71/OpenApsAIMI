@@ -326,26 +326,6 @@ sealed class ProfileSealed(
             timeZone = TimeZone.getDefault()
         )
 
-    override fun toPump(activePlugin: ActivePlugin): Profile =
-        Pure(
-            PureProfile(
-                jsonObject = JSONObject(),
-                basalBlocks = basalBlocks.shiftBlock(percentage / 100.0 / activePlugin.activeInsulin.concentration, timeshift),
-                isfBlocks = isfBlocks.shiftBlock(100.0 / percentage * activePlugin.activeInsulin.concentration, timeshift),
-                icBlocks = icBlocks.shiftBlock(100.0 / percentage * activePlugin.activeInsulin.concentration, timeshift),
-                targetBlocks = targetBlocks.shiftTargetBlock(timeshift),
-                glucoseUnit = units,
-                dia = when (this) {
-                    is PS   -> this.value.iCfg.insulinEndTime / 3600.0 / 1000.0
-                    is EPS  -> this.value.iCfg.insulinEndTime / 3600.0 / 1000.0
-                    is Pure -> this.value.dia
-                },
-                timeZone = TimeZone.getDefault()
-            ),
-            null
-        )
-
-
     override fun toPump(concentration: Double): Profile =
         Pure(
             PureProfile(
