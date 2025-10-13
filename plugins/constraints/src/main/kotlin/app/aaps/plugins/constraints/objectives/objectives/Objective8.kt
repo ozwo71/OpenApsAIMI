@@ -8,15 +8,17 @@ import app.aaps.plugins.constraints.R
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@Suppress("SpellCheckingInspection")
 @Singleton
-class Objective5 @Inject constructor(
+class Objective8 @Inject constructor(
     preferences: Preferences,
     rh: ResourceHelper,
     dateUtil: DateUtil,
-) : Objective(preferences, rh, dateUtil, "maxiobzero", R.string.objectives_maxiobzero_objective, R.string.objectives_maxiobzero_gate) {
+) : Objective(preferences, rh, dateUtil, "smb", R.string.objectives_smb_objective, R.string.objectives_smb_gate) {
 
     init {
-        tasks.add(MinimumDurationTask(this, T.days(5).msecs()).learned(Learned(R.string.objectives_maxiobzero_learned)))
+        tasks.add(
+            MinimumDurationTask(this, T.days(28).msecs())
+                .learned(Learned(R.string.objectives_smb_learned))
+        )
     }
 }

@@ -139,7 +139,7 @@
     <!-- Profile -->
     <string name="localprofile">Profile</string>
     <string name="localprofile_shortname">LP</string>
-    <string name="description_profile_local">Define a profile which is available offline.</string>
+    <string name="description_profile_local">Define a profile describing your insulin needs.</string>
     <string name="a11y_add_new_to_list">add new to list</string>
     <string name="do_you_want_switch_profile">Do you want to switch profile and discard changes made to current profile?</string>
     <string name="save_or_reset_changes_first">Save or reset current changes first</string>

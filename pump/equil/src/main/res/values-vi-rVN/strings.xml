@@ -101,7 +101,7 @@
     <string name="equil_history_group_bolus">Liều bolus</string>
     <string name="equil_history_group_basal">Liều Basal</string>
     <string name="equil_history_group_configuration">Cấu hình</string>
-    <string name="equil_tab_action">Hành động lịch sử</string>
+    <string name="equil_tab_action">Lịch sử hoạt động</string>
     <string name="equil_tab_equil">Lịch sử Equil</string>
     <string name="equil_password_error">Mật khẩu ghép đôi Equil không chính xác</string>
     <string name="equil_none">không</string>

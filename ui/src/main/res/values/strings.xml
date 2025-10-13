@@ -45,7 +45,6 @@
     <string name="treatments_wizard_total_label">Total</string>
 
     <!-- SiteRotationDialog -->
-    <string name="site_synthesis">Synthesis</string>
     <string name="site_front">Front</string>
     <string name="site_back">Back</string>
     <string name="site_man">Man</string>

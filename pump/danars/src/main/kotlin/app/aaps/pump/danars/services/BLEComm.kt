@@ -14,7 +14,6 @@ import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.SystemClock
 import android.util.Base64
 import androidx.core.app.ActivityCompat
@@ -109,9 +108,7 @@ class BLEComm @Inject internal constructor(
 
     @Synchronized
     fun connect(from: String, address: String?): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
-        ) {
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             ToastUtils.errorToast(context, context.getString(app.aaps.core.ui.R.string.need_connect_permission))
             aapsLogger.error(LTag.PUMPBTCOMM, "missing permission: $from")
             return false
@@ -133,7 +130,7 @@ class BLEComm @Inject internal constructor(
             return false
         }
         if (device.bondState == BluetoothDevice.BOND_NONE) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
                 device.createBond()
                 SystemClock.sleep(10000)
             }
@@ -159,9 +156,7 @@ class BLEComm @Inject internal constructor(
 
     @Synchronized
     fun disconnect(from: String) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
-        ) {
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             aapsLogger.error(LTag.PUMPBTCOMM, "missing permission: $from")
             return
         }
