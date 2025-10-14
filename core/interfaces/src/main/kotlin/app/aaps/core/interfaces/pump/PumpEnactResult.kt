@@ -28,7 +28,7 @@ interface PumpEnactResult {
     fun isTempCancel(isTempCancel: Boolean): PumpEnactResult
     fun bolusDelivered(bolusDelivered: Double): PumpEnactResult
     fun queued(queued: Boolean): PumpEnactResult
-    fun insulinConvertion(concentration: Double): PumpEnactResult = this.also {
+    fun fromPump(concentration: Double): PumpEnactResult = this.also {
         it.bolusDelivered *= concentration
         it.absolute *= concentration
     }

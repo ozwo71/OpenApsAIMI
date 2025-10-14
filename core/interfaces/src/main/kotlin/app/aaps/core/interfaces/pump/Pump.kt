@@ -86,14 +86,14 @@ interface Pump {
      *
      *  @param profile new profile
      */
-    fun setNewBasalProfile(profile: Profile): PumpEnactResult   // updated concentration
+    fun setNewBasalProfile(profile: Profile): PumpEnactResult
 
     /**
      * @param profile profile to check
      *
      * @return true if pump is running the same profile as in param
      */
-    fun isThisProfileSet(profile: Profile): Boolean             // updated concentration
+    fun isThisProfileSet(profile: Profile): Boolean
 
     /**
      * @return timestamp of last connection to the pump in milliseconds
@@ -106,12 +106,12 @@ interface Pump {
      * This _must not_ be affected by current pump states
      * (TBRs, pump suspended/running etc.)
      */
-    val baseBasalRate: Double                                   // updated concentration
+    val baseBasalRate: Double
 
     /**
      * Reservoir level at time of last connection [Units of insulin]
      */
-    val reservoirLevel: Double                                  // updated concentration
+    val reservoirLevel: Double
 
     /**
      * Battery level at time of last connection [%]
@@ -125,7 +125,7 @@ interface Pump {
      *                          e.g. DBI will not contain carbs if the pump can't store carbs.
      * @return PumpEnactResult
      */
-    fun deliverTreatment(detailedBolusInfo: DetailedBolusInfo): PumpEnactResult // updated concentration
+    fun deliverTreatment(detailedBolusInfo: DetailedBolusInfo): PumpEnactResult
 
     /**
      *  Stopping of performed bolus requested by user
@@ -148,7 +148,7 @@ interface Pump {
      *                              (if the same TBR rate is requested && enforceNew == false driver can keep
      *                              running TBR. In this case return will be success = true, enacted = false)
      */
-    fun setTempBasalAbsolute(absoluteRate: Double, durationInMinutes: Int, profile: Profile, enforceNew: Boolean, tbrType: PumpSync.TemporaryBasalType): PumpEnactResult    // updated concentration
+    fun setTempBasalAbsolute(absoluteRate: Double, durationInMinutes: Int, profile: Profile, enforceNew: Boolean, tbrType: PumpSync.TemporaryBasalType): PumpEnactResult
 
     /**
      * Request a TRB in %
@@ -166,7 +166,7 @@ interface Pump {
      *                              (if the same TBR rate is requested && enforceNew == false driver can keep
      *                              running TBR. In this case return will be success = true, enacted = false)
      */
-    fun setTempBasalPercent(percent: Int, durationInMinutes: Int, profile: Profile, enforceNew: Boolean, tbrType: PumpSync.TemporaryBasalType): PumpEnactResult    // updated concentration
+    fun setTempBasalPercent(percent: Int, durationInMinutes: Int, profile: Profile, enforceNew: Boolean, tbrType: PumpSync.TemporaryBasalType): PumpEnactResult
 
     /**
      * Cancel current TBR if a TBR is running
@@ -179,7 +179,7 @@ interface Pump {
      */
     fun cancelTempBasal(enforceNew: Boolean): PumpEnactResult
 
-    fun setExtendedBolus(insulin: Double, durationInMinutes: Int): PumpEnactResult              // updated concentration
+    fun setExtendedBolus(insulin: Double, durationInMinutes: Int): PumpEnactResult
     fun cancelExtendedBolus(): PumpEnactResult
 
     /**
@@ -189,7 +189,7 @@ interface Pump {
      *
      * @return                      JSON with information
      */
-    fun getJSONStatus(profile: Profile, profileName: String, version: String): JSONObject        //Todo: To Update concentration
+    fun getJSONStatus(profile: Profile, profileName: String, version: String): JSONObject
 
     /**
      *  Manufacturer type. Usually defined by used plugin
@@ -222,7 +222,7 @@ interface Pump {
     /**
      * Short info for SMS, Wear etc
      */
-    fun shortStatus(veryShort: Boolean): String                             //Todo: To Update/Check concentration
+    fun shortStatus(veryShort: Boolean): String
 
     /**
      * @return true if pump is currently emulating temporary basals by extended boluses (usually to bypass 200% limit)
@@ -232,7 +232,7 @@ interface Pump {
     /**
      * Load TDDs and store them to the database
      */
-    fun loadTDDs(): PumpEnactResult                                         //Todo: To Update/Check concentration
+    fun loadTDDs(): PumpEnactResult
 
     /**
      * @return true if pump handles DST changes by it self. In this case it's not necessary stop the loop
@@ -273,7 +273,7 @@ interface Pump {
     /**
      * Only used for pump types where hasCustomUnreachableAlertCheck=true
      */
-    fun isUnreachableAlertTimeoutExceeded(alertTimeoutMilliseconds: Long): Boolean = false
+    fun isUnreachableAlertTimeoutExceeded(unreachableTimeoutMilliseconds: Long): Boolean = false
 
     /**
      * if true APS set 100% basal before full hour to avoid pump beeping

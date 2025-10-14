@@ -516,7 +516,6 @@ class InsightPlugin @Inject constructor(
                     val t = EventOverviewBolusProgress.Treatment(0.0, 0, detailedBolusInfo.bolusType === BS.Type.SMB, detailedBolusInfo.id)
                     val bolusingEvent = EventOverviewBolusProgress
                     bolusingEvent.t = t
-                    //bolusingEvent.status = rh.gs(app.aaps.pump.common.R.string.bolus_delivered_so_far, 0.0, insulin)
                     bolusingEvent.status = ch.bolusProgress(0.0, insulin)
                     bolusingEvent.percent = 0
                     rxBus.send(bolusingEvent)
@@ -559,15 +558,12 @@ class InsightPlugin @Inject constructor(
                             trials = -1
                             val percentBefore = bolusingEvent.percent
                             bolusingEvent.percent = (100.0 / activeBolus.initialAmount * (activeBolus.initialAmount - activeBolus.remainingAmount)).toInt()
-                            //bolusingEvent.status =
-                            //    rh.gs(app.aaps.pump.common.R.string.bolus_delivered_so_far, activeBolus.initialAmount - activeBolus.remainingAmount, activeBolus.initialAmount)
                             bolusingEvent.status = ch.bolusProgress(activeBolus.initialAmount - activeBolus.remainingAmount, activeBolus.initialAmount)
                             if (percentBefore != bolusingEvent.percent) rxBus.send(bolusingEvent)
                         } else {
                             synchronized(_bolusLock) {
                                 if (bolusCancelled || trials == -1 || trials++ >= 5) {
                                     if (!bolusCancelled) {
-                                        //bolusingEvent.status = rh.gs(app.aaps.pump.common.R.string.bolus_delivered_so_far, insulin, insulin)
                                         bolusingEvent.status = ch.bolusProgress(insulin, insulin)
                                         bolusingEvent.percent = 100
                                         rxBus.send(bolusingEvent)

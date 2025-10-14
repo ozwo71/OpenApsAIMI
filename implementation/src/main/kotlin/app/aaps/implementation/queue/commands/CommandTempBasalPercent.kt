@@ -41,7 +41,7 @@ class CommandTempBasalPercent(
             if (percent == 100)
                 activePlugin.activePump.cancelTempBasal(enforceNew)
             else
-                activePlugin.activePump.setTempBasalPercent(percent, durationInMinutes, ch.toPump(profile), enforceNew, tbrType).insulinConvertion(ch.concentration)
+                activePlugin.activePump.setTempBasalPercent(percent, durationInMinutes, ch.toPump(profile), enforceNew, tbrType).fromPump(ch.concentration)
         aapsLogger.debug(LTag.PUMPQUEUE, "Result percent: $percent durationInMinutes: $durationInMinutes success: ${r.success} enacted: ${r.enacted}")
         callback?.result(r)?.run()
     }
