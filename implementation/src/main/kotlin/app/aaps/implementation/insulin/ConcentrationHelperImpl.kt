@@ -70,12 +70,12 @@ class ConcentrationHelperImpl @Inject constructor(
         toPump(amount * 10)
     )
 
-    override fun bolusProgress(totalAmount: Double, delivered: Double): String {
+    override fun bolusProgress(delivered: Double, totalAmount: Double): String {
         if (isU100())
             return rh.gs(R.string.bolus_delivered_so_far, delivered, totalAmount)
         else {
-            val amountString = rh.gs(R.string.bolus_delivered_so_far, delivered, totalAmount)
-            val convertedString = rh.gs(R.string.bolus_delivered_so_far, fromPump(delivered), fromPump(totalAmount))
+            val amountString = rh.gs(R.string.bolus_delivered, delivered, totalAmount)
+            val convertedString = rh.gs(R.string.bolus_delivered, fromPump(delivered), fromPump(totalAmount))
             return rh.gs(R.string.bolus_converted_delivered, convertedString, amountString)
         }
     }

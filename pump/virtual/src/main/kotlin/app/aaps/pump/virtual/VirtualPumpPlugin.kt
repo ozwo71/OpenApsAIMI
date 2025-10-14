@@ -197,7 +197,7 @@ open class VirtualPumpPlugin @Inject constructor(
         var delivering = 0.0
         while (delivering < detailedBolusInfo.insulin) {
             SystemClock.sleep(200)
-            bolusingEvent.status = rh.gs(app.aaps.core.ui.R.string.bolus_delivering, delivering)
+            bolusingEvent.status = ch.bolusProgress(delivering, detailedBolusInfo.insulin)
             bolusingEvent.percent = min((delivering / detailedBolusInfo.insulin * 100).toInt(), 100)
             rxBus.send(bolusingEvent)
             delivering += 0.1
@@ -208,7 +208,7 @@ open class VirtualPumpPlugin @Inject constructor(
                     .comment(rh.gs(app.aaps.core.ui.R.string.stop))
         }
         SystemClock.sleep(200)
-        bolusingEvent.status = rh.gs(app.aaps.core.ui.R.string.bolus_delivered_successfully, detailedBolusInfo.insulin)
+        bolusingEvent.status = ch.bolusProgress(detailedBolusInfo.insulin, detailedBolusInfo.insulin)
         bolusingEvent.percent = 100
         rxBus.send(bolusingEvent)
         SystemClock.sleep(1000)

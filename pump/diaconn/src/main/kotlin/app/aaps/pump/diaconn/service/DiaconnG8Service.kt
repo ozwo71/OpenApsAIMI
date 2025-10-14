@@ -527,7 +527,8 @@ class DiaconnG8Service : DaggerService() {
                 if (diaconnG8Pump.isPumpVersionGe3_53) {
                     progressPecent = diaconnG8Pump.bolusingInjProgress
                     //bolusingEvent.status = String.format(rh.gs(R.string.waitingforestimatedbolusend), progressPecent)
-                    bolusingEvent.status = "볼러스 주입중 ${diaconnG8Pump.bolusingInjAmount}U / ${diaconnG8Pump.bolusingSetAmount}U (${progressPecent}%)"
+                    //bolusingEvent.status = "볼러스 주입중 ${diaconnG8Pump.bolusingInjAmount}U / ${diaconnG8Pump.bolusingSetAmount}U (${progressPecent}%)"
+                    bolusingEvent.status = ch.bolusProgress(diaconnG8Pump.bolusingInjAmount, diaconnG8Pump.bolusingSetAmount)
                     bolusingEvent.percent = min(progressPecent, 100)
                 } else {
                     val waitTime = (expectedEnd - System.currentTimeMillis()) / 1000

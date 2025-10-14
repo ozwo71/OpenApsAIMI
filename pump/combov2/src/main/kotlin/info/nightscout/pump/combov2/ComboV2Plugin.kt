@@ -22,6 +22,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.constraints.PluginConstraints
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
@@ -135,7 +136,8 @@ class ComboV2Plugin @Inject constructor(
     private val androidPermission: AndroidPermission,
     private val config: Config,
     private val decimalFormatter: DecimalFormatter,
-    private val pumpEnactResultProvider: Provider<PumpEnactResult>
+    private val pumpEnactResultProvider: Provider<PumpEnactResult>,
+    private val ch: ConcentrationHelper
 ) :
     PumpPluginBase(
         pluginDescription = PluginDescription()
@@ -1050,14 +1052,14 @@ class ComboV2Plugin @Inject constructor(
                         is RTCommandProgressStage.DeliveringBolus -> {
                             val bolusingEvent = EventOverviewBolusProgress
                             bolusingEvent.percent = (progressReport.overallProgress * 100.0).toInt()
-                            bolusingEvent.status = rh.gs(app.aaps.core.ui.R.string.bolus_delivering, detailedBolusInfo.insulin)
+                            bolusingEvent.status = ch.bolusProgress(detailedBolusInfo.insulin * progressReport.overallProgress, detailedBolusInfo.insulin)
                             rxBus.send(bolusingEvent)
                         }
 
                         BasicProgressStage.Finished               -> {
                             val bolusingEvent = EventOverviewBolusProgress
                             bolusingEvent.percent = (progressReport.overallProgress * 100.0).toInt()
-                            bolusingEvent.status = "Bolus finished, performing post-bolus checks"
+                            bolusingEvent.status = rh.gs(R.string.combov2_bolus_finished)
                             rxBus.send(bolusingEvent)
                         }
 

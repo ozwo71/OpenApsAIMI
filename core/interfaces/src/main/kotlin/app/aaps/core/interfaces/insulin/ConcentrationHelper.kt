@@ -34,7 +34,7 @@ interface ConcentrationHelper {
     fun bolusWithConvertedVolume(amount:Double): String
 
     // show bolus Progress information
-    fun bolusProgress(totalAmount: Double, amount: Double): String
+    fun bolusProgress(delivered: Double, totalAmount: Double): String
 
     val concentration: Double
 }

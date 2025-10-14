@@ -470,7 +470,7 @@ class MedtrumService : DaggerService(), BLECommCallback {
 
                 if (currentBolusAmount != null && currentBolusAmount != lastSentBolusAmount) {
                     bolusingEvent.t = medtrumPump.bolusingTreatment
-                    bolusingEvent.status = rh.gs(app.aaps.pump.common.R.string.bolus_delivered_so_far, medtrumPump.bolusingTreatment?.insulin, medtrumPump.bolusAmountToBeDelivered)
+                    bolusingEvent.status = ch.bolusProgress(medtrumPump.bolusingTreatment?.insulin ?:0.0, medtrumPump.bolusAmountToBeDelivered)
                     bolusingEvent.percent = round(currentBolusAmount.div(medtrumPump.bolusAmountToBeDelivered) * 100).toInt() - 1
                     rxBus.send(bolusingEvent)
                     lastSentBolusAmount = currentBolusAmount

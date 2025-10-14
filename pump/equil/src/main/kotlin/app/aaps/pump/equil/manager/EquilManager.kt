@@ -4,6 +4,7 @@ import android.os.SystemClock
 import android.text.TextUtils
 import app.aaps.core.data.model.BS
 import app.aaps.core.data.pump.defs.PumpType
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
@@ -82,7 +83,8 @@ class EquilManager @Inject constructor(
     private val equilBLE: EquilBLE,
     private val equilHistoryRecordDao: EquilHistoryRecordDao,
     private val equilHistoryPumpDao: EquilHistoryPumpDao,
-    private val pumpEnactResultProvider: Provider<PumpEnactResult>
+    private val pumpEnactResultProvider: Provider<PumpEnactResult>,
+    private val ch: ConcentrationHelper
 ) {
 
     private val gsonInstance: Gson = createGson()
@@ -276,8 +278,7 @@ class EquilManager @Inject constructor(
                 result.enacted(true)
                 while (!bolusProfile.stop && percent < 100) {
                     progressUpdateEvent.percent = percent.toInt()
-                    progressUpdateEvent.status = this.rh.gs(
-                        R.string.equil_bolus_delivered,
+                    progressUpdateEvent.status = ch.bolusProgress(
                         percent / 100.0 * detailedBolusInfo.insulin,
                         detailedBolusInfo.insulin
                     )
