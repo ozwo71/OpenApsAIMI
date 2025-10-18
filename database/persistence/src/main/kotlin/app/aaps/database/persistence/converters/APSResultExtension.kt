@@ -3,6 +3,7 @@ package app.aaps.database.persistence.converters
 import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.CurrentTemp
+import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.core.interfaces.aps.GlucoseStatusAutoIsf
 import app.aaps.core.interfaces.aps.GlucoseStatusSMB
 import app.aaps.core.interfaces.aps.IobTotal
@@ -110,7 +111,7 @@ fun APSResult.toDb(): app.aaps.database.entities.APSResult =
                 timestamp = this.date,
                 algorithm = this.algorithm.toDb(),
                 // Remplacer GlucoseStatusSMB par GlucoseStatusAimi si tu en as un
-                glucoseStatusJson = this.glucoseStatus?.let { Json.encodeToString(GlucoseStatusSMB.serializer(), it as GlucoseStatusSMB) },
+                glucoseStatusJson = this.glucoseStatus?.let { Json.encodeToString(GlucoseStatusAIMI.serializer(), it as GlucoseStatusAIMI) },
                 currentTempJson = this.currentTemp?.let { Json.encodeToString(CurrentTemp.serializer(), it) },
                 iobDataJson = this.iobData?.let { Json.encodeToString(ArraySerializer(IobTotal.serializer()), it) },
                 profileJson = this.oapsProfileAimi?.let { Json.encodeToString(OapsProfileAimi.serializer(), it) },

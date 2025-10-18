@@ -10,7 +10,7 @@ import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.CurrentTemp
-import app.aaps.core.interfaces.aps.GlucoseStatus
+import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.MealData
 import app.aaps.core.interfaces.aps.OapsProfileAimi
@@ -28,7 +28,6 @@ import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
-import app.aaps.core.keys.Preferences
 import app.aaps.core.keys.StringKey
 import java.io.File
 import java.text.DecimalFormat
@@ -51,6 +50,7 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import android.content.Context
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.R
 import kotlin.math.exp
 
@@ -85,9 +85,9 @@ internal fun computeMealHighIobDecision(
 class DetermineBasalaimiSMB2 @Inject constructor(
     private val profileUtil: ProfileUtil,
     private val fabricPrivacy: FabricPrivacy,
+    private val preferences: Preferences,
     context: Context
 ) {
-    @Inject lateinit var preferences: Preferences
     @Inject lateinit var persistenceLayer: PersistenceLayer
     @Inject lateinit var tddCalculator: TddCalculator
     @Inject lateinit var tirCalculator: TirCalculator
@@ -95,7 +95,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var profileFunction: ProfileFunction
     @Inject lateinit var iobCobCalculator: IobCobCalculator
     @Inject lateinit var activePlugin: ActivePlugin
-
     private val context: Context = context.applicationContext
     private val EPS_FALL = 0.3      // mg/dL/5min : seuil de baisse
     private val EPS_ACC  = 0.2      // mg/dL/5min : seuil d'écart short vs long
@@ -2908,7 +2907,7 @@ fun appendCompactLog(
     }
 
     @SuppressLint("NewApi", "DefaultLocale") fun determine_basal(
-        glucose_status: GlucoseStatus, currenttemp: CurrentTemp, iob_data_array: Array<IobTotal>, profile: OapsProfileAimi, autosens_data: AutosensResult, mealData: MealData,
+        glucose_status: GlucoseStatusAIMI, currenttemp: CurrentTemp, iob_data_array: Array<IobTotal>, profile: OapsProfileAimi, autosens_data: AutosensResult, mealData: MealData,
         microBolusAllowed: Boolean, currentTime: Long, flatBGsDetected: Boolean, dynIsfMode: Boolean
     ): RT {
         consoleError.clear()
