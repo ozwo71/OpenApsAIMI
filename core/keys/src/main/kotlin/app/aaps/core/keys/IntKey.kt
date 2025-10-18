@@ -1,8 +1,5 @@
 package app.aaps.core.keys
 
-import app.aaps.core.keys.interfaces.BooleanPreferenceKey
-import app.aaps.core.keys.interfaces.IntPreferenceKey
-
 enum class IntKey(
     override val key: String,
     override val defaultValue: Int,
@@ -16,8 +13,7 @@ enum class IntKey(
     override val dependency: BooleanPreferenceKey? = null,
     override val negativeDependency: BooleanPreferenceKey? = null,
     override val hideParentScreenIfHidden: Boolean = false,
-    override val engineeringModeOnly: Boolean = false,
-    override val exportable: Boolean = true
+    override val engineeringModeOnly: Boolean = false
 ) : IntPreferenceKey {
 
     OverviewCarbsButtonIncrement1("carbs_button_increment_1", 5, -50, 50, defaultedBySM = true, dependency = BooleanKey.OverviewShowCarbsButton),
@@ -68,20 +64,12 @@ enum class IntKey(
     SmsRemoteBolusDistance("smscommunicator_remotebolusmindistance", 15, 3, 60),
 
     BgSourceRandomInterval("randombg_interval_min", 5, 1, 15, defaultedBySM = true),
+    GarminLocalHttpPort("communication_http_port", 28891, 1001, 65535, defaultedBySM = true, hideParentScreenIfHidden = true),
     NsClientAlarmStaleData("ns_alarm_stale_data_value", 16, 15, 120),
     NsClientUrgentAlarmStaleData("ns_alarm_urgent_stale_data_value", 31, 30, 180),
-    OApsAIMIDynISFAdjustment("key_DynISF_Adjust",100,1,500),
-    OApsAIMIDynISFAdjustmentHyper("key_DynISFAdjusthyper",150,1,500),
-    OApsAIMImealAdjISFFact("key_oaps_aimi_mealAdjFact",200,1,500),
-    OApsAIMIFCLAdjISFFact("key_oaps_aimi_FCLAdjFact",200,1,500),
-    OApsAIMILunchAdjISFFact("key_oaps_aimi_lunchAdjFact",200,1,500),
-    OApsAIMIDinnerAdjISFFact("key_oaps_aimi_dinnerAdjFact",200,1,500),
-    OApsAIMIsleepAdjISFFact("key_oaps_aimi_sleepAdjFact",150,1,500),
     OApsAIMIHighBGinterval("key_oaps_aimi_highBG_interval", 3, 1, 20, defaultedBySM = true),
     OApsAIMImealinterval("key_oaps_aimi_meal_interval", 3, 1, 20, defaultedBySM = true),
-    OApsAIMIBFAdjISFFact("key_oaps_aimi_BFAdjFact",200,1,500),
     OApsAIMILunchinterval("key_oaps_aimi_lunch_interval", 3, 1, 20, defaultedBySM = true),
-    OApsAIMIFCLinterval("key_oaps_aimi_FCL_interval", 3, 1, 20, defaultedBySM = true),
     OApsAIMIDinnerinterval("key_oaps_aimi_dinner_interval", 3, 1, 20, defaultedBySM = true),
     OApsAIMIHCinterval("key_oaps_aimi_HC_interval", 3, 1, 20, defaultedBySM = true),
     OApsAIMISnackinterval("key_oaps_aimi_snack_interval", 3, 1, 20, defaultedBySM = true),
@@ -90,5 +78,9 @@ enum class IntKey(
     //OApsAIMIautodriveISF("key_oaps_aimi_autodriveISF",5,1,500),
     OApsAIMIAutodriveTarget("key_oaps_aimi_autodriveTarget",70,1,160),
     OApsAIMIAutodriveBG("key_oaps_aimi_autodriveBG",90,1,160),
+    OApsAIMINightGrowthAgeYears("key_oaps_aimi_ngr_age_years", 14, 1, 25),
+    OApsAIMINightGrowthMinDurationMin("key_oaps_aimi_ngr_min_duration", 30, 5, 240),
+    OApsAIMINightGrowthMinEventualOverTarget("key_oaps_aimi_ngr_min_eventual_over_target", 15, 0, 120),
+    OApsAIMINightGrowthDecayMinutes("key_oaps_aimi_ngr_decay_minutes", 20, 0, 120),
     OApsAIMIlogsize("key_oaps_aimi_logsize",25,1,50)
 }

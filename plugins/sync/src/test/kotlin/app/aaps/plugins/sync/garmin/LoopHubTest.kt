@@ -27,9 +27,10 @@ import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.queue.CommandQueue
+import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.keys.Preferences
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.UnitDoubleKey
-import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.shared.tests.TestBase
 import io.reactivex.rxjava3.core.Single
 import org.junit.jupiter.api.AfterEach
@@ -65,6 +66,7 @@ class LoopHubTest : TestBase() {
     @Mock lateinit var userEntryLogger: UserEntryLogger
     @Mock lateinit var preferences: Preferences
     @Mock lateinit var processedTbrEbData: ProcessedTbrEbData
+    @Mock lateinit var dateUtil: DateUtil
 
     private lateinit var loopHub: LoopHubImpl
     private val clock = Clock.fixed(Instant.ofEpochMilli(10_000), ZoneId.of("UTC"))
@@ -78,7 +80,7 @@ class LoopHubTest : TestBase() {
         }
         loopHub = LoopHubImpl(
             aapsLogger, commandQueue, constraints, iobCobCalculator, loop,
-            profileFunction, profileUtil, persistenceLayer, userEntryLogger, preferences, processedTbrEbData
+            profileFunction, profileUtil, persistenceLayer, userEntryLogger, preferences, processedTbrEbData, dateUtil
         )
         loopHub.clock = clock
     }
@@ -312,8 +314,7 @@ class LoopHubTest : TestBase() {
             duration = samplingEnd.toEpochMilli() - samplingStart.toEpochMilli(),
             dateCreated = clock.millis(),
             beatsPerMinute = 101.0,
-            device = "Test Device"
-        )
+            device = "Test Device")
         whenever(persistenceLayer.insertOrUpdateHeartRate(hr)).thenReturn(
             Single.just(PersistenceLayer.TransactionResult())
         )

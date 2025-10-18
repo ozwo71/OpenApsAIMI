@@ -122,8 +122,11 @@ enum class BooleanKey(
     OApsAIMIEnableBasal("key_enable_basal", false),
     OApsAIMIEnableStepsFromWatch("count_steps_watch", false),
     OApsAIMIpregnancy("key_use_AimiPregnancy",false),
+    OApsAIMIforcelimits("key_use_AimiForceLimits",false),
     OApsAIMInight("OApsAIMI_Enable_night",false),
     OApsAIMIhoneymoon("key_use_Aimi_honeymoon",false),
     OApsxdriponeminute(key = "key_use_Aimi_xdripOM",defaultValue = false),
-    OApsAIMIautoDrive(key = "key_use_Aimi_autoDrive",defaultValue = false)
+    OApsAIMIautoDrive(key = "key_use_Aimi_autoDrive",defaultValue = false),
+    OApsAIMIwcycle(key = "key_use_Aimi_wcycle",defaultValue = false),
+    OApsAIMINightGrowthEnabled("key_oaps_aimi_ngr_enabled", true)
 }

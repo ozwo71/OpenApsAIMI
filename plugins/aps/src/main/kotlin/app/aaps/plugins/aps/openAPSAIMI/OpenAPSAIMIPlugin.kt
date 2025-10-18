@@ -50,8 +50,9 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.IntentKey
+import app.aaps.core.keys.Preferences
 import app.aaps.core.keys.UnitDoubleKey
-import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.StringKey
 import app.aaps.core.objects.aps.DetermineBasalResult
 import app.aaps.core.objects.constraints.ConstraintObject
 import app.aaps.core.objects.extensions.convertedToAbsolute
@@ -67,6 +68,9 @@ import app.aaps.core.validators.preferences.AdaptiveIntPreference
 import app.aaps.core.validators.preferences.AdaptiveIntentPreference
 import app.aaps.core.validators.preferences.AdaptiveSwitchPreference
 import app.aaps.core.validators.preferences.AdaptiveUnitPreference
+import app.aaps.core.validators.preferences.AdaptiveStringPreference
+import app.aaps.core.validators.DefaultEditTextValidator
+import app.aaps.core.validators.EditTextValidator
 import app.aaps.plugins.aps.OpenAPSFragment
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.events.EventOpenAPSUpdateGui
@@ -79,8 +83,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.floor
-import kotlin.math.ln
-import kotlin.math.min
+//import app.aaps.plugins.aps.openAPSAIMI.AimiModelHandler
 
 @Singleton
 open class OpenAPSAIMIPlugin  @Inject constructor(
@@ -105,6 +108,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val uiInteraction: UiInteraction,
     private val determineBasalaimiSMB2: DetermineBasalaimiSMB2,
     private val profiler: Profiler,
+    private val context: Context,
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.APS)
@@ -120,8 +124,12 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     aapsLogger, rh
 ), APS, PluginConstraints {
 
+
+
     override fun onStart() {
         super.onStart()
+        AimiUamHandler.clearCache(context)
+
         var count = 0
         val apsResults = persistenceLayer.getApsResults(dateUtil.now() - T.days(1).msecs(), dateUtil.now())
         apsResults.forEach {
@@ -135,11 +143,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         aapsLogger.debug(LTag.APS, "Loaded $count variable sensitivity values from database")
     }
 
+    override fun onStop() {
+        super.onStop()
+        AimiUamHandler.close(context)
+    }
     // last values
     override var lastAPSRun: Long = 0
     override val algorithm = APSResult.Algorithm.AIMI
     override var lastAPSResult: DetermineBasalResult? = null
     override fun supportsDynamicIsf(): Boolean = preferences.get(BooleanKey.ApsUseDynamicSensitivity)
+
     // Dans votre classe principale (ou plugin), vous pouvez déclarer :
     private val kalmanISFCalculator = KalmanISFCalculator(tddCalculator, preferences, aapsLogger)
 
@@ -157,7 +170,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             start
         )
 
-        return sensitivity.second?.let { it * multiplier}
+        return sensitivity.second?.let { it * multiplier }
     }
 
     override fun getAverageIsfMgdl(timestamp: Long, caller: String): Double? {
@@ -192,6 +205,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val pump = activePlugin.activePump
         return pump.pumpDescription.isTempBasalCapable
     }
+
     override fun preprocessPreferences(preferenceFragment: PreferenceFragmentCompat) {
         super.preprocessPreferences(preferenceFragment)
 
@@ -213,7 +227,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         preferenceFragment.findPreference<SwitchPreference>(BooleanKey.ApsSensitivityRaisesTarget.key)?.isVisible = autoSensOrDynIsfSensEnabled
         preferenceFragment.findPreference<AdaptiveIntPreference>(IntKey.ApsUamMaxMinutesOfBasalToLimitSmb.key)?.isVisible = smbEnabled && uamEnabled
     }
+
     private val dynIsfCache = LongSparseArray<Double>()
+
     // Exemple de fonction pour prédire le delta futur à partir d'un historique récent
     private fun predictedDelta(deltaHistory: List<Double>): Double {
         if (deltaHistory.isEmpty()) return 0.0
@@ -223,27 +239,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         return weightedSum / weights.sum()
     }
 
-    // private fun dynamicDeltaCorrectionFactor(delta: Double?, predicted: Double?, bg: Double?): Double {
-    //     if (delta == null || predicted == null || bg == null) return 1.0
-    //     // Calcul de la moyenne du delta actuel et du delta prédit
-    //     val combinedDelta = (delta + predicted) / 2.0
-    //     return when {
-    //         // Si BG baisse, on augmente la sensibilité de façon progressive
-    //         combinedDelta < 0 -> {
-    //             val factor = Math.exp(0.15 * Math.abs(combinedDelta))
-    //             factor.coerceAtMost(1.4)
-    //         }
-    //         bg > 130 -> 0.5
-    //         // Si BG monte, n'appliquer une réduction que si combinedDelta est supérieur à un seuil (ici 10 mg/dL/5min)
-    //         combinedDelta > 4 -> {
-    //             // Réduction basée sur l'excès au-dessus du seuil
-    //             val factor = Math.exp(-0.3 * (combinedDelta - 4))
-    //             factor.coerceAtLeast(5.0 / 40.0)
-    //         }
-    //         // Pour des hausses faibles, ne pas appliquer de correction
-    //         else -> 1.0
-    //     }
-    // }
     private fun dynamicDeltaCorrectionFactor(delta: Double?, predicted: Double?, bg: Double?): Double {
         if (delta == null || predicted == null || bg == null) return 1.0
         val combinedDelta = (delta + predicted) / 2.0
@@ -254,38 +249,63 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 factor.coerceAtMost(1.4)
             }
             // En hyperglycémie : si BG est > 130, on applique une réduction progressive
-            bg > 130.0 -> {
+            bg > 110.0        -> {
                 // On réduit d’un certain pourcentage (ici jusqu’à 30%) en fonction de BG
-                val bgReduction = 1.0 - ((bg - 130.0) / (200.0 - 130.0)) * 0.3
+                val bgReduction = 1.0 - ((bg - 110.0) / (200.0 - 110.0)) * 0.5
                 // On combine ce facteur avec la réponse exponentielle basée sur combinedDelta si nécessaire
                 if (combinedDelta > 10) {
                     // Si le delta est important, on accentue la réduction avec une réponse exponentielle
                     val expFactor = Math.exp(-0.3 * (combinedDelta - 10))
-                    maxOf(expFactor, bgReduction)
+                    minOf(expFactor, bgReduction)
                 } else {
                     bgReduction
                 }
             }
-            else -> 1.0
+
+            else              -> 1.0
         }
     }
 
-
+    // private fun getRecentDeltas(): List<Double> {
+    //     val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
+    //     if (data.isEmpty()) return emptyList()
+    //
+    //     val now = data.first()
+    //     val nowDate = now.timestamp
+    //     val recentDeltas = mutableListOf<Double>()
+    //
+    //     // collecte des deltas sur une fenêtre pertinente (entre 2.5 et 7.5 minutes)
+    //     for (i in 1 until data.size) {
+    //         if (data[i].value > 39 && !data[i].filledGap) {
+    //             val minutesAgo = ((nowDate - data[i].timestamp) / (1000.0 * 60))
+    //             // On choisit ici un intervalle où les données sont suffisamment récentes
+    //             if (minutesAgo in 0.0..10.0) {
+    //                 val delta = (now.recalculated - data[i].recalculated) / minutesAgo * 5
+    //                 recentDeltas.add(delta)
+    //             }
+    //         }
+    //     }
+    //     return recentDeltas
+    // }
     private fun getRecentDeltas(): List<Double> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
+        var bg = glucoseStatusProvider.glucoseStatusData?.glucose ?: return emptyList()
+        var delta = glucoseStatusProvider.glucoseStatusData?.delta ?: return emptyList()
         if (data.isEmpty()) return emptyList()
+        // Fenêtre standard selon BG
+        val standardWindow = if (bg < 130) 30f else 15f
+        // Fenêtre raccourcie pour détection rapide
+        val rapidRiseWindow = 10f
+        // Si le delta instantané est supérieur à 15 mg/dL, on choisit la fenêtre rapide
+        val intervalMinutes = if (delta > 15) rapidRiseWindow else standardWindow
 
-        val now = data.first()
-        val nowDate = now.timestamp
+        val nowTimestamp = data.first().timestamp
         val recentDeltas = mutableListOf<Double>()
-
-        // collecte des deltas sur une fenêtre pertinente (entre 2.5 et 7.5 minutes)
         for (i in 1 until data.size) {
             if (data[i].value > 39 && !data[i].filledGap) {
-                val minutesAgo = ((nowDate - data[i].timestamp) / (1000.0 * 60))
-                // On choisit ici un intervalle où les données sont suffisamment récentes
-                if (minutesAgo in 0.0..10.0) {
-                    val delta = (now.recalculated - data[i].recalculated) / minutesAgo * 5
+                val minutesAgo = ((nowTimestamp - data[i].timestamp) / (1000.0 * 60)).toFloat()
+                if (minutesAgo in 0.0f..intervalMinutes) {
+                    val delta = (data.first().recalculated - data[i].recalculated) / minutesAgo * 5f
                     recentDeltas.add(delta)
                 }
             }
@@ -293,95 +313,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         return recentDeltas
     }
     @Synchronized
-//     private fun calculateVariableIsf(timestamp: Long, bg: Double?): Pair<String, Double?> {
-//         if (!preferences.get(BooleanKey.ApsUseDynamicSensitivity)) return Pair("OFF", null)
-//
-//         val result = persistenceLayer.getApsResultCloseTo(timestamp)
-//         if (result?.variableSens != null) {
-//             return Pair("DB", result.variableSens)
-//         }
-//
-//         val glucose = bg ?: glucoseStatusProvider.glucoseStatusData?.glucose ?: return Pair("GLUC", null)
-//         val delta = glucoseStatusProvider.glucoseStatusData?.delta
-//
-//         // Cache system to optimize repeated calculations
-//         val key = timestamp - timestamp % T.mins(30).msecs() + glucose.toLong()
-//         val cached = dynIsfCache[key]
-//         if (cached != null && timestamp < dateUtil.now()) {
-//             return Pair("HIT", cached)
-//         }
-//
-//         // Minimum TDD to avoid instability in new installations
-//         val minTDD = 10.0
-//         val tdd7P: Double = preferences.get(DoubleKey.OApsAIMITDD7)
-//         val tdd7D = tddCalculator.averageTDD(tddCalculator.calculate(7, allowMissingDays = false))
-//         if (tdd7D != null && tdd7D.data.totalAmount > tdd7P && tdd7D.data.totalAmount > 1.3 * tdd7P) {
-//             tdd7D.data.totalAmount = 1.2 * tdd7P
-//         }
-//         if (tdd7D != null && tdd7D.data.totalAmount < tdd7P * 0.9) {
-//     tdd7D.data.totalAmount = tdd7P * 0.9
-//     aapsLogger.info(LTag.APS, "TDD for 7 days was too low. Adjusted to 90% of TDD7P: ${tdd7D.data.totalAmount}")
-//         }
-//
-//         var tdd2Days = tddCalculator.averageTDD(tddCalculator.calculate(2, allowMissingDays = false))?.data?.totalAmount ?: 0.0
-//         if (tdd2Days == 0.0 || tdd2Days < tdd7P) tdd2Days = tdd7P
-//
-//         val tdd2DaysPerHour = tdd2Days / 24
-//         val tddLast4H = tdd2DaysPerHour * 4
-//
-//         var tddDaily = tddCalculator.averageTDD(tddCalculator.calculate(1, allowMissingDays = false))?.data?.totalAmount ?: 0.0
-//         if (tddDaily == 0.0 || tddDaily < tdd7P / 2) tddDaily = maxOf(tdd7P, minTDD)
-//         if (tddDaily > tdd7P && tddDaily > 1.1 * tdd7P) {
-//             tddDaily = 1.1 * tdd7P
-//         }
-//
-//         var tdd24Hrs = tddCalculator.calculateDaily(-24, 0)?.totalAmount ?: 0.0
-//         if (tdd24Hrs == 0.0) tdd24Hrs = tdd7P
-//         val tdd24HrsPerHour = tdd24Hrs / 24
-//         val tddLast8to4H = tdd24HrsPerHour * 4
-//
-//         val tddWeightedFromLast8H = ((0.3 * tdd2DaysPerHour) + (1.2 * tddLast4H) + (0.5 * tddLast8to4H)) * 3
-//         var tdd = (tddWeightedFromLast8H * 0.60) + (tdd2Days * 0.10) + (tddDaily * 0.30)
-//
-//         val isfMgdl = profileFunction.getProfile()?.getProfileIsfMgdl()
-//
-//         var sensitivity = if (glucose != null) Round.roundTo(1800 / (tdd * ln(glucose / 75.0 + 1)), 0.1) else isfMgdl
-//
-//         // 🔹 ISF correction limits to avoid extreme values
-//         if (sensitivity!! < 5.0) sensitivity = 5.0
-//         if (sensitivity > 300.0) sensitivity = 300.0
-//
-// //historique récent des deltas sous forme de liste :
-//         val recentDeltas = getRecentDeltas()
-//         val predicted = predictedDelta(recentDeltas)
-//         val dynamicFactor = dynamicDeltaCorrectionFactor(delta,predicted, bg)
-//         // 🔹 Apply smoothing function to avoid abrupt changes in ISF
-//         val calendarInstance = Calendar.getInstance()
-//         val hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
-//         //sensitivity = smoothSensitivityChange(sensitivity, glucose, delta)
-//         val smoothedISF =if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) smoothSensitivityChange(sensitivity, glucose, predicted) else smoothSensitivityChange(sensitivity, glucose, delta)
-//         aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $sensitivity, après lissage : $smoothedISF")
-//         sensitivity = smoothedISF
-//         // Apply ISF correction with delta factor
-//         //sensitivity *= deltaCorrectionFactor
-//         sensitivity *= dynamicFactor
-//
-//         // 🔹 Prevent ISF from being too low in case of large drops
-//         if (sensitivity < 5.0) {
-//             aapsLogger.warn(LTag.APS, "ISF trop bas ! Ajusté à 5.0 au lieu de $sensitivity")
-//             sensitivity = 5.0
-//         }
-//         if (sensitivity > 300.0){
-//             aapsLogger.warn(LTag.APS, "ISF trop haut ! Ajusté à 300.0 au lieu de $sensitivity")
-//             sensitivity = 300.0
-//         }
-//         aapsLogger.debug(LTag.APS, "🔍 TDD ajusté : $tdd")
-//         // Cache calculated ISF
-//         if (dynIsfCache.size() > 1000) dynIsfCache.clear()
-//         dynIsfCache.put(key, sensitivity)
-//
-//         return Pair("CALC", sensitivity)
-//     }
     private fun calculateVariableIsf(timestamp: Long, bg: Double?): Pair<String, Double?> {
         if (!preferences.get(BooleanKey.ApsUseDynamicSensitivity)) return Pair("OFF", null)
 
@@ -394,13 +325,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val currentDelta = glucoseStatusProvider.glucoseStatusData?.delta
         val recentDeltas = getRecentDeltas()
         val predictedDelta = predictedDelta(recentDeltas)
-        val dynamicFactor = dynamicDeltaCorrectionFactor(currentDelta,predictedDelta, bg)
+        val dynamicFactor = dynamicDeltaCorrectionFactor(currentDelta, predictedDelta, bg)
         // Calcul adaptatif via filtre Kalman (la classe KalmanISFCalculator doit être instanciée préalablement)
         var adaptiveISF = kalmanISFCalculator.calculateISF(glucose, currentDelta, predictedDelta)
-        // val calendarInstance = Calendar.getInstance()
-        // val hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
-        // val smoothedISF =if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) smoothSensitivityChange(adaptiveISF, glucose, predictedDelta) else smoothSensitivityChange(adaptiveISF, glucose, currentDelta)
-        // aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $adaptiveISF, après lissage : $smoothedISF")
         aapsLogger.debug(LTag.APS, "Adaptive ISF computed via Kalman: $adaptiveISF for BG: $glucose")
         var sensitivity = adaptiveISF * dynamicFactor
         // Imposer une valeur minimale de 5 et maximale de 300
@@ -414,105 +341,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         return Pair("CALC", sensitivity)
     }
-
-
-    // private fun smoothSensitivityChange(
-    //     rawSensitivity: Double,
-    //     glucose: Double?,
-    //     delta: Double?
-    // ): Double {
-    //     val recentDeltas = getRecentDeltas()
-    //     val predicted = predictedDelta(recentDeltas)
-    //     if (glucose == null) return rawSensitivity
-    //
-    //     // 1) récupère une valeur d’ISF interpolée selon BG et delta
-    //     val interpolatedISF = interpolate(glucose,predicted)
-    //
-    //     // 2) On fusionne la sensibilité brute et l’interpolée pour lisser
-    //     val smoothingFactor = 0.3
-    //     var newISF = rawSensitivity * (1.0 - smoothingFactor) + interpolatedISF * smoothingFactor
-    //
-    //     // 3️⃣ Correction basée sur la variation rapide de la glycémie
-    //     val deltaCorrectionFactor = when {
-    //         delta == null             -> 1.0
-    //         predicted > 8 && glucose!! > 120    -> 0.3  // Réduction plus forte si delta > 10 mg/dL en 5 min
-    //         predicted > 5 && glucose!! > 120 -> 0.6  // Réduction modérée si delta > 5 mg/dL
-    //         predicted < -5                -> 1.4 // Augmentation modérée si delta < -5 mg/dL
-    //         else                      -> 1.0
-    //     }
-    //
-    //     // 4️⃣ Application de la correction et sécurisation des bornes
-    //     newISF *= deltaCorrectionFactor
-    //
-    //     // 5️⃣ Limites de sécurité pour éviter des valeurs absurdes
-    //     return newISF.coerceIn(10.0, 300.0) // L'ISF est toujours entre 15 et 300
-    // }
-    //
-    // fun interpolate(xdata: Double, delta: Double?): Double {
-    //     // 🔹 Points de référence pour l'interpolation (ISF ajusté selon la glycémie)
-    //     val polyX = arrayOf(50.0, 60.0, 80.0, 100.0, 110.0, 120.0, 140.0, 160.0, 180.0, 200.0, 220.0, 240.0, 260.0, 280.0, 300.0)
-    //     val polyY = arrayOf(2.0, 2.0, 2.0, 1.5, 1.1, 1.0, 0.6, 0.5, 0.4, 0.3, 0.25, 0.2, 0.15, 0.15, 0.15)
-    //
-    //     val polymax = polyX.size - 1
-    //     var newVal = 1.0
-    //     var lowVal = polyY[0]
-    //     var topVal = polyY[polymax]
-    //     var lowX = polyX[0]
-    //     var topX = polyX[polymax]
-    //     var lowLabl = lowX
-    //
-    //     // 🔹 Extrapolation pour les glycémies < 50 mg/dL
-    //     if (xdata < lowX) {
-    //         val stepT = polyX[1]
-    //         val sValold = polyY[1]
-    //         newVal = lowVal + (sValold - lowVal) / (stepT - lowX) * (xdata - lowX)
-    //     }
-    //     // 🔹 Extrapolation pour les glycémies > 300 mg/dL
-    //     else if (xdata > topX) {
-    //         val step = polyX[polymax - 1]
-    //         val sVal = polyY[polymax - 1]
-    //         newVal = sVal + (topVal - sVal) / (topX - step) * (xdata - step)
-    //         newVal = min(newVal, 0.15) // 🔹 Limitation max (réduction ISF maximale)
-    //     }
-    //     // 🔹 Interpolation normale
-    //     else {
-    //         for (i in 0..polymax) {
-    //             val step = polyX[i]
-    //             val sVal = polyY[i]
-    //             if (step == xdata) {
-    //                 newVal = sVal
-    //                 break
-    //             } else if (step > xdata) {
-    //                 topVal = sVal
-    //                 lowX = lowLabl
-    //                 topX = step
-    //                 newVal = lowVal + (topVal - lowVal) / (topX - lowX) * (xdata - lowX)
-    //                 break
-    //             }
-    //             lowVal = sVal
-    //             lowLabl = step
-    //         }
-    //     }
-    //
-    //     // 🔹 Facteur dynamique basé sur le delta
-    //     val deltaFactor = when {
-    //         delta == null -> 1.0
-    //         delta > 10 -> 0.1   // 🔹 Réduction TRÈS agressive si delta > 10 mg/dL/5min
-    //         delta > 5  -> 0.4   // 🔹 Réduction forte si delta > 5 mg/dL/5min
-    //         delta > 2  -> 0.7   // 🔹 Réduction modérée si delta > 2 mg/dL/5min
-    //         delta < -10 -> 1.6  // 🔹 Augmentation TRÈS forte si delta < -10 mg/dL/5min
-    //         delta < -5  -> 1.3  // 🔹 Augmentation forte si delta < -5 mg/dL/5min
-    //         delta < -2  -> 1.1  // 🔹 Augmentation modérée si delta < -2 mg/dL/5min
-    //         else -> 1.0
-    //     }
-    //
-    //     // 🔹 Application de la correction dynamique
-    //     newVal *= deltaFactor
-    //
-    //     // 🔹 Sécurisation des bornes ISF
-    //     return newVal.coerceIn(0.1, 1.5)
-    // }
-
 
     override fun invoke(initiator: String, tempBasalFallback: Boolean) {
         aapsLogger.debug(LTag.APS, "invoke from $initiator tempBasalFallback: $tempBasalFallback")
@@ -617,60 +445,15 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 tddDaily = 1.1 * tdd7P
                 aapsLogger.info(LTag.APS, "TDD for 1 day limited to 10% increase. New TDDDaily: $tddDaily")
             }
-//
 // // Calcul du TDD sur 24 heures
             var tdd24Hrs = tddCalculator.calculateDaily(-24, 0)?.totalAmount ?: 0.0
             if (tdd24Hrs == 0.0) tdd24Hrs = tdd7P
             val tdd24HrsPerHour = tdd24Hrs / 24
             val tddLast8to4H = tdd24HrsPerHour * 4
-//
-// // Gestion du contexte glycémique et insulinique
-//             val bg = glucoseStatusProvider.glucoseStatusData?.glucose
-//             val delta = glucoseStatus?.delta
-//
-//
 // // Calcul pondéré du TDD récent pour éviter les fluctuations extrêmes
             val tddWeightedFromLast8H = ((1.2 * tdd2DaysPerHour) + (0.3 * tddLast4H) + (0.5 * tddLast8to4H)) * 3
             var tdd = (tddWeightedFromLast8H * 0.20) + (tdd2Days * 0.50) + (tddDaily * 0.30)
-//
-//
-// // Calcul de la sensibilité insulinique
-//             val isfMgdl = profileFunction.getProfile()?.getProfileIsfMgdl()
-//             var variableSensitivity = if (bg != null) Round.roundTo(1800 / (tdd * ln(bg / insulinDivisor + 1)), 0.1) else isfMgdl
-//
-// // 🔹 Vérification des bornes minimales et maximales
-//             variableSensitivity = when {
-//                 variableSensitivity!! < 5.0 -> 5.0
-//                 variableSensitivity > 300.0 -> 300.0
-//                 else -> variableSensitivity
-//             }
-//
-//             val recentDeltas = getRecentDeltas()
-//             val predicted = predictedDelta(recentDeltas)
-//             val dynamicFactor = dynamicDeltaCorrectionFactor(delta,predicted, bg)
-//             val calendarInstance = Calendar.getInstance()
-//             val hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
-//
-//             // 🔹 5) Lissage de l'ISF pour éviter les variations brusques
-//             //variableSensitivity = smoothSensitivityChange(variableSensitivity, bg, delta)
-//             val smoothedISF =if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) smoothSensitivityChange(variableSensitivity, bg, predicted) else smoothSensitivityChange(variableSensitivity, bg, delta)
-//             aapsLogger.debug(LTag.APS, "🔍 ISF avant lissage : $variableSensitivity, après lissage : $smoothedISF")
-//             variableSensitivity = smoothedISF
-//             // Application de la correction
-//             //variableSensitivity *= deltaCorrectionFactor
-//             variableSensitivity *= dynamicFactor
-//
-// // 🔹 6) Bornes minimales et maximales pour éviter des valeurs extrêmes
-//             variableSensitivity = variableSensitivity.coerceIn(5.0, 300.0)
-//             // 🔹 Prevent ISF from being too low in case of large drops
-//             if (variableSensitivity < 5.0) {
-//                 aapsLogger.warn(LTag.APS, "ISF trop bas ! Ajusté à 5.0 au lieu de $variableSensitivity")
-//                 variableSensitivity = 5.0
-//             }
-//             if (variableSensitivity > 300.0){
-//                 aapsLogger.warn(LTag.APS, "ISF trop haut ! Ajusté à 300.0 au lieu de $variableSensitivity")
-//                 variableSensitivity = 300.0
-//             }
+
             // On récupère la glycémie et le delta actuel
             val currentBG = glucoseStatusProvider.glucoseStatusData?.glucose
             if (currentBG == null) {
@@ -685,16 +468,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             var variableSensitivity = kalmanISFCalculator.calculateISF(currentBG, currentDelta, predictedDelta)
             aapsLogger.debug(LTag.APS, "Adaptive ISF computed: $variableSensitivity for BG: $currentBG, currentDelta: $currentDelta, predictedDelta: $predictedDelta")
 
-            // Optionnel : application d'un lissage supplémentaire en fonction de l'heure de la journée
-            // val calendarInstance = Calendar.getInstance()
-            // val hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
-            // variableSensitivity = if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) {
-            //     smoothSensitivityChange(variableSensitivity, currentBG, predictedDelta)
-            // } else {
-            //     smoothSensitivityChange(variableSensitivity, currentBG, currentDelta)
-            // }
-            // aapsLogger.debug(LTag.APS, "Adaptive ISF after additional smoothing: $variableSensitivity")
-
             // Imposition des bornes pour que l'ISF soit toujours compris entre 5 et 300
             variableSensitivity = variableSensitivity.coerceIn(5.0, 300.0)
             aapsLogger.debug(LTag.APS, "Final adaptive ISF after clamping: $variableSensitivity")
@@ -705,7 +478,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 ratioFromTdd = tdd24Hrs / tdd2Days,
                 ratioFromCarbs = 1.0 // Peut être ajusté si nécessaire
             )
-
 
             val iobArray = iobCobCalculator.calculateIobArrayForSMB(autosensResult, SMBDefaults.exercise_mode, SMBDefaults.half_basal_exercise_target, isTempTarget)
             val mealData = iobCobCalculator.getMealDataWithWaitingForCalculationFinish()
@@ -848,28 +620,102 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         }
         return maxIob
     }
+    fun detectMealOnset(delta: Float, predictedDelta: Float, acceleration: Float): Boolean {
+        val combinedDelta = (delta + predictedDelta) / 2.0f
+        return combinedDelta > 3.0f && acceleration > 1.2f
+    }
 
-    override fun applyBasalConstraints(absoluteRate: Constraint<Double>, profile: Profile): Constraint<Double> {
+    override fun applyBasalConstraints(
+        absoluteRate: Constraint<Double>,
+        profile: Profile
+    ): Constraint<Double> {
+        val glucoseStatus = glucoseStatusProvider.glucoseStatusData ?: return absoluteRate
+        // ────────────────────────────────────────────────────
+        // 1️⃣ On détecte si l’on est en mode “meal” ou “early autodrive”
+        val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
+        val isMealMode = therapy.snackTime
+            || therapy.highCarbTime
+            || therapy.mealTime
+            || therapy.lunchTime
+            || therapy.dinnerTime
+            || therapy.bfastTime
+
+        val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
+        val night = hour <= 7
+        val isEarlyAutodrive = !night
+            && !isMealMode
+            && /* tous les autres modes */ !therapy.sportTime
+            && glucoseStatus.glucose > 110
+            && detectMealOnset(
+            glucoseStatus.delta.toFloat(),
+            predictedDelta(getRecentDeltas()).toFloat(),
+            glucoseStatus.bgAcceleration.toFloat()
+        )
+
+        val isSpecialMode = isMealMode || isEarlyAutodrive
+
+        // ────────────────────────────────────────────────────
+        // 2️⃣ On choisit la bonne pref en fonction du mode
+        var maxBasal = when {
+            isMealMode       -> preferences.get(DoubleKey.meal_modes_MaxBasal)
+            isEarlyAutodrive -> preferences.get(DoubleKey.autodriveMaxBasal)
+            else             -> preferences.get(DoubleKey.ApsMaxBasal)
+        }
+
         if (isEnabled()) {
-            var maxBasal = preferences.get(DoubleKey.ApsMaxBasal)
+            // 3️⃣ On remonte au maxDailyBasal si besoin
             if (maxBasal < profile.getMaxDailyBasal()) {
                 maxBasal = profile.getMaxDailyBasal()
-                absoluteRate.addReason(rh.gs(R.string.increasing_max_basal), this)
+                absoluteRate.addReason(
+                    rh.gs(R.string.increasing_max_basal),
+                    this
+                )
             }
-            absoluteRate.setIfSmaller(maxBasal, rh.gs(app.aaps.core.ui.R.string.limitingbasalratio, maxBasal, rh.gs(R.string.maxvalueinpreferences)), this)
 
-            // Check percentRate but absolute rate too, because we know real current basal in pump
+            // 4️⃣ On bride toujours sur maxBasal
+            absoluteRate.setIfSmaller(
+                maxBasal,
+                rh.gs(
+                    app.aaps.core.ui.R.string.limitingbasalratio,
+                    maxBasal,
+                    rh.gs(R.string.maxvalueinpreferences)
+                ),
+                this
+            )
+
+            // ───> **Si on est dans un mode spécial, on s’arrête là :**
+            if (isSpecialMode) {
+                return absoluteRate
+            }
+
+            // ────────────────────────────────────────────────────
+            // 5️⃣ Sinon, on applique en plus le multiplicateur “current basal”
             val maxBasalMultiplier = preferences.get(DoubleKey.ApsMaxCurrentBasalMultiplier)
             val maxFromBasalMultiplier = floor(maxBasalMultiplier * profile.getBasal() * 100) / 100
             absoluteRate.setIfSmaller(
                 maxFromBasalMultiplier,
-                rh.gs(app.aaps.core.ui.R.string.limitingbasalratio, maxFromBasalMultiplier, rh.gs(R.string.max_basal_multiplier)),
+                rh.gs(
+                    app.aaps.core.ui.R.string.limitingbasalratio,
+                    maxFromBasalMultiplier,
+                    rh.gs(R.string.max_basal_multiplier)
+                ),
                 this
             )
-            val maxBasalFromDaily = preferences.get(DoubleKey.ApsMaxDailyMultiplier)
-            val maxFromDaily = floor(profile.getMaxDailyBasal() * maxBasalFromDaily * 100) / 100
-            absoluteRate.setIfSmaller(maxFromDaily, rh.gs(app.aaps.core.ui.R.string.limitingbasalratio, maxFromDaily, rh.gs(R.string.max_daily_basal_multiplier)), this)
+
+            // 6️⃣ Et le multiplicateur “daily basal”
+            val maxDailyMultiplier = preferences.get(DoubleKey.ApsMaxDailyMultiplier)
+            val maxFromDaily = floor(profile.getMaxDailyBasal() * maxDailyMultiplier * 100) / 100
+            absoluteRate.setIfSmaller(
+                maxFromDaily,
+                rh.gs(
+                    app.aaps.core.ui.R.string.limitingbasalratio,
+                    maxFromDaily,
+                    rh.gs(R.string.max_daily_basal_multiplier)
+                ),
+                this
+            )
         }
+
         return absoluteRate
     }
 
@@ -908,6 +754,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             .store(BooleanKey.ApsUseDynamicSensitivity, preferences)
             .store(IntKey.ApsDynIsfAdjustmentFactor, preferences)
     }
+
     override fun addPreferenceScreen(preferenceManager: PreferenceManager, parent: PreferenceScreen, context: Context, requiredKey: String?) {
         val category = PreferenceCategory(context)
         parent.addPreference(category)
@@ -915,110 +762,303 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             key = "AIMI_Settings"
             title = rh.gs(R.string.aimi_preferences)
             initialExpandedChildrenCount = 0
-            addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIlogsize, dialogMessage = R.string.oaps_aimi_logsize_summary, title = R.string.oaps_aimi_logsize_title))
-            addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsxdriponeminute, title = R.string.Enable_xdripOM_title))
-            //addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIEnableBasal, title = R.string.Enable_basal_title))
-            addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIpregnancy, title = R.string.OApsAIMI_Enable_pregnancy))
-            addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIhoneymoon, title = R.string.OApsAIMI_Enable_honeymoon))
-            addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMInight, title = R.string.OApsAIMI_Enable_night_title))
-            addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIEnableStepsFromWatch, title = R.string.countsteps_watch_title))
-            addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIMaxSMB, dialogMessage = R.string.openapsaimi_maxsmb_summary, title = R.string.openapsaimi_maxsmb_title))
+
+            addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                key = "Global User Preferences"
+                //title = "Global User Preferences"
+                title = rh.gs(R.string.user_preferences)
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.user_preferences_title_menu)
+                })
+            addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIMLtraining, title = R.string.oaps_aimi_enableMlTraining_title))
             addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIweight, dialogMessage = R.string.oaps_aimi_weight_summary, title = R.string.oaps_aimi_weight_title))
             addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMICHO, dialogMessage = R.string.oaps_aimi_cho_summary, title = R.string.oaps_aimi_cho_title))
             addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMITDD7, dialogMessage = R.string.oaps_aimi_tdd7_summary, title = R.string.oaps_aimi_tdd7_title))
-            //addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIDynISFAdjustment, dialogMessage = R.string.DynISF_Adjust_summary, title = R.string.DynISF_Adjust_title))
-            addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIMorningFactor, dialogMessage = R.string.oaps_aimi_morning_factor_summary, title = R.string.oaps_aimi_morning_factor_title))
-            addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAfternoonFactor, dialogMessage = R.string.oaps_aimi_afternoon_factor_summary, title = R.string.oaps_aimi_afternoon_factor_title))
-            addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIEveningFactor, dialogMessage = R.string.oaps_aimi_evening_factor_summary, title = R.string.oaps_aimi_evening_factor_title))
+            //addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIforcelimits, title = R.string.OApsAIMI_Force_Limits))
+            //addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIlogsize, dialogMessage = R.string.oaps_aimi_logsize_summary, title = R.string.oaps_aimi_logsize_title))
+                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIEnableStepsFromWatch, title = R.string.countsteps_watch_title))
+                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsxdriponeminute, title = R.string.Enable_xdripOM_title))
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.user_modes_preferences_title_menu)
+                })
+
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "Women_Cycle"
+                    title = rh.gs(R.string.wcycle_preferences)
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.wcycle_preferences_title_menu)
+                    })
+                    addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIwcycle, title = R.string.oaps_aimi_enablewcycle_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIwcycledateday, dialogMessage = R.string.wcycledateday_summary, title = R.string.wcycledateday_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIwcyclemenstruation, dialogMessage = R.string.wcyclemenstruation_summary, title = R.string.wcyclemenstruation_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIwcycleovulation, dialogMessage = R.string.wcycleovulation_summary, title = R.string.wcycleovulation_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIwcycleluteal, dialogMessage = R.string.wcycleluteal_summary, title = R.string.wcycleluteal_title))
+                })
+                    addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIpregnancy, title = R.string.OApsAIMI_Enable_pregnancy))
+                    addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIhoneymoon, title = R.string.OApsAIMI_Enable_honeymoon))
+                    addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMInight, title = R.string.OApsAIMI_Enable_night_title))
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.oaps_aimi_ngr_title)
+                })
+                addPreference(
+                    AdaptiveSwitchPreference(
+                        ctx = context,
+                        booleanKey = BooleanKey.OApsAIMINightGrowthEnabled,
+                        summary = R.string.oaps_aimi_ngr_enabled_summary,
+                        title = R.string.oaps_aimi_ngr_enabled_title
+                    )
+                )
+                addPreference(
+                    AdaptiveIntPreference(
+                        ctx = context,
+                        intKey = IntKey.OApsAIMINightGrowthAgeYears,
+                        dialogMessage = R.string.oaps_aimi_ngr_age_summary,
+                        title = R.string.oaps_aimi_ngr_age_title
+                    )
+                )
+                val hhmmValidator = DefaultEditTextValidator.Parameters(
+                    testType = EditTextValidator.TEST_REGEXP,
+                    customRegexp = "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+                )
+                addPreference(
+                    AdaptiveStringPreference(
+                        ctx = context,
+                        stringKey = StringKey.OApsAIMINightGrowthStart,
+                        dialogMessage = R.string.oaps_aimi_ngr_night_start_summary,
+                        summary = R.string.oaps_aimi_ngr_night_start_summary,
+                        title = R.string.oaps_aimi_ngr_night_start_title,
+                        validatorParams = hhmmValidator
+                    )
+                )
+                addPreference(
+                    AdaptiveStringPreference(
+                        ctx = context,
+                        stringKey = StringKey.OApsAIMINightGrowthEnd,
+                        dialogMessage = R.string.oaps_aimi_ngr_night_end_summary,
+                        summary = R.string.oaps_aimi_ngr_night_end_summary,
+                        title = R.string.oaps_aimi_ngr_night_end_title,
+                        validatorParams = hhmmValidator
+                    )
+                )
+                addPreference(
+                    AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMINightGrowthMinRiseSlope,
+                        dialogMessage = R.string.oaps_aimi_ngr_min_rise_summary,
+                        title = R.string.oaps_aimi_ngr_min_rise_title
+                    )
+                )
+                addPreference(
+                    AdaptiveIntPreference(
+                        ctx = context,
+                        intKey = IntKey.OApsAIMINightGrowthMinDurationMin,
+                        dialogMessage = R.string.oaps_aimi_ngr_min_duration_summary,
+                        title = R.string.oaps_aimi_ngr_min_duration_title
+                    )
+                )
+                addPreference(
+                    AdaptiveIntPreference(
+                        ctx = context,
+                        intKey = IntKey.OApsAIMINightGrowthMinEventualOverTarget,
+                        dialogMessage = R.string.oaps_aimi_ngr_min_eventual_summary,
+                        title = R.string.oaps_aimi_ngr_min_eventual_title
+                    )
+                )
+                addPreference(
+                    AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMINightGrowthSmbMultiplier,
+                        dialogMessage = R.string.oaps_aimi_ngr_smb_multiplier_summary,
+                        title = R.string.oaps_aimi_ngr_smb_multiplier_title
+                    )
+                )
+                addPreference(
+                    AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMINightGrowthBasalMultiplier,
+                        dialogMessage = R.string.oaps_aimi_ngr_basal_multiplier_summary,
+                        title = R.string.oaps_aimi_ngr_basal_multiplier_title
+                    )
+                )
+                addPreference(
+                    AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMINightGrowthMaxSmbClamp,
+                        dialogMessage = R.string.oaps_aimi_ngr_max_smb_summary,
+                        title = R.string.oaps_aimi_ngr_max_smb_title
+                    )
+                )
+                addPreference(
+                    AdaptiveDoublePreference(
+                        ctx = context,
+                        doubleKey = DoubleKey.OApsAIMINightGrowthMaxIobExtra,
+                        dialogMessage = R.string.oaps_aimi_ngr_max_iob_summary,
+                        title = R.string.oaps_aimi_ngr_max_iob_title
+                    )
+                )
+                addPreference(
+                    AdaptiveIntPreference(
+                        ctx = context,
+                        intKey = IntKey.OApsAIMINightGrowthDecayMinutes,
+                        dialogMessage = R.string.oaps_aimi_ngr_decay_summary,
+                        title = R.string.oaps_aimi_ngr_decay_title
+                    )
+                )
+
+            })
+
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                key = "Reactivity"
+                //title = "Reactivity BG < 120"
+                title = rh.gs(R.string.reactivity_preferences)
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.bg_under_120_preferences_title_menu)
+                })
+                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIMorningFactor, dialogMessage = R.string.oaps_aimi_morning_factor_summary, title = R.string.oaps_aimi_morning_factor_title))
+                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAfternoonFactor, dialogMessage = R.string.oaps_aimi_afternoon_factor_summary, title = R.string.oaps_aimi_afternoon_factor_title))
+                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIEveningFactor, dialogMessage = R.string.oaps_aimi_evening_factor_summary, title = R.string.oaps_aimi_evening_factor_title))
+                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIMaxSMB, dialogMessage = R.string.openapsaimi_maxsmb_summary, title = R.string.openapsaimi_maxsmb_title))
+            })
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "high_BG_settings"
-                title = "High BG Preferences"
+                //title = "High BG Preferences (BG > 120)"
+                title = rh.gs(R.string.high_BG_preferences)
+                addPreference(PreferenceCategory(context).apply {
+                       title = rh.gs(R.string.bg_over_120_preferences_title_menu)
+                })
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHyperFactor, dialogMessage = R.string.oaps_aimi_hyper_factor_summary, title = R.string.oaps_aimi_hyper_factor_title))
-                //addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIDynISFAdjustmentHyper, dialogMessage = R.string.DynISFAdjusthyper_summary, title = R.string.DynISFAdjusthyper_title))
                 addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIHighBGinterval, dialogMessage = R.string.oaps_aimi_HIGHBG_interval_summary, title = R.string.oaps_aimi_HIGHBG_interval_title))
                 addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHighBGMaxSMB, dialogMessage = R.string.openapsaimi_highBG_maxsmb_summary, title = R.string.openapsaimi_highBG_maxsmb_title))
             })
+
+
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "Training_ML_Modes"
-                title = "Training ML and Modes"
-                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIMLtraining, title = R.string.oaps_aimi_enableMlTraining_title))
-                addPreference(preferenceManager.createPreferenceScreen(context).apply {
-                    key = "Autodrive"
-                    title = "Autodrive"
-                    addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIautoDrive, title = R.string.oaps_aimi_enableMlautoDrive_title))
-                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolus, dialogMessage = R.string.prebolussmall_autodrive_mode_summary, title = R.string.prebolussmall_autodrive_mode_title))
-                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivePrebolus, dialogMessage = R.string.prebolus_autodrive_mode_summary, title = R.string.prebolus_autodrive_mode_title))
-                    //addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIautodriveISF, dialogMessage = R.string.oaps_aimi_AutodriveISF_summary, title = R.string.oaps_aimi_AutodriveISF_title))
-                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIcombinedDelta, dialogMessage = R.string.OApsAIMI_CombinedDelta_summary, title = R.string.OApsAIMI_CombinedDelta_title))
-                    addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIAutodriveTarget, dialogMessage = R.string.oaps_aimi_AutodriveTarget_summary, title = R.string.oaps_aimi_AutodriveTarget_title))
-                    addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIAutodriveBG, dialogMessage = R.string.oaps_aimi_AutodriveBG_summary, title = R.string.oaps_aimi_AutodriveBG_title))
-                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodriveDeviation, dialogMessage = R.string.oaps_aimi_AutodriveDeviation_summary, title = R.string.oaps_aimi_AutodriveDeviation_title))
-                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodriveAcceleration, dialogMessage = R.string.oaps_aimi_AutodriveAcceleration_summary, title = R.string.oaps_aimi_AutodriveAcceleration_title))
+                //title = "Training ML and Modes"
+                title = rh.gs(R.string.training_ml_modes_preferences)
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.manual_modes_preferences_title_menu)
                 })
-                addPreference(preferenceManager.createPreferenceScreen(context).apply {
-                    key = "mode_meal"
-                    title = "Meal Mode settings"
-                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIMealPrebolus, dialogMessage = R.string.prebolus_meal_mode_summary, title = R.string.prebolus_meal_mode_title))
-                    //addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMImealAdjISFFact, dialogMessage = R.string.oaps_aimi_mealAdjFact_summary, title = R.string.oaps_aimi_mealAdjFact_title))
-                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIMealFactor, dialogMessage = R.string.OApsAIMI_MealFactor_summary, title = R.string.OApsAIMI_MealFactor_title))
-                    addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMImealinterval, dialogMessage = R.string.oaps_aimi_meal_interval_summary, title = R.string.oaps_aimi_meal_interval_title))
-                })
+
+                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.meal_modes_MaxBasal, dialogMessage = R.string.meal_modes_max_basal_summary, title = R.string.meal_modes_max_basal_title))
+
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "mode_Breakfast"
-                    title = "Breakfast Mode settings"
+                    //title = "Breakfast Mode settings"
+                    title = rh.gs(R.string.training_ml_breakfast_modes_preferences)
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.breakfast_modes_preferences_title_menu)
+                    })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIBFPrebolus, dialogMessage = R.string.prebolus_BF_mode_summary, title = R.string.prebolus_BF_mode_title))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIBFPrebolus2, dialogMessage = R.string.prebolus2_BF_mode_summary, title = R.string.prebolus2_BF_mode_title))
-                    //addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIBFAdjISFFact, dialogMessage = R.string.oaps_aimi_BFdjFact_summary, title = R.string.oaps_aimi_BFAdjFact_title))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIBFFactor, dialogMessage = R.string.OApsAIMI_BFFactor_summary, title = R.string.OApsAIMI_BFFactor_title))
                     addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIBFinterval, dialogMessage = R.string.oaps_aimi_BF_interval_summary, title = R.string.oaps_aimi_BF_interval_title))
                 })
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "mode_Lunch"
-                    title = "Lunch Mode settings"
+                    //title = "Lunch Mode settings"
+                    title = rh.gs(R.string.training_ml_lunch_modes_preferences)
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.lunch_modes_preferences_title_menu)
+                    })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMILunchPrebolus, dialogMessage = R.string.prebolus_lunch_mode_summary, title = R.string.prebolus_lunch_mode_title))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMILunchPrebolus2, dialogMessage = R.string.prebolus2_lunch_mode_summary, title = R.string.prebolus2_lunch_mode_title))
-                    //addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMILunchAdjISFFact, dialogMessage = R.string.oaps_aimi_LunchAdjFact_summary, title = R.string.oaps_aimi_LunchAdjFact_title))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMILunchFactor, dialogMessage = R.string.OApsAIMI_LunchFactor_summary, title = R.string.OApsAIMI_lunchFactor_title))
                     addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMILunchinterval, dialogMessage = R.string.oaps_aimi_lunch_interval_summary, title = R.string.oaps_aimi_lunch_interval_title))
                 })
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "mode_dinner"
-                    title = "Dinner Mode settings"
+                    //title = "Dinner Mode settings"
+                    title = rh.gs(R.string.training_ml_dinner_modes_preferences)
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.dinner_modes_preferences_title_menu)
+                    })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIDinnerPrebolus, dialogMessage = R.string.prebolus_Dinner_mode_summary, title = R.string.prebolus_Dinner_mode_title))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIDinnerPrebolus2, dialogMessage = R.string.prebolus2_Dinner_mode_summary, title = R.string.prebolus2_Dinner_mode_title))
-                    //addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIDinnerAdjISFFact, dialogMessage = R.string.oaps_aimi_DinnerAdjFact_summary, title = R.string.oaps_aimi_DinnerAdjFact_title))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIDinnerFactor, dialogMessage = R.string.OApsAIMI_DinnerFactor_summary, title = R.string.OApsAIMI_DinnerFactor_title))
                     addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIDinnerinterval, dialogMessage = R.string.oaps_aimi_Dinner_interval_summary, title = R.string.oaps_aimi_Dinner_interval_title))
                 })
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "mode_highcarb"
-                    title = "High Carb Mode settings"
+                    //title = "High Carb Mode settings"
+                    title = rh.gs(R.string.training_ml_high_carb_modes_preferences)
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.high_carb_modes_preferences_title_menu)
+                    })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHighCarbPrebolus, dialogMessage = R.string.prebolus_highcarb_mode_summary, title = R.string.prebolus_highcarb_mode_title))
-                    //addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIHighCarbAdjISFFact, dialogMessage = R.string.oaps_aimi_highcarbAdjFact_summary, title = R.string.oaps_aimi_highcarbAdjFact_title))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIHCFactor, dialogMessage = R.string.OApsAIMI_HC_Factor_summary, title = R.string.OApsAIMI_HC_Factor_title))
                     addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIHCinterval, dialogMessage = R.string.oaps_aimi_HC_interval_summary, title = R.string.oaps_aimi_HC_interval_title))
                 })
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "mode_snack"
-                    title = "Snack Mode settings"
+                    //title = "Snack Mode settings"
+                    title = rh.gs(R.string.training_ml_snack_modes_preferences)
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.snack_modes_preferences_title_menu)
+                    })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMISnackPrebolus, dialogMessage = R.string.prebolus_snack_mode_summary, title = R.string.prebolus_snack_mode_title))
-                    //addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMISnackAdjISFFact, dialogMessage = R.string.oaps_aimi_snackAdjFact_summary, title = R.string.oaps_aimi_snackAdjFact_title))
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMISnackFactor, dialogMessage = R.string.OApsAIMI_snack_Factor_summary, title = R.string.OApsAIMI_snack_Factor_title))
                     addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMISnackinterval, dialogMessage = R.string.oaps_aimi_snack_interval_summary, title = R.string.oaps_aimi_snack_interval_title))
                 })
                 addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "mode_meal"
+                    //title = "Meal Mode settings"
+                    title = rh.gs(R.string.training_ml_generic_meal_modes_preferences)
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.generic_meal_modes_preferences_title_menu)
+                    })
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIMealPrebolus, dialogMessage = R.string.prebolus_meal_mode_summary, title = R.string.prebolus_meal_mode_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIMealFactor, dialogMessage = R.string.OApsAIMI_MealFactor_summary, title = R.string.OApsAIMI_MealFactor_title))
+                    addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMImealinterval, dialogMessage = R.string.oaps_aimi_meal_interval_summary, title = R.string.oaps_aimi_meal_interval_title))
+                })
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
                     key = "mode_sleep"
-                    title = "Sleep Mode settings"
-                    //addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIsleepAdjISFFact, dialogMessage = R.string.oaps_aimi_sleepAdjFact_summary, title = R.string.oaps_aimi_sleepAdjFact_title))
+                    //title = "Sleep Mode settings"
+                    title = rh.gs(R.string.training_ml_sleep_modes_preferences)
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.sleep_modes_preferences_title_menu)
+                    })
                     addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIsleepFactor, dialogMessage = R.string.OApsAIMI_sleep_Factor_summary, title = R.string.OApsAIMI_sleep_Factor_title))
                     addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMISleepinterval, dialogMessage = R.string.oaps_aimi_sleep_interval_summary, title = R.string.oaps_aimi_sleep_interval_title))
                 })
             })
+
+            addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                key = "Autodrive"
+                //title = "Autodrive settings"
+                title = rh.gs(R.string.autodrive_preferences)
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.autodrive_preferences_title_menu)
+                })
+                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.OApsAIMIautoDrive, title = R.string.oaps_aimi_enableMlautoDrive_title))
+                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.autodriveMaxBasal, dialogMessage = R.string.autodrive_max_basal_summary, title = R.string.autodrive_max_basal_title))
+                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivesmallPrebolus, dialogMessage = R.string.prebolussmall_autodrive_mode_summary, title = R.string.prebolussmall_autodrive_mode_title))
+                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIautodrivePrebolus, dialogMessage = R.string.prebolus_autodrive_mode_summary, title = R.string.prebolus_autodrive_mode_title))
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "Autodrive prebolus variables"
+                    //title = "Autodrive prebolus variables"
+                    title = rh.gs(R.string.autodrive_prebolus_variables)
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.autodrive_prebolus_title_menu)
+                    })
+                    //addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIAutodriveTarget, dialogMessage = R.string.oaps_aimi_AutodriveTarget_summary, title = R.string.oaps_aimi_AutodriveTarget_title))
+                    addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.OApsAIMIAutodriveBG, dialogMessage = R.string.oaps_aimi_AutodriveBG_summary, title = R.string.oaps_aimi_AutodriveBG_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIcombinedDelta, dialogMessage = R.string.OApsAIMI_CombinedDelta_summary, title = R.string.OApsAIMI_CombinedDelta_title))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodriveDeviation, dialogMessage = R.string.oaps_aimi_AutodriveDeviation_summary, title = R.string.oaps_aimi_AutodriveDeviation_title))
+                    //addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.OApsAIMIAutodriveAcceleration, dialogMessage = R.string.oaps_aimi_AutodriveAcceleration_summary, title = R.string.oaps_aimi_AutodriveAcceleration_title))
+                })
+            })
+            addPreference(PreferenceCategory(context).apply {
+                title = rh.gs(R.string.aimi_preferences_title_menu)
+            })
+            addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsMaxBasal, dialogMessage = R.string.openapsma_max_basal_summary, title = R.string.openapsma_max_basal_title))
+            addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsSmbMaxIob, dialogMessage = R.string.openapssmb_max_iob_summary, title = R.string.openapssmb_max_iob_title))
             addPreference(preferenceManager.createPreferenceScreen(context).apply {
                 key = "OAPS_SMB_Settings"
                 title = rh.gs(R.string.AAPS_SMB_Settings)
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsMaxBasal, dialogMessage = R.string.openapsma_max_basal_summary, title = R.string.openapsma_max_basal_title))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsSmbMaxIob, dialogMessage = R.string.openapssmb_max_iob_summary, title = R.string.openapssmb_max_iob_title))
+                addPreference(PreferenceCategory(context).apply {
+                    title = rh.gs(R.string.aaps_preferences_title_menu)
+                })
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseDynamicSensitivity, summary = R.string.use_dynamic_sensitivity_summary, title = R.string.use_dynamic_sensitivity_title))
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseAutosens, title = R.string.openapsama_use_autosens))
                 addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.ApsDynIsfAdjustmentFactor, dialogMessage = R.string.dyn_isf_adjust_summary, title = R.string.dyn_isf_adjust_title))
@@ -1033,27 +1073,27 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseSmbWithLowTt, summary = R.string.enable_smb_with_temp_target_summary, title = R.string.enable_smb_with_temp_target))
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseSmbAfterCarbs, summary = R.string.enable_smb_after_carbs_summary, title = R.string.enable_smb_after_carbs))
                 addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.ApsMaxSmbFrequency, title = R.string.smb_interval_summary))
-                //addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.ApsMaxMinutesOfBasalToLimitSmb, title = R.string.smb_max_minutes_summary))
-                //addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.ApsUamMaxMinutesOfBasalToLimitSmb, dialogMessage = R.string.uam_smb_max_minutes, title = R.string.uam_smb_max_minutes_summary))
                 addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsUseUam, summary = R.string.enable_uam_summary, title = R.string.enable_uam))
                 addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.ApsCarbsRequestThreshold, dialogMessage = R.string.carbs_req_threshold_summary, title = R.string.carbs_req_threshold))
-            })
-            addPreference(preferenceManager.createPreferenceScreen(context).apply {
-                key = "absorption_smb_advanced"
-                title = rh.gs(app.aaps.core.ui.R.string.advanced_settings_title)
-                addPreference(
-                    AdaptiveIntentPreference(
-                        ctx = context,
-                        intentKey = IntentKey.ApsLinkToDocs,
-                        intent = Intent().apply { action = Intent.ACTION_VIEW; data = Uri.parse(rh.gs(R.string.openapsama_link_to_preference_json_doc)) },
-                        summary = R.string.openapsama_link_to_preference_json_doc_txt
+                addPreference(preferenceManager.createPreferenceScreen(context).apply {
+                    key = "absorption_smb_advanced"
+                    title = rh.gs(app.aaps.core.ui.R.string.advanced_settings_title)
+                    addPreference(PreferenceCategory(context).apply {
+                        title = rh.gs(R.string.aaps_preferences_title_menu)
+                    })
+                    addPreference(
+                        AdaptiveIntentPreference(
+                            ctx = context,
+                            intentKey = IntentKey.ApsLinkToDocs,
+                            intent = Intent().apply { action = Intent.ACTION_VIEW; data = Uri.parse(rh.gs(R.string.openapsama_link_to_preference_json_doc)) },
+                            summary = R.string.openapsama_link_to_preference_json_doc_txt
+                        )
                     )
-                )
-                addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsAlwaysUseShortDeltas, summary = R.string.always_use_short_avg_summary, title = R.string.always_use_short_avg))
-                addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsMaxDailyMultiplier, dialogMessage = R.string.openapsama_max_daily_safety_multiplier_summary, title = R.string.openapsama_max_daily_safety_multiplier))
-                addPreference(
-                    AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsMaxCurrentBasalMultiplier, dialogMessage = R.string.openapsama_current_basal_safety_multiplier_summary, title = R.string.openapsama_current_basal_safety_multiplier)
-                )
+                    addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.ApsAlwaysUseShortDeltas, summary = R.string.always_use_short_avg_summary, title = R.string.always_use_short_avg))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsMaxDailyMultiplier, dialogMessage = R.string.openapsama_max_daily_safety_multiplier_summary, title = R.string.openapsama_max_daily_safety_multiplier))
+                    addPreference(AdaptiveDoublePreference(ctx = context, doubleKey = DoubleKey.ApsMaxCurrentBasalMultiplier, dialogMessage = R.string.openapsama_current_basal_safety_multiplier_summary, title = R.string.openapsama_current_basal_safety_multiplier)
+                    )
+                })
             })
         }
     }

@@ -2,9 +2,9 @@ package app.aaps.plugins.aps.openAPSAIMI
 
 import app.aaps.core.interfaces.stats.TddCalculator
 import app.aaps.core.keys.DoubleKey
+import app.aaps.core.keys.Preferences
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.keys.interfaces.Preferences
 import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.max
@@ -70,6 +70,15 @@ class KalmanISFCalculator(
         val tddDaily = tddCalculator.averageTDD(tddCalculator.calculate(1, allowMissingDays = false))?.data?.totalAmount ?: tdd7P
         return (0.2 * tdd7D) + (0.4 * tdd2Days) + (0.4 * tddDaily)
     }
+
+    // private fun computeRawISF(glucose: Double): Double {
+    //     val effectiveTDD = computeEffectiveTDD()
+    //     val safeTDD = if (effectiveTDD < 1.0) 1.0 else effectiveTDD
+    //     // Facteur additionnel : si la glycémie dépasse 200 mg/dL, on réduit rawISF
+    //     val bgFactor = if (glucose > 200.0) 0.7 else 1.0
+    //     val rawISF = SCALING_FACTOR / (safeTDD * ln(glucose / BASE_CONSTANT + 1)) * bgFactor
+    //     return rawISF.coerceIn(MIN_ISF, MAX_ISF)
+    // }
     private fun computeRawISF(glucose: Double): Double {
         val effectiveTDD = computeEffectiveTDD()
         val safeTDD = if (effectiveTDD < 1.0) 1.0 else effectiveTDD
@@ -84,6 +93,15 @@ class KalmanISFCalculator(
             glucose >= 100.0 -> 0.9
             else -> 1.0
         }
+        // val bgFactor = if (glucose > 100.0) {
+        //     // Apply exponential decay for faster reduction
+        //     val factor = Math.exp((glucose - 100.0)/50.0)
+        //     1.0 / factor.coerceAtLeast(1.0).coerceAtMost(2.0)
+        // } else {
+        //     1.0
+        // }
+
+
         val rawISF = (SCALING_FACTOR / (safeTDD * ln(glucose / BASE_CONSTANT + 1))) * bgFactor
         return rawISF.coerceIn(MIN_ISF, MAX_ISF)
     }
