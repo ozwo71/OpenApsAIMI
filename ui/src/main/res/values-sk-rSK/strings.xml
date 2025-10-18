@@ -37,6 +37,7 @@
     <string name="format_cob_ic">%1$.1fg IC: %2$.1f</string>
     <string name="format_carbs_ic">%1$.0fg IC: %2$.1f</string>
     <string name="treatments_wizard_total_label">Spolu</string>
+    <!-- SiteRotationDialog -->
     <!-- FillDialog -->
     <string name="fill_warning">Prosím uistite sa, že hodnota zodpovedá špecifikácií Vášho setu!</string>
     <string name="record_pump_site_change">Zaznamenať výmenu setu</string>
@@ -137,6 +138,8 @@
     <!--    Widget-->
     <string name="use_black_color">Použiť čiernu farbu</string>
     <string name="widget_configuration">Konfiguráciu widgetu</string>
+    <string name="until_changed">Dokiaľ sa nezmení</string>
+    <string name="limitations">Obmedzenia</string>
     <string-array name="yes_no_positiveonly_negativeonly">
         <item>Oba</item>
         <item>Iba kladné</item>

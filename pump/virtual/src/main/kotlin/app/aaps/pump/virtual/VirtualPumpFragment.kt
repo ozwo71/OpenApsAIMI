@@ -1,5 +1,6 @@
 package app.aaps.pump.virtual
 
+import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
@@ -22,9 +23,12 @@ import app.aaps.core.interfaces.rx.events.EventTempBasalChange
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.objects.extensions.toStringFull
+import app.aaps.pump.virtual.composeui.TestActivity
 import app.aaps.pump.virtual.databinding.VirtualPumpFragmentBinding
 import app.aaps.pump.virtual.events.EventVirtualPumpUpdateGui
+import app.aaps.pump.virtual.keys.VirtualBooleanNonPreferenceKey
 import dagger.android.support.DaggerFragment
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.kotlin.plusAssign
@@ -41,6 +45,7 @@ class VirtualPumpFragment : DaggerFragment() {
     @Inject lateinit var aapsSchedulers: AapsSchedulers
     @Inject lateinit var decimalFormatter: DecimalFormatter
     @Inject lateinit var persistenceLayer: PersistenceLayer
+    @Inject lateinit var preferences: Preferences
 
     private val disposable = CompositeDisposable()
 
@@ -52,6 +57,8 @@ class VirtualPumpFragment : DaggerFragment() {
     // This property is only valid between onCreateView and
     // onDestroyView.
     private val binding get() = _binding!!
+
+    private val composeTestEnabled = false
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
         VirtualPumpFragmentBinding.inflate(inflater, container, false).also { _binding = it }.root
@@ -76,6 +83,16 @@ class VirtualPumpFragment : DaggerFragment() {
             handler.postDelayed(refreshLoop, T.mins(1).msecs())
         }
         handler.postDelayed(refreshLoop, T.mins(1).msecs())
+
+        binding.pumpSuspended.isChecked = preferences.get(VirtualBooleanNonPreferenceKey.IsSuspended)
+        binding.pumpSuspended.setOnClickListener { preferences.put(VirtualBooleanNonPreferenceKey.IsSuspended, binding.pumpSuspended.isChecked) }
+
+        binding.composeDemo.setOnClickListener {
+            startActivity(Intent(context, TestActivity::class.java))
+        }
+
+        binding.composeDemo.visibility = if (composeTestEnabled) View.VISIBLE else View.GONE
+
         updateGui()
     }
 

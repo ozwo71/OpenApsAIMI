@@ -1,13 +1,14 @@
 package app.aaps.plugins.constraints.objectives
 
 import app.aaps.core.data.plugin.PluginType
+import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.Objectives
 import app.aaps.core.interfaces.constraints.Objectives.Companion.AUTOSENS_OBJECTIVE
 import app.aaps.core.interfaces.constraints.Objectives.Companion.AUTO_OBJECTIVE
+import app.aaps.core.interfaces.constraints.Objectives.Companion.CLOSED_LOOP_OBJECTIVE
 import app.aaps.core.interfaces.constraints.Objectives.Companion.FIRST_OBJECTIVE
-import app.aaps.core.interfaces.constraints.Objectives.Companion.MAXBASAL_OBJECTIVE
-import app.aaps.core.interfaces.constraints.Objectives.Companion.MAXIOB_ZERO_CL_OBJECTIVE
+import app.aaps.core.interfaces.constraints.Objectives.Companion.LGS_OBJECTIVE
 import app.aaps.core.interfaces.constraints.Objectives.Companion.SMB_OBJECTIVE
 import app.aaps.core.interfaces.constraints.PluginConstraints
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -21,26 +22,16 @@ import app.aaps.plugins.constraints.R
 import app.aaps.plugins.constraints.objectives.keys.ObjectivesBooleanComposedKey
 import app.aaps.plugins.constraints.objectives.keys.ObjectivesLongComposedKey
 import app.aaps.plugins.constraints.objectives.objectives.Objective
-import app.aaps.plugins.constraints.objectives.objectives.Objective0
-import app.aaps.plugins.constraints.objectives.objectives.Objective1
-import app.aaps.plugins.constraints.objectives.objectives.Objective10
-import app.aaps.plugins.constraints.objectives.objectives.Objective2
-import app.aaps.plugins.constraints.objectives.objectives.Objective3
-import app.aaps.plugins.constraints.objectives.objectives.Objective4
-import app.aaps.plugins.constraints.objectives.objectives.Objective5
-import app.aaps.plugins.constraints.objectives.objectives.Objective6
-import app.aaps.plugins.constraints.objectives.objectives.Objective7
-import app.aaps.plugins.constraints.objectives.objectives.Objective9
-import dagger.android.HasAndroidInjector
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class ObjectivesPlugin @Inject constructor(
-    private val injector: HasAndroidInjector,
     aapsLogger: AAPSLogger,
     rh: ResourceHelper,
-    preferences: Preferences
+    preferences: Preferences,
+    config: Config,
+    val objectives: List<@JvmSuppressWildcards Objective>
 ) : PluginBaseWithPreferences(
     pluginDescription = PluginDescription()
         .mainType(PluginType.CONSTRAINTS)
@@ -48,32 +39,11 @@ class ObjectivesPlugin @Inject constructor(
         .pluginIcon(app.aaps.core.ui.R.drawable.ic_graduation)
         .pluginName(app.aaps.core.ui.R.string.objectives)
         .shortName(R.string.objectives_shortname)
+        .enableByDefault(config.APS)
         .description(R.string.description_objectives),
     ownPreferences = listOf(ObjectivesBooleanComposedKey::class.java, ObjectivesLongComposedKey::class.java),
     aapsLogger, rh, preferences
 ), PluginConstraints, Objectives {
-
-    var objectives: MutableList<Objective> = ArrayList()
-
-    override fun onStart() {
-        super.onStart()
-        setupObjectives()
-    }
-
-    private fun setupObjectives() {
-        objectives.clear()
-        objectives.add(Objective0(injector))
-        objectives.add(Objective1(injector))
-        objectives.add(Objective2(injector))
-        objectives.add(Objective3(injector))
-        objectives.add(Objective4(injector))
-        objectives.add(Objective5(injector))
-        objectives.add(Objective6(injector))
-        objectives.add(Objective7(injector))
-        objectives.add(Objective9(injector))
-        objectives.add(Objective10(injector))
-        // edit companion object if you remove/add Objective
-    }
 
     fun reset() {
         for (objective in objectives) {
@@ -111,19 +81,19 @@ class ObjectivesPlugin @Inject constructor(
         return value
     }
 
-    override fun isLgsAllowed(value: Constraint<Boolean>): Constraint<Boolean> {
+    override fun isLgsForced(value: Constraint<Boolean>): Constraint<Boolean> {
         // Check if initialized
         if (objectives.isEmpty()) return value
-        if (!objectives[MAXBASAL_OBJECTIVE].isStarted)
-            value.set(false, rh.gs(R.string.objectivenotstarted, MAXBASAL_OBJECTIVE + 1), this)
+        if (objectives[LGS_OBJECTIVE].isStarted && !objectives[LGS_OBJECTIVE].isAccomplished)
+            value.set(true, rh.gs(R.string.objectivenotfinished, LGS_OBJECTIVE + 1), this)
         return value
     }
 
     override fun isClosedLoopAllowed(value: Constraint<Boolean>): Constraint<Boolean> {
         // Check if initialized
         if (objectives.isEmpty()) return value
-        if (!objectives[MAXIOB_ZERO_CL_OBJECTIVE].isStarted)
-            value.set(false, rh.gs(R.string.objectivenotstarted, MAXIOB_ZERO_CL_OBJECTIVE + 1), this)
+        if (!objectives[CLOSED_LOOP_OBJECTIVE].isStarted)
+            value.set(false, rh.gs(R.string.objectivenotstarted, CLOSED_LOOP_OBJECTIVE + 1), this)
         return value
     }
 
@@ -141,14 +111,6 @@ class ObjectivesPlugin @Inject constructor(
         if (!objectives[SMB_OBJECTIVE].isStarted)
             value.set(false, rh.gs(R.string.objectivenotstarted, SMB_OBJECTIVE + 1), this)
         return value
-    }
-
-    override fun applyMaxIOBConstraints(maxIob: Constraint<Double>): Constraint<Double> {
-        // Check if initialized
-        if (objectives.isEmpty()) return maxIob
-        if (objectives[MAXIOB_ZERO_CL_OBJECTIVE].isStarted && !objectives[MAXIOB_ZERO_CL_OBJECTIVE].isAccomplished)
-            maxIob.set(0.0, rh.gs(R.string.objectivenotfinished, MAXIOB_ZERO_CL_OBJECTIVE + 1), this)
-        return maxIob
     }
 
     override fun isAutomationEnabled(value: Constraint<Boolean>): Constraint<Boolean> {

@@ -1,5 +1,6 @@
 import org.gradle.kotlin.dsl.android
 import java.io.ByteArrayOutputStream
+import org.gradle.kotlin.dsl.debugImplementation
 import java.text.SimpleDateFormat
 import java.util.Date
 
@@ -93,7 +94,6 @@ android {
     compileSdk = Versions.compileSdk
 
     namespace = "app.aaps"
-    ndkVersion = Versions.ndkVersion
 
     defaultConfig {
         // Remplace par des valeurs fixes si besoin (ex. 21, 34, etc.)
@@ -253,6 +253,9 @@ dependencies {
     androidTestImplementation(project(":shared:tests"))
     androidTestImplementation(libs.androidx.test.rules)
     androidTestImplementation(libs.org.skyscreamer.jsonassert)
+
+    debugImplementation(libs.com.squareup.leakcanary.android)
+
 
     kspAndroidTest(libs.com.google.dagger.android.processor)
 

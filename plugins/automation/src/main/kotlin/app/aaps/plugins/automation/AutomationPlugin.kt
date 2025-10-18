@@ -8,6 +8,7 @@ import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceManager
 import androidx.preference.PreferenceScreen
 import app.aaps.core.data.model.GlucoseUnit
+import app.aaps.core.data.model.RM
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.data.time.T
@@ -42,6 +43,7 @@ import app.aaps.plugins.automation.actions.ActionNotification
 import app.aaps.plugins.automation.actions.ActionProfileSwitch
 import app.aaps.plugins.automation.actions.ActionProfileSwitchPercent
 import app.aaps.plugins.automation.actions.ActionRunAutotune
+import app.aaps.plugins.automation.actions.ActionSMBChange
 import app.aaps.plugins.automation.actions.ActionSendSMS
 import app.aaps.plugins.automation.actions.ActionSettingsExport
 import app.aaps.plugins.automation.actions.ActionStartTempTarget
@@ -240,27 +242,22 @@ class AutomationPlugin @Inject constructor(
     internal fun processActions() {
         if (!config.appInitialized) return
         var commonEventsEnabled = true
-        if (loop.isSuspended || !(loop as PluginBase).isEnabled()) {
-            aapsLogger.debug(LTag.AUTOMATION, "Loop deactivated")
-            executionLog.add(rh.gs(app.aaps.core.ui.R.string.loopisdisabled))
+        if (loop.runningMode.isSuspended() || !loop.runningMode.isLoopRunning()) {
+            aapsLogger.debug(LTag.AUTOMATION, "Loop suspended")
+            executionLog.add(rh.gs(app.aaps.core.ui.R.string.loopsuspended))
             rxBus.send(EventAutomationUpdateGui())
             commonEventsEnabled = false
         }
-        if (loop.isDisconnected || !(loop as PluginBase).isEnabled()) {
+        if (loop.runningMode == RM.Mode.DISCONNECTED_PUMP || !(loop as PluginBase).isEnabled()) {
             aapsLogger.debug(LTag.AUTOMATION, "Loop disconnected")
             executionLog.add(rh.gs(app.aaps.core.ui.R.string.disconnected))
             rxBus.send(EventAutomationUpdateGui())
             commonEventsEnabled = false
         }
-        if (activePlugin.activePump.isSuspended()) {
-            aapsLogger.debug(LTag.AUTOMATION, "Pump suspended")
-            executionLog.add(rh.gs(app.aaps.core.ui.R.string.waitingforpump))
-            rxBus.send(EventAutomationUpdateGui())
-            commonEventsEnabled = false
-        }
         val enabled = constraintChecker.isAutomationEnabled()
         if (!enabled.value()) {
-            executionLog.add(enabled.getMostLimitedReasons())
+            val reason = enabled.getMostLimitedReasons()
+            if (executionLog.lastOrNull() != reason) executionLog.add(reason)
             rxBus.send(EventAutomationUpdateGui())
             commonEventsEnabled = false
         }
@@ -379,10 +376,6 @@ class AutomationPlugin @Inject constructor(
 
     fun getActionDummyObjects(): List<Action> {
         val actions = mutableListOf(
-            //ActionLoopDisable(injector),
-            //ActionLoopEnable(injector),
-            //ActionLoopResume(injector),
-            //ActionLoopSuspend(injector),
             ActionStopProcessing(injector),
             ActionStartTempTarget(injector),
             ActionStopTempTarget(injector),
@@ -392,7 +385,8 @@ class AutomationPlugin @Inject constructor(
             ActionCarePortalEvent(injector),
             ActionProfileSwitchPercent(injector),
             ActionProfileSwitch(injector),
-            ActionSendSMS(injector)
+            ActionSendSMS(injector),
+            ActionSMBChange(injector)
         )
         if (config.isEngineeringMode() && config.isDev())
             actions.add(ActionRunAutotune(injector))

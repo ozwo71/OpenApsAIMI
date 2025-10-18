@@ -11,6 +11,7 @@ import app.aaps.core.graph.data.DeviationDataPoint
 import app.aaps.core.graph.data.FixedLineGraphSeries
 import app.aaps.core.graph.data.LineGraphSeries
 import app.aaps.core.graph.data.PointsWithLabelGraphSeries
+import app.aaps.core.graph.data.RunningModeDataPoint
 import app.aaps.core.graph.data.ScaledDataPoint
 import app.aaps.core.graph.data.StepsDataPoint
 import app.aaps.core.interfaces.db.PersistenceLayer
@@ -63,6 +64,7 @@ class OverviewDataImpl @Inject constructor(
         basalLineGraphSeries = LineGraphSeries<ScaledDataPoint>()
         absoluteBasalGraphSeries = LineGraphSeries<ScaledDataPoint>()
         temporaryTargetSeries = LineGraphSeries<DataPoint>()
+        runningModesSeries = PointsWithLabelGraphSeries< RunningModeDataPoint>()
         maxIAValue = 0.0
         activitySeries = FixedLineGraphSeries<ScaledDataPoint>()
         activityPredictionSeries = FixedLineGraphSeries<ScaledDataPoint>()
@@ -135,7 +137,7 @@ class OverviewDataImpl @Inject constructor(
         profileFunction.getProfile()?.let { profile ->
             var temporaryBasal = processedTbrEbData.getTempBasalIncludingConvertedExtended(dateUtil.now())
             if (temporaryBasal?.isInProgress == false) temporaryBasal = null
-            temporaryBasal?.let { rh.gs(app.aaps.plugins.main.R.string.temp_basal_overview_short_name) + it.toStringShort(rh) }
+            temporaryBasal?.let { rh.gs(app.aaps.plugins.main.R.string.temp_basal_overview_short_name) + " " + it.toStringShort(rh) }
                 ?: rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, profile.getBasal())
         } ?: rh.gs(app.aaps.core.ui.R.string.value_unavailable_short)
 
@@ -196,7 +198,7 @@ class OverviewDataImpl @Inject constructor(
     override var absoluteBasalGraphSeries: SeriesData = LineGraphSeries<ScaledDataPoint>()
 
     override var temporaryTargetSeries: SeriesData = LineGraphSeries<DataPoint>()
-
+    override var runningModesSeries: SeriesData = PointsWithLabelGraphSeries< RunningModeDataPoint>()
     override var maxIAValue = 0.0
     override val actScale = Scale()
     override var activitySeries: SeriesData = FixedLineGraphSeries<ScaledDataPoint>()

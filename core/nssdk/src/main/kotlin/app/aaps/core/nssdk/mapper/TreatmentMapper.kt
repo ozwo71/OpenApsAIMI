@@ -313,6 +313,8 @@ internal fun RemoteTreatment.toTreatment(): NSTreatment? {
                 isReadOnly = this.isReadOnly == true,
                 isValid = this.isValid != false,
                 eventType = this.eventType,
+                location = this.location,
+                arrow = this.arrow,
                 notes = this.notes,
                 pumpId = this.pumpId,
                 endId = this.endId,
@@ -347,7 +349,12 @@ internal fun RemoteTreatment.toTreatment(): NSTreatment? {
                 pumpType = this.pumpType,
                 pumpSerial = this.pumpSerial,
                 duration = durationInMilliseconds,
-                reason = NSOfflineEvent.Reason.fromString(this.reason)
+                reason = NSOfflineEvent.Reason.fromString(this.reason),
+                // RunningMode
+                originalDuration = this.originalDuration,
+                mode = NSOfflineEvent.Mode.fromString(this.mode),
+                autoForced = this.autoForced == true,
+                reasons = this.reasons ?: ""
             )
         }
 
@@ -562,6 +569,8 @@ internal fun NSTreatment.toRemoteTreatment(): RemoteTreatment? =
             isReadOnly = isReadOnly,
             isValid = isValid,
             eventType = eventType,
+            location = location,
+            arrow = arrow,
             notes = notes,
             pumpId = pumpId,
             endId = endId,
@@ -593,7 +602,12 @@ internal fun NSTreatment.toRemoteTreatment(): RemoteTreatment? =
             pumpSerial = pumpSerial,
             duration = TimeUnit.MILLISECONDS.toMinutes(duration),
             durationInMilliseconds = duration,
-            reason = reason.name
+            reason = reason.name,
+            // RunningMode
+            originalDuration = originalDuration,
+            mode = mode.name,
+            autoForced = autoForced,
+            reasons = reasons
         )
 
         is NSExtendedBolus          ->

@@ -25,7 +25,6 @@ import app.aaps.core.interfaces.constraints.PluginConstraints
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
-import app.aaps.core.interfaces.objects.Instantiator
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
@@ -105,10 +104,12 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.util.Locale
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.time.ExperimentalTime
 import info.nightscout.comboctl.base.BluetoothAddress as ComboCtlBluetoothAddress
 import info.nightscout.comboctl.base.LogLevel as ComboCtlLogLevel
 import info.nightscout.comboctl.base.Logger as ComboCtlLogger
@@ -127,14 +128,14 @@ class ComboV2Plugin @Inject constructor(
     private val context: Context,
     private val rxBus: RxBus,
     private val constraintChecker: ConstraintsChecker,
-    private val sp: SP,
+    sp: SP,
     private val pumpSync: PumpSync,
     private val dateUtil: DateUtil,
     private val uiInteraction: UiInteraction,
     private val androidPermission: AndroidPermission,
     private val config: Config,
     private val decimalFormatter: DecimalFormatter,
-    private val instantiator: Instantiator
+    private val pumpEnactResultProvider: Provider<PumpEnactResult>
 ) :
     PumpPluginBase(
         pluginDescription = PluginDescription()
@@ -844,7 +845,7 @@ class ComboV2Plugin @Inject constructor(
                 Notification.URGENT
             )
 
-            return instantiator.providePumpEnactResult().apply {
+            return pumpEnactResultProvider.get().apply {
                 success = false
                 enacted = false
                 comment = rh.gs(app.aaps.core.ui.R.string.pump_not_initialized_profile_not_set)
@@ -856,7 +857,7 @@ class ComboV2Plugin @Inject constructor(
         rxBus.send(EventDismissNotification(Notification.PROFILE_NOT_SET_NOT_INITIALIZED))
         rxBus.send(EventDismissNotification(Notification.FAILED_UPDATE_PROFILE))
 
-        val pumpEnactResult = instantiator.providePumpEnactResult()
+        val pumpEnactResult = pumpEnactResultProvider.get()
 
         val requestedBasalProfile = profile.toComboCtlBasalProfile()
         aapsLogger.debug(LTag.PUMP, "Basal profile to set: $requestedBasalProfile")
@@ -1017,7 +1018,7 @@ class ComboV2Plugin @Inject constructor(
             BS.Type.PRIMING -> ComboCtlPump.StandardBolusReason.PRIMING_INFUSION_SET
         }
 
-        val pumpEnactResult = instantiator.providePumpEnactResult()
+        val pumpEnactResult = pumpEnactResultProvider.get()
         pumpEnactResult.success = false
 
         if (isSuspended()) {
@@ -1162,7 +1163,7 @@ class ComboV2Plugin @Inject constructor(
     }
 
     override fun setTempBasalAbsolute(absoluteRate: Double, durationInMinutes: Int, profile: Profile, enforceNew: Boolean, tbrType: PumpSync.TemporaryBasalType): PumpEnactResult {
-        val pumpEnactResult = instantiator.providePumpEnactResult()
+        val pumpEnactResult = pumpEnactResultProvider.get()
         pumpEnactResult.isPercent = false
 
         // Corner case: Current base basal rate is 0 IU. We cannot do
@@ -1213,7 +1214,7 @@ class ComboV2Plugin @Inject constructor(
     }
 
     override fun setTempBasalPercent(percent: Int, durationInMinutes: Int, profile: Profile, enforceNew: Boolean, tbrType: PumpSync.TemporaryBasalType): PumpEnactResult {
-        val pumpEnactResult = instantiator.providePumpEnactResult()
+        val pumpEnactResult = pumpEnactResultProvider.get()
         pumpEnactResult.isPercent = true
 
         val roundedPercentage = ((percent + 5) / 10) * 10
@@ -1245,7 +1246,7 @@ class ComboV2Plugin @Inject constructor(
     }
 
     override fun cancelTempBasal(enforceNew: Boolean): PumpEnactResult {
-        val pumpEnactResult = instantiator.providePumpEnactResult()
+        val pumpEnactResult = pumpEnactResultProvider.get()
         pumpEnactResult.isPercent = true
         pumpEnactResult.isTempCancel = enforceNew
         setTbrInternal(100, 0, tbrType = ComboCtlTbr.Type.NORMAL, force100Percent = enforceNew, pumpEnactResult)
@@ -1329,6 +1330,7 @@ class ComboV2Plugin @Inject constructor(
     override fun cancelExtendedBolus(): PumpEnactResult =
         createFailurePumpEnactResult(R.string.combov2_extended_bolus_not_supported)
 
+    @OptIn(ExperimentalTime::class)
     override fun getJSONStatus(profile: Profile, profileName: String, version: String): JSONObject {
         if (!isInitialized())
             return JSONObject()
@@ -1443,6 +1445,7 @@ class ComboV2Plugin @Inject constructor(
     override val pumpDescription: PumpDescription
         get() = _pumpDescription
 
+    @OptIn(ExperimentalTime::class)
     override fun shortStatus(veryShort: Boolean): String {
         val lines = mutableListOf<String>()
 
@@ -1501,8 +1504,9 @@ class ComboV2Plugin @Inject constructor(
 
     override val isFakingTempsByExtendedBoluses = false
 
+    @OptIn(ExperimentalTime::class)
     override fun loadTDDs(): PumpEnactResult {
-        val pumpEnactResult = instantiator.providePumpEnactResult()
+        val pumpEnactResult = pumpEnactResultProvider.get()
         val acquiredPump = getAcquiredPump()
 
         runBlocking {
@@ -1984,6 +1988,7 @@ class ComboV2Plugin @Inject constructor(
         _baseBasalRateUIFlow.value = activeBasalProfile?.get(currentHour)?.cctlBasalToIU()
     }
 
+    @OptIn(ExperimentalTime::class)
     private fun handlePumpEvent(event: ComboCtlPump.Event) {
         aapsLogger.debug(LTag.PUMP, "Handling pump event $event")
 
@@ -2409,7 +2414,7 @@ class ComboV2Plugin @Inject constructor(
         reportFinishedBolus(rh.gs(stringId), pumpEnactResult, succeeded)
 
     private fun createFailurePumpEnactResult(comment: Int) =
-        instantiator.providePumpEnactResult()
+        pumpEnactResultProvider.get()
             .success(false)
             .enacted(false)
             .comment(comment)
@@ -2447,7 +2452,7 @@ class ComboV2Plugin @Inject constructor(
                     ctx = context, intentKey = ComboIntentKey.UnpairPump, title = R.string.combov2_unpair_pump_title, summary = R.string.combov2_unpair_pump_summary
                 ).apply {
                     onPreferenceClickListener = Preference.OnPreferenceClickListener { preference ->
-                        OKDialog.showConfirmation(preference.context, "Confirm pump unpairing", "Do you really want to unpair the pump?", ok = Runnable { unpair() })
+                        OKDialog.showConfirmation(preference.context, "Confirm pump unpairing", "Do you really want to unpair the pump?", ok = { unpair() })
                         false
                     }
                 }

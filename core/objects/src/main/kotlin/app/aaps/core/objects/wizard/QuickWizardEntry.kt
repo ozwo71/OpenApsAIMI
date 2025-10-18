@@ -2,6 +2,7 @@ package app.aaps.core.objects.wizard
 
 import app.aaps.annotations.OpenForTesting
 import app.aaps.core.data.iob.InMemoryGlucoseValue
+import app.aaps.core.data.model.RM
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
@@ -17,22 +18,23 @@ import app.aaps.core.objects.extensions.valueToUnits
 import app.aaps.core.utils.JsonHelper.safeGetInt
 import app.aaps.core.utils.JsonHelper.safeGetString
 import app.aaps.core.utils.MidnightUtils
-import dagger.android.HasAndroidInjector
 import org.json.JSONException
 import org.json.JSONObject
 import java.util.UUID
 import javax.inject.Inject
+import javax.inject.Provider
 
-class QuickWizardEntry @Inject constructor(private val injector: HasAndroidInjector) {
-
-    @Inject lateinit var aapsLogger: AAPSLogger
-    @Inject lateinit var preferences: Preferences
-    @Inject lateinit var profileFunction: ProfileFunction
-    @Inject lateinit var loop: Loop
-    @Inject lateinit var iobCobCalculator: IobCobCalculator
-    @Inject lateinit var persistenceLayer: PersistenceLayer
-    @Inject lateinit var dateUtil: DateUtil
-    @Inject lateinit var glucoseStatusProvider: GlucoseStatusProvider
+class QuickWizardEntry @Inject constructor(
+    aapsLogger: AAPSLogger,
+    private val preferences: Preferences,
+    private val profileFunction: ProfileFunction,
+    private val loop: Loop,
+    private val iobCobCalculator: IobCobCalculator,
+    private val persistenceLayer: PersistenceLayer,
+    private val dateUtil: DateUtil,
+    private val glucoseStatusProvider: GlucoseStatusProvider,
+    private val bolusWizardProvider: Provider<BolusWizard>
+) {
 
     // for mock
     @OpenForTesting
@@ -61,7 +63,6 @@ class QuickWizardEntry @Inject constructor(private val injector: HasAndroidInjec
     }
 
     init {
-        injector.androidInjector().inject(this)
         val guid = UUID.randomUUID().toString()
         val emptyData = """{
                 "guid": "$guid",
@@ -134,7 +135,7 @@ class QuickWizardEntry @Inject constructor(private val injector: HasAndroidInjec
         if (useSuperBolus() == YES && preferences.get(BooleanKey.OverviewUseSuperBolus)) {
             superBolus = true
         }
-        if (loop.isEnabled() && loop.isSuperBolus) superBolus = false
+        if (loop.runningMode == RM.Mode.SUPER_BOLUS) superBolus = false
         // Trend
         val glucoseStatus = glucoseStatusProvider.glucoseStatusData
         var trend = false
@@ -146,7 +147,7 @@ class QuickWizardEntry @Inject constructor(private val injector: HasAndroidInjec
             trend = true
         }
         val percentage = if (usePercentage() == DEFAULT) preferences.get(IntKey.OverviewBolusPercentage) else percentage()
-        return BolusWizard(injector).doCalc(
+        return bolusWizardProvider.get().doCalc(
             profile,
             profileName,
             tempTarget,

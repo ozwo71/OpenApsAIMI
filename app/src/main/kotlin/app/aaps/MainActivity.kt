@@ -275,8 +275,6 @@ class MainActivity : DaggerAppCompatActivityWithResult() {
 
     private fun start() {
         binding.splash.visibility = View.GONE
-        //Check here if loop plugin is disabled. Else check via constraints
-        if (!loop.isEnabled()) versionCheckerUtils.triggerCheckVersion()
         setUserStats()
         setupViews()
 

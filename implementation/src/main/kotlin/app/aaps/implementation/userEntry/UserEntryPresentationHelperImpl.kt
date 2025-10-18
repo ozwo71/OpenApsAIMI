@@ -53,6 +53,7 @@ class UserEntryPresentationHelperImpl @Inject constructor(
         Sources.TempBasalDialog     -> R.drawable.ic_actions_start_temp_basal
         Sources.CalibrationDialog   -> R.drawable.ic_calibration
         Sources.FillDialog          -> R.drawable.ic_cp_pump_cannula
+        Sources.SiteRotationDialog  -> app.aaps.core.ui.R.drawable.ic_site_rotation
         Sources.BgCheck             -> R.drawable.ic_cp_bgcheck
         Sources.SensorInsert        -> R.drawable.ic_cp_cgm_insert
         Sources.BatteryChange       -> R.drawable.ic_cp_pump_battery
@@ -139,8 +140,10 @@ class UserEntryPresentationHelperImpl @Inject constructor(
         is ValueWithUnit.SimpleString -> valueWithUnit.value
         is ValueWithUnit.TEMeterType  -> translator.translate(valueWithUnit.value)
         is ValueWithUnit.TETTReason   -> translator.translate(valueWithUnit.value)
-        is ValueWithUnit.OEReason     -> translator.translate(valueWithUnit.value)
+        is ValueWithUnit.RMMode       -> translator.translate(valueWithUnit.value)
         is ValueWithUnit.TEType       -> translator.translate(valueWithUnit.value)
+        is ValueWithUnit.TELocation   -> translator.translate(valueWithUnit.value)
+        is ValueWithUnit.TEArrow      -> translator.translate(valueWithUnit.value)
         is ValueWithUnit.Timestamp    -> dateUtil.dateAndTimeAndSecondsString(valueWithUnit.value)
 
         is ValueWithUnit.Mgdl         -> {
@@ -214,8 +217,10 @@ class UserEntryPresentationHelperImpl @Inject constructor(
                 is ValueWithUnit.SimpleString -> simpleString = simpleString.addWithSeparator(valueWithUnit.value)
                 is ValueWithUnit.TEMeterType  -> therapyEvent = therapyEvent.addWithSeparator(translator.translate(valueWithUnit.value))
                 is ValueWithUnit.TETTReason   -> therapyEvent = therapyEvent.addWithSeparator(translator.translate(valueWithUnit.value))
-                is ValueWithUnit.OEReason     -> therapyEvent = therapyEvent.addWithSeparator(translator.translate(valueWithUnit.value))
+                is ValueWithUnit.RMMode       -> therapyEvent = therapyEvent.addWithSeparator(translator.translate(valueWithUnit.value))
                 is ValueWithUnit.TEType       -> therapyEvent = therapyEvent.addWithSeparator(translator.translate(valueWithUnit.value))
+                is ValueWithUnit.TELocation   -> therapyEvent = therapyEvent.addWithSeparator(translator.translate(valueWithUnit.value))
+                is ValueWithUnit.TEArrow      -> therapyEvent = therapyEvent.addWithSeparator(translator.translate(valueWithUnit.value))
                 is ValueWithUnit.Timestamp    -> timestamp = dateUtil.dateAndTimeAndSecondsString(valueWithUnit.value)
 
                 is ValueWithUnit.Mgdl         ->

@@ -1,5 +1,8 @@
 package app.aaps.core.keys
 
+import app.aaps.core.keys.interfaces.BooleanPreferenceKey
+import app.aaps.core.keys.interfaces.IntPreferenceKey
+
 enum class IntKey(
     override val key: String,
     override val defaultValue: Int,
@@ -13,7 +16,8 @@ enum class IntKey(
     override val dependency: BooleanPreferenceKey? = null,
     override val negativeDependency: BooleanPreferenceKey? = null,
     override val hideParentScreenIfHidden: Boolean = false,
-    override val engineeringModeOnly: Boolean = false
+    override val engineeringModeOnly: Boolean = false,
+    override val exportable: Boolean = true
 ) : IntPreferenceKey {
 
     OverviewCarbsButtonIncrement1("carbs_button_increment_1", 5, -50, 50, defaultedBySM = true, dependency = BooleanKey.OverviewShowCarbsButton),
@@ -82,5 +86,6 @@ enum class IntKey(
     OApsAIMINightGrowthMinDurationMin("key_oaps_aimi_ngr_min_duration", 30, 5, 240),
     OApsAIMINightGrowthMinEventualOverTarget("key_oaps_aimi_ngr_min_eventual_over_target", 15, 0, 120),
     OApsAIMINightGrowthDecayMinutes("key_oaps_aimi_ngr_decay_minutes", 20, 0, 120),
-    OApsAIMIlogsize("key_oaps_aimi_logsize",25,1,50)
+    OApsAIMIlogsize("key_oaps_aimi_logsize",25,1,50),
+    SiteRotationUserProfile("site_rotation_user_profile", 0, 0, 2)
 }
