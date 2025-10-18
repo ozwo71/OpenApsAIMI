@@ -118,11 +118,9 @@ class LoopPlugin @Inject constructor(
     private val persistenceLayer: PersistenceLayer,
     private val runningConfiguration: RunningConfiguration,
     private val uiInteraction: UiInteraction,
-    private val instantiator: Instantiator,
     private val processedDeviceStatusData: ProcessedDeviceStatusData,
-    private val glucoseStatusProvider: GlucoseStatusProvider
+    private val glucoseStatusProvider: GlucoseStatusProvider,
     private val pumpEnactResultProvider: Provider<PumpEnactResult>,
-    private val processedDeviceStatusData: ProcessedDeviceStatusData
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.LOOP)
