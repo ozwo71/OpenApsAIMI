@@ -54,7 +54,7 @@ class OmnipodErosPumpPluginTest : TestBaseWithProfile() {
         val plugin = OmnipodErosPumpPlugin(
             aapsLogger, rh, preferences, commandQueue, TestAapsSchedulers(), rxBus, context,
             erosPodStateManager, aapsOmnipodErosManager, fabricPrivacy, rileyLinkServiceData, dateUtil, aapsOmnipodUtil,
-            rileyLinkUtil, omnipodAlertUtil, profileFunction, pumpSync, uiInteraction, erosHistoryDatabase, decimalFormatter, pumpEnactResultProvider
+            rileyLinkUtil, omnipodAlertUtil, pumpSync, uiInteraction, erosHistoryDatabase, decimalFormatter, pumpEnactResultProvider, ch
         )
         val pumpState = PumpSync.PumpState(null, null, null, null, "")
         `when`(pumpSync.expectedPumpState()).thenReturn(pumpState)
@@ -66,7 +66,7 @@ class OmnipodErosPumpPluginTest : TestBaseWithProfile() {
             aapsOmnipodErosManager.setTemporaryBasal(ArgumentMatchers.any(TempBasalPair::class.java))
         ).thenAnswer { invocation: InvocationOnMock ->
             val pair = invocation.getArgument<TempBasalPair>(0)
-            val result = PumpEnactResultObject(rh)
+            val result = PumpEnactResultObject(rh, ch)
             result.absolute(pair.insulinRate)
             result.duration(pair.durationMinutes)
             result
@@ -74,6 +74,8 @@ class OmnipodErosPumpPluginTest : TestBaseWithProfile() {
 
         // Given standard basal
         `when`(profile.getBasal()).thenReturn(0.5)
+        `when`(ch.toPump(ArgumentMatchers.anyDouble())).thenAnswer { invocation -> invocation.getArgument<Double>(0) }
+        `when`(ch.fromPump(ArgumentMatchers.anyDouble())).thenAnswer { invocation -> invocation.getArgument<Double>(0) }
         // When
         var result1 = plugin.setTempBasalPercent(80, 30, profile, false, PumpSync.TemporaryBasalType.NORMAL)
         var result2 = plugin.setTempBasalPercent(5000, 30000, profile, false, PumpSync.TemporaryBasalType.NORMAL)

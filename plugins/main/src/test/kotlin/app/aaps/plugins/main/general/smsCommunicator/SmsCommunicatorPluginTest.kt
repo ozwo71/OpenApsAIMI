@@ -241,6 +241,8 @@ class SmsCommunicatorPluginTest : TestBaseWithProfile() {
         `when`(rh.gs(R.string.smscommunicator_set_closed_loop_reply_with_code)).thenReturn("In order to switch Loop mode to Closed loop reply with code %1\$s")
         `when`(rh.gs(R.string.smscommunicator_current_loop_mode)).thenReturn("Current loop mode: %1\$s")
         `when`(rh.gs(R.string.smscommunicator_set_lgs_reply_with_code)).thenReturn("In order to switch Loop mode to LGS (Low Glucose Suspend) reply with code %1\$s")
+        `when`(ch.toPump(ArgumentMatchers.anyDouble())).thenAnswer { invocation -> invocation.getArgument<Double>(0) }
+        `when`(ch.fromPump(ArgumentMatchers.anyDouble())).thenAnswer { invocation -> invocation.getArgument<Double>(0) }
     }
 
     @Test
