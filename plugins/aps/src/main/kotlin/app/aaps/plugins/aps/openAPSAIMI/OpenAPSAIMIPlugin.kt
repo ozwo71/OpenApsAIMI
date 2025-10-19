@@ -77,6 +77,7 @@ import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.events.EventOpenAPSUpdateGui
 import app.aaps.plugins.aps.events.EventResetOpenAPSGui
 import app.aaps.plugins.aps.openAPS.TddStatus
+import app.aaps.plugins.aps.openAPSAutoISF.GlucoseStatusCalculatorAutoIsf
 import dagger.android.HasAndroidInjector
 import org.json.JSONObject
 import java.util.Calendar
@@ -105,6 +106,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val processedTbrEbData: ProcessedTbrEbData,
     private val persistenceLayer: PersistenceLayer,
     private val glucoseStatusProvider: GlucoseStatusAIMI,
+    private val glucoseStatusCalculatorAIMI: GlucoseStatusCalculatorAIMI,
     private val tddCalculator: TddCalculator,
     private val bgQualityCheck: BgQualityCheck,
     private val uiInteraction: UiInteraction,
@@ -143,7 +145,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         }
         aapsLogger.debug(LTag.APS, "Loaded $count variable sensitivity values from database")
     }
-
+    override fun getGlucoseStatusData(allowOldData: Boolean): GlucoseStatus? = glucoseStatusCalculatorAIMI.getGlucoseStatusData(allowOldData)
     override fun onStop() {
         super.onStop()
         AimiUamHandler.close(context)
