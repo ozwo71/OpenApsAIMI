@@ -19,10 +19,10 @@ interface ConcentrationHelper {
     fun getProfile(): Profile?
 
     // show basalrate with units in U/h if U100: i.e. "0.6 U/h", and with both value if other concentration: i.e. for U200 "0.6 U/h (0.3 U/h)"
-    fun basalRateString(rate: Double, toPump: Boolean = true): String
+    fun basalRateString(rate: Double, toPump: Boolean = false): String
 
     // show bolus with units in U if U100: i.e. "4 U", and with both value if other concentration: i.e. for U200 "4 U (2 U)"
-    fun insulinAmountString(amount: Double, toPump: Boolean = true): String
+    fun insulinAmountString(amount: Double, toPump: Boolean = false): String
 
     // show insulinConcentration as a String i.e. "U100", "U200", ...
     fun insulinConcentrationString(): String

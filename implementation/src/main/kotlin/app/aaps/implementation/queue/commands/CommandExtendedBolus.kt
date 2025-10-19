@@ -39,7 +39,7 @@ class CommandExtendedBolus(
 
     override fun status(): String = rh.gs(app.aaps.core.ui.R.string.extended_bolus_u_min, insulin, durationInMinutes)
 
-    override fun log(): String = "EXTENDEDBOLUS ${ch.insulinAmountString(insulin)} U $durationInMinutes min"
+    override fun log(): String = "EXTENDEDBOLUS ${ch.insulinAmountString(insulin, true)} U $durationInMinutes min"
     override fun cancel() {
         aapsLogger.debug(LTag.PUMPQUEUE, "Result cancel")
         callback?.result(pumpEnactResultProvider.get().success(false).comment(app.aaps.core.ui.R.string.connectiontimedout))?.run()

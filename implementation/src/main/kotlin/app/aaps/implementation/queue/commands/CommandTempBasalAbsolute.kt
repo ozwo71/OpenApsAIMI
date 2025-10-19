@@ -38,13 +38,13 @@ class CommandTempBasalAbsolute(
 
     override fun execute() {
         val r = activePlugin.activePump.setTempBasalAbsolute(ch.toPump(absoluteRate), durationInMinutes, ch.toPump(profile), enforceNew, tbrType).fromPump(ch.concentration)
-        aapsLogger.debug(LTag.PUMPQUEUE, "Result rate: ${ch.basalRateString(absoluteRate)} durationInMinutes: $durationInMinutes success: ${r.success} enacted: ${r.enacted}")
+        aapsLogger.debug(LTag.PUMPQUEUE, "Result rate: ${ch.basalRateString(absoluteRate, true)} durationInMinutes: $durationInMinutes success: ${r.success} enacted: ${r.enacted}")
         callback?.result(r)?.run()
     }
 
     override fun status(): String = rh.gs(app.aaps.core.ui.R.string.temp_basal_absolute, absoluteRate, durationInMinutes)
 
-    override fun log(): String = "TEMP BASAL ${ch.basalRateString(absoluteRate)} $durationInMinutes min"
+    override fun log(): String = "TEMP BASAL ${ch.basalRateString(absoluteRate, true)} $durationInMinutes min"
     override fun cancel() {
         aapsLogger.debug(LTag.PUMPQUEUE, "Result cancel")
         callback?.result(pumpEnactResultProvider.get().success(false).comment(app.aaps.core.ui.R.string.connectiontimedout))?.run()

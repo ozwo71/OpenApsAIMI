@@ -239,8 +239,6 @@ class CommandQueueImplementationTest : TestBaseWithProfile() {
         Mockito.`when`(ch.concentration).thenReturn(1.0)
         Mockito.`when`(ch.basalRateString(ArgumentMatchers.anyDouble(), ArgumentMatchers.anyBoolean())).thenReturn("SomeString")
         Mockito.`when`(ch.toPump(validProfile)).thenReturn(validProfile)
-        //Mockito.`when`(ch.insulinAmountString(ArgumentMatchers.anyDouble())).thenReturn("SomeString")
-        //Mockito.`when`(ch.basalRateString(ArgumentMatchers.anyDouble())).thenReturn("SomeString")
         doAnswer(Answer { invocation: InvocationOnMock ->
             Thread {
                 val work = TestListenableWorkerBuilder<QueueWorker>(context).build()

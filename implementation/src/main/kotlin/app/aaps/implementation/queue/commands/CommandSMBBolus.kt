@@ -59,7 +59,7 @@ class CommandSMBBolus(
 
     override fun status(): String = rh.gs(app.aaps.core.ui.R.string.smb_bolus_u, detailedBolusInfo.insulin)
 
-    override fun log(): String = "SMB BOLUS ${ch.insulinAmountString(detailedBolusInfo.insulin)}"
+    override fun log(): String = "SMB BOLUS ${ch.insulinAmountString(detailedBolusInfo.insulin, true)}"
     override fun cancel() {
         aapsLogger.debug(LTag.PUMPQUEUE, "Result cancel")
         callback?.result(pumpEnactResultProvider.get().success(false).comment(app.aaps.core.ui.R.string.connectiontimedout))?.run()
