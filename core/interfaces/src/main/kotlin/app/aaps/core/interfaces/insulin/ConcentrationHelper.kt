@@ -33,8 +33,11 @@ interface ConcentrationHelper {
     // show bolus with volume in µl after convertion due to concentration
     fun bolusWithConvertedVolume(amount:Double): String
 
-    // show bolus Progress information
+    // show bolus Progress information with delivered
     fun bolusProgress(delivered: Double, totalAmount: Double): String
+
+    // show bolus Progress information without delivered
+    fun bolusProgressShort(delivered: Double, totalAmount: Double): String
 
     val concentration: Double
 }

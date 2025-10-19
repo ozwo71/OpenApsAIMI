@@ -80,6 +80,16 @@ class ConcentrationHelperImpl @Inject constructor(
         }
     }
 
+    override fun bolusProgressShort(delivered: Double, totalAmount: Double): String {
+        if (isU100())
+            return rh.gs(R.string.bolus_delivered, delivered, totalAmount)
+        else {
+            val amountString = rh.gs(R.string.bolus_delivered, delivered, totalAmount)
+            val convertedString = rh.gs(R.string.bolus_delivered, fromPump(delivered), fromPump(totalAmount))
+            return rh.gs(R.string.concentration_format, convertedString, amountString)
+        }
+    }
+
     override val concentration: Double
         get() = preferences.get(IntNonKey.InsulinConcentration) / 100.0
 
