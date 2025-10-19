@@ -37,5 +37,7 @@ data class GlucoseStatusAIMI(
      *  where 1 unit of Time is 5 minutes */
     val a2: Double = 0.0,
     /** correlation coefficient, i.e. quality of parabola fit */
-    val corrSqu: Double = 0.0
+    val corrSqu: Double = 0.0,
+    val combinedDelta: Double = 0.0,          // delta pondéré AIMI (prefs)
+    val isNightGrowthCandidate: Boolean = false
 )

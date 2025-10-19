@@ -95,6 +95,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var profileFunction: ProfileFunction
     @Inject lateinit var iobCobCalculator: IobCobCalculator
     @Inject lateinit var activePlugin: ActivePlugin
+    @Inject lateinit var glucoseStatusCalculatorAimi: GlucoseStatusCalculatorAimi
     private val context: Context = context.applicationContext
     private val EPS_FALL = 0.3      // mg/dL/5min : seuil de baisse
     private val EPS_ACC  = 0.2      // mg/dL/5min : seuil d'écart short vs long
@@ -2040,30 +2041,6 @@ fun appendCompactLog(
     private fun interpolateFactor(value: Float, start1: Float, end1: Float, start2: Float, end2: Float): Float {
         return start2 + (value - start1) * (end2 - start2) / (end1 - start1)
     }
-    // // Méthode pour récupérer les deltas récents (entre 2.5 et 7.5 minutes par exemple)
-    // private fun getRecentDeltas(): List<Double> {
-    //     val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
-    //     if (data.isEmpty()) return emptyList()
-    //     // Fenêtre standard selon BG
-    //     val standardWindow = if (bg < 130) 40f else 20f
-    //     // Fenêtre raccourcie pour détection rapide
-    //     val rapidRiseWindow = 10f
-    //     // Si le delta instantané est supérieur à 15 mg/dL, on choisit la fenêtre rapide
-    //     val intervalMinutes = if (delta > 15) rapidRiseWindow else standardWindow
-    //
-    //     val nowTimestamp = data.first().timestamp
-    //     val recentDeltas = mutableListOf<Double>()
-    //     for (i in 1 until data.size) {
-    //         if (data[i].value > 39 && !data[i].filledGap) {
-    //             val minutesAgo = ((nowTimestamp - data[i].timestamp) / (1000.0 * 60)).toFloat()
-    //             if (minutesAgo in 0.0f..intervalMinutes) {
-    //                 val delta = (data.first().recalculated - data[i].recalculated) / minutesAgo * 5f
-    //                 recentDeltas.add(delta)
-    //             }
-    //         }
-    //     }
-    //     return recentDeltas
-    // }
     private fun getRecentDeltas(): List<Double> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
         if (data.isEmpty()) return emptyList()

@@ -19,8 +19,6 @@ import app.aaps.core.interfaces.aps.APS
 import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.CurrentTemp
-import app.aaps.core.interfaces.aps.GlucoseStatus
-import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.core.interfaces.bgQualityCheck.BgQualityCheck
 import app.aaps.core.interfaces.configuration.Config
@@ -29,6 +27,8 @@ import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.constraints.PluginConstraints
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
+import app.aaps.core.interfaces.aps.GlucoseStatus
+import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -77,7 +77,6 @@ import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.events.EventOpenAPSUpdateGui
 import app.aaps.plugins.aps.events.EventResetOpenAPSGui
 import app.aaps.plugins.aps.openAPS.TddStatus
-import app.aaps.plugins.aps.openAPSAutoISF.GlucoseStatusCalculatorAutoIsf
 import dagger.android.HasAndroidInjector
 import org.json.JSONObject
 import java.util.Calendar
@@ -105,8 +104,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     protected val dateUtil: DateUtil,
     private val processedTbrEbData: ProcessedTbrEbData,
     private val persistenceLayer: PersistenceLayer,
-    private val glucoseStatusProvider: GlucoseStatusAIMI,
-    private val glucoseStatusCalculatorAIMI: GlucoseStatusCalculatorAIMI,
+    private val glucoseStatusProvider: GlucoseStatusProvider,
+    private val glucoseStatusCalculatorAimi: GlucoseStatusCalculatorAimi,
     private val tddCalculator: TddCalculator,
     private val bgQualityCheck: BgQualityCheck,
     private val uiInteraction: UiInteraction,
@@ -145,7 +144,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         }
         aapsLogger.debug(LTag.APS, "Loaded $count variable sensitivity values from database")
     }
-    override fun getGlucoseStatusData(allowOldData: Boolean): GlucoseStatus? = glucoseStatusCalculatorAIMI.getGlucoseStatusData(allowOldData)
+    override fun getGlucoseStatusData(allowOldData: Boolean): GlucoseStatus? =
+        glucoseStatusCalculatorAimi.getGlucoseStatusData(allowOldData)
     override fun onStop() {
         super.onStop()
         AimiUamHandler.close(context)
@@ -271,28 +271,28 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
     private fun getRecentDeltas(): List<Double> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
-        var bg = glucoseStatusProvider.glucose ?: return emptyList()
-        var delta = glucoseStatusProvider.delta ?: return emptyList()
+        val smb = glucoseStatusCalculatorAimi.getGlucoseStatusData(true) ?: return emptyList()
+        val bg = smb.glucose
+        val deltaNow = smb.delta
         if (data.isEmpty()) return emptyList()
-        // Fenêtre standard selon BG
-        val standardWindow = if (bg < 130) 30f else 15f
-        // Fenêtre raccourcie pour détection rapide
-        val rapidRiseWindow = 10f
-        // Si le delta instantané est supérieur à 15 mg/dL, on choisit la fenêtre rapide
-        val intervalMinutes = if (delta > 15) rapidRiseWindow else standardWindow
 
-        val nowTimestamp = data.first().timestamp
-        val recentDeltas = mutableListOf<Double>()
+        val standardWindow = if (bg < 130) 30f else 15f
+        val rapidRiseWindow = 10f
+        val intervalMinutes = if (deltaNow > 15) rapidRiseWindow else standardWindow
+
+        val nowTs = data.first().timestamp
+        val recent = mutableListOf<Double>()
         for (i in 1 until data.size) {
-            if (data[i].value > 39 && !data[i].filledGap) {
-                val minutesAgo = ((nowTimestamp - data[i].timestamp) / (1000.0 * 60)).toFloat()
-                if (minutesAgo in 0.0f..intervalMinutes) {
-                    val delta = (data.first().recalculated - data[i].recalculated) / minutesAgo * 5f
-                    recentDeltas.add(delta)
+            val r = data[i]
+            if (r.value > 39 && !r.filledGap) {
+                val minAgo = ((nowTs - r.timestamp) / 60000.0).toFloat()
+                if (minAgo in 0.0f..intervalMinutes) {
+                    val d = (data.first().recalculated - r.recalculated) / minAgo * 5f
+                    recent.add(d)
                 }
             }
         }
-        return recentDeltas
+        return recent
     }
     @Synchronized
     private fun calculateVariableIsf(timestamp: Long, bg: Double?): Pair<String, Double?> {
@@ -303,8 +303,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             return Pair("DB", result.variableSens)
         }
 
-        val glucose = bg ?: glucoseStatusProvider.glucose ?: return Pair("GLUC", null)
-        val currentDelta = glucoseStatusProvider.delta
+        val glucose = bg ?: glucoseStatusProvider.glucoseStatusData?.glucose ?: return Pair("GLUC", null)
+        val currentDelta = glucoseStatusProvider.glucoseStatusData?.delta
         val recentDeltas = getRecentDeltas()
         val predictedDelta = predictedDelta(recentDeltas)
         val dynamicFactor = dynamicDeltaCorrectionFactor(currentDelta, predictedDelta, bg)
@@ -327,7 +327,12 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     override fun invoke(initiator: String, tempBasalFallback: Boolean) {
         aapsLogger.debug(LTag.APS, "invoke from $initiator tempBasalFallback: $tempBasalFallback")
         lastAPSResult = null
-        val glucoseStatus = glucoseStatusProvider
+        val glucoseStatus = getGlucoseStatusData(false)
+        if (glucoseStatus == null) {
+            rxBus.send(EventResetOpenAPSGui(rh.gs(R.string.openapsma_no_glucose_data)))
+            aapsLogger.debug(LTag.APS, rh.gs(R.string.openapsma_no_glucose_data))
+            return
+        }
         val profile = profileFunction.getProfile()
         val pump = activePlugin.activePump
 
@@ -339,11 +344,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         if (!isEnabled()) {
             rxBus.send(EventResetOpenAPSGui(rh.gs(R.string.openapsma_disabled)))
             aapsLogger.debug(LTag.APS, rh.gs(R.string.openapsma_disabled))
-            return
-        }
-        if (glucoseStatus == null) {
-            rxBus.send(EventResetOpenAPSGui(rh.gs(R.string.openapsma_no_glucose_data)))
-            aapsLogger.debug(LTag.APS, rh.gs(R.string.openapsma_no_glucose_data))
             return
         }
 
@@ -437,12 +437,12 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             var tdd = (tddWeightedFromLast8H * 0.20) + (tdd2Days * 0.50) + (tddDaily * 0.30)
 
             // On récupère la glycémie et le delta actuel
-            val currentBG = glucoseStatusProvider.glucose
+            val currentBG = glucoseStatusProvider.glucoseStatusData?.glucose
             if (currentBG == null) {
                 aapsLogger.error(LTag.APS, "Données de glycémie indisponibles, impossibilité de calculer l'ISF adaptatif.")
                 return
             }
-            val currentDelta = glucoseStatusProvider.delta
+            val currentDelta = glucoseStatusProvider.glucoseStatusData?.delta
             val recentDeltas = getRecentDeltas()
             val predictedDelta = predictedDelta(recentDeltas)
 
@@ -487,7 +487,38 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(activityHistoric - i), profile)
                 historicActivity += iob.activity
             }
+// Récupère GS standard + features AIMI
+            val pack = glucoseStatusCalculatorAimi.compute(allowOldData = true)
+            val gs = pack.gs ?: run {
+                rxBus.send(EventResetOpenAPSGui(rh.gs(R.string.openapsma_no_glucose_data)))
+                aapsLogger.debug(LTag.APS, rh.gs(R.string.openapsma_no_glucose_data))
+                return
+            }
+            val f = pack.features
 
+// Construit l’objet attendu par determine_basal
+            val glucoseStatusAimi = GlucoseStatusAIMI(
+                glucose         = gs.glucose,
+                noise           = gs.noise,
+                delta           = gs.delta,
+                shortAvgDelta   = gs.shortAvgDelta,
+                longAvgDelta    = gs.longAvgDelta,
+                date            = gs.date,
+
+                // Champs AIMI disponibles
+                duraISFminutes  = f?.stable5pctMinutes ?: 0.0,
+                deltaPl         = f?.delta5Prev ?: 0.0,
+                deltaPn         = f?.delta5Next ?: 0.0,
+                bgAcceleration  = f?.accel ?: 0.0,
+                corrSqu         = f?.corrR2 ?: 0.0,
+
+                // Champs non exposés par AimiBgFeatures => valeurs neutres
+                duraISFaverage  = 0.0,
+                parabolaMinutes = 0.0,
+                a0              = 0.0,
+                a1              = 0.0,
+                a2              = 0.0
+            )
             futureActivity = Round.roundTo(futureActivity, 0.0001)
             sensorLagActivity = Round.roundTo(sensorLagActivity, 0.0001)
             historicActivity = Round.roundTo(historicActivity, 0.0001)
@@ -559,7 +590,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             aapsLogger.debug(LTag.APS, "DynIsfMode:         $dynIsfMode")
 
             determineBasalaimiSMB2.determine_basal(
-                glucose_status = glucoseStatus,
+                glucose_status = glucoseStatusAimi,
                 currenttemp = currentTemp,
                 iob_data_array = iobArray,
                 profile = oapsProfile,
@@ -611,7 +642,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         absoluteRate: Constraint<Double>,
         profile: Profile
     ): Constraint<Double> {
-        val glucoseStatus = glucoseStatusProvider ?: return absoluteRate
         // ────────────────────────────────────────────────────
         // 1️⃣ On détecte si l’on est en mode “meal” ou “early autodrive”
         val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
@@ -624,15 +654,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
         val night = hour <= 7
-        val isEarlyAutodrive = !night
-            && !isMealMode
-            && /* tous les autres modes */ !therapy.sportTime
-            && glucoseStatus.glucose > 110
-            && detectMealOnset(
-            glucoseStatus.delta.toFloat(),
-            predictedDelta(getRecentDeltas()).toFloat(),
-            glucoseStatus.bgAcceleration.toFloat()
-        )
+        val smb = glucoseStatusCalculatorAimi.getGlucoseStatusData(false) ?: return absoluteRate
+        val feats = glucoseStatusCalculatorAimi.getAimiFeatures(false)
+        val accel = feats?.accel ?: 0.0
+        val isEarlyAutodrive = !night && !isMealMode && !therapy.sportTime &&
+            smb.glucose > 110 &&
+            detectMealOnset(
+                smb.delta.toFloat(),
+                predictedDelta(getRecentDeltas()).toFloat(),
+                accel.toFloat()
+            )
 
         val isSpecialMode = isMealMode || isEarlyAutodrive
 
