@@ -113,13 +113,13 @@ class VirtualPumpFragment : DaggerFragment() {
     private fun updateGui() {
         if (_binding == null) return
         val profile = ch.getProfile() ?: return
-        binding.baseBasalRate.text = rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, virtualPumpPlugin.baseBasalRate)
-        binding.tempbasal.text = persistenceLayer.getTemporaryBasalActiveAt(dateUtil.now())?.toStringFull(profile, dateUtil, rh)
+        binding.baseBasalRate.text = ch.basalRateString(virtualPumpPlugin.baseBasalRate)
+        binding.tempbasal.text = persistenceLayer.getTemporaryBasalActiveAt(dateUtil.now())?.toStringFull(profile, dateUtil, rh, ch)
             ?: ""
-        binding.extendedbolus.text = persistenceLayer.getExtendedBolusActiveAt(dateUtil.now())?.toStringFull(dateUtil, rh)
+        binding.extendedbolus.text = persistenceLayer.getExtendedBolusActiveAt(dateUtil.now())?.toStringFull(dateUtil, rh, ch)
             ?: ""
         binding.battery.text = rh.gs(app.aaps.core.ui.R.string.format_percent, virtualPumpPlugin.batteryPercent)
-        binding.reservoir.text = rh.gs(app.aaps.core.ui.R.string.format_insulin_units, virtualPumpPlugin.reservoirInUnits.toDouble())
+        binding.reservoir.text = ch.insulinAmountString(virtualPumpPlugin.reservoirInUnits.toDouble())
 
         virtualPumpPlugin.refreshConfiguration()
         val pumpType = virtualPumpPlugin.pumpType
