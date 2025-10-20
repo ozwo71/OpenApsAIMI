@@ -53,7 +53,7 @@ class InsulinOrefRapidActingPlugin @Inject constructor(
             .description(R.string.description_insulin_rapid)
             .setDefault()
             .enableByDefault(true)
-        if(config.isEngineeringMode())
+        if(concentrationEnabled)
             pluginDescription.preferencesId(PluginDescription.PREFERENCE_SCREEN)
     }
 }

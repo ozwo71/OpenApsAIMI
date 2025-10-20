@@ -34,4 +34,5 @@ interface Config {
     fun ignoreNightscoutV3Errors(): Boolean
     fun doNotSendSmsOnProfileChange(): Boolean
     fun enableAutotune(): Boolean
+    fun enableInsulinConcentration(): Boolean
 }

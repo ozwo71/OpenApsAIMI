@@ -51,7 +51,7 @@ class InsulinOrefUltraRapidActingPlugin @Inject constructor(
         pluginDescription
             .pluginName(R.string.ultra_rapid_oref)
             .description(R.string.description_insulin_ultra_rapid)
-        if(config.isEngineeringMode())
+        if(concentrationEnabled)
             pluginDescription.preferencesId(PluginDescription.PREFERENCE_SCREEN)
     }
 }

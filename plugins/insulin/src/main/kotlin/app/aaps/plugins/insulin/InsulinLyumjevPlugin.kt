@@ -49,7 +49,7 @@ class InsulinLyumjevPlugin @Inject constructor(
             .pluginIcon(R.drawable.ic_insulin)
             .pluginName(R.string.lyumjev)
             .description(R.string.description_insulin_lyumjev)
-        if(config.isEngineeringMode())
+        if(concentrationEnabled)
             pluginDescription.preferencesId(PluginDescription.PREFERENCE_SCREEN)
     }
 }

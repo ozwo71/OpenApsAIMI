@@ -54,6 +54,8 @@ class InsulinFragment : DaggerFragment() {
         get()= preferences.get(IntNonKey.InsulinConcentration)
     private val targetInsulin: Int
         get()= preferences.get(IntKey.InsulinRequestedConcentration)
+    private val concentrationEnabled: Boolean
+        get() = config.isEngineeringMode() && config.isDev() || config.enableAutotune()
 
     // This property is only valid between onCreateView and
     // onDestroyView.
@@ -95,7 +97,7 @@ class InsulinFragment : DaggerFragment() {
 
     private fun updateGui() {
             _binding?.let {
-                val insulinConcentrationVisibility = (currentConcentration != 100 || targetConcentration != 100 || config.isEngineeringMode())
+                val insulinConcentrationVisibility = (currentConcentration != 100 || targetConcentration != 100 || concentrationEnabled)
                 val buttonVisibility = (!concentrationConfirmed || (currentInsulin != targetInsulin && recentUpdate)) && insulinConcentrationVisibility
                 binding.insulinConfirmation.visibility = buttonVisibility.toVisibility()
                 binding.concentration.visibility = insulinConcentrationVisibility.toVisibility()

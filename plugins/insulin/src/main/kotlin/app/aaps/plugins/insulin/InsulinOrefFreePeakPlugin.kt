@@ -86,7 +86,7 @@ class InsulinOrefFreePeakPlugin @Inject constructor(
             title = rh.gs(R.string.insulin_oref_peak)
             initialExpandedChildrenCount = 0
             addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.InsulinOrefPeak, title = R.string.insulin_peak_time))
-            if(config.isEngineeringMode()) {
+            if(concentrationEnabled) {
                 addConcentrationPreference(preferenceManager, context, this)
             }
         }

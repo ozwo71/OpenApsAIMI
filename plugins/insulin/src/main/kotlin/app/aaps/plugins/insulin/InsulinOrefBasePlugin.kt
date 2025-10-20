@@ -81,6 +81,8 @@ abstract class InsulinOrefBasePlugin(
     val MAX_INSULIN = T.days(7).msecs()
     private val recentUpdate: Boolean
         get()=preferences.get(LongNonKey.LastInsulinChange) > System.currentTimeMillis() - T.mins(15).msecs()
+    val concentrationEnabled: Boolean
+        get() = config.isEngineeringMode() && config.isDev() || config.enableAutotune()
 
     override val dia
         get(): Double {
@@ -153,7 +155,7 @@ abstract class InsulinOrefBasePlugin(
             .observeOn(aapsSchedulers.main)
             .subscribe({ swapAdapter() }, fabricPrivacy::logException)
         swapAdapter()
-        if (!config.isEngineeringMode()) { // Concentration not allowed without engineering mode
+        if (!concentrationEnabled) { // Concentration not allowed without engineering mode
             preferences.put(IntKey.InsulinRequestedConcentration, 100)
         }
     }
