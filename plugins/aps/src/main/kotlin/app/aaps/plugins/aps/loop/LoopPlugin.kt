@@ -94,6 +94,8 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.math.abs
+import app.aaps.plugins.aps.openAPSAIMI.GlucoseStatusCalculatorAimi
+
 
 @Singleton
 class LoopPlugin @Inject constructor(
@@ -120,7 +122,8 @@ class LoopPlugin @Inject constructor(
     private val uiInteraction: UiInteraction,
     private val pumpEnactResultProvider: Provider<PumpEnactResult>,
     private val processedDeviceStatusData: ProcessedDeviceStatusData,
-    private val ch: ConcentrationHelper
+    private val ch: ConcentrationHelper,
+    private val glucoseStatusCalculatorAimi: GlucoseStatusCalculatorAimi
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.LOOP)
@@ -187,7 +190,7 @@ class LoopPlugin @Inject constructor(
             val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
 
             // 2) Récupère la glycémie (ajustez le code si la variable/méthode diffère)
-            val currentBG = glucoseStatusProvider.glucoseStatusData?.glucose
+            val currentBG = glucoseStatusCalculatorAimi.compute(false).gs?.glucose
 
             // 3) Condition : autodrive activé ET glycémie disponible >= 120
             if (autodrive && currentBG != null && currentBG >= 130.0) {
