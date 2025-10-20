@@ -132,6 +132,7 @@ data class UserEntry(
         LoopDialog,
         TempBasalDialog,
         CalibrationDialog,
+        ConcentrationDialog,
         FillDialog,
         SiteRotationDialog,
         BgCheck,

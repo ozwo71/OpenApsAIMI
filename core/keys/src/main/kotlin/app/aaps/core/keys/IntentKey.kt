@@ -19,4 +19,5 @@ enum class IntentKey(
     SmsOtpSetup(key = "smscommunicator_otp_setup", dependency = BooleanKey.SmsAllowRemoteCommands),
     OverviewQuickWizardSettings(key = "overview_quickwizard_settings"),
     XdripInfo(key = "xdrip_info"),
+    InsulinConcentrationRequest("InsulinConcentrationRequest")
 }

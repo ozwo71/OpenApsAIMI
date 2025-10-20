@@ -9,6 +9,7 @@ import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.UserEntryLogger
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
 import app.aaps.core.interfaces.plugin.PluginDescription
@@ -48,7 +49,7 @@ class LoopPluginTest : TestBaseWithProfile() {
         loopPlugin = LoopPlugin(
             aapsLogger, aapsSchedulers, rxBus, preferences, config,
             constraintChecker, rh, profileFunction, context, commandQueue, activePlugin, virtualPumpPlugin, iobCobCalculator, processedTbrEbData, receiverStatusStore, fabricPrivacy, dateUtil, uel,
-            persistenceLayer, runningConfiguration, uiInteraction, pumpEnactResultProvider, processedDeviceStatusData
+            persistenceLayer, runningConfiguration, uiInteraction, pumpEnactResultProvider, processedDeviceStatusData, ch
         )
         `when`(activePlugin.activePump).thenReturn(virtualPumpPlugin)
         `when`(context.getSystemService(Context.NOTIFICATION_SERVICE)).thenReturn(notificationManager)

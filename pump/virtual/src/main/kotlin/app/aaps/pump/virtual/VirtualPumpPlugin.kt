@@ -16,13 +16,13 @@ import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.Profile
-import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.Pump
@@ -68,14 +68,14 @@ open class VirtualPumpPlugin @Inject constructor(
     rh: ResourceHelper,
     private val aapsSchedulers: AapsSchedulers,
     preferences: Preferences,
-    private val profileFunction: ProfileFunction,
     commandQueue: CommandQueue,
     private val pumpSync: PumpSync,
     private val config: Config,
     private val dateUtil: DateUtil,
     private val processedDeviceStatusData: ProcessedDeviceStatusData,
     private val persistenceLayer: PersistenceLayer,
-    private val pumpEnactResultProvider: Provider<PumpEnactResult>
+    private val pumpEnactResultProvider: Provider<PumpEnactResult>,
+    private val ch: ConcentrationHelper
 ) : PumpPluginBase(
     pluginDescription = PluginDescription()
         .mainType(PluginType.PUMP)
@@ -173,7 +173,7 @@ open class VirtualPumpPlugin @Inject constructor(
     override fun lastDataTime(): Long = lastDataTime
 
     override val baseBasalRate: Double
-        get() = profileFunction.getProfile()?.getBasal() ?: 0.0
+        get() = ch.getProfile()?.getBasal() ?: 0.0
 
     override val reservoirLevel: Double
         get() =
@@ -187,7 +187,6 @@ open class VirtualPumpPlugin @Inject constructor(
         // Insulin value must be greater than 0
         require(detailedBolusInfo.carbs == 0.0) { detailedBolusInfo.toString() }
         require(detailedBolusInfo.insulin > 0) { detailedBolusInfo.toString() }
-
         val result = pumpEnactResultProvider.get()
             .success(true)
             .bolusDelivered(detailedBolusInfo.insulin)
@@ -198,7 +197,7 @@ open class VirtualPumpPlugin @Inject constructor(
         var delivering = 0.0
         while (delivering < detailedBolusInfo.insulin) {
             SystemClock.sleep(200)
-            bolusingEvent.status = rh.gs(app.aaps.core.ui.R.string.bolus_delivering, delivering)
+            bolusingEvent.status = ch.bolusProgress(delivering, detailedBolusInfo.insulin)
             bolusingEvent.percent = min((delivering / detailedBolusInfo.insulin * 100).toInt(), 100)
             rxBus.send(bolusingEvent)
             delivering += 0.1
@@ -209,7 +208,7 @@ open class VirtualPumpPlugin @Inject constructor(
                     .comment(rh.gs(app.aaps.core.ui.R.string.stop))
         }
         SystemClock.sleep(200)
-        bolusingEvent.status = rh.gs(app.aaps.core.ui.R.string.bolus_delivered_successfully, detailedBolusInfo.insulin)
+        bolusingEvent.status = ch.bolusProgress(detailedBolusInfo.insulin, detailedBolusInfo.insulin)
         bolusingEvent.percent = 100
         rxBus.send(bolusingEvent)
         SystemClock.sleep(1000)

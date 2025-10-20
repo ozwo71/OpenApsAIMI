@@ -40,6 +40,7 @@ class QueueWorkerTest : TestBaseWithProfile() {
                 it.aapsLogger = aapsLogger
                 it.activePlugin = activePlugin
                 it.rh = rh
+                it.ch = ch
             }
             if (it is QueueWorker) {
                 it.aapsLogger = aapsLogger
@@ -63,7 +64,7 @@ class QueueWorkerTest : TestBaseWithProfile() {
         commandQueue = CommandQueueImplementation(
             injector, aapsLogger, rxBus, aapsSchedulers, rh, constraintChecker,
             profileFunction, activePlugin, context, preferences, config, dateUtil, fabricPrivacy, androidPermission,
-            uiInteraction, persistenceLayer, decimalFormatter, pumpEnactResultProvider, jobName, workManager
+            uiInteraction, persistenceLayer, decimalFormatter, pumpEnactResultProvider, jobName, workManager, ch
         )
 
         val pumpDescription = PumpDescription()
@@ -71,6 +72,7 @@ class QueueWorkerTest : TestBaseWithProfile() {
 
         Mockito.`when`(context.getSystemService(Context.POWER_SERVICE)).thenReturn(powerManager)
         Mockito.`when`(profileFunction.getProfile()).thenReturn(validProfile)
+        Mockito.`when`(ch.toPump(validProfile)).thenReturn(validProfile)
 
         val bolusConstraint = ConstraintObject(0.0, aapsLogger)
         Mockito.`when`(constraintChecker.applyBolusConstraints(anyObject())).thenReturn(bolusConstraint)
@@ -89,6 +91,7 @@ class QueueWorkerTest : TestBaseWithProfile() {
 
     @Test
     fun commandIsPickedUp() = runTest(timeout = 30.seconds) {
+        Mockito.`when`(ch.toPump(ArgumentMatchers.anyDouble())).thenReturn(2.0)
         commandQueue.tempBasalAbsolute(2.0, 60, true, validProfile, PumpSync.TemporaryBasalType.NORMAL, null)
         val result = sut.doWorkAndLog()
         assertIs<ListenableWorker.Result.Success>(result)

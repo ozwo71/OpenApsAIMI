@@ -1,5 +1,6 @@
 package app.aaps.pump.danars.comm
 
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -14,7 +15,8 @@ class DanaRSPacketNotifyDeliveryComplete @Inject constructor(
     private val aapsLogger: AAPSLogger,
     private val rh: ResourceHelper,
     private val rxBus: RxBus,
-    private val danaPump: DanaPump
+    private val danaPump: DanaPump,
+    private val ch: ConcentrationHelper
 ) : DanaRSPacket() {
 
     init {
@@ -27,7 +29,7 @@ class DanaRSPacketNotifyDeliveryComplete @Inject constructor(
         val deliveredInsulin = byteArrayToInt(getBytes(data, DATA_START, 2)) / 100.0
         danaPump.bolusingTreatment?.insulin = deliveredInsulin
         val bolusingEvent = EventOverviewBolusProgress
-        bolusingEvent.status = rh.gs(app.aaps.core.ui.R.string.bolus_delivering, deliveredInsulin)
+        bolusingEvent.status = ch.bolusProgress(deliveredInsulin, danaPump.bolusAmountToBeDelivered)
         bolusingEvent.t = danaPump.bolusingTreatment
         bolusingEvent.percent = min((deliveredInsulin / danaPump.bolusAmountToBeDelivered * 100).toInt(), 100)
         danaPump.bolusDone = true

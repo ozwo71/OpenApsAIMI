@@ -2,6 +2,7 @@ package app.aaps.plugins.main.extensions
 
 import app.aaps.core.data.model.BS
 import app.aaps.core.data.time.T
+import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.insulin.Insulin
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.ui.UiInteraction
@@ -16,7 +17,7 @@ import org.mockito.Mockito
 
 class BolusExtensionKtTest : TestBaseWithProfile() {
 
-    @Mock lateinit var profileFunctions: ProfileFunction
+    @Mock lateinit var persistenceLayer: PersistenceLayer
     @Mock lateinit var uiInteraction: UiInteraction
 
     private lateinit var insulin: Insulin
@@ -24,7 +25,7 @@ class BolusExtensionKtTest : TestBaseWithProfile() {
     private val dia = 7.0
 
     @BeforeEach fun setup() {
-        insulin = InsulinLyumjevPlugin(rh, profileFunctions, rxBus, aapsLogger, config, hardLimits, uiInteraction)
+        insulin = InsulinLyumjevPlugin(rh, preferences, aapsSchedulers, fabricPrivacy, persistenceLayer, profileFunction, rxBus, aapsLogger, config, hardLimits, uiInteraction, context)
         Mockito.`when`(activePlugin.activeInsulin).thenReturn(insulin)
     }
 

@@ -30,8 +30,9 @@ class DanaRsPacketNotifyDeliveryRateDisplayTest : DanaRSTestBase() {
     @Test
     fun runTest() {
         `when`(rh.gs(ArgumentMatchers.anyInt(), anyObject())).thenReturn("SomeString")
+        `when`(ch.bolusProgress(ArgumentMatchers.anyDouble(), ArgumentMatchers.anyDouble())).thenReturn("SomeString")
         // val packet = DanaRS_Packet_Notify_Delivery_Rate_Display(1.0, Treatment(treatmentInjector))
-        val packet = DanaRSPacketNotifyDeliveryRateDisplay(aapsLogger, rh, rxBus, danaPump)
+        val packet = DanaRSPacketNotifyDeliveryRateDisplay(aapsLogger, rh, rxBus, danaPump, ch)
         // test params
         Assertions.assertEquals(0, packet.getRequestParams().size)
         // test message decoding

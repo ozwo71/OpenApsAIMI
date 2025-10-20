@@ -12,13 +12,13 @@ import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.data.pump.defs.TimeChangeType
 import app.aaps.core.data.time.T
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.plugin.OwnDatabasePlugin
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.Profile
-import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.OmnipodDash
 import app.aaps.core.interfaces.pump.Pump
@@ -108,7 +108,6 @@ class OmnipodDashPumpPlugin @Inject constructor(
     commandQueue: CommandQueue,
     private val omnipodManager: OmnipodDashManager,
     private val podStateManager: OmnipodDashPodStateManager,
-    private val profileFunction: ProfileFunction,
     private val history: DashHistory,
     private val pumpSync: PumpSync,
     private val rxBus: RxBus,
@@ -118,6 +117,7 @@ class OmnipodDashPumpPlugin @Inject constructor(
     private val uiInteraction: UiInteraction,
     private val decimalFormatter: DecimalFormatter,
     private val pumpEnactResultProvider: Provider<PumpEnactResult>,
+    private val ch: ConcentrationHelper,
     private val dashHistoryDatabase: DashHistoryDatabase
 ) : PumpPluginBase(
     pluginDescription = PluginDescription()
@@ -769,7 +769,7 @@ class OmnipodDashPumpPlugin @Inject constructor(
             }
             val percent = (waited.toFloat() / estimatedDeliveryTimeSeconds) * 100
             updateBolusProgressDialog(
-                rh.gs(app.aaps.pump.common.R.string.bolus_delivered_so_far, Round.roundTo(percent * requestedBolusAmount / 100, PodConstants.POD_PULSE_BOLUS_UNITS), requestedBolusAmount),
+                ch.bolusProgress(Round.roundTo(percent * requestedBolusAmount / 100, PodConstants.POD_PULSE_BOLUS_UNITS), requestedBolusAmount),
                 percent.toInt()
             )
         }
@@ -800,7 +800,7 @@ class OmnipodDashPumpPlugin @Inject constructor(
                 val remainingUnits = podStateManager.lastBolus!!.bolusUnitsRemaining
                 val percent = ((requestedBolusAmount - remainingUnits) / requestedBolusAmount) * 100
                 updateBolusProgressDialog(
-                    rh.gs(app.aaps.pump.common.R.string.bolus_delivered_so_far, Round.roundTo(requestedBolusAmount - remainingUnits, PodConstants.POD_PULSE_BOLUS_UNITS), requestedBolusAmount),
+                    ch.bolusProgress(Round.roundTo(requestedBolusAmount - remainingUnits, PodConstants.POD_PULSE_BOLUS_UNITS), requestedBolusAmount),
                     percent.toInt()
                 )
 
@@ -1224,7 +1224,7 @@ class OmnipodDashPumpPlugin @Inject constructor(
     }
 
     private fun resumeDelivery(): PumpEnactResult {
-        return profileFunction.getProfile()?.let {
+        return ch.getProfile()?.let {
             executeProgrammingCommand(
                 pre = observeDeliverySuspended(),
                 historyEntry = history.createRecord(OmnipodCommandType.RESUME_DELIVERY, basalProfileRecord = BasalValuesRecord(it.getBasalValues().toList())),
@@ -1261,7 +1261,7 @@ class OmnipodDashPumpPlugin @Inject constructor(
     }
 
     private fun handleTimeChange(): PumpEnactResult {
-        return profileFunction.getProfile()?.let {
+        return ch.getProfile()?.let {
             setNewBasalProfile(it, OmnipodCommandType.SET_TIME)
         } ?: pumpEnactResultProvider.get().success(false).enacted(false).comment("No profile active")
     }

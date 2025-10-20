@@ -11,6 +11,7 @@ import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.data.pump.defs.TimeChangeType
 import app.aaps.core.data.time.T
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.Notification
@@ -84,7 +85,8 @@ class EopatchPumpPlugin @Inject constructor(
     private val profileFunction: ProfileFunction,
     private val pumpEnactResultProvider: Provider<PumpEnactResult>,
     private val patchConfig: PatchConfig,
-    private val normalBasalManager: NormalBasalManager
+    private val normalBasalManager: NormalBasalManager,
+    private val ch: ConcentrationHelper
 ) : PumpPluginBase(
     pluginDescription = PluginDescription()
         .mainType(PluginType.PUMP)
@@ -318,7 +320,7 @@ class EopatchPumpPlugin @Inject constructor(
             if (patchManagerExecutor.patchConnectionState.isConnected) {
                 val delivering = preferenceManager.bolusCurrent.nowBolus.injected
                 rxBus.send(EventOverviewBolusProgress.apply {
-                    status = rh.gs(app.aaps.core.ui.R.string.bolus_delivering, delivering)
+                    status = ch.bolusProgress(delivering.toDouble(), detailedBolusInfo.insulin)
                     percent = min((delivering / detailedBolusInfo.insulin * 100).toInt(), 100)
                     t = tr
                 })
@@ -326,7 +328,7 @@ class EopatchPumpPlugin @Inject constructor(
         } while (!preferenceManager.bolusCurrent.nowBolus.endTimeSynced && isSuccess)
 
         rxBus.send(EventOverviewBolusProgress.apply {
-            status = rh.gs(app.aaps.core.ui.R.string.bolus_delivered_successfully, detailedBolusInfo.insulin)
+            status = ch.bolusProgress(detailedBolusInfo.insulin, detailedBolusInfo.insulin)
             percent = 100
         })
 
@@ -348,7 +350,7 @@ class EopatchPumpPlugin @Inject constructor(
                 .observeOn(aapsSchedulers.main)
                 .subscribe {
                     rxBus.send(EventOverviewBolusProgress.apply {
-                        status = rh.gs(app.aaps.core.ui.R.string.bolus_delivered_successfully, (it.injectedBolusAmount * 0.05f))
+                        status = ch.bolusProgress((it.injectedBolusAmount * 0.05f).toDouble(), (it.injectedBolusAmount * 0.05f).toDouble())
                     })
                 }
         )
