@@ -2,9 +2,9 @@ package app.aaps.plugins.aps.openAPSAIMI
 
 import app.aaps.core.interfaces.stats.TddCalculator
 import app.aaps.core.keys.DoubleKey
-import app.aaps.core.keys.Preferences
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.keys.interfaces.Preferences
 import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.max
