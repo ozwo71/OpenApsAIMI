@@ -2905,7 +2905,7 @@ fun appendCompactLog(
 
         val gs = gsAimi?.gs
         val f = gsAimi?.features
-        
+
         val glucoseStatus = glucose_status ?: GlucoseStatusAIMI(
             glucose = gs?.glucose ?: 0.0,
             noise = gs?.noise ?: 0.0,
