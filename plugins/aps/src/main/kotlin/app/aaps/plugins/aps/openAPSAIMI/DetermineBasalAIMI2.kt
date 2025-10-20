@@ -2896,6 +2896,34 @@ fun appendCompactLog(
             consoleLog = consoleLog,
             consoleError = consoleError
         )
+        val gsAimi = try {
+            glucoseStatusCalculatorAimi.compute(false)
+        } catch (e: Exception) {
+            consoleError.add("❌ GlucoseStatusCalculatorAimi compute() failed: ${e.message}")
+            null
+        }
+
+        val gs = gsAimi?.gs
+        val f = gsAimi?.features
+        
+        val glucoseStatus = glucose_status ?: GlucoseStatusAIMI(
+            glucose = gs?.glucose ?: 0.0,
+            noise = gs?.noise ?: 0.0,
+            delta = gs?.delta ?: 0.0,
+            shortAvgDelta = gs?.shortAvgDelta ?: 0.0,
+            longAvgDelta = gs?.longAvgDelta ?: 0.0,
+            date = gs?.date ?: System.currentTimeMillis(),
+            duraISFminutes = f?.stable5pctMinutes ?: 0.0,
+            duraISFaverage = 0.0,
+            parabolaMinutes = 0.0,
+            deltaPl = f?.delta5Prev ?: 0.0,
+            deltaPn = f?.delta5Next ?: 0.0,
+            bgAcceleration = f?.accel ?: 0.0,
+            a0 = 0.0,
+            a1 = 0.0,
+            a2 = 0.0,
+            corrSqu = f?.corrR2 ?: 0.0
+        )
         val reasonAimi = StringBuilder()
         // On définit fromTime pour couvrir une longue période (par exemple, les 7 derniers jours)
         val fromTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(7)
@@ -2934,7 +2962,7 @@ fun appendCompactLog(
         this.hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
         val dayOfWeek = calendarInstance[Calendar.DAY_OF_WEEK]
         val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-        this.bg = glucose_status.glucose
+        this.bg = glucoseStatus.glucose
         val getlastBolusSMB = persistenceLayer.getNewestBolusOfType(BS.Type.SMB)
         val lastBolusSMBTime = getlastBolusSMB?.timestamp ?: 0L
         //val lastBolusSMBMinutes = lastBolusSMBTime / 60000
@@ -3024,10 +3052,10 @@ fun appendCompactLog(
         this.tags60to120minAgo = parseNotes(60, 120)
         this.tags120to180minAgo = parseNotes(120, 180)
         this.tags180to240minAgo = parseNotes(180, 240)
-        this.delta = glucose_status.delta.toFloat()
-        this.shortAvgDelta = glucose_status.shortAvgDelta.toFloat()
-        this.longAvgDelta = glucose_status.longAvgDelta.toFloat()
-        val bgAcceleration = glucose_status.bgAcceleration ?: 0f
+        this.delta = glucoseStatus.delta.toFloat()
+        this.shortAvgDelta = glucoseStatus.shortAvgDelta.toFloat()
+        this.longAvgDelta = glucoseStatus.longAvgDelta.toFloat()
+        val bgAcceleration = glucoseStatus.bgAcceleration ?: 0f
         this.bgacc = bgAcceleration.toDouble()
         val therapy = Therapy(persistenceLayer).also {
             it.updateStatesBasedOnTherapyEvents()
@@ -3188,13 +3216,13 @@ fun appendCompactLog(
         val systemTime = currentTime
 
         // TODO eliminate
-        val bgTime = glucose_status.date
+        val bgTime = glucoseStatus.date
         val minAgo = round((systemTime - bgTime) / 60.0 / 1000.0, 1)
         // TODO eliminate
-        //bg = glucose_status.glucose.toFloat()
+        //bg = glucoseStatus.glucose.toFloat()
         //this.bg = bg.toFloat()
         // TODO eliminate
-        val noise = glucose_status.noise
+        val noise = glucoseStatus.noise
         // 38 is an xDrip error state that usually indicates sensor failure
         // all other BG values between 11 and 37 mg/dL reflect non-error-code BG values, so we should zero temp for those
         if (bg <= 10 || bg == 38.0 || noise >= 3) {  //Dexcom is in ??? mode or calibrating, or xDrip reports high noise
@@ -3330,14 +3358,14 @@ fun appendCompactLog(
             this.iob = iob2
         }
 
-        val tick: String = if (glucose_status.delta > -0.5) {
-            "+" + round(glucose_status.delta)
+        val tick: String = if (glucoseStatus.delta > -0.5) {
+            "+" + round(glucoseStatus.delta)
         } else {
-            round(glucose_status.delta).toString()
+            round(glucoseStatus.delta).toString()
         }
-        val minDelta = min(glucose_status.delta, glucose_status.shortAvgDelta)
-        val minAvgDelta = min(glucose_status.shortAvgDelta, glucose_status.longAvgDelta)
-        // val maxDelta = max(glucose_status.delta, max(glucose_status.shortAvgDelta, glucose_status.longAvgDelta))
+        val minDelta = min(glucoseStatus.delta, glucoseStatus.shortAvgDelta)
+        val minAvgDelta = min(glucoseStatus.shortAvgDelta, glucoseStatus.longAvgDelta)
+        // val maxDelta = max(glucoseStatus.delta, max(glucoseStatus.shortAvgDelta, glucoseStatus.longAvgDelta))
         val tdd7P: Double = preferences.get(DoubleKey.OApsAIMITDD7)
         var tdd7Days = profile.TDD
         if (tdd7Days == 0.0 || tdd7Days < tdd7P) tdd7Days = tdd7P
@@ -3532,7 +3560,7 @@ fun appendCompactLog(
             deviation = round((30 / 5) * (minAvgDelta - bgi))
             // and if deviation is still negative, use long_avgdelta
             if (deviation < 0) {
-                deviation = round((30 / 5) * (glucose_status.longAvgDelta - bgi))
+                deviation = round((30 / 5) * (glucoseStatus.longAvgDelta - bgi))
             }
         }
         // calculate the naive (bolus calculator math) eventual BG based on net IOB and sensitivity
@@ -3731,12 +3759,12 @@ fun appendCompactLog(
         val actCurr = profile.sensorLagActivity
         val actFuture = profile.futureActivity
         val td = adjustedDIAInMinutes
-        val deltaGross = round((glucose_status.delta + actCurr * sens).coerceIn(0.0, 35.0), 1)
+        val deltaGross = round((glucoseStatus.delta + actCurr * sens).coerceIn(0.0, 35.0), 1)
         val actTarget = deltaGross / sens * factors.toFloat()
         var actMissing = 0.0
         var deltaScore = 0.5  // 0..1 : 0 proche/sous target, 1 très au-dessus
 
-        if (glucose_status.delta <= 4.0) {
+        if (glucoseStatus.delta <= 4.0) {
             actMissing = round((actCurr * smbToGive - max(actFuture, 0.0)) / 5, 4)
             // échelle 0..1 en fonction de l’écart à la cible
             deltaScore = ((bg - target_bg) / 100.0).coerceIn(0.0, 1.0)
