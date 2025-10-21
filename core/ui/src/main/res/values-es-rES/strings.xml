@@ -226,7 +226,7 @@
     <string name="careportal_pump_site_change">Cambio de cánula</string>
     <string name="cgm_sensor_insert">Inserción de sensor</string>
     <string name="careportal_pump_site_management">Sitios de la Bomba</string>
-    <string name="careportal_cgm_site_management">Sitios de MCG</string>
+    <string name="careportal_cgm_site_management">Sitios del MCG</string>
     <string name="careportal_cgmsensorstart">Inicio de Sensor</string>
     <string name="careportal_cgm_sensor_stop">Detener sensor MCG</string>
     <string name="careportal_dad_alert">D.A.D Alerta</string>
@@ -285,7 +285,7 @@
     <string name="location_front_right_lower_thigh">Muslo inferior derecho, frente</string>
     <string name="location_front_left_lower_thigh">Muslo inferior izquierdo, frente</string>
     <string name="arrow_up">Arriba</string>
-    <string name="arrow_up_right">Arriba derecha</string>
+    <string name="arrow_up_right">Arriba a la derecha</string>
     <string name="arrow_right">Derecha</string>
     <string name="arrow_down_right">Abajo a la derecha</string>
     <string name="arrow_down">Abajo</string>
