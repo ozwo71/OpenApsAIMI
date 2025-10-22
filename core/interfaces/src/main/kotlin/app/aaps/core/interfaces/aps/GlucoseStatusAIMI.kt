@@ -6,12 +6,12 @@ import kotlinx.serialization.Serializable
 @OptIn(InternalSerializationApi::class)
 @Serializable
 data class GlucoseStatusAIMI(
-    val glucose: Double,
-    val noise: Double = 0.0,
-    val delta: Double = 0.0,
-    val shortAvgDelta: Double = 0.0,
-    val longAvgDelta: Double = 0.0,
-    val date: Long = 0L,
+    override val glucose: Double,
+    override val noise: Double = 0.0,
+    override val delta: Double = 0.0,
+    override val shortAvgDelta: Double = 0.0,
+    override val longAvgDelta: Double = 0.0,
+    override val date: Long = 0L,
     /** past duration of BG changing only within +/- 5% */
     val duraISFminutes: Double = 0.0,
     /** average BG while BG was changing less than +/- 5% */
@@ -40,4 +40,4 @@ data class GlucoseStatusAIMI(
     val corrSqu: Double = 0.0,
     val combinedDelta: Double = 0.0,          // delta pondéré AIMI (prefs)
     val isNightGrowthCandidate: Boolean = false
-)
+) : GlucoseStatus
