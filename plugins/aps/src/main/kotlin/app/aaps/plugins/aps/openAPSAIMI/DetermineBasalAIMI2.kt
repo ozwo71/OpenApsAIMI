@@ -52,6 +52,7 @@ import kotlin.math.sqrt
 import android.content.Context
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.R
+import kotlin.collections.get
 import kotlin.math.exp
 
 // 📝 Structure & helper pour partager la logique de relâchement du plafond IOB en mode repas.
@@ -1235,6 +1236,10 @@ fun appendCompactLog(
     private fun isHighCarbModeCondition(): Boolean {
         val pbolusHC: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
         return highCarbrunTime in 0..7 && lastBolusSMBUnit != pbolusHC.toFloat() && highCarbTime
+    }
+    private fun isHighCarb2ModeCondition(): Boolean {
+        val pbolusHC2: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus2)
+        return highCarbrunTime in 15..24 && lastBolusSMBUnit != pbolusHC2.toFloat() && highCarbTime
     }
 
     private fun issnackModeCondition(): Boolean {
@@ -3177,6 +3182,13 @@ fun appendCompactLog(
             rT.units = pbolusHC
             //rT.reason.append(" Microbolusing High Carb Mode ${pbolusHC}U.")
             rT.reason.append(context.getString(R.string.reason_prebolus_highcarb, pbolusHC))
+            return rT
+        }
+        if (isHighCarb2ModeCondition()) {
+            val pbolusHC2: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus2)
+            rT.units = pbolusHC2
+            //rT.reason.append(" Microbolusing High Carb Mode ${pbolusHC}U.")
+            rT.reason.append(context.getString(R.string.reason_prebolus_highcarb2, pbolusHC2))
             return rT
         }
         if (issnackModeCondition()) {
