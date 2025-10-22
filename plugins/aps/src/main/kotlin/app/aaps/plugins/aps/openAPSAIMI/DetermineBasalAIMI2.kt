@@ -4550,7 +4550,34 @@ rT.reason.appendLine(
                     }
                 }
             }
+// 🎯 Plateau hyperglycémie : BG haut, pentes ~0 => pousser la basale
+            if (chosenRate == null) {
+                val isPlateauHigh =
+                    bg > 180 &&
+                        kotlin.math.abs(delta) <= 2.0 &&
+                        kotlin.math.abs(shortAvgDelta) <= 2.0 &&
+                        kotlin.math.abs(longAvgDelta) <= 2.0 &&
+                        // si tu as les features AIMI (optionnel, sinon enlève ces 2 lignes)
+                        (glucoseStatus?.duraISFminutes ?: 0.0) >= 15.0 &&
+                        kotlin.math.abs(glucoseStatus?.bgAcceleration ?: 0.0) <= 0.2
 
+                if (isPlateauHigh) {
+                    // Erreur au-dessus du seuil 180
+                    val err = (bg - 180.0).coerceAtLeast(0.0)
+
+                    // Boost proportionnel plafonné (ex : +15% à +60% selon l’écart)
+                    // 200 mg/dL → ~+33%, 235 → ~+60% cap
+                    val boostFrac = (err /variableSensitivity).coerceIn(0.15, 0.60)
+
+                    // Candidate = basale * (1 + boost); on prend le max vs basalaimi
+                    val candidate = profile_current_basal * (1.0 + boostFrac)
+                    val boosted = maxOf(candidate, basalaimi.toDouble())
+
+                    chosenRate = boosted.also {
+                        rT.reason.append(context.getString(R.string.aimi_plateau_high_boost))
+                    }
+                }
+            }
 // ------------------------------
 // 9️⃣ Hyperglycémies & corrections
             if (chosenRate == null) {
