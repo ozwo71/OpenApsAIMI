@@ -5,32 +5,28 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
-import app.aaps.core.interfaces.aps.GlucoseStatusSMB
+import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.plugins.aps.openAPS.DeltaCalculator
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.DoubleKey
+import app.aaps.plugins.aps.openAPSAIMI.extensions.asRounded
 import dagger.Reusable
 import javax.inject.Inject
 import kotlin.math.max
 
-/** Features additionnels pour AIMI, calculés en même temps que GlucoseStatusSMB. */
+/** Features additionnels pour AIMI, calculés en même temps que GlucoseStatusAIMI. */
 data class AimiBgFeatures(
-    // Fit quadratique / dynamique
-    val accel: Double,               // mg/dL/min^2
-    val delta5Prev: Double,          // pente 5 min passée (deltaPl)
-    val delta5Next: Double,          // pente 5 min future (deltaPn)
-    val corrR2: Double,              // R² du fit retenu
-    val parabolaMinutes: Double,     // durée couverte par le fit (minutes)
-    val a0: Double,                  // coefficients de la parabole (BG = a0 + a1*t + a2*t^2), t en pas de 5 min
+    val accel: Double,
+    val delta5Prev: Double,
+    val delta5Next: Double,
+    val corrR2: Double,
+    val parabolaMinutes: Double,
+    val a0: Double,
     val a1: Double,
     val a2: Double,
-
-    // Bande ±5 %
-    val stable5pctMinutes: Double,   // durée de "bande 5%" (min)
-    val stable5pctAverage: Double,       // moyenne BG sur la bande ±5 %
-
-    // Indicateurs AIMI
-    val combinedDelta: Double,       // delta combiné AIMI (pondérations prefs)
+    val stable5pctMinutes: Double,
+    val stable5pctAverage: Double,
+    val combinedDelta: Double,
     val isNightGrowthCandidate: Boolean
 )
 
@@ -43,33 +39,32 @@ class GlucoseStatusCalculatorAimi @Inject constructor(
     private val deltaCalculator: DeltaCalculator,
     private val preferences: Preferences
 ) {
-    /** Constantes fallback si les prefs ne sont pas dispo (ou désactivées). */
     private object Defaults {
-        const val FRESHNESS_MIN = 7L          // données CGM max âgées de 7 min
-        const val SERIES_GAP_MIN = 13L        // gap max en min dans la série bande ±5 %
-        const val FIT_GAP_MIN = 11L           // gap max en min pour le fit quad
-        const val CUTOFF_MIN = 47.5           // horizon d’analyse max (minutes)
-        const val BW_FRACTION = 0.05          // ±5% bande stabilisée
-        const val CACHE_TTL_MS = 30_000L      // 30s de TTL pour le cache local
+        const val FRESHNESS_MIN = 7L
+        const val SERIES_GAP_MIN = 13L
+        const val FIT_GAP_MIN = 11L
+        const val CUTOFF_MIN = 47.5
+        const val BW_FRACTION = 0.05
+        const val CACHE_TTL_MS = 30_000L
     }
 
     data class Result(
-        val gs: GlucoseStatusSMB?,     // pour le pipeline standard
-        val features: AimiBgFeatures?  // pour AIMI (accel, deltaPl, deltaPn, a0/a1/a2…)
+        val gs: GlucoseStatusAIMI?,
+        val features: AimiBgFeatures?
     )
 
     private var last: Result? = null
     private var lastTs: Long = 0L
 
-    /** API “standard” attendue par le plugin: renvoie un GlucoseStatus (SMB). */
-    fun getGlucoseStatusData(allowOldData: Boolean): GlucoseStatusSMB? =
+    /** API “standard” pour le plugin: renvoie un GlucoseStatusAIMI. */
+    fun getGlucoseStatusData(allowOldData: Boolean): GlucoseStatusAIMI? =
         (if (shouldRecompute(allowOldData)) compute(allowOldData) else last)?.gs
 
     /** API AIMI: renvoie les features (accélération, deltas paraboliques, etc.). */
     fun getAimiFeatures(allowOldData: Boolean): AimiBgFeatures? =
         (if (shouldRecompute(allowOldData)) compute(allowOldData) else last)?.features
 
-    /** Renvoie le couple SMB + features, recalcule si besoin. */
+    /** Recalcule et renvoie (GS AIMI + features). */
     fun compute(allowOldData: Boolean): Result {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy()
         if (data == null || data.isEmpty()) {
@@ -83,10 +78,10 @@ class GlucoseStatusCalculatorAimi @Inject constructor(
             return storeAndReturn(null, null)
         }
 
-        // 1) Deltas standard (SMB)
+        // 1) Deltas standard
         val deltas = deltaCalculator.calculateDeltas(data)
 
-        // 2) Bande ±5 %
+        // 2) Bande ±5%
         val bw = Defaults.BW_FRACTION
         val head = data[0]
         val headTs = head.timestamp
@@ -106,7 +101,7 @@ class GlucoseStatusCalculatorAimi @Inject constructor(
             minutesDur = gapMin
         }
 
-        // 3) Fit quadratique local (accélération, deltas ±5 min, R², a0/a1/a2, durée du fit)
+        // 3) Fit quadratique local
         val fit = QuadraticFit.fit5min(
             data = data,
             cutoffMin = Defaults.CUTOFF_MIN,
@@ -116,11 +111,10 @@ class GlucoseStatusCalculatorAimi @Inject constructor(
             filled = { it.filledGap }
         )
 
-        // 4) Delta combiné (pondérations depuis les prefs)
-        //    - on recycle deux clés existantes pour les poids (sinon 1.0 par défaut)
+        // 4) Delta combiné (poids depuis prefs)
         val wDelta = 1.0
-        val wShort = preferences.getOr(DoubleKey.OApsAIMIAutodriveAcceleration, 1.0) // poids "short"
-        val wLong  = preferences.getOr(DoubleKey.OApsAIMIcombinedDelta, 1.0)         // poids "long"
+        val wShort = preferences.getOr(DoubleKey.OApsAIMIAutodriveAcceleration, 1.0)
+        val wLong  = preferences.getOr(DoubleKey.OApsAIMIcombinedDelta, 1.0)
         val combinedDelta = combineDelta(
             d = deltas.delta,
             s = deltas.shortAvgDelta,
@@ -129,19 +123,10 @@ class GlucoseStatusCalculatorAimi @Inject constructor(
         )
 
         // 5) Heuristique Night-Growth
-        val ngrSlopeMin = preferences.getOr(DoubleKey.OApsAIMINightGrowthMinRiseSlope, 5.0) // mg/dL/5min
+        val ngrSlopeMin = preferences.getOr(DoubleKey.OApsAIMINightGrowthMinRiseSlope, 5.0)
         val isNg = (fit?.deltaPl ?: 0.0) >= ngrSlopeMin || (fit?.accel ?: 0.0) > 0.0
 
-        // 6) Construction GlucoseStatusSMB + features AIMI
-        val gs = GlucoseStatusSMB(
-            glucose = head.recalculated,
-            noise = 0.0,
-            delta = deltas.delta,
-            shortAvgDelta = deltas.shortAvgDelta,
-            longAvgDelta = deltas.longAvgDelta,
-            date = head.timestamp
-        )
-
+        // 6) GS AIMI + features
         val features = AimiBgFeatures(
             accel = fit?.accel ?: 0.0,
             delta5Prev = fit?.deltaPl ?: 0.0,
@@ -151,13 +136,30 @@ class GlucoseStatusCalculatorAimi @Inject constructor(
             a0 = fit?.a0 ?: 0.0,
             a1 = fit?.a1 ?: 0.0,
             a2 = fit?.a2 ?: 0.0,
-
             stable5pctMinutes = minutesDur,
             stable5pctAverage = avg,
-
             combinedDelta = combinedDelta,
             isNightGrowthCandidate = isNg
         )
+
+        val gsAimi = GlucoseStatusAIMI(
+            glucose = head.recalculated,
+            noise = 0.0,
+            delta = deltas.delta,
+            shortAvgDelta = deltas.shortAvgDelta,
+            longAvgDelta = deltas.longAvgDelta,
+            date = head.timestamp,
+            duraISFminutes = minutesDur,
+            duraISFaverage = avg,
+            parabolaMinutes = features.parabolaMinutes,
+            deltaPl = features.delta5Prev,
+            deltaPn = features.delta5Next,
+            bgAcceleration = features.accel,
+            a0 = features.a0,
+            a1 = features.a1,
+            a2 = features.a2,
+            corrSqu = features.corrR2
+        ).asRounded()
 
         log.debug(
             LTag.GLUCOSE,
@@ -172,12 +174,10 @@ class GlucoseStatusCalculatorAimi @Inject constructor(
                 "NG=$isNg"
         )
 
-        return storeAndReturn(gs, features)
+        return storeAndReturn(gsAimi, features)
     }
 
-    // --- Helpers internes ----------------------------------------------------
-
-    private fun storeAndReturn(gs: GlucoseStatusSMB?, features: AimiBgFeatures?): Result {
+    private fun storeAndReturn(gs: GlucoseStatusAIMI?, features: AimiBgFeatures?): Result {
         val res = Result(gs, features)
         last = res
         lastTs = dateUtil.now()
@@ -187,30 +187,25 @@ class GlucoseStatusCalculatorAimi @Inject constructor(
     private fun shouldRecompute(allowOldData: Boolean): Boolean {
         if (last == null) return true
         val staleness = dateUtil.now() - lastTs
-        // Recalcule si on ne veut pas de vieux data, si cache périmé, ou si jamais calculé
         return (!allowOldData) || staleness > Defaults.CACHE_TTL_MS
     }
 
-    /** Petite extension util pour lire avec valeur par défaut. */
     private fun Preferences.getOr(key: DoubleKey, default: Double): Double =
         runCatching { this.get(key) }.getOrNull() ?: default
 
-    /** Pondération simple (normalisée) des deltas. */
     private fun combineDelta(d: Double, s: Double, l: Double, wD: Double, wS: Double, wL: Double): Double {
         val sumW = max(1e-9, wD + wS + wL)
         return (wD * d + wS * s + wL * l) / sumW
     }
 }
 
-/** Fit quadratique local pour extraire accel / deltaPl / deltaPn / R² / a0/a1/a2 / durée. */
 private object QuadraticFit {
-
     data class Out(
-        val accel: Double,   // mg/dL/min^2
-        val deltaPl: Double, // pente 5 min passée
-        val deltaPn: Double, // pente 5 min future
+        val accel: Double,
+        val deltaPl: Double,
+        val deltaPn: Double,
         val r2: Double,
-        val duraMin: Double, // durée couverte par le fit (minutes)
+        val duraMin: Double,
         val a0: Double,
         val a1: Double,
         val a2: Double
@@ -225,14 +220,11 @@ private object QuadraticFit {
         filled: (T) -> Boolean
     ): Out? {
         if (data.size < 4) return null
-
-        val SCALE_TIME = 300.0  // 5 min en secondes
+        val SCALE_TIME = 300.0
         val SCALE_BG = 50.0
-
         val t0 = time(data[0])
         var lastTi = 0.0
         var n = 0
-
         var sumY = 0.0
         var sumX = 0.0
         var sumX2 = 0.0
@@ -240,7 +232,6 @@ private object QuadraticFit {
         var sumX4 = 0.0
         var sumXY = 0.0
         var sumX2Y = 0.0
-
         var best: Out? = null
         var bestR2 = -1.0
 
@@ -248,19 +239,15 @@ private object QuadraticFit {
             val r = data[i]
             if (recalc(r) <= 39 || filled(r)) continue
             n++
-
             val ti = (time(r) - t0) / 1000.0 / SCALE_TIME
             if (-ti * SCALE_TIME > cutoffMin * 60) break
             if (ti < lastTi - fitGapMin * 60 / SCALE_TIME) break
             lastTi = ti
-
             val x = ti
             val y = recalc(r) / SCALE_BG
-
             val x2 = x * x
             val x3 = x2 * x
             val x4 = x2 * x2
-
             sumX += x; sumX2 += x2; sumX3 += x3; sumX4 += x4
             sumY += y; sumXY += x * y; sumX2Y += x2 * y
 
@@ -284,7 +271,6 @@ private object QuadraticFit {
                 val b = detB / detH
                 val c = detC / detH
 
-                // R²
                 var ssTot = 0.0
                 var ssRes = 0.0
                 val yMean = sumY / n
@@ -299,30 +285,19 @@ private object QuadraticFit {
                 }
                 val r2 = if (ssTot != 0.0) 1 - ssRes / ssTot else 0.0
 
-                // Slopes ±5 min & acceleration
                 val dt = 5 * 60 / SCALE_TIME
-                val accel = 2 * a * SCALE_BG / 60.0        // mg/dL/min^2
+                val accel = 2 * a * SCALE_BG / 60.0
                 val deltaPl = -SCALE_BG * (a * (-dt) * (-dt) - b * dt)
                 val deltaPn =  SCALE_BG * (a * ( dt) * ( dt) + b * dt)
 
-                // Coeffs remis en échelle (t en pas de 5 min)
                 val a0 = c * SCALE_BG
                 val a1 = b * SCALE_BG
                 val a2 = a * SCALE_BG
 
                 if (r2 >= bestR2) {
-                    val duraMin = (-ti * (SCALE_TIME / 60.0)) * 5.0 // minutes couvertes
+                    val duraMin = (-ti * (SCALE_TIME / 60.0)) * 5.0
                     bestR2 = r2
-                    best = Out(
-                        accel = accel,
-                        deltaPl = deltaPl,
-                        deltaPn = deltaPn,
-                        r2 = r2,
-                        duraMin = kotlin.math.max(0.0, duraMin),
-                        a0 = a0,
-                        a1 = a1,
-                        a2 = a2
-                    )
+                    best = Out(accel, deltaPl, deltaPn, r2, max(0.0, duraMin), a0, a1, a2)
                 }
             }
         }
