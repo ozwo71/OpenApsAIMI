@@ -858,7 +858,8 @@
     <string name="reason_prebolus_lunch2">&#160;Microbolusing 2/2 Lunch Mode %.2fU.</string>
     <string name="reason_prebolus_dinner1">&#160;Microbolusing 1/2 Dinner Mode %.2fU.</string>
     <string name="reason_prebolus_dinner2">&#160;Microbolusing 2/2 Dinner Mode %.2fU.</string>
-    <string name="reason_prebolus_highcarb">&#160;Microbolusing High Carb Mode %.2fU.</string>
+    <string name="reason_prebolus_highcarb">&#160;Microbolusing 1/2 High Carb Mode %.2fU.</string>
+    <string name="reason_prebolus_highcarb2">&#160;Microbolusing 2/2 High Carb Mode %.2fU.</string>
     <string name="reason_prebolus_snack">&#160;Microbolusing Snack Mode %.2fU.</string>
     <string name="reason_maxsmb">&#160;| MaxSMB %.1f U&#160;\n</string>
     <string name="reason_cgm_calibrating">CGM is calibrating, in ??? state, or noise is high</string>
