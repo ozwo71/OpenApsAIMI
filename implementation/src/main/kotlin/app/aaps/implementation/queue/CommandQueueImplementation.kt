@@ -26,6 +26,7 @@ import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.profile.ProfileFunction
+import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.core.interfaces.pump.PumpSync
@@ -173,14 +174,33 @@ class CommandQueueImplementation @Inject constructor(
         }
     }
 
-    @Suppress("SameParameterValue")
+    /**
+     * Watchdog. I observed issue where work stuck in RUNNING state but nothing actually happens
+     * (last work completed successfully).
+     * Cancel scheduled work in this case
+     */
+    private var readScheduledDetected: Long? = null
+
     @Synchronized
-    fun isLastScheduled(type: CommandType): Boolean {
+    fun isReadStatusScheduled(): Boolean {
+        /*
+         * Cancel all works if ReadStatus is scheduled for more that 15 min
+         */
+        readScheduledDetected?.let {
+            if (dateUtil.isOlderThan(it, minutes = 15)) {
+                workManager.cancelUniqueWork(jobName.name)
+                fabricPrivacy.logCustom("QueueWorkerStuck")
+                Thread.sleep(5000)
+            }
+        }
+
         synchronized(queue) {
-            if (queue.isNotEmpty() && queue[queue.size - 1].commandType == type) {
+            if (queue.isNotEmpty() && queue[queue.size - 1].commandType == CommandType.READSTATUS) {
+                readScheduledDetected = dateUtil.now()
                 return true
             }
         }
+        readScheduledDetected = null
         return false
     }
 
@@ -476,7 +496,7 @@ class CommandQueueImplementation @Inject constructor(
 
     // returns true if command is queued
     override fun readStatus(reason: String, callback: Callback?): Boolean {
-        if (isLastScheduled(CommandType.READSTATUS)) {
+        if (isReadStatusScheduled()) {
             aapsLogger.debug(LTag.PUMPQUEUE, "READSTATUS $reason ignored as duplicated")
             callback?.result(executingNowError())?.run()
             return false
@@ -672,16 +692,11 @@ class CommandQueueImplementation @Inject constructor(
     }
 
     private fun showBolusProgressDialog(detailedBolusInfo: DetailedBolusInfo) {
+        BolusProgressData.set(detailedBolusInfo.insulin, isSMB = detailedBolusInfo.bolusType === BS.Type.SMB, id = detailedBolusInfo.id)
         if (detailedBolusInfo.context != null) {
-            uiInteraction.runBolusProgressDialog(
-                (detailedBolusInfo.context as AppCompatActivity).supportFragmentManager,
-                detailedBolusInfo.insulin,
-                detailedBolusInfo.id
-            )
+            uiInteraction.runBolusProgressDialog((detailedBolusInfo.context as AppCompatActivity).supportFragmentManager)
         } else {
             val i = Intent()
-            i.putExtra("insulin", detailedBolusInfo.insulin)
-            i.putExtra("id", detailedBolusInfo.id)
             i.setClass(context, uiInteraction.bolusProgressHelperActivity)
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(i)
