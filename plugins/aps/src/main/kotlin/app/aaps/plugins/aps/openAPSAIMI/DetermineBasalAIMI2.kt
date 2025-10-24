@@ -96,7 +96,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var profileFunction: ProfileFunction
     @Inject lateinit var iobCobCalculator: IobCobCalculator
     @Inject lateinit var activePlugin: ActivePlugin
+    @Inject lateinit var aimiAdaptiveBasal: AIMIAdaptiveBasal
     @Inject lateinit var glucoseStatusCalculatorAimi: GlucoseStatusCalculatorAimi
+
     private val context: Context = context.applicationContext
     private val EPS_FALL = 0.3      // mg/dL/5min : seuil de baisse
     private val EPS_ACC  = 0.2      // mg/dL/5min : seuil d'écart short vs long
@@ -2901,32 +2903,41 @@ fun appendCompactLog(
             consoleLog = consoleLog,
             consoleError = consoleError
         )
-        val gsAimi = try {
+        // --- GS + features AIMI -----------------------------------------------------
+        val pack = try {
             glucoseStatusCalculatorAimi.compute(false)
         } catch (e: Exception) {
-            consoleError.add("❌ GlucoseStatusCalculatorAimi compute() failed: ${e.message}")
+            consoleError.add("❌ GlucoseStatusCalculatorAimi.compute() failed: ${e.message}")
             null
         }
 
-        val gs = gsAimi?.gs
-        val f = gsAimi?.features
+        if (pack == null || pack.gs == null) {
+            consoleError.add("❌ No glucose data (AIMI pack empty)")
+            return rT.also { it.reason.append("no GS") } // ou ton handling habituel
+        }
 
+        val gs = pack.gs!!
+        val f  = pack.features
+
+// Construit un GlucoseStatusAIMI complet (plus de 0.0 par défaut)
         val glucoseStatus = glucose_status ?: GlucoseStatusAIMI(
-            glucose = gs?.glucose ?: 0.0,
-            noise = gs?.noise ?: 0.0,
-            delta = gs?.delta ?: 0.0,
-            shortAvgDelta = gs?.shortAvgDelta ?: 0.0,
-            longAvgDelta = gs?.longAvgDelta ?: 0.0,
-            date = gs?.date ?: System.currentTimeMillis(),
+            glucose = gs.glucose,
+            noise = gs.noise,
+            delta = gs.delta,
+            shortAvgDelta = gs.shortAvgDelta,
+            longAvgDelta = gs.longAvgDelta,
+            date = gs.date,
+
+            // === valeurs issues de f (si présentes) ===
             duraISFminutes = f?.stable5pctMinutes ?: 0.0,
-            duraISFaverage = 0.0,
-            parabolaMinutes = 0.0,
+            duraISFaverage = f?.stable5pctAverage ?: 0.0,
+            parabolaMinutes = f?.parabolaMinutes ?: 0.0,
             deltaPl = f?.delta5Prev ?: 0.0,
             deltaPn = f?.delta5Next ?: 0.0,
             bgAcceleration = f?.accel ?: 0.0,
-            a0 = 0.0,
-            a1 = 0.0,
-            a2 = 0.0,
+            a0 = f?.a0 ?: 0.0,
+            a1 = f?.a1 ?: 0.0,
+            a2 = f?.a2 ?: 0.0,
             corrSqu = f?.corrR2 ?: 0.0
         )
         val reasonAimi = StringBuilder()
@@ -4352,10 +4363,53 @@ rT.reason.appendLine(
 // 1️⃣ Préparation des variables
             var overrideSafety = false
             var chosenRate: Double? = null
+            // Préparer l’input pour AIMI+ (plateau kicker, micro-resume, anti-stall)
+            val activeTbr = currenttemp // ta source TBR en cours
+            val lastTempIsZero = activeTbr?.rate == 0.0
+            val zeroSinceMin = if (lastTempIsZero) {
+                // adapte selon tes champs : ici, estimation grossière
+                max(0, activeTbr.duration - (activeTbr.minutesrunning ?: 0))
+            } else 0
+            val minutesSinceLastChange = /* ta métrique existante (sinon 0) */ 0
+
+            val inAimi = AIMIAdaptiveBasal.Input(
+                bg = glucoseStatus.glucose,
+                delta = glucoseStatus.delta,
+                shortAvgDelta = glucoseStatus.shortAvgDelta,
+                longAvgDelta = glucoseStatus.longAvgDelta,
+                accel = glucoseStatus.bgAcceleration,
+                r2 = glucoseStatus.corrSqu,
+                parabolaMin = glucoseStatus.parabolaMinutes,
+                combinedDelta = f?.combinedDelta ?: 0.0,
+                profileBasal = profile_current_basal,
+                lastTempIsZero = lastTempIsZero,
+                zeroSinceMin = zeroSinceMin,
+                minutesSinceLastChange = minutesSinceLastChange
+            )
+
+            val aimiDecision = aimiAdaptiveBasal.suggest(inAimi)
+            if (aimiDecision.rateUph != null) {
+                val candidate = aimiDecision.rateUph
+                val dur = aimiDecision.durationMin
+                if (chosenRate == null) {
+                    chosenRate = candidate
+                    rT.duration = dur
+                    rT.reason.append(" | ").append(aimiDecision.reason)
+                } else if (candidate > chosenRate!!) {
+                    // on prend l’option la plus “énergique”, durée la plus courte par prudence
+                    chosenRate = candidate
+                    rT.duration = minOf(rT.duration!!, dur)
+                    rT.reason.append(" | override by AIMI+: ").append(aimiDecision.reason)
+                }
+                // (optionnel) cap dur de sécurité
+                val hardCap = 1.8 * profile_current_basal
+                chosenRate = min(chosenRate!!, hardCap)
+            }
+
 
 // Garde: une TBR "meal" forcée est-elle déjà active ? (≈ même valeur & durée > 0)
             val forcedMealActive =
-                kotlin.math.abs(currenttemp.rate - forcedBasalmealmodes.toDouble()) < 0.05 &&
+                abs(currenttemp.rate - forcedBasalmealmodes.toDouble()) < 0.05 &&
                     currenttemp.duration > 0
 
 // Sommes-nous dans la fenêtre repas 0–30 min ?
