@@ -1,6 +1,7 @@
 name: Android Build (Signed)
 
 on:
+  workflow_dispatch: # Ermöglicht das manuelle Starten im "Actions"-Tab
   push:
     branches:
       - master-AIMI-Test
