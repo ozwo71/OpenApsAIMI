@@ -4,7 +4,7 @@ on:
   workflow_dispatch: # Ermöglicht das manuelle Starten im "Actions"-Tab
   schedule:
     # Läuft alle 6 Stunden (um 0, 6, 12, 18 Uhr UTC)
-    - cron: '0 */6 * * *'
+    - cron: '0 3 * * *'
 jobs:
   sync:
     runs-on: ubuntu-latest
