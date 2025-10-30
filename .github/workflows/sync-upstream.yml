@@ -25,7 +25,7 @@ jobs:
       - name: Add Upstream Remote
         run: |
           # Dies ist das *Original*-Repo, von dem du geforkt hast
-          git remote add upstream [https://github.com/MTR93600/OpenApsAIMI.git](https://github.com/MTR93600/OpenApsAIMI.git)
+          git remote add upstream https://github.com/MTR93600/OpenApsAIMI.git
 
       - name: Fetch and Rebase from Upstream
         run: |
