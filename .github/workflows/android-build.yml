@@ -3,7 +3,8 @@ name: Android Build (Signed)
 on:
   push:
     branches:
-      - master-AIMI-Test
+      #- master-AIMI-Test
+      - dev_OAPSAIMI
     tags:
       - 'v*.*.*'  # Déclenche sur les tags de version
   pull_request:
