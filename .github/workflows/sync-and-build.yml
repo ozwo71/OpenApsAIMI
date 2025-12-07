@@ -41,7 +41,7 @@ jobs:
   build-and-upload:
     needs: sync
     if: needs.sync.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest // ubuntu-22.04 wird auch in android-build.yml verwendet
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
