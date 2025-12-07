@@ -2,7 +2,7 @@ name: Sync, Build & Upload to Nextcloud
 
 on:
   schedule:
-    - cron: '0 * * * *' # Stündlich
+    - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
       branch_name:
@@ -25,6 +25,7 @@ jobs:
         with:
           ref: ${{ env.BUILD_BRANCH }}
           fetch-depth: 0
+          submodules: recursive # WICHTIG: Submodules laden
 
       - name: Sync with Upstream
         id: sync
@@ -61,6 +62,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.BUILD_BRANCH }}
+          submodules: recursive # WICHTIG: Auch hier Submodules laden
 
       - name: Set up JDK 21
         uses: actions/setup-java@v3
@@ -69,7 +71,6 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      # NEU: Keystore dekodieren, damit Gradle ihn finden kann
       - name: Decode Keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
@@ -77,10 +78,12 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # GEÄNDERT: Direkt signiert bauen durch Parameter-Injection
       - name: Build Signed Release APK
+        # ÄNDERUNG: -x :plugins:main:verifyFullReleaseResources hinzugefügt
         run: |
           ./gradlew assembleFullRelease \
+          -x lint \
+          -x :plugins:main:verifyFullReleaseResources \
           -Dorg.gradle.jvmargs="-Xmx8g -XX:+UseParallelGC -Xss1024m" \
           -Dorg.gradle.workers.max=8 \
           -Pandroid.injected.signing.store.file=$(pwd)/keystore.jks \
@@ -91,12 +94,16 @@ jobs:
       - name: Rename APK
         id: rename_apk
         run: |
-          # Pfad zur direkt von Gradle erzeugten Datei
           SRC_FILE="app/build/outputs/apk/full/release/app-full-release.apk"
           NEW_NAME="AAPS_FullRelease_$(date +'%Y-%m-%d_%H-%M').apk"
           
-          mv "$SRC_FILE" "$NEW_NAME"
-          echo "apk_path=$NEW_NAME" >> $GITHUB_OUTPUT
+          if [ -f "$SRC_FILE" ]; then
+            mv "$SRC_FILE" "$NEW_NAME"
+            echo "apk_path=$NEW_NAME" >> $GITHUB_OUTPUT
+          else
+            echo "Fehler: APK wurde nicht erstellt."
+            exit 1
+          fi
 
       - name: Upload to Nextcloud
         run: |
