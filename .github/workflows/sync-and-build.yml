@@ -1,0 +1,65 @@
+name: Sync and Build APK
+
+on:
+  schedule:
+    - cron: '0 * * * *' # Läuft jede Stunde
+  workflow_dispatch: # Erlaubt manuellen Start
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: dev_OAPSAIMI # Dein Ziel-Branch
+          fetch-depth: 0
+
+      - name: Sync with Upstream
+        run: |
+          git config --global user.name 'GitHub Action'
+          git config --global user.email 'action@github.com'
+          git remote add upstream https://github.com/MTR93600/OpenApsAIMI.git
+          git fetch upstream
+          # Versuche Merge. Wenn keine Änderungen, passiert nichts.
+          git merge upstream/dev_OAPSAIMI --allow-unrelated-histories
+          git push origin dev_OAPSAIMI
+build:
+    needs: sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev_OAPSAIMI
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Unsigned Release APK
+        # Baut die Release-Version, überspringt Lint-Checks für Schnelligkeit
+        run: ./gradlew assembleFullRelease -x lint
+
+      - name: Sign APK
+        uses: r0adkll/sign-android-release@v1
+        id: sign_app
+        with:
+          releaseDirectory: app/build/outputs/apk/full/release
+          signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
+          alias: ${{ secrets.KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+        # Falls der Build fehlschlägt, weil er die APK nicht findet, 
+        # muss ggf. der Pfad unter 'releaseDirectory' geprüft werden.
+
+      - name: Upload Signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-signed
+          # Der signierte Pfad wird von der Sign-Action ausgegeben
+          path: ${{ steps.sign_app.outputs.signedReleaseFile }}
