@@ -2,11 +2,11 @@ name: Sync, Build & Upload to Nextcloud
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '0 6,18 * * *' # Täglich um 06:00 und 18:00 Uhr
   workflow_dispatch:
     inputs:
       branch_name:
-        description: 'Welcher Branch soll gebaut werden?'
+        description: 'Branch'
         required: true
         default: 'dev_OAPSAIMI'
         type: string
@@ -25,13 +25,12 @@ jobs:
         with:
           ref: ${{ env.BUILD_BRANCH }}
           fetch-depth: 0
-          submodules: recursive # WICHTIG: Submodules laden
 
       - name: Sync with Upstream
         id: sync
         run: |
           if [ "${{ env.BUILD_BRANCH }}" != "dev_OAPSAIMI" ]; then
-            echo "Custom Branch gewählt. Überspringe Sync."
+            echo "Custom Branch. Kein Sync."
             echo "has_changes=false" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -50,52 +49,61 @@ jobs:
             git push origin dev_OAPSAIMI
             echo "has_changes=true" >> $GITHUB_OUTPUT
           else
-            echo "No updates found."
+            echo "No updates."
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
 
   build-and-upload:
     needs: sync
     if: needs.sync.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04 # Exakt wie in android-build.yml
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.BUILD_BRANCH }}
-          submodules: recursive # WICHTIG: Auch hier Submodules laden
+          submodules: recursive
 
       - name: Set up JDK 21
         uses: actions/setup-java@v3
         with:
-          java-version: '21'
           distribution: 'temurin'
-          cache: 'gradle'
+          java-version: '21' #
 
-      - name: Decode Keystore
+      # Caching für schnelleren Build (aus android-build.yml übernommen)
+      - name: Cache Gradle packages
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper/
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      # Keystore exakt wie in der funktionierenden Vorlage dekodieren
+      - name: Decode keystore
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > monkeystore.jks
+        shell: bash
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Signed Release APK
-        # ÄNDERUNG: -x :plugins:main:verifyFullReleaseResources hinzugefügt
-        run: |
-          ./gradlew assembleFullRelease \
-          -x lint \
-          -x :plugins:main:verifyFullReleaseResources \
-          -Dorg.gradle.jvmargs="-Xmx8g -XX:+UseParallelGC -Xss1024m" \
-          -Dorg.gradle.workers.max=8 \
-          -Pandroid.injected.signing.store.file=$(pwd)/keystore.jks \
-          -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
-          -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
-          -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+      # Build-Schritt mit ENV-Variablen statt Parameter-Injection
+      # Baut nur die Haupt-App (:app:assembleFullRelease), um Zeit zu sparen.
+      - name: Build Release APK
+        run: ./gradlew :app:assembleFullRelease
+        env:
+          KEYSTORE_FILE: ${{ github.workspace }}/monkeystore.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
       - name: Rename APK
         id: rename_apk
         run: |
           SRC_FILE="app/build/outputs/apk/full/release/app-full-release.apk"
-          NEW_NAME="AAPS_FullRelease_$(date +'%Y-%m-%d_%H-%M').apk"
+          NEW_NAME="AAPS_Release_$(date +'%Y-%m-%d_%H-%M').apk"
           
           if [ -f "$SRC_FILE" ]; then
             mv "$SRC_FILE" "$NEW_NAME"
@@ -107,14 +115,6 @@ jobs:
 
       - name: Upload to Nextcloud
         run: |
-          echo "Uploading ${{ steps.rename_apk.outputs.apk_path }}..."
           curl -u "${{ secrets.NEXTCLOUD_USER }}:${{ secrets.NEXTCLOUD_PASSWORD }}" \
           -T "${{ steps.rename_apk.outputs.apk_path }}" \
           "${{ secrets.NEXTCLOUD_URL }}${{ steps.rename_apk.outputs.apk_path }}"
-          
-          if [ $? -eq 0 ]; then
-            echo "✅ Upload successfully completed."
-          else
-            echo "❌ Upload failed."
-            exit 1
-          fi
