@@ -24,7 +24,7 @@ jobs:
           # Versuche Merge. Wenn keine Änderungen, passiert nichts.
           git merge upstream/dev_OAPSAIMI --allow-unrelated-histories
           git push origin dev_OAPSAIMI
-build:
+  build:
     needs: sync
     runs-on: ubuntu-latest
     steps:
