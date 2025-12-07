@@ -7,6 +7,7 @@ on:
       - dev_OAPSAIMI
     tags:
       - 'v*.*.*'  # Déclenche sur les tags de version
+  workflow_dispatch:
   pull_request:
     branches:
       - master
