@@ -3,7 +3,16 @@ name: Sync, Build & Upload to Nextcloud
 on:
   schedule:
     - cron: '0 * * * *' # Stündlich
-  workflow_dispatch:        # Manuell
+  workflow_dispatch:
+    inputs:
+      branch_name:
+        description: 'Welcher Branch soll gebaut werden?'
+        required: true
+        default: 'dev_OAPSAIMI'
+        type: string
+
+env:
+  BUILD_BRANCH: ${{ inputs.branch_name || 'dev_OAPSAIMI' }}
 
 jobs:
   sync:
@@ -14,12 +23,18 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          ref: dev_OAPSAIMI
+          ref: ${{ env.BUILD_BRANCH }}
           fetch-depth: 0
 
       - name: Sync with Upstream
         id: sync
         run: |
+          if [ "${{ env.BUILD_BRANCH }}" != "dev_OAPSAIMI" ]; then
+            echo "Custom Branch gewählt. Überspringe Sync."
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
           git config --global user.name 'GitHub Action'
           git config --global user.email 'action@github.com'
           git remote add upstream https://github.com/MTR93600/OpenApsAIMI.git
@@ -45,52 +60,51 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: dev_OAPSAIMI
+          ref: ${{ env.BUILD_BRANCH }}
 
       - name: Set up JDK 21
         uses: actions/setup-java@v3
         with:
-          java-version: '21' # Java 21 ist laut aaps-ci.yml und android-build.yml erforderlich
+          java-version: '21'
           distribution: 'temurin'
           cache: 'gradle'
+
+      # NEU: Keystore dekodieren, damit Gradle ihn finden kann
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # GEÄNDERT: Direkt signiert bauen durch Parameter-Injection
       - name: Build Signed Release APK
-        # Nutzt JVM Args aus aaps-ci.yml um OutOfMemory Fehler zu vermeiden
         run: |
-          ./gradlew assembleFullRelease -x lint \
+          ./gradlew assembleFullRelease \
           -Dorg.gradle.jvmargs="-Xmx8g -XX:+UseParallelGC -Xss1024m" \
-          -Dorg.gradle.workers.max=8
-
-      - name: Sign APK
-        uses: r0adkll/sign-android-release@v1
-        id: sign_app
-        with:
-          releaseDirectory: app/build/outputs/apk/full/release
-          signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
-          alias: ${{ secrets.KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
+          -Dorg.gradle.workers.max=8 \
+          -Pandroid.injected.signing.store.file=$(pwd)/keystore.jks \
+          -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+          -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+          -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
       - name: Rename APK
         id: rename_apk
         run: |
-          SIGNED_FILE="${{ steps.sign_app.outputs.signedReleaseFile }}"
-          # Generiert Namen: AAPS_FullRelease_YYYY-MM-DD_HH-MM.apk
+          # Pfad zur direkt von Gradle erzeugten Datei
+          SRC_FILE="app/build/outputs/apk/full/release/app-full-release.apk"
           NEW_NAME="AAPS_FullRelease_$(date +'%Y-%m-%d_%H-%M').apk"
-          mv "$SIGNED_FILE" "$NEW_NAME"
+          
+          mv "$SRC_FILE" "$NEW_NAME"
           echo "apk_path=$NEW_NAME" >> $GITHUB_OUTPUT
 
       - name: Upload to Nextcloud
         run: |
-          echo "Uploading ${{ steps.rename_apk.outputs.apk_path }} to Nextcloud..."
+          echo "Uploading ${{ steps.rename_apk.outputs.apk_path }}..."
           curl -u "${{ secrets.NEXTCLOUD_USER }}:${{ secrets.NEXTCLOUD_PASSWORD }}" \
           -T "${{ steps.rename_apk.outputs.apk_path }}" \
           "${{ secrets.NEXTCLOUD_URL }}${{ steps.rename_apk.outputs.apk_path }}"
           
-          # Status Check
           if [ $? -eq 0 ]; then
             echo "✅ Upload successfully completed."
           else
