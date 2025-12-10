@@ -115,6 +115,9 @@ jobs:
 
       - name: Upload to Nextcloud
         run: |
-          curl -u "${{ secrets.NEXTCLOUD_USER }}:${{ secrets.NEXTCLOUD_PASSWORD }}" \
+          # --fail: Bricht bei Server-Fehlern (4xx, 5xx) ab -> Action schlägt fehl
+          # --show-error: Zeigt die Fehlermeldung im Log an
+          curl --fail --show-error -u "${{ secrets.NEXTCLOUD_USER }}:${{ secrets.NEXTCLOUD_PASSWORD }}" \
           -T "${{ steps.rename_apk.outputs.apk_path }}" \
           "${{ secrets.NEXTCLOUD_URL }}${{ steps.rename_apk.outputs.apk_path }}"
+
