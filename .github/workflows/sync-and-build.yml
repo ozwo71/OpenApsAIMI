@@ -122,4 +122,16 @@ jobs:
           curl --fail --show-error -u "${{ secrets.NEXTCLOUD_USER }}:${{ secrets.NEXTCLOUD_PASSWORD }}" \
           -T "${{ steps.rename_apk.outputs.apk_path }}" \
           "${{ secrets.NEXTCLOUD_URL }}${{ steps.rename_apk.outputs.apk_path }}"
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: [sync, build-and-upload] # Läuft nach dem Build
+    if: always() # Läuft auch, wenn der Build fehlschlägt
+    steps:
+      - name: Delete Old Workflow Runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ secrets.GH_PAT }} # Dein PAT (wichtig für Lösch-Rechte!)
+          repository: ${{ github.repository }}
+          retain_days: 3       # Behalte Logs der letzten 3 Tage
+          keep_minimum_runs: 3 # Behalte immer mindestens die letzten 3 Runs    
 
