@@ -25,6 +25,7 @@ jobs:
         with:
           ref: ${{ env.BUILD_BRANCH }}
           fetch-depth: 0
+          token: ${{ secrets.GH_PAT }} # <--- Token für z.B. Erstellung von Actions
 
       - name: Sync with Upstream
         id: sync
