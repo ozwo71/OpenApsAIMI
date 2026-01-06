@@ -1,8 +1,8 @@
-name: Sync, Build & Upload to Nextcloud
+name: Sync, Build, Release & Upload
 
 on:
   schedule:
-    - cron: '0 6,18 * * *' # Täglich um 06:00 und 18:00 Uhr
+    - cron: '0 6,18 * * *' # 06:00 und 18:00 Uhr
   workflow_dispatch:
     inputs:
       branch_name:
@@ -10,6 +10,10 @@ on:
         required: true
         default: 'dev_OAPSAIMI'
         type: string
+
+permissions:
+  contents: write # WICHTIG: Erlaubt das Erstellen von Releases/Tags
+  actions: write  # Für das Löschen alter Runs
 
 env:
   BUILD_BRANCH: ${{ inputs.branch_name || 'dev_OAPSAIMI' }}
@@ -25,7 +29,7 @@ jobs:
         with:
           ref: ${{ env.BUILD_BRANCH }}
           fetch-depth: 0
-          token: ${{ secrets.GH_PAT }} # <--- Token für z.B. Erstellung von Actions
+          token: ${{ secrets.GH_PAT }} # Dein PAT für Git-Operationen
 
       - name: Sync with Upstream
         id: sync
@@ -54,10 +58,11 @@ jobs:
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
 
-  build-and-upload:
+  build-release-upload:
     needs: sync
+    # Baut wenn: Änderungen da sind ODER manuell gestartet wurde
     if: needs.sync.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-22.04 # Exakt wie in android-build.yml
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -68,9 +73,8 @@ jobs:
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
-          java-version: '21' #
+          java-version: '21'
 
-      # Caching für schnelleren Build (aus android-build.yml übernommen)
       - name: Cache Gradle packages
         uses: actions/cache@v3
         with:
@@ -81,7 +85,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      # Keystore exakt wie in der funktionierenden Vorlage dekodieren
       - name: Decode keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > monkeystore.jks
@@ -90,8 +93,6 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # Build-Schritt mit ENV-Variablen statt Parameter-Injection
-      # Baut nur die Haupt-App (:app:assembleFullRelease), um Zeit zu sparen.
       - name: Build Release APK
         run: ./gradlew :app:assembleFullRelease
         env:
@@ -100,38 +101,54 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-      - name: Rename APK
-        id: rename_apk
+      - name: Rename APK & Generate Tag Info
+        id: prepare_assets
         run: |
           SRC_FILE="app/build/outputs/apk/full/release/app-full-release.apk"
-          NEW_NAME="AAPS_Release_$(date +'%Y-%m-%d_%H-%M').apk"
+          # Zeitstempel für Dateiname und Tag
+          TIMESTAMP=$(date +'%Y-%m-%d_%H-%M')
+          NEW_NAME="AAPS_Release_${TIMESTAMP}.apk"
+          TAG_NAME="build-${TIMESTAMP}"
           
           if [ -f "$SRC_FILE" ]; then
             mv "$SRC_FILE" "$NEW_NAME"
             echo "apk_path=$NEW_NAME" >> $GITHUB_OUTPUT
+            echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
           else
             echo "Fehler: APK wurde nicht erstellt."
             exit 1
           fi
 
-      # Upload zu Nextcloud
-      # --fail: Bricht bei Server-Fehlern (4xx, 5xx) ab -> Action schlägt fehl
-      # --show-error: Zeigt die Fehlermeldung im Log an
+      # 1. Upload zu GitHub Release
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.prepare_assets.outputs.tag_name }}
+          name: "AAPS Build ${{ steps.prepare_assets.outputs.tag_name }}"
+          body: "Automatischer Build vom Branch ${{ env.BUILD_BRANCH }}"
+          draft: false
+          prerelease: false
+          files: ${{ steps.prepare_assets.outputs.apk_path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Standard Token reicht hier dank 'permissions' oben
+
+      # 2. Upload zu Nextcloud (Optionales Backup)
       - name: Upload to Nextcloud
+        continue-on-error: true # WICHTIG: Wenn Nextcloud down ist, gilt der Build trotzdem als "Success" (wegen Release)
         run: |
           curl --fail --show-error -u "${{ secrets.NEXTCLOUD_USER }}:${{ secrets.NEXTCLOUD_PASSWORD }}" \
-          -T "${{ steps.rename_apk.outputs.apk_path }}" \
-          "${{ secrets.NEXTCLOUD_URL }}${{ steps.rename_apk.outputs.apk_path }}"
+          -T "${{ steps.prepare_assets.outputs.apk_path }}" \
+          "${{ secrets.NEXTCLOUD_URL }}${{ steps.prepare_assets.outputs.apk_path }}"
+
   cleanup:
     runs-on: ubuntu-latest
-    needs: [sync, build-and-upload] # Läuft nach dem Build
-    if: always() # Läuft auch, wenn der Build fehlschlägt
+    needs: [sync, build-release-upload]
+    if: always()
     steps:
       - name: Delete Old Workflow Runs
         uses: Mattraks/delete-workflow-runs@v2
         with:
-          token: ${{ secrets.GH_PAT }} # Dein PAT (wichtig für Lösch-Rechte!)
+          token: ${{ secrets.GH_PAT }}
           repository: ${{ github.repository }}
-          retain_days: 3       # Behalte Logs der letzten 3 Tage
-          keep_minimum_runs: 3 # Behalte immer mindestens die letzten 3 Runs    
-
+          retain_days: 3
+          keep_minimum_runs: 3
