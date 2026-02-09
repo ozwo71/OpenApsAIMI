@@ -143,12 +143,25 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     needs: [sync, build-release-upload]
-    if: always()
+    if: always() # Läuft auch bei Fehler, um aufzuräumen
+    permissions:
+      contents: write # WICHTIG: Erlaubt das Löschen von Releases
+      actions: write
     steps:
+      # 1. Alte Logs löschen
       - name: Delete Old Workflow Runs
         uses: Mattraks/delete-workflow-runs@v2
         with:
           token: ${{ secrets.GH_PAT }}
           repository: ${{ github.repository }}
-          retain_days: 3
-          keep_minimum_runs: 3
+          retain_days: 5
+          keep_minimum_runs: 5
+
+      # 2. Alte Releases (APKs) löschen (NEU)
+      - name: Delete Older Releases
+        uses: dev-drprasad/delete-older-releases@v0.3.3
+        with:
+          keep_latest: 5        # Behält nur die allerneuesten 3 APKs
+          delete_tags: true     # Löscht auch den Git-Tag (hält die Liste sauber)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
