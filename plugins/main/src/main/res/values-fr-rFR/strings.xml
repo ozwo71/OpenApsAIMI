@@ -116,4 +116,6 @@
     <string name="adaptive_smoothing_quality_dialog_ok">Confiance du lissage adaptatif : OK (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
     <string name="adaptive_smoothing_quality_dialog_uncertain">Confiance du lissage adaptatif : incertaine (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
     <string name="adaptive_smoothing_quality_dialog_bad">Confiance du lissage adaptatif : faible (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
+
+    <string name="notification_iob_short">%1$.1f U</string>
 </resources>
