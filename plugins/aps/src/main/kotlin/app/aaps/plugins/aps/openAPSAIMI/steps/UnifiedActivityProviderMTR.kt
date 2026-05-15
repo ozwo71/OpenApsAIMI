@@ -13,8 +13,11 @@ import kotlinx.coroutines.runBlocking
 /**
  * 🎛️ Unified Activity Provider - MTR Implementation
  *
- * Orchestrates data retrieval from multiple sources (Wear OS, Health Connect, Phone)
+ * Orchestrates data retrieval from multiple sources (Garmin watchface, Wear OS, Health Connect, Phone)
  * based on user preferences and data freshness validation.
+ *
+ * **Heart rate:** Garmin CIQ rows (`Garmin-Watchface`, legacy `Garmin`) follow the same priority
+ * rules as steps so physio `hrNow` matches dashboard ingestion.
  *
  * **Window totals:** Health Connect and phone sync store, on each [SC] row, both per-interval
  * counts (`steps5min`, `steps15min`, …) for the same sync instant. For standard windows (5–180 min),
@@ -47,6 +50,8 @@ class UnifiedActivityProviderMTR @Inject constructor(
         private const val SOURCE_HC = "HealthConnect"
         private const val SOURCE_PHONE = "PhoneSensor"
         private const val SOURCE_GARMIN = "Garmin-Watchface"
+        /** [LoopHubImpl.storeHeartRate] default when watchface omits `device`. */
+        private const val SOURCE_GARMIN_LEGACY = "Garmin"
 
         /** HC / phone sync may lag; beyond this, prefer bucket aggregation. */
         private const val MAX_ROW_AGE_MS = 10 * 60 * 1000L
@@ -59,6 +64,39 @@ class UnifiedActivityProviderMTR @Inject constructor(
             val prefs = context.getSharedPreferences(context.packageName + "_preferences", android.content.Context.MODE_PRIVATE)
             return prefs.getString(PREF_KEY_SOURCE_MODE, DEFAULT_MODE) ?: DEFAULT_MODE
         }
+
+        /**
+         * Picks the freshest HR row for [mode] (Garmin / Wear / HC priority).
+         * [records] should be sorted by [HR.timestamp] descending when possible.
+         */
+        internal fun resolveLatestHeartRate(records: List<HR>, mode: String): HrResult? {
+            if (mode == MODE_DISABLED || records.isEmpty()) return null
+
+            val sorted = if (records.size <= 1) records else records.sortedByDescending { it.timestamp }
+            val garminRecord = sorted.firstOrNull { isGarminDevice(it.device) }
+            val wearRecord = sorted.firstOrNull { isWearDevice(it.device) }
+            val hcRecord = sorted.firstOrNull { it.device == SOURCE_HC }
+
+            val picked = when (mode) {
+                MODE_PREFER_WEAR -> wearRecord ?: garminRecord ?: hcRecord
+                MODE_HEALTH_CONNECT_ONLY -> hcRecord
+                MODE_AUTO_FALLBACK -> garminRecord ?: wearRecord ?: hcRecord
+                else -> null
+            }
+            return picked?.let { hrToResult(it) }
+        }
+
+        internal fun isGarminDevice(device: String?): Boolean =
+            device == SOURCE_GARMIN || device == SOURCE_GARMIN_LEGACY
+
+        internal fun isWearDevice(device: String?): Boolean {
+            if (device == null) return false
+            if (isGarminDevice(device)) return false
+            return device != SOURCE_HC && device != SOURCE_PHONE
+        }
+
+        private fun hrToResult(hr: HR): HrResult =
+            HrResult(bpm = hr.beatsPerMinute, timestamp = hr.timestamp, source = hr.device)
     }
 
     override fun getLatestSteps(windowMs: Long): StepsResult? {
@@ -164,23 +202,7 @@ class UnifiedActivityProviderMTR @Inject constructor(
         val start = now - windowMs
 
         return try {
-            val records = loadHrRecords(start, now).sortedByDescending { it.timestamp }
-
-            if (records.isEmpty()) return null
-
-            val wearRecord = records.firstOrNull { isWearDevice(it.device) }
-            val hcRecord = records.firstOrNull { it.device == SOURCE_HC }
-
-            val result = when (mode) {
-                MODE_PREFER_WEAR -> wearRecord?.let { toHrResult(it) }
-                MODE_HEALTH_CONNECT_ONLY -> hcRecord?.let { toHrResult(it) }
-                MODE_AUTO_FALLBACK -> {
-                    wearRecord?.let { toHrResult(it) }
-                        ?: hcRecord?.let { toHrResult(it) }
-                }
-                else -> null
-            }
-            result
+            resolveLatestHeartRate(loadHrRecords(start, now), mode)
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "[$TAG] Error fetching HR", e)
             null
@@ -191,25 +213,12 @@ class UnifiedActivityProviderMTR @Inject constructor(
         return sp.getString(PREF_KEY_SOURCE_MODE, DEFAULT_MODE)
     }
 
-    private fun isWearDevice(device: String?): Boolean {
-        if (device == null) return false
-        return device != SOURCE_HC && device != SOURCE_PHONE && device != SOURCE_GARMIN
-    }
-
     private fun toStepsResult(sc: SC): StepsResult {
         return StepsResult(
             steps = sc.steps5min,
             timestamp = sc.timestamp,
             source = sc.device,
             duration = sc.duration
-        )
-    }
-
-    private fun toHrResult(hr: HR): HrResult {
-        return HrResult(
-            bpm = hr.beatsPerMinute,
-            timestamp = hr.timestamp,
-            source = hr.device
         )
     }
 
