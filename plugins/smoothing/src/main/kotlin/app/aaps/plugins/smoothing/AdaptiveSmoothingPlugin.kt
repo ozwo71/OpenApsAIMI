@@ -20,9 +20,9 @@ import app.aaps.core.interfaces.rx.events.EventAdaptiveSmoothingQuality
 import app.aaps.core.interfaces.smoothing.Smoothing
 import app.aaps.core.interfaces.smoothing.SmoothingContext
 import app.aaps.core.ui.compose.icons.IcStats
-import app.aaps.core.keys.DoubleNonKey
-import app.aaps.core.keys.LongNonKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.smoothing.keys.UkfDoubleNonKey
+import app.aaps.plugins.smoothing.keys.UkfLongNonKey
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
@@ -95,7 +95,7 @@ class AdaptiveSmoothingPlugin @Inject constructor(
         0.0, 0.40     // Rate process noise: ~0.24 mg/dL/min std dev
     )
 
-    // Adaptive Measurement Noise (R) Limits (learned default = [DoubleNonKey.UkfLearnedR])
+    // Adaptive Measurement Noise (R) Limits (learned default = [UkfDoubleNonKey.LearnedR])
     private val rMin = 16.0
     private val rMax = 196.0
 
@@ -104,7 +104,7 @@ class AdaptiveSmoothingPlugin @Inject constructor(
     private val rateDamping = 0.98
 
     // Processing state
-    private var learnedR = DoubleNonKey.UkfLearnedR.defaultValue
+    private var learnedR = UkfDoubleNonKey.LearnedR.defaultValue
     private val innovations = ArrayDeque<Double>(innovationWindow + 1)
     private val rawInnovationVariance = ArrayDeque<Double>(innovationWindow + 1)
     private var lastProcessedTimestamp: Long = 0
@@ -416,7 +416,7 @@ class AdaptiveSmoothingPlugin @Inject constructor(
     private fun blendRAfterMajorGap(currentR: Double, gapMinutes: Double): Double {
         if (!gapMinutes.isFinite() || gapMinutes <= MAJOR_GAP_MINUTES) return currentR
         val lambda = min(1.0, (gapMinutes - MAJOR_GAP_MINUTES) / R_BLEND_SLOPE_MINUTES) * R_BLEND_MAX_WEIGHT
-        val rInit = DoubleNonKey.UkfLearnedR.defaultValue
+        val rInit = UkfDoubleNonKey.LearnedR.defaultValue
         return ((1.0 - lambda) * currentR + lambda * rInit).coerceIn(rMin, rMax)
     }
 
@@ -900,19 +900,19 @@ class AdaptiveSmoothingPlugin @Inject constructor(
 
     private fun loadPersistedParameters() {
         try {
-            learnedR = preferences.get(DoubleNonKey.UkfLearnedR)
-            lastProcessedTimestamp = preferences.get(LongNonKey.UkfLastProcessedTimestamp)
-            lastSensorChangeTimestamp = preferences.get(LongNonKey.UkfSensorChangeTimestamp)
+            learnedR = preferences.get(UkfDoubleNonKey.LearnedR)
+            lastProcessedTimestamp = preferences.get(UkfLongNonKey.LastProcessedTimestamp)
+            lastSensorChangeTimestamp = preferences.get(UkfLongNonKey.LastSensorChangeTimestamp)
         } catch (_: Exception) {
-            learnedR = DoubleNonKey.UkfLearnedR.defaultValue
+            learnedR = UkfDoubleNonKey.LearnedR.defaultValue
         }
     }
 
     private fun savePersistedParameters() {
         try {
-            preferences.put(DoubleNonKey.UkfLearnedR, learnedR)
-            preferences.put(LongNonKey.UkfLastProcessedTimestamp, lastProcessedTimestamp)
-            preferences.put(LongNonKey.UkfSensorChangeTimestamp, lastSensorChangeTimestamp)
+            preferences.put(UkfDoubleNonKey.LearnedR, learnedR)
+            preferences.put(UkfLongNonKey.LastProcessedTimestamp, lastProcessedTimestamp)
+            preferences.put(UkfLongNonKey.LastSensorChangeTimestamp, lastSensorChangeTimestamp)
         } catch (_: Exception) { }
     }
 
@@ -926,7 +926,7 @@ class AdaptiveSmoothingPlugin @Inject constructor(
     }
 
     private fun resetLearning() {
-        learnedR = DoubleNonKey.UkfLearnedR.defaultValue
+        learnedR = UkfDoubleNonKey.LearnedR.defaultValue
         innovations.clear()
         rawInnovationVariance.clear()
         lastAdaptiveSmoothingQualityTier = null

@@ -27,6 +27,7 @@ import app.aaps.plugins.smoothing.AdaptiveSmoothingPlugin
 import app.aaps.plugins.smoothing.AvgSmoothingPlugin
 import app.aaps.plugins.smoothing.ExponentialSmoothingPlugin
 import app.aaps.plugins.smoothing.NoSmoothingPlugin
+import app.aaps.plugins.smoothing.UnscentedKalmanFilterPlugin
 import app.aaps.plugins.source.DexcomPlugin
 import app.aaps.plugins.source.EversensePlugin
 import app.aaps.plugins.source.GlimpPlugin
@@ -377,14 +378,20 @@ abstract class PluginsListModule {
     @Binds
     @AllConfigs
     @IntoMap
+    @IntKey(610)
+    abstract fun bindAvgSmoothingPlugin(plugin: AvgSmoothingPlugin): PluginBase
+
+    @Binds
+    @AllConfigs
+    @IntoMap
     @IntKey(607)
     abstract fun bindAdaptiveSmoothingPlugin(plugin: AdaptiveSmoothingPlugin): PluginBase
 
     @Binds
     @AllConfigs
     @IntoMap
-    @IntKey(610)
-    abstract fun bindAvgSmoothingPlugin(plugin: AvgSmoothingPlugin): PluginBase
+    @IntKey(615)
+    abstract fun bindUnscentedKalmanFilterPlugin(plugin: UnscentedKalmanFilterPlugin): PluginBase
 
     @Qualifier
     annotation class AllConfigs

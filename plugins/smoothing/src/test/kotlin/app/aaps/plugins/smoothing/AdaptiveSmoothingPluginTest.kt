@@ -7,8 +7,8 @@ import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.rx.events.AdaptiveSmoothingQualityTier
 import app.aaps.core.interfaces.smoothing.SmoothingContext
-import app.aaps.core.keys.DoubleNonKey
-import app.aaps.core.keys.LongNonKey
+import app.aaps.plugins.smoothing.keys.UkfDoubleNonKey
+import app.aaps.plugins.smoothing.keys.UkfLongNonKey
 import app.aaps.shared.tests.TestBaseWithProfile
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.emptyFlow
@@ -31,9 +31,9 @@ class AdaptiveSmoothingPluginTest : TestBaseWithProfile() {
     @BeforeEach
     fun setUpPlugin() {
         runBlocking {
-            whenever(preferences.get(DoubleNonKey.UkfLearnedR)).thenReturn(DoubleNonKey.UkfLearnedR.defaultValue)
-            whenever(preferences.get(LongNonKey.UkfLastProcessedTimestamp)).thenReturn(LongNonKey.UkfLastProcessedTimestamp.defaultValue)
-            whenever(preferences.get(LongNonKey.UkfSensorChangeTimestamp)).thenReturn(LongNonKey.UkfSensorChangeTimestamp.defaultValue)
+            whenever(preferences.get(UkfDoubleNonKey.LearnedR)).thenReturn(UkfDoubleNonKey.LearnedR.defaultValue)
+            whenever(preferences.get(UkfLongNonKey.LastProcessedTimestamp)).thenReturn(UkfLongNonKey.LastProcessedTimestamp.defaultValue)
+            whenever(preferences.get(UkfLongNonKey.LastSensorChangeTimestamp)).thenReturn(UkfLongNonKey.LastSensorChangeTimestamp.defaultValue)
 
             whenever(persistenceLayer.observeChanges(eq(TE::class.java))).thenReturn(emptyFlow())
 

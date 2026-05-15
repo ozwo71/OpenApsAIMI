@@ -21,9 +21,6 @@ dependencies {
     testImplementation(project(":shared:tests"))
     testImplementation(project(":implementation"))
 
-    testImplementation(project(":shared:tests"))
-    testImplementation(project(":implementation"))
-
     ksp(libs.com.google.dagger.compiler)
     ksp(libs.com.google.dagger.hilt.compiler)
     ksp(libs.com.google.dagger.android.processor)
