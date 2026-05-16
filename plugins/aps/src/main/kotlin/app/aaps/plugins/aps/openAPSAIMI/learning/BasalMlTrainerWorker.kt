@@ -7,16 +7,19 @@ import app.aaps.core.objects.workflow.LoggingWorker
 import kotlinx.coroutines.Dispatchers
 
 /**
- * Legacy worker name — delegates to [BasalMlTrainingCoordinator].
- * Prefer [BasalMlTrainerWorker] scheduled by [AimiMlTrainingScheduler].
+ * Periodic worker (6h, idle + charging) for basal / T3C neural weight training.
  */
-class BasalAdaptiveTrainerWorker(
+class BasalMlTrainerWorker(
     appContext: Context,
     workerParams: WorkerParameters,
 ) : LoggingWorker(appContext, workerParams, Dispatchers.IO) {
 
     override suspend fun doWorkAndLog(): Result {
-        aapsLogger.debug(LTag.APS, "BasalAdaptiveTrainerWorker: delegating to BasalMlTrainingCoordinator")
+        if (BasalMlTrainingCoordinator.instance == null) {
+            aapsLogger.warn(LTag.APS, "BasalMlTrainerWorker: coordinator not initialized — retry")
+            return Result.retry()
+        }
+        aapsLogger.debug(LTag.APS, "BasalMlTrainerWorker: starting coordinated training")
         return runBasalMlTrainingJob()
     }
 }

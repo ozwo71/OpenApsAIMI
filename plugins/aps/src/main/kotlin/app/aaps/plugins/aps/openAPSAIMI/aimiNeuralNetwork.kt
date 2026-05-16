@@ -264,6 +264,9 @@ class AimiNeuralNetwork(
     }
 
 
+    /** Best validation loss from the most recent [trainWithValidation] run. */
+    fun lastBestValidationLoss(): Double = bestValLoss
+
     fun validate(valInputs: List<FloatArray>, valTargets: List<DoubleArray>): Double {
         if (valInputs.isEmpty()) return 0.0
 

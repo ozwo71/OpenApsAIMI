@@ -116,12 +116,18 @@ class BasalNeuralLearner @Inject constructor(
         val t3cWeights = storageHelper.getAimiFile("t3c_brain_weights.json")
         val basalWeights = storageHelper.getAimiFile("basal_adaptive_weights.json")
 
-        if (t3cWeights.exists()) {
-            neuralT3cNet = AimiNeuralNetwork.loadFromFile(t3cWeights)
-        }
-        if (basalWeights.exists()) {
-            neuralBasalNet = AimiNeuralNetwork.loadFromFile(basalWeights)
-        }
+        neuralT3cNet = BasalMlModelStore.loadValid(t3cWeights, BasalMlTrainingCoordinator.INPUT_SIZE)
+        neuralBasalNet = BasalMlModelStore.loadValid(basalWeights, BasalMlTrainingCoordinator.INPUT_SIZE)
+    }
+
+    /** Reload weight files from disk after background training publishes new models. */
+    @Synchronized
+    fun reloadModels() {
+        loadModels()
+        log.debug(
+            LTag.APS,
+            "BasalNeuralLearner: models reloaded (t3c=${neuralT3cNet != null}, basal=${neuralBasalNet != null})",
+        )
     }
 
     /**

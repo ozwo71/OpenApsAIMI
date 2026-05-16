@@ -119,6 +119,7 @@ import androidx.core.net.toUri
 import kotlin.math.abs
 import kotlin.math.exp
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiPkpdSettingsScreen
+import app.aaps.plugins.aps.openAPSAIMI.learning.AimiMlTrainingScheduler
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiBackupManager
 import app.aaps.core.objects.extensions.put
 import app.aaps.core.objects.extensions.store
@@ -159,6 +160,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator, // 🧠 AI Auditor MTR
     private val contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager, // 🎯 Context Manager
     private val aimiBackupManager: AimiBackupManager, // ☁️ Cloud Backup Manager (Force Init)
+    private val aimiMlTrainingScheduler: AimiMlTrainingScheduler,
     private val insulin: Insulin,
     private val ch: ConcentrationHelper,
     private val trajectoryHistoryProvider: TrajectoryHistoryProvider,
@@ -231,25 +233,11 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             { t -> aapsLogger.error(LTag.APS, "Physio preference Rx error", t) }
         )
         
-        // 🧠 Start AIMI Neural Trainer
+        // 🧠 Basal / T3C ML trainer (6h); Autodrive attention stays on 24h schedule in AutodriveNeuralTrainer
         try {
-            val constraints = androidx.work.Constraints.Builder()
-                .setRequiresCharging(true)
-                .setRequiresDeviceIdle(true)
-                .build()
-                
-            val workRequest = androidx.work.PeriodicWorkRequestBuilder<app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveNeuralTrainerWorker>(
-                6, java.util.concurrent.TimeUnit.HOURS
-            ).setConstraints(constraints).build()
-
-            androidx.work.WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                "AIMINeuralTrainer",
-                androidx.work.ExistingPeriodicWorkPolicy.KEEP,
-                workRequest
-            )
-            aapsLogger.info(LTag.APS, "✅ AIMI Neural Trainer scheduled successfully")
+            aimiMlTrainingScheduler.schedule()
         } catch (e: Exception) {
-            aapsLogger.error(LTag.APS, "❌ Failed to schedule AIMI Neural Trainer", e)
+            aapsLogger.error(LTag.APS, "❌ Failed to schedule AIMI basal/T3C ML trainer", e)
         }
         
         AimiUamHandler.clearCache(context)
@@ -312,10 +300,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         }
 
         try {
-            androidx.work.WorkManager.getInstance(context).cancelUniqueWork("AIMINeuralTrainer")
-            aapsLogger.info(LTag.APS, "🛑 AIMI Neural Trainer stopped")
+            aimiMlTrainingScheduler.cancel()
         } catch (e: Exception) {
-            aapsLogger.error(LTag.APS, "Error stopping AIMI Neural Trainer", e)
+            aapsLogger.error(LTag.APS, "Error stopping AIMI basal/T3C ML trainer", e)
         }
 
         AimiUamHandler.close(context)
