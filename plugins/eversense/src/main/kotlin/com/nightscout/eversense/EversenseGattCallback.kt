@@ -93,6 +93,10 @@ class EversenseGattCallback(
     fun isConnected(): Boolean = connected
     fun is365(): Boolean = security == EversenseSecurityType.SecureV2
 
+    // Submit a task to the bleExecutor and return a Future so callers can block until complete.
+    fun submitToExecutor(task: () -> Unit): java.util.concurrent.Future<*> =
+        bleExecutor.submit(task)
+
     // FIX 4: Added disconnect() which calls both disconnect() and close() on the GATT client.
     // Calling only disconnect() without close() leaks the underlying GATT client resource.
     @SuppressLint("MissingPermission")
@@ -341,7 +345,7 @@ class EversenseGattCallback(
             }
         }
 
-        if (EversenseE3Packets.isPushPacket(data[0])) {
+        if (!is365() && EversenseE3Packets.isPushPacket(data[0])) {
             EversenseLogger.debug(TAG, "Keep Alive packet received (E3)!")
             bleExecutor.submit {
                 EversenseE3Communicator.readGlucose(this, preferences, plugin.watchers)

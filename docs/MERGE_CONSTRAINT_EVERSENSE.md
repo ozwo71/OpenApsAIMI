@@ -26,6 +26,19 @@ The **CAPTCG patch series 0001–0005** was applied on `dev_OAPSAIMI` (with reso
 
 Upstream `.patch` files are stored under `eversense_upstream_patches/` (gitignored) for re-application or diff review; re-fetch from GitHub if missing.
 
+### CAPTCG sync (2026-05-17, commit `3da9a02`)
+
+Targeted port from [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS-Eversense-) (not a full `git am` — fork has AIMI/dashboard deltas):
+
+| Change | Files |
+|--------|--------|
+| E3 calibration packet 0x3C (dual FAT timestamps) | `SendCalibrationPacket.kt`, `EversenseE3Communicator.sendCalibration` |
+| E3 push packets 0x40–0x42 trigger glucose read | `EversenseE3Packets.isPushPacket`, `EversenseGattCallback` |
+| Calibration on `bleExecutor` + local `lastCalibrationDate` | `EversenseGattCallback.submitToExecutor`, `EversenseCGMPlugin.sendCalibration` |
+| E3 DMS EU (`ousiamapialpha` / `ousalphaapiservices`) | `EversenseHttpE3Util.kt`, `EversensePlugin` cloud upload branch |
+
+**Not ported in this pass:** in-app README guide (link only in CAPTCG README); full patch re-apply of 0002–0005 filenames refresh.
+
 ### Notification reader vs native plugin (important)
 
 Notifications from official Senseonics apps are **not** the BLE plugin: they are routed through **Notification reader** using `plugins/source/src/main/assets/notification_reader_packages.json`.

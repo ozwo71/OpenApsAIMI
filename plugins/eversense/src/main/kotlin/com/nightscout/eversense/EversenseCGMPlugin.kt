@@ -241,13 +241,25 @@ class EversenseCGMPlugin {
             return false
         }
         return try {
-            if (gattCallback.is365()) {
-                val packet = com.nightscout.eversense.packets.e365.SetBloodGlucosePointPacket365(glucoseMgDl, timestampMs)
-                gattCallback.writePacket<com.nightscout.eversense.packets.e365.SetBloodGlucosePointPacket365.Response>(packet)
-                EversenseLogger.info(TAG, "365 calibration sent: $glucoseMgDl mg/dL")
-            } else {
-                EversenseE3Communicator.sendCalibration(gattCallback, glucoseMgDl)
+            val future = gattCallback.submitToExecutor {
+                if (gattCallback.is365()) {
+                    val packet = com.nightscout.eversense.packets.e365.SetBloodGlucosePointPacket365(glucoseMgDl, timestampMs)
+                    gattCallback.writePacket<com.nightscout.eversense.packets.e365.SetBloodGlucosePointPacket365.Response>(packet)
+                    EversenseLogger.info(TAG, "365 calibration sent: $glucoseMgDl mg/dL")
+                } else {
+                    EversenseE3Communicator.sendCalibration(gattCallback, glucoseMgDl, timestampMs)
+                }
             }
+            future.get(20000, java.util.concurrent.TimeUnit.MILLISECONDS)
+            val prefs = preferences ?: return true
+            val stateJson = prefs.getString(StorageKeys.STATE, null) ?: "{}"
+            val updatedState = JSON.decodeFromString<EversenseState>(stateJson)
+            updatedState.lastCalibrationDate = timestampMs
+            updatedState.nextCalibrationDate = timestampMs + 24 * 60 * 60 * 1000L
+            prefs.edit(commit = true) {
+                putString(StorageKeys.STATE, JSON.encodeToString(updatedState))
+            }
+            EversenseLogger.info(TAG, "Updated lastCalibrationDate to $timestampMs after successful calibration")
             true
         } catch (e: Exception) {
             EversenseLogger.error(TAG, "Failed to send calibration: $e")

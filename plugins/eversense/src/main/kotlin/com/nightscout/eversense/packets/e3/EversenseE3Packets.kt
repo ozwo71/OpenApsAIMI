@@ -107,7 +107,14 @@ class EversenseE3Packets {
         const val WriteTwoByteSerialFlashRegisterResponseId = 173.toByte()
 
         fun isPushPacket(data: Byte): Boolean {
-            return data == KeepAlivePush
+            // KeepAlivePush (0x50) triggers normal glucose + sync cycle.
+            // GlucoseLevelAlarmPush (0x40), GlucoseLevelAlertPush (0x41),
+            // RateAndPredictiveAlertPush (0x42) are glucose push notifications
+            // that the transmitter sends unsolicited after calibration or alarm events.
+            return data == KeepAlivePush ||
+                data == GlucoseLevelAlarmPush ||
+                data == GlucoseLevelAlertPush ||
+                data == RateAndPredictiveAlertPush
         }
 
         fun isErrorPacket(data: Byte): Boolean {

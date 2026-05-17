@@ -288,9 +288,9 @@ class EversenseE3Communicator {
         // Send a blood glucose calibration value to the E3 transmitter.
         // The transmitter must be in CalibrationReadiness.READY state.
         // Throws EversenseWriteException if the packet fails.
-        fun sendCalibration(gatt: EversenseGattCallback, glucoseMgDl: Int) {
+        fun sendCalibration(gatt: EversenseGattCallback, glucoseMgDl: Int, sampleTimeMs: Long = System.currentTimeMillis()) {
             EversenseLogger.info(TAG, "Sending calibration value: $glucoseMgDl mg/dL")
-            gatt.writePacket<SendCalibrationPacket.Response>(SendCalibrationPacket(glucoseMgDl), 15000L)
+            gatt.writePacket<SendCalibrationPacket.Response>(SendCalibrationPacket(glucoseMgDl, sampleTimeMs), 15000L)
             EversenseLogger.info(TAG, "Calibration sent successfully")
         }
     }
