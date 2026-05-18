@@ -146,38 +146,46 @@ class OverviewDataImpl @Inject constructor(
     */
 
     override fun temporaryBasalText(): String =
-        runBlocking { profileFunction.getProfile() }?.let { profile ->
-            var temporaryBasal = processedTbrEbData.getTempBasalIncludingConvertedExtended(dateUtil.now())
-            if (temporaryBasal?.isInProgress == false) temporaryBasal = null
-            temporaryBasal?.let { rh.gs(app.aaps.core.ui.R.string.temp_basal_overview_short_name) + " " + it.toStringShort(rh) }
-                ?: rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, profile.getBasal())
-        } ?: rh.gs(app.aaps.core.ui.R.string.value_unavailable_short)
+        runBlocking {
+            profileFunction.getProfile()?.let { profile ->
+                var temporaryBasal = processedTbrEbData.getTempBasalIncludingConvertedExtended(dateUtil.now())
+                if (temporaryBasal?.isInProgress == false) temporaryBasal = null
+                temporaryBasal?.let { rh.gs(app.aaps.core.ui.R.string.temp_basal_overview_short_name) + " " + it.toStringShort(rh) }
+                    ?: rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, profile.getBasal())
+            } ?: rh.gs(app.aaps.core.ui.R.string.value_unavailable_short)
+        }
 
     override fun temporaryBasalDialogText(): String =
-        runBlocking { profileFunction.getProfile() }?.let { profile ->
-            processedTbrEbData.getTempBasalIncludingConvertedExtended(dateUtil.now())?.let { temporaryBasal ->
-                "${rh.gs(app.aaps.core.ui.R.string.base_basal_rate_label)}: ${rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, profile.getBasal())}" +
-                    "\n" + rh.gs(app.aaps.core.ui.R.string.tempbasal_label) + ": " + temporaryBasal.toStringFull(profile, dateUtil, rh)
-            }
-                ?: "${rh.gs(app.aaps.core.ui.R.string.base_basal_rate_label)}: ${rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, profile.getBasal())}"
-        } ?: rh.gs(app.aaps.core.ui.R.string.value_unavailable_short)
+        runBlocking {
+            profileFunction.getProfile()?.let { profile ->
+                processedTbrEbData.getTempBasalIncludingConvertedExtended(dateUtil.now())?.let { temporaryBasal ->
+                    "${rh.gs(app.aaps.core.ui.R.string.base_basal_rate_label)}: ${rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, profile.getBasal())}" +
+                        "\n" + rh.gs(app.aaps.core.ui.R.string.tempbasal_label) + ": " + temporaryBasal.toStringFull(profile, dateUtil, rh)
+                }
+                    ?: "${rh.gs(app.aaps.core.ui.R.string.base_basal_rate_label)}: ${rh.gs(app.aaps.core.ui.R.string.pump_base_basal_rate, profile.getBasal())}"
+            } ?: rh.gs(app.aaps.core.ui.R.string.value_unavailable_short)
+        }
 
     @DrawableRes override fun temporaryBasalIcon(): Int =
-        runBlocking { profileFunction.getProfile() }?.let { profile ->
-            processedTbrEbData.getTempBasalIncludingConvertedExtended(dateUtil.now())?.let { temporaryBasal ->
-                val percentRate = temporaryBasal.convertedToPercent(dateUtil.now(), profile)
-                when {
-                    percentRate > 100 -> R.drawable.ic_cp_basal_tbr_high
-                    percentRate < 100 -> R.drawable.ic_cp_basal_tbr_low
-                    else              -> R.drawable.ic_cp_basal_no_tbr
+        runBlocking {
+            profileFunction.getProfile()?.let { profile ->
+                processedTbrEbData.getTempBasalIncludingConvertedExtended(dateUtil.now())?.let { temporaryBasal ->
+                    val percentRate = temporaryBasal.convertedToPercent(dateUtil.now(), profile)
+                    when {
+                        percentRate > 100 -> R.drawable.ic_cp_basal_tbr_high
+                        percentRate < 100 -> R.drawable.ic_cp_basal_tbr_low
+                        else              -> R.drawable.ic_cp_basal_no_tbr
+                    }
                 }
-            }
-        } ?: R.drawable.ic_cp_basal_no_tbr
+            } ?: R.drawable.ic_cp_basal_no_tbr
+        }
 
     @AttrRes override fun temporaryBasalColor(context: Context?): Int =
-        processedTbrEbData.getTempBasalIncludingConvertedExtended(dateUtil.now())?.let {
-            rh.gac(context, app.aaps.core.ui.R.attr.basal)
-        } ?: rh.gac(context, app.aaps.core.ui.R.attr.defaultTextColor)
+        runBlocking {
+            processedTbrEbData.getTempBasalIncludingConvertedExtended(dateUtil.now())?.let {
+                rh.gac(context, app.aaps.core.ui.R.attr.basal)
+            } ?: rh.gac(context, app.aaps.core.ui.R.attr.defaultTextColor)
+        }
 
     /*
      * EXTENDED BOLUS

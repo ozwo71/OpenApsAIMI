@@ -1059,13 +1059,32 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, View.OnLongClic
     private fun updateModernCircleDashboard() {
         viewLifecycleOwner.lifecycleScope.launch {
             val profile = profileFunction.getProfile() ?: return@launch
-            runOnUiThread {
-                _binding ?: return@runOnUiThread
 
             // Get current data from providers (same as updateBg)
             val lastBg = lastBgData.lastBg()
             val nowCircle = dateUtil.now()
             val glucoseStatus = glucoseStatusProvider.glucoseStatusData
+            val displayTsForBasal = DashboardCoherentGlucose.displayTimestamp(
+                lastBg,
+                glucoseStatus,
+                activePlugin.activeSmoothing,
+                nowCircle
+            )
+            val basalAt = displayTsForBasal ?: lastBg?.timestamp ?: nowCircle
+            val activityBasalData = iobCobCalculator.getBasalData(profile, basalAt)
+            val profileBasalAtActivity = profile.getBasal(basalAt)
+            val activityPercent = if (profileBasalAtActivity > 0) {
+                ((activityBasalData.basal / profileBasalAtActivity) * 100).toInt()
+            } else {
+                100
+            }
+            val tbrFormattedRate = String.format(
+                "%.2f",
+                iobCobCalculator.getBasalData(profile, lastBg?.timestamp ?: dateUtil.now()).basal
+            )
+
+            runOnUiThread {
+                _binding ?: return@runOnUiThread
             val displayMgdl = DashboardCoherentGlucose.displayMgdl(
                 lastBg,
                 glucoseStatus,
@@ -1212,24 +1231,14 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, View.OnLongClic
             // 8. UPDATE ACTIVITY TEXT (Bottom right - Activity % from loop data)
             // ───────────────────────────────────────────────────────────────────────
             activityText?.let { tv ->
-                // Get TBR percentage from current basal vs profile basal
-                val basalAt = displayTs ?: lastBg?.timestamp ?: nowCircle
-                val basalData = iobCobCalculator.getBasalData(profile, basalAt)
-                val currentBasal = basalData.basal
-                val profileBasal = profile.getBasal(basalAt)
-                val activity = if (profileBasal > 0) {
-                    ((currentBasal / profileBasal) * 100).toInt()
-                } else 100
-                tv.text = "Activity: $activity%"
+                tv.text = "Activity: $activityPercent%"
             }
 
             // ───────────────────────────────────────────────────────────────────────
             // 9. UPDATE TBR TEXT (Bottom right - Current basal rate)
             // ───────────────────────────────────────────────────────────────────────
             tbrText?.let { tv ->
-                val basalRate = iobCobCalculator.getBasalData(profile, lastBg?.timestamp ?: dateUtil.now())
-                val formattedRate = String.format("%.2f", basalRate.basal)
-                tv.text = "TBR: $formattedRate U/h"
+                tv.text = "TBR: $tbrFormattedRate U/h"
             }
             }
         }
