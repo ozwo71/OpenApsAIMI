@@ -1037,6 +1037,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         exerciseInsulinLockoutActive = false
         aimiContextActivityActive = false
+        pkpdAbsorptionGuardAppliedThisTick = false
+        isConfirmedHighRiseThisTick = false
+        mealAdvisorOneShotThisTick = false
         lastLoopCgmNoise = ctx.glucoseStatus.noise
 
         if (ctx.extraDebug.isNotEmpty()) {
@@ -3168,6 +3171,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val hyperKicker = (bg > targetBg + 30 && (delta >= 0.3 || shortAvgDelta >= 0.2))
 
         val isMealAdvisorOneShot = preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
+        mealAdvisorOneShotThisTick = isMealAdvisorOneShot
         if (isMealAdvisorOneShot && !exerciseInsulinLockoutActive) {
             preferences.put(BooleanKey.OApsAIMIMealAdvisorTrigger, false)
 
@@ -3304,18 +3308,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         val anyMealModeForGuard = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime
 
-        val pkpdGuard = PkpdAbsorptionGuard.compute(
-            pkpdRuntime = pkpdRuntime,
-            windowSinceLastDoseMin = windowSinceDoseInt.toDouble(),
-            bg = bg,
-            delta = delta.toDouble(),
-            shortAvgDelta = shortAvgDelta.toDouble(),
-            targetBg = targetBg,
-            predBg = predictedBg.toDouble().takeIf { it > 20 },
-            isMealMode = anyMealModeForGuard,
-            isConfirmedHighRise = isConfirmedHighRiseLocal
-        )
-
         val isAggressivePriorityContext = isMealAdvisorOneShot || anyMealModeForGuard || isConfirmedHighRiseLocal
         val pkpdReliefEnabled = preferences.get(BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled)
         val pkpdReliefMinFactor = preferences.get(DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor).coerceIn(0.50, 1.0)
@@ -3357,23 +3349,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             } else {
                 effectiveMaxIobForPriority
             }
-        if (pkpdGuard.isActive()) {
-            val beforeGuard = smbToGiveLocal
-            val guardFactor = if (isAggressivePriorityContext) {
-                if (pkpdReliefEnabled) max(pkpdGuard.factor, pkpdReliefMinFactor) else pkpdGuard.factor
-            } else {
-                pkpdGuard.factor
+        val pkpdGuardApply = applyPkpdAbsorptionGuardOncePerTick(
+            smbIn = smbToGiveLocal,
+            pkpdRuntime = pkpdRuntime,
+            windowSinceLastDoseMin = windowSinceLastPkpdDoseMin(windowSinceDoseInt),
+            anyMealModeForGuard = anyMealModeForGuard,
+            isConfirmedHighRise = isConfirmedHighRiseLocal,
+            mealAdvisorOneShot = isMealAdvisorOneShot,
+            reason = rT.reason,
+            logChannel = PkpdGuardLogChannel.PIPELINE,
+        )
+        smbToGiveLocal = pkpdGuardApply.smbOut
+        intervalsmbLocal = intervalsmb
+        if (pkpdGuardApply.skippedDuplicate) {
+            consoleLog.add("PKPD_GUARD_SKIP: already applied this tick (e.g. Autodrive V3 finalize)")
+        } else if (pkpdGuardApply.multiplicationApplied) {
+            pkpdGuardApply.guard?.let { pkpdGuard ->
+                rT.reason.append(" | ${pkpdGuard.reason} x${"%.2f".format(pkpdGuardApply.effectiveFactor)}")
             }
-            smbToGiveLocal = (smbToGiveLocal * guardFactor.toFloat()).coerceAtLeast(0f)
-
-            consoleError.add(pkpdGuard.toLogString())
-            consoleLog.add("SMB_GUARDED: ${"%.2f".format(beforeGuard)}U → ${"%.2f".format(smbToGiveLocal)}U")
-            if (isAggressivePriorityContext && pkpdReliefEnabled && guardFactor > pkpdGuard.factor) {
-                consoleLog.add(
-                    "PKPD_RELIEF: factor ${"%.2f".format(pkpdGuard.factor)} -> ${"%.2f".format(guardFactor)} " +
-                        "(meal/advisor/high-rise priority)"
-                )
-            }
+        }
+        if (isAggressivePriorityContext && pkpdReliefEnabled) {
             if (effectiveMaxIobForPriority > this.maxIob) {
                 consoleLog.add(
                     "MAXIOB_RELIEF: ${"%.2f".format(this.maxIob)} -> ${"%.2f".format(effectiveMaxIobForPriority)} " +
@@ -3385,13 +3380,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     "MEAL_DEBRIDAGE_MAXIOB: ${"%.2f".format(effectiveMaxIobForPriority)} -> ${"%.2f".format(effectiveMaxIobForDebridage)} " +
                         "(target=${iobTargetU?.let { "%.2f".format(it) } ?: "n/a"}U, BG=${"%.0f".format(bg)}, Δ=${"%.1f".format(delta)})"
                 )
-            }
-
-            rT.reason.append(" | ${pkpdGuard.reason} x${"%.2f".format(guardFactor)}")
-
-            if (pkpdGuard.intervalAddMin > 0) {
-                intervalsmbLocal = (intervalsmbLocal + pkpdGuard.intervalAddMin).coerceAtMost(10)
-                consoleLog.add("INTERVAL_ADJUSTED: +${pkpdGuard.intervalAddMin}m → ${intervalsmbLocal}m total")
             }
         }
 
@@ -5638,6 +5626,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var insulinPeakTime = 0.0
     private var iobActivityNow: Double = 0.0
     private var lastBolusAgeMinutes: Double = Double.NaN
+    /** One PKPD absorption-guard multiply per [determine_basal] tick (see [applyPkpdAbsorptionGuardOncePerTick]). */
+    private var pkpdAbsorptionGuardAppliedThisTick: Boolean = false
+    private var isConfirmedHighRiseThisTick: Boolean = false
+    private var mealAdvisorOneShotThisTick: Boolean = false
     private var lastDecisionSource: String = "AIMI"
     private var lastSafetySource: String = "NONE"
     private var lastPredictionAvailable: Boolean = false
@@ -7374,6 +7366,149 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
+    private data class PkpdAbsorptionGuardApplyResult(
+        val smbOut: Float,
+        val intervalAddMin: Int,
+        val guard: PkpdAbsorptionGuard?,
+        val effectiveFactor: Double,
+        val multiplicationApplied: Boolean,
+        val skippedDuplicate: Boolean,
+    )
+
+    private enum class PkpdGuardLogChannel {
+        PIPELINE,
+        FINALIZE,
+    }
+
+    private fun resolvePkpdGuardPredBg(): Double? {
+        val predicted = predictedBg.toDouble()
+        if (predicted > 20) return predicted
+        if (eventualBG.isFinite() && eventualBG > 20) return eventualBG
+        return null
+    }
+
+    private fun windowSinceLastPkpdDoseMin(fallbackWindowInt: Int = 0): Double =
+        if (lastBolusAgeMinutes.isFinite()) lastBolusAgeMinutes else fallbackWindowInt.toDouble()
+
+    private fun isPkpdAggressivePriorityContext(
+        anyMealModeForGuard: Boolean,
+        isConfirmedHighRise: Boolean,
+        mealAdvisorOneShot: Boolean,
+    ): Boolean = mealAdvisorOneShot || anyMealModeForGuard || isConfirmedHighRise
+
+    private fun effectivePkpdGuardFactor(
+        guard: PkpdAbsorptionGuard,
+        aggressivePriority: Boolean,
+    ): Double {
+        val pkpdReliefEnabled = preferences.get(BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled)
+        val pkpdReliefMinFactor = preferences.get(DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor).coerceIn(0.50, 1.0)
+        return if (aggressivePriority && pkpdReliefEnabled) {
+            max(guard.factor, pkpdReliefMinFactor)
+        } else {
+            guard.factor
+        }
+    }
+
+    /**
+     * Single PKPD absorption-guard multiply per tick. [runPkpdGuardEndoDampenRedCarpetAndCapSmb] and
+     * [applySafetyPrecautions] must both use this helper so relief, pred BG, and high-rise flags stay aligned.
+     */
+    private fun applyPkpdAbsorptionGuardOncePerTick(
+        smbIn: Float,
+        pkpdRuntime: PkPdRuntime?,
+        windowSinceLastDoseMin: Double,
+        anyMealModeForGuard: Boolean,
+        isConfirmedHighRise: Boolean,
+        mealAdvisorOneShot: Boolean,
+        reason: StringBuilder?,
+        logChannel: PkpdGuardLogChannel,
+    ): PkpdAbsorptionGuardApplyResult {
+        if (pkpdAbsorptionGuardAppliedThisTick) {
+            return PkpdAbsorptionGuardApplyResult(
+                smbOut = smbIn,
+                intervalAddMin = 0,
+                guard = null,
+                effectiveFactor = 1.0,
+                multiplicationApplied = false,
+                skippedDuplicate = true,
+            )
+        }
+
+        val guard = PkpdAbsorptionGuard.compute(
+            pkpdRuntime = pkpdRuntime,
+            windowSinceLastDoseMin = windowSinceLastDoseMin,
+            bg = bg,
+            delta = delta.toDouble(),
+            shortAvgDelta = shortAvgDelta.toDouble(),
+            targetBg = targetBg.toDouble(),
+            predBg = resolvePkpdGuardPredBg(),
+            isMealMode = anyMealModeForGuard,
+            isConfirmedHighRise = isConfirmedHighRise,
+        )
+        pkpdAbsorptionGuardAppliedThisTick = true
+
+        val aggressivePriority = isPkpdAggressivePriorityContext(
+            anyMealModeForGuard = anyMealModeForGuard,
+            isConfirmedHighRise = isConfirmedHighRise,
+            mealAdvisorOneShot = mealAdvisorOneShot,
+        )
+        val effectiveFactor = effectivePkpdGuardFactor(guard, aggressivePriority)
+
+        if (!guard.isActive()) {
+            return PkpdAbsorptionGuardApplyResult(
+                smbOut = smbIn,
+                intervalAddMin = 0,
+                guard = guard,
+                effectiveFactor = effectiveFactor,
+                multiplicationApplied = false,
+                skippedDuplicate = false,
+            )
+        }
+
+        val beforeGuard = smbIn
+        val smbOut = (smbIn * effectiveFactor.toFloat()).coerceAtLeast(0f)
+        if (guard.intervalAddMin > 0) {
+            intervalsmb = (intervalsmb + guard.intervalAddMin).coerceAtMost(10)
+            if (logChannel == PkpdGuardLogChannel.PIPELINE) {
+                consoleLog.add("INTERVAL_ADJUSTED: +${guard.intervalAddMin}m → ${intervalsmb}m total")
+            }
+        }
+        if (smbOut < beforeGuard) {
+            when (logChannel) {
+                PkpdGuardLogChannel.PIPELINE -> {
+                    consoleError.add(guard.toLogString())
+                    consoleLog.add("SMB_GUARDED: ${"%.2f".format(beforeGuard)}U → ${"%.2f".format(smbOut)}U")
+                    if (aggressivePriority && effectiveFactor > guard.factor) {
+                        consoleLog.add(
+                            "PKPD_RELIEF: factor ${"%.2f".format(guard.factor)} -> ${"%.2f".format(effectiveFactor)} " +
+                                "(meal/advisor/high-rise priority)"
+                        )
+                    }
+                }
+                PkpdGuardLogChannel.FINALIZE -> {
+                    reason?.appendLine(
+                        "🛡️ PKPD Guard (${guard.reason}): ${"%.2f".format(beforeGuard)} → ${"%.2f".format(smbOut)} U"
+                    )
+                    if (aggressivePriority && effectiveFactor > guard.factor) {
+                        consoleLog.add(
+                            "PKPD_RELIEF_FINALIZE: factor ${"%.2f".format(guard.factor)} -> ${"%.2f".format(effectiveFactor)} " +
+                                "(meal/high-rise priority, finalizeAndCapSMB)"
+                        )
+                    }
+                }
+            }
+        }
+
+        return PkpdAbsorptionGuardApplyResult(
+            smbOut = smbOut,
+            intervalAddMin = guard.intervalAddMin,
+            guard = guard,
+            effectiveFactor = effectiveFactor,
+            multiplicationApplied = smbOut < beforeGuard,
+            skippedDuplicate = false,
+        )
+    }
+
     private fun applySafetyPrecautions(
         mealData: MealData,
         smbToGiveParam: Float,
@@ -7456,23 +7591,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 )
             )
         }
-        // 🛡️ PKPD Guard Integration
-        val guard = PkpdAbsorptionGuard.compute(
+        // 🛡️ PKPD Guard — shared with [runPkpdGuardEndoDampenRedCarpetAndCapSmb] (once per tick)
+        val anyMealModeForGuard = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime
+        val confirmedHighRiseForGuard = isConfirmedHighRise || isConfirmedHighRiseThisTick
+        val mealAdvisorForGuard = mealAdvisorOneShotThisTick ||
+            preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
+        val pkpdGuardApply = applyPkpdAbsorptionGuardOncePerTick(
+            smbIn = smbToGive,
             pkpdRuntime = pkpdRuntime,
-            windowSinceLastDoseMin = lastBolusAgeMinutes,
-            bg = bg,
-            delta = delta.toDouble(),
-            shortAvgDelta = shortAvgDelta.toDouble(),
-            targetBg = targetBg.toDouble(),
-            predBg = eventualBG,
-            isMealMode = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime,
-            isConfirmedHighRise = isConfirmedHighRise
+            windowSinceLastDoseMin = windowSinceLastPkpdDoseMin(),
+            anyMealModeForGuard = anyMealModeForGuard,
+            isConfirmedHighRise = confirmedHighRiseForGuard,
+            mealAdvisorOneShot = mealAdvisorForGuard,
+            reason = reason,
+            logChannel = PkpdGuardLogChannel.FINALIZE,
         )
-
-        val beforeGuard = smbToGive
-        smbToGive = (smbToGive * guard.factor.toFloat()).coerceAtLeast(0f)
-        if (smbToGive < beforeGuard) {
-             reason?.appendLine("🛡️ PKPD Guard (${guard.reason}): ${"%.2f".format(beforeGuard)} → ${"%.2f".format(smbToGive)} U")
+        smbToGive = pkpdGuardApply.smbOut
+        if (pkpdGuardApply.skippedDuplicate) {
+            consoleLog.add("PKPD_GUARD_SKIP_FINALIZE: guard already applied earlier this tick")
         }
 
         // Finalisation
@@ -9882,6 +10018,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         ) = runEarlyDetermineBasalStages(ctx)
 
         val isConfirmedHighRiseLocal = bootstrapPhysiologyAfterEarlyTick(ctx, tdd7Days)
+        isConfirmedHighRiseThisTick = isConfirmedHighRiseLocal
 
         val (
             decisionCtx,
