@@ -194,6 +194,17 @@ enum class BooleanKey(
     OApsAIMIT3cAdaptiveBasalEnabled("key_use_aimi_t3c_adaptive_basal", false),
     OApsAIMIAutodriveV3EnhancedGater("key_use_aimi_autodrive_v3_enhanced_gater", false),
     OApsAIMIautoDriveActive(key = "key_use_aimi_autodrive_active", defaultValue = false),
+    /**
+     * When Autodrive V3 applies a safe command, skip the legacy MPC/PI blender so V3 safety
+     * (night cap, post-hypo, weight-aware limits) is not overwritten.
+     */
+    OApsAIMIautoDriveAuthoritative(
+        key = "key_aimi_autodrive_v3_authoritative",
+        defaultValue = true,
+        titleResId = R.string.pref_title_aimi_autodrive_v3_authoritative,
+        summaryResId = R.string.pref_summary_aimi_autodrive_v3_authoritative,
+        dependency = OApsAIMIautoDriveActive,
+    ),
     OApsAIMIwcycle(key = "key_use_Aimi_wcycle",defaultValue = false),
     OApsAIMIWCycleShadow("key_use_Aimi_wcycle_shadow", false),
     OApsAIMIWCycleRequireConfirm("key_use_Aimi_wcycle_require_confirm", false),

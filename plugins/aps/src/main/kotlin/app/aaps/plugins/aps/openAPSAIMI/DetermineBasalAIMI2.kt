@@ -2108,15 +2108,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return rT
     }
 
+    private data class AutodriveV3BranchResult(
+        val appliedAction: Boolean,
+        val skipLegacySmbBlender: Boolean,
+    )
+
     /**
      * Autodrive V3 (MPC): preference [BooleanKey.OApsAIMIautoDriveActive], [autodriveGater.shouldEngageV3], engine tick, TBR + SMB when safe.
      *
-     * **Behavior preserved from inline block:**
-     * - Pref off → **no** reads of meal-estimate prefs, **no** gater/engine calls, returns `false`.
-     * - Gate not engaged → returns `false`; [lastAutodriveState] untouched by this method.
-     * - Gate engaged → [lastAutodriveState] = [AutodriveState.ENGAGED], then [autodriveEngine.setShadowMode](false) / [setIsActive](true), then [tick].
-     *   Unsafe or null command → log only; [v3AppliedAction] stays false; **ENGAGED is not cleared here** (caller's WATCHING reset unchanged).
-     * - Safe command → [setTempBasal] / [finalizeAndCapSMB] as before; `true` iff effective bolus or meaningful TBR vs profile basal.
+     * When [BooleanKey.OApsAIMIautoDriveAuthoritative] is on and a safe V3 command is applied,
+     * [skipLegacySmbBlender] is true so the legacy MPC/PI path does not overwrite V3 SMB.
      *
      * @param hypoThresholdMgdl same as `threshold` after [HypoThresholdMath.computeHypoThreshold] in [determine_basal] (LGS guard for MPC `lgsThreshold` cap).
      */
@@ -2129,9 +2130,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         shortAvgDeltaAdj: Float,
         hypoThresholdMgdl: Double,
         pkpdRuntime: PkPdRuntime?,
-    ): Boolean {
-        if (!preferences.get(BooleanKey.OApsAIMIautoDriveActive)) return false
+    ): AutodriveV3BranchResult {
+        if (!preferences.get(BooleanKey.OApsAIMIautoDriveActive)) {
+            return AutodriveV3BranchResult(appliedAction = false, skipLegacySmbBlender = false)
+        }
         var v3AppliedAction = false
+        var skipLegacySmbBlender = false
         val recentEstimateCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
         val recentEstimateTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
         val estimateAgeMinutes = if (recentEstimateTime > 0L) {
@@ -2231,6 +2235,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val effectiveTbr = rT.rate ?: profile.current_basal
                 val effectiveDuration = rT.duration ?: 0
                 v3AppliedAction = effectiveBolus > 0.01 || (effectiveDuration > 0 && kotlin.math.abs(effectiveTbr - profile.current_basal) > 0.01)
+                if (v3AppliedAction && preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative)) {
+                    skipLegacySmbBlender = true
+                    consoleLog.add("AUTODRIVE_V3_AUTHORITATIVE: Legacy MPC/PI blender will be skipped this tick")
+                }
 
                 consoleLog.add("🚀 ${gate.reason} intent=$v3Smb actual=$effectiveBolus tbr=$v3TbrRate")
                 logDecisionFinal("AUTODRIVE_V3", rT, bg, delta)
@@ -2239,7 +2247,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🛑 [AUTODRIVE V3] Gated: ${gate.reason}")
             }
         }
-        return v3AppliedAction
+        return AutodriveV3BranchResult(
+            appliedAction = v3AppliedAction,
+            skipLegacySmbBlender = skipLegacySmbBlender,
+        )
     }
 
     /**
@@ -3150,6 +3161,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         isConfirmedHighRiseLocal: Boolean,
         exerciseInsulinLockoutActive: Boolean,
         combinedDelta: Float,
+        skipLegacySmbBlender: Boolean,
+        minBgLookbackMgdl: Double,
     ): AimiSmbAdvisorLogAndExecutionStage {
         val hasPred = predictedBg > 20
         val hyperKicker = (bg > targetBg + 30 && (delta >= 0.3 || shortAvgDelta >= 0.2))
@@ -3180,27 +3193,43 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         @Suppress("UNUSED_VARIABLE")
         val useLegacyDynamicsdia = pkpdDiaMinutesOverride == null
 
-        val smbExecution = executeSmbInstruction(
-            bg = bg, delta = delta, iob = iob, basalaimi = basalaimi, basal = basal,
-            honeymoon = honeymoon, hourOfDay = hourOfDay,
-            mealTime = mealTime, bfastTime = bfastTime, lunchTime = lunchTime,
-            dinnerTime = dinnerTime, highCarbTime = highCarbTime, snackTime = snackTime,
-            sens = sens, tp = tp.toFloat(), variableSensitivity = variableSensitivity,
-            target_bg = targetBg, predictedBg = predictedBg, eventualBG = eventualBG,
-            isMealAdvisorOneShot = isMealAdvisorOneShot, mealData = ctx.mealData,
-            pkpdRuntime = pkpdRuntime, sportTime = sportTime, lateFatRiseFlag = lateFatRiseFlag,
-            highCarbrunTime = highCarbrunTime, threshold = threshold,
-            currentTime = ctx.currentTime, windowSinceDoseInt = windowSinceDoseInt,
-            intervalsmb = intervalsmb, insulinStep = pumpCaps.bolusStep.toFloat(),
-            highBgOverrideUsed = highBgOverrideUsed, cob = cob,
-            pkpdDiaMinutesOverride = pkpdDiaMinutesOverride,
-            profile = profile, rT = rT,
-            combinedDeltaLocal = combinedDelta, glucoseStatusLocal = glucoseStatus,
-            pumpAgeDaysLocal = pumpAgeDays, modelcalLocal = modelcal.toDouble(),
-            profileCurrentBasalLocal = profileCurrentBasal,
-            isConfirmedHighRise = isConfirmedHighRiseLocal,
-            exerciseInsulinLockout = exerciseInsulinLockoutActive
-        )
+        val smbExecution = if (skipLegacySmbBlender) {
+            val v3SmbUnits = (rT.insulinReq ?: 0.0).coerceAtLeast(0.0)
+            rT.reason.appendLine(context.getString(R.string.reason_autodrive_v3_authoritative_blender_skipped))
+            consoleLog.add(
+                "AUTODRIVE_V3_AUTHORITATIVE: SMB ${"%.2f".format(v3SmbUnits)} U from V3 (legacy blender skipped)"
+            )
+            SmbInstructionExecutor.Result(
+                predictedSmb = predictedSMB,
+                basal = basal,
+                finalSmb = v3SmbUnits.toFloat(),
+                highBgOverrideUsed = highBgOverrideUsed,
+                newSmbInterval = intervalsmb,
+            )
+        } else {
+            executeSmbInstruction(
+                bg = bg, delta = delta, iob = iob, basalaimi = basalaimi, basal = basal,
+                honeymoon = honeymoon, hourOfDay = hourOfDay,
+                mealTime = mealTime, bfastTime = bfastTime, lunchTime = lunchTime,
+                dinnerTime = dinnerTime, highCarbTime = highCarbTime, snackTime = snackTime,
+                sens = sens, tp = tp.toFloat(), variableSensitivity = variableSensitivity,
+                target_bg = targetBg, predictedBg = predictedBg, eventualBG = eventualBG,
+                isMealAdvisorOneShot = isMealAdvisorOneShot, mealData = ctx.mealData,
+                pkpdRuntime = pkpdRuntime, sportTime = sportTime, lateFatRiseFlag = lateFatRiseFlag,
+                highCarbrunTime = highCarbrunTime, threshold = threshold,
+                currentTime = ctx.currentTime, windowSinceDoseInt = windowSinceDoseInt,
+                intervalsmb = intervalsmb, insulinStep = pumpCaps.bolusStep.toFloat(),
+                highBgOverrideUsed = highBgOverrideUsed, cob = cob,
+                pkpdDiaMinutesOverride = pkpdDiaMinutesOverride,
+                profile = profile, rT = rT,
+                combinedDeltaLocal = combinedDelta, glucoseStatusLocal = glucoseStatus,
+                pumpAgeDaysLocal = pumpAgeDays, modelcalLocal = modelcal.toDouble(),
+                profileCurrentBasalLocal = profileCurrentBasal,
+                isConfirmedHighRise = isConfirmedHighRiseLocal,
+                exerciseInsulinLockout = exerciseInsulinLockoutActive,
+                minBgLookbackMgdl = minBgLookbackMgdl,
+            )
+        }
 
         return AimiSmbAdvisorLogAndExecutionStage(
             smbExecution = smbExecution,
@@ -9256,7 +9285,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         combinedDeltaLocal: Float, glucoseStatusLocal: GlucoseStatusAIMI,
         pumpAgeDaysLocal: Float, modelcalLocal: Double, profileCurrentBasalLocal: Double,
         isConfirmedHighRise: Boolean = false,
-        exerciseInsulinLockout: Boolean = false
+        exerciseInsulinLockout: Boolean = false,
+        minBgLookbackMgdl: Double = Double.MAX_VALUE,
     ): SmbInstructionExecutor.Result {
         return SmbInstructionExecutor.execute(
             SmbInstructionExecutor.Input(
@@ -9297,7 +9327,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 globalReactivityFactor = if (preferences.get(BooleanKey.OApsAIMIUnifiedReactivityEnabled)) {
                     if (isConfirmedHighRise) max(safeReactivityFactor, 1.0) else safeReactivityFactor
                 } else 1.0,
-                isConfirmedHighRise = isConfirmedHighRise
+                isConfirmedHighRise = isConfirmedHighRise,
+                minBgLookbackMgdl = minBgLookbackMgdl,
             ),
             SmbInstructionExecutor.Hooks(
                 refineSmb = { combined, short, long, predicted, profileInput ->
@@ -10038,7 +10069,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )?.let { return it }
 
         // Autodrive V3 — see [runAutodriveV3MultiVariableBranch]
-        val v3AppliedAction = runAutodriveV3MultiVariableBranch(
+        val v3Branch = runAutodriveV3MultiVariableBranch(
             ctx = ctx,
             profile = profile,
             rT = rT,
@@ -10048,6 +10079,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             hypoThresholdMgdl = threshold,
             pkpdRuntime = pkpdRuntime,
         )
+        val v3AppliedAction = v3Branch.appliedAction
+        val skipLegacySmbBlender = v3Branch.skipLegacySmbBlender
 
         // PRIORITY 4: AUTODRIVE (Strict) [FALLBACK V2] — see [runAutodriveV2FallbackBranch]
         runAutodriveV2FallbackBranch(
@@ -10278,6 +10311,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             isConfirmedHighRiseLocal = isConfirmedHighRiseLocal,
             exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
             combinedDelta = combinedDelta.toFloat(),
+            skipLegacySmbBlender = skipLegacySmbBlender,
+            minBgLookbackMgdl = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
         )
 
         var smbToGive = applySmbAdvisorExecutionToTickStateAndLog(smbExecution) { basal = it }
