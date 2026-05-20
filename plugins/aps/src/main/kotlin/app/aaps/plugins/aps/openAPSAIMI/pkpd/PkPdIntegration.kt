@@ -52,7 +52,15 @@ class PkPdIntegration(private val preferences: Preferences) {
             .filter { it.units > 0.0 && it.ageMin.isFinite() && it.ageMin >= 0.0 }
             .toList()
     }
-@Synchronized
+    @Synchronized
+    fun reconstructedIobUnits(): Double {
+        val est = estimator ?: return 0.0
+        return recentBolusSamples.sumOf { sample ->
+            sample.units * est.iobResidualAt(sample.ageMin)
+        }.coerceAtLeast(0.0)
+    }
+
+    @Synchronized
     fun computeRuntime(
         epochMillis: Long,
         bg: Double,

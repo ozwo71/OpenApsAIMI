@@ -61,9 +61,16 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLogRow
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfTddProvider
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.ports.PkpdPort
+import app.aaps.plugins.aps.openAPSAIMI.prediction.NaiveEventualBgSignGuard
 import app.aaps.plugins.aps.openAPSAIMI.prediction.PredictionSanityResult
 import app.aaps.plugins.aps.openAPSAIMI.prediction.minPredictedAcrossCurves
 import app.aaps.plugins.aps.openAPSAIMI.prediction.sanitizePredictionValues
+import app.aaps.plugins.aps.openAPSAIMI.risk.AimiRiskEnvelope
+import app.aaps.plugins.aps.openAPSAIMI.risk.AimiRiskEnvelopeBuilder
+import app.aaps.plugins.aps.openAPSAIMI.risk.IobConsensus
+import app.aaps.plugins.aps.openAPSAIMI.risk.IobDecisionSource
+import app.aaps.plugins.aps.openAPSAIMI.risk.PredictionPathBounds
+import app.aaps.plugins.aps.openAPSAIMI.risk.PredictionPathMath
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiLoopPhase
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiLoopTelemetry
 import app.aaps.plugins.aps.openAPSAIMI.physio.AimiHormonitorStudyExporterMTR
@@ -1038,6 +1045,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         exerciseInsulinLockoutActive = false
         aimiContextActivityActive = false
         pkpdAbsorptionGuardAppliedThisTick = false
+        cachedRiskEnvelopeEarly = null
+        cachedRiskEnvelopeDecision = null
         isConfirmedHighRiseThisTick = false
         mealAdvisorOneShotThisTick = false
         lastLoopCgmNoise = ctx.glucoseStatus.noise
@@ -2971,6 +2980,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.eventualBG = pkpdPredictions.eventual
         this.predictedBg = pkpdPredictions.eventual.toFloat()
         rT.eventualBG = pkpdPredictions.eventual
+        val iobConsensus = IobConsensus.resolve(
+            aapsIobUnits = iobData.iob,
+            pkpdIobUnits = pkpdIntegration.reconstructedIobUnits().takeIf { cachedPkpdRuntime != null },
+        )
+        if (iobConsensus.source == IobDecisionSource.PKPD_WHEN_AAPS_NEGATIVE) {
+            consoleLog.add(
+                "🛡️ IOB_CONSENSUS_PKPD: AAPS=${"%.2f".format(iobConsensus.aapsIobUnits)} → " +
+                    "PKPD=${"%.2f".format(iobConsensus.pkpdIobUnits)} (Δ=${"%.2f".format(iobConsensus.deltaUnits)})"
+            )
+        }
         val bgi = round((-iobData.activity * effectiveSens * 5), 2)
         var deviation = round(30 / 5 * (minDelta - bgi))
         if (deviation < 0) {
@@ -2979,8 +2998,36 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 deviation = round((30 / 5) * (glucoseStatus.longAvgDelta - bgi))
             }
         }
-        val naiveEventualBg = round(bg - (iobData.iob * sens), 0)
+        val naiveEbgResolution = NaiveEventualBgSignGuard.resolve(
+            bgMgdl = bg,
+            iobUnits = iobConsensus.decisionIobUnits,
+            sensMgDlPerU = sens,
+            pkpdRelativeActivity = cachedPkpdRuntime?.activity?.relativeActivity,
+            pkpdStage = cachedPkpdRuntime?.activity?.stage,
+        )
+        if (naiveEbgResolution.signGuardApplied) {
+            consoleLog.add(
+                "🛡️ NAIVE_EBG_SIGN_GUARD: iob=${"%.2f".format(iobData.iob)} (negative) + " +
+                    "pkpdActivity=${"%.2f".format(cachedPkpdRuntime?.activity?.relativeActivity ?: 0.0)} " +
+                    "stage=${cachedPkpdRuntime?.activity?.stage} → collapse naive ebg to current bg " +
+                    "(rawNaive=${"%.0f".format(naiveEbgResolution.rawNaiveRoundedMgdl)})"
+            )
+        }
+        val naiveEventualBg = naiveEbgResolution.naiveEventualBgMgdl
         val legacyEventual = naiveEventualBg + deviation
+
+        cachedRiskEnvelopeDecision = AimiRiskEnvelopeBuilder.buildDecision(
+            bg = bg,
+            delta = delta,
+            predTerminal = pkpdPredictions.eventual,
+            eventualTerminal = pkpdPredictions.eventual,
+            pathBounds = pkpdPredictions.pathBounds,
+            aapsIobUnits = iobData.iob,
+            iobConsensus = iobConsensus,
+            lgsThreshold = profile.lgsThreshold,
+            naiveEbgSignGuardApplied = naiveEbgResolution.signGuardApplied,
+        )
+        consoleLog.add(AimiRiskEnvelopeBuilder.formatLogLine(cachedRiskEnvelopeDecision!!))
 
         var minBgOut = minBg
         var targetBgOut = targetBg
@@ -3040,11 +3087,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         cob: Float,
     ): Float {
         val modelcal = calculateSMBFromModel(rT.reason)
+        val decisionRisk = cachedRiskEnvelopeDecision
+        val hypoThresholdForGuard = decisionRisk?.hypoThresholdMgdl ?: threshold
+        val hypoCompositeForReason = decisionRisk?.compositeMinMgdl ?: minBgHypoComposite
         var isHypoBlocked = shouldBlockHypoWithHysteresis(
             bg = bg,
             predictedBg = predictedBg.toDouble(),
             eventualBg = eventualBg,
-            threshold = threshold,
+            threshold = hypoThresholdForGuard,
             deltaMgdlPer5min = delta.toDouble()
         )
 
@@ -3065,8 +3115,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.appendLine(
                 context.getString(
                     R.string.reason_hypo_guard,
-                    convertBG(minBgHypoComposite),
-                    convertBG(threshold),
+                    convertBG(hypoCompositeForReason),
+                    convertBG(hypoThresholdForGuard),
                     convertBG(bg),
                     convertBG(predictedBg.toDouble()),
                     convertBG(eventualBg)
@@ -5434,6 +5484,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 "eventualBg=${sanity.eventualBg.roundToInt()} min=${minBg.roundToInt()} th=${threshold.toInt()} " +
                 "noise=${glucoseStatus.noise} dataAge=${minAgo}m pumpReachable=$pumpReachable sanity=${sanity.label}",
         )
+        cachedRiskEnvelopeEarly = AimiRiskEnvelopeBuilder.buildEarly(
+            bg = bg,
+            delta = delta,
+            predTerminal = sanity.predBg,
+            eventualTerminal = sanity.eventualBg,
+            predBGs = rT.predBGs,
+            lgsThreshold = profile.lgsThreshold,
+        )
+        consoleLog.add(AimiRiskEnvelopeBuilder.formatLogLine(cachedRiskEnvelopeEarly!!))
         return AimiAdvancedPredictionsPredPipePrep(sanity, minBg, threshold)
     }
 
@@ -5547,6 +5606,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var recentNotes: List<UE>? = null
     private var tags0to60minAgo = ""
     private var cachedPkpdRuntime: PkPdRuntime? = null // 🔧 FIX (MTR): Global cache for Safety methods
+    private var cachedRiskEnvelopeEarly: AimiRiskEnvelope? = null
+    private var cachedRiskEnvelopeDecision: AimiRiskEnvelope? = null
     private var tags60to120minAgo = ""
     private var tags120to180minAgo = ""
     private var tags180to240minAgo = ""
@@ -8592,7 +8653,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         fun safe(v: Double) = if (v.isFinite()) v else Double.POSITIVE_INFINITY
         val minBg = minOf(safe(bg), safe(predictedBg), safe(eventualBg))
 
-        val blockedNow = HypoGuard.isBelowHypoThreshold(bg, predictedBg, eventualBg, HypoThresholdMath.computeHypoThreshold(80.0, profileUtil.convertToMgdlDetect(preferences.get(UnitDoubleKey.ApsLgsThreshold)).toInt() ), deltaMgdlPer5min)
+        val blockedNow = HypoGuard.isBelowHypoThreshold(
+            bgNow = bg,
+            predicted = predictedBg,
+            eventual = eventualBg,
+            hypo = threshold,
+            delta = deltaMgdlPer5min,
+        )
         if (blockedNow) {
             lastHypoBlockAt = now
             hypoClearCandidateSince = null
@@ -8962,7 +9029,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private data class PredictionResult(
         val eventual: Double,
-        val series: List<Int>
+        val series: List<Int>,
+        val pathBounds: PredictionPathBounds,
     )
 
     private fun computePkpdPredictions(
@@ -8991,6 +9059,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             List(48) { currentBg }
         }
 
+        val pathBounds = PredictionPathMath.boundsFromRawSeries(advancedPredictions)
         val sanitizedPredictions = advancedPredictions.map { round(min(401.0, max(39.0, it)), 0) }
         val intsPredictions = sanitizedPredictions.map { it.toInt() }
         rT.predBGs = Predictions().apply {
@@ -9002,9 +9071,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         val eventual = intsPredictions.lastOrNull()?.toDouble() ?: currentBg
         consoleLog.add(
-            "PKPD predictions → eventual=${"%.0f".format(eventual)} mg/dL from ${intsPredictions.size} steps"
+            "PKPD predictions → eventual=${"%.0f".format(eventual)} mg/dL from ${intsPredictions.size} steps " +
+                "pathMinRaw=${pathBounds.pathMinRawMgdl?.let { "%.0f".format(it) } ?: "n/a"} " +
+                "pathMinClamp=${pathBounds.pathMinClampedMgdl?.let { "%.0f".format(it) } ?: "n/a"}"
         )
-        return PredictionResult(eventual, intsPredictions)
+        return PredictionResult(eventual, intsPredictions, pathBounds)
     }
 
     private fun ensurePredictionFallback(rt: RT, bgNow: Double) {
