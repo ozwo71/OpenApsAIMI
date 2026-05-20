@@ -397,7 +397,10 @@ fun MainScreen(
                                     scenesViewModel.refreshState()
                                     showAutomationSheet = true
                                 },
-                                automationCount = automationState.items.size + automationState.sceneItems.size,
+                                // Total drives nav-button visibility; count drives the badge.
+                                automationTotal = automationState.items.size + automationState.sceneItems.size,
+                                automationCount = automationState.items.count { it.activationReason == null } +
+                                    automationState.sceneItems.count { it.activationReason == null },
                                 pumpSetupPlugin = pumpSetupPlugin,
                                 bgSetupPlugin = bgSetupPlugin,
                                 bgQualityBadgeIcon = bgQualityBadgeIcon,
@@ -434,10 +437,9 @@ fun MainScreen(
                             )
                         }
 
-                        // FABs (classic View UI switch removed upstream; Compose is the only shell)
+                        // FABs for embedded AIMI dashboard skin (classic overview uses in-screen FABs)
                         if (showChrome) {
                             if (isDashboardEmbedded) {
-                                val fabBottomOffset = if (hasToolbar && showChrome) 56.dp else 0.dp
                                 PumpActivityFab(
                                     visible = showDashboardPumpFab,
                                     bolusState = bolusState,
