@@ -210,6 +210,8 @@ enum class BooleanKey(
     OApsAIMIWCycleRequireConfirm("key_use_Aimi_wcycle_require_confirm", false),
     OApsAIMINightGrowthEnabled("key_oaps_aimi_ngr_enabled", true),
     OApsAIMIPkpdEnabled("key_aimi_pkpd_enabled", false),
+    /** Set after the guided PK/PD setup wizard completes (or is skipped). */
+    OApsAIMIPkpdSetupWizardCompleted("key_aimi_pkpd_setup_wizard_completed", false),
     OApsAIMIPeakGovernorEnabled(
         key = "key_aimi_peak_governor_enabled",
         defaultValue = true,

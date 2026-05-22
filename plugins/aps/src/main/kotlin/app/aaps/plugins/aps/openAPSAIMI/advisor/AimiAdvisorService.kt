@@ -222,6 +222,20 @@ class AimiAdvisorService {
         return AdvisorContext(metrics, profileSnapshot, prefsSnapshot, pkpdSnapshot)
     }
 
+    /**
+     * PKPD-only recommendations for the guided Compose settings screen (7-day metrics when available).
+     */
+    fun pkpdRecommendationsForSettings(periodDays: Int = 7): List<AimiRecommendation> {
+        if (preferences == null || rh == null) return emptyList()
+        return try {
+            val context = collectContext(periodDays)
+            PkpdAdvisor().analysePkpd(context.metrics, context.pkpdPrefs, rh, null)
+        } catch (t: Throwable) {
+            aapsLogger?.error(app.aaps.core.interfaces.logging.LTag.APS, "pkpdRecommendationsForSettings failed", t)
+            emptyList()
+        }
+    }
+
     private fun calculateWeightedAverage(values: Array<app.aaps.core.interfaces.profile.Profile.ProfileValue>): Double {
         if (values.isEmpty()) return 0.0
         
