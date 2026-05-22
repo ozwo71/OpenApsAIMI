@@ -33,7 +33,11 @@ class AutodriveAuditor @Inject constructor() {
         else if (state.bgVelocity < -1.5) sb.append("📉 Chute Rapide")
         
         if (state.estimatedRa > 0.5) {
-            sb.append(" | 🍽️ Absorption Détectée (~${(state.estimatedRa).toInt()} mg/dL/min)")
+            if (state.cob >= 0.5) {
+                sb.append(" | 🍽️ Absorption Détectée (~${(state.estimatedRa).toInt()} mg/dL/min)")
+            } else {
+                sb.append(" | 📈 Montée non expliquée (~${(state.estimatedRa).toInt()} mg/dL/min estimé)")
+            }
         }
 
         if (safeCommand.scheduledMicroBolus > 0) {

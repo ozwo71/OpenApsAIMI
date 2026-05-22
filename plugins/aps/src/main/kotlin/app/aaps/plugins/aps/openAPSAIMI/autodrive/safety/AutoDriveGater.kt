@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.autodrive.safety
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextRepository
+import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -28,7 +29,9 @@ class AutoDriveGater @Inject constructor(
         cob: Double = 0.0,
         uamConfidence: Double = 0.0,
         explicitMealMode: Boolean = false,
-        hasRecentMealEstimate: Boolean = false
+        hasRecentMealEstimate: Boolean = false,
+        minBgLookback75m: Double = 200.0,
+        estimatedRa: Double = 0.0,
     ): GatingResult {
         // 1. Fetch real-time health data
         val health = healthRepo.fetchSnapshot()
@@ -59,7 +62,12 @@ class AutoDriveGater @Inject constructor(
 
         // 4. Refined glycemic entry thresholds
         val isHighPlateau = bg > 150.0
-        val isActivelyRising = combinedDelta > 0.8
+        val isActivelyRising = when {
+            bg >= 150.0 -> combinedDelta > 0.8
+            bg >= 120.0 -> combinedDelta > 1.2 ||
+                (combinedDelta > 0.8 && (uamConfidence >= 0.5 || estimatedRa >= 0.7))
+            else -> combinedDelta > 2.0 && minBgLookback75m >= CorrectionAggressionGate.REBOUND_MIN_BG_LOOKBACK_MGDL
+        }
         val isMealRising = implicitMealContext && combinedDelta > 0.25
 
         val shouldEngage = isHighPlateau || isActivelyRising || isMealRising
@@ -67,7 +75,8 @@ class AutoDriveGater @Inject constructor(
         if (!shouldEngage) {
             val reason =
                 "BG stable (<150) and rise too weak " +
-                    "(BG=$bg, Trend=$combinedDelta, COB=$cob, UAM=$uamConfidence, mealCtx=$implicitMealContext)"
+                    "(BG=$bg, Trend=$combinedDelta, COB=$cob, UAM=$uamConfidence, mealCtx=$implicitMealContext, minBg75=$minBgLookback75m)"
+            aapsLogger.debug(LTag.APS, "${CorrectionAggressionGate.LOG_PREFIX}_V3_GATER: disengage $reason")
             return GatingResult(engage = false, reason = "🧘 $reason")
         }
 
@@ -76,6 +85,10 @@ class AutoDriveGater @Inject constructor(
             isMealRising -> "Meal-aware rise"
             else -> "Strong rise"
         }
+        aapsLogger.debug(
+            LTag.APS,
+            "${CorrectionAggressionGate.LOG_PREFIX}_V3_GATER: engage $engageReason BG=$bg combD=$combinedDelta minBg75=$minBgLookback75m"
+        )
         return GatingResult(
             engage = true,
             reason = "🚀 V3 ENGAGED [$engageReason] (BG=$bg, Trend=$combinedDelta, COB=$cob, UAM=$uamConfidence)"

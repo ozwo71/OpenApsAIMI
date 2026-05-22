@@ -77,6 +77,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.AimiHormonitorStudyExporterMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorDecisionEventMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioDecisionTraceMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
+import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoGuard
 import app.aaps.plugins.aps.openAPSAIMI.safety.signalEventualDrop
 import app.aaps.plugins.aps.openAPSAIMI.safety.signalMinPredDrop
@@ -1048,6 +1049,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         cachedRiskEnvelopeEarly = null
         cachedRiskEnvelopeDecision = null
         isConfirmedHighRiseThisTick = false
+        correctionAggressionDecision = null
         mealAdvisorOneShotThisTick = false
         lastLoopCgmNoise = ctx.glucoseStatus.noise
 
@@ -2163,7 +2165,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             cob = ctx.mealData.mealCOB,
             uamConfidence = AimiUamHandler.confidenceOrZero(),
             explicitMealMode = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime,
-            hasRecentMealEstimate = hasRecentMealEstimate
+            hasRecentMealEstimate = hasRecentMealEstimate,
+            minBgLookback75m = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
+            estimatedRa = continuousStateEstimator.getLastRa(),
         )
 
         if (gate.engage) {
@@ -3098,10 +3102,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             deltaMgdlPer5min = delta.toDouble()
         )
 
-        if (isHypoBlocked && (delta > 5.0 || bg > targetBg + 40)) {
+        val aggression = correctionAggressionDecision
+        if (isHypoBlocked && aggression?.allowRocketHypoOverride == true) {
             isHypoBlocked = false
             lastHypoBlockAt = 0L
-            rT.reason.append("🚀 Rocket Override: Hypo Block IGNORED due to massive rise. ")
+            rT.reason.append(
+                "🚀 Rocket Override (${CorrectionAggressionGate.LOG_PREFIX} ${aggression.tier.name}): Hypo Block IGNORED. "
+            )
+        } else if (isHypoBlocked && (delta > 5.0 || bg > targetBg + 40)) {
+            consoleLog.add(
+                "${CorrectionAggressionGate.LOG_PREFIX}: hypo rocket override BLOCKED " +
+                    "(tier=${aggression?.tier?.name ?: "n/a"} tag=${aggression?.reasonTag ?: "n/a"})"
+            )
         }
 
         var fallbackActive = false
@@ -3609,9 +3621,36 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 AimiMealHyperBasalBoostOutcome.ContinueWithOptionalRate(optionalRate)
             }
 
-            ((bg > targetBg + 40 || delta > 5.0f) && (delta >= 0.3 || shortAvgDelta >= 0.2)) -> {
+            correctionAggressionDecision?.tier == CorrectionAggressionGate.Tier.REBOUND_GUARD &&
+                cachedBasalFirstActive &&
+                bg < targetBg + 15.0 &&
+                delta >= 0.0f -> {
+                val bridgeRate = calculateRate(
+                    basal,
+                    profileCurrentBasal,
+                    1.5,
+                    "${CorrectionAggressionGate.LOG_PREFIX}: post-hypo TBR bridge (Basal-First)",
+                    ctx.currentTemp,
+                    rT,
+                )
+                consoleLog.add(
+                    "${CorrectionAggressionGate.LOG_PREFIX}: rebound basal bridge " +
+                        "${"%.2f".format(bridgeRate)} U/h (no Global Hyper Kicker)"
+                )
+                AimiMealHyperBasalBoostOutcome.ContinueWithOptionalRate(
+                    if (bridgeRate > profileCurrentBasal * 1.05) bridgeRate else null
+                )
+            }
+
+            run {
+                val aggression = correctionAggressionDecision
+                val allowHyper = aggression?.allowGlobalHyperKicker == true &&
+                    (delta >= 0.3 || shortAvgDelta >= 0.2)
+                allowHyper
+            } -> {
                 val autodriveMaxBasal = preferences.get(DoubleKey.autodriveMaxBasal)
                 val safeMax = if (autodriveMaxBasal > 0.1) autodriveMaxBasal else profile.max_basal
+                val scaleCap = correctionAggressionDecision?.maxBasalScaleCap ?: 10.0
 
                 val boostedRate = adjustBasalForGeneralHyper(
                     suggestedBasalUph = profileCurrentBasal,
@@ -3619,11 +3658,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     targetBg = targetBg,
                     delta = delta.toDouble(),
                     shortAvgDelta = shortAvgDelta.toDouble(),
-                    maxBasalConfig = safeMax
+                    maxBasalConfig = safeMax,
+                    maxScaleCap = scaleCap,
                 )
 
+                val tag = correctionAggressionDecision?.tier?.name ?: "n/a"
                 val optionalRate = if (boostedRate > profileCurrentBasal * 1.1) {
-                    calculateRate(basal, profileCurrentBasal, boostedRate / profileCurrentBasal, "Global Hyper Kicker (Active)", ctx.currentTemp, rT, overrideSafety = true)
+                    calculateRate(
+                        basal,
+                        profileCurrentBasal,
+                        boostedRate / profileCurrentBasal,
+                        "Global Hyper Kicker ($tag / ${CorrectionAggressionGate.LOG_PREFIX})",
+                        ctx.currentTemp,
+                        rT,
+                        overrideSafety = true,
+                    )
                 } else {
                     null
                 }
@@ -5690,6 +5739,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     /** One PKPD absorption-guard multiply per [determine_basal] tick (see [applyPkpdAbsorptionGuardOncePerTick]). */
     private var pkpdAbsorptionGuardAppliedThisTick: Boolean = false
     private var isConfirmedHighRiseThisTick: Boolean = false
+    private var correctionAggressionDecision: CorrectionAggressionGate.Decision? = null
     private var mealAdvisorOneShotThisTick: Boolean = false
     private var lastDecisionSource: String = "AIMI"
     private var lastSafetySource: String = "NONE"
@@ -6329,6 +6379,73 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         return recentBGs
     }
+
+    private fun buildCorrectionAggressionInput(
+        bg: Double,
+        targetBg: Double,
+        delta: Float,
+        shortAvgDelta: Float,
+        combinedDelta: Float,
+        cob: Double,
+        postHypoHint: CorrectionAggressionGate.PostHypoHint = CorrectionAggressionGate.PostHypoHint.NONE,
+    ): CorrectionAggressionGate.Input {
+        val recentEstimateCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
+        val recentEstimateTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
+        val estimateAgeMin = if (recentEstimateTime > 0L) {
+            (System.currentTimeMillis() - recentEstimateTime) / 60000.0
+        } else {
+            Double.MAX_VALUE
+        }
+        val hasRecentMealEstimate = recentEstimateCarbs > 10.0 && estimateAgeMin in 0.0..45.0
+        return CorrectionAggressionGate.Input(
+            bg = bg,
+            targetBg = targetBg,
+            deltaMgdl5m = delta.toDouble(),
+            shortAvgDelta = shortAvgDelta.toDouble(),
+            combinedDelta = combinedDelta.toDouble(),
+            cob = cob,
+            minBgLookback75m = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
+            estimatedCarbs = recentEstimateCarbs,
+            estimatedCarbsAgeMin = estimateAgeMin,
+            uamConfidence = AimiUamHandler.confidenceOrZero(),
+            estimatedRa = continuousStateEstimator.getLastRa(),
+            explicitMealMode = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime,
+            hasRecentMealEstimate = hasRecentMealEstimate,
+            isConfirmedHighRise = isConfirmedHighRiseThisTick,
+            postHypoHint = postHypoHint,
+        )
+    }
+
+    private fun evaluateAndLogCorrectionAggression(
+        bg: Double,
+        targetBg: Double,
+        delta: Float,
+        shortAvgDelta: Float,
+        combinedDelta: Float,
+        cob: Double,
+        postHypoHint: CorrectionAggressionGate.PostHypoHint = CorrectionAggressionGate.PostHypoHint.NONE,
+    ): CorrectionAggressionGate.Decision {
+        val input = buildCorrectionAggressionInput(
+            bg = bg,
+            targetBg = targetBg,
+            delta = delta,
+            shortAvgDelta = shortAvgDelta,
+            combinedDelta = combinedDelta,
+            cob = cob,
+            postHypoHint = postHypoHint,
+        )
+        val decision = CorrectionAggressionGate.evaluate(input)
+        correctionAggressionDecision = decision
+        CorrectionAggressionGate.appendLogs(decision, input, consoleLog, aapsLogger)
+        return decision
+    }
+
+    private fun mapPostHypoToAggressionHint(state: PostHypoState): CorrectionAggressionGate.PostHypoHint =
+        when (state) {
+            is PostHypoState.ReboundSuspected -> CorrectionAggressionGate.PostHypoHint.REBOUND_SUSPECTED
+            is PostHypoState.MealConfirmed -> CorrectionAggressionGate.PostHypoHint.MEAL_CONFIRMED
+            PostHypoState.None -> CorrectionAggressionGate.PostHypoHint.NONE
+        }
 
     /**
      * Minimum recalculated BG (mg/dL) over bucketed data in [0, lookbackMinutes].
@@ -7880,11 +7997,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         // Vérifier si c'est un repas (explicite ou implicite Autodrive V3)
+        val inPostHypoRecoveryWindow = sinceHypoMs <= 45 * 60_000L
         val isMealContext = explicitMealMode || cob > 0.5 ||
-            isMealLikelyWithoutDeclaration(
-                shortAvgDelta, delta, slopeFromMinDeviation,
-                recentBGs, estimatedCarbs, estimatedCarbsAgeMs, localHour
-            )
+            if (inPostHypoRecoveryWindow) {
+                CorrectionAggressionGate.isMealLikelyPostHypoStrict(
+                    cob = cob,
+                    estimatedCarbs = estimatedCarbs,
+                    estimatedCarbsAgeMs = estimatedCarbsAgeMs,
+                    uamConfidence = AimiUamHandler.confidenceOrZero(),
+                    bg = recentBGs.firstOrNull()?.toDouble() ?: 0.0,
+                    shortAvgDelta = shortAvgDelta,
+                    delta = delta,
+                    recentBGs = recentBGs,
+                )
+            } else {
+                isMealLikelyWithoutDeclaration(
+                    shortAvgDelta, delta, slopeFromMinDeviation,
+                    recentBGs, estimatedCarbs, estimatedCarbsAgeMs, localHour
+                )
+            }
 
         return if (isMealContext) {
             // ReboundSuspected expire au bout de 30 min même sans déclaration repas
@@ -10276,6 +10407,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             targetBgMgdl = targetBg,
         )?.let { return it }
 
+        evaluateAndLogCorrectionAggression(
+            bg = bg,
+            targetBg = targetBg.toDouble(),
+            delta = delta,
+            shortAvgDelta = shortAvgDelta,
+            combinedDelta = combinedDelta,
+            cob = cob.toDouble(),
+        )
+
         // Autodrive V3 — see [runAutodriveV3MultiVariableBranch]
         val v3Branch = runAutodriveV3MultiVariableBranch(
             ctx = ctx,
@@ -10329,6 +10469,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             snackTime = snackTime,
             reason = reason,
         )
+
+        val aggressionInputForRefine = buildCorrectionAggressionInput(
+            bg = bg,
+            targetBg = targetBg.toDouble(),
+            delta = delta,
+            shortAvgDelta = shortAvgDelta,
+            combinedDelta = combinedDelta,
+            cob = cob.toDouble(),
+            postHypoHint = mapPostHypoToAggressionHint(postHypoState),
+        )
+        correctionAggressionDecision = correctionAggressionDecision?.let { prior ->
+            CorrectionAggressionGate.refineForPostHypo(
+                prior,
+                aggressionInputForRefine,
+                mapPostHypoToAggressionHint(postHypoState),
+            )
+        } ?: CorrectionAggressionGate.evaluate(aggressionInputForRefine)
+        correctionAggressionDecision?.let { refined ->
+            CorrectionAggressionGate.appendLogs(refined, aggressionInputForRefine, consoleLog, aapsLogger)
+        }
 
         runPostHypoCompressionAndDriftTerminatorOrReturn(
             ctx = ctx,
@@ -10958,14 +11118,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         targetBg: Double,
         delta: Double,
         shortAvgDelta: Double,
-        maxBasalConfig: Double
+        maxBasalConfig: Double,
+        maxScaleCap: Double = 10.0,
     ): Double {
         // "Progressivement rapidement" logic requested by user
         
         // Risque montée franche ou plateau haut persistant
         val rising = delta >= 0.5 || shortAvgDelta >= 0.3
         val plateauHigh = delta >= -0.1 && bg > targetBg + 50
-        val rocketStart = delta > 10.0 // FCL 13.0 Rocket Start
+        val rocketStart = delta > 10.0 &&
+            (bg > targetBg + 20.0 || maxScaleCap >= 8.0)
     
         if (!rising && !plateauHigh && !rocketStart) return suggestedBasalUph
     
@@ -10976,15 +11138,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 60mg au dessus: x5
         // 90mg au dessus: x8
         // 120mg+        : x10 (Authorized by user)
-        // Rocket Start : Auto Max (x10) if delta > 10.0
+        // Rocket Start : Auto Max (x10) if delta > 10.0 and not post-hypo rebound guard
     
-        val scaleFactor = when {
+        var scaleFactor = when {
             rocketStart || deviation >= 120 -> 10.0
             deviation >= 90  -> 8.0
             deviation >= 60  -> 5.0
             deviation >= 30  -> 2.0
             else -> 1.0
         }
+        scaleFactor = min(scaleFactor, maxScaleCap)
     
         if (scaleFactor == 1.0) return suggestedBasalUph
         
