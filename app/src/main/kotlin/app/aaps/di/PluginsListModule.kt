@@ -295,7 +295,7 @@ abstract class PluginsListModule {
     @Binds
     @AllConfigs
     @IntoMap
-    @IntKey(445)
+    @IntKey(446)
     abstract fun bindEversensePlugin(plugin: EversensePlugin): PluginBase
 
     @Binds
