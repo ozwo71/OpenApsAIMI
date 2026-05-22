@@ -53,7 +53,7 @@
     <string name="permission_dexcom_description">Application needs permission to receive CGM data from Dexcom app</string>
     <string name="permission_notification_listener_title">Notification Access</string>
     <string name="permission_notification_listener_description">Required to read glucose values from CGM app notifications</string>
-<!-- Eversense plugin -->
+    <!-- Eversense plugin -->
     <string name="source_eversense">Eversense</string>
     <string name="description_source_eversense">Eversense E3/365 driver</string>
     <string name="eversense_information_title">Information</string>
@@ -111,7 +111,8 @@
     <string name="eversense_placement_instruction_poor">Poor signal. Make sure the transmitter is placed directly over the sensor site.</string>
     <string name="eversense_placement_instruction_not_connected">Connect to your transmitter to view signal strength.</string>
     <string name="eversense_placement_last_update">Last update: %1$s</string>
-    <string name="eversense_placement_reading">Reading&#8230;</string>`n    <string name="eversense_placement_connected">Transmitter Connected</string>
+    <string name="eversense_placement_reading">Reading&#8230;</string>
+    <string name="eversense_placement_connected">Transmitter Connected</string>
     <string name="eversense_placement_connected_instruction">Your transmitter is connected. Make sure it is positioned directly over your sensor site and secured with the adhesive patch.</string>
     <string name="eversense_calibration_sending">Sending calibration&#8230;</string>
     <string name="eversense_release_for_official_app">Release for Official App</string>
@@ -122,6 +123,16 @@
     <string name="eversense_transmitter_not_placed">Eversense transmitter not detecting — check placement</string>
     <string name="eversense_transmitter_not_placed_summary">Make sure the transmitter is placed directly over the sensor site and secured with the adhesive patch.</string>
     <string name="eversense_reconnecting">Reconnecting…</string>
+
+    <!-- Aidex CGM source (upstream) -->
+    <string name="aidex">MicroTech CGM App</string>
+    <string name="aidex_short">CGM App</string>
+    <string name="description_source_aidex">Receive CGM values from LinX, LinX vista, Equil G. Smart 2, Diaexpert 2 etc.</string>
+    <string name="aidex_sensor_expired">Sensor expired, please replace with a new sensor</string>
+    <string name="aidex_sensor_error">Sensor error, please check the sensor status</string>
+    <string name="aidex_sensor_stabilizing">The sensor is stabilizing, please wait…</string>
+    <string name="aidex_sensor_replace">Sensor replacement required, please replace with a new sensor as soon as possible</string>
+    <string name="aidex_signal_lost">Sensor signal lost, please check the connection</string>
 </resources>
 
 

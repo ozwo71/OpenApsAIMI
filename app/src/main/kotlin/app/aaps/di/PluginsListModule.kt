@@ -28,6 +28,7 @@ import app.aaps.plugins.smoothing.AvgSmoothingPlugin
 import app.aaps.plugins.smoothing.ExponentialSmoothingPlugin
 import app.aaps.plugins.smoothing.NoSmoothingPlugin
 import app.aaps.plugins.smoothing.UnscentedKalmanFilterPlugin
+import app.aaps.plugins.source.AidexPlugin
 import app.aaps.plugins.source.DexcomPlugin
 import app.aaps.plugins.source.EversensePlugin
 import app.aaps.plugins.source.GlimpPlugin
@@ -296,6 +297,13 @@ abstract class PluginsListModule {
     @IntoMap
     @IntKey(445)
     abstract fun bindEversensePlugin(plugin: EversensePlugin): PluginBase
+
+    @Binds
+    @AllConfigs
+    @IntoMap
+    @IntKey(445)
+    abstract fun bindAidexPlugin(plugin: AidexPlugin): PluginBase
+
 
     @Binds
     @AllConfigs

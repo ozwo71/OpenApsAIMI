@@ -93,11 +93,18 @@ enum class NotificationId(
 
     // CGM
     BG_READINGS_MISSED(27, URGENT, CGM),
-    EVERSENSE_ALARM(95, URGENT, CGM, allowMultiple = true),
-    EVERSENSE_FIRMWARE(96, INFO, CGM),
-    EVERSENSE_RELEASE(97, INFO, CGM),
-    EVERSENSE_PLACEMENT(98, URGENT, CGM),
-    EVERSENSE_CREDENTIALS(99, URGENT, CGM),
+    // CGM — Aidex (upstream legacy notification IDs)
+    AIDEX_SENSOR_EXPIRED(95, URGENT, CGM),
+    AIDEX_SENSOR_ERROR(96, URGENT, CGM),
+    AIDEX_SENSOR_STABILIZING(97, NORMAL, CGM),
+    AIDEX_REPLACE_SENSOR(98, NORMAL, CGM),
+    AIDEX_SIGNAL_LOST(99, NORMAL, CGM),
+    // CGM — Eversense (fork; IDs 100–104 avoid Aidex collision)
+    EVERSENSE_ALARM(100, URGENT, CGM, allowMultiple = true),
+    EVERSENSE_FIRMWARE(101, INFO, CGM),
+    EVERSENSE_RELEASE(102, INFO, CGM),
+    EVERSENSE_PLACEMENT(103, URGENT, CGM),
+    EVERSENSE_CREDENTIALS(104, URGENT, CGM),
 
     // Loop / APS
     EASY_MODE_ENABLED(2, URGENT, LOOP),
@@ -106,9 +113,9 @@ enum class NotificationId(
     CARBS_REQUIRED(60, NORMAL, LOOP),
     SMB_FALLBACK(89, NORMAL, LOOP),
     DYN_ISF_FALLBACK(91, NORMAL, LOOP),
-    HYPO_RISK_ALARM(95, URGENT, LOOP, allowMultiple = true),
-    APEX_SERVICE_MSG(96, INFO, LOOP),
-    PUMP_IS_LOCKED(97, URGENT, LOOP),
+    HYPO_RISK_ALARM(105, URGENT, LOOP, allowMultiple = true),
+    APEX_SERVICE_MSG(106, INFO, LOOP),
+    PUMP_IS_LOCKED(107, URGENT, LOOP),
 
     // Sync — Nightscout
     OLD_NS(9, URGENT, SYNC),
@@ -158,6 +165,7 @@ enum class NotificationId(
     SCENE_CHAINED(1302, INFO, AUTOMATION, allowMultiple = true),
     SCENE_CHAIN_SKIPPED(1303, NORMAL, AUTOMATION, allowMultiple = true),
     SCENE_CHAIN_ERROR(1300, URGENT, AUTOMATION, allowMultiple = true);
+
 
     companion object {
 
