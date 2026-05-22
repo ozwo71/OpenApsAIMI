@@ -50,7 +50,7 @@ class BgQualityCheckPlugin @Inject constructor(
 
     private var disposable: CompositeDisposable = CompositeDisposable()
 
-    override fun onStart() {
+    override suspend fun onStart() {
         super.onStart()
         disposable += rxBus
             .toObservable(EventBucketedDataCreated::class.java)
@@ -58,7 +58,7 @@ class BgQualityCheckPlugin @Inject constructor(
             .subscribe({ processBgData() }, fabricPrivacy::logException)
     }
 
-    override fun onStop() {
+    override suspend fun onStop() {
         super.onStop()
         disposable.clear()
     }

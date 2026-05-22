@@ -84,7 +84,7 @@ class OverviewPlugin @Inject constructor(
 
     override val overviewBus = RxBusImpl(aapsSchedulers, aapsLogger)
 
-    override fun onStart() {
+    override suspend fun onStart() {
         super.onStart()
         overviewMenus.loadGraphConfig()
         overviewData.initRange()
@@ -105,7 +105,7 @@ class OverviewPlugin @Inject constructor(
 
     }
 
-    override fun onStop() {
+    override suspend fun onStop() {
         disposable.clear()
         super.onStop()
     }

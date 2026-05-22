@@ -177,14 +177,14 @@ class LoopPlugin @Inject constructor(
 
     private var handler: Handler? = null
 
-    @OptIn(FlowPreview::class)
     /**
      * Wall-clock time of last successful [invoke] from the glucose worker (`Calculation for … cause=EventNewBG` / History).
      * Skips AIMI periodic autodrive when a glucose-driven loop already ran recently; periodic fallback still runs if BG stalls.
      */
     private var lastGlucoseWorkerLoopWallClock: Long = 0L
 
-    override fun onStart() {
+    @OptIn(FlowPreview::class)
+    override suspend fun onStart() {
         createNotificationChannel()
         super.onStart()
         handler = Handler(HandlerThread(this::class.simpleName + "Handler").also { it.start() }.looper)
@@ -254,7 +254,7 @@ class LoopPlugin @Inject constructor(
         mNotificationManager.createNotificationChannel(channel)
     }
 
-    override fun onStop() {
+    override suspend fun onStop() {
         disposable.clear()
         handler?.removeCallbacksAndMessages(null)
         handler?.looper?.quit()
@@ -1094,31 +1094,39 @@ class LoopPlugin @Inject constructor(
         val pump = activePlugin.activePump
         val profile = profileFunction.getProfile() ?: return
         if (config.APS) {
-            if (pump.pumpDescription.tempBasalStyle == PumpDescription.ABSOLUTE) {
-                commandQueue.tempBasalAbsolute(0.0, durationInMinutes, true, profile, PumpSync.TemporaryBasalType.EMULATED_PUMP_SUSPEND, object : Callback() {
-                    override fun run() {
-                        if (!result.success) {
-                            uiInteraction.runAlarm(result.comment, rh.gs(app.aaps.core.ui.R.string.temp_basal_delivery_error), app.aaps.core.ui.R.raw.boluserror)
-                        }
-                    }
-                })
+            val tbrResult = if (pump.pumpDescription.tempBasalStyle == PumpDescription.ABSOLUTE) {
+                commandQueue.tempBasalAbsolute(
+                    0.0,
+                    durationInMinutes,
+                    true,
+                    profile,
+                    PumpSync.TemporaryBasalType.EMULATED_PUMP_SUSPEND,
+                )
             } else {
-                commandQueue.tempBasalPercent(0, durationInMinutes, true, profile, PumpSync.TemporaryBasalType.EMULATED_PUMP_SUSPEND, object : Callback() {
-                    override fun run() {
-                        if (!result.success) {
-                            uiInteraction.runAlarm(result.comment, rh.gs(app.aaps.core.ui.R.string.temp_basal_delivery_error), app.aaps.core.ui.R.raw.boluserror)
-                        }
-                    }
-                })
+                commandQueue.tempBasalPercent(
+                    0,
+                    durationInMinutes,
+                    true,
+                    profile,
+                    PumpSync.TemporaryBasalType.EMULATED_PUMP_SUSPEND,
+                )
+            }
+            if (!tbrResult.success) {
+                uiInteraction.runAlarm(
+                    tbrResult.comment,
+                    rh.gs(app.aaps.core.ui.R.string.temp_basal_delivery_error),
+                    app.aaps.core.ui.R.raw.boluserror,
+                )
             }
             if (pump.pumpDescription.isExtendedBolusCapable && persistenceLayer.getExtendedBolusActiveAt(dateUtil.now()) != null) {
-                commandQueue.cancelExtended(object : Callback() {
-                    override fun run() {
-                        if (!result.success) {
-                            uiInteraction.runAlarm(result.comment, rh.gs(app.aaps.core.ui.R.string.extendedbolusdeliveryerror), app.aaps.core.ui.R.raw.boluserror)
-                        }
-                    }
-                })
+                val cancelEbResult = commandQueue.cancelExtended()
+                if (!cancelEbResult.success) {
+                    uiInteraction.runAlarm(
+                        cancelEbResult.comment,
+                        rh.gs(app.aaps.core.ui.R.string.extendedbolusdeliveryerror),
+                        app.aaps.core.ui.R.raw.boluserror,
+                    )
+                }
             }
         }
         // DISCONNECTED_PUMP / SUPER_BOLUS: insertRunningMode alone does not notify overview/dashboard —
@@ -1141,14 +1149,16 @@ class LoopPlugin @Inject constructor(
             note = note,
             listValues = listValues
         )
-        if (config.APS)
-            commandQueue.cancelTempBasal(enforceNew = false, autoForced = autoForced, callback = object : Callback() {
-                override fun run() {
-                    if (!result.success) {
-                        uiInteraction.runAlarm(result.comment, rh.gs(app.aaps.core.ui.R.string.temp_basal_delivery_error), app.aaps.core.ui.R.raw.boluserror)
-                    }
-                }
-            })
+        if (config.APS) {
+            val cancelResult = commandQueue.cancelTempBasal(enforceNew = false, autoForced = autoForced)
+            if (!cancelResult.success) {
+                uiInteraction.runAlarm(
+                    cancelResult.comment,
+                    rh.gs(app.aaps.core.ui.R.string.temp_basal_delivery_error),
+                    app.aaps.core.ui.R.raw.boluserror,
+                )
+            }
+        }
         // SUSPENDED_BY_USER / SUSPENDED_BY_PUMP: refresh overview + hybrid dashboard immediately.
         rxBus.send(EventRefreshOverview("suspendLoop"))
     }

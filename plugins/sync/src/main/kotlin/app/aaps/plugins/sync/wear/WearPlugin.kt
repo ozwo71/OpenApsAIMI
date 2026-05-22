@@ -108,7 +108,7 @@ class WearPlugin @Inject constructor(
     }
 
     @OptIn(FlowPreview::class)
-    override fun onStart() {
+    override suspend fun onStart() {
         super.onStart()
         val newScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         scope = newScope
@@ -239,7 +239,7 @@ class WearPlugin @Inject constructor(
         }
     }
 
-    override fun onStop() {
+    override suspend fun onStop() {
         scope?.cancel()
         scope = null
         disposable.clear()

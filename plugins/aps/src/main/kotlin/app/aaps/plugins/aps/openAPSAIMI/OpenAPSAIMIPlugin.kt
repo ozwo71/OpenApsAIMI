@@ -190,7 +190,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     /** Background work for plugin startup (avoids blocking the thread that calls [onStart]). */
     private val aimiPluginIoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    override fun onStart() {
+    override suspend fun onStart() {
         super.onStart()
         preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey::class.java)
         preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey::class.java)
@@ -277,7 +277,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     }
     override fun getGlucoseStatusData(allowOldData: Boolean): GlucoseStatus? =
         glucoseStatusCalculatorAimi.getGlucoseStatusData(allowOldData)
-    override fun onStop() {
+    override suspend fun onStop() {
         super.onStop()
 
         physioPreferenceDisposable?.dispose()

@@ -135,7 +135,7 @@ class GarminPlugin @Inject constructor(
         )
     }
 
-    override fun onStart() {
+    override suspend fun onStart() {
         super.onStart()
         aapsLogger.info(LTag.GARMIN, "start")
         scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -186,7 +186,7 @@ class GarminPlugin @Inject constructor(
         }
     }
 
-    override fun onStop() {
+    override suspend fun onStop() {
         scope.cancel()
         garminMessengerField?.dispose()
         aapsLogger.info(LTag.GARMIN, "Stop")

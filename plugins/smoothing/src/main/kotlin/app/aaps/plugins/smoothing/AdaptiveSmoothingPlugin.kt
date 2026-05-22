@@ -199,7 +199,7 @@ class AdaptiveSmoothingPlugin @Inject constructor(
         }
     }
 
-    override fun onStop() {
+    override suspend fun onStop() {
         sensorObservationJob?.cancel()
         sensorBackfillJob?.cancel()
         smoothingSupervisor.cancelChildren()

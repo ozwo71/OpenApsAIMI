@@ -121,7 +121,7 @@ class EversensePlugin @Inject constructor(
         eversense.setContext(context, true)
     }
 
-    override fun onStart() {
+    override suspend fun onStart() {
         super.onStart()
         eversense.addWatcher(this)
         if (hasBluetoothPermissions()) {
@@ -137,7 +137,7 @@ class EversensePlugin @Inject constructor(
         if (eversense.is365()) checkCredentialsNotification()
     }
 
-    override fun onStop() {
+    override suspend fun onStop() {
         super.onStop()
         eversense.removeWatcher(this)
     }
