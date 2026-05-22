@@ -15,7 +15,11 @@ data class PkPdLearningConfig(
     val minIOBForLearningU: Double = 0.3,
     val maxRateChangeScale: Double = 1.0,
     val lr: Double = 0.02,
-    val tailWeight: Double = 1.5
+    val tailWeight: Double = 1.5,
+    /** Soft regularization target for learned DIA (hours). */
+    val anchorDiaHrs: Double = 4.0,
+    /** Soft regularization target for learned peak (minutes). */
+    val anchorPeakMin: Double = 75.0,
 )
 
 class AdaptivePkPdEstimator(
@@ -63,15 +67,18 @@ class AdaptivePkPdEstimator(
         val tailFactor = 1.0 + cfg.tailWeight * max(0.0, (windowMin - p0.peakMin) / max(1.0, p0.peakMin))
         val diaAdj = cfg.lr * tailFactor * sign(err) * min(1.0, abs(err) / 10.0)
         val tpAdj = cfg.lr * 0.5 * sign(err) * min(1.0, abs(err) / 10.0)
-        val anchorDia = 4.0
-        val anchorTp  = 75.0
-        val reg = 0.002   // régularisation très faible
+        val reg = 0.002
 
-        val diaAdjReg = diaAdj - reg * (p0.diaHrs - anchorDia)
-        val tpAdjReg  = tpAdj  - reg * (p0.peakMin - anchorTp)
+        val diaAdjReg = diaAdj - reg * (p0.diaHrs - cfg.anchorDiaHrs)
+        val tpAdjReg = tpAdj - reg * (p0.peakMin - cfg.anchorPeakMin)
 
         val now = epochMin
-        val dtDays = if (lastUpdateEpochMin == 0L) 1.0 else max(1.0, (now - lastUpdateEpochMin) / (60.0 * 24.0))
+        val minutesPerDay = 60.0 * 24.0
+        val dtDays = if (lastUpdateEpochMin == 0L) {
+            min(1.0, 5.0 / minutesPerDay)
+        } else {
+            min(1.0, (now - lastUpdateEpochMin) / minutesPerDay)
+        }
         lastUpdateEpochMin = now
         val bounds = cfg.bounds
         val maxDiaStep = bounds.maxDiaChangePerDayH * cfg.maxRateChangeScale * dtDays

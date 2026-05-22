@@ -264,6 +264,16 @@ fun AimiPkpdSettingsScreen(
                             titleResId = R.string.oaps_aimi_pkpd_max_peak_delta_title,
                             preferenceRevision = preferenceRevision,
                         )
+                        PkpdReactiveDoubleSlider(
+                            key = DoubleKey.OApsAIMIPkpdAnchorDiaH,
+                            titleResId = R.string.oaps_aimi_pkpd_anchor_dia_title,
+                            preferenceRevision = preferenceRevision,
+                        )
+                        PkpdReactiveDoubleSlider(
+                            key = DoubleKey.OApsAIMIPkpdAnchorPeakMin,
+                            titleResId = R.string.oaps_aimi_pkpd_anchor_peak_title,
+                            preferenceRevision = preferenceRevision,
+                        )
                     }
 
                     ExpandableSection(title = stringResource(R.string.aimi_pkpd_section_expert), initiallyExpanded = false) {

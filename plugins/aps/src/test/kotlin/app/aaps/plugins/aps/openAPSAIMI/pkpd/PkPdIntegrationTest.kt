@@ -5,10 +5,13 @@ import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
+import io.mockk.verify
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PkPdIntegrationTest {
@@ -105,6 +108,86 @@ class PkPdIntegrationTest {
         assertEquals(InsulinActivityStage.PRE_ONSET, result?.activity?.stage)
     }
 
+    @Test
+    fun `learned DIA persists after small in-memory drift`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        mockPkpdDefaults()
+        IsfTddProvider.set(50.0)
+
+        val diaSlot = slot<Double>()
+        every { preferences.put(DoubleKey.OApsAIMIPkpdStateDiaH, capture(diaSlot)) } returns Unit
+        every { preferences.put(DoubleKey.OApsAIMIPkpdStatePeakMin, any()) } returns Unit
+
+        repeat(80) { tick ->
+            integration.computeRuntime(
+                epochMillis = (tick + 1L) * 5L * 60L * 1000L,
+                bg = 110.0,
+                deltaMgDlPer5 = -12.0,
+                iobU = 2.5,
+                carbsActiveG = 0.0,
+                windowMin = 60,
+                exerciseFlag = false,
+                profileIsf = 50.0,
+                tdd24h = 40.0,
+            )
+        }
+
+        verify(atLeast = 1) { preferences.put(DoubleKey.OApsAIMIPkpdStateDiaH, any()) }
+        assertTrue(diaSlot.isCaptured)
+        assertTrue(diaSlot.captured < 6.0)
+    }
+
+    @Test
+    fun `tail policy change does not wipe in-memory learned DIA`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        mockPkpdDefaults()
+        IsfTddProvider.set(50.0)
+
+        repeat(60) { tick ->
+            integration.computeRuntime(
+                epochMillis = (tick + 1L) * 5L * 60L * 1000L,
+                bg = 110.0,
+                deltaMgDlPer5 = -12.0,
+                iobU = 2.5,
+                carbsActiveG = 0.0,
+                windowMin = 60,
+                exerciseFlag = false,
+                profileIsf = 50.0,
+                tdd24h = 40.0,
+            )
+        }
+        val learnedBeforeTailChange = integration.computeRuntime(
+            epochMillis = 61L * 5L * 60L * 1000L,
+            bg = 110.0,
+            deltaMgDlPer5 = -12.0,
+            iobU = 2.5,
+            carbsActiveG = 0.0,
+            windowMin = 60,
+            exerciseFlag = false,
+            profileIsf = 50.0,
+            tdd24h = 40.0,
+        )?.params?.diaHrs
+        assertNotNull(learnedBeforeTailChange)
+        assertTrue(learnedBeforeTailChange!! < 5.99)
+
+        every { preferences.get(DoubleKey.OApsAIMISmbTailDamping) } returns 0.70
+
+        val afterTailChange = integration.computeRuntime(
+            epochMillis = 62L * 5L * 60L * 1000L,
+            bg = 110.0,
+            deltaMgDlPer5 = -12.0,
+            iobU = 2.5,
+            carbsActiveG = 0.0,
+            windowMin = 60,
+            exerciseFlag = false,
+            profileIsf = 50.0,
+            tdd24h = 40.0,
+        )?.params?.diaHrs
+
+        assertNotNull(afterTailChange)
+        assertEquals(learnedBeforeTailChange, afterTailChange!!, 0.02)
+    }
+
     private fun mockPkpdDefaults() {
         every { preferences.get(DoubleKey.OApsAIMIPkpdStateDiaH) } returns 6.0
         every { preferences.get(DoubleKey.OApsAIMIPkpdStatePeakMin) } returns 55.0
@@ -114,6 +197,8 @@ class PkPdIntegrationTest {
         every { preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax) } returns 95.0
         every { preferences.get(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH) } returns 0.5
         every { preferences.get(DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin) } returns 5.0
+        every { preferences.get(DoubleKey.OApsAIMIPkpdAnchorDiaH) } returns 4.0
+        every { preferences.get(DoubleKey.OApsAIMIPkpdAnchorPeakMin) } returns 55.0
         every { preferences.get(DoubleKey.OApsAIMIIsfFusionMinFactor) } returns 0.7
         every { preferences.get(DoubleKey.OApsAIMIIsfFusionMaxFactor) } returns 1.5
         every { preferences.get(DoubleKey.OApsAIMIIsfFusionMaxChangePerTick) } returns 0.2

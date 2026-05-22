@@ -32,6 +32,8 @@ fun applyPkpdInsulinPreset(preferences: Preferences, preset: PkpdInsulinPreset) 
             preferences.putClamped(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax, 95.0)
             preferences.putClamped(DoubleKey.OApsAIMIPkpdInitialDiaH, 6.0)
             preferences.putClamped(DoubleKey.OApsAIMIPkpdInitialPeakMin, 55.0)
+            preferences.putClamped(DoubleKey.OApsAIMIPkpdAnchorDiaH, 4.0)
+            preferences.putClamped(DoubleKey.OApsAIMIPkpdAnchorPeakMin, 55.0)
         }
         PkpdInsulinPreset.RAPID -> {
             preferences.putClamped(DoubleKey.OApsAIMIPkpdBoundsDiaMinH, 5.0)
@@ -40,6 +42,8 @@ fun applyPkpdInsulinPreset(preferences: Preferences, preset: PkpdInsulinPreset) 
             preferences.putClamped(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax, 130.0)
             preferences.putClamped(DoubleKey.OApsAIMIPkpdInitialDiaH, 6.5)
             preferences.putClamped(DoubleKey.OApsAIMIPkpdInitialPeakMin, 75.0)
+            preferences.putClamped(DoubleKey.OApsAIMIPkpdAnchorDiaH, 4.0)
+            preferences.putClamped(DoubleKey.OApsAIMIPkpdAnchorPeakMin, 75.0)
         }
         PkpdInsulinPreset.STANDARD -> {
             preferences.putClamped(DoubleKey.OApsAIMIPkpdBoundsDiaMinH, 6.0)
@@ -48,6 +52,8 @@ fun applyPkpdInsulinPreset(preferences: Preferences, preset: PkpdInsulinPreset) 
             preferences.putClamped(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax, 200.0)
             preferences.putClamped(DoubleKey.OApsAIMIPkpdInitialDiaH, 8.0)
             preferences.putClamped(DoubleKey.OApsAIMIPkpdInitialPeakMin, 90.0)
+            preferences.putClamped(DoubleKey.OApsAIMIPkpdAnchorDiaH, 6.0)
+            preferences.putClamped(DoubleKey.OApsAIMIPkpdAnchorPeakMin, 90.0)
         }
         PkpdInsulinPreset.CUSTOM -> Unit
     }

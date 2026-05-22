@@ -20,24 +20,31 @@ data class PkpdBolusSample(
 class PkPdIntegration(private val preferences: Preferences) {
 
     companion object {
-        /**
-         * Minimum change in learned peak (minutes vs last persisted) required to write prefs again.
-         * Tight values cause noisy UI; TAP-G RFC §9 B.3 — tune with product if needed.
-         */
-        const val PEAK_PERSIST_MIN_DELTA_MIN = 0.5
+        /** Minimum learned DIA change (hours) before writing prefs again. */
+        const val DIA_PERSIST_MIN_DELTA_H = 0.005
+
+        /** Minimum learned peak change (minutes) before writing prefs again. */
+        const val PEAK_PERSIST_MIN_DELTA_MIN = 0.05
     }
 
-    private data class Config(
+    /**
+     * Loop-facing configuration that must not include learned DIA/peak state.
+     * Learned values live in prefs and in [estimator]; comparing them here used to
+     * reset the estimator on every successful persist.
+     */
+    private data class StructuralConfig(
         val enabled: Boolean,
         val bounds: PkPdBounds,
-        val initial: PkPdParams,
         val isfBounds: IsfFusionBounds,
-        val tailPolicy: TailAwareSmbPolicy
+        val tailPolicy: TailAwareSmbPolicy,
+        val anchorDiaHrs: Double,
+        val anchorPeakMin: Double,
     )
 
-    private var cachedConfig: Config? = null
+    private var cachedStructuralConfig: StructuralConfig? = null
     private var estimator: AdaptivePkPdEstimator? = null
     private var lastBounds: PkPdBounds? = null
+    private var lastLearningCfg: PkPdLearningConfig? = null
     private var fusion: IsfFusion? = null
     private var lastFusionBounds: IsfFusionBounds? = null
     private var damping: SmbDamping? = null
@@ -52,6 +59,7 @@ class PkPdIntegration(private val preferences: Preferences) {
             .filter { it.units > 0.0 && it.ageMin.isFinite() && it.ageMin >= 0.0 }
             .toList()
     }
+
     @Synchronized
     fun reconstructedIobUnits(): Double {
         val est = estimator ?: return 0.0
@@ -76,41 +84,27 @@ class PkPdIntegration(private val preferences: Preferences) {
         combinedDelta: Double? = null,
         uamConfidence: Double = 0.0
     ): PkPdRuntime? {
-        val config = readConfig()
-        // If the configuration changed, clear cached objects so they are rebuilt
-        if (cachedConfig == null || cachedConfig != config) {
-            cachedConfig = config
-            estimator = null
-            fusion = null
-            damping = null
-            lastBounds = null
-            lastFusionBounds = null
-            lastTailPolicy = null
-            lastPersisted = null
+        val structural = readStructuralConfig()
+        val previousStructural = cachedStructuralConfig
+        if (previousStructural != null && previousStructural != structural) {
+            applyStructuralConfigChange(previousStructural, structural)
         }
-        if (!config.enabled) {
-            consoleLog?.add("PKPD Debug: Config ENABLED is FALSE. Check OApsAIMIPkpdEnabled preference.")
-            // When disabled we also clear caches
+        cachedStructuralConfig = structural
 
-            estimator = null
-            fusion = null
-            damping = null
-            lastBounds = null
-            lastFusionBounds = null
-            lastTailPolicy = null
-            cachedConfig = null
-            lastPersisted = null
+        if (!structural.enabled) {
+            consoleLog?.add("PKPD Debug: Config ENABLED is FALSE. Check OApsAIMIPkpdEnabled preference.")
+            clearAllCaches()
             return null
         }
 
         if (lastPersisted == null) {
-            lastPersisted = clampParams(config.initial, config.bounds)
+            lastPersisted = readLearnedSeed(structural.bounds)
         }
 
-        // Objects are created lazily; ensure* will reuse existing instances when possible
-        val estimator = ensureEstimator(config)
-        val fusion = ensureFusion(config.isfBounds)
-        val damping = ensureDamping(config.tailPolicy)
+        val learningCfg = buildLearningConfig(structural)
+        val estimator = ensureEstimator(structural.bounds, learningCfg)
+        val fusion = ensureFusion(structural.isfBounds)
+        val damping = ensureDamping(structural.tailPolicy)
         val tddIsf = computeTddIsf(tdd24h, profileIsf)
         IsfTddProvider.set(tddIsf)
         val epochMin = TimeUnit.MILLISECONDS.toMinutes(epochMillis)
@@ -135,7 +129,7 @@ class PkPdIntegration(private val preferences: Preferences) {
             exerciseFlag = exerciseFlag
         )
         val params = estimator.params()
-        persistStateIfNeeded(params, config.bounds)
+        persistStateIfNeeded(params, structural.bounds)
         val tailFraction = estimator.iobResidualAt(windowMin.toDouble()).coerceIn(0.0, 1.0)
         val baselineActivityState = estimator.activityStateAt(windowMin.toDouble())
         val activityState = aggregateActivityState(
@@ -159,24 +153,21 @@ class PkPdIntegration(private val preferences: Preferences) {
         val maxScale = if (mealContext?.mealModeActive == true) 1.5 else 1.4
         val pkpdScale = (1.0 + 0.12 * tailFraction + 0.22 * activityBlend + anticipatoryBoost + mealBoost)
             .coerceIn(minScale, maxScale)
-            
-        // 🚀 CONFIRMATION DE MONTÉE : Priorité au combinedDelta si disponible
+
         val effectiveDelta = combinedDelta ?: deltaMgDlPer5
-        val isRising = effectiveDelta > 0.5 // Seuil de montée pour verrouiller l'agression
-        
-        // 🚀 VELOCITY BOOST : Increase aggression (reduce ISF) based on effectiveDelta
+        val isRising = effectiveDelta > 0.5
+
         var aggressionMultiplier = if (effectiveDelta > 1.5) {
             val rawFactor = Math.exp(-0.04 * (effectiveDelta - 1.5))
             rawFactor.coerceIn(0.60, 1.0)
         } else 1.0
 
-        // 🧠 UAM BRAIN BOOST : If ML detects a meal, force more aggression
         if (uamConfidence > 0.5) {
-            val uamBoost = 1.0 - (uamConfidence - 0.5) * 0.4 // extra up to 20% reduction
+            val uamBoost = 1.0 - (uamConfidence - 0.5) * 0.4
             aggressionMultiplier *= uamBoost.coerceIn(0.8, 1.0)
             consoleLog?.add("🧠 UAM detected (conf=${"%.2f".format(uamConfidence)}) -> Extra ISF Boost")
         }
-        
+
         val fusedIsf = fusion.fused(profileIsf, tddIsf, pkpdScale, isRising, aggressionMultiplier)
         return PkPdRuntime(
             params = params,
@@ -188,6 +179,39 @@ class PkPdIntegration(private val preferences: Preferences) {
             damping = damping,
             activity = activityState
         )
+    }
+
+    private fun applyStructuralConfigChange(old: StructuralConfig, new: StructuralConfig) {
+        estimator?.let { persistStateIfNeeded(it.params(), new.bounds) }
+
+        val learningInputsChanged = old.bounds != new.bounds ||
+            old.anchorDiaHrs != new.anchorDiaHrs ||
+            old.anchorPeakMin != new.anchorPeakMin
+        if (learningInputsChanged) {
+            estimator = null
+            lastBounds = null
+            lastLearningCfg = null
+        }
+        if (old.isfBounds != new.isfBounds) {
+            fusion = null
+            lastFusionBounds = null
+        }
+        if (old.tailPolicy != new.tailPolicy) {
+            damping = null
+            lastTailPolicy = null
+        }
+    }
+
+    private fun clearAllCaches() {
+        estimator = null
+        fusion = null
+        damping = null
+        lastBounds = null
+        lastFusionBounds = null
+        lastTailPolicy = null
+        lastLearningCfg = null
+        cachedStructuralConfig = null
+        lastPersisted = null
     }
 
     private fun aggregateActivityState(
@@ -241,7 +265,7 @@ class PkPdIntegration(private val preferences: Preferences) {
         )
     }
 
-    private fun readConfig(): Config {
+    private fun readStructuralConfig(): StructuralConfig {
         val enabled = preferences.get(BooleanKey.OApsAIMIPkpdEnabled)
         val bounds = PkPdBounds(
             diaMinH = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMinH),
@@ -250,10 +274,6 @@ class PkPdIntegration(private val preferences: Preferences) {
             peakMinMax = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax),
             maxDiaChangePerDayH = preferences.get(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH),
             maxPeakChangePerDayMin = preferences.get(DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin)
-        )
-        val initial = PkPdParams(
-            diaHrs = preferences.get(DoubleKey.OApsAIMIPkpdStateDiaH),
-            peakMin = preferences.get(DoubleKey.OApsAIMIPkpdStatePeakMin)
         )
         val isfBounds = IsfFusionBounds(
             minFactor = preferences.get(DoubleKey.OApsAIMIIsfFusionMinFactor),
@@ -266,17 +286,40 @@ class PkPdIntegration(private val preferences: Preferences) {
             postExerciseDamping = preferences.get(DoubleKey.OApsAIMISmbExerciseDamping),
             lateFattyMealDamping = preferences.get(DoubleKey.OApsAIMISmbLateFatDamping)
         )
-        return Config(enabled, bounds, initial, isfBounds, tailPolicy)
+        return StructuralConfig(
+            enabled = enabled,
+            bounds = bounds,
+            isfBounds = isfBounds,
+            tailPolicy = tailPolicy,
+            anchorDiaHrs = preferences.get(DoubleKey.OApsAIMIPkpdAnchorDiaH),
+            anchorPeakMin = preferences.get(DoubleKey.OApsAIMIPkpdAnchorPeakMin),
+        )
     }
 
-    private fun ensureEstimator(config: Config): AdaptivePkPdEstimator {
-        val learningCfg = PkPdLearningConfig(bounds = config.bounds)
-        // Re‑create estimator only when we have never created one or the bounds changed
-        if (estimator == null || lastBounds != config.bounds) {
-            val start = estimator?.params()?.let { clampParams(it, config.bounds) }
-                ?: clampParams(lastPersisted ?: config.initial, config.bounds)
+    private fun readLearnedSeed(bounds: PkPdBounds): PkPdParams =
+        clampParams(
+            PkPdParams(
+                diaHrs = preferences.get(DoubleKey.OApsAIMIPkpdStateDiaH),
+                peakMin = preferences.get(DoubleKey.OApsAIMIPkpdStatePeakMin),
+            ),
+            bounds,
+        )
+
+    private fun buildLearningConfig(structural: StructuralConfig): PkPdLearningConfig =
+        PkPdLearningConfig(
+            bounds = structural.bounds,
+            anchorDiaHrs = structural.anchorDiaHrs,
+            anchorPeakMin = structural.anchorPeakMin,
+        )
+
+    private fun ensureEstimator(bounds: PkPdBounds, learningCfg: PkPdLearningConfig): AdaptivePkPdEstimator {
+        if (estimator == null || lastBounds != bounds || lastLearningCfg != learningCfg) {
+            val start = estimator?.params()?.let { clampParams(it, bounds) }
+                ?: lastPersisted
+                ?: readLearnedSeed(bounds)
             estimator = AdaptivePkPdEstimator(LogNormalKernel(), learningCfg, start)
-            lastBounds = config.bounds
+            lastBounds = bounds
+            lastLearningCfg = learningCfg
         }
         return estimator!!
     }
@@ -307,7 +350,7 @@ class PkPdIntegration(private val preferences: Preferences) {
         val clamped = clampParams(params, bounds)
         val last = lastPersisted
         val shouldPersist = last == null ||
-            abs(last.diaHrs - clamped.diaHrs) > 0.01 ||
+            abs(last.diaHrs - clamped.diaHrs) > DIA_PERSIST_MIN_DELTA_H ||
             abs(last.peakMin - clamped.peakMin) > PEAK_PERSIST_MIN_DELTA_MIN
         if (shouldPersist) {
             preferences.put(DoubleKey.OApsAIMIPkpdStateDiaH, clamped.diaHrs)
@@ -338,16 +381,13 @@ class PkPdIntegration(private val preferences: Preferences) {
     private fun computeTddIsf(tdd24h: Double, fallback: Double): Double {
         if (tdd24h <= 0.1) return fallback
         val anchored = 1800.0 / tdd24h
-        
-        // 🛡️ CLAMP: Prevent TDD-ISF from deviating more than ±50% from profile
-        // Protects against temporary TDD anomalies (new site, atypical day, etc.)
-        // Example: Profile ISF = 147, TDD-ISF raw = 57 → clamped to 73.5
+
         val maxDeviation = fallback * 0.5
         val clamped = anchored.coerceIn(
-            fallback - maxDeviation,  // Min: profile × 0.5
-            fallback + maxDeviation   // Max: profile × 1.5
+            fallback - maxDeviation,
+            fallback + maxDeviation
         )
-        
+
         return clamped.coerceIn(5.0, 400.0)
     }
 }
@@ -363,7 +403,6 @@ class PkPdRuntime(
     val activity: InsulinActivityState
 ) {
 
-    // ✅ API audit (garde)
     fun dampSmbWithAudit(
         smb: Double,
         exercise: Boolean,
@@ -372,7 +411,6 @@ class PkPdRuntime(
     ): SmbDampingAudit =
         damping.dampWithAudit(smb, tailFraction, exercise, suspectedLateFatMeal, bypassDamping, activity)
 
-    // ✅ API non-audit (garde) — utile si on veut le résultat sans traces
     fun dampSmb(
         smb: Double,
         exercise: Boolean,

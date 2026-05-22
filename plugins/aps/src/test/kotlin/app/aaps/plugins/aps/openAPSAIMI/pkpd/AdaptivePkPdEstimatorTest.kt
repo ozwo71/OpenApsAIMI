@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.pkpd
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AdaptivePkPdEstimatorTest {
@@ -64,5 +65,50 @@ class AdaptivePkPdEstimatorTest {
         
         estimator.update(2000, 100.0, -20.0, 1.0, 0.0, 60, false)
         assertNotEquals(initialParams, estimator.params())
+    }
+
+    @Test
+    fun `ultra-fast anchor allows peak to move below 75 min`() {
+        IsfTddProvider.set(45.0)
+        val bounds = PkPdBounds(
+            diaMinH = 5.0,
+            diaMaxH = 8.0,
+            peakMinMin = 35.0,
+            peakMinMax = 95.0,
+            maxDiaChangePerDayH = 0.5,
+            maxPeakChangePerDayMin = 5.0,
+        )
+        val cfg = PkPdLearningConfig(
+            bounds = bounds,
+            anchorDiaHrs = 4.0,
+            anchorPeakMin = 55.0,
+        )
+        val estimator = AdaptivePkPdEstimator(
+            initial = PkPdParams(diaHrs = 6.0, peakMin = 75.0),
+            cfg = cfg,
+        )
+        repeat(120) { tick ->
+            estimator.update(
+                epochMin = (tick + 1L) * 5L,
+                bg = 100.0,
+                deltaMgDlPer5 = -10.0,
+                iobU = 2.0,
+                carbsActiveG = 0.0,
+                windowMin = 60,
+                exerciseFlag = false,
+            )
+        }
+        assertTrue(estimator.params().peakMin < 70.0)
+    }
+
+    @Test
+    fun `dtDays uses loop tick fraction not full day on first update`() {
+        IsfTddProvider.set(45.0)
+        val bounds = PkPdBounds(maxDiaChangePerDayH = 0.24)
+        val estimator = AdaptivePkPdEstimator(cfg = PkPdLearningConfig(bounds = bounds))
+        val before = estimator.params().diaHrs
+        estimator.update(5L, 100.0, -15.0, 2.0, 0.0, 60, false)
+        val firstStep = kotlin.math.abs(estimator.params().diaHrs - before)
+        assertTrue(firstStep < 0.05)
     }
 }

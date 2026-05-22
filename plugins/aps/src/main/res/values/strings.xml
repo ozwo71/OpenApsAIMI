@@ -262,6 +262,10 @@
     <string name="oaps_aimi_pkpd_max_dia_delta_summary">Limits how quickly the learned DIA can change each day.</string>
     <string name="oaps_aimi_pkpd_max_peak_delta_title">Max peak change per day (min)</string>
     <string name="oaps_aimi_pkpd_max_peak_delta_summary">Limits how quickly the learned peak time can change each day.</string>
+    <string name="oaps_aimi_pkpd_anchor_dia_title">Learning anchor DIA (h)</string>
+    <string name="oaps_aimi_pkpd_anchor_dia_summary">Soft target the online learner pulls DIA toward (regularization). Use ~4 h for ultra-fast insulin.</string>
+    <string name="oaps_aimi_pkpd_anchor_peak_title">Learning anchor peak (min)</string>
+    <string name="oaps_aimi_pkpd_anchor_peak_summary">Soft target for learned peak time. Match your insulin (e.g. ~55 min for Lyumjev/Fiasp).</string>
     <string name="oaps_aimi_isf_fusion_min_title">ISF fusion minimum factor</string>
     <string name="oaps_aimi_isf_fusion_min_summary">Lower bound applied to the fused ISF relative to the TDD anchor.</string>
     <string name="oaps_aimi_isf_fusion_max_title">ISF fusion maximum factor</string>
