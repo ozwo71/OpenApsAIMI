@@ -649,8 +649,9 @@ fun PkpdLabeledSlider(
         snapshotFlow { local }
             .debounce(350)
             .collect { committed ->
-                if (userEdited && kotlin.math.abs(committed - value) > 1e-6) {
+                if (userEdited) {
                     onValueChange(committed)
+                    userEdited = false
                 }
             }
     }

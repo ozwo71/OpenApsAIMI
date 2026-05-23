@@ -32,4 +32,12 @@ class PkpdSettingsSupportTest {
         assertEquals(0.5, PkpdTailPrudence.readLevelFromDamping(0.5), 0.001)
         assertEquals(1.0, PkpdTailPrudence.readLevelFromDamping(0.70), 0.02)
     }
+
+    @Test
+    fun `slider endpoints map to expected preference values`() {
+        assertEquals(0.85 to 1.10, PkpdCorrectionPrudence.factorsForLevel(0.0))
+        assertEquals(0.65 to 1.40, PkpdCorrectionPrudence.factorsForLevel(1.0))
+        assertEquals(0.92, PkpdTailPrudence.dampingForLevel(0.0), 0.001)
+        assertEquals(0.70, PkpdTailPrudence.dampingForLevel(1.0), 0.001)
+    }
 }
