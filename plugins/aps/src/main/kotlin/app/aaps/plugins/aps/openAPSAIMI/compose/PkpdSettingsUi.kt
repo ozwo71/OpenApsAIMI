@@ -31,7 +31,10 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import app.aaps.core.keys.BooleanKey
@@ -628,6 +631,7 @@ fun PkpdPresetChipRow(
     }
 }
 
+@OptIn(FlowPreview::class)
 @Composable
 fun PkpdLabeledSlider(
     title: String,
@@ -639,7 +643,17 @@ fun PkpdLabeledSlider(
     onValueChange: (Double) -> Unit,
 ) {
     var local by remember { mutableDoubleStateOf(value) }
+    var userEdited by remember { mutableStateOf(false) }
     LaunchedEffect(value) { local = value }
+    LaunchedEffect(Unit) {
+        snapshotFlow { local }
+            .debounce(350)
+            .collect { committed ->
+                if (userEdited && kotlin.math.abs(committed - value) > 1e-6) {
+                    onValueChange(committed)
+                }
+            }
+    }
     Column(Modifier.fillMaxWidth().padding(vertical = AapsSpacing.extraSmall)) {
         Text(title, style = MaterialTheme.typography.titleSmall)
         summary?.let {
@@ -652,8 +666,8 @@ fun PkpdLabeledSlider(
         SliderWithButtons(
             value = local,
             onValueChange = {
+                userEdited = true
                 local = it
-                onValueChange(it)
             },
             valueRange = valueRange,
             step = 0.05,

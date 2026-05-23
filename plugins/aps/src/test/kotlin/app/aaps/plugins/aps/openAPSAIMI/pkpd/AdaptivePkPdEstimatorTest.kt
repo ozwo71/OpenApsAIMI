@@ -35,6 +35,18 @@ class AdaptivePkPdEstimatorTest {
         // Exercise
         estimator.update(1000, 100.0, -5.0, 1.0, 0.0, 60, true)
         assertEquals(initialParams, estimator.params())
+
+        // Hypo BG
+        estimator.update(1000, 65.0, -2.0, 1.0, 0.0, 60, false)
+        assertEquals(initialParams, estimator.params())
+
+        // Near hypo while falling
+        estimator.update(1000, 85.0, -2.0, 1.0, 0.0, 60, false)
+        assertEquals(initialParams, estimator.params())
+
+        // Fast fall
+        estimator.update(1000, 110.0, -4.0, 1.0, 0.0, 60, false)
+        assertEquals(initialParams, estimator.params())
     }
 
     @Test

@@ -118,7 +118,7 @@ class PkPdIntegration(private val preferences: Preferences) {
                     "(bounds ${AdaptivePkPdEstimator.LEARNING_WINDOW_MIN_MIN}-${AdaptivePkPdEstimator.LEARNING_WINDOW_MAX_MIN})",
             )
         }
-        logPkpdLearningSkipReason(iobU, carbsActiveG, deltaMgDlPer5, exerciseFlag, consoleLog)
+        logPkpdLearningSkipReason(bg, iobU, carbsActiveG, deltaMgDlPer5, exerciseFlag, consoleLog)
         estimator.update(
             epochMin = epochMin,
             bg = bg,
@@ -272,17 +272,24 @@ class PkPdIntegration(private val preferences: Preferences) {
             diaMaxH = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMaxH),
             peakMinMin = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMin),
             peakMinMax = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax),
-            maxDiaChangePerDayH = preferences.get(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH),
-            maxPeakChangePerDayMin = preferences.get(DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin)
+            maxDiaChangePerDayH = PkpdLearningBounds.coerceMaxDiaChangePerDayH(
+                preferences.get(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH),
+            ),
+            maxPeakChangePerDayMin = PkpdLearningBounds.coerceMaxPeakChangePerDayMin(
+                preferences.get(DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin),
+            ),
         )
         val isfBounds = IsfFusionBounds(
             minFactor = preferences.get(DoubleKey.OApsAIMIIsfFusionMinFactor),
             maxFactor = preferences.get(DoubleKey.OApsAIMIIsfFusionMaxFactor),
             maxChangePer5Min = preferences.get(DoubleKey.OApsAIMIIsfFusionMaxChangePerTick)
         )
+        val effectiveTailDamping = PkpdSmbTailDamping.effectiveStoredValue(
+            preferences.get(DoubleKey.OApsAIMISmbTailDamping),
+        )
         val tailPolicy = TailAwareSmbPolicy(
             tailIobHigh = preferences.get(DoubleKey.OApsAIMISmbTailThreshold),
-            smbDampingAtTail = preferences.get(DoubleKey.OApsAIMISmbTailDamping),
+            smbDampingAtTail = effectiveTailDamping,
             postExerciseDamping = preferences.get(DoubleKey.OApsAIMISmbExerciseDamping),
             lateFattyMealDamping = preferences.get(DoubleKey.OApsAIMISmbLateFatDamping)
         )
@@ -360,6 +367,7 @@ class PkPdIntegration(private val preferences: Preferences) {
     }
 
     private fun logPkpdLearningSkipReason(
+        bg: Double,
         iobU: Double,
         carbsActiveG: Double,
         deltaMgDlPer5: Double,
@@ -367,6 +375,9 @@ class PkPdIntegration(private val preferences: Preferences) {
         consoleLog: MutableList<String>?,
     ) {
         val reason = when {
+            bg < AdaptivePkPdEstimator.HYPO_LEARN_SKIP_BG_MGDL -> "bg<hypo"
+            bg < AdaptivePkPdEstimator.HYPO_CAUTION_BG_MGDL && deltaMgDlPer5 < -1.0 -> "bg_near_hypo_falling"
+            deltaMgDlPer5 <= AdaptivePkPdEstimator.FAST_FALL_DELTA_MGDL5 -> "fast_fall"
             iobU < 0.3 -> "iob<0.3"
             carbsActiveG > 15.0 -> "cob>15"
             exerciseFlag -> "exercise"

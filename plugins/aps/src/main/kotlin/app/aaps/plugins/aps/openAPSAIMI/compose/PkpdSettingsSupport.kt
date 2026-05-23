@@ -9,6 +9,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.StringPreferenceKey
 import app.aaps.plugins.aps.openAPSAIMI.advisor.PkpdPrefsSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
 import kotlin.math.abs
 
 /** Maps a single 0–1 “correction prudence” slider to ISF fusion bounds. */
@@ -20,24 +21,33 @@ object PkpdCorrectionPrudence {
     private const val MIN_FACTOR_AGGRESSIVE = 0.65
     private const val MAX_FACTOR_AGGRESSIVE = 1.40
 
-    fun readLevel(preferences: Preferences): Double {
-        val min = preferences.get(DoubleKey.OApsAIMIIsfFusionMinFactor)
-        val max = preferences.get(DoubleKey.OApsAIMIIsfFusionMaxFactor)
-        val neutralMin = MIN_FACTOR_NEUTRAL
-        val neutralMax = MAX_FACTOR_NEUTRAL
-        val minDelta = abs(min - neutralMin)
-        val maxDelta = abs(max - neutralMax)
-        val prudenceScore = (minDelta + maxDelta) / 2.0
+    fun readLevel(preferences: Preferences): Double =
+        readLevelFromFactors(
+            preferences.get(DoubleKey.OApsAIMIIsfFusionMinFactor),
+            preferences.get(DoubleKey.OApsAIMIIsfFusionMaxFactor),
+        )
+
+    internal fun readLevelFromFactors(min: Double, max: Double): Double {
+        if (near(min, MIN_FACTOR_NEUTRAL) && near(max, MAX_FACTOR_NEUTRAL)) return 0.5
+        if (near(min, MIN_FACTOR_PRUDENT) && near(max, MAX_FACTOR_PRUDENT)) return 0.0
+        if (near(min, MIN_FACTOR_AGGRESSIVE) && near(max, MAX_FACTOR_AGGRESSIVE)) return 1.0
         return when {
-            prudenceScore < 0.06 -> 0.5
-            min >= MIN_FACTOR_PRUDENT - 0.02 && max <= MAX_FACTOR_PRUDENT + 0.02 -> 0.0
-            min <= MIN_FACTOR_AGGRESSIVE + 0.02 && max >= MAX_FACTOR_AGGRESSIVE - 0.02 -> 1.0
-            prudenceScore < 0.12 -> 0.25
-            else -> 0.75
+            min >= MIN_FACTOR_PRUDENT - 0.02 -> 0.0
+            min <= MIN_FACTOR_AGGRESSIVE + 0.02 -> 1.0
+            min >= MIN_FACTOR_NEUTRAL ->
+                0.5 * (MIN_FACTOR_PRUDENT - min) / (MIN_FACTOR_PRUDENT - MIN_FACTOR_NEUTRAL)
+            else ->
+                0.5 + 0.5 * (MIN_FACTOR_NEUTRAL - min) / (MIN_FACTOR_NEUTRAL - MIN_FACTOR_AGGRESSIVE)
         }.coerceIn(0.0, 1.0)
     }
 
     fun applyLevel(preferences: Preferences, level: Double) {
+        val (minFactor, maxFactor) = factorsForLevel(level)
+        preferences.put(DoubleKey.OApsAIMIIsfFusionMinFactor, minFactor.coerceIn(0.5, 1.0))
+        preferences.put(DoubleKey.OApsAIMIIsfFusionMaxFactor, maxFactor.coerceIn(1.0, 2.0))
+    }
+
+    internal fun factorsForLevel(level: Double): Pair<Double, Double> {
         val t = level.coerceIn(0.0, 1.0)
         val minFactor = when {
             t <= 0.5 -> lerp(MIN_FACTOR_PRUDENT, MIN_FACTOR_NEUTRAL, t * 2.0)
@@ -47,43 +57,31 @@ object PkpdCorrectionPrudence {
             t <= 0.5 -> lerp(MAX_FACTOR_PRUDENT, MAX_FACTOR_NEUTRAL, t * 2.0)
             else -> lerp(MAX_FACTOR_NEUTRAL, MAX_FACTOR_AGGRESSIVE, (t - 0.5) * 2.0)
         }
-        preferences.put(DoubleKey.OApsAIMIIsfFusionMinFactor, minFactor.coerceIn(0.5, 1.0))
-        preferences.put(DoubleKey.OApsAIMIIsfFusionMaxFactor, maxFactor.coerceIn(1.0, 2.0))
+        return minFactor to maxFactor
     }
+
+    private fun near(a: Double, b: Double, eps: Double = 0.02) = abs(a - b) <= eps
 
     private fun lerp(a: Double, b: Double, t: Double): Double = a + (b - a) * t
 }
 
 /** Maps a 0–1 slider to SMB tail damping (higher slider = more tail delivery). */
 object PkpdTailPrudence {
-    private const val DAMPING_CAUTIOUS = 0.92
-    private const val DAMPING_NEUTRAL = 0.85
-    private const val DAMPING_PERMISSIVE = 0.70
+    fun readLevel(preferences: Preferences): Double =
+        readLevelFromDamping(preferences.get(DoubleKey.OApsAIMISmbTailDamping))
 
-    fun readLevel(preferences: Preferences): Double {
-        val damping = preferences.get(DoubleKey.OApsAIMISmbTailDamping)
-        return when {
-            damping >= DAMPING_CAUTIOUS - 0.02 -> 0.0
-            damping <= DAMPING_PERMISSIVE + 0.02 -> 1.0
-            abs(damping - DAMPING_NEUTRAL) < 0.04 -> 0.5
-            damping > DAMPING_NEUTRAL -> 0.25
-            else -> 0.75
-        }.coerceIn(0.0, 1.0)
-    }
+    internal fun readLevelFromDamping(damping: Double): Double =
+        PkpdSmbTailDamping.sliderLevelFromDamping(damping)
 
     fun applyLevel(preferences: Preferences, level: Double) {
-        val t = level.coerceIn(0.0, 1.0)
-        val damping = when {
-            t <= 0.5 -> lerp(DAMPING_CAUTIOUS, DAMPING_NEUTRAL, t * 2.0)
-            else -> lerp(DAMPING_NEUTRAL, DAMPING_PERMISSIVE, (t - 0.5) * 2.0)
-        }
         preferences.put(
             DoubleKey.OApsAIMISmbTailDamping,
-            damping.coerceIn(DoubleKey.OApsAIMISmbTailDamping.min, DoubleKey.OApsAIMISmbTailDamping.max),
+            dampingForLevel(level).coerceIn(DoubleKey.OApsAIMISmbTailDamping.min, DoubleKey.OApsAIMISmbTailDamping.max),
         )
     }
 
-    private fun lerp(a: Double, b: Double, t: Double): Double = a + (b - a) * t
+    internal fun dampingForLevel(level: Double): Double =
+        PkpdSmbTailDamping.dampingForSliderLevel(level)
 }
 
 enum class PkpdLearningPace {
@@ -95,8 +93,9 @@ enum class PkpdLearningPace {
 fun PkpdLearningPace.readFrom(preferences: Preferences): PkpdLearningPace {
     val dia = preferences.get(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH)
     return when {
-        dia <= 0.3 -> PkpdLearningPace.SLOW
-        dia >= 0.8 -> PkpdLearningPace.FAST
+        dia <= 0.25 -> PkpdLearningPace.SLOW
+        dia <= 0.65 -> PkpdLearningPace.NORMAL
+        dia <= 1.2 -> PkpdLearningPace.FAST
         else -> PkpdLearningPace.NORMAL
     }
 }

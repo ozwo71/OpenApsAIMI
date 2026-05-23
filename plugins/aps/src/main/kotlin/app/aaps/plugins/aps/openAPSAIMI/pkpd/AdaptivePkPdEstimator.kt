@@ -33,6 +33,15 @@ class AdaptivePkPdEstimator(
         const val LEARNING_WINDOW_MIN_MIN = 20
         /** Must match [PkPdLearningConfig.maxWindowMin]. */
         const val LEARNING_WINDOW_MAX_MIN = 180
+
+        /** Skip learning below this BG — insulin/glucose dynamics are dominated by hypo recovery. */
+        const val HYPO_LEARN_SKIP_BG_MGDL = 75.0
+
+        /** Skip learning when BG is still near hypo and falling. */
+        const val HYPO_CAUTION_BG_MGDL = 90.0
+
+        /** Skip learning on fast falls — observed drop is not a reliable PK/PD signal. */
+        const val FAST_FALL_DELTA_MGDL5 = -3.0
     }
 
     private val state = AtomicReference(initial)
@@ -56,6 +65,9 @@ class AdaptivePkPdEstimator(
         if (exerciseFlag) return
         // RELAXED: Allow learning during slower rises (was 3.0, now 5.0)
         if (deltaMgDlPer5 > 5.0) return
+        if (bg < HYPO_LEARN_SKIP_BG_MGDL) return
+        if (bg < HYPO_CAUTION_BG_MGDL && deltaMgDlPer5 < -1.0) return
+        if (deltaMgDlPer5 <= FAST_FALL_DELTA_MGDL5) return
 
         val p0 = state.get()
         val isfTddMgDlPerU = IsfTddProvider.isfTdd()

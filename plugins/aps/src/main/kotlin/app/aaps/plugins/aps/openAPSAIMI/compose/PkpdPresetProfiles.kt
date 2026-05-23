@@ -57,6 +57,9 @@ fun applyPkpdInsulinPreset(preferences: Preferences, preset: PkpdInsulinPreset) 
         }
         PkpdInsulinPreset.CUSTOM -> Unit
     }
+    PkpdLearningPace.NORMAL.applyTo(preferences)
+    PkpdCorrectionPrudence.applyLevel(preferences, 0.5)
+    PkpdTailPrudence.applyLevel(preferences, 0.5)
     syncPkpdLearnedStateToBounds(preferences)
 }
 
