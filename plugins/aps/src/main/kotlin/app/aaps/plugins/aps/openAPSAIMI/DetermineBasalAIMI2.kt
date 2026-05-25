@@ -315,6 +315,9 @@ internal data class AimiDecisionContext(
  */
 private const val MEAL_ADVISOR_IOB_DISCOUNT_FACTOR = 0.7
 
+/** Meal Advisor estimates older than this are cleared (prefs can survive months otherwise). */
+private const val MEAL_ADVISOR_STALE_ESTIMATE_MAX_MIN = 24.0 * 60.0
+
 /**
  * Minimum Carb Coverage for Meal Advisor
  * 
@@ -5361,21 +5364,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 fallbackWindowMin = windowSinceDoseInt
             )
         )
-        val pkpdRuntimeTemp = pkpdIntegration.computeRuntime(
-            epochMillis = ctx.currentTime,
-            bg = bg,
-            deltaMgDlPer5 = delta.toDouble(),
-            iobU = iob.toDouble(),
-            carbsActiveG = carbsActiveG,
-            windowMin = windowSinceDoseInt,
-            exerciseFlag = sportTime,
-            profileIsf = profile.sens,
-            tdd24h = tdd24Hrs.toDouble(),
-            mealContext = pkpdMealContext,
-            consoleLog = consoleLog,
-            combinedDelta = combinedDelta.toDouble(),
-            uamConfidence = AimiUamHandler.confidenceOrZero()
-        )
+        val pkpdRuntimeTemp = try {
+            pkpdIntegration.computeRuntime(
+                epochMillis = ctx.currentTime,
+                bg = bg,
+                deltaMgDlPer5 = delta.toDouble(),
+                iobU = iob.toDouble(),
+                carbsActiveG = carbsActiveG,
+                windowMin = windowSinceDoseInt,
+                exerciseFlag = sportTime,
+                profileIsf = profile.sens,
+                tdd24h = tdd24Hrs.toDouble(),
+                mealContext = pkpdMealContext,
+                consoleLog = consoleLog,
+                combinedDelta = combinedDelta.toDouble(),
+                uamConfidence = AimiUamHandler.confidenceOrZero(),
+            )
+        } catch (e: Exception) {
+            consoleError.add("❌ PKPD runtime failed: ${e.message}")
+            aapsLogger.error(LTag.APS, "PKPD computeRuntime failed", e)
+            null
+        }
 
         var pkpdRuntime = pkpdRuntimeIn
         if (pkpdRuntimeTemp != null) {
@@ -11332,9 +11341,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         isExplicitTrigger: Boolean,
         hasRecentBolus45m: Boolean,
     ): DecisionResult {
-        val estimatedCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
+        var estimatedCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
         val estimatedCarbsTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
-        val timeSinceEstimateMin = (System.currentTimeMillis() - estimatedCarbsTime) / 60000.0
+        val timeSinceEstimateMin = if (estimatedCarbsTime > 0L) {
+            (System.currentTimeMillis() - estimatedCarbsTime) / 60000.0
+        } else {
+            Double.POSITIVE_INFINITY
+        }
+        if (estimatedCarbs > 0.0 && timeSinceEstimateMin > MEAL_ADVISOR_STALE_ESTIMATE_MAX_MIN) {
+            preferences.put(DoubleKey.OApsAIMILastEstimatedCarbs, 0.0)
+            preferences.put(DoubleKey.OApsAIMILastEstimatedCarbTime, 0.0)
+            aapsLogger.debug(
+                LTag.APS,
+                "MEAL_ADVISOR_TRACE cleared stale estimate carbs=$estimatedCarbs ageMin=${"%.0f".format(timeSinceEstimateMin)}",
+            )
+            estimatedCarbs = 0.0
+        }
 
         // 🛡️ CRITICAL FIX (Zombie Meal Bug): 
         // We limit the "Passive" window to 20 minutes (was 120).
