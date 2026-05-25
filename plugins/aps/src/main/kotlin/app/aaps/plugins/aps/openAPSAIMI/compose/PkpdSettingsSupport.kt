@@ -43,8 +43,10 @@ object PkpdCorrectionPrudence {
 
     fun applyLevel(preferences: Preferences, level: Double) {
         val (minFactor, maxFactor) = factorsForLevel(level)
-        preferences.put(DoubleKey.OApsAIMIIsfFusionMinFactor, minFactor.coerceIn(0.5, 1.0))
-        preferences.put(DoubleKey.OApsAIMIIsfFusionMaxFactor, maxFactor.coerceIn(1.0, 2.0))
+        val minStored = minFactor.coerceIn(DoubleKey.OApsAIMIIsfFusionMinFactor.min, DoubleKey.OApsAIMIIsfFusionMinFactor.max)
+        val maxStored = maxFactor.coerceIn(DoubleKey.OApsAIMIIsfFusionMaxFactor.min, DoubleKey.OApsAIMIIsfFusionMaxFactor.max)
+        preferences.put(DoubleKey.OApsAIMIIsfFusionMinFactor, minStored)
+        preferences.put(DoubleKey.OApsAIMIIsfFusionMaxFactor, maxOf(maxStored, minStored))
     }
 
     internal fun factorsForLevel(level: Double): Pair<Double, Double> {

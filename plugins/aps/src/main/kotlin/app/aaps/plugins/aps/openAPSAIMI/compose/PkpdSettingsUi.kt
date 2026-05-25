@@ -220,7 +220,10 @@ fun PkpdSimpleSettingsContent(
         valueRange = 0.0..1.0,
         leftLabel = stringResource(R.string.aimi_pkpd_prudence_left),
         rightLabel = stringResource(R.string.aimi_pkpd_prudence_right),
-        onValueChange = { PkpdCorrectionPrudence.applyLevel(preferences, it) },
+        onValueChange = {
+            PkpdCorrectionPrudence.applyLevel(preferences, it)
+            onPreferenceRevisionBump()
+        },
     )
 
     PkpdLabeledSlider(
@@ -230,7 +233,10 @@ fun PkpdSimpleSettingsContent(
         valueRange = 0.0..1.0,
         leftLabel = stringResource(R.string.aimi_pkpd_tail_left),
         rightLabel = stringResource(R.string.aimi_pkpd_tail_right),
-        onValueChange = { PkpdTailPrudence.applyLevel(preferences, it) },
+        onValueChange = {
+            PkpdTailPrudence.applyLevel(preferences, it)
+            onPreferenceRevisionBump()
+        },
     )
 
     OutlinedButton(onClick = onOpenAdvanced, modifier = Modifier.fillMaxWidth()) {

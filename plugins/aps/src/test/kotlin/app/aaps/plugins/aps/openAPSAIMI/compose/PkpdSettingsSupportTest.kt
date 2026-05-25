@@ -34,6 +34,13 @@ class PkpdSettingsSupportTest {
     }
 
     @Test
+    fun `level 0_4 matches two steps left from center`() {
+        val (min, max) = PkpdCorrectionPrudence.factorsForLevel(0.4)
+        assertEquals(0.77, min, 0.01)
+        assertEquals(1.22, max, 0.01)
+    }
+
+    @Test
     fun `slider endpoints map to expected preference values`() {
         assertEquals(0.85 to 1.10, PkpdCorrectionPrudence.factorsForLevel(0.0))
         assertEquals(0.65 to 1.40, PkpdCorrectionPrudence.factorsForLevel(1.0))

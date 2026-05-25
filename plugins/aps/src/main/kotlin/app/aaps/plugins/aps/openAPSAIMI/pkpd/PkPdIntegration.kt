@@ -278,12 +278,12 @@ class PkPdIntegration(private val preferences: Preferences) {
             maxPeakChangePerDayMin = PkpdLearningBounds.coerceMaxPeakChangePerDayMin(
                 preferences.get(DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin),
             ),
-        )
+        ).normalized()
         val isfBounds = IsfFusionBounds(
             minFactor = preferences.get(DoubleKey.OApsAIMIIsfFusionMinFactor),
             maxFactor = preferences.get(DoubleKey.OApsAIMIIsfFusionMaxFactor),
-            maxChangePer5Min = preferences.get(DoubleKey.OApsAIMIIsfFusionMaxChangePerTick)
-        )
+            maxChangePer5Min = preferences.get(DoubleKey.OApsAIMIIsfFusionMaxChangePerTick),
+        ).normalized()
         val effectiveTailDamping = PkpdSmbTailDamping.effectiveStoredValue(
             preferences.get(DoubleKey.OApsAIMISmbTailDamping),
         )
@@ -305,9 +305,11 @@ class PkPdIntegration(private val preferences: Preferences) {
 
     private fun readLearnedSeed(bounds: PkPdBounds): PkPdParams =
         clampParams(
-            PkPdParams(
-                diaHrs = preferences.get(DoubleKey.OApsAIMIPkpdStateDiaH),
-                peakMin = preferences.get(DoubleKey.OApsAIMIPkpdStatePeakMin),
+            sanitizePkPdParams(
+                PkPdParams(
+                    diaHrs = preferences.get(DoubleKey.OApsAIMIPkpdStateDiaH),
+                    peakMin = preferences.get(DoubleKey.OApsAIMIPkpdStatePeakMin),
+                ),
             ),
             bounds,
         )
@@ -348,8 +350,10 @@ class PkPdIntegration(private val preferences: Preferences) {
     }
 
     private fun clampParams(params: PkPdParams, bounds: PkPdBounds): PkPdParams {
-        val dia = params.diaHrs.coerceIn(bounds.diaMinH, bounds.diaMaxH)
-        val peak = params.peakMin.coerceIn(bounds.peakMinMin, bounds.peakMinMax)
+        val safe = sanitizePkPdParams(params)
+        val b = bounds.normalized()
+        val dia = safe.diaHrs.coerceIn(b.diaMinH, b.diaMaxH)
+        val peak = safe.peakMin.coerceIn(b.peakMinMin, b.peakMinMax)
         return PkPdParams(dia, peak)
     }
 

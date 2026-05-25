@@ -6,6 +6,7 @@ import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.sqrt
+import kotlin.math.max
 import kotlin.math.min
 
 /** Parameters describing the insulin action model. */
@@ -22,7 +23,30 @@ data class PkPdBounds(
     val peakMinMax: Double = 180.0,
     val maxDiaChangePerDayH: Double = 1.0,
     val maxPeakChangePerDayMin: Double = 10.0
-)
+) {
+    /** Ensures min ≤ max so [kotlin.ranges.coerceIn] on DIA/peak never throws after bad prefs or merges. */
+    fun normalized(): PkPdBounds {
+        val diaLo = min(diaMinH, diaMaxH)
+        val diaHi = max(diaMinH, diaMaxH)
+        val peakLo = min(peakMinMin, peakMinMax)
+        val peakHi = max(peakMinMin, peakMinMax)
+        return copy(
+            diaMinH = diaLo,
+            diaMaxH = diaHi,
+            peakMinMin = peakLo,
+            peakMinMax = peakHi,
+            maxDiaChangePerDayH = maxDiaChangePerDayH.coerceAtLeast(0.0),
+            maxPeakChangePerDayMin = maxPeakChangePerDayMin.coerceAtLeast(0.0),
+        )
+    }
+}
+
+/** Sanitizes learned PK/PD state read from preferences before use in the estimator/kernel. */
+fun sanitizePkPdParams(params: PkPdParams): PkPdParams {
+    val dia = params.diaHrs.takeIf { it.isFinite() && it > 0.0 } ?: 6.0
+    val peak = params.peakMin.takeIf { it.isFinite() && it > 1.0 } ?: 75.0
+    return PkPdParams(dia, peak)
+}
 
 interface Kernel {
     /** Instant insulin action (not cumulative) normalised so that the area equals 1 on [0, DIA]. */
