@@ -36,6 +36,8 @@ class HealthContextRepository @Inject constructor(
     
     companion object {
         private const val TAG = "HealthContextRepo"
+        /** Re-use steps/HR snapshot for Autodrive gating when loop ticks are frequent. */
+        private const val AUTODRIVE_GATER_SNAPSHOT_MAX_AGE_MS = 90_000L
     }
 
     // In-memory cache of the last valid snapshot
@@ -50,7 +52,20 @@ class HealthContextRepository @Inject constructor(
      * Fetches and builds the current Health Snapshot.
      * Merges HC data with Watch data and calculates derived metrics.
      */
-    fun fetchSnapshot(): HealthContextSnapshot {
+    fun fetchSnapshot(): HealthContextSnapshot = fetchSnapshotInternal()
+
+    /**
+     * Throttled snapshot for Autodrive V3 gater — avoids four DB reads every 5 min when unchanged.
+     */
+    fun fetchSnapshotForAutodriveGater(): HealthContextSnapshot {
+        val ageMs = System.currentTimeMillis() - lastSnapshot.timestamp
+        if (lastSnapshot.isValid && ageMs in 0..AUTODRIVE_GATER_SNAPSHOT_MAX_AGE_MS) {
+            return lastSnapshot
+        }
+        return fetchSnapshotInternal()
+    }
+
+    private fun fetchSnapshotInternal(): HealthContextSnapshot {
         // 1. Fetch Basic Data (HC)
         refreshCoreDataAsync()
         @Suppress("UNCHECKED_CAST")

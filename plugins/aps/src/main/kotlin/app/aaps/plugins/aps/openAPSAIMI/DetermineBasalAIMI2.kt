@@ -97,6 +97,7 @@ import app.aaps.plugins.aps.openAPSAIMI.smb.computeMealHighIobDecision
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleFacade
 import app.aaps.plugins.aps.openAPSAIMI.comparison.AimiSmbComparator
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiDetermineBasalTickOrchestrator
+import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiLoopTickRecovery
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleInfo
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
@@ -10977,37 +10978,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         glucose_status: GlucoseStatusAIMI, currenttemp: CurrentTemp, iob_data_array: Array<IobTotal>, profile: OapsProfileAimi, autosens_data: AutosensResult, mealData: MealData,
         microBolusAllowed: Boolean, currentTime: Long, flatBGsDetected: Boolean, dynIsfMode: Boolean, uiInteraction: UiInteraction,
         extraDebug: String = "" // 🌀 Extensible Debug Channel (e.g. Cosine Gate)
-    ): RT = AimiLoopTelemetry.traceDetermineBasalTick(
-        preferences = preferences,
-        wallClockMs = currentTime,
-        onTickEnd = { tickId, startedWallMs, endedWallMs ->
-            try {
-                hormonitorStudyExporter.recordLoopTickEnd(
-                    tickId = tickId,
-                    startedWallMs = startedWallMs,
-                    endedWallMs = endedWallMs,
-                    lastPhaseName = AimiLoopTelemetry.currentLoopPhase.name
-                )
-            } catch (_: Throwable) {
-                // Never break determine_basal on telemetry.
-            }
-        },
-        onTickAbort = { tickId, startedWallMs, endedWallMs, error ->
-            determineBasalInvocationCaches.abandonInvocationAfterUnhandledError()
-            try {
-                hormonitorStudyExporter.recordLoopTickAborted(
-                    tickId = tickId,
-                    startedWallMs = startedWallMs,
-                    endedWallMs = endedWallMs,
-                    errorClass = error::class.simpleName ?: "Throwable",
-                    errorMessage = error.message ?: "",
-                    lastPhaseName = AimiLoopTelemetry.currentLoopPhase.name
-                )
-            } catch (_: Throwable) {
-                // Never break determine_basal on telemetry.
-            }
-        }
-    ) {
+    ): RT {
         val ctx = AimiTickContext(
             glucoseStatus = glucose_status,
             currentTemp = currenttemp,
@@ -11020,9 +10991,45 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             flatBGsDetected = flatBGsDetected,
             dynIsfMode = dynIsfMode,
             uiInteraction = uiInteraction,
-            extraDebug = extraDebug
+            extraDebug = extraDebug,
         )
-        return AimiDetermineBasalTickOrchestrator.run(this, ctx)
+        return AimiLoopTelemetry.traceDetermineBasalTick(
+            preferences = preferences,
+            wallClockMs = currentTime,
+            onLockTimeout = { AimiLoopTickRecovery.skippedPriorTickStillRunning(ctx) },
+            recoverFromError = { error ->
+                AimiLoopTickRecovery.safeResultAfterUnhandledError(ctx, error, consoleLog, consoleError)
+            },
+            onTickEnd = { tickId, startedWallMs, endedWallMs ->
+                try {
+                    hormonitorStudyExporter.recordLoopTickEnd(
+                        tickId = tickId,
+                        startedWallMs = startedWallMs,
+                        endedWallMs = endedWallMs,
+                        lastPhaseName = AimiLoopTelemetry.currentLoopPhase.name
+                    )
+                } catch (_: Throwable) {
+                    // Never break determine_basal on telemetry.
+                }
+            },
+            onTickAbort = { tickId, startedWallMs, endedWallMs, error ->
+                determineBasalInvocationCaches.abandonInvocationAfterUnhandledError()
+                try {
+                    hormonitorStudyExporter.recordLoopTickAborted(
+                        tickId = tickId,
+                        startedWallMs = startedWallMs,
+                        endedWallMs = endedWallMs,
+                        errorClass = error::class.simpleName ?: "Throwable",
+                        errorMessage = error.message ?: "",
+                        lastPhaseName = AimiLoopTelemetry.currentLoopPhase.name
+                    )
+                } catch (_: Throwable) {
+                    // Never break determine_basal on telemetry.
+                }
+            },
+        ) {
+            AimiDetermineBasalTickOrchestrator.run(this, ctx)
+        }
     }
 
     private fun inferFinalLoopDecisionFromResult(result: RT): String {

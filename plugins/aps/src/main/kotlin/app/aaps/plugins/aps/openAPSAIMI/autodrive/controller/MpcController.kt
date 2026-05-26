@@ -8,6 +8,7 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveCommand
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
@@ -36,6 +37,26 @@ class MpcController @Inject constructor(
     private val steps = horizonMinutes / stepMinutes
     // Poids de base (Modifiés dynamiquement si Nuit/Jour)
     private val qBg = 1.0                    // Pénalité pour l'écart au Target BG
+
+    /** Hard cap on grid search size — prevents CPU blow-ups when maxSMB is very high. */
+    internal companion object {
+        const val MAX_DOSE_CANDIDATES = 400
+        const val FINE_SEARCH_STEP_U = 0.005
+        const val COARSE_SEARCH_STEP_U = 0.015
+
+        fun buildDoseCandidates(maxSafeDoseU: Double, searchStep: Double): List<Double> {
+            if (!maxSafeDoseU.isFinite() || maxSafeDoseU <= 0.0) return listOf(0.0)
+            val step = searchStep.takeIf { it.isFinite() && it > 0.0 } ?: FINE_SEARCH_STEP_U
+            val out = ArrayList<Double>(min(MAX_DOSE_CANDIDATES, (maxSafeDoseU / step).toInt() + 1))
+            var dose = 0.0
+            while (dose <= maxSafeDoseU + step * 0.5 && out.size < MAX_DOSE_CANDIDATES) {
+                out.add(dose)
+                dose += step
+            }
+            if (out.isEmpty()) out.add(0.0)
+            return out
+        }
+    }
 
     /**
      * Calcule la dose optimale pour les 5 prochaines minutes (Receding Horizon).
@@ -87,18 +108,22 @@ class MpcController @Inject constructor(
         // Bridle le domaine de recherche MPC : min(plafond SMB actif, poids × coeff).
         // Coeff configurable (OApsAIMIMpcInsulinUPerKgPerStep), défaut 0.065 U/kg/5min (~+30% vs ancien 0.05 fixe).
         val uPerKg = preferences.get(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep)
-        val maxSafeDoseU = min(activeMaxSmb, state.patientWeightKg * uPerKg)
+        val boundedMaxSmb = if (activeMaxSmb.isFinite() && activeMaxSmb > 0.0) activeMaxSmb else state.maxSMB.coerceAtLeast(0.0)
+        val weightCap = state.patientWeightKg.takeIf { it.isFinite() && it > 0.0 }?.let { it * uPerKg } ?: boundedMaxSmb
+        val maxSafeDoseU = min(boundedMaxSmb, weightCap).coerceAtLeast(0.0)
+
+        val isHyperPlateauQuiet = !state.isNight &&
+            state.bg > 145.0 &&
+            abs(state.bgVelocity) < 0.35 &&
+            abs(state.combinedDelta) < 1.2 &&
+            state.estimatedRa < 2.5
 
         // Résolution via balayage fin sur le domaine praticable Sécurisé [0.0 , maxSafeDoseU]
-        // Un pas de 0.005U sur 5 min équivaut à un ajustement basal lisse de 0.06 U/h
-        val searchStep = 0.005
-        val doseCandidates = generateSequence(0.0) { it + searchStep }
-            .takeWhile { it <= maxSafeDoseU }
-            .toList()
+        val searchStep = if (isHyperPlateauQuiet) COARSE_SEARCH_STEP_U else FINE_SEARCH_STEP_U
+        val doseCandidates = Companion.buildDoseCandidates(maxSafeDoseU, searchStep)
 
-        // 📊 MULTI-HORIZON COMPARISON (Alignment Request)
-        // We find the optimal dose for each horizon to provide a comparative view in the logs.
-        val horizons = listOf(60, 120, 180)
+        // Hyper plateau: act on 180m horizon only (still safe); skip extra alignment work.
+        val horizons = if (isHyperPlateauQuiet) listOf(180) else listOf(60, 120, 180)
         val optimalDoses = mutableMapOf<Int, Double>()
 
         for (h in horizons) {
@@ -117,11 +142,19 @@ class MpcController @Inject constructor(
         }
 
         val bestDose = optimalDoses[180] ?: 0.0 // We act on the safest (180w) result
-        
-        aapsLogger.debug(
-            LTag.APS,
-            "🧮 [MPC] Alignment Comparison: 60=${optimalDoses[60]!!.format(2)}U, 120=${optimalDoses[120]!!.format(2)}U, 180w=${bestDose.format(2)}U"
-        )
+
+        if (isHyperPlateauQuiet) {
+            aapsLogger.debug(
+                LTag.APS,
+                "🧮 [MPC] Hyper-plateau quiet mode: candidates=${doseCandidates.size} step=${searchStep} 180w=${bestDose.format(2)}U",
+            )
+        } else {
+            aapsLogger.debug(
+                LTag.APS,
+                "🧮 [MPC] Alignment Comparison: 60=${optimalDoses[60]?.format(2) ?: "n/a"}U, " +
+                    "120=${optimalDoses[120]?.format(2) ?: "n/a"}U, 180w=${bestDose.format(2)}U",
+            )
+        }
 
         // Traitement de la sortie :
         val maxTbrMultiplier = if (state.isNight) 5.0 else 3.0

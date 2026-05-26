@@ -34,7 +34,7 @@ class AutoDriveGater @Inject constructor(
         estimatedRa: Double = 0.0,
     ): GatingResult {
         // 1. Fetch real-time health data
-        val health = healthRepo.fetchSnapshot()
+        val health = healthRepo.fetchSnapshotForAutodriveGater()
         
         // 2. Physiological Blockers (Exercise/Stress)
         // High Intensity HR Check (> 140 is a hard block regardless of BG)

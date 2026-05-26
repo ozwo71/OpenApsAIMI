@@ -65,21 +65,32 @@ object AimiLoopTelemetry {
         }
     }
 
+    fun isTickInProgress(): Boolean = activeTickId > 0L
+
+    fun activeTickAgeMs(): Long {
+        val started = activeTickStartedWallMs
+        return if (started > 0L) (System.currentTimeMillis() - started).coerceAtLeast(0L) else 0L
+    }
+
     /**
      * Wraps one full AIMI determine_basal pass. Non-local returns from [block] still run `finally`.
-     * On success: ring `tick_end` and onTickEnd. On failure: ring `tick_abort`, onTickAbort, then rethrows
-     * (no onTickEnd — avoids a false successful loop_tick_end line in the blackbox).
+     * On success: ring `tick_end` and onTickEnd.
+     * On failure: ring `tick_abort`, onTickAbort, then [recoverFromError] (no process crash).
+     * On lock timeout: [onLockTimeout] without running [block].
      */
     internal inline fun traceDetermineBasalTick(
         preferences: Preferences,
         wallClockMs: Long,
+        noinline onLockTimeout: () -> RT,
+        noinline recoverFromError: (Throwable) -> RT,
         noinline onTickEnd: ((tickId: Long, startedWallMs: Long, endedWallMs: Long) -> Unit)? = null,
         noinline onTickAbort: ((tickId: Long, startedWallMs: Long, endedWallMs: Long, error: Throwable) -> Unit)? = null,
         block: () -> RT
     ): RT {
         val exclusive = preferences.get(BooleanKey.OApsAIMILoopExclusiveInvocationEnabled)
-        if (exclusive) {
-            AimiLoopGate.acquireExclusive()
+        if (exclusive && !AimiLoopGate.tryAcquireExclusive()) {
+            appendRing("tick_skip lock_timeout wall_ms=$wallClockMs")
+            return onLockTimeout()
         }
         try {
             val id = tickSeq.incrementAndGet()
@@ -104,7 +115,7 @@ object AimiLoopTelemetry {
                 } catch (_: Throwable) {
                     // Never break the loop on telemetry.
                 }
-                throw t
+                return recoverFromError(t)
             } finally {
                 if (completedNormally) {
                     val endedWallMs = System.currentTimeMillis()

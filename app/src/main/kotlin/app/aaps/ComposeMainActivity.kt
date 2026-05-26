@@ -122,6 +122,7 @@ import app.aaps.core.ui.compose.preference.LocalCheckPassword
 import app.aaps.core.ui.compose.preference.LocalHashPassword
 import app.aaps.core.ui.compose.preference.LocalVisibilityContext
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
+import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiLoopRuntimeGuard
 import app.aaps.core.ui.compose.pump.PumpActivityDialog
 import app.aaps.core.ui.compose.pump.PumpCommunicationStatus
 import app.aaps.core.ui.locale.LocaleHelper
@@ -898,18 +899,17 @@ class ComposeMainActivity : AppCompatActivity() {
         super.onResume()
         if (!config.appInitialized) return
         refreshOnResume()
-        // After the activity resumes: hybrid dashboard [OverviewViewModel] may have been stopped in
-        // [onStop]; an Rx event fired only here would be dropped if sent synchronously in [onResume].
-        window.decorView.post {
-            if (isDestroyed) return@post
-            // Compose home routing is skin-driven (SkinInterface.prefersDashboardHome).
+        // Defer heavy dashboard refresh while an AIMI loop tick holds the exclusive lock (reduces resume ANR).
+        val deferMs = if (AimiLoopRuntimeGuard.isDetermineBasalTickInProgress()) 2_500L else 0L
+        window.decorView.postDelayed({
+            if (isDestroyed) return@postDelayed
             if (storedSkinPrefersDashboardHome(preferences.get(StringKey.GeneralSkin))) {
-                // [now = true]: same path as overview menu refresh — full refreshAll on any resumed OverviewFragment.
-                // overviewBus IOB event: keeps [iobCobCalculator] / Compose caches aligned after background (hybrid VM alone was not enough).
                 rxBus.send(EventRefreshOverview("ComposeMainActivity.afterChildFragmentsResume", now = true))
-                activePlugin.activeOverview.overviewBus.send(EventUpdateOverviewIobCob("ComposeMainActivity.afterChildFragmentsResume"))
+                activePlugin.activeOverview.overviewBus.send(
+                    EventUpdateOverviewIobCob("ComposeMainActivity.afterChildFragmentsResume"),
+                )
             }
-        }
+        }, deferMs)
     }
 
     private fun storedSkinPrefersDashboardHome(storedGeneralSkin: String): Boolean {
