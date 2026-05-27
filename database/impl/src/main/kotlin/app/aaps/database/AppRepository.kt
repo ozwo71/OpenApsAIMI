@@ -680,7 +680,11 @@ class AppRepository @Inject internal constructor(
     }
 
     suspend fun getTemporaryBasalActiveAt(timestamp: Long): TemporaryBasal? =
-        database.temporaryBasalDao.getTemporaryBasalActiveAt(timestamp)
+        database.temporaryBasalDao.getTemporaryBasalActiveAt(
+            timestamp = timestamp,
+            earliestTimestamp = TemporaryBasalQueryBounds.earliestTimestampForActiveAt(timestamp),
+            maxReasonableDurationMs = TemporaryBasalQueryBounds.MAX_REASONABLE_DURATION_MS
+        )
 
     suspend fun getTemporaryBasalsActiveBetweenTimeAndTime(from: Long, to: Long): List<TemporaryBasal> =
         database.temporaryBasalDao.getTemporaryBasalActiveBetweenTimeAndTime(from, to)

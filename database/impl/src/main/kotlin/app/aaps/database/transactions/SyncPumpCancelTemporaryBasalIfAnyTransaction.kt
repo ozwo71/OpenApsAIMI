@@ -1,5 +1,6 @@
 package app.aaps.database.transactions
 
+import app.aaps.database.daos.getTemporaryBasalActiveAtBounded
 import app.aaps.database.entities.TemporaryBasal
 import app.aaps.database.entities.embedments.InterfaceIDs
 import app.aaps.database.entities.interfaces.end
@@ -13,7 +14,7 @@ class SyncPumpCancelTemporaryBasalIfAnyTransaction(
         val existing = database.temporaryBasalDao.findByPumpEndIds(endPumpId, pumpType, pumpSerial)
         if (existing != null) // assume TBR has been cut already
             return result
-        val running = database.temporaryBasalDao.getTemporaryBasalActiveAt(timestamp)
+        val running = database.temporaryBasalDao.getTemporaryBasalActiveAtBounded(timestamp)
         if (running != null && running.interfaceIDs.endId == null) { // do not allow overwrite if cut by end event
             val old = running.copy()
             if (running.timestamp != timestamp) running.end = timestamp // prevent zero duration

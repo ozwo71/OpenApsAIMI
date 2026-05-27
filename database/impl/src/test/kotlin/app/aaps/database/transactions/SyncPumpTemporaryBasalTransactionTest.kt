@@ -10,6 +10,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.verify
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 
@@ -30,7 +31,7 @@ class SyncPumpTemporaryBasalTransactionTest {
         val tb = createTemporaryBasal(pumpId = 100L, timestamp = 1000L, rate = 1.5, duration = 60_000L)
 
         whenever(temporaryBasalDao.findByPumpIds(100L, InterfaceIDs.PumpType.DANA_I, "ABC123")).thenReturn(null)
-        whenever(temporaryBasalDao.getTemporaryBasalActiveAtLegacy(1000L)).thenReturn(null)
+        whenever(temporaryBasalDao.getTemporaryBasalActiveAtLegacy(any(), any(), any())).thenReturn(null)
 
         val transaction = SyncPumpTemporaryBasalTransaction(tb, null)
         transaction.database = database
@@ -81,7 +82,7 @@ class SyncPumpTemporaryBasalTransactionTest {
         val running = createTemporaryBasal(pumpId = 50L, timestamp = 1000L, rate = 1.5, duration = 60_000L)
 
         whenever(temporaryBasalDao.findByPumpIds(100L, InterfaceIDs.PumpType.DANA_I, "ABC123")).thenReturn(null)
-        whenever(temporaryBasalDao.getTemporaryBasalActiveAtLegacy(5000L)).thenReturn(running)
+        whenever(temporaryBasalDao.getTemporaryBasalActiveAtLegacy(any(), any(), any())).thenReturn(running)
 
         val transaction = SyncPumpTemporaryBasalTransaction(tb, null)
         transaction.database = database
@@ -99,7 +100,7 @@ class SyncPumpTemporaryBasalTransactionTest {
         val running = createTemporaryBasal(pumpId = 50L, timestamp = 1000L, rate = 1.5, duration = 60_000L)
 
         whenever(temporaryBasalDao.findByPumpIds(100L, InterfaceIDs.PumpType.DANA_I, "ABC123")).thenReturn(null)
-        whenever(temporaryBasalDao.getTemporaryBasalActiveAtLegacy(1000L)).thenReturn(running)
+        whenever(temporaryBasalDao.getTemporaryBasalActiveAtLegacy(any(), any(), any())).thenReturn(running)
 
         val transaction = SyncPumpTemporaryBasalTransaction(tb, null)
         transaction.database = database

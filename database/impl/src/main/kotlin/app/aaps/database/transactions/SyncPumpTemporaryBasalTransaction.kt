@@ -1,5 +1,6 @@
 package app.aaps.database.transactions
 
+import app.aaps.database.daos.getTemporaryBasalActiveAtLegacyBounded
 import app.aaps.database.entities.TemporaryBasal
 import app.aaps.database.entities.interfaces.end
 
@@ -33,7 +34,7 @@ class SyncPumpTemporaryBasalTransaction(
                 result.updated.add(Pair(old, existing))
             }
         } else {
-            val running = database.temporaryBasalDao.getTemporaryBasalActiveAtLegacy(temporaryBasal.timestamp)
+            val running = database.temporaryBasalDao.getTemporaryBasalActiveAtLegacyBounded(temporaryBasal.timestamp)
             if (running != null && temporaryBasal.timestamp > running.timestamp) {
                 val old = running.copy()
                 running.end = temporaryBasal.timestamp

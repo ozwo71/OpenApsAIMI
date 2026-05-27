@@ -32,7 +32,7 @@ class SyncNsTemporaryBasalTransactionTest {
         val tb = createTemporaryBasal(id = 0, nsId = "ns-123", timestamp = 1000L, duration = 60_000L)
 
         whenever(temporaryBasalDao.findByNSId("ns-123")).thenReturn(null)
-        whenever(temporaryBasalDao.getTemporaryBasalActiveAt(1000L)).thenReturn(null)
+        whenever(temporaryBasalDao.getTemporaryBasalActiveAt(any(), any(), any())).thenReturn(null)
 
         val transaction = SyncNsTemporaryBasalTransaction(listOf(tb), nsClientMode = false)
         transaction.database = database
@@ -50,7 +50,7 @@ class SyncNsTemporaryBasalTransactionTest {
         val existing = createTemporaryBasal(id = 1, nsId = null, timestamp = 999L, duration = 60_000L)
 
         whenever(temporaryBasalDao.findByNSId("ns-123")).thenReturn(null)
-        whenever(temporaryBasalDao.getTemporaryBasalActiveAt(1000L)).thenReturn(existing)
+        whenever(temporaryBasalDao.getTemporaryBasalActiveAt(any(), any(), any())).thenReturn(existing)
 
         val transaction = SyncNsTemporaryBasalTransaction(listOf(tb), nsClientMode = false)
         transaction.database = database
@@ -68,7 +68,7 @@ class SyncNsTemporaryBasalTransactionTest {
         val existing = createTemporaryBasal(id = 1, nsId = null, timestamp = 1000L, duration = 60_000L)
 
         whenever(temporaryBasalDao.findByNSId("ns-123")).thenReturn(null)
-        whenever(temporaryBasalDao.getTemporaryBasalActiveAt(5000L)).thenReturn(existing)
+        whenever(temporaryBasalDao.getTemporaryBasalActiveAt(any(), any(), any())).thenReturn(existing)
 
         val transaction = SyncNsTemporaryBasalTransaction(listOf(tb), nsClientMode = false)
         transaction.database = database
@@ -222,8 +222,8 @@ class SyncNsTemporaryBasalTransactionTest {
         whenever(temporaryBasalDao.findByNSId("ns-2")).thenReturn(null)
         whenever(temporaryBasalDao.findByPumpIds(pumpId, InterfaceIDs.PumpType.DANA_I, "DANA-ABC")).thenReturn(null)
         whenever(temporaryBasalDao.findByPumpIds(pumpId, InterfaceIDs.PumpType.MEDTRONIC_522_722, "MEDTRONIC-XYZ")).thenReturn(null)
-        whenever(temporaryBasalDao.getTemporaryBasalActiveAt(1000L)).thenReturn(null)
-        whenever(temporaryBasalDao.getTemporaryBasalActiveAt(2000L)).thenReturn(null)
+        whenever(temporaryBasalDao.getTemporaryBasalActiveAt(any(), any(), any())).thenReturn(null)
+        whenever(temporaryBasalDao.getTemporaryBasalActiveAt(any(), any(), any())).thenReturn(null)
 
         val transaction = SyncNsTemporaryBasalTransaction(listOf(tb1, tb2), nsClientMode = false)
         transaction.database = database
@@ -304,7 +304,7 @@ class SyncNsTemporaryBasalTransactionTest {
 
         whenever(temporaryBasalDao.findByNSId(nsId)).thenReturn(null)
         // Composite key check should NOT be called (null check fails)
-        whenever(temporaryBasalDao.getTemporaryBasalActiveAt(timestamp)).thenReturn(existing)
+        whenever(temporaryBasalDao.getTemporaryBasalActiveAt(any(), any(), any())).thenReturn(existing)
 
         val transaction = SyncNsTemporaryBasalTransaction(listOf(incoming), nsClientMode = false)
         transaction.database = database
@@ -315,7 +315,7 @@ class SyncNsTemporaryBasalTransactionTest {
         assertThat(result.updatedNsId).hasSize(1)
 
         verify(temporaryBasalDao, never()).findByPumpIds(any(), any(), any())  // NOT called
-        verify(temporaryBasalDao).getTemporaryBasalActiveAt(timestamp)  // Fallback used
+        verify(temporaryBasalDao).getTemporaryBasalActiveAt(any(), any(), any())  // Fallback used
         verify(temporaryBasalDao).updateExistingEntry(existing)
     }
 

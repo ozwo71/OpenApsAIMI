@@ -42,11 +42,27 @@ internal interface TemporaryBasalDao : TraceableDao<TemporaryBasal> {
     @Query("SELECT * FROM $TABLE_TEMPORARY_BASALS WHERE (temporaryId = :temporaryId) AND (pumpType = :pumpType) AND (pumpSerial = :pumpSerial) AND (referenceId IS NULL)")
     suspend fun findByPumpTempIds(temporaryId: Long, pumpType: InterfaceIDs.PumpType, pumpSerial: String): TemporaryBasal?
 
-    @Query("SELECT * FROM $TABLE_TEMPORARY_BASALS WHERE (timestamp <= :timestamp) AND ((timestamp + duration) > :timestamp) AND (referenceId IS NULL) AND (isValid = 1) ORDER BY timestamp DESC LIMIT 1")
-    suspend fun getTemporaryBasalActiveAtLegacy(timestamp: Long): TemporaryBasal?
+    @Query(
+        "SELECT * FROM $TABLE_TEMPORARY_BASALS WHERE (timestamp <= :timestamp) AND (timestamp >= :earliestTimestamp) " +
+            "AND ((timestamp + duration) > :timestamp) AND (referenceId IS NULL) AND (isValid = 1) " +
+            "AND (duration <= :maxReasonableDurationMs) ORDER BY timestamp DESC LIMIT 1"
+    )
+    suspend fun getTemporaryBasalActiveAtLegacy(
+        timestamp: Long,
+        earliestTimestamp: Long,
+        maxReasonableDurationMs: Long
+    ): TemporaryBasal?
 
-    @Query("SELECT * FROM $TABLE_TEMPORARY_BASALS WHERE (timestamp <= :timestamp) AND ((timestamp + duration) > :timestamp) AND (referenceId IS NULL) AND (isValid = 1) ORDER BY timestamp DESC LIMIT 1")
-    suspend fun getTemporaryBasalActiveAt(timestamp: Long): TemporaryBasal?
+    @Query(
+        "SELECT * FROM $TABLE_TEMPORARY_BASALS WHERE (timestamp <= :timestamp) AND (timestamp >= :earliestTimestamp) " +
+            "AND ((timestamp + duration) > :timestamp) AND (referenceId IS NULL) AND (isValid = 1) " +
+            "AND (duration <= :maxReasonableDurationMs) ORDER BY timestamp DESC LIMIT 1"
+    )
+    suspend fun getTemporaryBasalActiveAt(
+        timestamp: Long,
+        earliestTimestamp: Long,
+        maxReasonableDurationMs: Long
+    ): TemporaryBasal?
 
     @Query("SELECT * FROM $TABLE_TEMPORARY_BASALS WHERE (timestamp <= :to) AND ((timestamp + duration) > :from) AND (referenceId IS NULL) AND (isValid = 1) ORDER BY timestamp DESC")
     suspend fun getTemporaryBasalActiveBetweenTimeAndTime(from: Long, to: Long): List<TemporaryBasal>

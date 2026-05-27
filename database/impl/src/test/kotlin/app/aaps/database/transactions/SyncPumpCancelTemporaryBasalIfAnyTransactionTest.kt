@@ -34,7 +34,7 @@ class SyncPumpCancelTemporaryBasalIfAnyTransactionTest {
         val running = createTemporaryBasal(timestamp = 1000L, duration = 60_000L, endId = null)
 
         whenever(temporaryBasalDao.findByPumpEndIds(200L, InterfaceIDs.PumpType.DANA_I, "ABC123")).thenReturn(null)
-        whenever(temporaryBasalDao.getTemporaryBasalActiveAt(31_000L)).thenReturn(running)
+        whenever(temporaryBasalDao.getTemporaryBasalActiveAt(any(), any(), any())).thenReturn(running)
 
         val transaction = SyncPumpCancelTemporaryBasalIfAnyTransaction(
             timestamp, endPumpId, InterfaceIDs.PumpType.DANA_I, "ABC123"
@@ -75,7 +75,7 @@ class SyncPumpCancelTemporaryBasalIfAnyTransactionTest {
         val endPumpId = 200L
 
         whenever(temporaryBasalDao.findByPumpEndIds(200L, InterfaceIDs.PumpType.DANA_I, "ABC123")).thenReturn(null)
-        whenever(temporaryBasalDao.getTemporaryBasalActiveAt(31_000L)).thenReturn(null)
+        whenever(temporaryBasalDao.getTemporaryBasalActiveAt(any(), any(), any())).thenReturn(null)
 
         val transaction = SyncPumpCancelTemporaryBasalIfAnyTransaction(
             timestamp, endPumpId, InterfaceIDs.PumpType.DANA_I, "ABC123"
@@ -95,7 +95,7 @@ class SyncPumpCancelTemporaryBasalIfAnyTransactionTest {
         val running = createTemporaryBasal(timestamp = 1000L, duration = 60_000L, endId = null)
 
         whenever(temporaryBasalDao.findByPumpEndIds(200L, InterfaceIDs.PumpType.DANA_I, "ABC123")).thenReturn(null)
-        whenever(temporaryBasalDao.getTemporaryBasalActiveAt(1000L)).thenReturn(running)
+        whenever(temporaryBasalDao.getTemporaryBasalActiveAt(any(), any(), any())).thenReturn(running)
 
         val transaction = SyncPumpCancelTemporaryBasalIfAnyTransaction(
             timestamp, endPumpId, InterfaceIDs.PumpType.DANA_I, "ABC123"
