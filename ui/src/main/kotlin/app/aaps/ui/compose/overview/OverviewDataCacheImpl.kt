@@ -666,11 +666,9 @@ class OverviewDataCacheImpl @AssistedInject constructor(
     // =========================================================================
 
     private suspend fun updateRunningModeFromDatabase() {
-        // Read directly from DB — loop.runningModeRecord routes through runningModePreCheck()
-        // which touches activePump and crashes at startup before the pump plugin is selected.
-        // Loop will correct mode itself when it next runs; the RM observer will pick it up.
         val now = dateUtil.now()
-        val rmRecord = persistenceLayer.getRunningModeActiveAt(now)
+        val rmRecord = runCatching { loop.runningModeRecord() }
+            .getOrElse { persistenceLayer.getRunningModeActiveAt(now) }
 
         // Store raw data only - ViewModel computes display text
         _runningModeFlow.value = RunningModeDisplayData(

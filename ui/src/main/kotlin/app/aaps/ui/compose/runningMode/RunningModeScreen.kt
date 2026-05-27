@@ -132,6 +132,22 @@ fun RunningModeScreen(
                 )
             }
 
+            // Pump-reported suspend: offer resume when preCheck or long suspend allows it
+            val showPumpSuspendedResume =
+                state.currentMode == RM.Mode.SUSPENDED_BY_PUMP &&
+                    state.allowedNextModes.contains(RM.Mode.RESUME)
+            if (showPumpSuspendedResume) {
+                PumpSuspendedResumeSection(
+                    onAction = { action ->
+                        if (showOkCancel) pendingAction = action
+                        else {
+                            executeAction(viewModel, action)
+                            onNavigateBack()
+                        }
+                    }
+                )
+            }
+
             // Suspend Section
             val showSuspendSection = state.allowedNextModes.contains(RM.Mode.SUSPENDED_BY_USER) ||
                 (state.allowedNextModes.contains(RM.Mode.RESUME) && state.currentMode == RM.Mode.SUSPENDED_BY_USER)
@@ -254,6 +270,23 @@ private fun LoopControlSection(
                     Modifier.weight(1f)
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PumpSuspendedResumeSection(
+    onAction: (PendingRunningModeAction) -> Unit
+) {
+    val resumeText = stringResource(R.string.resume)
+    val title = stringResource(app.aaps.core.ui.R.string.pumpsuspended)
+    SectionCard(title = title) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            CompactButton(
+                resumeText,
+                RM.Mode.RESUME,
+                { onAction(PendingRunningModeAction(RM.Mode.RESUME, Action.RESUME, 0, resumeText)) }
+            )
         }
     }
 }

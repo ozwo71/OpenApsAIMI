@@ -238,6 +238,7 @@ class KeepAliveWorker(
 
     @VisibleForTesting
     suspend fun checkPump() {
+        runCatching { loop.runningModeRecord() }
         val pump = activePlugin.activePump
         val ps = profileFunction.getRequestedProfile() ?: return
         val requestedProfile = ProfileSealed.PS(ps, activePlugin)

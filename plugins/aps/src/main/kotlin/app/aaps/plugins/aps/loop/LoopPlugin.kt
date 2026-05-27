@@ -311,8 +311,8 @@ class LoopPlugin @Inject constructor(
             RM.Mode.CLOSED_LOOP_LGS   -> mutableListOf(RM.Mode.DISABLED_LOOP, RM.Mode.OPEN_LOOP, RM.Mode.CLOSED_LOOP, RM.Mode.DISCONNECTED_PUMP, RM.Mode.SUSPENDED_BY_USER, RM.Mode.SUPER_BOLUS)
             RM.Mode.SUPER_BOLUS       -> mutableListOf(RM.Mode.DISCONNECTED_PUMP, RM.Mode.RESUME)
             RM.Mode.DISCONNECTED_PUMP -> mutableListOf(RM.Mode.RESUME)
-            RM.Mode.SUSPENDED_BY_DST  -> mutableListOf(RM.Mode.DISCONNECTED_PUMP)
-            RM.Mode.SUSPENDED_BY_PUMP -> mutableListOf() // handled independently
+            RM.Mode.SUSPENDED_BY_DST  -> mutableListOf(RM.Mode.DISCONNECTED_PUMP, RM.Mode.RESUME)
+            RM.Mode.SUSPENDED_BY_PUMP -> allowedNextModesWhenSuspendedByPump()
             RM.Mode.SUSPENDED_BY_USER -> mutableListOf(RM.Mode.DISCONNECTED_PUMP, RM.Mode.RESUME)
             RM.Mode.RESUME            -> error("Invalid mode")
         }
@@ -331,8 +331,8 @@ class LoopPlugin @Inject constructor(
         val now = dateUtil.now()
         val currentRM = runningModeRecord()
         if (currentRM.mode == RM.Mode.SUSPENDED_BY_PUMP) {
-            // do nothing. Handled in runningModePreCheck
-            return false
+            if (newRM != RM.Mode.RESUME) return false
+            return endPumpSuspendedRunningMode(currentRM, action, source, listValues)
         }
         // Preconditions (hardcoded logic)
         if (newRM.mustBeTemporary()) assert(durationInMinutes > 0)
@@ -391,6 +391,41 @@ class LoopPlugin @Inject constructor(
             }
         }
         return false
+    }
+
+    private suspend fun allowedNextModesWhenSuspendedByPump(): MutableList<RM.Mode> {
+        if (!config.APS) return mutableListOf()
+        if (!runCatching { activePlugin.activePumpInternal }.isSuccess) return mutableListOf()
+        val modes = mutableListOf<RM.Mode>()
+        val pumpSuspended = runCatching { activePlugin.activePump.isSuspended() }.getOrDefault(true)
+        if (!pumpSuspended) {
+            modes.add(RM.Mode.RESUME)
+            return modes
+        }
+        val rm = persistenceLayer.getRunningModeActiveAt(dateUtil.now())
+        if (rm.isTemporary() && dateUtil.now() - rm.timestamp > T.hours(2).msecs()) {
+            modes.add(RM.Mode.RESUME)
+        }
+        return modes
+    }
+
+    private suspend fun endPumpSuspendedRunningMode(
+        currentRM: RM,
+        action: Action,
+        source: Sources,
+        listValues: List<ValueWithUnit>
+    ): Boolean {
+        val now = dateUtil.now()
+        currentRM.duration = (now - currentRM.timestamp).coerceAtLeast(1L)
+        val result = persistenceLayer.insertOrUpdateRunningMode(
+            runningMode = currentRM,
+            action = action,
+            source = source,
+            listValues = listValues
+        )
+        rxBus.send(EventRefreshOverview("handleRunningModeChange"))
+        runningModePreCheckSuspend()
+        return result.inserted.isNotEmpty() || result.updated.isNotEmpty()
     }
 
     /**

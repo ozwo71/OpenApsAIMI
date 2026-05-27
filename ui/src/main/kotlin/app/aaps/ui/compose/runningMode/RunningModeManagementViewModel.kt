@@ -17,12 +17,14 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.ProfileFunction
+import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventShowSnackbar
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.Translator
 import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.ui.R
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,6 +50,7 @@ class RunningModeManagementViewModel @Inject constructor(
     private val profileFunction: ProfileFunction,
     private val activePlugin: ActivePlugin,
     private val translator: Translator,
+    private val rh: ResourceHelper,
     private val preferences: Preferences,
     private val persistenceLayer: PersistenceLayer,
     private val aapsLogger: AAPSLogger,
@@ -149,6 +152,14 @@ class RunningModeManagementViewModel @Inject constructor(
                     else                            -> { /* no tracking needed */
                     }
                 }
+                loadState()
+            } else {
+                rxBus.send(
+                    EventShowSnackbar(
+                        rh.gs(R.string.running_mode_change_failed),
+                        EventShowSnackbar.Type.Error
+                    )
+                )
             }
         }
     }

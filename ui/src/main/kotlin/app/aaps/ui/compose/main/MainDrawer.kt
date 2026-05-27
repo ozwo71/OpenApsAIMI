@@ -1,6 +1,5 @@
 package app.aaps.ui.compose.main
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +23,7 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import app.aaps.core.ui.compose.AppBrandIcon
 import app.aaps.core.ui.compose.navigation.ElementType
 import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.core.ui.compose.navigation.descriptionResId
@@ -47,8 +47,8 @@ fun MainDrawer(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
         ) {
-            Image(
-                painter = painterResource(id = appIcon),
+            AppBrandIcon(
+                iconResId = appIcon,
                 contentDescription = "AAPS Logo",
                 modifier = Modifier.size(40.dp)
             )

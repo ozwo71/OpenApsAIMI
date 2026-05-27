@@ -11,16 +11,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -36,6 +33,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.net.toUri
 import app.aaps.core.interfaces.configuration.ExternalOptions
 import app.aaps.core.ui.R
+import app.aaps.core.ui.compose.AppBrandIcon
 
 data class AboutDialogData(
     val title: String,
@@ -56,11 +54,10 @@ fun AboutAlertDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
-            Icon(
-                painter = painterResource(id = data.icon),
+            AppBrandIcon(
+                iconResId = data.icon,
                 contentDescription = null,
-                modifier = Modifier.size(48.dp),
-                tint = Color.Unspecified
+                modifier = Modifier.size(48.dp)
             )
         },
         title = {
