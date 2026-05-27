@@ -900,7 +900,7 @@ class ComposeMainActivity : AppCompatActivity() {
         if (!config.appInitialized) return
         refreshOnResume()
         // Defer heavy dashboard refresh while an AIMI loop tick holds the exclusive lock (reduces resume ANR).
-        val deferMs = if (AimiLoopRuntimeGuard.isDetermineBasalTickInProgress()) 2_500L else 0L
+        val deferMs = AimiLoopRuntimeGuard.overviewRefreshDeferMs()
         window.decorView.postDelayed({
             if (isDestroyed) return@postDelayed
             if (storedSkinPrefersDashboardHome(preferences.get(StringKey.GeneralSkin))) {

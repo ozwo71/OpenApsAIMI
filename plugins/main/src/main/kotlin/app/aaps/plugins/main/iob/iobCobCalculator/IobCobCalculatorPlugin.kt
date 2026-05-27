@@ -41,8 +41,10 @@ import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.interfaces.utils.MidnightTime
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
+import app.aaps.core.interfaces.workflow.AppInitCalculationPolicy
 import app.aaps.core.interfaces.workflow.CalculationSignalsEmitter
 import app.aaps.core.interfaces.workflow.CalculationWorkflow
+import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiLoopRuntimeGuard
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.StringKey
@@ -60,6 +62,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
@@ -176,19 +180,7 @@ class IobCobCalculatorPlugin @Inject constructor(
             .toObservable(EventAppInitialized::class.java)
             .observeOn(aapsSchedulers.io)
             .subscribe(
-                {
-                    calculationWorkflow.runCalculation(
-                        CalculationWorkflow.MAIN_CALCULATION,
-                        this,
-                        overviewData,
-                        cache.get(),
-                        signals,
-                        "onEventAppInitialized",
-                        System.currentTimeMillis(),
-                        bgDataReload = true,
-                        triggeredByNewBG = false
-                    )
-                },
+                { scheduleDeferredAppInitializedCalculation() },
                 fabricPrivacy::logException
             )
         historyWorker = Executors.newSingleThreadScheduledExecutor()
@@ -201,6 +193,31 @@ class IobCobCalculatorPlugin @Inject constructor(
         historyWorker?.shutdown()
         historyWorker = null
         super.onStop()
+    }
+
+    private fun scheduleDeferredAppInitializedCalculation() {
+        val activeScope = scope ?: return
+        activeScope.launch {
+            delay(AppInitCalculationPolicy.DEFER_MS)
+            if (AimiLoopRuntimeGuard.isDetermineBasalTickInProgress()) {
+                aapsLogger.debug(
+                    LTag.AUTOSENS,
+                    "Deferred ${AppInitCalculationPolicy.REASON_ON_EVENT_APP_INITIALIZED} skipped — AIMI tick active"
+                )
+                return@launch
+            }
+            calculationWorkflow.runCalculation(
+                CalculationWorkflow.MAIN_CALCULATION,
+                iobCobCalculator = this@IobCobCalculatorPlugin,
+                overviewData = overviewData,
+                cache = cache.get(),
+                signals = signals,
+                reason = AppInitCalculationPolicy.REASON_ON_EVENT_APP_INITIALIZED,
+                end = System.currentTimeMillis(),
+                bgDataReload = true,
+                triggeredByNewBG = false
+            )
+        }
     }
 
     private fun resetDataAndRunCalculation(reason: String) {

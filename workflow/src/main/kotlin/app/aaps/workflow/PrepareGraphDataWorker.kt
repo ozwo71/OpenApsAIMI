@@ -47,6 +47,7 @@ import app.aaps.core.interfaces.rx.events.EventBucketedDataCreated
 import app.aaps.core.interfaces.smoothing.SmoothingContext
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
+import app.aaps.core.interfaces.workflow.AppInitCalculationPolicy
 import app.aaps.core.interfaces.workflow.CalculationSignalsEmitter
 import app.aaps.core.interfaces.workflow.CalculationWorkflow
 import app.aaps.core.keys.DoubleKey
@@ -265,8 +266,15 @@ class PrepareGraphDataWorker(
             val prevDataTime = ads.roundUpTime(bucketedData[bucketedData.size - 3].timestamp)
             aapsLogger.debug(LTag.AUTOSENS) { "Prev data time: " + dateUtil.dateAndTimeString(prevDataTime) }
             var previous = autosensDataTable[prevDataTime]
+            val oldestBucketIndex = AppInitCalculationPolicy.warmStartOldestBucketIndex(bucketedData.size, data.reason)
+            if (oldestBucketIndex > 0) {
+                aapsLogger.debug(
+                    LTag.AUTOSENS,
+                    "AUTOSENSDATA warm-start ${data.reason}: skipping buckets 0..${oldestBucketIndex - 1} of ${bucketedData.size}"
+                )
+            }
             // start from oldest to be able sub cob
-            for (i in bucketedData.size - 4 downTo 0) {
+            for (i in bucketedData.size - 4 downTo oldestBucketIndex) {
                 data.signals.emitProgress(CalculationWorkflow.ProgressData.IOB_COB_OREF, 100 - (100.0 * i / bucketedData.size).toInt())
                 if (isStopped) {
                     aapsLogger.debug(LTag.AUTOSENS, "Aborting calculation thread (trigger): ${data.reason}")
@@ -484,8 +492,15 @@ class PrepareGraphDataWorker(
             val prevDataTime = ads.roundUpTime(bucketedData[bucketedData.size - 3].timestamp)
             aapsLogger.debug(LTag.AUTOSENS) { "Prev data time: " + dateUtil.dateAndTimeString(prevDataTime) }
             var previous = autosensDataTable[prevDataTime]
+            val oldestBucketIndexOref = AppInitCalculationPolicy.warmStartOldestBucketIndex(bucketedData.size, data.reason)
+            if (oldestBucketIndexOref > 0) {
+                aapsLogger.debug(
+                    LTag.AUTOSENS,
+                    "AUTOSENSDATA warm-start ${data.reason}: skipping buckets 0..${oldestBucketIndexOref - 1} of ${bucketedData.size}"
+                )
+            }
             // start from oldest to be able to sub cob
-            for (i in bucketedData.size - 4 downTo 0) {
+            for (i in bucketedData.size - 4 downTo oldestBucketIndexOref) {
                 data.signals.emitProgress(CalculationWorkflow.ProgressData.IOB_COB_OREF, 100 - (100.0 * i / bucketedData.size).toInt())
                 if (isStopped) {
                     aapsLogger.debug(LTag.AUTOSENS) { "Aborting calculation thread (trigger): ${data.reason}" }

@@ -153,12 +153,18 @@ internal class DashboardShellController(
         }
     }
 
-    private val embeddedResumeDeferredRunnable = Runnable {
+    private var pendingOverviewRefreshTag: String? = null
+    private var pendingOverviewRefreshNow: Boolean = false
+    private var pendingOverviewRefreshIncludeIob: Boolean = true
+
+    private val overviewRefreshWhenSafeRunnable = Runnable {
+        val tag = pendingOverviewRefreshTag ?: return@Runnable
         if (!host.isBindingAttached() || shellBinding == null || !config.appInitialized) return@Runnable
-        activePlugin.activeOverview.overviewBus.send(
-            EventUpdateOverviewIobCob("$eventSourcePrefix.embeddedResumeDeferred"),
-        )
-        rxBus.send(EventRefreshOverview("$eventSourcePrefix.embeddedResumeDeferred", now = false))
+        pendingOverviewRefreshTag = null
+        if (pendingOverviewRefreshIncludeIob) {
+            activePlugin.activeOverview.overviewBus.send(EventUpdateOverviewIobCob(tag))
+        }
+        rxBus.send(EventRefreshOverview(tag, now = pendingOverviewRefreshNow))
     }
 
     fun attach(binding: FragmentDashboardBinding) {
@@ -412,7 +418,7 @@ internal class DashboardShellController(
         cancelDashboardRefreshJobs()
         shellBinding?.root?.let { root ->
             root.removeCallbacks(coalescedUiPipelineRunnable)
-            root.removeCallbacks(embeddedResumeDeferredRunnable)
+            root.removeCallbacks(overviewRefreshWhenSafeRunnable)
         }
         disposables.clear()
         graphViewportLayoutListener?.let { listener ->
@@ -488,13 +494,45 @@ internal class DashboardShellController(
         if (shellBinding == null || !config.appInitialized || !host.isBindingAttached()) return
         startDashboardPeriodicRefresh()
         subscribeOverviewCacheMarkerStreams()
-        rxBus.send(EventRefreshOverview("$eventSourcePrefix.dataPipeline", now = false))
-        activePlugin.activeOverview.overviewBus.send(EventUpdateOverviewIobCob("$eventSourcePrefix.dataPipeline"))
+        scheduleOverviewRefreshWhenSafe(
+            tagSuffix = "dataPipeline",
+            now = false,
+            includeIobCob = true,
+            extraDebounceMs = 0L,
+        )
         if (host.embeddedInComposeMainShell()) {
-            val binding = shellBinding ?: return
-            val root = binding.root
-            root.removeCallbacks(embeddedResumeDeferredRunnable)
-            root.postDelayed(embeddedResumeDeferredRunnable, 200L)
+            scheduleOverviewRefreshWhenSafe(
+                tagSuffix = "embeddedResumeDeferred",
+                now = false,
+                includeIobCob = true,
+                extraDebounceMs = EMBEDDED_RESUME_DEBOUNCE_MS,
+            )
+        }
+    }
+
+    private fun scheduleOverviewRefreshWhenSafe(
+        tagSuffix: String,
+        now: Boolean,
+        includeIobCob: Boolean,
+        extraDebounceMs: Long,
+    ) {
+        if (!config.appInitialized) return
+        val root = shellBinding?.root
+        pendingOverviewRefreshTag = "$eventSourcePrefix.$tagSuffix"
+        pendingOverviewRefreshNow = now
+        pendingOverviewRefreshIncludeIob = includeIobCob
+        val deferMs = extraDebounceMs + DashboardOverviewRefreshGate.deferMsIfAimiTickActive()
+        if (root == null) {
+            if (deferMs == 0L) {
+                overviewRefreshWhenSafeRunnable.run()
+            }
+            return
+        }
+        root.removeCallbacks(overviewRefreshWhenSafeRunnable)
+        if (deferMs == 0L) {
+            overviewRefreshWhenSafeRunnable.run()
+        } else {
+            root.postDelayed(overviewRefreshWhenSafeRunnable, deferMs)
         }
     }
 
@@ -505,6 +543,8 @@ internal class DashboardShellController(
         embeddedLayoutSettleRefreshJob = null
         overviewCacheMarkerJob?.cancel()
         overviewCacheMarkerJob = null
+        shellBinding?.root?.removeCallbacks(overviewRefreshWhenSafeRunnable)
+        pendingOverviewRefreshTag = null
     }
 
     /**
@@ -538,7 +578,12 @@ internal class DashboardShellController(
         periodicOverviewRefreshJob = host.liveDataOwner.lifecycleScope.launch {
             while (isActive) {
                 if (host.isBindingAttached() && shellBinding != null && config.appInitialized) {
-                    rxBus.send(EventRefreshOverview("$eventSourcePrefix.periodic"))
+                    scheduleOverviewRefreshWhenSafe(
+                        tagSuffix = "periodic",
+                        now = false,
+                        includeIobCob = false,
+                        extraDebounceMs = 0L,
+                    )
                 }
                 delay(DASHBOARD_PERIODIC_REFRESH_MS)
             }
@@ -548,7 +593,12 @@ internal class DashboardShellController(
                 delay(EMBEDDED_LAYOUT_SETTLE_REFRESH_MS)
                 if (!host.isBindingAttached() || shellBinding == null) return@launch
                 if (!config.appInitialized) return@launch
-                rxBus.send(EventRefreshOverview("$eventSourcePrefix.embeddedLayoutSettle"))
+                scheduleOverviewRefreshWhenSafe(
+                    tagSuffix = "embeddedLayoutSettle",
+                    now = false,
+                    includeIobCob = false,
+                    extraDebounceMs = 0L,
+                )
             }
         }
     }
@@ -1388,6 +1438,7 @@ internal class DashboardShellController(
         private const val MARKER_DATA_RETRY_DELAY_MS = 700L
         private const val MARKER_DATA_RETRY_MAX_ATTEMPTS = 8
         private const val DASHBOARD_PERIODIC_REFRESH_MS = 60 * 1000L
+        private const val EMBEDDED_RESUME_DEBOUNCE_MS = 200L
         private const val EMBEDDED_LAYOUT_SETTLE_REFRESH_MS = 2_000L
     }
 }
