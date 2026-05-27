@@ -83,14 +83,19 @@ interface UiInteraction {
     }
 
     /**
-     * Starts a repeating alarm sound.
-     * @param sound The raw resource ID of the sound to play.
-     * @param reason A string describing why the alarm is being started.
+     * Posts a sound-bearing notification for an in-app notification (overview/dashboard list).
+     * Replaces the old foreground AlarmSoundService path.
      */
-    fun startAlarm(@RawRes sound: Int, reason: String)
+    fun postNotificationSoundAlarm(notificationKey: Int, @RawRes soundId: Int, title: String, body: String, urgent: Boolean)
 
     /**
-     * Stops any currently playing alarm.
+     * Cancels the sound notification for a single in-app notification key without stopping other active alarms.
+     */
+    fun cancelNotificationSoundAlarm(notificationKey: Int)
+
+    /**
+     * Stops any currently playing alarm (cancels FSI + all sound notifications).
+     * Per-AAPS-notification cancellation happens internally inside the implementation module.
      * @param reason A string describing why the alarm is being stopped.
      */
     fun stopAlarm(reason: String)

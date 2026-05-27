@@ -190,7 +190,8 @@ class BuiltInSearchables @Inject constructor(
             IntKey.AlertsPumpUnreachableThreshold,
             BooleanKey.AlertCarbsRequired,
             BooleanKey.AlertUrgentAsAndroidNotification,
-            BooleanKey.AlertIncreaseVolume
+            BooleanKey.AlertIncreaseVolume,
+            BooleanKey.AlertOverrideDoNotDisturb
         ),
         icon = Icons.Default.Notifications
     )

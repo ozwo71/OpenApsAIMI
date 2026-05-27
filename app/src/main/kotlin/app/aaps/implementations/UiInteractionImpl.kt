@@ -2,28 +2,34 @@ package app.aaps.implementations
 
 import android.content.Context
 import android.content.Intent
+import android.os.Looper
+import android.widget.Toast
 import androidx.annotation.RawRes
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ProcessLifecycleOwner
 import app.aaps.ComposeMainActivity
 import app.aaps.compose.navigation.AppRoute
 import app.aaps.core.ui.compose.ScreenMode
+import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.AlarmIntent
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.implementation.androidNotification.AlarmNotificationManager
 import app.aaps.ui.activities.ErrorActivity
 import app.aaps.ui.dialogs.AlertDialogs
-import app.aaps.ui.services.AlarmSoundService
-import app.aaps.ui.services.AlarmSoundServiceHelper
 import dagger.Reusable
 import javax.inject.Inject
 
-@Suppress("DEPRECATION")
 @Reusable
 class UiInteractionImpl @Inject constructor(
     private val context: Context,
     rxBus: RxBus,
-    private val alarmSoundServiceHelper: AlarmSoundServiceHelper,
-    preferences: Preferences
+    preferences: Preferences,
+    private val alarmNotificationManager: AlarmNotificationManager,
+    private val aapsLogger: AAPSLogger
 ) : UiInteraction {
 
     private val alertDialogs: AlertDialogs = AlertDialogs(preferences, rxBus)
@@ -35,20 +41,53 @@ class UiInteractionImpl @Inject constructor(
     override val unitsValues = arrayOf<CharSequence>("mg/dl", "mmol")
 
     override fun runAlarm(status: String, title: String, @RawRes soundId: Int) {
-        val i = Intent(context, errorHelperActivity)
-        i.putExtra(AlarmSoundService.SOUND_ID, soundId)
-        i.putExtra(AlarmSoundService.STATUS, status)
-        i.putExtra(AlarmSoundService.TITLE, title)
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        context.startActivity(i)
+        // ProcessLifecycleOwner.currentState requires main-thread access (officially @MainThread).
+        // BLE callbacks, RxJava workers, and coroutine non-main dispatchers all call runAlarm
+        // from non-main threads. From those contexts we skip the foreground-direct optimization
+        // entirely and use the FSI path, which is safe from any thread.
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            aapsLogger.debug(LTag.CORE, "runAlarm (off-main → FSI): $title - $status (sound=$soundId)")
+            alarmNotificationManager.postFullScreenAlarm(status = status, title = title, soundId = soundId)
+            return
+        }
+
+        if (isAppInForeground()) {
+            aapsLogger.debug(LTag.CORE, "runAlarm (foreground direct): $title - $status (sound=$soundId)")
+            val intent = Intent(context, errorHelperActivity).apply {
+                putExtra(AlarmIntent.EXTRA_SOUND_ID, soundId)
+                putExtra(AlarmIntent.EXTRA_STATUS, status)
+                putExtra(AlarmIntent.EXTRA_TITLE, title)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            try {
+                context.startActivity(intent)
+            } catch (ex: Exception) {
+                aapsLogger.error(LTag.CORE, "runAlarm: direct startActivity failed, falling back to FSI", ex)
+                postFsiFallback(status, title, soundId)
+            }
+        } else {
+            aapsLogger.debug(LTag.CORE, "runAlarm (background via FSI): $title - $status (sound=$soundId)")
+            alarmNotificationManager.postFullScreenAlarm(status = status, title = title, soundId = soundId)
+        }
     }
 
-    override fun startAlarm(@RawRes sound: Int, reason: String) {
-        alarmSoundServiceHelper.startAlarm(sound, reason)
+    override fun postNotificationSoundAlarm(notificationKey: Int, @RawRes soundId: Int, title: String, body: String, urgent: Boolean) {
+        alarmNotificationManager.postSoundAlarmNotification(
+            notificationKey = notificationKey,
+            soundId = soundId,
+            title = title,
+            body = body,
+            urgent = urgent
+        )
+    }
+
+    override fun cancelNotificationSoundAlarm(notificationKey: Int) {
+        alarmNotificationManager.cancelSoundAlarm(notificationKey)
     }
 
     override fun stopAlarm(reason: String) {
-        alarmSoundServiceHelper.stopAlarm(reason)
+        aapsLogger.debug(LTag.CORE, "stopAlarm: $reason")
+        alarmNotificationManager.cancelAlarm()
     }
 
     override fun showOkDialog(context: Context, title: String, message: String, onFinish: (() -> Unit)?) {
@@ -128,4 +167,16 @@ class UiInteractionImpl @Inject constructor(
             putExtra(ComposeMainActivity.EXTRA_NAVIGATE_ROUTE, navRoute)
         })
     }
+
+    private fun postFsiFallback(status: String, title: String, @RawRes soundId: Int) {
+        alarmNotificationManager.postFullScreenAlarm(status = status, title = title, soundId = soundId)
+        runCatching {
+            Toast.makeText(context, "ALARM: $title — $status", Toast.LENGTH_LONG).show()
+        }.onFailure {
+            aapsLogger.error(LTag.CORE, "runAlarm: Toast fallback also failed; alarm not user-visible", it)
+        }
+    }
+
+    private fun isAppInForeground(): Boolean =
+        ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
 }

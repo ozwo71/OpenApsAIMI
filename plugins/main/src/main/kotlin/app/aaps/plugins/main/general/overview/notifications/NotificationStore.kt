@@ -77,7 +77,19 @@ class NotificationStore @Inject constructor(
         store.add(n)
         if (preferences.get(BooleanKey.AlertUrgentAsAndroidNotification) && n !is NotificationWithAction)
             raiseSystemNotification(n)
-        if (n.soundId != null && n.soundId != 0) uiInteraction.startAlarm(n.soundId!!, n.text.orEmpty())
+        if (n.soundId != null && n.soundId != 0) {
+            val title = if (n.level == Notification.URGENT)
+                rh.gs(app.aaps.core.ui.R.string.urgent_alarm)
+            else
+                rh.gs(app.aaps.core.ui.R.string.info)
+            uiInteraction.postNotificationSoundAlarm(
+                notificationKey = n.id,
+                soundId = n.soundId!!,
+                title = title,
+                body = n.text.orEmpty(),
+                urgent = n.level == Notification.URGENT
+            )
+        }
         Collections.sort(store, NotificationComparator())
         return true
     }
@@ -86,7 +98,7 @@ class NotificationStore @Inject constructor(
     fun remove(id: Int): Boolean {
         for (i in store.indices) {
             if (store[i].id == id) {
-                if (store[i].soundId != null) uiInteraction.stopAlarm("Removed " + store[i].text.orEmpty())
+                if (store[i].soundId != null) uiInteraction.cancelNotificationSoundAlarm(store[i].id)
                 aapsLogger.debug(LTag.NOTIFICATION, "Notification removed: " + store[i].text)
                 store.removeAt(i)
                 return true
@@ -101,7 +113,7 @@ class NotificationStore @Inject constructor(
         while (i < store.size) {
             val n = store[i]
             if (n.validTo != 0L && n.validTo < System.currentTimeMillis()) {
-                if (store[i].soundId != null) uiInteraction.stopAlarm("Expired " + store[i].text)
+                if (store[i].soundId != null) uiInteraction.cancelNotificationSoundAlarm(store[i].id)
                 aapsLogger.debug(LTag.NOTIFICATION, "Notification expired: " + store[i].text)
                 store.removeAt(i)
                 i--
