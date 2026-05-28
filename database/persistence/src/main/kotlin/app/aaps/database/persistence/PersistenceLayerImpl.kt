@@ -31,8 +31,10 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
+import android.database.CursorWindowAllocationException
 import android.database.sqlite.SQLiteOutOfMemoryException
 import app.aaps.database.AppRepository
+import app.aaps.database.DatabaseMaintenanceCoordinator
 import app.aaps.database.entities.Bolus
 import app.aaps.database.entities.BolusCalculatorResult
 import app.aaps.database.entities.Carbs
@@ -158,9 +160,10 @@ class PersistenceLayerImpl @Inject constructor(
     override fun clearDatabases() = repository.clearDatabases()
     override val databaseClearedFlow: Flow<Unit> get() = repository.databaseClearedFlow()
     override fun clearApsResults() = repository.clearApsResults()
-    override suspend fun cleanupDatabase(keepDays: Long, deleteTrackedChanges: Boolean): String = withContext(Dispatchers.IO) {
-        repository.cleanupDatabase(keepDays, deleteTrackedChanges)
-    }
+    override suspend fun cleanupDatabase(keepDays: Long, deleteTrackedChanges: Boolean, runVacuum: Boolean): String =
+        withContext(Dispatchers.IO) {
+            repository.cleanupDatabase(keepDays, deleteTrackedChanges, runVacuum)
+        }
 
     // Flow-based change observation
     @Suppress("UNCHECKED_CAST")
@@ -932,7 +935,20 @@ class PersistenceLayerImpl @Inject constructor(
 
     // EPS
     override suspend fun getEffectiveProfileSwitchActiveAt(timestamp: Long): EPS? = withContext(Dispatchers.IO) {
-        repository.getEffectiveProfileSwitchActiveAt(timestamp)?.fromDb()
+        if (DatabaseMaintenanceCoordinator.isCompactionInProgress) return@withContext null
+        runCatching { repository.getEffectiveProfileSwitchActiveAt(timestamp)?.fromDb() }
+            .onFailure { e ->
+                if (e.isSqliteMemoryError()) {
+                    aapsLogger.error(
+                        LTag.DATABASE,
+                        "getEffectiveProfileSwitchActiveAt memory error at $timestamp — run database cleanup",
+                        e
+                    )
+                } else {
+                    aapsLogger.error(LTag.DATABASE, "getEffectiveProfileSwitchActiveAt failed at $timestamp", e)
+                }
+            }
+            .getOrNull()
     }
 
     override suspend fun getEffectiveProfileSwitchByNSId(nsId: String): EPS? = withContext(Dispatchers.IO) {
@@ -1254,8 +1270,25 @@ class PersistenceLayerImpl @Inject constructor(
     }
 
     override suspend fun getRunningModeActiveAt(timestamp: Long): RM = withContext(Dispatchers.IO) {
-        repository.getRunningModeActiveAt(timestamp)?.fromDb()
-            ?: RM(timestamp = 0, mode = RM.DEFAULT_MODE, duration = 0)
+        if (DatabaseMaintenanceCoordinator.isCompactionInProgress) {
+            return@withContext RM(timestamp = 0, mode = RM.DEFAULT_MODE, duration = 0)
+        }
+        runCatching {
+            repository.getRunningModeActiveAt(timestamp)?.fromDb()
+                ?: RM(timestamp = 0, mode = RM.DEFAULT_MODE, duration = 0)
+        }
+            .onFailure { e ->
+                if (e.isSqliteMemoryError()) {
+                    aapsLogger.error(
+                        LTag.DATABASE,
+                        "getRunningModeActiveAt memory error at $timestamp — run database cleanup",
+                        e
+                    )
+                } else {
+                    aapsLogger.error(LTag.DATABASE, "getRunningModeActiveAt failed at $timestamp", e)
+                }
+            }
+            .getOrElse { RM(timestamp = 0, mode = RM.DEFAULT_MODE, duration = 0) }
     }
 
     override suspend fun getRunningModeByNSId(nsId: String): RM? = withContext(Dispatchers.IO) {
@@ -1415,12 +1448,13 @@ class PersistenceLayerImpl @Inject constructor(
 
     // TB
     override suspend fun getTemporaryBasalActiveAt(timestamp: Long): TB? = withContext(Dispatchers.IO) {
+        if (DatabaseMaintenanceCoordinator.isCompactionInProgress) return@withContext null
         runCatching { repository.getTemporaryBasalActiveAt(timestamp)?.fromDb() }
             .onFailure { e ->
-                if (e.isSqliteOutOfMemory()) {
+                if (e.isSqliteMemoryError()) {
                     aapsLogger.error(
                         LTag.DATABASE,
-                        "getTemporaryBasalActiveAt OOM at $timestamp — run database cleanup",
+                        "getTemporaryBasalActiveAt memory error at $timestamp — run database cleanup",
                         e
                     )
                 } else {
@@ -2501,10 +2535,13 @@ class PersistenceLayerImpl @Inject constructor(
     }
 }
 
-private fun Throwable.isSqliteOutOfMemory(): Boolean {
+private fun Throwable.isSqliteMemoryError(): Boolean {
     var current: Throwable? = this
     while (current != null) {
-        if (current is SQLiteOutOfMemoryException) return true
+        when (current) {
+            is SQLiteOutOfMemoryException,
+            is CursorWindowAllocationException -> return true
+        }
         current = current.cause
     }
     return false

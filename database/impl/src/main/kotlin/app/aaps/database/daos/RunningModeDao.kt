@@ -38,6 +38,12 @@ internal interface RunningModeDao : TraceableDao<RunningMode> {
     @Query("SELECT * FROM $TABLE_RUNNING_MODE WHERE referenceId IS NULL AND isValid = 1 ORDER BY timestamp DESC LIMIT 1")
     suspend fun getAllRunningModes(): List<RunningMode>
 
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM $TABLE_RUNNING_MODE " +
+            "WHERE timestamp >= :since AND duration = 0 AND referenceId IS NULL AND isValid = 1)"
+    )
+    suspend fun hasPermanentRecordSince(since: Long): Boolean
+
     @Query("SELECT * FROM $TABLE_RUNNING_MODE WHERE (timestamp >= :timestamp) AND (referenceId IS NULL) ORDER BY timestamp ASC")
     suspend fun getRunningModeDataIncludingInvalidFromTime(timestamp: Long): List<RunningMode>
 

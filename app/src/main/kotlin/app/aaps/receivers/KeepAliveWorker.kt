@@ -160,7 +160,8 @@ class KeepAliveWorker(
     private suspend fun databaseCleanup() {
         val lastRun = preferences.get(LongNonKey.LastCleanupRun)
         if (lastRun < dateUtil.now() - T.days(1).msecs()) {
-            val result = persistenceLayer.cleanupDatabase(6 * 31, deleteTrackedChanges = false)
+            // Daily retention trim only — no VACUUM (blocks SQLite for minutes on large DBs; see Milos 16598541af).
+            val result = persistenceLayer.cleanupDatabase(6 * 31, deleteTrackedChanges = false, runVacuum = false)
             aapsLogger.debug(LTag.CORE, "Cleanup result: $result")
             preferences.put(LongNonKey.LastCleanupRun, dateUtil.now())
         }

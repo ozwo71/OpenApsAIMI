@@ -32,8 +32,24 @@ internal interface EffectiveProfileSwitchDao : TraceableDao<EffectiveProfileSwit
     @Query("SELECT * FROM $TABLE_EFFECTIVE_PROFILE_SWITCHES WHERE isValid = 1 AND referenceId IS NULL ORDER BY timestamp ASC LIMIT 1")
     suspend fun getOldestEffectiveProfileSwitchRecord(): EffectiveProfileSwitch?
 
-    @Query("SELECT * FROM $TABLE_EFFECTIVE_PROFILE_SWITCHES WHERE :timestamp >= timestamp AND referenceId IS NULL AND isValid = 1 ORDER BY timestamp DESC LIMIT 1")
-    suspend fun getEffectiveProfileSwitchActiveAt(timestamp: Long): EffectiveProfileSwitch?
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM $TABLE_EFFECTIVE_PROFILE_SWITCHES " +
+            "WHERE timestamp >= :since AND originalDuration = 0 AND referenceId IS NULL AND isValid = 1)"
+    )
+    suspend fun hasPermanentRecordSince(since: Long): Boolean
+
+    @Query(
+        "SELECT id FROM $TABLE_EFFECTIVE_PROFILE_SWITCHES WHERE timestamp <= :timestamp " +
+            "AND timestamp >= :earliestTimestamp AND referenceId IS NULL AND isValid = 1 " +
+            "ORDER BY timestamp DESC LIMIT 1"
+    )
+    suspend fun findActiveIdAt(timestamp: Long, earliestTimestamp: Long): Long?
+
+    @Query(
+        "SELECT id FROM $TABLE_EFFECTIVE_PROFILE_SWITCHES WHERE timestamp <= :timestamp " +
+            "AND referenceId IS NULL AND isValid = 1 ORDER BY timestamp DESC LIMIT 1"
+    )
+    suspend fun findActiveIdAtUnbounded(timestamp: Long): Long?
 
     @Query("SELECT * FROM $TABLE_EFFECTIVE_PROFILE_SWITCHES WHERE timestamp >= :timestamp AND isValid = 1 AND referenceId IS NULL ORDER BY timestamp ASC")
     suspend fun getEffectiveProfileSwitchDataFromTime(timestamp: Long): List<EffectiveProfileSwitch>

@@ -667,8 +667,8 @@ class OverviewDataCacheImpl @AssistedInject constructor(
 
     private suspend fun updateRunningModeFromDatabase() {
         val now = dateUtil.now()
-        val rmRecord = runCatching { loop.runningModeRecord() }
-            .getOrElse { persistenceLayer.getRunningModeActiveAt(now) }
+        val rmRecord = runCatching { persistenceLayer.getRunningModeActiveAt(now) }
+            .getOrElse { RM(timestamp = 0, mode = RM.DEFAULT_MODE, duration = 0) }
 
         // Store raw data only - ViewModel computes display text
         _runningModeFlow.value = RunningModeDisplayData(

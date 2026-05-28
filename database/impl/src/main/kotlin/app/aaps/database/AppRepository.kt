@@ -136,7 +136,7 @@ class AppRepository @Inject internal constructor(
 
     fun clearApsResults() = database.apsResultDao.deleteAllEntries()
 
-    suspend fun cleanupDatabase(keepDays: Long, deleteTrackedChanges: Boolean): String {
+    suspend fun cleanupDatabase(keepDays: Long, deleteTrackedChanges: Boolean, runVacuum: Boolean = false): String {
         database.openHelper.writableDatabase.query("PRAGMA optimize").use { }
         val than = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(keepDays)
         val removed = mutableListOf<Pair<String, Int>>()
@@ -151,10 +151,10 @@ class AppRepository @Inject internal constructor(
         removed.add(Pair("TemporaryTarget", database.temporaryTargetDao.deleteOlderThan(than)))
         removed.add(Pair("BolusCalculatorResult", database.bolusCalculatorResultDao.deleteOlderThan(than)))
         // keep at least one permanent EPS (don't delete if only expired temporaries exist within window)
-        if (database.effectiveProfileSwitchDao.getEffectiveProfileSwitchDataFromTime(than + 1).any { it.originalDuration == 0L })
+        if (database.effectiveProfileSwitchDao.hasPermanentRecordSince(than + 1))
             removed.add(Pair("EffectiveProfileSwitch", database.effectiveProfileSwitchDao.deleteOlderThan(than)))
         // keep at least one permanent PS
-        if (database.profileSwitchDao.getProfileSwitchDataFromTime(than + 1).any { it.duration == 0L })
+        if (database.profileSwitchDao.hasPermanentRecordSince(than + 1))
             removed.add(Pair("ProfileSwitch", database.profileSwitchDao.deleteOlderThan(than)))
         removed.add(Pair("ApsResult", database.apsResultDao.deleteOlderThan(than)))
         // keep version history database.versionChangeDao.deleteOlderThan(than)
@@ -163,7 +163,7 @@ class AppRepository @Inject internal constructor(
         // keep foods database.foodDao.deleteOlderThan(than)
         removed.add(Pair("DeviceStatus", database.deviceStatusDao.deleteOlderThan(than)))
         // keep at least one permanent RM (don't delete if only expired temporaries exist within window)
-        if (database.runningModeDao.getRunningModeDataFromTime(than + 1).any { it.duration == 0L })
+        if (database.runningModeDao.hasPermanentRecordSince(than + 1))
             removed.add(Pair("RunningMode", database.runningModeDao.deleteOlderThan(than)))
         removed.add(Pair("HeartRate", database.heartRateDao.deleteOlderThan(than)))
         removed.add(Pair("StepsCount", database.stepsCountDao.deleteOlderThan(than)))
@@ -192,11 +192,18 @@ class AppRepository @Inject internal constructor(
         removed
             .filter { it.second > 0 }
             .forEach { ret.append(it.first + " " + it.second + "<br>") }
-        database.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(TRUNCATE)").use { }
-        try {
-            database.openHelper.writableDatabase.execSQL("VACUUM")
-        } catch (e: android.database.sqlite.SQLiteException) {
-            ret.append("VACUUM failed: ${e.message}<br>")
+        if (runVacuum) {
+            DatabaseMaintenanceCoordinator.markCompactionStarted()
+            try {
+                database.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(TRUNCATE)").use { }
+                try {
+                    database.openHelper.writableDatabase.execSQL("VACUUM")
+                } catch (e: android.database.sqlite.SQLiteException) {
+                    ret.append("VACUUM failed: ${e.message}<br>")
+                }
+            } finally {
+                DatabaseMaintenanceCoordinator.markCompactionFinished()
+            }
         }
         return ret.toString()
     }
@@ -395,8 +402,14 @@ class AppRepository @Inject internal constructor(
     suspend fun getOldestEffectiveProfileSwitchRecord(): EffectiveProfileSwitch? =
         database.effectiveProfileSwitchDao.getOldestEffectiveProfileSwitchRecord()
 
-    suspend fun getEffectiveProfileSwitchActiveAt(timestamp: Long): EffectiveProfileSwitch? =
-        database.effectiveProfileSwitchDao.getEffectiveProfileSwitchActiveAt(timestamp)
+    suspend fun getEffectiveProfileSwitchActiveAt(timestamp: Long): EffectiveProfileSwitch? {
+        val earliest = EffectiveProfileSwitchQueryBounds.earliestTimestampForActiveAt(timestamp)
+        var id = database.effectiveProfileSwitchDao.findActiveIdAt(timestamp, earliest)
+        if (id == null && earliest > 0L) {
+            id = database.effectiveProfileSwitchDao.findActiveIdAtUnbounded(timestamp)
+        }
+        return id?.let { database.effectiveProfileSwitchDao.findById(it) }
+    }
 
     suspend fun getEffectiveProfileSwitchesFromTime(timestamp: Long, ascending: Boolean): List<EffectiveProfileSwitch> =
         database.effectiveProfileSwitchDao.getEffectiveProfileSwitchDataFromTime(timestamp).reversedIf(!ascending)

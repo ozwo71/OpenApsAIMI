@@ -87,7 +87,11 @@ class NSClientComposeContent(
                     scope.launch {
                         try {
                             val result = withContext(Dispatchers.IO) {
-                                persistenceLayer.cleanupDatabase(CLEANUP_RETENTION_DAYS, deleteTrackedChanges = true)
+                                persistenceLayer.cleanupDatabase(
+                                    CLEANUP_RETENTION_DAYS,
+                                    deleteTrackedChanges = true,
+                                    runVacuum = true
+                                )
                             }
                             if (result.isNotEmpty()) {
                                 resultMessage = "<b>$clearedEntriesText</b><br>$result"

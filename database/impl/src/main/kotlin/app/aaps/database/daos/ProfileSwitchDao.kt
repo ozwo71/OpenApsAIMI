@@ -40,6 +40,12 @@ internal interface ProfileSwitchDao : ProfileSwitchDaoWorkaround {
     @Query("SELECT * FROM $TABLE_PROFILE_SWITCHES WHERE referenceId IS NULL AND isValid = 1 ORDER BY timestamp DESC LIMIT 1")
     suspend fun getAllProfileSwitches(): List<ProfileSwitch>
 
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM $TABLE_PROFILE_SWITCHES " +
+            "WHERE timestamp >= :since AND duration = 0 AND referenceId IS NULL AND isValid = 1)"
+    )
+    suspend fun hasPermanentRecordSince(since: Long): Boolean
+
     @Query("SELECT * FROM $TABLE_PROFILE_SWITCHES WHERE (timestamp >= :timestamp) AND (referenceId IS NULL) ORDER BY timestamp ASC")
     suspend fun getProfileSwitchDataIncludingInvalidFromTime(timestamp: Long): List<ProfileSwitch>
 

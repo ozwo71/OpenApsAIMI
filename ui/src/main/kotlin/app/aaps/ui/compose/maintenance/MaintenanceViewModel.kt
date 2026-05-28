@@ -186,7 +186,7 @@ class MaintenanceViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    persistenceLayer.cleanupDatabase(93, deleteTrackedChanges = true)
+                    persistenceLayer.cleanupDatabase(93, deleteTrackedChanges = true, runVacuum = true)
                 }
                 if (result.isNotEmpty()) {
                     _events.emit(MaintenanceEvent.CleanupResult(result))

@@ -155,7 +155,7 @@ class NSClientFragment : DaggerFragment(), MenuProvider, PluginFragment {
                                 viewLifecycleOwner.lifecycleScope.launch {
                                     try {
                                         val result = withContext(Dispatchers.IO) {
-                                            persistenceLayer.cleanupDatabase(93, deleteTrackedChanges = true)
+                                            persistenceLayer.cleanupDatabase(93, deleteTrackedChanges = true, runVacuum = true)
                                         }
                                         if (result.isNotEmpty()) {
                                             OKDialog.show(

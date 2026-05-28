@@ -45,8 +45,9 @@ interface PersistenceLayer {
      * Perform database maintenance
      * @param keepDays remove all records older than
      * @param deleteTrackedChanges delete tracked changes from all tables
+     * @param runVacuum when true, run WAL checkpoint truncate and VACUUM (blocks the DB for a long time on large databases; use only for explicit user-initiated cleanup)
      */
-    suspend fun cleanupDatabase(keepDays: Long, deleteTrackedChanges: Boolean): String
+    suspend fun cleanupDatabase(keepDays: Long, deleteTrackedChanges: Boolean, runVacuum: Boolean = false): String
 
     // Flow-based change observation
     /**
