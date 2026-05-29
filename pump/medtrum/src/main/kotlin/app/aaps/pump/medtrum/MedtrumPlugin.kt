@@ -48,6 +48,7 @@ import app.aaps.core.keys.interfaces.withEntriesProvider
 import app.aaps.core.objects.constraints.ConstraintObject
 import app.aaps.core.ui.compose.icons.IcPluginMedtrum
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
+import app.aaps.pump.medtrum.code.ConnectionState
 import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
 import app.aaps.pump.medtrum.compose.MedtrumComposeContent
 import app.aaps.pump.medtrum.keys.MedtrumBooleanKey
@@ -185,11 +186,11 @@ class MedtrumPlugin @Inject constructor(
     override fun keepAliveShouldReadStatusWhenDisconnected(): Boolean = false
 
     override fun isBusy(): Boolean {
-        if (isConnecting()) return true
-        if (isHandshakeInProgress()) return true
-        if (!medtrumPump.bolusDone) return true
-        if (medtrumPump.tempBasalInProgress) return true
-        return false
+        // QueueWorker: only block while a bolus is actively being delivered.
+        // Do NOT use tempBasalInProgress — that means a TBR is running on the patch (normal in closed loop)
+        // and would leave the queue stuck on "busy"/CONNECTING forever (see PUMPQUEUE logs).
+        // Do not treat BLE connect / handshake as busy — use isConnecting() / isHandshakeInProgress().
+        return !medtrumPump.bolusDone
     }
 
     override fun isConnected(): Boolean {
@@ -202,7 +203,12 @@ class MedtrumPlugin @Inject constructor(
     }
 
     override fun isConnecting(): Boolean = medtrumService?.isConnecting == true
-    override fun isHandshakeInProgress(): Boolean = false
+
+    override fun isHandshakeInProgress(): Boolean =
+        isInitialized() &&
+            medtrumService != null &&
+            medtrumPump.connectionState == ConnectionState.CONNECTING &&
+            !isConnected()
 
     override fun finishHandshaking() {
         // Unused

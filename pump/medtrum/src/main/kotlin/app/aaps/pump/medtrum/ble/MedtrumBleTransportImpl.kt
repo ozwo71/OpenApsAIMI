@@ -336,7 +336,10 @@ class MedtrumBleTransportImpl @Inject constructor(
                 aapsLogger.error(LTag.PUMPBTCOMM, "GATT connect failed status=$status, closing")
                 isConnecting = false
                 isConnected = false
-                gatt.disconnect()
+                cachedDeviceAddress = null
+                gatt.close()
+                bluetoothGatt = null
+                medtrumCallback?.onDisconnected()
                 return
             }
             isConnected = true
@@ -472,6 +475,7 @@ class MedtrumBleTransportImpl @Inject constructor(
         aapsLogger.error(LTag.PUMPBTCOMM, "BluetoothAdapter or Gatt not initialized")
         isConnecting = false
         isConnected = false
+        medtrumCallback?.onDisconnected()
     }
 
     // --- Connection scan (auto-connects on SN match) ---
@@ -494,6 +498,9 @@ class MedtrumBleTransportImpl @Inject constructor(
 
             override fun onScanFailed(errorCode: Int) {
                 aapsLogger.error(LTag.PUMPBTCOMM, "Connection scan failed: $errorCode")
+                stopConnectionScan()
+                isConnecting = false
+                medtrumCallback?.onDisconnected()
             }
         }
         val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()

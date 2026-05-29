@@ -228,29 +228,37 @@ class MedtrumService : DaggerService(), MedtrumBleCallback {
     }
 
     fun connect(from: String): Boolean {
-        aapsLogger.debug(LTag.PUMP, "connect: called from: $from")
+        aapsLogger.debug(LTag.PUMP, "connect: called from: $from (state=$currentState, link=${medtrumPump.connectionState})")
+        if (from != "auto-reconnect") {
+            resetAutoReconnectState("connect from $from")
+        }
         return when (currentState) {
-            is IdleState  -> {
-                medtrumPump.connectionState = ConnectionState.CONNECTING
-                bleTransport.connect(from, medtrumPump.pumpSN)
-            }
+            is IdleState  -> beginBleConnect(from)
 
             is ReadyState -> {
-                aapsLogger.error(LTag.PUMPCOMM, "Connect attempt when in ReadyState from: $from")
                 if (isConnected) {
                     aapsLogger.debug(LTag.PUMP, "connect: already connected")
                     true
                 } else {
                     aapsLogger.debug(LTag.PUMP, "connect: not connected, resetting state and trying to connect")
                     toState(IdleState())
-                    medtrumPump.connectionState = ConnectionState.CONNECTING
-                    bleTransport.connect(from, medtrumPump.pumpSN)
+                    beginBleConnect(from)
                 }
             }
 
+            is CommandState -> {
+                aapsLogger.debug(LTag.PUMP, "connect: command in progress, link already up ($from)")
+                true
+            }
+
             else          -> {
-                aapsLogger.error(LTag.PUMPCOMM, "Connect attempt when in state: $currentState from: $from")
-                false
+                if (medtrumPump.connectionState == ConnectionState.CONNECTING) {
+                    aapsLogger.debug(LTag.PUMP, "connect: Medtrum auth handshake in progress ($from)")
+                    true
+                } else {
+                    aapsLogger.error(LTag.PUMPCOMM, "Connect attempt when in state: $currentState from: $from")
+                    false
+                }
             }
         }
     }
@@ -280,6 +288,17 @@ class MedtrumService : DaggerService(), MedtrumBleCallback {
         loadEvents()
         if (result) result = sendPacketAndGetResponse(StopPatchPacket(injector))
         return result
+    }
+
+    private fun beginBleConnect(from: String): Boolean {
+        medtrumPump.connectionState = ConnectionState.CONNECTING
+        val started = bleTransport.connect(from, medtrumPump.pumpSN)
+        if (!started) {
+            aapsLogger.error(LTag.PUMP, "beginBleConnect failed ($from)")
+            medtrumPump.connectionState = ConnectionState.DISCONNECTED
+            toState(IdleState())
+        }
+        return started
     }
 
     fun stopConnecting() {
