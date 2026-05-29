@@ -17,6 +17,7 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
@@ -36,7 +37,6 @@ import app.aaps.pump.medtrum.comm.ManufacturerData
 import app.aaps.pump.medtrum.comm.ReadDataPacket
 import app.aaps.pump.medtrum.comm.WriteCommandPackets
 import app.aaps.pump.medtrum.extension.toInt
-import app.aaps.pump.medtrum.keys.MedtrumBooleanKey
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -279,29 +279,77 @@ class MedtrumBleTransportImpl @Inject constructor(
 
     @Synchronized
     private fun connectGatt(device: BluetoothDevice) {
+        stopConnectionScan()
         writeSequenceNumber = 0
-        if (bluetoothGatt == null) {
-            bluetoothGatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
-        } else {
-            aapsLogger.error(LTag.PUMPBTCOMM, "connectGatt: gatt already exists, disconnecting first")
-            disconnect("connectGatt conflict")
+        closeExistingGatt()
+        handler.post {
+            MedtrumBleBondUtil.logBondStateIfRelevant(device, aapsLogger)
+            val gatt = openGattConnection(device)
+            if (gatt == null) {
+                aapsLogger.error(LTag.PUMPBTCOMM, "connectGatt failed for ${device.address}")
+                isConnecting = false
+                medtrumCallback?.onDisconnected()
+            } else {
+                bluetoothGatt = gatt
+            }
         }
+    }
+
+    private fun openGattConnection(device: BluetoothDevice): BluetoothGatt? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            device.connectGatt(
+                context,
+                false,
+                gattCallback,
+                BluetoothDevice.TRANSPORT_LE,
+                BluetoothDevice.PHY_LE_1M_MASK,
+                handler
+            )
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE, BluetoothDevice.PHY_LE_1M_MASK, handler)
+        } else {
+            device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+        }
+
+    @Synchronized
+    private fun closeExistingGatt() {
+        bluetoothGatt?.let { gatt ->
+            try {
+                gatt.disconnect()
+            } catch (_: Exception) {
+            }
+            try {
+                gatt.close()
+            } catch (_: Exception) {
+            }
+        }
+        bluetoothGatt = null
+        uartRead = null
+        uartWrite = null
     }
 
     @Synchronized
     private fun onConnectionStateChangeSynchronized(gatt: BluetoothGatt, status: Int, newState: Int) {
         aapsLogger.debug(LTag.PUMPBTCOMM, "onConnectionStateChange newState: $newState status: $status")
         if (newState == BluetoothProfile.STATE_CONNECTED) {
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                aapsLogger.error(LTag.PUMPBTCOMM, "GATT connect failed status=$status, closing")
+                isConnecting = false
+                isConnected = false
+                gatt.disconnect()
+                return
+            }
             isConnected = true
             isConnecting = false
-            bluetoothGatt?.discoverServices()
+            gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
+            gatt.discoverServices()
         } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+            if (status != BluetoothGatt.GATT_SUCCESS && status != 0) {
+                aapsLogger.warn(LTag.PUMPBTCOMM, "GATT disconnected with status=$status")
+            }
             if (isConnecting) {
-                val resetDevice = preferences.get(MedtrumBooleanKey.MedtrumScanOnConnectionErrors)
-                if (resetDevice) {
-                    aapsLogger.warn(LTag.PUMPBTCOMM, "Disconnected while connecting, resetting cached address")
-                    cachedDeviceAddress = null
-                }
+                aapsLogger.warn(LTag.PUMPBTCOMM, "Disconnected while connecting, clearing cached BLE address for rescan")
+                cachedDeviceAddress = null
                 SystemClock.sleep(2000)
             }
             gatt.close()
@@ -322,16 +370,15 @@ class MedtrumBleTransportImpl @Inject constructor(
             handleNotInitialized(); return
         }
         bluetoothGatt?.setCharacteristicNotification(characteristic, enabled)
-        characteristic?.getDescriptor(UUID.fromString(CONFIG_UUID))?.let {
+        characteristic?.getDescriptor(UUID.fromString(CONFIG_UUID))?.let { descriptor ->
+            val gatt = bluetoothGatt ?: return@let
             when {
                 characteristic.properties and NEEDS_ENABLE_NOTIFICATION > 0 -> {
-                    it.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                    bluetoothGatt?.writeDescriptor(it)
+                    writeDescriptorValue(gatt, descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
                 }
 
                 characteristic.properties and NEEDS_ENABLE_INDICATION > 0   -> {
-                    it.value = BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
-                    bluetoothGatt?.writeDescriptor(it)
+                    writeDescriptorValue(gatt, descriptor, BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)
                 }
             }
         }
@@ -385,17 +432,37 @@ class MedtrumBleTransportImpl @Inject constructor(
     @Synchronized
     private fun writeCharacteristicInternal(characteristic: BluetoothGattCharacteristic, data: ByteArray) {
         handler.postDelayed({
-                                if (bluetoothAdapter == null || bluetoothGatt == null) {
-                                    handleNotInitialized()
-                                } else {
-                                    characteristic.value = data
-                                    characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-                                    aapsLogger.debug(LTag.PUMPBTCOMM, "writeCharacteristic: ${data.contentToString()}")
-                                    if (bluetoothGatt?.writeCharacteristic(characteristic) != true) {
-                                        medtrumCallback?.onSendMessageError("Failed to write characteristic", true)
-                                    }
-                                }
-                            }, WRITE_DELAY_MILLIS)
+            val gatt = bluetoothGatt
+            if (bluetoothAdapter == null || gatt == null) {
+                handleNotInitialized()
+            } else {
+                aapsLogger.debug(LTag.PUMPBTCOMM, "writeCharacteristic: ${data.contentToString()}")
+                val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    gatt.writeCharacteristic(
+                        characteristic,
+                        data,
+                        BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                    ) == BluetoothGatt.GATT_SUCCESS
+                } else {
+                    characteristic.value = data
+                    characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                    gatt.writeCharacteristic(characteristic)
+                }
+                if (!ok) {
+                    medtrumCallback?.onSendMessageError("Failed to write characteristic", true)
+                }
+            }
+        }, WRITE_DELAY_MILLIS)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun writeDescriptorValue(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, value: ByteArray) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            gatt.writeDescriptor(descriptor, value)
+        } else {
+            descriptor.value = value
+            gatt.writeDescriptor(descriptor)
+        }
     }
 
     private val uartWriteChar: BluetoothGattCharacteristic
@@ -535,6 +602,7 @@ class MedtrumBleTransportImpl @Inject constructor(
         override fun connect(address: String): Boolean {
             if (!hasPermission(Manifest.permission.BLUETOOTH_CONNECT)) return false
             val device = bluetoothAdapter?.getRemoteDevice(address) ?: return false
+            isConnecting = true
             connectGatt(device)
             return true
         }
