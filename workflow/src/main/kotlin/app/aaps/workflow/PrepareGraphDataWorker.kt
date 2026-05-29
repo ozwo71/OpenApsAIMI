@@ -12,6 +12,7 @@ import app.aaps.core.interfaces.aps.AutosensData
 import app.aaps.core.interfaces.aps.AutosensDataStore
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.IobTotal
+import app.aaps.core.interfaces.calibration.CalibrationContext
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.IobCobCalculator
@@ -166,9 +167,10 @@ class PrepareGraphDataWorker(
         val basalIob = iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended().iob
         val smoothingContext = SmoothingContext(cachedTotalIobUnits = bolusIob + basalIob)
         val workingCopy: MutableList<InMemoryGlucoseValue> = synchronized(dataLock) {
-            bucketedData?.map { it.copy(smoothed = null) }?.toMutableList()
+            bucketedData?.map { it.copy(smoothed = null, calibrated = null) }?.toMutableList()
         } ?: return
-        val smoothed = activePlugin.activeSmoothing.smooth(workingCopy, smoothingContext)
+        val calibrated = activePlugin.activeCalibration.calibrate(workingCopy, CalibrationContext.NONE)
+        val smoothed = activePlugin.activeSmoothing.smooth(calibrated, smoothingContext)
         synchronized(dataLock) {
             bucketedData = smoothed
         }

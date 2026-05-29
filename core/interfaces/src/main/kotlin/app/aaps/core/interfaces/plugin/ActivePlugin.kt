@@ -4,6 +4,7 @@ import android.content.Context
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.aps.APS
 import app.aaps.core.interfaces.aps.Sensitivity
+import app.aaps.core.interfaces.calibration.Calibration
 import app.aaps.core.interfaces.constraints.Objectives
 import app.aaps.core.interfaces.constraints.Safety
 import app.aaps.core.interfaces.iob.IobCobCalculator
@@ -74,6 +75,12 @@ interface ActivePlugin {
      * Overview / dashboard plugin (provides [Overview.overviewBus] for UI refresh coordination).
      */
     val activeOverview: Overview
+
+    /**
+     * Calibration plugin (per-sensor override on top of factory-calibrated values).
+     * Defaults to no-op when no override plugin is enabled.
+     */
+    val activeCalibration: Calibration
 
     /**
      *  Currently selected NsClient plugin

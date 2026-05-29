@@ -56,6 +56,7 @@ import app.aaps.core.ui.compose.LocalSnackbarHostState
 import app.aaps.core.ui.compose.ScreenMode
 import app.aaps.core.ui.compose.ToolbarConfig
 import app.aaps.core.ui.compose.navigation.ElementType
+import app.aaps.core.ui.compose.navigation.LocalPluginNavigationRequest
 import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.core.ui.compose.preference.PluginPreferencesScreen
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
@@ -742,7 +743,16 @@ private fun PluginContentRoute(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            CompositionLocalProvider(LocalSnackbarHostState provides snackbarHostState) {
+            // remember so the lambda identity stays stable across recompositions —
+            // otherwise CompositionLocalProvider invalidates every consumer in the subtree
+            // on every PluginContentRoute recomposition.
+            val navigationRequestLambda = remember(onNavigationRequest, navController) {
+                { request: NavigationRequest -> onNavigationRequest(request, navController) }
+            }
+            CompositionLocalProvider(
+                LocalSnackbarHostState provides snackbarHostState,
+                LocalPluginNavigationRequest provides navigationRequestLambda
+            ) {
                 composeContent.Render(
                     setToolbarConfig = { config -> toolbarConfig = config },
                     onNavigateBack = { navController.safePopBackStack() },
