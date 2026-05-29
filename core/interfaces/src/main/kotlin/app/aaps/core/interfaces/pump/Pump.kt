@@ -46,6 +46,19 @@ interface Pump {
     fun isSuspended(): Boolean
 
     /**
+     * Whether delivery is halted in a way that should drive [app.aaps.core.data.model.RM.Mode.SUSPENDED_BY_PUMP]
+     * reconciliation. Defaults to [isSuspended]; drivers with a coarse [isSuspended] (e.g. Medtrum patch
+     * setup states) should override to avoid false suspend/resume cycles during BLE reconnect.
+     */
+    fun isSuspendedForRunningModeReconciliation(): Boolean = isSuspended()
+
+    /**
+     * When false, [app.aaps.receivers.KeepAliveWorker] skips [readStatus] while the link is down so the
+     * driver can own reconnect (e.g. Medtrum auto-reconnect) without competing BLE connect attempts.
+     */
+    fun keepAliveShouldReadStatusWhenDisconnected(): Boolean = true
+
+    /**
      * @return true if pump is not ready to accept commands right now
      */
     fun isBusy(): Boolean

@@ -179,7 +179,16 @@ class MedtrumPlugin @Inject constructor(
         return medtrumPump.pumpState < MedtrumPumpState.ACTIVE || medtrumPump.pumpState > MedtrumPumpState.ACTIVE_ALT
     }
 
+    override fun isSuspendedForRunningModeReconciliation(): Boolean =
+        medtrumPump.pumpState.isSuspendedByPump()
+
+    override fun keepAliveShouldReadStatusWhenDisconnected(): Boolean = false
+
     override fun isBusy(): Boolean {
+        if (isConnecting()) return true
+        if (isHandshakeInProgress()) return true
+        if (!medtrumPump.bolusDone) return true
+        if (medtrumPump.tempBasalInProgress) return true
         return false
     }
 

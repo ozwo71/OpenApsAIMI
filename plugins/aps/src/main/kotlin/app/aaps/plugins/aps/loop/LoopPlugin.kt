@@ -397,7 +397,7 @@ class LoopPlugin @Inject constructor(
         if (!config.APS) return mutableListOf()
         if (!runCatching { activePlugin.activePumpInternal }.isSuccess) return mutableListOf()
         val modes = mutableListOf<RM.Mode>()
-        val pumpSuspended = runCatching { activePlugin.activePump.isSuspended() }.getOrDefault(true)
+        val pumpSuspended = runCatching { activePlugin.activePump.isSuspendedForRunningModeReconciliation() }.getOrDefault(true)
         if (!pumpSuspended) {
             modes.add(RM.Mode.RESUME)
             return modes
@@ -448,32 +448,40 @@ class LoopPlugin @Inject constructor(
         // state because they have no real pump — doing so rewrites NS-synced SUSPENDED_BY_PUMP
         // rows with garbage durations and triggers a cross-device feedback loop.
         if (config.APS) {
-            // Suspended pump found but suspended running mode not set
-            if (activePlugin.activePump.isSuspended() && runningMode.mode != RM.Mode.SUSPENDED_BY_PUMP) {
-                suspendLoop(
-                    mode = RM.Mode.SUSPENDED_BY_PUMP,
-                    autoForced = true,
-                    reasons = rh.gs(app.aaps.core.ui.R.string.pumpsuspended),
-                    durationInMinutes = Int.MAX_VALUE,
-                    action = Action.SUSPEND,
-                    source = Sources.Loop
-                )
-                rxBus.send(EventRefreshOverview("runningModePreCheck"))
-                return
-            }
-            // Pump not suspended anymore but running mode is suspended by pump -> end running mode
-            if (!activePlugin.activePump.isSuspended() && runningMode.mode == RM.Mode.SUSPENDED_BY_PUMP) {
-                runningMode.duration = dateUtil.now() - runningMode.timestamp
-                @SuppressLint("CheckResult")
-                persistenceLayer.insertOrUpdateRunningMode(
-                    runningMode = runningMode,
-                    action = Action.PUMP_RUNNING,
-                    source = Sources.Loop,
-                    listValues = listOf(ValueWithUnit.SimpleString(rh.gs(app.aaps.core.ui.R.string.pump_running)))
-                )
-                // re-run to process other conditions
-                runningModePreCheckSuspend()
-                return
+            val pump = activePlugin.activePump
+            val mayReconcilePumpRunningMode = pump.isInitialized() &&
+                pump.isConnected() &&
+                !pump.isConnecting() &&
+                !pump.isHandshakeInProgress()
+            if (mayReconcilePumpRunningMode) {
+                val pumpSuspended = pump.isSuspendedForRunningModeReconciliation()
+                // Suspended pump found but suspended running mode not set
+                if (pumpSuspended && runningMode.mode != RM.Mode.SUSPENDED_BY_PUMP) {
+                    suspendLoop(
+                        mode = RM.Mode.SUSPENDED_BY_PUMP,
+                        autoForced = true,
+                        reasons = rh.gs(app.aaps.core.ui.R.string.pumpsuspended),
+                        durationInMinutes = Int.MAX_VALUE,
+                        action = Action.SUSPEND,
+                        source = Sources.Loop
+                    )
+                    rxBus.send(EventRefreshOverview("runningModePreCheck"))
+                    return
+                }
+                // Pump not suspended anymore but running mode is suspended by pump -> end running mode
+                if (!pumpSuspended && runningMode.mode == RM.Mode.SUSPENDED_BY_PUMP) {
+                    runningMode.duration = dateUtil.now() - runningMode.timestamp
+                    @SuppressLint("CheckResult")
+                    persistenceLayer.insertOrUpdateRunningMode(
+                        runningMode = runningMode,
+                        action = Action.PUMP_RUNNING,
+                        source = Sources.Loop,
+                        listValues = listOf(ValueWithUnit.SimpleString(rh.gs(app.aaps.core.ui.R.string.pump_running)))
+                    )
+                    // re-run to process other conditions
+                    runningModePreCheckSuspend()
+                    return
+                }
             }
         }
 

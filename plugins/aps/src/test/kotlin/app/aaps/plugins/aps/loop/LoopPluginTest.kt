@@ -350,7 +350,17 @@ class LoopPluginTest : TestBaseWithProfile() {
 
     private fun setupForPreCheck() = runTest {
         // Default setup: All constraints pass, pump is not suspended.
+        whenever(activePlugin.activePump.isInitialized()).thenReturn(true)
+        whenever(activePlugin.activePump.isConnected()).thenReturn(true)
+        whenever(activePlugin.activePump.isConnecting()).thenReturn(false)
+        whenever(activePlugin.activePump.isHandshakeInProgress()).thenReturn(false)
         whenever(activePlugin.activePump.isSuspended()).thenReturn(false)
+        whenever(activePlugin.activePump.isSuspendedForRunningModeReconciliation()).thenAnswer {
+            activePlugin.activePump.isSuspended()
+        }
+        whenever(commandQueue.cancelTempBasal(any(), any())).thenReturn(
+            pumpEnactResultProvider.get().success(true).enacted(true)
+        )
         whenever(constraintChecker.isLoopInvocationAllowed()).thenReturn(ConstraintObject(true, aapsLogger))
         whenever(constraintChecker.isClosedLoopAllowed()).thenReturn(ConstraintObject(true, aapsLogger))
         whenever(constraintChecker.isLgsForced()).thenReturn(ConstraintObject(false, aapsLogger))
@@ -375,6 +385,7 @@ class LoopPluginTest : TestBaseWithProfile() {
         // The current mode in the DB is CLOSED_LOOP, but the pump reports it's suspended
         mockCurrentMode(RM(mode = RM.Mode.CLOSED_LOOP, timestamp = dateUtil.now(), duration = 0))
         whenever(activePlugin.activePump.isSuspended()).thenReturn(true)
+        whenever(activePlugin.activePump.isSuspendedForRunningModeReconciliation()).thenReturn(true)
 
         // Act
         loopPlugin.runningModeRecord() // Accessing the property triggers the pre-check
@@ -400,6 +411,7 @@ class LoopPluginTest : TestBaseWithProfile() {
         val suspendedByPumpMode = RM(mode = RM.Mode.SUSPENDED_BY_PUMP, timestamp = dateUtil.now() - T.mins(5).msecs(), duration = 0)
         val previousMode = RM(mode = RM.Mode.CLOSED_LOOP, timestamp = dateUtil.now() - T.mins(10).msecs(), duration = T.mins(5).msecs())
         whenever(activePlugin.activePump.isSuspended()).thenReturn(false)
+        whenever(activePlugin.activePump.isSuspendedForRunningModeReconciliation()).thenReturn(false)
         whenever(rh.gs(app.aaps.core.ui.R.string.pump_running)).thenReturn("Pump running")
 
         // 1. First time getRunningModeActiveAt is called, return the suspended mode.

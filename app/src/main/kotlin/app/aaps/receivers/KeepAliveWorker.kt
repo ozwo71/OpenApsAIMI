@@ -229,7 +229,9 @@ class KeepAliveWorker(
         var shouldUploadStatus = false
         if (config.AAPSCLIENT) return
         if (config.PUMPCONTROL) shouldUploadStatus = true
-        else if (!loop.runningMode().isLoopRunning() || iobCobCalculator.ads.actualBg() == null) shouldUploadStatus = true
+        else if (!persistenceLayer.getRunningModeActiveAt(dateUtil.now()).mode.isLoopRunning() ||
+            iobCobCalculator.ads.actualBg() == null
+        ) shouldUploadStatus = true
         else if (activePlugin.activeAPS?.let { dateUtil.isOlderThan(it.lastAPSRun, 5) } == true) shouldUploadStatus = true
         if (dateUtil.isOlderThan(lastIobUpload, IOB_UPDATE_FREQUENCY_IN_MINUTES) && shouldUploadStatus) {
             lastIobUpload = dateUtil.now()
@@ -239,13 +241,13 @@ class KeepAliveWorker(
 
     @VisibleForTesting
     suspend fun checkPump() {
-        runCatching { loop.runningModeRecord() }
         val pump = activePlugin.activePump
         val ps = profileFunction.getRequestedProfile() ?: return
         val requestedProfile = ProfileSealed.PS(ps, activePlugin)
         val runningProfile = profileFunction.getProfile()
         val lastConnection = pump.lastDataTime.value
         val now = dateUtil.now()
+        val runningMode = persistenceLayer.getRunningModeActiveAt(now).mode
         val isStatusOutdated = lastConnection + STATUS_UPDATE_FREQUENCY < now
         val isBasalOutdated = abs(requestedProfile.getBasal() - ch.fromPump(pump.baseBasalRate)) > pump.pumpDescription.basalStep
         aapsLogger.debug(LTag.CORE, "Last connection: " + dateUtil.dateAndTimeString(lastConnection))
@@ -260,7 +262,6 @@ class KeepAliveWorker(
         // last read status attempt and the current time can be slightly over 5 minutes (for example,
         // 300041 milliseconds instead of exactly 300000). Add 30 extra seconds to allow for
         // plenty of tolerance.
-        val runningMode = loop.runningMode()
         if (lastReadStatus != 0L && (now - lastReadStatus).coerceIn(minimumValue = 0, maximumValue = null) <= T.secs(5 * 60 + 30).msecs()) {
             localAlertUtils.checkPumpUnreachableAlarm(lastConnection, isStatusOutdated, runningMode == RM.Mode.DISCONNECTED_PUMP)
         }
@@ -277,10 +278,10 @@ class KeepAliveWorker(
                 )
         ) {
             rxBus.send(EventProfileChangeRequested())
-        } else if (isStatusOutdated && !pump.isBusy()) {
+        } else if (isStatusOutdated && !pump.isBusy() && (pump.isConnected() || pump.keepAliveShouldReadStatusWhenDisconnected())) {
             lastReadStatus = now
             commandQueue.readStatus(rh.gs(app.aaps.core.ui.R.string.keepalive_status_outdated))
-        } else if (isBasalOutdated && !pump.isBusy()) {
+        } else if (isBasalOutdated && !pump.isBusy() && (pump.isConnected() || pump.keepAliveShouldReadStatusWhenDisconnected())) {
             lastReadStatus = now
             commandQueue.readStatus(rh.gs(app.aaps.core.ui.R.string.keepalive_basal_outdated))
         }
