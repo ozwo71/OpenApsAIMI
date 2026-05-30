@@ -296,10 +296,10 @@ fun createScenarioFloorLine(
     LineCartesianLayer.Line(
         fill = LineCartesianLayer.LineFill.single(Fill(color)),
         stroke = LineCartesianLayer.LineStroke.Dashed(
-            thickness = 3.5.dp,
+            thickness = 2.5.dp,
             cap = StrokeCap.Round,
-            dashLength = 7.dp,
-            gapLength = 5.dp,
+            dashLength = 6.dp,
+            gapLength = 4.dp,
         ),
         areaFill = null,
         pointProvider = LineCartesianLayer.PointProvider.single(
@@ -307,10 +307,10 @@ fun createScenarioFloorLine(
                 component = ShapeComponent(
                     fill = Fill(color),
                     shape = CircleShape,
-                    strokeFill = Fill(pointHaloColor.copy(alpha = 0.88f)),
-                    strokeThickness = 1.75.dp,
+                    strokeFill = Fill(pointHaloColor.copy(alpha = 0.72f)),
+                    strokeThickness = 1.dp,
                 ),
-                size = 7.dp,
+                size = 5.dp,
             )
         ),
     )
@@ -326,10 +326,10 @@ fun createScenarioBestLine(
     LineCartesianLayer.Line(
         fill = LineCartesianLayer.LineFill.single(Fill(color)),
         stroke = LineCartesianLayer.LineStroke.Dashed(
-            thickness = 4.dp,
+            thickness = 2.75.dp,
             cap = StrokeCap.Round,
-            dashLength = 9.dp,
-            gapLength = 5.dp,
+            dashLength = 7.dp,
+            gapLength = 4.dp,
         ),
         areaFill = null,
         pointProvider = LineCartesianLayer.PointProvider.single(
@@ -337,10 +337,10 @@ fun createScenarioBestLine(
                 component = ShapeComponent(
                     fill = Fill(color),
                     shape = CircleShape,
-                    strokeFill = Fill(pointHaloColor.copy(alpha = 0.92f)),
-                    strokeThickness = 2.dp,
+                    strokeFill = Fill(pointHaloColor.copy(alpha = 0.78f)),
+                    strokeThickness = 1.dp,
                 ),
-                size = 8.dp,
+                size = 5.5.dp,
             )
         ),
     )
