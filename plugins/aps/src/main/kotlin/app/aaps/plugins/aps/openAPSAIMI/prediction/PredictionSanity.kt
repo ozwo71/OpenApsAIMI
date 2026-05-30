@@ -43,6 +43,10 @@ internal fun sanitizePredictionValues(
     if (rising && baseBg > 140 && largeDrop > 80) {
         predBg = (baseBg + delta * 6).coerceIn(25.0, 600.0)
         anomalies.add("jumpClamp")
+    } else if (rising && baseBg > 110 && largeDrop > 60) {
+        predBg = (baseBg + delta * 4).coerceIn(25.0, 600.0)
+        eventualBg = maxOf(eventualBg, predBg)
+        anomalies.add("jumpClampModerate")
     }
 
     if (eventualBg < 25 || eventualBg > 600) {

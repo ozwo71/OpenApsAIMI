@@ -71,6 +71,7 @@ import app.aaps.plugins.aps.openAPSAIMI.risk.IobConsensus
 import app.aaps.plugins.aps.openAPSAIMI.risk.IobDecisionSource
 import app.aaps.plugins.aps.openAPSAIMI.risk.PredictionPathBounds
 import app.aaps.plugins.aps.openAPSAIMI.risk.PredictionPathMath
+import app.aaps.plugins.aps.openAPSAIMI.risk.SafetyPredictionTerminalsResolver
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiLoopPhase
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiLoopTelemetry
 import app.aaps.plugins.aps.openAPSAIMI.physio.AimiHormonitorStudyExporterMTR
@@ -86,6 +87,16 @@ import app.aaps.plugins.aps.openAPSAIMI.safety.clampSmbToMaxSmbAndMaxIob
 import app.aaps.plugins.aps.openAPSAIMI.control.StraightLineTubeAdvisor
 import app.aaps.plugins.aps.openAPSAIMI.safety.signalTrajectoryStack
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoThresholdMath
+import app.aaps.plugins.aps.openAPSAIMI.safety.MealSafetyContext
+import app.aaps.plugins.aps.openAPSAIMI.safety.PredictiveHypoEvaluator
+import app.aaps.plugins.aps.openAPSAIMI.safety.PredictiveHypoInput
+import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionApplicator
+import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionContext
+import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionEngine
+import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionInput
+import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionPair
+import app.aaps.plugins.aps.openAPSAIMI.safety.SafetyRiskExportSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.safety.SafetyStartResolution
 import app.aaps.plugins.aps.openAPSAIMI.safety.resolveSafetyStart
 import app.aaps.plugins.aps.openAPSAIMI.safety.CompressionReboundGuard
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoTools
@@ -104,6 +115,7 @@ import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.CycleTrackingMode
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionEngine
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionCurves
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionProfiler
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionState
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdAbsorptionGuard
@@ -157,7 +169,38 @@ internal data class AimiDecisionContext(
         var basal_safety_cap: BasalCap? = null,
         var physiological_context: PhysioContext? = null,
         /** IOB surveillance / anti-stacking snapshot for AIMI_Decisions.jsonl analysis */
-        var iob_surveillance: IobSurveillanceExport? = null
+        var iob_surveillance: IobSurveillanceExport? = null,
+        /** LGS / predictive hypo safety snapshot (Phase 5 export) */
+        var safety_risk: SafetyRiskExport? = null,
+        /** Dual scenario curves (CLINICAL_FLOOR + SCENARIO_BEST) */
+        var scenario_projection: ScenarioProjectionExport? = null,
+    )
+
+    data class SafetyRiskExport(
+        val phase: String,
+        val predictive_hypo_suppressed: Boolean,
+        val safety_gate: String,
+        val halt_remaining_pipeline: Boolean,
+        val meal_context_active: Boolean,
+        val meal_rise_confirmed: Boolean,
+        val composite_min_mgdl: Double,
+        val pred_bg_mgdl: Double,
+        val eventual_bg_mgdl: Double,
+        val uam_terminal_mgdl: Double?,
+        val hypo_threshold_mgdl: Double,
+        val decision_composite_min_mgdl: Double?,
+        val decision_hypo_threshold_mgdl: Double?,
+        val reconcile_delta_mgdl: Double?,
+    )
+
+    data class ScenarioProjectionExport(
+        val floor_terminal_mgdl: Double,
+        val floor_path_min_mgdl: Double,
+        val best_terminal_mgdl: Double,
+        val best_path_min_mgdl: Double,
+        val terminal_gap_mgdl: Double,
+        val trajectory_type: String?,
+        val contributors: List<String>,
     )
 
     /**
@@ -286,6 +329,35 @@ internal data class AimiDecisionContext(
                 sJson.put("summary_line", s.summary_line)
                 sJson.put("tuning_reference", s.tuning_reference)
                 adj.put("iob_surveillance", sJson)
+            }
+            adjustments.safety_risk?.let { r ->
+                val rJson = org.json.JSONObject()
+                rJson.put("phase", r.phase)
+                rJson.put("predictive_hypo_suppressed", r.predictive_hypo_suppressed)
+                rJson.put("safety_gate", r.safety_gate)
+                rJson.put("halt_remaining_pipeline", r.halt_remaining_pipeline)
+                rJson.put("meal_context_active", r.meal_context_active)
+                rJson.put("meal_rise_confirmed", r.meal_rise_confirmed)
+                rJson.put("composite_min_mgdl", r.composite_min_mgdl)
+                rJson.put("pred_bg_mgdl", r.pred_bg_mgdl)
+                rJson.put("eventual_bg_mgdl", r.eventual_bg_mgdl)
+                rJson.put("uam_terminal_mgdl", r.uam_terminal_mgdl ?: org.json.JSONObject.NULL)
+                rJson.put("hypo_threshold_mgdl", r.hypo_threshold_mgdl)
+                rJson.put("decision_composite_min_mgdl", r.decision_composite_min_mgdl ?: org.json.JSONObject.NULL)
+                rJson.put("decision_hypo_threshold_mgdl", r.decision_hypo_threshold_mgdl ?: org.json.JSONObject.NULL)
+                rJson.put("reconcile_delta_mgdl", r.reconcile_delta_mgdl ?: org.json.JSONObject.NULL)
+                adj.put("safety_risk", rJson)
+            }
+            adjustments.scenario_projection?.let { s ->
+                val sJson = org.json.JSONObject()
+                sJson.put("floor_terminal_mgdl", s.floor_terminal_mgdl)
+                sJson.put("floor_path_min_mgdl", s.floor_path_min_mgdl)
+                sJson.put("best_terminal_mgdl", s.best_terminal_mgdl)
+                sJson.put("best_path_min_mgdl", s.best_path_min_mgdl)
+                sJson.put("terminal_gap_mgdl", s.terminal_gap_mgdl)
+                sJson.put("trajectory_type", s.trajectory_type ?: org.json.JSONObject.NULL)
+                sJson.put("contributors", org.json.JSONArray(s.contributors))
+                adj.put("scenario_projection", sJson)
             }
             json.put("adjustments", adj)
 
@@ -436,6 +508,7 @@ private data class AimiAdvancedPredictionsPredPipePrep(
     val sanity: PredictionSanityResult,
     val minBg: Double,
     val threshold: Double,
+    val scenario: ScenarioProjectionPair,
 )
 
 /**
@@ -1052,6 +1125,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         pkpdAbsorptionGuardAppliedThisTick = false
         cachedRiskEnvelopeEarly = null
         cachedRiskEnvelopeDecision = null
+        lastSafetyRiskExport = null
+        lastScenarioProjection = null
         isConfirmedHighRiseThisTick = false
         correctionAggressionDecision = null
         mealAdvisorOneShotThisTick = false
@@ -3036,6 +3111,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             naiveEbgSignGuardApplied = naiveEbgResolution.signGuardApplied,
         )
         consoleLog.add(AimiRiskEnvelopeBuilder.formatLogLine(cachedRiskEnvelopeDecision!!))
+        reconcileSafetyRiskWithDecisionEnvelope()
 
         var minBgOut = minBg
         var targetBgOut = targetBg
@@ -4954,6 +5030,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
 
         decisionCtx.adjustments.iob_surveillance = lastIobSurveillanceExport
+        decisionCtx.adjustments.safety_risk = lastSafetyRiskExport?.toDecisionContextExport()
+        decisionCtx.adjustments.scenario_projection = lastScenarioProjection?.toDecisionContextExport()
 
         val medicalJson = decisionCtx.toMedicalJson()
         consoleLog.add("AIMI_SNAPSHOT: $medicalJson")
@@ -4979,6 +5057,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val latestSnapshot = physioAdapter.getLatestSnapshot()
             val wCycleInfo = wCycleInfoForRun
             val traceForExport = physioAdapter.getLastDecisionTrace() ?: fallbackTrace
+            val safetyExport = lastSafetyRiskExport
             val event = HormonitorDecisionEventMTR(
                 eventId = decisionCtx.event_id,
                 eventTimestamp = decisionCtx.timestamp,
@@ -5013,7 +5092,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     traceForExport.copy(finalLoopDecisionType = inferFinalLoopDecisionFromResult(finalResult))
                 } else {
                     traceForExport
-                }
+                },
+                safetyPhase = safetyExport?.phase?.name,
+                predictiveHypoSuppressed = safetyExport?.predictiveHypoSuppressed,
+                safetyGate = safetyExport?.safetyGate,
+                safetyCompositeMinMgdl = safetyExport?.compositeMinMgdl,
+                safetyUamTerminalMgdl = safetyExport?.uamTerminalMgdl,
+                decisionCompositeMinMgdl = safetyExport?.decisionCompositeMinMgdl,
+                safetyReconcileDeltaMgdl = safetyExport?.reconcileDeltaMgdl,
             )
             hormonitorStudyExporter.export(event)
             hormonitorStudyExporter.exportShadowContributions(event)
@@ -5513,46 +5599,98 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         predictedBg: Float,
         glucoseStatus: GlucoseStatusAIMI,
         minAgo: Double,
+        isExplicitAdvisorRun: Boolean,
+        physioMultipliers: PhysioMultipliersMTR,
+        iobData: IobTotal,
     ): AimiAdvancedPredictionsPredPipePrep {
-        applyAdvancedPredictions(
-            bg = bg, delta = delta, sens = sens, iob_data_array = ctx.iobDataArray,
-            mealData = ctx.mealData, profile = ctx.profile, rT = rT,
+        val advisorTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
+        val advisorCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
+        val isFreshAdvisor = (dateUtil.now() - advisorTime) < 60 * 60_000L
+        val effectiveCob = if (ctx.mealData.mealCOB > 0) ctx.mealData.mealCOB
+        else if (isFreshAdvisor) advisorCarbs else 0.0
+        val curves = AdvancedPredictionEngine.predictCurves(
+            currentBG = bg,
+            iobArray = ctx.iobDataArray,
+            finalSensitivity = sens,
+            cobG = effectiveCob,
+            profile = profile,
+            delta = delta.toDouble(),
         )
+        val mealContext = buildMealSafetyContext(isExplicitAdvisorRun, iobData)
+        val scenarioCtx = ScenarioProjectionContext(
+            mealContext = mealContext,
+            effectiveCobG = effectiveCob,
+            targetBgMgdl = targetBg.toDouble(),
+            trajectoryAnalysis = trajectoryGuard.getLastAnalysis(),
+            trajectoryRelevanceScore = physioMultipliers.trajectoryRelevanceScore,
+            activityProtectionMode = activityProtectionMode,
+            contextActivityActive = aimiContextActivityActive,
+            contextSmbFactor = rT.contextModulation.takeIf { rT.contextEnabled }?.toFloat() ?: 1.0f,
+            physioSmbFactor = physioMultipliers.smbFactor,
+            physioReactivityFactor = physioMultipliers.reactivityFactor,
+            physioBasalFactor = physioMultipliers.basalFactor,
+        )
+        val scenario = ScenarioProjectionEngine.build(
+            ScenarioProjectionInput(
+                bgNowMgdl = bg,
+                deltaMgdlPer5 = delta,
+                curves = curves,
+                context = scenarioCtx,
+            ),
+        )
+        lastScenarioProjection = scenario
+        ScenarioProjectionApplicator.applyToRt(rT, scenario)
+        this.predictedBg = scenario.scenarioBest.terminalMgdl.toFloat()
+        lastEventualBgSnapshot = scenario.scenarioBest.terminalMgdl
+        lastPredictionSize = scenario.scenarioBest.pointsMgdl.size
+        lastPredictionAvailable = scenario.scenarioBest.pointsMgdl.isNotEmpty()
+        consoleLog.add(scenario.formatLogLine())
+        consoleError.add(
+            "🔮 SCENARIO: floor=${scenario.clinicalFloor.terminalMgdl.toInt()} best=${scenario.scenarioBest.terminalMgdl.toInt()} " +
+                "Δ=${(scenario.scenarioBest.terminalMgdl - scenario.clinicalFloor.terminalMgdl).toInt()}",
+        )
+
         fun safePredPipeValue(v: Double) = if (v.isFinite()) v else Double.POSITIVE_INFINITY
         val sanity = sanitizePredictionValues(
             bg = bg,
             delta = delta,
-            predBgRaw = predictedBg.toDouble(),
-            eventualBgRaw = rT.eventualBG,
+            predBgRaw = scenario.scenarioBest.terminalMgdl,
+            eventualBgRaw = scenario.scenarioBest.terminalMgdl,
             series = rT.predBGs,
             log = consoleLog,
+        )
+        val floorComposite = minOf(
+            safePredPipeValue(bg),
+            safePredPipeValue(scenario.clinicalFloor.pathMinMgdl),
+            safePredPipeValue(scenario.clinicalFloor.terminalMgdl),
         )
         val minBg = minOf(
             safePredPipeValue(bg),
             safePredPipeValue(sanity.predBg),
             safePredPipeValue(sanity.eventualBg),
         )
-        val threshold = HypoThresholdMath.computeHypoThreshold(minBg, profile.lgsThreshold)
+        val threshold = HypoThresholdMath.computeHypoThreshold(floorComposite, profile.lgsThreshold)
         val pumpReachable = try {
             activePlugin.activePump.isInitialized() && activePlugin.activePump.isConnected()
         } catch (_: Exception) {
             false
         }
         consoleLog.add(
-            "PRED_PIPE: bg=${bg.roundToInt()} delta=${"%.1f".format(delta)} predBg=${sanity.predBg.roundToInt()} " +
-                "eventualBg=${sanity.eventualBg.roundToInt()} min=${minBg.roundToInt()} th=${threshold.toInt()} " +
+            "PRED_PIPE: bg=${bg.roundToInt()} delta=${"%.1f".format(delta)} bestT=${sanity.predBg.roundToInt()} " +
+                "floorT=${scenario.clinicalFloor.terminalMgdl.toInt()} floorMin=${scenario.clinicalFloor.pathMinMgdl.toInt()} " +
+                "min=${minBg.roundToInt()} th=${threshold.toInt()} " +
                 "noise=${glucoseStatus.noise} dataAge=${minAgo}m pumpReachable=$pumpReachable sanity=${sanity.label}",
         )
         cachedRiskEnvelopeEarly = AimiRiskEnvelopeBuilder.buildEarly(
             bg = bg,
             delta = delta,
-            predTerminal = sanity.predBg,
-            eventualTerminal = sanity.eventualBg,
+            predTerminal = scenario.clinicalFloor.terminalMgdl,
+            eventualTerminal = scenario.scenarioBest.terminalMgdl,
             predBGs = rT.predBGs,
             lgsThreshold = profile.lgsThreshold,
         )
         consoleLog.add(AimiRiskEnvelopeBuilder.formatLogLine(cachedRiskEnvelopeEarly!!))
-        return AimiAdvancedPredictionsPredPipePrep(sanity, minBg, threshold)
+        return AimiAdvancedPredictionsPredPipePrep(sanity, minBg, threshold, scenario)
     }
 
     /**
@@ -5567,12 +5705,61 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         delta: Float,
         iobData: IobTotal,
         glucoseStatus: GlucoseStatusAIMI,
-        predBg: Double,
-        eventualBg: Double,
+        scenario: ScenarioProjectionPair,
+        isExplicitAdvisorRun: Boolean,
     ): AimiPredPipelineSafetyGate {
-        val safetyRes = trySafetyStart(bg, delta, profile, iobData, glucoseStatus.noise.toInt(), predBg, eventualBg)
-        if (safetyRes !is DecisionResult.Applied) return AimiPredPipelineSafetyGate.Continue
-        consoleLog.add("SAFETY_APPLIED_TBR_ZERO intent=${safetyRes.tbrUph}")
+        val mealContext = buildMealSafetyContext(isExplicitAdvisorRun, iobData)
+        val safetyTerminals = SafetyPredictionTerminalsResolver.resolveFromScenario(
+            bg = bg,
+            delta = delta,
+            mealContext = mealContext,
+            projection = scenario,
+        )
+        val lgsTh = HypoThresholdMath.computeHypoThreshold(
+            safetyTerminals.compositeMinMgdl,
+            profile.lgsThreshold,
+        )
+        val suppression = PredictiveHypoEvaluator.evaluateSuppression(
+            PredictiveHypoInput(
+                bgNow = bg,
+                predicted = safetyTerminals.predBg,
+                eventual = safetyTerminals.eventualBg,
+                hypoThreshold = lgsTh,
+                delta = delta.toDouble(),
+                mealContext = mealContext,
+            ),
+        )
+        consoleLog.add(
+            "RISK_SAFETY_EARLY: compositeMin=${safetyTerminals.compositeMinMgdl.toInt()} " +
+                "predT=${safetyTerminals.predBg.toInt()} evT=${safetyTerminals.eventualBg.toInt()} " +
+                "bestT=${scenario.scenarioBest.terminalMgdl.toInt()} floorT=${scenario.clinicalFloor.terminalMgdl.toInt()} " +
+                "mealRise=${safetyTerminals.mealRiseConfirmed} suppressed=${suppression.suppressed}",
+        )
+        val resolution = trySafetyStart(
+            bg = bg,
+            delta = delta,
+            profile = profile,
+            iob = iobData,
+            noise = glucoseStatus.noise.toInt(),
+            predBg = safetyTerminals.predBg,
+            eventualBg = safetyTerminals.eventualBg,
+            mealContext = mealContext,
+        )
+        lastSafetyRiskExport = SafetyRiskExportSnapshot(
+            predictiveHypoSuppressed = suppression.suppressed,
+            safetyGate = resolution.lastSafetySource,
+            haltRemainingPipeline = resolution.haltRemainingPipeline,
+            mealContextActive = mealContext.hasMealIntent,
+            mealRiseConfirmed = safetyTerminals.mealRiseConfirmed,
+            compositeMinMgdl = safetyTerminals.compositeMinMgdl,
+            predBgMgdl = safetyTerminals.predBg,
+            eventualBgMgdl = safetyTerminals.eventualBg,
+            uamTerminalMgdl = safetyTerminals.uamTerminalMgdl,
+            hypoThresholdMgdl = lgsTh,
+        )
+        if (resolution.decision !is DecisionResult.Applied) return AimiPredPipelineSafetyGate.Continue
+        val safetyRes = resolution.decision as DecisionResult.Applied
+        consoleLog.add("SAFETY_APPLIED_TBR intent=${safetyRes.tbrUph} haltPipeline=${resolution.haltRemainingPipeline}")
         if (safetyRes.tbrUph != null) {
             setTempBasal(
                 safetyRes.tbrUph,
@@ -5582,15 +5769,71 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 ctx.currentTemp,
                 overrideSafetyLimits = true,
                 adaptiveMultiplier = adaptiveMult,
+                allowPartialSafetyTbr = !resolution.haltRemainingPipeline,
+                mealContext = mealContext,
             )
         }
-        rT.insulinReq = 0.0
-        rT.reason.append(" | ⚠ Safety Halt: ${safetyRes.reason}")
+        if (resolution.haltRemainingPipeline) {
+            rT.insulinReq = 0.0
+            rT.reason.append(" | ⚠ Safety Halt: ${safetyRes.reason}")
+            lastDecisionSource = safetyRes.source
+            logDecisionFinal("SAFETY", rT, bg, delta)
+            markFinalLoopDecisionFromRT(rT, ctx.currentTemp)
+            return AimiPredPipelineSafetyGate.Halt(rT)
+        }
+        rT.reason.append(" | ⚠ Safety TBR: ${safetyRes.reason}")
         lastDecisionSource = safetyRes.source
-        logDecisionFinal("SAFETY", rT, bg, delta)
-        markFinalLoopDecisionFromRT(rT, ctx.currentTemp)
-        return AimiPredPipelineSafetyGate.Halt(rT)
+        return AimiPredPipelineSafetyGate.Continue
     }
+
+    /**
+     * Phase 4C — reconcile EARLY safety snapshot with authoritative DECISION envelope (invariant 5 preserved:
+     * safety still runs before advisor; DECISION enriches export only).
+     */
+    private fun reconcileSafetyRiskWithDecisionEnvelope() {
+        val early = lastSafetyRiskExport ?: return
+        val decision = cachedRiskEnvelopeDecision ?: return
+        val deltaComposite = decision.compositeMinMgdl - early.compositeMinMgdl
+        lastSafetyRiskExport = early.copy(
+            decisionCompositeMinMgdl = decision.compositeMinMgdl,
+            decisionHypoThresholdMgdl = decision.hypoThresholdMgdl,
+            reconcileDeltaMgdl = deltaComposite,
+        )
+        consoleLog.add(
+            "RISK_SAFETY_RECONCILE: earlyComposite=${early.compositeMinMgdl.toInt()} " +
+                "decisionComposite=${decision.compositeMinMgdl.toInt()} Δ=${"%.0f".format(deltaComposite)} " +
+                "earlyGate=${early.safetyGate} pathFloorHit=${if (decision.pathMinHitNumericFloor) 1 else 0}",
+        )
+    }
+
+    private fun ScenarioProjectionPair.toDecisionContextExport(): AimiDecisionContext.ScenarioProjectionExport =
+        AimiDecisionContext.ScenarioProjectionExport(
+            floor_terminal_mgdl = clinicalFloor.terminalMgdl,
+            floor_path_min_mgdl = clinicalFloor.pathMinMgdl,
+            best_terminal_mgdl = scenarioBest.terminalMgdl,
+            best_path_min_mgdl = scenarioBest.pathMinMgdl,
+            terminal_gap_mgdl = scenarioBest.terminalMgdl - clinicalFloor.terminalMgdl,
+            trajectory_type = trajectoryType,
+            contributors = contributors.map { "${it.id.name}:${it.summary}" },
+        )
+
+    private fun SafetyRiskExportSnapshot.toDecisionContextExport(): AimiDecisionContext.SafetyRiskExport =
+        AimiDecisionContext.SafetyRiskExport(
+            phase = phase.name,
+            predictive_hypo_suppressed = predictiveHypoSuppressed,
+            safety_gate = safetyGate,
+            halt_remaining_pipeline = haltRemainingPipeline,
+            meal_context_active = mealContextActive,
+            meal_rise_confirmed = mealRiseConfirmed,
+            composite_min_mgdl = compositeMinMgdl,
+            pred_bg_mgdl = predBgMgdl,
+            eventual_bg_mgdl = eventualBgMgdl,
+            uam_terminal_mgdl = uamTerminalMgdl,
+            hypo_threshold_mgdl = hypoThresholdMgdl,
+            decision_composite_min_mgdl = decisionCompositeMinMgdl,
+            decision_hypo_threshold_mgdl = decisionHypoThresholdMgdl,
+            reconcile_delta_mgdl = reconcileDeltaMgdl,
+        )
 
     private fun logInvocationCacheState(tag: String, state: AsyncDataState<*>) {
         val msg = when (state) {
@@ -5667,6 +5910,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var cachedPkpdRuntime: PkPdRuntime? = null // 🔧 FIX (MTR): Global cache for Safety methods
     private var cachedRiskEnvelopeEarly: AimiRiskEnvelope? = null
     private var cachedRiskEnvelopeDecision: AimiRiskEnvelope? = null
+    private var lastSafetyRiskExport: SafetyRiskExportSnapshot? = null
+    private var lastScenarioProjection: ScenarioProjectionPair? = null
     private var tags60to120minAgo = ""
     private var tags120to180minAgo = ""
     private var tags180to240minAgo = ""
@@ -6739,18 +6984,70 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         currenttemp: CurrentTemp,
         overrideSafetyLimits: Boolean = false,
         forceExact: Boolean = false,
-        adaptiveMultiplier: Double = 1.0
+        adaptiveMultiplier: Double = 1.0,
+        allowPartialSafetyTbr: Boolean = false,
+        mealContext: MealSafetyContext? = null,
     ): RT {
-        // 0) LGS kill-switch (sans récursion)
         val lgsPref = profile.lgsThreshold
         val hypoGuard = HypoThresholdMath.computeHypoThreshold(minBg = profile.min_bg, lgsThreshold = lgsPref)
-        val blockLgs = HypoGuard.isBelowHypoThreshold(bg, predictedBg.toDouble(), eventualBG, hypoGuard, delta.toDouble())
-        if (blockLgs) {
-            rT.reason.append(context.getString(R.string.lgs_triggered, "%.0f".format(bg), "%.0f".format(hypoGuard)))
-            rT.duration = maxOf(duration, 30)
-            rT.rate = 0.0
-            physioAdapter.setFinalLoopDecisionType("suspend")
-            return rT
+        val floor = PredictiveHypoEvaluator.floor(hypoGuard)
+        val effectiveMealContext = mealContext ?: MealSafetyContext(
+            mealModeActive = mealTime || lunchTime || dinnerTime || snackTime || highCarbTime || bfastTime,
+            manualBolusAgeMin = internalLastSmbMillis.takeIf { it > 0L }?.let { (dateUtil.now() - it) / 60000.0 },
+        )
+
+        if (forceExact) {
+            val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
+            val isMealMode = therapy.snackTime || therapy.highCarbTime || therapy.mealTime
+                || therapy.lunchTime || therapy.dinnerTime || therapy.bfastTime
+            when {
+                bg <= floor -> {
+                    rT.reason.append(context.getString(R.string.lgs_triggered, "%.0f".format(bg), "%.0f".format(hypoGuard)))
+                    rT.duration = maxOf(duration, 30)
+                    rT.rate = 0.0
+                    physioAdapter.setFinalLoopDecisionType("suspend")
+                    return rT
+                }
+                isMealMode && bg > hypoGuard -> {
+                    val rate = _rate.coerceAtLeast(0.0)
+                    rT.reason.append(
+                        context.getString(
+                            R.string.manual_basal_override,
+                            rate,
+                            duration,
+                            "✔",
+                        ),
+                    )
+                    rT.duration = duration
+                    rT.rate = rate
+                    val decisionType = when {
+                        rate == 0.0 -> "suspend"
+                        rate > currenttemp.rate -> "tbr_up"
+                        rate < currenttemp.rate -> "tbr_down"
+                        else -> "none"
+                    }
+                    physioAdapter.setFinalLoopDecisionType(decisionType)
+                    return rT
+                }
+            }
+        }
+
+        if (!(allowPartialSafetyTbr && _rate > 0.0)) {
+            val blockLgs = HypoGuard.isBelowHypoThreshold(
+                bgNow = bg,
+                predicted = predictedBg.toDouble(),
+                eventual = eventualBG,
+                hypo = hypoGuard,
+                delta = delta.toDouble(),
+                mealContext = effectiveMealContext,
+            )
+            if (blockLgs) {
+                rT.reason.append(context.getString(R.string.lgs_triggered, "%.0f".format(bg), "%.0f".format(hypoGuard)))
+                rT.duration = maxOf(duration, 30)
+                rT.rate = 0.0
+                physioAdapter.setFinalLoopDecisionType("suspend")
+                return rT
+            }
         }
         val isLgsEnabled = profile.lgsThreshold != null && profile.lgsThreshold!! > 0
 
@@ -9185,38 +9482,58 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         delta: Double
     ): PredictionResult {
         consoleLog.add("Debug: computePkpdPredictions called with delta=$delta")
-        val advancedPredictions = try {
-            AdvancedPredictionEngine.predict(
+        val curves = try {
+            AdvancedPredictionEngine.predictCurves(
                 currentBG = currentBg,
                 iobArray = iobArray,
                 finalSensitivity = finalSensitivity,
                 cobG = cobG,
                 profile = profile,
-                delta = delta
+                delta = delta,
             )
         } catch (e: Exception) {
             consoleLog.add("Error in AdvancedPredictionEngine: ${e.message}")
-            // Fallback: flat prediction
-            List(48) { currentBg }
+            val flat = List(48) { currentBg }
+            AdvancedPredictionCurves(flat, flat, flat, flat, flat)
         }
 
-        val pathBounds = PredictionPathMath.boundsFromRawSeries(advancedPredictions)
-        val sanitizedPredictions = advancedPredictions.map { round(min(401.0, max(39.0, it)), 0) }
-        val intsPredictions = sanitizedPredictions.map { it.toInt() }
+        val pathBounds = PredictionPathMath.boundsFromPredictions(
+            Predictions().apply {
+                IOB = curves.iob.map { round(min(401.0, max(39.0, it)), 0).toInt() }
+                COB = curves.cob.map { round(min(401.0, max(39.0, it)), 0).toInt() }
+                UAM = curves.uam.map { round(min(401.0, max(39.0, it)), 0).toInt() }
+                ZT = curves.zt.map { round(min(401.0, max(39.0, it)), 0).toInt() }
+            },
+        ).let { curveBounds ->
+            val rawBounds = PredictionPathMath.boundsFromRawSeries(curves.hybrid)
+            PredictionPathBounds(
+                pathMinRawMgdl = rawBounds.pathMinRawMgdl,
+                pathMinClampedMgdl = curveBounds.pathMinClampedMgdl ?: rawBounds.pathMinClampedMgdl,
+                pathMinHitNumericFloor = rawBounds.pathMinHitNumericFloor || curveBounds.pathMinHitNumericFloor,
+            )
+        }
+        fun sanitizeInts(points: List<Double>): List<Int> =
+            points.map { round(min(401.0, max(39.0, it)), 0).toInt() }
+        val iobInts = sanitizeInts(curves.iob)
+        val cobInts = sanitizeInts(curves.cob)
+        val uamInts = sanitizeInts(curves.uam)
+        val ztInts = sanitizeInts(curves.zt)
+        val hybridInts = sanitizeInts(curves.hybrid)
         rT.predBGs = Predictions().apply {
-            IOB = intsPredictions
-            COB = intsPredictions
-            ZT = intsPredictions
-            UAM = intsPredictions
+            IOB = iobInts
+            COB = cobInts
+            ZT = ztInts
+            UAM = uamInts
         }
 
-        val eventual = intsPredictions.lastOrNull()?.toDouble() ?: currentBg
+        val eventual = hybridInts.lastOrNull()?.toDouble() ?: currentBg
         consoleLog.add(
-            "PKPD predictions → eventual=${"%.0f".format(eventual)} mg/dL from ${intsPredictions.size} steps " +
+            "PKPD predictions → eventual=${"%.0f".format(eventual)} mg/dL from ${hybridInts.size} steps " +
+                "uamT=${uamInts.lastOrNull() ?: "n/a"} " +
                 "pathMinRaw=${pathBounds.pathMinRawMgdl?.let { "%.0f".format(it) } ?: "n/a"} " +
                 "pathMinClamp=${pathBounds.pathMinClampedMgdl?.let { "%.0f".format(it) } ?: "n/a"}"
         )
-        return PredictionResult(eventual, intsPredictions, pathBounds)
+        return PredictionResult(eventual, hybridInts, pathBounds)
     }
 
     private fun ensurePredictionFallback(rt: RT, bgNow: Double) {
@@ -10024,39 +10341,42 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val advisorCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
             val isFreshAdvisor = (dateUtil.now() - advisorTime) < 60 * 60000
             val effectiveCOB = if (mealData.mealCOB > 0) mealData.mealCOB else if (isFreshAdvisor) advisorCarbs else 0.0
-            val advancedPredictions = AdvancedPredictionEngine.predict(
+            val curves = AdvancedPredictionEngine.predictCurves(
                 currentBG = bg, iobArray = iob_data_array, finalSensitivity = sens,
-                cobG = effectiveCOB, profile = profile, delta = delta.toDouble()
+                cobG = effectiveCOB, profile = profile, delta = delta.toDouble(),
             )
-            val sanitizedPredictions = advancedPredictions.mapNotNull {
-                if (it.isNaN()) null else round(kotlin.math.min(401.0, kotlin.math.max(39.0, it)), 0)
-            }
-            val intsPredictions = sanitizedPredictions.map { it.toInt() }
+            fun sanitizeCurve(points: List<Double>): List<Int> =
+                points.mapNotNull {
+                    if (it.isNaN()) null else round(kotlin.math.min(401.0, kotlin.math.max(39.0, it)), 0).toInt()
+                }
+            val iobInts = sanitizeCurve(curves.iob)
+            val cobInts = sanitizeCurve(curves.cob)
+            val uamInts = sanitizeCurve(curves.uam)
+            val ztInts = sanitizeCurve(curves.zt)
+            val hybridInts = sanitizeCurve(curves.hybrid)
+            val intsPredictions = hybridInts
             lastPredictionSize = intsPredictions.size
             lastPredictionAvailable = intsPredictions.isNotEmpty()
             if (intsPredictions.isNotEmpty()) {
-                val IOBpredBGs = mutableListOf<Double>()
-                val COBpredBGs = mutableListOf<Double>()
-                val UAMpredBGs = mutableListOf<Double>()
-                val ZTpredBGs  = mutableListOf<Double>()
-                IOBpredBGs.add(bg); COBpredBGs.add(bg); UAMpredBGs.add(bg); ZTpredBGs.add(bg)
-                intsPredictions.forEach { pred ->
-                    val v = pred.toDouble()
-                    IOBpredBGs.add(v); COBpredBGs.add(v); UAMpredBGs.add(v); ZTpredBGs.add(v)
-                }
                 val lastPred = intsPredictions.last().toDouble()
-                val minPred  = intsPredictions.minOrNull()?.toDouble() ?: bg
+                val minPred = intsPredictions.minOrNull()?.toDouble() ?: bg
+                val uamTerminal = uamInts.lastOrNull()?.toDouble()
                 lastEventualBgSnapshot = lastPred
                 rT.eventualBG = lastPred
                 this.predictedBg = lastPred.toFloat()
                 rT.predBGs = Predictions().apply {
-                    IOB = IOBpredBGs.map { it.toInt() }; COB = COBpredBGs.map { it.toInt() }
-                    ZT  = ZTpredBGs.map { it.toInt()  }; UAM = UAMpredBGs.map { it.toInt() }
+                    IOB = iobInts
+                    COB = cobInts
+                    ZT = ztInts
+                    UAM = uamInts
                 }
-                consoleError.add("🔮 PREDICT GRAPH: IOB=${IOBpredBGs.size} COB=${COBpredBGs.size}")
-                consoleError.add("minGuardBG ${minPred.toInt()} IOBpredBG ${lastPred.toInt()}")
-                if (UAMpredBGs.size < 6) consoleError.add("⚠ WARNING: UAM Series too short (<6) for Graph!")
-                consoleLog.add("PRED_SET size=${intsPredictions.size} eventual=${lastPred.toInt()} min=${minPred.toInt()} source=Advanced")
+                consoleError.add("🔮 PREDICT GRAPH: IOB=${iobInts.size} COB=${cobInts.size} UAM=${uamInts.size}")
+                consoleError.add("minGuardBG ${minPred.toInt()} IOBpredBG ${lastPred.toInt()} UAMterm=${uamTerminal?.toInt() ?: "n/a"}")
+                if (uamInts.size < 6) consoleError.add("⚠ WARNING: UAM Series too short (<6) for Graph!")
+                consoleLog.add(
+                    "PRED_SET size=${intsPredictions.size} eventual=${lastPred.toInt()} min=${minPred.toInt()} " +
+                        "uamT=${uamTerminal?.toInt() ?: "n/a"} source=AdvancedCurves",
+                )
             } else {
                 consoleError.add("🔮 PREDICT WARNING: Empty prediction list returned. Using Fallback.")
                 val fallbackList = listOf(bg.toInt(), bg.toInt(), bg.toInt())
@@ -10361,7 +10681,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         var sens = sensInit
 
-        val (sanity, minBg, threshold) = runAdvancedPredictionsAndPredPipePrep(
+        val (sanity, minBg, threshold, scenario) = runAdvancedPredictionsAndPredPipePrep(
             ctx = ctx,
             profile = profile,
             rT = rT,
@@ -10371,6 +10691,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             predictedBg = predictedBg,
             glucoseStatus = glucoseStatus,
             minAgo = minAgo,
+            isExplicitAdvisorRun = isExplicitAdvisorRun,
+            physioMultipliers = physioMultipliers,
+            iobData = iob_data,
         )
 
         when (
@@ -10382,8 +10705,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 delta = delta,
                 iobData = iob_data,
                 glucoseStatus = glucoseStatus,
-                predBg = sanity.predBg,
-                eventualBg = sanity.eventualBg,
+                scenario = scenario,
+                isExplicitAdvisorRun = isExplicitAdvisorRun,
             )
         ) {
             is AimiPredPipelineSafetyGate.Halt -> return safetyGate.rT
@@ -11314,6 +11637,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     // Safety (LGS / hypo): [trySafetyStart] entry.
+    private fun buildMealSafetyContext(isExplicitAdvisorRun: Boolean, iobData: IobTotal): MealSafetyContext {
+        val advisorTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
+        val advisorCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
+        val advisorFresh = advisorCarbs > 0.0 && (dateUtil.now() - advisorTime) < 60 * 60_000L
+        val effectiveLastBolusMs = kotlin.math.max(iobData.lastBolusTime, internalLastSmbMillis).takeIf { it > 0L }
+        val manualBolusAgeMin = effectiveLastBolusMs?.let { (dateUtil.now() - it) / 60000.0 }
+        return MealSafetyContext(
+            mealModeActive = mealTime || lunchTime || dinnerTime || snackTime || highCarbTime || bfastTime,
+            manualBolusAgeMin = manualBolusAgeMin,
+            mealAdvisorCarbsFresh = advisorFresh,
+            explicitMealTrigger = isExplicitAdvisorRun,
+        )
+    }
+
     private fun trySafetyStart(
         bg: Double,
         delta: Float,
@@ -11321,8 +11658,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         iob: IobTotal,
         noise: Int,
         predBg: Double,
-        eventualBg: Double
-    ): DecisionResult {
+        eventualBg: Double,
+        mealContext: MealSafetyContext,
+    ): SafetyStartResolution {
         lastSafetySource = "CALLED"
         val resolution = resolveSafetyStart(
             bg = bg,
@@ -11332,10 +11670,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             eventualBg = eventualBg,
             currentBasalUph = profile.current_basal,
             lgsThreshold = profile.lgsThreshold,
+            mealContext = mealContext,
         )
         resolution.consoleLines.forEach { consoleLog.add(it) }
         lastSafetySource = resolution.lastSafetySource
-        return resolution.decision
+        return resolution
     }
 
     private fun tryMealAdvisor(

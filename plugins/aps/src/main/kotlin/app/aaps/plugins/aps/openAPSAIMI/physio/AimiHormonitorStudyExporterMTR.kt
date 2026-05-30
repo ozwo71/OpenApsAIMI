@@ -57,7 +57,14 @@ data class HormonitorDecisionEventMTR(
     val sleepEfficiency: Double? = null,
     val physioSnapshotTimestamp: Long? = null,
     val physioSnapshotValidFlag: Boolean? = null,
-    val physioTrace: PhysioDecisionTraceMTR
+    val physioTrace: PhysioDecisionTraceMTR,
+    val safetyPhase: String? = null,
+    val predictiveHypoSuppressed: Boolean? = null,
+    val safetyGate: String? = null,
+    val safetyCompositeMinMgdl: Double? = null,
+    val safetyUamTerminalMgdl: Double? = null,
+    val decisionCompositeMinMgdl: Double? = null,
+    val safetyReconcileDeltaMgdl: Double? = null,
 ) {
     fun toJSON(datasetId: String, generatedAtIsoUtc: String, appVersion: String, schemaVersion: String): JSONObject =
         JSONObject().apply {
@@ -105,6 +112,13 @@ data class HormonitorDecisionEventMTR(
             put("physio_veto_reason", physioTrace.vetoReason ?: JSONObject.NULL)
             put("final_loop_decision_type", physioTrace.finalLoopDecisionType ?: JSONObject.NULL)
             put("source", physioTrace.source)
+            put("safety_phase", safetyPhase ?: JSONObject.NULL)
+            put("predictive_hypo_suppressed", predictiveHypoSuppressed ?: JSONObject.NULL)
+            put("safety_gate", safetyGate ?: JSONObject.NULL)
+            put("safety_composite_min_mgdl", safetyCompositeMinMgdl ?: JSONObject.NULL)
+            put("safety_uam_terminal_mgdl", safetyUamTerminalMgdl ?: JSONObject.NULL)
+            put("decision_composite_min_mgdl", decisionCompositeMinMgdl ?: JSONObject.NULL)
+            put("safety_reconcile_delta_mgdl", safetyReconcileDeltaMgdl ?: JSONObject.NULL)
         }
 }
 
@@ -114,7 +128,7 @@ class AimiHormonitorStudyExporterMTR(
     private val preferences: Preferences
 ) {
     companion object {
-        private const val SCHEMA_VERSION = "1.0.0"
+        private const val SCHEMA_VERSION = "1.1.0"
         private const val FILE_NAME = "AIMI_HORMONITOR_event_stream_v1.jsonl"
         private const val DAILY_FILE_NAME = "AIMI_HORMONITOR_daily_outcomes_v1.jsonl"
         private const val QA_FILE_NAME = "AIMI_HORMONITOR_dataset_qa_v1.jsonl"

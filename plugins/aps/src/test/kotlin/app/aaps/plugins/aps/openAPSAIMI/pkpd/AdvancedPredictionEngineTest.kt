@@ -5,6 +5,7 @@ import app.aaps.core.interfaces.aps.OapsProfileAimi
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -63,5 +64,30 @@ class AdvancedPredictionEngineTest {
         )
         // Should drop
         assertTrue(result.last() < 200.0)
+    }
+
+    @Test
+    fun predictCurves_uamRisesWithPositiveDeltaWhileIobFalls() {
+        val profile = mockk<OapsProfileAimi>(relaxed = true)
+        every { profile.carb_ratio } returns 10.0
+        every { profile.peakTime } returns 75.0
+
+        val iobEntry = mockk<IobTotal>()
+        every { iobEntry.iob } returns 6.0
+        every { iobEntry.activity } returns 0.02
+        every { iobEntry.time } returns System.currentTimeMillis()
+
+        val curves = AdvancedPredictionEngine.predictCurves(
+            currentBG = 119.0,
+            iobArray = arrayOf(iobEntry),
+            finalSensitivity = 50.0,
+            cobG = 0.0,
+            profile = profile,
+            delta = 5.0,
+            horizonMinutes = 60,
+        )
+        assertTrue(curves.iob.last() < curves.iob.first())
+        assertTrue(curves.uam.last() >= curves.uam.first())
+        assertNotEquals(curves.iob.last(), curves.uam.last())
     }
 }

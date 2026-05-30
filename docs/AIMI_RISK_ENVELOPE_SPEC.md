@@ -77,6 +77,8 @@ Used in: `NaiveEventualBgSignGuard`, decision envelope, `RISK_DECISION` log line
 
 ## Hypo guard unification
 
+All predictive hypo decisions (`HypoGuard`, `LgsSafetyTriage` Tier 2/3, `setTempBasal` kill-switch when not partial) delegate to **`PredictiveHypoEvaluator`** with optional **`MealSafetyContext`**. See [LGS_PREDICTIVE_MEAL_BLIND_CASE_STUDY.md](LGS_PREDICTIVE_MEAL_BLIND_CASE_STUDY.md).
+
 `shouldBlockHypoWithHysteresis` **must** use:
 
 - `hypoThresholdMgdl` from **`DECISION`** envelope (same formula as V3 early threshold, but on **post-PKPD** predictions)  
@@ -108,6 +110,14 @@ grep APS logs for:
 
 ## Future (Phase 4+)
 
-- Ordered `RiskAdjustment` list for trajectory / PKPD guard / relief (see architecture doc)  
-- JSONL export fields mirroring envelope  
+- Ordered `RiskAdjustment` list for trajectory / PKPD guard / relief (see architecture doc)
 - Optional: refresh V3 threshold from DECISION when V3 did not act (fallback only)
+
+### Implemented (2026-05-29)
+
+| Item | Detail |
+|------|--------|
+| **4A distinct curves** | `AdvancedPredictionEngine.predictCurves()` — IOB / COB / UAM / ZT / hybrid |
+| **4B safety composite** | `SafetyPredictionTerminalsResolver` — UAM terminal replaces insulin-only floor during meal rise |
+| **4C reconcile** | `RISK_SAFETY_EARLY` at `trySafetyStart`; `RISK_SAFETY_RECONCILE` after `RISK_DECISION` (invariant 5 unchanged) |
+| **5 export** | `adjustments.safety_risk` in `AIMI_Decisions.jsonl`; hormonitor schema **1.1.0** fields |
