@@ -5,12 +5,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.aaps.core.interfaces.overview.graph.SeriesType
 import app.aaps.ui.compose.overview.graphs.DEFAULT_GRAPH_ZOOM_MINUTES
+import app.aaps.ui.compose.overview.graphs.PREDICTION_VIEWPORT_FUTURE_BIAS_MINUTES
 import app.aaps.ui.compose.overview.graphs.GraphViewModel
 import app.aaps.ui.compose.overview.graphs.timestampToX
 import com.patrykandpatrick.vico.compose.cartesian.Scroll
@@ -72,6 +74,18 @@ internal fun DashboardVicoSharedViewportEffects(
     val bgInfoState by graphViewModel.bgInfoState.collectAsStateWithLifecycle()
     val predictions by graphViewModel.predictionsFlow.collectAsStateWithLifecycle()
     var lastBgTimestamp by remember { mutableLongStateOf(0L) }
+    var scenarioViewportInitialized by remember(viewportResetGeneration) { mutableStateOf(false) }
+
+    LaunchedEffect(predictions.size, derivedTimeRange, viewportFollowingLive, viewportResetGeneration) {
+        if (scenarioViewportInitialized || !viewportFollowingLive) return@LaunchedEffect
+        val showPredictions = SeriesType.PREDICTIONS in bgOverlays
+        val timeRange = derivedTimeRange
+        if (!showPredictions || predictions.isEmpty() || timeRange == null) return@LaunchedEffect
+        val (minTimestamp, _) = timeRange
+        val nowX = timestampToX(System.currentTimeMillis(), minTimestamp)
+        scrollState.animateScroll(Scroll.Absolute.x(nowX + PREDICTION_VIEWPORT_FUTURE_BIAS_MINUTES, bias = 1f))
+        scenarioViewportInitialized = true
+    }
 
     LaunchedEffect(bgInfoState.bgInfo?.timestamp, viewportFollowingLive) {
         val newTimestamp = bgInfoState.bgInfo?.timestamp ?: return@LaunchedEffect
@@ -84,7 +98,7 @@ internal fun DashboardVicoSharedViewportEffects(
             if (showPredictions && predictions.isNotEmpty() && timeRange != null) {
                 val (minTimestamp, _) = timeRange
                 val nowX = timestampToX(System.currentTimeMillis(), minTimestamp)
-                scrollState.animateScroll(Scroll.Absolute.x(nowX + 120.0, bias = 1f))
+                scrollState.animateScroll(Scroll.Absolute.x(nowX + PREDICTION_VIEWPORT_FUTURE_BIAS_MINUTES, bias = 1f))
             } else {
                 scrollState.animateScroll(Scroll.Absolute.End)
             }

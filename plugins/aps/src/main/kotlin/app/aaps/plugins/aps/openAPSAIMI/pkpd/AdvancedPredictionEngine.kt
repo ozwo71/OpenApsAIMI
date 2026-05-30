@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.pkpd
 
+import app.aaps.core.data.configuration.Constants
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import kotlin.math.abs
@@ -53,12 +54,13 @@ object AdvancedPredictionEngine {
         delta: Double = 0.0,
         horizonMinutes: Int = 240,
     ): AdvancedPredictionCurves {
+        val effectiveHorizonMinutes = maxOf(Constants.PREDICTION_GRAPH_MIN_MINUTES, horizonMinutes)
         val iobSeries = mutableListOf(currentBG)
         val cobSeries = mutableListOf(currentBG)
         val uamSeries = mutableListOf(currentBG)
         val ztSeries = mutableListOf(currentBG)
         val hybridSeries = mutableListOf(currentBG)
-        if (horizonMinutes <= 0) {
+        if (effectiveHorizonMinutes <= 0) {
             return AdvancedPredictionCurves(
                 iob = iobSeries,
                 cob = cobSeries,
@@ -68,7 +70,7 @@ object AdvancedPredictionEngine {
             )
         }
 
-        val steps = maxOf(1, horizonMinutes / STEP_MINUTES)
+        val steps = maxOf(1, effectiveHorizonMinutes / STEP_MINUTES)
         val now = System.currentTimeMillis()
         val carbRatio = profile.carb_ratio.takeIf { it > 0 } ?: 10.0
         val csf = finalSensitivity / carbRatio

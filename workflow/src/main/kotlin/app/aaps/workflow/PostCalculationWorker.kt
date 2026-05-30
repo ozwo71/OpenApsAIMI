@@ -110,8 +110,8 @@ class PostCalculationWorker(
         }
         if (predictionsAvailable && apsResult != null) {
             var predictionHours = (ceil(apsResult.latestPredictionsTime - System.currentTimeMillis().toDouble()) / (60 * 60 * 1000)).toInt()
-            predictionHours = min(3, predictionHours)
-            predictionHours = max(0, predictionHours)
+            predictionHours = min(Constants.PREDICTION_GRAPH_HORIZON_HOURS, predictionHours)
+            predictionHours = max(Constants.PREDICTION_GRAPH_MIN_HOURS, predictionHours)
             val hoursToFetch = Constants.GRAPH_TIME_RANGE_HOURS - predictionHours
             data.overviewData.toTime = calendar.timeInMillis + 100000 // GraphView-era nudge, retained while workers still consume this shape
             data.overviewData.fromTime = data.overviewData.toTime - T.hours(hoursToFetch.toLong()).msecs()
@@ -128,7 +128,7 @@ class PostCalculationWorker(
         val lowMgdl = profileUtil.convertToMgdl(lowMarkInUnits, profileUtil.units)
 
         val predictionDataPoints = apsResult?.predictionsAsGv
-            ?.filter { it.value >= 40 }
+            ?.filter { it.value >= Constants.PREDICTION_GRAPH_DISPLAY_FLOOR_MGDL }
             ?.map { gv ->
                 BgDataPoint(
                     timestamp = gv.timestamp,

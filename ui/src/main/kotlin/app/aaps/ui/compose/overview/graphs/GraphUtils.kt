@@ -117,6 +117,13 @@ fun rememberBottomAxisItemPlacer(minTimestamp: Long): HorizontalAxis.ItemPlacer 
 const val DEFAULT_GRAPH_ZOOM_MINUTES = 360.0
 
 /**
+ * When predictions are shown, auto-scroll places **now + this offset** at the right edge of the viewport
+ * so the scenario tail (~4 h) stays readable on the dashboard / overview graph.
+ * Keep in sync with [app.aaps.core.data.configuration.Constants.PREDICTION_VIEWPORT_FUTURE_BIAS_MINUTES].
+ */
+const val PREDICTION_VIEWPORT_FUTURE_BIAS_MINUTES = 180.0
+
+/**
  * Maximum zoom-in level — never show fewer than this many minutes.
  * Prevents Vico's internal label/constraint math from overflowing at extreme zoom
  * (Compose `Constraints` can't represent the resulting data-label widths → crash).
@@ -274,6 +281,68 @@ fun createSoftPredictionLine(color: Color): LineCartesianLayer.Line =
                 size = 3.5.dp
             )
         )
+    )
+
+/**
+ * AIMI scenario **clinical floor** (maps to legacy IOB prediction series on the graph).
+ *
+ * Vico draws the connector from [LineCartesianLayer.Line.fill]; keep it **opaque** — low-alpha fill
+ * made the dashed prediction nearly invisible on the dark dashboard (regression vs Canvas renderer).
+ */
+fun createScenarioFloorLine(
+    color: Color,
+    pointHaloColor: Color = Color.White,
+): LineCartesianLayer.Line =
+    LineCartesianLayer.Line(
+        fill = LineCartesianLayer.LineFill.single(Fill(color)),
+        stroke = LineCartesianLayer.LineStroke.Dashed(
+            thickness = 3.5.dp,
+            cap = StrokeCap.Round,
+            dashLength = 7.dp,
+            gapLength = 5.dp,
+        ),
+        areaFill = null,
+        pointProvider = LineCartesianLayer.PointProvider.single(
+            LineCartesianLayer.Point(
+                component = ShapeComponent(
+                    fill = Fill(color),
+                    shape = CircleShape,
+                    strokeFill = Fill(pointHaloColor.copy(alpha = 0.88f)),
+                    strokeThickness = 1.75.dp,
+                ),
+                size = 7.dp,
+            )
+        ),
+    )
+
+/**
+ * AIMI scenario **best path** (maps to legacy UAM prediction series on the graph).
+ * Stronger weight than [createScenarioFloorLine] so the authoritative curve reads first.
+ */
+fun createScenarioBestLine(
+    color: Color,
+    pointHaloColor: Color = Color.White,
+): LineCartesianLayer.Line =
+    LineCartesianLayer.Line(
+        fill = LineCartesianLayer.LineFill.single(Fill(color)),
+        stroke = LineCartesianLayer.LineStroke.Dashed(
+            thickness = 4.dp,
+            cap = StrokeCap.Round,
+            dashLength = 9.dp,
+            gapLength = 5.dp,
+        ),
+        areaFill = null,
+        pointProvider = LineCartesianLayer.PointProvider.single(
+            LineCartesianLayer.Point(
+                component = ShapeComponent(
+                    fill = Fill(color),
+                    shape = CircleShape,
+                    strokeFill = Fill(pointHaloColor.copy(alpha = 0.92f)),
+                    strokeThickness = 2.dp,
+                ),
+                size = 8.dp,
+            )
+        ),
     )
 
 /** Blend prediction / accent colors toward surface for a less alarming palette. */

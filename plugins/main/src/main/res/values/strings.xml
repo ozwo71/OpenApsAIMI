@@ -52,6 +52,7 @@
     <string name="dashboard_adjustment_extended_bolus">Extended bolus: %1$s</string>
     <string name="dashboard_adjustment_glycemia">Glycemia: %1$s %2$s (Δ %3$s/min)</string>
     <string name="dashboard_adjustment_prediction">Prediction: %1$s %2$s in %3$s</string>
+    <string name="dashboard_adjustment_scenario_projection">Scenario %1$s · Floor %2$s (+%3$s min)</string>
     <string name="dashboard_adjustment_prediction_unavailable">Prediction: unavailable</string>
     <string name="dashboard_adjustment_minutes">%1$d min</string>
     <string name="dashboard_adjustment_iob_activity">IOB: %1$s | Activity: %2$s%%</string>
@@ -275,6 +276,8 @@
     <string name="dashboard_hero_sensor_dialog_title">CGM</string>
     <string name="dashboard_hero_sensor_dialog_message">%1$s\n\n%2$s</string>
     <string name="graph_legend_smb">SMB</string>
+    <string name="graph_legend_scenario_floor">Floor</string>
+    <string name="graph_legend_scenario_best">Scenario</string>
     <string name="dashboard_graph_smb_toast">SMB · %1$s</string>
     <string name="dashboard_metrics_overflow_a11y">Dashboard layout options</string>
     <string name="graph_legend_tbr">TBR</string>

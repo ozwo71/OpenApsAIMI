@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
@@ -117,6 +118,11 @@ fun BgGraphCompose(
      * and lighter weights to keep therapy cues readable without a punitive feel.
      */
     dashboardSoftTherapyVisuals: Boolean = false,
+    /**
+     * Dashboard AIMI scenario projection: show only floor (IOB) + best (UAM) with high-contrast styling,
+     * risk envelope band, and terminal marker. PKPD reference curves (COB/ZT/aCOB) are hidden.
+     */
+    dashboardScenarioProjectionVisuals: Boolean = false,
     /**
      * When true with [SeriesType.ACTIVITY] in [bgOverlays], activity is drawn in [DashboardActivityStripChart]
      * below this chart (own Y scale) instead of being scaled into mg/dL space.
@@ -354,14 +360,24 @@ fun BgGraphCompose(
     }
 
     // Split predictions by type into registry
-    val predictionsByType = remember(predictions) {
-        mapOf(
-            SERIES_PRED_IOB to predictions.filter { it.type == BgType.IOB_PREDICTION },
-            SERIES_PRED_COB to predictions.filter { it.type == BgType.COB_PREDICTION },
-            SERIES_PRED_ACOB to predictions.filter { it.type == BgType.A_COB_PREDICTION },
-            SERIES_PRED_UAM to predictions.filter { it.type == BgType.UAM_PREDICTION },
-            SERIES_PRED_ZT to predictions.filter { it.type == BgType.ZT_PREDICTION }
-        )
+    val predictionsByType = remember(predictions, dashboardScenarioProjectionVisuals) {
+        if (dashboardScenarioProjectionVisuals) {
+            mapOf(
+                SERIES_PRED_IOB to predictions.filter { it.type == BgType.IOB_PREDICTION },
+                SERIES_PRED_COB to emptyList(),
+                SERIES_PRED_ACOB to emptyList(),
+                SERIES_PRED_UAM to predictions.filter { it.type == BgType.UAM_PREDICTION },
+                SERIES_PRED_ZT to emptyList(),
+            )
+        } else {
+            mapOf(
+                SERIES_PRED_IOB to predictions.filter { it.type == BgType.IOB_PREDICTION },
+                SERIES_PRED_COB to predictions.filter { it.type == BgType.COB_PREDICTION },
+                SERIES_PRED_ACOB to predictions.filter { it.type == BgType.A_COB_PREDICTION },
+                SERIES_PRED_UAM to predictions.filter { it.type == BgType.UAM_PREDICTION },
+                SERIES_PRED_ZT to predictions.filter { it.type == BgType.ZT_PREDICTION },
+            )
+        }
     }
 
     // Single LaunchedEffect for all data - ensures atomic updates
@@ -379,6 +395,7 @@ fun BgGraphCompose(
         stableTimeRange,
         dashboardSmbMarkers,
         dashboardSplitActivityToStrip,
+        dashboardScenarioProjectionVisuals,
     ) {
         seriesRegistry[SERIES_REGULAR] = bgReadings
         seriesRegistry[SERIES_BUCKETED] = bucketedData
@@ -514,9 +531,25 @@ fun BgGraphCompose(
     val normalizerLine = remember { createNormalizerLine() }
 
     val surfaceForBlend = scheme.surface
-    val iobPredLine = remember(iobPredColor, dashboardSoftTherapyVisuals, surfaceForBlend) {
-        val c = if (dashboardSoftTherapyVisuals) softenChartColor(iobPredColor, surfaceForBlend) else iobPredColor
-        if (dashboardSoftTherapyVisuals) createSoftPredictionLine(c) else createPredictionLine(c)
+    val useScenarioProjectionLines = dashboardScenarioProjectionVisuals && showPredictions
+    val scenarioPointHalo = scheme.onSurface.copy(alpha = 0.94f)
+    val scenarioFloorColor = iobPredColor
+    val scenarioBestColor = remember(uamPredColor, scheme.tertiary) {
+        // UAM palette (#C9BD60) is muted on dark dashboard — lift toward tertiary for contrast.
+        lerp(uamPredColor, scheme.tertiary, 0.45f)
+    }
+    val iobPredLine = remember(
+        scenarioFloorColor,
+        scenarioPointHalo,
+        dashboardSoftTherapyVisuals,
+        surfaceForBlend,
+        useScenarioProjectionLines,
+    ) {
+        when {
+            useScenarioProjectionLines -> createScenarioFloorLine(scenarioFloorColor, scenarioPointHalo)
+            dashboardSoftTherapyVisuals -> createSoftPredictionLine(softenChartColor(iobPredColor, surfaceForBlend))
+            else -> createPredictionLine(iobPredColor)
+        }
     }
     val cobPredLine = remember(cobPredColor, dashboardSoftTherapyVisuals, surfaceForBlend) {
         val c = if (dashboardSoftTherapyVisuals) softenChartColor(cobPredColor, surfaceForBlend) else cobPredColor
@@ -526,9 +559,18 @@ fun BgGraphCompose(
         val c = if (dashboardSoftTherapyVisuals) softenChartColor(aCobPredColor, surfaceForBlend) else aCobPredColor
         if (dashboardSoftTherapyVisuals) createSoftPredictionLine(c) else createPredictionLine(c)
     }
-    val uamPredLine = remember(uamPredColor, dashboardSoftTherapyVisuals, surfaceForBlend) {
-        val c = if (dashboardSoftTherapyVisuals) softenChartColor(uamPredColor, surfaceForBlend) else uamPredColor
-        if (dashboardSoftTherapyVisuals) createSoftPredictionLine(c) else createPredictionLine(c)
+    val uamPredLine = remember(
+        scenarioBestColor,
+        scenarioPointHalo,
+        dashboardSoftTherapyVisuals,
+        surfaceForBlend,
+        useScenarioProjectionLines,
+    ) {
+        when {
+            useScenarioProjectionLines -> createScenarioBestLine(scenarioBestColor, scenarioPointHalo)
+            dashboardSoftTherapyVisuals -> createSoftPredictionLine(softenChartColor(uamPredColor, surfaceForBlend))
+            else -> createPredictionLine(uamPredColor)
+        }
     }
     val ztPredLine = remember(ztPredColor, dashboardSoftTherapyVisuals, surfaceForBlend) {
         val c = if (dashboardSoftTherapyVisuals) softenChartColor(ztPredColor, surfaceForBlend) else ztPredColor
@@ -699,6 +741,27 @@ fun BgGraphCompose(
         fillColor = scheme.secondaryContainer,
         fillAlpha = 0.095f,
     )
+    val scenarioGeometry = remember(
+        predictions,
+        dashboardScenarioProjectionVisuals,
+        showPredictions,
+        minTimestamp,
+        generalUnits,
+    ) {
+        if (!dashboardScenarioProjectionVisuals || !showPredictions) {
+            null
+        } else {
+            buildScenarioProjectionChartGeometry(predictions, minTimestamp, viewModel::glucoseMgdlToChartY)
+        }
+    }
+    val scenarioDecorations = rememberScenarioProjectionDecorations(
+        geometry = scenarioGeometry,
+        bgAxisMinY = 0.0,
+        bgAxisMaxY = startAxisMaxY,
+        envelopeFillColor = scenarioBestColor,
+        terminalMarkerColor = scenarioBestColor,
+        terminalGlowColor = scenarioBestColor,
+    )
     val axisLabelColor = if (dashboardSoftTherapyVisuals) scheme.onSurfaceVariant.copy(alpha = 0.72f) else scheme.onSurface
     val gridGuideAlpha = if (dashboardSoftTherapyVisuals) 0.22f else 0.5f
     // Dashboard soft BG axis: ~48 mg/dL steps in chart Y space (display units — see legacy GraphData).
@@ -710,9 +773,10 @@ fun BgGraphCompose(
                 1.0
             }
         }
-    val decorations = remember(comfortCorridorDecoration, tbrDecoration, nowLine) {
+    val decorations = remember(comfortCorridorDecoration, scenarioDecorations, tbrDecoration, nowLine) {
         buildList {
             comfortCorridorDecoration?.let { add(it) }
+            addAll(scenarioDecorations)
             tbrDecoration?.let { add(it) }
             add(nowLine)
         }

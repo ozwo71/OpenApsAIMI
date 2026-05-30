@@ -61,6 +61,7 @@ internal fun DashboardBgGraphVico(
             dashboardTbrMarkerEpochMs = graphRenderInput.tbrMarkerEpochMs,
             lockStartAxisYFromZero = true,
             dashboardSoftTherapyVisuals = true,
+            dashboardScenarioProjectionVisuals = true,
             dashboardSplitActivityToStrip = false,
             onDashboardSmbMarkerTap =
                 if (graphRenderInput.smbMarkers.isNotEmpty()) { marker ->

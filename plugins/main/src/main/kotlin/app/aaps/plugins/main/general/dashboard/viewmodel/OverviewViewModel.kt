@@ -5,7 +5,8 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import app.aaps.core.data.iob.InMemoryGlucoseValue
+import app.aaps.core.data.configuration.Constants
+import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.model.EB
 import app.aaps.core.data.model.EPS
 import app.aaps.core.data.model.GlucoseUnit
@@ -908,13 +909,35 @@ class OverviewViewModel(
             fabricPrivacy.logMessage("PRED_UNAVAILABLE: predictions empty")
             return resourceHelper.gs(R.string.dashboard_adjustment_prediction_unavailable)
         }
-        val targetTime = now + TimeUnit.MINUTES.toMillis(PREDICTION_LOOKAHEAD_MINUTES)
-        val closest = predictions.minByOrNull { abs(it.timestamp - targetTime) }
-            ?: return resourceHelper.gs(R.string.dashboard_adjustment_prediction_unavailable)
-        val valueText = profileUtil.fromMgdlToStringInUnits(closest.value)
-        val minutes = max(1L, abs(closest.timestamp - now) / TimeUnit.MINUTES.toMillis(1))
-        val minutesText = resourceHelper.gs(R.string.dashboard_adjustment_minutes, minutes)
-        return resourceHelper.gs(R.string.dashboard_adjustment_prediction, "→", valueText, minutesText)
+        val bestTerminal = predictions
+            .filter { it.sourceSensor == SourceSensor.UAM_PREDICTION }
+            .maxByOrNull { it.timestamp }
+        val floorTerminal = predictions
+            .filter { it.sourceSensor == SourceSensor.IOB_PREDICTION }
+            .maxByOrNull { it.timestamp }
+        if (bestTerminal == null && floorTerminal == null) {
+            return resourceHelper.gs(R.string.dashboard_adjustment_prediction_unavailable)
+        }
+        val terminalTimestamp = maxOf(
+            bestTerminal?.timestamp ?: 0L,
+            floorTerminal?.timestamp ?: 0L,
+        )
+        val horizonMinutes = if (terminalTimestamp > now) {
+            ((terminalTimestamp - now) / TimeUnit.MINUTES.toMillis(1)).coerceAtLeast(1L)
+        } else {
+            Constants.PREDICTION_GRAPH_HORIZON_HOURS * 60L
+        }
+        val displayHorizonMinutes = maxOf(Constants.PREDICTION_GRAPH_MIN_MINUTES.toLong(), horizonMinutes)
+        val bestText = bestTerminal?.let { profileUtil.fromMgdlToStringInUnits(it.value) }
+            ?: resourceHelper.gs(app.aaps.core.ui.R.string.value_unavailable_short)
+        val floorText = floorTerminal?.let { profileUtil.fromMgdlToStringInUnits(it.value) }
+            ?: resourceHelper.gs(app.aaps.core.ui.R.string.value_unavailable_short)
+        return resourceHelper.gs(
+            R.string.dashboard_adjustment_scenario_projection,
+            bestText,
+            floorText,
+            displayHorizonMinutes,
+        )
     }
 
     private suspend fun buildIobActivityLine(): String {
@@ -1267,7 +1290,6 @@ class OverviewViewModel(
     private data class ModeKeyword(val token: String, val labelRes: Int)
 
     companion object {
-        private const val PREDICTION_LOOKAHEAD_MINUTES = 30L
         private const val SAFETY_LIMITED_BG = 90.0
         private const val SAFETY_CRITICAL_BG = 70.0
         private val MODE_LOOKBACK_MS = TimeUnit.HOURS.toMillis(12)

@@ -4,7 +4,9 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.model.GlucoseUnit
+import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
@@ -418,14 +420,25 @@ class GraphViewModel @AssistedInject constructor(
 
         if (allTimestamps.isEmpty()) {
             cacheTimeRange?.let {
-                val upper = if (showPredictions) it.endTime else it.toTime
+                val upper = if (showPredictions) {
+                    val minFutureEnd = System.currentTimeMillis() +
+                        T.hours(Constants.PREDICTION_GRAPH_MIN_HOURS.toLong()).msecs()
+                    maxOf(it.endTime, minFutureEnd)
+                } else {
+                    it.toTime
+                }
                 Pair(it.fromTime, upper)
             }
         } else {
             val minTime = allTimestamps.minOrNull() ?: return@combine null
             val maxTime = allTimestamps.maxOrNull() ?: return@combine null
             val cacheUpper = cacheTimeRange?.let { if (showPredictions) it.endTime else it.toTime }
-            val effectiveMax = if (cacheUpper != null) maxOf(maxTime, cacheUpper) else maxTime
+            var effectiveMax = if (cacheUpper != null) maxOf(maxTime, cacheUpper) else maxTime
+            if (showPredictions && effectivePredictions.isNotEmpty()) {
+                val minFutureEnd = System.currentTimeMillis() +
+                    T.hours(Constants.PREDICTION_GRAPH_MIN_HOURS.toLong()).msecs()
+                effectiveMax = maxOf(effectiveMax, minFutureEnd)
+            }
             Pair(minTime, effectiveMax)
         }
     }.stateIn(

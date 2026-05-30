@@ -219,10 +219,10 @@ fun GraphsSection(
             }
             val timeRange = derivedTimeRange
             if (showPredictions && predictions.isNotEmpty() && timeRange != null) {
-                // Scroll so "now + 2h" is at the right edge of viewport
+                // Scroll so "now + 3h" is at the right edge of viewport
                 val (minTimestamp, _) = timeRange
                 val nowX = timestampToX(System.currentTimeMillis(), minTimestamp)
-                bgScrollState.animateScroll(Scroll.Absolute.x(nowX + 120.0, bias = 1f))
+                bgScrollState.animateScroll(Scroll.Absolute.x(nowX + PREDICTION_VIEWPORT_FUTURE_BIAS_MINUTES, bias = 1f))
             } else {
                 // No predictions - scroll to end
                 bgScrollState.animateScroll(Scroll.Absolute.End)

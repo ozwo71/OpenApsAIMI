@@ -91,4 +91,20 @@ object Constants {
 
     // Graph time range
     const val GRAPH_TIME_RANGE_HOURS = 24
+
+    /** AIMI PKPD + scenario projection horizon (minutes); matches [AdvancedPredictionEngine] default. */
+    const val PREDICTION_GRAPH_HORIZON_HOURS = 4
+
+    /** Minimum future span reserved on the home graph when predictions are shown. */
+    const val PREDICTION_GRAPH_MIN_HOURS = 2
+
+    const val PREDICTION_GRAPH_MIN_MINUTES = PREDICTION_GRAPH_MIN_HOURS * 60
+
+    /**
+     * Keep scenario floor points (clamped to 39 mg/dL) on the graph — legacy filter at 40 hid most of the curve.
+     */
+    const val PREDICTION_GRAPH_DISPLAY_FLOOR_MGDL = 39.0
+
+    /** Future viewport bias when auto-scrolling the home graph to show prediction tail (minutes). */
+    const val PREDICTION_VIEWPORT_FUTURE_BIAS_MINUTES = 180
 }

@@ -943,7 +943,11 @@ internal class DashboardShellController(
             overviewData.fromTime
         }
         val predictionQueryFrom = min(visibleFromEpoch, overviewData.fromTime)
-        val predictionFutureHorizonMs = T.hours(3).msecs()
+        val minFutureHorizonMs = T.hours(Constants.PREDICTION_GRAPH_MIN_HOURS.toLong()).msecs()
+        val predictionFutureHorizonMs = max(
+            minFutureHorizonMs,
+            T.hours(Constants.PREDICTION_GRAPH_HORIZON_HOURS.toLong()).msecs(),
+        )
         val predictionDisplayToEpoch = visibleToEpoch + predictionFutureHorizonMs
         val predictionQueryTo = max(overviewData.endTime, predictionDisplayToEpoch)
         val requestedCacheRange =

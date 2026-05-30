@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
@@ -91,7 +92,10 @@ internal fun DashboardGraphComposeCard(
     val density = LocalDensity.current
     val smbHitPx = remember(density) { with(density) { 36.dp.toPx() } }
     val scheme = MaterialTheme.colorScheme
-    val originalBgValue = AapsTheme.generalColors.originalBgValue
+    val generalColors = AapsTheme.generalColors
+    val originalBgValue = generalColors.originalBgValue
+    val iobPredictionColor = generalColors.iobPrediction
+    val scenarioBestLegendColor = lerp(generalColors.uamPrediction, scheme.tertiary, 0.45f)
     /** Matches [BgGraphCompose] on dashboard: original BG palette + optional reading tint, soft alpha. */
     val bgLegendLineColor = remember(useVicoGraph, vicoChartLook.bgReadingTintKey, scheme, originalBgValue) {
         if (useVicoGraph) {
@@ -149,20 +153,29 @@ internal fun DashboardGraphComposeCard(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     if (showPredictionLegend) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .width(14.dp)
-                                    .height(3.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)),
+                        if (useVicoGraph) {
+                            DashboardScenarioProjectionLegend(
+                                floorColor = iobPredictionColor,
+                                bestColor = scenarioBestLegendColor,
+                                floorLabel = stringResource(R.string.graph_legend_scenario_floor),
+                                bestLabel = stringResource(R.string.graph_legend_scenario_best),
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = stringResource(R.string.prediction_shortname),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(14.dp)
+                                        .height(3.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)),
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = stringResource(R.string.prediction_shortname),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                     if (!attachLegacyGraphBackend && composeState.graphRenderInput.smbMarkers.isNotEmpty()) {
