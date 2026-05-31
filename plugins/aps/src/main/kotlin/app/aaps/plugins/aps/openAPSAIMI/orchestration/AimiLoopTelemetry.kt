@@ -107,8 +107,9 @@ object AimiLoopTelemetry {
             } catch (t: Throwable) {
                 val endedWallMs = System.currentTimeMillis()
                 val errSimple = t::class.simpleName ?: "Throwable"
+                val phase = currentLoopPhase.name
                 appendRing(
-                    "tick_abort id=$id wall_ms=$endedWallMs duration_ms=${endedWallMs - wallClockMs} error=$errSimple"
+                    "tick_abort id=$id phase=$phase wall_ms=$endedWallMs duration_ms=${endedWallMs - wallClockMs} error=$errSimple"
                 )
                 try {
                     onTickAbort?.invoke(id, wallClockMs, endedWallMs, t)

@@ -53,5 +53,32 @@ class AimiLoopTickRecoveryTest {
         assertEquals(2.5, rt.IOB ?: 0.0, 0.0)
         assertFalse(rt.reason.toString().contains("test boom"))
         assertTrue(rt.consoleError?.any { it.contains("IllegalStateException") } == true)
+        assertTrue(rt.reason.toString().contains("safe hold ["))
+    }
+
+    @Test
+    fun `unhandled error recovery includes loop phase and aimi frame in reason`() {
+        AimiLoopTelemetry.enterPhase(AimiLoopPhase.CORE_DECISION, null)
+        val error = NullPointerException("missing field").apply {
+            stackTrace = arrayOf(
+                StackTraceElement(
+                    "app.aaps.plugins.aps.openAPSAIMI.DetermineBasalAIMI2",
+                    "coreDecisionBranch",
+                    "DetermineBasalAIMI2.kt",
+                    4287,
+                ),
+            )
+        }
+        val rt = AimiLoopTickRecovery.safeResultAfterUnhandledError(
+            ctx = sampleCtx(),
+            error = error,
+            consoleLog = mutableListOf(),
+            consoleError = mutableListOf(),
+        )
+        val reason = rt.reason.toString()
+        assertTrue(reason.contains("CORE_DECISION"))
+        assertTrue(reason.contains("SMB & basal decision tree"))
+        assertTrue(reason.contains("DetermineBasalAIMI2.coreDecisionBranch:4287"))
+        assertTrue(rt.consoleError?.any { it.contains("DetermineBasalAIMI2.coreDecisionBranch:4287") } == true)
     }
 }
