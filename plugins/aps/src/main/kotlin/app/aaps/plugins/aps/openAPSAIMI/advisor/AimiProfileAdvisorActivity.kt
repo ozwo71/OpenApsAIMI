@@ -33,6 +33,16 @@ import app.aaps.core.keys.interfaces.BooleanPreferenceKey
 import app.aaps.core.keys.interfaces.PreferenceKey
 import app.aaps.core.keys.interfaces.StringPreferenceKey
 import android.content.Intent
+import app.aaps.core.keys.StringKey
+import app.aaps.core.interfaces.maintenance.ImportExportPrefs
+import app.aaps.core.interfaces.protection.ExportPasswordDataStore
+import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.AimiTuningContext
+import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningContextApplySupport
+import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningContextEngine
+import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningApplyResult
+import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningExportStatus
+import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningPlan
+import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningStepTier
 import java.util.Locale
 
 
@@ -53,6 +63,8 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     @Inject lateinit var tddCalculator: app.aaps.core.interfaces.stats.TddCalculator
     @Inject lateinit var tirCalculator: app.aaps.core.interfaces.stats.TirCalculator
     @Inject lateinit var aapsLogger: app.aaps.core.interfaces.logging.AAPSLogger
+    @Inject lateinit var importExportPrefs: ImportExportPrefs
+    @Inject lateinit var exportPasswordDataStore: ExportPasswordDataStore
     
     // NOT injected - created manually to avoid Dagger issues
     private lateinit var advisorService: AimiAdvisorService
@@ -61,7 +73,9 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     /** Observation / PKPD recommendation cards; used to remove rows after apply without full recreate(). */
     private val recommendationRowViews = mutableListOf<Pair<View, AimiRecommendation>>()
 
-    
+    private var lastReport: AdvisorReport? = null
+    private var selectedTuningContext: AimiTuningContext =
+        AimiTuningContext.AUTO_BALANCE
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -77,6 +91,9 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             aapsLogger = aapsLogger
         )
         historyRepo = app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository(this)
+        selectedTuningContext = TuningContextEngine.parseContext(
+            preferences.get(StringKey.AimiTuningContextSelection),
+        )
         title = rh.gs(R.string.aimi_advisor_title)
         
 
@@ -120,9 +137,13 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                     if (isFinishing) return@withContext
                     rootLayout.removeView(loadingText)
                     recommendationRowViews.clear()
+                    lastReport = report
 
                     // 1. Header (Title + Score Pill)
                     rootLayout.addView(createDashboardHeader(report))
+
+                    // 1b. Tuning context (bundled pref adjustments)
+                    rootLayout.addView(createTuningContextCard(report, cardColor))
             
                     // 2. Metrics Grid (2x2)
                     rootLayout.addView(createMetricsGrid(report.metrics, cardColor))
@@ -1099,6 +1120,197 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             }
         }
         return card
+    }
+
+    private fun createTuningContextCard(report: AdvisorReport, cardColor: Int): CardView {
+        val card = CardView(this).apply {
+            radius = 16f
+            setCardBackgroundColor(cardColor)
+            cardElevation = 0f
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { setMargins(0, 0, 0, 32) }
+        }
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 24, 24, 24)
+        }
+        column.addView(TextView(this).apply {
+            text = rh.gs(R.string.aimi_tuning_section_title)
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.parseColor("#94A3B8"))
+        })
+        column.addView(TextView(this).apply {
+            text = rh.gs(R.string.aimi_tuning_section_desc)
+            textSize = 13f
+            setTextColor(Color.parseColor("#CBD5E1"))
+            setPadding(0, 8, 0, 16)
+        })
+        column.addView(createTuningContextChipRow())
+        val buttonRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(0, 16, 0, 0)
+        }
+        buttonRow.addView(Button(this).apply {
+            text = rh.gs(R.string.aimi_tuning_preview_btn)
+            setOnClickListener { showTuningPreviewDialog(report) }
+        })
+        buttonRow.addView(Space(this).apply {
+            layoutParams = LinearLayout.LayoutParams(16, 0)
+        })
+        buttonRow.addView(Button(this).apply {
+            text = rh.gs(R.string.aimi_tuning_apply_btn)
+            setOnClickListener { showTuningApplyDialog(report) }
+        })
+        column.addView(buttonRow)
+        card.addView(column)
+        return card
+    }
+
+    private fun createTuningContextChipRow(): LinearLayout {
+        val contexts = listOf(
+            AimiTuningContext.MEAL_RISE to R.string.aimi_tuning_context_meal_rise,
+            AimiTuningContext.HYPO_GUARD to R.string.aimi_tuning_context_hypo_guard,
+            AimiTuningContext.HYPER_STABLE to R.string.aimi_tuning_context_hyper_stable,
+            AimiTuningContext.AUTO_BALANCE to R.string.aimi_tuning_context_auto,
+        )
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        contexts.forEachIndexed { index, (ctx, labelRes) ->
+            if (index > 0) {
+                row.addView(Space(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(8, 0)
+                })
+            }
+            row.addView(Button(this).apply {
+                text = rh.gs(labelRes)
+                isAllCaps = false
+                val selected = selectedTuningContext == ctx
+                setBackgroundColor(
+                    if (selected) Color.parseColor("#38BDF8") else Color.parseColor("#334155"),
+                )
+                setTextColor(if (selected) Color.parseColor("#0F172A") else Color.WHITE)
+                setOnClickListener {
+                    selectedTuningContext = ctx
+                    preferences.put(StringKey.AimiTuningContextSelection, ctx.name)
+                    recreate()
+                }
+            })
+        }
+        return row
+    }
+
+    private fun buildTuningPlan(report: AdvisorReport): TuningPlan {
+        val t3c = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
+        return TuningContextEngine.computePlan(
+            requestedContext = selectedTuningContext,
+            metrics = report.metrics,
+            preferences = preferences,
+            t3cBrittleMode = t3c,
+        )
+    }
+
+    private fun tierLabel(tier: TuningStepTier): String = when (tier) {
+        TuningStepTier.MICRO -> rh.gs(R.string.aimi_tuning_tier_micro)
+        TuningStepTier.MODERATE -> rh.gs(R.string.aimi_tuning_tier_moderate)
+        TuningStepTier.STRONG -> rh.gs(R.string.aimi_tuning_tier_strong)
+    }
+
+    private fun showTuningPreviewDialog(report: AdvisorReport) {
+        val plan = buildTuningPlan(report)
+        val body = formatTuningDialogBody(plan)
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(rh.gs(R.string.aimi_tuning_dialog_preview_title))
+            .setMessage(body)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+    }
+
+    private fun showTuningApplyDialog(report: AdvisorReport) {
+        val plan = buildTuningPlan(report)
+        if (!plan.isActionable) {
+            val msg = plan.blockedReason
+                ?: rh.gs(R.string.aimi_tuning_no_changes)
+            android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        val body = formatTuningDialogBody(plan)
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(rh.gs(R.string.aimi_tuning_dialog_apply_title))
+            .setMessage(body)
+            .setPositiveButton(rh.gs(R.string.aimi_tuning_apply_btn)) { _, _ ->
+                executeTuningApply(plan)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun formatTuningDialogBody(plan: TuningPlan): String {
+        val tierLine = rh.gs(R.string.aimi_tuning_dialog_tier, tierLabel(plan.dominantTier))
+        if (plan.blockedReason != null) {
+            return "$tierLine\n\n${rh.gs(R.string.aimi_tuning_blocked, plan.blockedReason!!)}"
+        }
+        if (plan.changes.isEmpty()) {
+            return "$tierLine\n\n${rh.gs(R.string.aimi_tuning_no_changes)}"
+        }
+        return "$tierLine\n\n${TuningContextApplySupport.formatPlanPreview(plan)}"
+    }
+
+    private fun executeTuningApply(plan: TuningPlan) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val applyResult = TuningContextApplySupport.applyTuningPlan(plan, preferences, historyRepo)
+            val exportStatus = if (applyResult.appliedCount > 0) {
+                TuningContextApplySupport.tryExportSettings(
+                    this@AimiProfileAdvisorActivity,
+                    importExportPrefs,
+                    exportPasswordDataStore,
+                )
+            } else {
+                TuningExportStatus.SKIPPED_DISABLED
+            }
+            val resultMessage = buildTuningResultMessage(applyResult.copy(exportStatus = exportStatus))
+            withContext(Dispatchers.Main) {
+                if (isFinishing) return@withContext
+                androidx.appcompat.app.AlertDialog.Builder(this@AimiProfileAdvisorActivity)
+                    .setTitle(rh.gs(R.string.aimi_tuning_result_title))
+                    .setMessage(resultMessage)
+                    .setPositiveButton(android.R.string.ok) { _, _ ->
+                        refreshRecommendationRowsAfterApply()
+                    }
+                    .show()
+            }
+        }
+    }
+
+    private fun buildTuningResultMessage(result: TuningApplyResult): String {
+        val sb = StringBuilder()
+        if (result.appliedCount == 0) {
+            sb.append(result.plan.blockedReason ?: rh.gs(R.string.aimi_tuning_no_changes))
+        } else {
+            sb.append(
+                rh.gs(
+                    R.string.aimi_tuning_result_summary,
+                    result.appliedCount,
+                    tierLabel(result.plan.dominantTier),
+                ),
+            ).append("\n\n")
+            result.summaryLines.forEach { sb.append("• ").append(it).append('\n') }
+            sb.append('\n')
+            sb.append(
+                when (result.exportStatus) {
+                    TuningExportStatus.SUCCESS -> rh.gs(R.string.aimi_tuning_result_export_ok)
+                    TuningExportStatus.SKIPPED_DISABLED -> rh.gs(R.string.aimi_tuning_result_export_skipped)
+                    TuningExportStatus.SKIPPED_NO_PASSWORD -> rh.gs(R.string.aimi_tuning_result_export_skipped)
+                    TuningExportStatus.SKIPPED_PASSWORD_EXPIRED -> rh.gs(R.string.aimi_tuning_result_export_expired)
+                    TuningExportStatus.FAILED -> rh.gs(R.string.aimi_tuning_result_export_failed)
+                },
+            )
+        }
+        return sb.toString().trimEnd()
     }
 
     private fun createFooter(report: AdvisorReport): TextView {

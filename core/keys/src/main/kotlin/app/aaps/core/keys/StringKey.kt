@@ -219,6 +219,8 @@ enum class StringKey(
     AimiAdvisorDeepSeekKey("aimi_advisor_deepseek_key", "", isPassword = true),
     AimiAdvisorClaudeKey("aimi_advisor_claude_key", "", isPassword = true),
     AimiAdvisorProvider("aimi_advisor_provider", "OPENAI", preferenceType = PreferenceType.LIST),
+    /** Last tuning context selected in AIMI Profile Advisor (AimiTuningContext enum name). */
+    AimiTuningContextSelection("aimi_tuning_context_selection", "AUTO_BALANCE"),
     AimiAuditorMode("aimi_auditor_mode", "AUDIT_ONLY", preferenceType = PreferenceType.LIST),  // resolved via withEntries in plugin
 
     // Context Module (dedicated provider for flexibility)

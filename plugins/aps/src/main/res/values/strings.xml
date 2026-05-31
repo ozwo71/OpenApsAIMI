@@ -1254,6 +1254,29 @@
     <string name="aimi_prefs_deepseek_key_summary">Enter your DeepSeek API Key</string>
     <string name="aimi_prefs_claude_key_title">Claude API Key</string>
     <string name="aimi_prefs_claude_key_summary">Enter your Anthropic Claude API Key</string>
+    <!-- Tuning context (Advisor) -->
+    <string name="aimi_tuning_section_title">TUNING CONTEXT</string>
+    <string name="aimi_tuning_section_desc">Choose what you want to improve. Step size adapts to your CGM burden (small / moderate / strong).</string>
+    <string name="aimi_tuning_context_meal_rise">Meal rise</string>
+    <string name="aimi_tuning_context_hypo_guard">Hypo guard</string>
+    <string name="aimi_tuning_context_hyper_stable">Hyper control</string>
+    <string name="aimi_tuning_context_auto">Auto</string>
+    <string name="aimi_tuning_preview_btn">Preview</string>
+    <string name="aimi_tuning_apply_btn">Apply tuning</string>
+    <string name="aimi_tuning_tier_micro">Small step</string>
+    <string name="aimi_tuning_tier_moderate">Moderate step</string>
+    <string name="aimi_tuning_tier_strong">Strong step</string>
+    <string name="aimi_tuning_dialog_preview_title">Proposed tuning</string>
+    <string name="aimi_tuning_dialog_apply_title">Apply tuning?</string>
+    <string name="aimi_tuning_dialog_tier">Dose: %1$s</string>
+    <string name="aimi_tuning_no_changes">No changes needed — settings already match this context or metrics do not warrant adjustment.</string>
+    <string name="aimi_tuning_blocked">Tuning blocked: %1$s</string>
+    <string name="aimi_tuning_result_title">Tuning applied</string>
+    <string name="aimi_tuning_result_summary">%1$d parameter(s) updated (%2$s step).</string>
+    <string name="aimi_tuning_result_export_ok">Settings export completed.</string>
+    <string name="aimi_tuning_result_export_skipped">Settings export skipped — enable unattended export and set password in Maintenance.</string>
+    <string name="aimi_tuning_result_export_expired">Settings export skipped — export password expired. Re-enter it in Maintenance.</string>
+    <string name="aimi_tuning_result_export_failed">Settings export failed — check Maintenance export settings.</string>
     <!-- AIMI ADVISOR STRINGS -->
     <string name="aimi_advisor_title">AIMI Advisor</string>
     <string name="aimi_adv_loading">Analyse en cours...</string>

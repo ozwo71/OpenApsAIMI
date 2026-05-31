@@ -28,7 +28,9 @@ class AdvisorHistoryRepository(context: Context) {
 
     enum class ActionType {
         PREFERENCE_CHANGE,
-        PROFILE_CHANGE
+        PROFILE_CHANGE,
+        /** Multi-key tuning context bundle from Advisor. */
+        TUNING_BUNDLE,
     }
 
     /**
