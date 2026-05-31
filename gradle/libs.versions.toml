@@ -161,6 +161,7 @@ commons-codec = { group = "commons-codec", name = "commons-codec", version = "1.
 com-thoughtworks-xstream = { group = "com.thoughtworks.xstream", name = "xstream", version = "1.4.21" }
 com-garmin-connectiq = { group = "com.garmin.connectiq", name = "ciq-companion-app-sdk", version = "2.4.0" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version = "1.3.0" }
+androidx-test-ext = { group = "androidx.test.ext", name = "junit-ktx", version = "1.3.0" }
 androidx-benchmark-macro-junit4 = { group = "androidx.benchmark", name = "benchmark-macro-junit4", version = "1.4.1" }
 net-openid-appauth = { group = "net.openid", name = "appauth", version = "0.11.1" }
 

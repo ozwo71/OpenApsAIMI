@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.text.buildAnnotatedString
 import app.aaps.core.ui.R
 import com.google.common.truth.Truth.assertThat
 import org.junit.Before
@@ -50,6 +51,41 @@ class OkDialogTest {
         compose.setContent {
             MaterialTheme {
                 OkDialog(title = "Information", message = "Operation completed.", onDismiss = { dismisses++ })
+            }
+        }
+
+        compose.onNodeWithText(okLabel).performClick()
+
+        assertThat(dismisses).isEqualTo(1)
+    }
+
+    @Test
+    fun annotatedString_rendersTitleMessageAndOk() {
+        compose.setContent {
+            MaterialTheme {
+                OkDialog(
+                    title = "Information",
+                    message = buildAnnotatedString { append("Annotated body.") },
+                    onDismiss = {}
+                )
+            }
+        }
+
+        compose.onNodeWithText("Information").assertIsDisplayed()
+        compose.onNodeWithText("Annotated body.").assertIsDisplayed()
+        compose.onNodeWithText(okLabel).assertIsDisplayed()
+    }
+
+    @Test
+    fun annotatedString_okButton_firesOnDismiss() {
+        var dismisses = 0
+        compose.setContent {
+            MaterialTheme {
+                OkDialog(
+                    title = "Information",
+                    message = buildAnnotatedString { append("Annotated body.") },
+                    onDismiss = { dismisses++ }
+                )
             }
         }
 

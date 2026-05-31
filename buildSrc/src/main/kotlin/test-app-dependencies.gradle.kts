@@ -17,6 +17,7 @@ dependencies {
     testImplementationFromCatalog("org-skyscreamer-jsonassert")
     testImplementationFromCatalog("kotlinx-coroutines-test")
 
+    androidTestImplementationFromCatalog("androidx-test-ext")
     androidTestImplementationFromCatalog("androidx-test-rules")
     androidTestImplementationFromCatalog("com-google-truth")
 }
