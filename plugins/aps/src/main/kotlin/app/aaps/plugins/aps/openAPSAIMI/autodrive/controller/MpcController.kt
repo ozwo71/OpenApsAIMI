@@ -151,8 +151,8 @@ class MpcController @Inject constructor(
         } else {
             aapsLogger.debug(
                 LTag.APS,
-                "🧮 [MPC] Alignment Comparison: 60=${optimalDoses[60]?.format(2) ?: "n/a"}U, " +
-                    "120=${optimalDoses[120]?.format(2) ?: "n/a"}U, 180w=${bestDose.format(2)}U",
+                "🧮 [MPC] Alignment Comparison: 60=${horizonDoseLabel(optimalDoses, 60)}U, " +
+                    "120=${horizonDoseLabel(optimalDoses, 120)}U, 180w=${bestDose.format(2)}U",
             )
         }
 
@@ -181,7 +181,7 @@ class MpcController @Inject constructor(
         }
 
         val smbU = max(0.0, bestDose - (tbrUph / 12.0))
-        val comparisonStr = "H:[60:${optimalDoses[60]!!.format(2)}|120:${optimalDoses[120]!!.format(2)}|180:${bestDose.format(2)}]"
+        val comparisonStr = formatHorizonComparison(optimalDoses, bestDose)
 
         return AutoDriveCommand(
             temporaryBasalRate = tbrUph,
@@ -257,6 +257,13 @@ class MpcController @Inject constructor(
 
         return totalCost
     }
+
+    /** Safe labels when [horizons] omits 60/120 (hyper-plateau quiet uses 180 only). */
+    private fun horizonDoseLabel(optimalDoses: Map<Int, Double>, minutes: Int): String =
+        optimalDoses[minutes]?.format(2) ?: "n/a"
+
+    private fun formatHorizonComparison(optimalDoses: Map<Int, Double>, bestDose: Double): String =
+        "H:[60:${horizonDoseLabel(optimalDoses, 60)}|120:${horizonDoseLabel(optimalDoses, 120)}|180:${bestDose.format(2)}]"
 
     private fun Double.format(digits: Int) = "%.${digits}f".format(this)
 }
