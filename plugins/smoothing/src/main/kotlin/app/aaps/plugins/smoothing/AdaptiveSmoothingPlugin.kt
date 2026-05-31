@@ -283,7 +283,7 @@ class AdaptiveSmoothingPlugin @Inject constructor(
         if (segments.isEmpty()) {
             aapsLogger.debug(LTag.GLUCOSE, "AdaptiveSmoothing: no multi-point segment; raw fallback")
             for (idx in data.indices) {
-                data[idx].smoothed = max(data[idx].value, MIN_VALID_BG)
+                data[idx].smoothed = max(data[idx].calibratedOrValue, MIN_VALID_BG)
                 data[idx].trendArrow = TrendArrow.NONE
             }
             emitQualitySnapshot(0.0, 0.0)
@@ -310,7 +310,7 @@ class AdaptiveSmoothingPlugin @Inject constructor(
 
         for (idx in data.indices) {
             if (!covered[idx]) {
-                data[idx].smoothed = max(data[idx].value, MIN_VALID_BG)
+                data[idx].smoothed = max(data[idx].calibratedOrValue, MIN_VALID_BG)
                 data[idx].trendArrow = TrendArrow.NONE
             }
         }
@@ -437,7 +437,7 @@ class AdaptiveSmoothingPlugin @Inject constructor(
     ): Triple<Int, Int, Int> {
         val oldestIdx = segment.oldestIdx
         val newestIdx = segment.newestIdx
-        val x = doubleArrayOf(data[oldestIdx].value, 0.0)
+        val x = doubleArrayOf(data[oldestIdx].calibratedOrValue, 0.0)
         val stateCovariance = doubleArrayOf(16.0, 0.0, 0.0, 1.0)
         var measurementNoiseR = initialR
 
@@ -452,7 +452,7 @@ class AdaptiveSmoothingPlugin @Inject constructor(
 
         for (i in oldestIdx downTo newestIdx) {
             covered[i] = true
-            val z = data[i].value
+            val z = data[i].calibratedOrValue
             val timestamp = data[i].timestamp
             processedPoints++
 
@@ -650,8 +650,8 @@ class AdaptiveSmoothingPlugin @Inject constructor(
         // No, 'data' is Newest...Oldest.
         // If we are at 'i', older points are i+1, i+2.
         
-        val valCur = data[index].value
-        val valOld1 = if (index + 1 < data.size) data[index+1].value else valCur
+        val valCur = data[index].calibratedOrValue
+        val valOld1 = if (index + 1 < data.size) data[index + 1].calibratedOrValue else valCur
         
         // Heuristic Delta (Raw) 
         val rawDelta = valCur - valOld1
@@ -876,7 +876,7 @@ class AdaptiveSmoothingPlugin @Inject constructor(
 
     private fun copyRawToSmoothed(data: MutableList<InMemoryGlucoseValue>) {
        data.forEach { 
-           it.smoothed = it.value
+           it.smoothed = it.calibratedOrValue
            it.trendArrow = TrendArrow.NONE
        }
     }
@@ -885,7 +885,7 @@ class AdaptiveSmoothingPlugin @Inject constructor(
         data.forEach { gv ->
             val smoothed = gv.smoothed
             if (smoothed == null || !smoothed.isFinite()) {
-                gv.smoothed = gv.value.coerceIn(MIN_VALID_BG, MAX_VALID_BG)
+                gv.smoothed = gv.calibratedOrValue.coerceIn(MIN_VALID_BG, MAX_VALID_BG)
                 gv.trendArrow = TrendArrow.FLAT
                 return@forEach
             }

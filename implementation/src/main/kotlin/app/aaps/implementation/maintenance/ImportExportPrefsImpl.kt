@@ -1158,8 +1158,9 @@ class ImportExportPrefsImpl @Inject constructor(
         data class ApsResultData(val algorithm: String?, val input: JSONObject, val output: JSONObject?)
 
         override suspend fun doWorkAndLog(): Result {
-            if (!config.isEngineeringMode()) return Result.success(workDataOf("Result" to "Export not enabled"))
+            // Drain first, unconditionally: clears DataInbox pending-work gate (same contract as Dexcom/xDrip workers).
             val items = dataInbox.drain(ApsExportInbox)
+            if (!config.isEngineeringMode()) return Result.success(workDataOf("Result" to "Export not enabled"))
             if (items.isEmpty()) return Result.success(workDataOf("Result" to "no data"))
 
             prefFileList.ensureResultDirExists()

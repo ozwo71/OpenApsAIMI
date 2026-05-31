@@ -8,6 +8,13 @@ Upstream reference repository: [CAPTCG/AndroidAPS-Eversense-](https://github.com
 
 The **CAPTCG patch series 0001–0005** was applied on `dev_OAPSAIMI` (with resolutions below). After this point, merges from Nightscout `dev` must **keep** `plugins:eversense`, DI registrations, `SourceSensor` **EVERSENSE_E3** / **EVERSENSE_365**, DB converters, `EversensePlugin`, and the Eversense preference strings in `core/keys`.
 
+### Merge `dev` → `dev_OAPSAIMI_mergeDEV` (2026-05-31)
+
+- Upstream commits through `d6e06f0087` (Data receive fix, calibration UI, jacoco/Compose tests).
+- **Clean merge** (no conflicts). Eversense / AIMI / dashboard paths untouched in merge diff.
+- Post-merge fork fixes: `AdaptiveSmoothingPlugin` → `calibratedOrValue`; `ApsResultExportWorker` drain-before-gate (parity Dexcom/xDrip).
+- Smoke: xDrip/Dexcom inbox, calibration screen buttons, dashboard ↔ classic overview skin.
+
 ### Merge resolutions performed
 
 1. **0003 — `core/keys/src/main/res/values/strings.xml`**  

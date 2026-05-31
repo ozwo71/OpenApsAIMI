@@ -37,6 +37,7 @@ When this fork includes (or will include) the CAPTCG Eversense BLE plugin series
 - [ ] Plugin activation/state transitions unchanged.
 - [ ] No regression on data flow feeding smoothing decisions.
 - [ ] No new blocking call on main thread.
+- [ ] With **Linear calibration** active, adaptive smoothing uses `calibratedOrValue` (parity with UKF / exponential smoothers).
 
 ### Dashboard + Skin switching
 - [ ] Embedded dashboard renders correctly.
@@ -48,6 +49,7 @@ When this fork includes (or will include) the CAPTCG Eversense BLE plugin series
 - [ ] JSON/CSV write paths still allowed and reachable.
 - [ ] No new permission requirement missing at runtime.
 - [ ] Storage fallback/error path validated (no silent failure loops).
+- [ ] **DataInbox** consumers call `drain()` before early return (Dexcom, xDrip, SMS, APS result export worker).
 
 ### Physio part
 - [ ] Inputs/outputs used by physio layer are unchanged or intentionally migrated.
@@ -111,6 +113,7 @@ Run after merge and before release build:
 ### Permissions / storage
 - [ ] JSON and CSV writes succeed on device.
 - [ ] Missing-permission scenario handled without infinite retries/freezes.
+- [ ] xDrip / Dexcom high-frequency receive: no WorkManager inbox stall (post-merge `Inbox.kt` gate).
 
 Pass criteria:
 - No freeze, no ANR, no blocking UI behavior, no critical feature regression.
