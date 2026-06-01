@@ -38,6 +38,9 @@ package app.aaps.plugins.aps.openAPSAIMI.autodrive.models
  * @property combinedDelta Filtered combined delta (maneuver confirmation).
  * @property uamConfidence UAM confidence in [0, 1].
  * @property applyHypoRecoveryRaDampening If true, PSE damps meal-like Ra after recent hypo without meal context.
+ * @property htrTierOrdinal [HyperSeverityTier.ordinal] from hyper trajectory release (0 = OFF).
+ * @property htrProjectedDevMgdl Scenario best terminal minus target (mg/dL) for MPC feed-forward.
+ * @property htrProjectionLeadMgdl Scenario best minus current BG (mg/dL).
  */
 data class AutoDriveState(
     val bg: Double,
@@ -59,7 +62,10 @@ data class AutoDriveState(
     val highBgMaxSMB: Double = 2.0,
     val combinedDelta: Double = 0.0,
     val uamConfidence: Double = 0.0,
-    val applyHypoRecoveryRaDampening: Boolean = false
+    val applyHypoRecoveryRaDampening: Boolean = false,
+    val htrTierOrdinal: Int = 0,
+    val htrProjectedDevMgdl: Double = 0.0,
+    val htrProjectionLeadMgdl: Double = 0.0,
 ) {
     init {
         require(bg in 30.0..600.0) { "BG out of safe bounds: $bg" }
@@ -98,7 +104,10 @@ data class AutoDriveState(
             highBgMaxSMB: Double = 2.0,
             combinedDelta: Double = 0.0,
             uamConfidence: Double = 0.0,
-            applyHypoRecoveryRaDampening: Boolean = false
+            applyHypoRecoveryRaDampening: Boolean = false,
+            htrTierOrdinal: Int = 0,
+            htrProjectedDevMgdl: Double = 0.0,
+            htrProjectionLeadMgdl: Double = 0.0,
         ): AutoDriveState {
             return try {
                 AutoDriveState(
@@ -121,7 +130,10 @@ data class AutoDriveState(
                     highBgMaxSMB = highBgMaxSMB.coerceAtLeast(0.0),
                     combinedDelta = combinedDelta,
                     uamConfidence = uamConfidence.coerceIn(0.0, 1.0),
-                    applyHypoRecoveryRaDampening = applyHypoRecoveryRaDampening
+                    applyHypoRecoveryRaDampening = applyHypoRecoveryRaDampening,
+                    htrTierOrdinal = htrTierOrdinal.coerceAtLeast(0),
+                    htrProjectedDevMgdl = htrProjectedDevMgdl.coerceAtLeast(0.0),
+                    htrProjectionLeadMgdl = htrProjectionLeadMgdl.coerceAtLeast(0.0),
                 )
             } catch (e: Exception) {
                 AutoDriveState(

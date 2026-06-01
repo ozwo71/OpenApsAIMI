@@ -192,6 +192,7 @@ Commande :
 - Alimenter SCENARIO_BEST directement depuis Autodrive MPC terminal  
 - Pref utilisateur : afficher floor seul / best seul / les deux  
 - Fusion DECISION envelope = scenario (single snapshot post-PKPD refresh)  
+- **Hyper Trajectory Release (HTR)** — pont scénario + trajectoire → doseur SMB : voir [AIMI_HYPER_TRAJECTORY_RELEASE.md](AIMI_HYPER_TRAJECTORY_RELEASE.md)  
 
 ---
 

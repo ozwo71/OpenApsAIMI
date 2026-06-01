@@ -236,6 +236,24 @@ enum class BooleanKey(
     /** Plateau + meaningful IOB + falling prediction → throttle SMB, bias TBR, no Red Carpet restore. */
     OApsAIMIIobSurveillanceGuard("key_aimi_iob_surveillance_guard", true),
     /**
+     * When true, scenario projection + trajectory can lift Autodrive V3 SMB on credible hyper rise
+     * (see docs/AIMI_HYPER_TRAJECTORY_RELEASE.md).
+     */
+    OApsAIMIHyperTrajectoryRelease(
+        key = "key_aimi_hyper_trajectory_release",
+        defaultValue = true,
+        titleResId = R.string.pref_title_aimi_hyper_trajectory_release,
+        summaryResId = R.string.pref_summary_aimi_hyper_trajectory_release,
+        dependency = OApsAIMIautoDriveActive,
+    ),
+    OApsAIMIHyperTrajectoryReleaseAggressive(
+        key = "key_aimi_hyper_trajectory_release_aggressive",
+        defaultValue = false,
+        titleResId = R.string.pref_title_aimi_hyper_trajectory_release_aggressive,
+        summaryResId = R.string.pref_summary_aimi_hyper_trajectory_release_aggressive,
+        dependency = OApsAIMIHyperTrajectoryRelease,
+    ),
+    /**
      * Trajectory-informed bounded tweak to DynISF (AutoISF-style CGM geometry). Requires dynamic sensitivity.
      * Default off: enable after monitoring shadow logs.
      */

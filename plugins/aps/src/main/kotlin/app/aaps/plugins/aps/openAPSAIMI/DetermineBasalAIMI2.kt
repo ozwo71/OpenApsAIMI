@@ -64,6 +64,14 @@ import app.aaps.plugins.aps.openAPSAIMI.ports.PkpdPort
 import app.aaps.plugins.aps.openAPSAIMI.prediction.NaiveEventualBgSignGuard
 import app.aaps.plugins.aps.openAPSAIMI.prediction.PredictionSanityResult
 import app.aaps.plugins.aps.openAPSAIMI.prediction.minPredictedAcrossCurves
+import app.aaps.plugins.aps.openAPSAIMI.release.HyperSeverityClassifier
+import app.aaps.plugins.aps.openAPSAIMI.release.HyperSeverityTier
+import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryHypoCredibility
+import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryMpcFeedForward
+import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryReleaseEvaluator
+import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryReleasePreferences
+import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryReleaseResult
+import app.aaps.plugins.aps.openAPSAIMI.safety.HypoLgsBlockReason
 import app.aaps.plugins.aps.openAPSAIMI.prediction.sanitizePredictionValues
 import app.aaps.plugins.aps.openAPSAIMI.risk.AimiRiskEnvelope
 import app.aaps.plugins.aps.openAPSAIMI.risk.AimiRiskEnvelopeBuilder
@@ -174,6 +182,23 @@ internal data class AimiDecisionContext(
         var safety_risk: SafetyRiskExport? = null,
         /** Dual scenario curves (CLINICAL_FLOOR + SCENARIO_BEST) */
         var scenario_projection: ScenarioProjectionExport? = null,
+        /** Hyper Trajectory Release (projection → SMB floor) */
+        var hyper_trajectory_release: HyperTrajectoryReleaseExport? = null,
+    )
+
+    data class HyperTrajectoryReleaseExport(
+        val active: Boolean,
+        val tier: String,
+        val dev_above_target_mgdl: Double,
+        val projected_dev_mgdl: Double,
+        val severity_weight: Double,
+        val absorption_offset_mgdl: Double,
+        val smb_floor_u: Double,
+        val v3_smb_before_u: Double,
+        val v3_smb_after_u: Double,
+        val suppress_traj_basal_shift: Boolean,
+        val hypo_min_pred_ignored: Boolean,
+        val reason: String,
     )
 
     data class SafetyRiskExport(
@@ -358,6 +383,22 @@ internal data class AimiDecisionContext(
                 sJson.put("trajectory_type", s.trajectory_type ?: org.json.JSONObject.NULL)
                 sJson.put("contributors", org.json.JSONArray(s.contributors))
                 adj.put("scenario_projection", sJson)
+            }
+            adjustments.hyper_trajectory_release?.let { h ->
+                val hJson = org.json.JSONObject()
+                hJson.put("active", h.active)
+                hJson.put("tier", h.tier)
+                hJson.put("dev_above_target_mgdl", h.dev_above_target_mgdl)
+                hJson.put("projected_dev_mgdl", h.projected_dev_mgdl)
+                hJson.put("severity_weight", h.severity_weight)
+                hJson.put("absorption_offset_mgdl", h.absorption_offset_mgdl)
+                hJson.put("smb_floor_u", h.smb_floor_u)
+                hJson.put("v3_smb_before_u", h.v3_smb_before_u)
+                hJson.put("v3_smb_after_u", h.v3_smb_after_u)
+                hJson.put("suppress_traj_basal_shift", h.suppress_traj_basal_shift)
+                hJson.put("hypo_min_pred_ignored", h.hypo_min_pred_ignored)
+                hJson.put("reason", h.reason)
+                adj.put("hyper_trajectory_release", hJson)
             }
             json.put("adjustments", adj)
 
@@ -1198,6 +1239,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      */
     private fun buildDecisionContextInitRtSosAndFlatShadow(ctx: AimiTickContext): AimiTickDecisionRtBootstrap {
         lastIobSurveillanceExport = null
+        lastHyperTrajectoryRelease = null
+        pendingTrajSpiralBasal = null
         val decisionCtx = AimiDecisionContext(
             event_id = "evt_${ctx.currentTime}",
             timestamp = ctx.currentTime,
@@ -2206,6 +2249,165 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val skipLegacySmbBlender: Boolean,
     )
 
+    private fun updateHyperDwellAboveHighBgClock(nowMs: Long = System.currentTimeMillis()) {
+        val highBgPref = preferences.get(DoubleKey.OApsAIMIHighBg)
+        val band = HyperTrajectoryHypoCredibility.highBgBandMgdl(targetBg.toDouble(), highBgPref)
+        if (bg >= targetBg + band) {
+            if (hyperDwellAboveHighBgSinceMs <= 0L) {
+                hyperDwellAboveHighBgSinceMs = nowMs
+            }
+        } else {
+            hyperDwellAboveHighBgSinceMs = 0L
+        }
+    }
+
+    private fun dwellAboveHighBgMinutes(nowMs: Long = System.currentTimeMillis()): Int {
+        if (hyperDwellAboveHighBgSinceMs <= 0L) return 0
+        return ((nowMs - hyperDwellAboveHighBgSinceMs) / 60_000L).toInt().coerceAtLeast(0)
+    }
+
+    private fun htrPreferences(): HyperTrajectoryReleasePreferences =
+        HyperTrajectoryReleasePreferences.from(preferences)
+
+    private fun classifyHyperSeverityForTick(
+        rT: RT,
+        combinedDelta: Float,
+        tdd24hU: Double,
+    ): HyperSeverityClassifier.Output {
+        val htrPrefs = htrPreferences()
+        val (floorTerminal, bestTerminal) = resolveHtrScenarioTerminals(rT)
+        val highBg = preferences.get(DoubleKey.OApsAIMIHighBg)
+        return HyperSeverityClassifier.classify(
+            HyperSeverityClassifier.Input(
+                bgMgdl = bg,
+                targetBgMgdl = targetBg.toDouble(),
+                highBgPreferenceMgdl = highBg,
+                deltaMgdlPer5 = delta.toDouble(),
+                shortAvgDeltaMgdlPer5 = shortAvgDelta.toDouble(),
+                combinedDeltaMgdlPer5 = combinedDelta.toDouble(),
+                floorTerminalMgdl = floorTerminal,
+                bestTerminalMgdl = bestTerminal,
+                tdd24hU = tdd24hU,
+                dwellAboveHighBgMinutes = dwellAboveHighBgMinutes(),
+                trajectoryType = trajectoryGuard.getLastAnalysis()?.classification,
+                establishedDevOverrideMgdl = htrPrefs.establishedDevOverrideMgdl,
+                deepDevOverrideMgdl = htrPrefs.deepDevOverrideMgdl,
+            ),
+        )
+    }
+
+    /** Scenario terminals when available; otherwise eventual / prediction fallbacks for the same tick. */
+    private fun resolveHtrScenarioTerminals(rT: RT): Pair<Double, Double> {
+        val scenario = lastScenarioProjection
+        if (scenario != null) {
+            return scenario.clinicalFloor.terminalMgdl to scenario.scenarioBest.terminalMgdl
+        }
+        val floorTerminal = minPredictedAcrossCurves(rT.predBGs) ?: bg
+        val bestTerminal = when {
+            eventualBG.isFinite() && eventualBG > bg + 15.0 -> eventualBG
+            lastEventualBgSnapshot.isFinite() && lastEventualBgSnapshot > bg + 15.0 -> lastEventualBgSnapshot
+            predictedBg > bg + 15f -> predictedBg.toDouble()
+            else -> bg
+        }
+        return floorTerminal to bestTerminal
+    }
+
+    private fun evaluateHyperTrajectoryRelease(
+        v3SmbU: Double,
+        rT: RT,
+        combinedDelta: Float,
+        tdd24hU: Double,
+    ): HyperTrajectoryReleaseResult {
+        val htrPrefs = htrPreferences()
+        val (floorTerminal, bestTerminal) = resolveHtrScenarioTerminals(rT)
+        if (htrPrefs.masterEnabled) {
+            updateHyperDwellAboveHighBgClock()
+        }
+        val isNight = hourOfDay >= 23 || hourOfDay < 6
+        return HyperTrajectoryReleaseEvaluator.evaluate(
+            HyperTrajectoryReleaseEvaluator.Input(
+                enabled = htrPrefs.masterEnabled,
+                bgMgdl = bg,
+                targetBgMgdl = targetBg.toDouble(),
+                highBgPreferenceMgdl = preferences.get(DoubleKey.OApsAIMIHighBg),
+                deltaMgdlPer5 = delta.toDouble(),
+                shortAvgDeltaMgdlPer5 = shortAvgDelta.toDouble(),
+                combinedDeltaMgdlPer5 = combinedDelta.toDouble(),
+                floorTerminalMgdl = floorTerminal,
+                bestTerminalMgdl = bestTerminal,
+                tdd24hU = tdd24hU,
+                iobU = iob.toDouble(),
+                maxIobU = maxIob,
+                maxSmbEffectiveU = maxSMBHB.coerceAtLeast(maxSMB),
+                v3SmbU = v3SmbU,
+                dwellAboveHighBgMinutes = dwellAboveHighBgMinutes(),
+                trajectoryType = trajectoryGuard.getLastAnalysis()?.classification,
+                minPredictedBgMgdl = minPredictedAcrossCurves(rT.predBGs),
+                aggressive = htrPrefs.aggressive,
+                isNight = isNight,
+                exerciseLockout = exerciseInsulinLockoutActive,
+                mealCobG = cob.toDouble(),
+                establishedDevOverrideMgdl = htrPrefs.establishedDevOverrideMgdl,
+                deepDevOverrideMgdl = htrPrefs.deepDevOverrideMgdl,
+            ),
+        )
+    }
+
+    private fun HyperTrajectoryReleaseResult.toDecisionContextExport(): AimiDecisionContext.HyperTrajectoryReleaseExport {
+        val target = targetBg.toDouble()
+        val bestT = lastScenarioProjection?.scenarioBest?.terminalMgdl ?: bg
+        return AimiDecisionContext.HyperTrajectoryReleaseExport(
+            active = active,
+            tier = tier.name,
+            dev_above_target_mgdl = bg - target,
+            projected_dev_mgdl = bestT - target,
+            severity_weight = severityWeight,
+            absorption_offset_mgdl = absorptionOffsetMgdl,
+            smb_floor_u = smbFloorU,
+            v3_smb_before_u = v3SmbBeforeU,
+            v3_smb_after_u = v3SmbAfterU,
+            suppress_traj_basal_shift = suppressTrajBasalShift,
+            hypo_min_pred_ignored = hypoMinPredIgnored,
+            reason = reason,
+        )
+    }
+
+    /**
+     * Traj-Bridge runs before [runAdvancedPredictionsAndPredPipePrep]; apply deferred basal after HTR.
+     */
+    private fun applyPendingTrajSpiralBasalIfNotSuppressed(
+        rT: RT,
+        bg: Double,
+        delta: Float,
+    ) {
+        val pending = pendingTrajSpiralBasal ?: return
+        pendingTrajSpiralBasal = null
+        if (lastHyperTrajectoryRelease?.suppressTrajBasalShift == true) {
+            consoleLog.add("🌀 HTR: deferred Traj-Bridge basal skipped — ${pending.reason}")
+            return
+        }
+        rT.rate = pending.proactiveBasalUph
+        rT.duration = pending.durationMin
+        rT.reason.append(" | 🌀 Traj-Bridge: ${pending.reason}")
+        lastSafetySource = pending.safetyTierLabel
+        logDecisionFinal("TRAJ_SAFETY", rT, bg, delta)
+    }
+
+    private fun sanitizedHypoGuardPredictedEventual(
+        rT: RT,
+        predictedBg: Double,
+        eventualBg: Double,
+    ): Pair<Double, Double> =
+        HyperTrajectoryHypoCredibility.sanitizeTerminalsForHypoGuard(
+            bgMgdl = bg,
+            predictedBgMgdl = predictedBg,
+            eventualBgMgdl = eventualBg,
+            minPredictedBgMgdl = minPredictedAcrossCurves(rT.predBGs),
+            targetBgMgdl = targetBg.toDouble(),
+            highBgPreferenceMgdl = preferences.get(DoubleKey.OApsAIMIHighBg),
+            scenarioBestTerminalMgdl = lastScenarioProjection?.scenarioBest?.terminalMgdl,
+        )
+
     /**
      * Autodrive V3 (MPC): preference [BooleanKey.OApsAIMIautoDriveActive], [autodriveGater.shouldEngageV3], engine tick, TBR + SMB when safe.
      *
@@ -2264,16 +2466,37 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 ctx.mealData.mealCOB >= 0.1 || hasRecentMealEstimate
             val applyHypoRecoveryRaDampening = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES) < 70.0 && !autodriveMealSignals
 
+            val tdd24hForHtr = resolveTdd24hForExport()
+                ?: (profile.max_daily_basal * 24.0).coerceAtLeast(1.0)
+            val isNightAutodrive = hourOfDay >= 23 || hourOfDay < 6
+            val htrClassification = classifyHyperSeverityForTick(
+                rT = rT,
+                combinedDelta = combinedDelta,
+                tdd24hU = tdd24hForHtr,
+            )
+            val (_, bestTerminalForMpc) = resolveHtrScenarioTerminals(rT)
+            val mpcHints = HyperTrajectoryMpcFeedForward.hintsFromClassification(
+                classification = htrClassification,
+                bgMgdl = bg,
+                bestTerminalMgdl = bestTerminalForMpc,
+                isNight = isNightAutodrive,
+                exerciseLockout = exerciseInsulinLockoutActive,
+            )
+            val estimatedRaForMpc = HyperTrajectoryMpcFeedForward.blendEstimatedRa(
+                baseRa = continuousStateEstimator.getLastRa(),
+                hints = mpcHints,
+            )
+
             val adState = app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState.createSafe(
                 bg = ctx.glucoseStatus.glucose,
                 bgVelocity = (shortAvgDeltaAdj.toDouble() / 5.0),
                 iob = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
                 cob = ctx.mealData.mealCOB,
                 estimatedSI = canonicalSI,
-                estimatedRa = continuousStateEstimator.getLastRa(),
+                estimatedRa = estimatedRaForMpc,
                 patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
                 physiologicalStressMask = doubleArrayOf(),
-                isNight = hourOfDay >= 23 || hourOfDay < 6,
+                isNight = isNightAutodrive,
                 hour = hourOfDay,
                 steps = snapshot.stepsLast15m,
                 hr = snapshot.hrNow,
@@ -2284,7 +2507,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 highBgMaxSMB = this.maxSMBHB,
                 combinedDelta = combinedDelta.toDouble(),
                 uamConfidence = AimiUamHandler.confidenceOrZero(),
-                applyHypoRecoveryRaDampening = applyHypoRecoveryRaDampening
+                applyHypoRecoveryRaDampening = applyHypoRecoveryRaDampening,
+                htrTierOrdinal = mpcHints.tierOrdinal,
+                htrProjectedDevMgdl = mpcHints.projectedDevMgdl,
+                htrProjectionLeadMgdl = mpcHints.projectionLeadMgdl,
             )
 
             if (adState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G6_NATIVE) {
@@ -2307,39 +2533,65 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 rhr = snapshot.rhrResting
             )
 
-            if (adCommand != null && adCommand.isSafe) {
-                val v3TbrRate = adCommand.temporaryBasalRate
+            val v3CommandSafe = adCommand != null && adCommand.isSafe
+            if (v3CommandSafe) {
+                val v3TbrRate = adCommand!!.temporaryBasalRate
                 if (v3TbrRate != null && v3TbrRate >= 0.0) {
                     setTempBasal(v3TbrRate, 30, profile, rT, ctx.currentTemp, overrideSafetyLimits = true, adaptiveMultiplier = adaptiveMult)
                 }
+            } else {
+                consoleLog.add("🧘 [AUTODRIVE V3] Command not safe — HTR may still lift SMB (${adCommand?.reason ?: "null"})")
+                aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🛑 [AUTODRIVE V3] Unsafe or null command")
+            }
 
-                val v3Smb = adCommand.scheduledMicroBolus ?: 0.0
-                if (v3Smb > 0) {
-                    finalizeAndCapSMB(
-                        rT = rT,
-                        proposedUnits = v3Smb,
-                        reasonHeader = "Autodrive V3: ${adCommand.reason}",
-                        mealData = ctx.mealData,
-                        hypoThreshold = hypoThresholdMgdl,
-                        isExplicitUserAction = false,
-                        decisionSource = "AutodriveV3"
-                    )
+            val v3Smb = if (v3CommandSafe) adCommand!!.scheduledMicroBolus ?: 0.0 else 0.0
+            val htr = evaluateHyperTrajectoryRelease(
+                v3SmbU = v3Smb,
+                rT = rT,
+                combinedDelta = combinedDelta,
+                tdd24hU = tdd24hForHtr,
+            )
+            lastHyperTrajectoryRelease = htr
+            val liftedV3Smb = htr.v3SmbAfterU
+            if (liftedV3Smb > 0.0) {
+                val v3Reason = if (v3CommandSafe) adCommand!!.reason else "V3 unsafe"
+                val htrReason = if (htr.active) {
+                    "Autodrive V3+HTR: $v3Reason | 🚀 ${htr.reason}"
+                } else {
+                    "Autodrive V3: $v3Reason"
                 }
+                finalizeAndCapSMB(
+                    rT = rT,
+                    proposedUnits = liftedV3Smb,
+                    reasonHeader = htrReason,
+                    mealData = ctx.mealData,
+                    hypoThreshold = hypoThresholdMgdl,
+                    isExplicitUserAction = false,
+                    decisionSource = if (htr.active) "AutodriveV3+HTR" else "AutodriveV3",
+                    hyperReleaseFloorU = if (htr.active) htr.smbFloorU else 0.0,
+                )
+            } else if (htr.active) {
+                consoleLog.add("🚀 HTR active but lifted SMB=0 (IOB/headroom); floor=${"%.2f".format(htr.smbFloorU)}U")
+            }
 
-                val effectiveBolus = rT.insulinReq ?: 0.0
-                val effectiveTbr = rT.rate ?: profile.current_basal
-                val effectiveDuration = rT.duration ?: 0
+            val effectiveBolus = rT.insulinReq ?: 0.0
+            val effectiveTbr = rT.rate ?: profile.current_basal
+            val effectiveDuration = rT.duration ?: 0
+            if (v3CommandSafe) {
                 v3AppliedAction = effectiveBolus > 0.01 || (effectiveDuration > 0 && kotlin.math.abs(effectiveTbr - profile.current_basal) > 0.01)
-                if (v3AppliedAction && preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative)) {
-                    skipLegacySmbBlender = true
-                    consoleLog.add("AUTODRIVE_V3_AUTHORITATIVE: Legacy MPC/PI blender will be skipped this tick")
-                }
-
+                val v3TbrRate = adCommand!!.temporaryBasalRate
                 consoleLog.add("🚀 ${gate.reason} intent=$v3Smb actual=$effectiveBolus tbr=$v3TbrRate")
                 logDecisionFinal("AUTODRIVE_V3", rT, bg, delta)
-            } else {
-                consoleLog.add("🧘 ${gate.reason} (Falling back to Classic)")
-                aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🛑 [AUTODRIVE V3] Gated: ${gate.reason}")
+            } else if (htr.active && effectiveBolus > 0.01) {
+                v3AppliedAction = true
+                consoleLog.add("🚀 HTR-only SMB after unsafe V3: actual=$effectiveBolus U")
+                logDecisionFinal("AUTODRIVE_V3+HTR", rT, bg, delta)
+            }
+            if ((v3AppliedAction || (htr.active && effectiveBolus > 0.01)) &&
+                preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative)
+            ) {
+                skipLegacySmbBlender = true
+                consoleLog.add("AUTODRIVE_V3_AUTHORITATIVE: Legacy MPC/PI blender will be skipped this tick")
             }
         }
         return AutodriveV3BranchResult(
@@ -3174,12 +3426,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val decisionRisk = cachedRiskEnvelopeDecision
         val hypoThresholdForGuard = decisionRisk?.hypoThresholdMgdl ?: threshold
         val hypoCompositeForReason = decisionRisk?.compositeMinMgdl ?: minBgHypoComposite
-        var isHypoBlocked = shouldBlockHypoWithHysteresis(
-            bg = bg,
+        val (hypoPredSanitized, hypoEventualSanitized) = sanitizedHypoGuardPredictedEventual(
+            rT = rT,
             predictedBg = predictedBg.toDouble(),
             eventualBg = eventualBg,
+        )
+        var isHypoBlocked = shouldBlockHypoWithHysteresis(
+            bg = bg,
+            predictedBg = hypoPredSanitized,
+            eventualBg = hypoEventualSanitized,
             threshold = hypoThresholdForGuard,
-            deltaMgdlPer5min = delta.toDouble()
+            deltaMgdlPer5min = delta.toDouble(),
         )
 
         val aggression = correctionAggressionDecision
@@ -3724,8 +3981,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             run {
                 val aggression = correctionAggressionDecision
+                val htrActive = lastHyperTrajectoryRelease?.active == true
                 val allowHyper = aggression?.allowGlobalHyperKicker == true &&
-                    (delta >= 0.3 || shortAvgDelta >= 0.2)
+                    (delta >= 0.3 || shortAvgDelta >= 0.2) &&
+                    !htrActive
+                if (htrActive && aggression?.allowGlobalHyperKicker == true) {
+                    consoleLog.add("🚀 HTR: Global Hyper Kicker skipped (trajectory SMB release active)")
+                }
                 allowHyper
             } -> {
                 val autodriveMaxBasal = preferences.get(DoubleKey.autodriveMaxBasal)
@@ -5032,6 +5294,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.iob_surveillance = lastIobSurveillanceExport
         decisionCtx.adjustments.safety_risk = lastSafetyRiskExport?.toDecisionContextExport()
         decisionCtx.adjustments.scenario_projection = lastScenarioProjection?.toDecisionContextExport()
+        decisionCtx.adjustments.hyper_trajectory_release = lastHyperTrajectoryRelease?.toDecisionContextExport()
 
         val medicalJson = decisionCtx.toMedicalJson()
         consoleLog.add("AIMI_SNAPSHOT: $medicalJson")
@@ -5269,14 +5532,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             isExplicitUserAction = isExplicitUserAction,
             mealClockActiveForSpiralRelax = mealClockActiveForSpiralRelax,
         )
+        val tdd24Bridge = if (tdd24Hrs.isFinite() && tdd24Hrs > 0f) tdd24Hrs.toDouble() else 50.0
+        val bridgeCombinedDelta = (delta + shortAvgDelta) / 2f
+        val bridgeHyperTier = classifyHyperSeverityForTick(
+            rT = rT,
+            combinedDelta = bridgeCombinedDelta,
+            tdd24hU = tdd24Bridge,
+        ).tier
+        val hyperTrajectorySpiral = bridgeHyperTier >= HyperSeverityTier.EMERGING
+        val stackingSpiral = !hyperTrajectorySpiral
+        val spiralMealAlign = mealPriorityAlign || hyperTrajectorySpiral
 
         val basalFraction = when {
-            mealPriorityAlign && energy > 3.5 -> 0.70
-            mealPriorityAlign && energy > 2.5 -> 0.85
-            mealPriorityAlign && energy > 1.5 -> 0.95
-            energy > 3.5 -> 0.25
-            energy > 2.5 -> 0.50
-            energy > 1.5 -> 0.70
+            spiralMealAlign && energy > 3.5 -> 0.70
+            spiralMealAlign && energy > 2.5 -> 0.85
+            spiralMealAlign && energy > 1.5 -> 0.95
+            stackingSpiral && energy > 3.5 -> 0.25
+            stackingSpiral && energy > 2.5 -> 0.50
+            stackingSpiral && energy > 1.5 -> 0.70
             else -> 1.0
         }
 
@@ -5291,17 +5564,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         val proactiveBasal = profile.current_basal * effectiveFraction
         val cgateNote = if (cgateAmplified) " [CGate ISF↑ → amplification]" else ""
-        val mealNote = if (mealPriorityAlign) " [MEAL_PRIORITY_RELAX]" else ""
-        val reason = "TRAJ_TIGHT_SPIRAL: E=${String.format("%.1f", energy)}U κ=${String.format("%.2f", curvature)} IOB=${String.format("%.2f", iobNow)}U → Basale proactive ${(effectiveFraction * 100).toInt()}%$cgateNote$mealNote"
+        val spiralNote = when {
+            hyperTrajectorySpiral -> " [HTR_HYPER_SPIRAL tier=${bridgeHyperTier.name}]"
+            mealPriorityAlign -> " [MEAL_PRIORITY_RELAX]"
+            stackingSpiral -> " [STACKING_SPIRAL]"
+            else -> ""
+        }
+        val reason = "TRAJ_TIGHT_SPIRAL: E=${String.format("%.1f", energy)}U κ=${String.format("%.2f", curvature)} IOB=${String.format("%.2f", iobNow)}U → Basale proactive ${(effectiveFraction * 100).toInt()}%$cgateNote$spiralNote"
 
-        consoleLog.add("🌀🛡️ TRAJECTORY_SAFETY_BRIDGE: $reason")
+        consoleLog.add("🌀🛡️ TRAJECTORY_SAFETY_BRIDGE (deferred): $reason")
 
-        rT.rate = proactiveBasal
-        rT.duration = if (energy > 3.5) 30 else 15
-        rT.reason.append(" | 🌀 Traj-Bridge: $reason")
-
-        lastSafetySource = "TrajBridge_Tier${when { energy > 3.5 -> 1; energy > 2.5 -> 2; else -> 3 }}"
-        logDecisionFinal("TRAJ_SAFETY", rT, bg, delta)
+        pendingTrajSpiralBasal = PendingTrajSpiralBasal(
+            proactiveBasalUph = proactiveBasal,
+            durationMin = if (energy > 3.5) 30 else 15,
+            reason = reason,
+            safetyTierLabel = "TrajBridge_Tier${when { energy > 3.5 -> 1; energy > 2.5 -> 2; else -> 3 }}",
+        )
         applyTrajectoryTightSpiralStandardSmbCapIfNeeded(
             energy = energy,
             iobNow = iobNow,
@@ -5912,6 +6190,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var cachedRiskEnvelopeDecision: AimiRiskEnvelope? = null
     private var lastSafetyRiskExport: SafetyRiskExportSnapshot? = null
     private var lastScenarioProjection: ScenarioProjectionPair? = null
+    private var lastHyperTrajectoryRelease: HyperTrajectoryReleaseResult? = null
+    private var hyperDwellAboveHighBgSinceMs: Long = 0L
+    private var pendingTrajSpiralBasal: PendingTrajSpiralBasal? = null
+
+    private data class PendingTrajSpiralBasal(
+        val proactiveBasalUph: Double,
+        val durationMin: Int,
+        val reason: String,
+        val safetyTierLabel: String,
+    )
     private var tags60to120minAgo = ""
     private var tags120to180minAgo = ""
     private var tags180to240minAgo = ""
@@ -7033,16 +7321,40 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         if (!(allowPartialSafetyTbr && _rate > 0.0)) {
-            val blockLgs = HypoGuard.isBelowHypoThreshold(
+            val (hypoPredForLgs, hypoEventualForLgs) = sanitizedHypoGuardPredictedEventual(
+                rT = rT,
+                predictedBg = predictedBg.toDouble(),
+                eventualBg = eventualBG,
+            )
+            val minPredCurve = minPredictedAcrossCurves(rT.predBGs)
+            val lgsReason = HypoLgsBlockReason.detect(
                 bgNow = bg,
-                predicted = predictedBg.toDouble(),
-                eventual = eventualBG,
+                predicted = hypoPredForLgs,
+                eventual = hypoEventualForLgs,
+                minPredictedCurve = minPredCurve,
                 hypo = hypoGuard,
                 delta = delta.toDouble(),
                 mealContext = effectiveMealContext,
             )
-            if (blockLgs) {
-                rT.reason.append(context.getString(R.string.lgs_triggered, "%.0f".format(bg), "%.0f".format(hypoGuard)))
+            if (lgsReason != null) {
+                val lgsLine = when (lgsReason) {
+                    HypoLgsBlockReason.BG_NOW ->
+                        context.getString(R.string.lgs_triggered, "%.0f".format(bg), "%.0f".format(hypoGuard))
+                    HypoLgsBlockReason.PREDICTED_MIN_CURVE ->
+                        context.getString(
+                            R.string.lgs_triggered_min_pred,
+                            "%.0f".format(minPredCurve ?: hypoPredForLgs),
+                            "%.0f".format(hypoGuard),
+                        )
+                    HypoLgsBlockReason.PREDICTED_AND_EVENTUAL, HypoLgsBlockReason.FAST_FALL ->
+                        context.getString(
+                            R.string.lgs_triggered_predicted,
+                            "%.0f".format(hypoPredForLgs),
+                            "%.0f".format(hypoEventualForLgs),
+                            "%.0f".format(hypoGuard),
+                        )
+                }
+                rT.reason.append(lgsLine)
                 rT.duration = maxOf(duration, 30)
                 rT.rate = 0.0
                 physioAdapter.setFinalLoopDecisionType("suspend")
@@ -7398,7 +7710,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         hypoThreshold: Double,
         isExplicitUserAction: Boolean = false,
         decisionSource: String = "AIMI",
-        isMealActive: Boolean = false
+        isMealActive: Boolean = false,
+        hyperReleaseFloorU: Double = 0.0,
     ) {
         // 🚀 REACTOR MODE: Full Speed (Safety delegated to applySafetyPrecautions)
         // User Directive: "Garde le moteur à plein régime"
@@ -7419,6 +7732,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 (this.bg >= 145.0) &&
                 (this.delta.toDouble() >= 1.8 || this.shortAvgDelta.toDouble() >= 1.5) &&
                 (this.iob.toDouble() < this.maxIob * 0.75)
+        val highBgBandForHtr = HyperTrajectoryHypoCredibility.highBgBandMgdl(
+            targetBg.toDouble(),
+            preferences.get(DoubleKey.OApsAIMIHighBg),
+        )
+        val hyperTrajectoryPriorityContext =
+            !isExplicitUserAction &&
+                hyperReleaseFloorU > 0.02 &&
+                this.bg >= targetBg + highBgBandForHtr * 0.85 &&
+                (this.delta.toDouble() >= 1.0 || this.shortAvgDelta.toDouble() >= 0.8) &&
+                (this.iob.toDouble() < this.maxIob * 0.92)
+        val smbDeliveryPriorityContext = mealPriorityContext || hyperTrajectoryPriorityContext
         if (mealPriorityContext) {
             consoleLog.add(
                 "🍽️ MEAL_PRIORITY_CONTEXT ON (BG=${"%.0f".format(this.bg)} Δ=${"%.1f".format(this.delta)} " +
@@ -7426,10 +7750,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     "UAM=${"%.2f".format(uamConfidence)} IOB=${"%.2f".format(this.iob)}/${"%.2f".format(this.maxIob)})"
             )
         }
+        if (hyperTrajectoryPriorityContext && !mealPriorityContext) {
+            consoleLog.add(
+                "🚀 HTR_PRIORITY_CONTEXT ON (BG=${"%.0f".format(this.bg)} Δ=${"%.1f".format(this.delta)} " +
+                    "floor=${"%.2f".format(hyperReleaseFloorU)}U IOB=${"%.2f".format(this.iob)}/${"%.2f".format(this.maxIob)})",
+            )
+        }
         val eventualForStacking = when {
             this.eventualBG > 1.0 -> this.eventualBG
             rT.eventualBG != null && rT.eventualBG!! > 1.0 -> rT.eventualBG!!
             else -> null
+        }
+        val rawMinPred = minPredictedAcrossCurves(rT.predBGs)
+        val minPredForStacking = if (lastHyperTrajectoryRelease?.hypoMinPredIgnored == true && rawMinPred != null) {
+            val dev = bg - targetBg
+            max(rawMinPred, bg - HyperTrajectoryHypoCredibility.hypoCredibilityDropMgdl(dev))
+        } else {
+            rawMinPred
         }
         val stackingEval = InsulinStackingStance.evaluate(
             bg = this.bg,
@@ -7439,11 +7776,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             iob = this.iob.toDouble(),
             maxIob = this.maxIob,
             eventualBg = eventualForStacking?.takeIf { it.isFinite() },
-            minPredBg = minPredictedAcrossCurves(rT.predBGs),
+            minPredBg = minPredForStacking,
             trajectoryEnergy = rT.trajectoryEnergy,
             isExplicitUserAction = isExplicitUserAction,
             enabled = preferences.get(BooleanKey.OApsAIMIIobSurveillanceGuard),
-            mealPriorityContext = mealPriorityContext
+            mealPriorityContext = smbDeliveryPriorityContext
         )
         var iobSurveillanceSuppressRedCarpet = stackingEval.suppressRedCarpetRestore
 
@@ -7475,7 +7812,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             maxSmbHigh = this.maxSMBHB,
             isExplicitUserAction = isExplicitUserAction,
             auditorConfidence = auditorLastConfidence,
-            mealPriorityContext = mealPriorityContext
+            mealPriorityContext = smbDeliveryPriorityContext
         )
         chainBaseLimit = baseLimit
 
@@ -7541,7 +7878,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
          }
 
         if (refractoryBlocked) {
-            if (mealPriorityContext) {
+            if (smbDeliveryPriorityContext) {
                 val before = gatedUnits
                 // Progressive refractory relaxation for confirmed meal rise:
                 // - Very early after bolus: keep conservative partial block
@@ -7568,7 +7905,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
          val tdd24h = resolveTdd24hForLoop(30.0)
          val activityThreshold = (tdd24h / 24.0) * 0.15 // 15% of hourly TDD
          
-        if (sinceBolus < 20.0 && iobActivityNow > activityThreshold && !isExplicitUserAction && !mealPriorityContext) {
+        if (sinceBolus < 20.0 && iobActivityNow > activityThreshold && !isExplicitUserAction && !smbDeliveryPriorityContext) {
              absorptionFactor = if (bg > targetBg + 60 && delta > 0) 0.75 else 0.5
              gatedUnits = (gatedUnits * absorptionFactor.toFloat()).coerceAtLeast(0f)
          }
@@ -7601,8 +7938,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              )
              
             // Apply throttle
-            val effectiveSmbFactor = if (mealPriorityContext) throttle.smbFactor.coerceAtLeast(0.80) else throttle.smbFactor
-            val effectiveIntervalAdd = if (mealPriorityContext) min(throttle.intervalAddMin, 1) else throttle.intervalAddMin
+            val effectiveSmbFactor = if (smbDeliveryPriorityContext) {
+                throttle.smbFactor.coerceAtLeast(if (hyperTrajectoryPriorityContext) 0.88 else 0.80)
+            } else {
+                throttle.smbFactor
+            }
+            val effectiveIntervalAdd = if (smbDeliveryPriorityContext) min(throttle.intervalAddMin, 1) else throttle.intervalAddMin
             chainThrottleFactor = effectiveSmbFactor
             chainIntervalAdd = effectiveIntervalAdd
              val originalGated = gatedUnits
@@ -7613,7 +7954,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleLog.add(
                     "PKPD_THROTTLE smbFactor=${"%.2f".format(effectiveSmbFactor)} intervalAdd=${effectiveIntervalAdd} " +
                         "preferTbr=${throttle.preferTbr} reason=${throttle.reason}" +
-                        if (mealPriorityContext) " [MEAL_PRIORITY_RELAX]" else ""
+                        when {
+                            hyperTrajectoryPriorityContext -> " [HTR_PRIORITY_RELAX]"
+                            mealPriorityContext -> " [MEAL_PRIORITY_RELAX]"
+                            else -> ""
+                        },
                 )
                  if (originalGated > 0f && gatedUnits < originalGated * 0.6f) {
                      consoleLog.add("  ⚠️ SMB reduced ${"%2f".format(originalGated)} → ${"%.2f".format(gatedUnits)}U (PKPD throttle)")
@@ -7728,6 +8073,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } else {
             // Comportement standard (Pas de repas ou demande nulle)
             finalUnits = safeCap.toDouble()
+        }
+        if (hyperReleaseFloorU > 0.0 && !isRedCarpetSituation) {
+            val iobSpace = (this.maxIob - this.iob).toDouble().coerceAtLeast(0.0)
+            val floorCap = minOf(hyperReleaseFloorU, iobSpace, baseLimit)
+            if (finalUnits + 0.02 < floorCap) {
+                consoleLog.add(
+                    "🚀 HTR finalize floor: ${"%.2f".format(finalUnits)}→${"%.2f".format(floorCap)}U " +
+                        "(hyperReleaseFloor=${"%.2f".format(hyperReleaseFloorU)}U)",
+                )
+                finalUnits = floorCap
+            }
         }
         chainFinal = finalUnits
         
@@ -9086,7 +9442,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         eventualBg: Double,
         threshold: Double,
         deltaMgdlPer5min: Double,
-        now: Long = System.currentTimeMillis()
+        now: Long = System.currentTimeMillis(),
     ): Boolean {
         fun safe(v: Double) = if (v.isFinite()) v else Double.POSITIVE_INFINITY
         val minBg = minOf(safe(bg), safe(predictedBg), safe(eventualBg))
@@ -10762,6 +11118,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         val v3AppliedAction = v3Branch.appliedAction
         val skipLegacySmbBlender = v3Branch.skipLegacySmbBlender
+        applyPendingTrajSpiralBasalIfNotSuppressed(rT = rT, bg = bg, delta = delta)
 
         // PRIORITY 4: AUTODRIVE (Strict) [FALLBACK V2] — see [runAutodriveV2FallbackBranch]
         runAutodriveV2FallbackBranch(

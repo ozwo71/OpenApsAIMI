@@ -146,6 +146,8 @@ object TuningContextEngine {
         tier: TuningStepTier,
         t3cBrittle: Boolean,
     ): List<TuningChange> {
+        // Complements Hyper Trajectory Release (HTR): when OApsAIMIHyperTrajectoryRelease is on with Autodrive V3,
+        // prefer HTR SMB floors over large MaxSMB jumps — avoid double-counting meal-rise aggression.
         val cappedTier = if (metrics.timeBelow70 >= 0.04) {
             capTier(tier, TuningStepTier.MICRO)
         } else {
@@ -167,14 +169,18 @@ object TuningContextEngine {
                 "Enable pragmatic relief for explicit meal/high-rise SMB intent.",
             )
         }
-        proposeDoubleIncrease(
-            out, preferences, DoubleKey.OApsAIMIHighBGMaxSMB, highBgStep, cappedTier,
-            "Raise High-BG Max SMB for post-meal corrections.",
-        )
-        proposeDoubleIncrease(
-            out, preferences, DoubleKey.OApsAIMIMaxSMB, smbStep, cappedTier,
-            "Raise Max SMB slightly for meal rises.",
-        )
+        val htrComplementsMealRise = preferences.get(BooleanKey.OApsAIMIautoDriveActive) &&
+            preferences.get(BooleanKey.OApsAIMIHyperTrajectoryRelease)
+        if (!htrComplementsMealRise) {
+            proposeDoubleIncrease(
+                out, preferences, DoubleKey.OApsAIMIHighBGMaxSMB, highBgStep, cappedTier,
+                "Raise High-BG Max SMB for post-meal corrections.",
+            )
+            proposeDoubleIncrease(
+                out, preferences, DoubleKey.OApsAIMIMaxSMB, smbStep, cappedTier,
+                "Raise Max SMB slightly for meal rises.",
+            )
+        }
         if (!moderateHypoRisk) {
             proposeDoubleIncrease(
                 out, preferences, DoubleKey.OApsAIMILunchFactor, lunchStep, cappedTier,

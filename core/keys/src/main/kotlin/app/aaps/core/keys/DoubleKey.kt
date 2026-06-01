@@ -360,6 +360,24 @@ enum class DoubleKey(
 
     // --- AIMI Adaptive Basal ---
     OApsAIMIHighBg(key = "OApsAIMIHighBg", 180.0, 140.0, 250.0), // seuil haut déclenchant les corrections plateau
+    OApsAIMIHyperEstablishedDevMgdl(
+        key = "key_aimi_hyper_established_dev_mgdl",
+        defaultValue = 0.0,
+        min = 0.0,
+        max = 160.0,
+        titleResId = R.string.pref_title_aimi_hyper_established_dev,
+        summaryResId = R.string.pref_summary_aimi_hyper_established_dev,
+        dependency = BooleanKey.OApsAIMIHyperTrajectoryRelease,
+    ),
+    OApsAIMIHyperDeepDevMgdl(
+        key = "key_aimi_hyper_deep_dev_mgdl",
+        defaultValue = 0.0,
+        min = 0.0,
+        max = 200.0,
+        titleResId = R.string.pref_title_aimi_hyper_deep_dev,
+        summaryResId = R.string.pref_summary_aimi_hyper_deep_dev,
+        dependency = BooleanKey.OApsAIMIHyperTrajectoryRelease,
+    ),
     OApsAIMIPlateauBandAbs(key = "OApsAIMIPlateauBandAbs", 2.5, 0.5, 6.0), // bande de tolérance du plateau (|Δ| ≤ X mg/dL/5m)
     OApsAIMIR2Confident(key = "OApsAIMIR2Confident", 0.7, 0.3, 0.95), // seuil de confiance du fit quadratique
     OApsAIMIMaxMultiplier(key = "OApsAIMIMaxMultiplier", 1.6, 1.0,2.5), // plafond multiplicatif de la basale (× profil)

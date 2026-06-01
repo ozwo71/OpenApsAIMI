@@ -6,6 +6,8 @@ import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveCommand
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
+import app.aaps.plugins.aps.openAPSAIMI.release.HyperSeverityTier
+import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryMpcFeedForward
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
@@ -80,6 +82,12 @@ class MpcController @Inject constructor(
             activeMaxSmb = 0.5 // On refuse d'envoyer de fortes doses d'un coup
         } else {
             activeTargetBg = 100.0
+
+            val htrTier = HyperSeverityTier.entries.getOrElse(state.htrTierOrdinal) { HyperSeverityTier.OFF }
+            val htrMaxMult = HyperTrajectoryMpcFeedForward.aggressiveMaxSmbMultiplier(
+                tier = htrTier,
+                projectionLeadMgdl = state.htrProjectionLeadMgdl,
+            )
             
             // 🚀 DAWN GUARD CONSERVATISM
             // Si on suspecte un pic de cortisol (Matériel + Heure + Pas de glucides + Pas de pas), 
@@ -91,13 +99,13 @@ class MpcController @Inject constructor(
             if (isDawnRiseSuspected) {
                 activeRInsulin = 100.0 // L'insuline est "très chère" : on préfère la basale lente
                 activeMaxSmb = state.maxSMB * 0.5 // On divise par 2 le plafond de bolus
-            } else if (state.estimatedRa > 3.0) {
-                // 🧨 DYNAMIC AGGRESSIVENESS (Phase 11 - Unannounced Meal Crushing)
-                activeRInsulin = 10.0
-                activeMaxSmb = state.highBgMaxSMB 
+            } else if (state.estimatedRa > 3.0 || htrTier >= HyperSeverityTier.ANTICIPATORY) {
+                // 🧨 DYNAMIC AGGRESSIVENESS (Phase 11 - Unannounced Meal Crushing) + HTR feed-forward
+                activeRInsulin = if (htrTier >= HyperSeverityTier.ANTICIPATORY) 12.0 else 10.0
+                activeMaxSmb = state.highBgMaxSMB * htrMaxMult
             } else if (state.bg > 120.0) {
                 activeRInsulin = 20.0
-                activeMaxSmb = state.highBgMaxSMB
+                activeMaxSmb = state.highBgMaxSMB * htrMaxMult.coerceAtLeast(1.0)
             } else {
                 activeRInsulin = 30.0
                 activeMaxSmb = state.maxSMB

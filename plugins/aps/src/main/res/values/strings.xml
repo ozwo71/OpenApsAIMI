@@ -338,6 +338,8 @@
     <string name="oaps_aimi_priority_max_iob_extra_title">Priority MaxIOB extra (U)</string>
     <string name="oaps_aimi_priority_max_iob_extra_summary">Range 0.0-5.0U (default 2.0U). Increase when correction remains insufficient after raising factor; decrease if lows appear in the 1-3h post-correction window.</string>
 
+    <string name="aimi_adv_rec_htr_enable_title">Enable hyper trajectory SMB release (HTR)</string>
+    <string name="aimi_adv_rec_htr_enable_desc">Sustained hyper with Autodrive V3 active but weak SMB delivery. HTR lifts V3 micro-bolus when scenario projection confirms a rise (not a fixed 200 mg/dL rule).</string>
     <string name="aimi_adv_rec_pkpd_relief_enable_title">Enable PKPD pragmatic relief</string>
     <string name="aimi_adv_rec_pkpd_relief_enable_desc">Hyper pattern with low hypo pressure detected. Enabling pragmatic relief helps preserve SMB intent in explicit meal/high-rise contexts.</string>
     <string name="aimi_adv_rec_pkpd_relief_factor_title">Increase PKPD relief minimum factor</string>
@@ -936,6 +938,8 @@
     <string name="smb_enabled_for_temp_target">SMB enabled for temp target of %1$s</string>
     <string name="smb_disabled_no_pref_or_condition">SMB disabled (no enableSMB preferences active or no condition satisfied)</string>
     <string name="lgs_triggered">🛑 LGS: BG=%1$s ≤ %2$s → TBR 0U/h (30m)\n</string>
+    <string name="lgs_triggered_min_pred">🛑 LGS: minPred=%1$s mg/dL ≤ %2$s (current BG above threshold) → TBR 0U/h (30m)\n</string>
+    <string name="lgs_triggered_predicted">🛑 LGS: pred=%1$s eventual=%2$s ≤ %3$s → TBR 0U/h (30m)\n</string>
     <string name="bg_insufficient_fallback_force_exact">⚠️ BG data insufficient, but meal override enforced.\n</string>
     <string name="bg_insufficient_fallback">⚠️ BG data insufficient or invalid → fallback\n</string>
     <string name="temp_basal_info">Temporary basal %1$s U/h for %2$d minutes\n</string>

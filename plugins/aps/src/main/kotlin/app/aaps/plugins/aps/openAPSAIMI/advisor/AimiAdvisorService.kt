@@ -488,6 +488,24 @@ class AimiAdvisorService {
             val maxIobFactor = preferences.get(DoubleKey.OApsAIMIPriorityMaxIobFactor)
             val maxIobExtra = preferences.get(DoubleKey.OApsAIMIPriorityMaxIobExtraU)
 
+            val autodriveV3Active = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
+            val htrEnabled = preferences.get(BooleanKey.OApsAIMIHyperTrajectoryRelease)
+            if (autodriveV3Active && !htrEnabled && ctx.metrics.timeAbove180 > 0.22 && ctx.metrics.timeBelow70 < 0.05) {
+                recs.add(
+                    AimiRecommendation(
+                        titleResId = R.string.aimi_adv_rec_htr_enable_title,
+                        descriptionResId = R.string.aimi_adv_rec_htr_enable_desc,
+                        priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.High,
+                        domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
+                        action = app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate(
+                            key = BooleanKey.OApsAIMIHyperTrajectoryRelease,
+                            newValue = true,
+                            reason = "Enable HTR when Autodrive V3 is active and hyper burden is high with low hypo pressure.",
+                        ),
+                    ),
+                )
+            }
+
             if (!reliefEnabled && ctx.metrics.timeAbove180 > 0.25 && ctx.metrics.timeBelow70 < 0.04) {
                 recs.add(
                     AimiRecommendation(
