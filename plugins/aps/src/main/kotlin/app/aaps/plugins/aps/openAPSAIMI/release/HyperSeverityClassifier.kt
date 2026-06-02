@@ -36,6 +36,8 @@ object HyperSeverityClassifier {
         val riseActive: Boolean,
         val projectionHyper: Boolean,
         val bestCredible: Boolean,
+        /** Hyper installed (dwell/dev) but projection/Δ quiet — keep correction tier, not OFF/DEEP throttle. */
+        val plateauSustain: Boolean,
     )
 
     fun classify(input: Input): Output {
@@ -60,8 +62,10 @@ object HyperSeverityClassifier {
             input.combinedDeltaMgdlPer5 >= 3.0
 
         val gapMin = gapMinMgdl(input.tdd24hU)
+        val projectionLeading = input.bestTerminalMgdl >= input.bgMgdl + highBand * 0.15
         val projectionHyper = input.bestTerminalMgdl.isFinite() &&
             input.floorTerminalMgdl.isFinite() &&
+            projectionLeading &&
             gap >= gapMin &&
             (
                 projectedDev >= highBand * 1.15 ||
@@ -75,8 +79,13 @@ object HyperSeverityClassifier {
         val strongProjectedRise = projectionHyper && riseActive &&
             input.bestTerminalMgdl >= input.bgMgdl + highBand * 0.45
 
+        val projectionQuiet = !riseActive && !projectionHyper
+        val sustainedHyper = dev >= establishedDev || input.dwellAboveHighBgMinutes >= 30
+        val plateauSustain = sustainedHyper && projectionQuiet
+
         var tier = when {
-            !bestCredible || (!riseActive && !projectionHyper) -> HyperSeverityTier.OFF
+            plateauSustain -> HyperSeverityTier.ESTABLISHED
+            !bestCredible || projectionQuiet -> HyperSeverityTier.OFF
             dev >= deepDev && strongProjectedRise -> HyperSeverityTier.ESTABLISHED
             dev >= deepDev -> HyperSeverityTier.DEEP
             dev >= establishedDev || input.dwellAboveHighBgMinutes >= 30 -> HyperSeverityTier.ESTABLISHED
@@ -105,6 +114,7 @@ object HyperSeverityClassifier {
             riseActive = riseActive,
             projectionHyper = projectionHyper,
             bestCredible = bestCredible,
+            plateauSustain = plateauSustain && tier == HyperSeverityTier.ESTABLISHED,
         )
     }
 

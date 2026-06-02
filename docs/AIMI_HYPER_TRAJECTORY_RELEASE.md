@@ -1,6 +1,6 @@
 # AIMI — Hyper Trajectory Release (HTR)
 
-**Statut :** Implémenté phases 0–4 — validation terrain utilisateur requise  
+**Statut :** Implémenté phases 0–4 + **plateau sustain** (hyper installée, projection plate) — validation terrain utilisateur requise  
 **Date :** 2026-06-01 (rev. seuils hyper dynamiques)  
 **Branche de référence :** `dev_OAPSAIMI_mergeDEV`  
 **Données terrain :** `AIMI_Support_Package_1780321706128` (déjeuner 1er juin, BG → 257 mg/dL)  
@@ -156,6 +156,17 @@ tier           = classifyHyperSeverity(effectiveDev, projectedDev, gap, Δ, dwel
 ```
 
 **`dwellAboveHighBg` :** minutes consécutives avec `bg ≥ target + highBgBand` (mémoire tick → évite de traiter un pic instantané comme hyper installée).
+
+### 4.0.2 Plateau sustain (hyper prolongée, COB=0)
+
+Quand `dev ≥ establishedDev` **ou** `dwellAboveHighBg ≥ 30 min` **et** la projection/Δ sont calmes (`!riseActive && !projectionHyper`), le classifieur ne retombe plus en **OFF** ni en **DEEP** bridé :
+
+- Palier forcé **ESTABLISHED** (`plateauSustain=true` dans les logs : `plateauSustain` dans `reason`).
+- Plancher SMB minimal TDD-scaled (~**0,65–0,72 × smbBase**), `projectionFactor` plancher **0,90**, pas de haircut absorption DEEP.
+- Renfort dwell : **×1,06** après 45 min, **×1,12** après 90 min au-dessus de `highBgBand`.
+- Mode agressif en plateau sustain : **×1,08** (pas ×1,15) pour limiter l’empilement tout en corrigeant.
+
+Cas terrain : repas non déclaré (KFC ~14h), BG **220–260** plusieurs heures avec `HTR off (tier)` → corrigé sans pref dev mg/dL.
 
 ### 4.0.1 Lien avec la sélection `maxSMB` existante
 

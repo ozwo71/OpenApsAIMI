@@ -72,17 +72,37 @@ object HyperTrajectoryReleaseEvaluator {
             return inactive(classification, input.v3SmbU, hypoMinPredIgnored, offReason)
         }
 
-        val tierWeight = tierWeight(classification.tier, input.deltaMgdlPer5, input.shortAvgDeltaMgdlPer5)
-        val absorptionOffset = absorptionOffsetMgdl(classification.tier)
+        val tierWeight = tierWeight(
+            classification.tier,
+            input.deltaMgdlPer5,
+            input.shortAvgDeltaMgdlPer5,
+            classification.plateauSustain,
+        )
+        val absorptionOffset = absorptionOffsetMgdl(classification.tier, classification.plateauSustain)
         val smbBaseU = smbBaseU(input.tdd24hU)
         val projectionLead = max(0.0, input.bestTerminalMgdl - input.bgMgdl)
-        val projectionFactor = (0.35 + projectionLead / 55.0).coerceIn(0.65, 1.55)
+        var projectionFactor = (0.35 + projectionLead / 55.0).coerceIn(0.65, 1.55)
+        if (classification.plateauSustain) {
+            projectionFactor = max(projectionFactor, plateauProjectionFactorFloor())
+        }
         val riseFactor = riseUrgencyFactor(input.deltaMgdlPer5, input.shortAvgDeltaMgdlPer5)
 
         var smbFloorU = smbBaseU * tierWeight * projectionFactor * riseFactor
-        smbFloorU *= absorptionDoseFactor(classification.tier)
-        if (input.aggressive) {
+        smbFloorU *= absorptionDoseFactor(classification.tier, classification.plateauSustain)
+        if (classification.plateauSustain) {
+            smbFloorU *= plateauDwellUrgencyFactor(input.dwellAboveHighBgMinutes)
+            smbFloorU = max(
+                smbFloorU,
+                smbBaseU * plateauMinFloorFraction(
+                    devAboveTargetMgdl = classification.devAboveTargetMgdl,
+                    deepDevMgdl = classification.deepDevMgdl,
+                ),
+            )
+        }
+        if (input.aggressive && !classification.plateauSustain) {
             smbFloorU *= 1.15
+        } else if (input.aggressive && classification.plateauSustain) {
+            smbFloorU *= 1.08
         }
         if (input.mealCobG >= 15.0) {
             smbFloorU *= 0.88
@@ -102,6 +122,7 @@ object HyperTrajectoryReleaseEvaluator {
             append("floor=${"%.2f".format(smbFloorU)}U ")
             append("v3 ${"%.2f".format(v3Before)}→${"%.2f".format(v3After)}U")
             if (absorptionOffset > 0.0) append(" absOff=${absorptionOffset.toInt()}")
+            if (classification.plateauSustain) append(" plateauSustain")
             if (hypoMinPredIgnored) append(" minPredIgnored")
             if (suppressTraj) append(" suppressTrajBridge")
         }
@@ -139,10 +160,23 @@ object HyperTrajectoryReleaseEvaluator {
             reason = "HTR off ($offReason) tier=${classification.tier.name}",
         )
 
-    internal fun absorptionDoseFactor(tier: HyperSeverityTier): Double =
-        when (tier) {
-            HyperSeverityTier.DEEP -> 0.88
-            HyperSeverityTier.ESTABLISHED -> 0.94
+    internal fun absorptionDoseFactor(tier: HyperSeverityTier, plateauSustain: Boolean = false): Double =
+        when {
+            plateauSustain -> 1.0
+            tier == HyperSeverityTier.DEEP -> 0.88
+            tier == HyperSeverityTier.ESTABLISHED -> 0.94
+            else -> 1.0
+        }
+
+    internal fun plateauProjectionFactorFloor(): Double = 0.90
+
+    internal fun plateauMinFloorFraction(devAboveTargetMgdl: Double, deepDevMgdl: Double): Double =
+        if (devAboveTargetMgdl >= deepDevMgdl) 0.72 else 0.65
+
+    internal fun plateauDwellUrgencyFactor(dwellAboveHighBgMinutes: Int): Double =
+        when {
+            dwellAboveHighBgMinutes >= 90 -> 1.12
+            dwellAboveHighBgMinutes >= 45 -> 1.06
             else -> 1.0
         }
 
@@ -155,11 +189,12 @@ object HyperTrajectoryReleaseEvaluator {
         tier: HyperSeverityTier,
         delta: Double,
         shortAvg: Double,
+        plateauSustain: Boolean = false,
     ): Double {
         val base = when (tier) {
             HyperSeverityTier.ANTICIPATORY -> 1.0
             HyperSeverityTier.EMERGING -> 1.1
-            HyperSeverityTier.ESTABLISHED -> 1.25
+            HyperSeverityTier.ESTABLISHED -> if (plateauSustain) 1.20 else 1.25
             HyperSeverityTier.DEEP -> if (delta < 2.5 && shortAvg < 2.5) 0.75 else 1.0
             HyperSeverityTier.OFF -> 0.0
         }
@@ -173,10 +208,11 @@ object HyperTrajectoryReleaseEvaluator {
             else -> 1.0
         }
 
-    internal fun absorptionOffsetMgdl(tier: HyperSeverityTier): Double =
-        when (tier) {
-            HyperSeverityTier.ESTABLISHED -> 15.0
-            HyperSeverityTier.DEEP -> 25.0
+    internal fun absorptionOffsetMgdl(tier: HyperSeverityTier, plateauSustain: Boolean = false): Double =
+        when {
+            plateauSustain -> 8.0
+            tier == HyperSeverityTier.ESTABLISHED -> 15.0
+            tier == HyperSeverityTier.DEEP -> 25.0
             else -> 0.0
         }
 }

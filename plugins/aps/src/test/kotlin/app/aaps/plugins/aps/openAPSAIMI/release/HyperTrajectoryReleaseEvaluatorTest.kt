@@ -104,6 +104,36 @@ class HyperTrajectoryReleaseEvaluatorTest {
     }
 
     @Test
+    fun kfc_afternoon_plateau_sustain_lifts_above_throttled_deep() {
+        val result = HyperTrajectoryReleaseEvaluator.evaluate(
+            HyperTrajectoryReleaseEvaluator.Input(
+                enabled = true,
+                bgMgdl = 256.0,
+                targetBgMgdl = 100.0,
+                highBgPreferenceMgdl = 140.0,
+                deltaMgdlPer5 = 0.5,
+                shortAvgDeltaMgdlPer5 = 0.4,
+                combinedDeltaMgdlPer5 = 0.5,
+                floorTerminalMgdl = 200.0,
+                bestTerminalMgdl = 228.0,
+                tdd24hU = 55.0,
+                iobU = 10.0,
+                maxIobU = 20.0,
+                maxSmbEffectiveU = 5.0,
+                v3SmbU = 0.0,
+                dwellAboveHighBgMinutes = 90,
+                trajectoryType = TrajectoryType.TIGHT_SPIRAL,
+                minPredictedBgMgdl = 200.0,
+                aggressive = true,
+            ),
+        )
+        assertEquals(HyperSeverityTier.ESTABLISHED, result.tier)
+        assertTrue(result.active)
+        assertTrue(result.smbFloorU >= 0.75, "floor was ${result.smbFloorU}")
+        assertTrue(result.reason.contains("plateauSustain"))
+    }
+
+    @Test
     fun aggressive_raises_floor() {
         val normal = HyperTrajectoryReleaseEvaluator.evaluate(thomas1251Input(v3Smb = 0.5))
         val base = thomas1251Input(v3Smb = 0.5)

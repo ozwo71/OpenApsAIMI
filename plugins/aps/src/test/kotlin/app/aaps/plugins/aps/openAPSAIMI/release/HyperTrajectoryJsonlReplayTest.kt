@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.release
 
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryType
 import org.json.JSONObject
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -85,6 +86,24 @@ class HyperTrajectoryJsonlReplayTest {
         val htr = rowToHtr(row)
         assertTrue(htr.tier == HyperSeverityTier.ANTICIPATORY || htr.tier == HyperSeverityTier.EMERGING)
         assertTrue(htr.active)
+    }
+
+    @Test
+    fun prolonged_plateau_tick_stays_active() {
+        val result = rowToHtr(
+            ReplayRow(
+                bg = 256.0,
+                delta = 0.5,
+                bestT = 228.0,
+                floorT = 200.0,
+                v3Smb = 0.0,
+                iob = 10.0,
+                dwellMin = 90,
+            ),
+        )
+        assertEquals(HyperSeverityTier.ESTABLISHED, result.tier)
+        assertTrue(result.active)
+        assertTrue(result.smbFloorU >= 0.7, "floor was ${result.smbFloorU}")
     }
 
     @Test
