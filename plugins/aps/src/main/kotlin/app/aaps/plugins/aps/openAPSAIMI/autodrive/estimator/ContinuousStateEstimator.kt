@@ -64,9 +64,10 @@ class ContinuousStateEstimator @Inject constructor(
         // 🚀 DAWN GUARD DAMPENING (Prevent Cortisol Over-Correction)
         // Entre 5h et 9h, si peu d'activité physique (pas de marche), on suspecte le cortisol.
         // On augmente le scepticisme (rVariance) pour ne pas sauter sur chaque variation du capteur.
-        val isDawnWindow = actualState.hour in 5..9
+        val isDawnWindow = actualState.hour in 4..10
         val isLowActivity = actualState.steps < 200
-        val isDawnGuardActive = isDawnWindow && isLowActivity && (actualState.cob < 0.1)
+        val legacyDawn = isDawnWindow && isLowActivity && (actualState.cob < 0.1)
+        val isDawnGuardActive = (actualState.physioExtendedDawnGuard && actualState.cob < 0.1) || legacyDawn
 
         // 🛡️ POST-HYPO RECOVERY GUARD (rescue-carbs rebound vs meal absorption)
         // Wired from DetermineBasalAIMI2: min BG < 70 in last 75 min, no meal modes / COB / recent carb estimate.

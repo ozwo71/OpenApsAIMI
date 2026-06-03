@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.release
 
+import app.aaps.plugins.aps.openAPSAIMI.physio.BehavioralRiskPolicy
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryType
 import kotlin.math.max
 import kotlin.math.min
@@ -33,6 +35,7 @@ object HyperTrajectoryReleaseEvaluator {
         val mealCobG: Double = 0.0,
         val establishedDevOverrideMgdl: Double = 0.0,
         val deepDevOverrideMgdl: Double = 0.0,
+        val behavioralRisk: BehavioralRiskPolicy? = null,
     )
 
     fun evaluate(input: Input): HyperTrajectoryReleaseResult {
@@ -62,23 +65,37 @@ object HyperTrajectoryReleaseEvaluator {
             tier = classification.tier,
         )
 
-        if (!input.enabled || input.isNight || input.exerciseLockout || !classification.tier.isReleaseEligible) {
+        val risk = input.behavioralRisk
+        var effectiveTier = classification.tier
+        if (risk != null && risk.capsHtrRelease()) {
+            effectiveTier = PhysiologicalPhaseClassifier.capHtrTier(effectiveTier, risk.maxHtrTier)
+        }
+
+        if (!input.enabled || input.isNight || input.exerciseLockout || !effectiveTier.isReleaseEligible) {
             val offReason = when {
                 !input.enabled -> "disabled"
                 input.isNight -> "night"
                 input.exerciseLockout -> "exercise"
+                risk?.capsHtrRelease() == true && !classification.tier.isReleaseEligible -> "tier"
+                risk?.capsHtrRelease() == true -> "physioRisk"
                 else -> "tier"
             }
-            return inactive(classification, input.v3SmbU, hypoMinPredIgnored, offReason)
+            return inactive(
+                classification.copyTier(effectiveTier),
+                input.v3SmbU,
+                hypoMinPredIgnored,
+                offReason,
+                risk,
+            )
         }
 
         val tierWeight = tierWeight(
-            classification.tier,
+            effectiveTier,
             input.deltaMgdlPer5,
             input.shortAvgDeltaMgdlPer5,
             classification.plateauSustain,
         )
-        val absorptionOffset = absorptionOffsetMgdl(classification.tier, classification.plateauSustain)
+        val absorptionOffset = absorptionOffsetMgdl(effectiveTier, classification.plateauSustain)
         val smbBaseU = smbBaseU(input.tdd24hU)
         val projectionLead = max(0.0, input.bestTerminalMgdl - input.bgMgdl)
         var projectionFactor = (0.35 + projectionLead / 55.0).coerceIn(0.65, 1.55)
@@ -88,7 +105,7 @@ object HyperTrajectoryReleaseEvaluator {
         val riseFactor = riseUrgencyFactor(input.deltaMgdlPer5, input.shortAvgDeltaMgdlPer5)
 
         var smbFloorU = smbBaseU * tierWeight * projectionFactor * riseFactor
-        smbFloorU *= absorptionDoseFactor(classification.tier, classification.plateauSustain)
+        smbFloorU *= absorptionDoseFactor(effectiveTier, classification.plateauSustain)
         if (classification.plateauSustain) {
             smbFloorU *= plateauDwellUrgencyFactor(input.dwellAboveHighBgMinutes)
             smbFloorU = max(
@@ -107,15 +124,18 @@ object HyperTrajectoryReleaseEvaluator {
         if (input.mealCobG >= 15.0) {
             smbFloorU *= 0.88
         }
+        if (risk != null && risk.smbFloorCapU.isFinite()) {
+            smbFloorU = min(smbFloorU, risk.smbFloorCapU)
+        }
         val iobHeadroom = max(0.0, input.maxIobU - input.iobU)
         smbFloorU = minOf(smbFloorU, input.maxSmbEffectiveU.coerceAtLeast(0.0), iobHeadroom)
 
         val v3Before = input.v3SmbU.coerceAtLeast(0.0)
         val v3After = max(v3Before, smbFloorU)
-        val suppressTraj = v3Before < smbFloorU * 0.5 && classification.tier.isReleaseEligible
+        val suppressTraj = v3Before < smbFloorU * 0.5 && effectiveTier.isReleaseEligible
 
         val reason = buildString {
-            append("HTR[${classification.tier.name}] ")
+            append("HTR[${effectiveTier.name}] ")
             append("dev=+${classification.devAboveTargetMgdl.toInt()} ")
             append("proj=+${classification.projectedDevMgdl.toInt()} ")
             append("gap=${classification.terminalGapMgdl.toInt()} ")
@@ -123,13 +143,16 @@ object HyperTrajectoryReleaseEvaluator {
             append("v3 ${"%.2f".format(v3Before)}→${"%.2f".format(v3After)}U")
             if (absorptionOffset > 0.0) append(" absOff=${absorptionOffset.toInt()}")
             if (classification.plateauSustain) append(" plateauSustain")
+            if (risk != null && risk.capsHtrRelease()) {
+                append(" physio=${risk.phase.name}")
+            }
             if (hypoMinPredIgnored) append(" minPredIgnored")
             if (suppressTraj) append(" suppressTrajBridge")
         }
 
         return HyperTrajectoryReleaseResult(
             active = smbFloorU > v3Before + 0.02,
-            tier = classification.tier,
+            tier = effectiveTier,
             severityWeight = tierWeight,
             smbFloorU = smbFloorU,
             v3SmbBeforeU = v3Before,
@@ -146,10 +169,17 @@ object HyperTrajectoryReleaseEvaluator {
         v3SmbU: Double,
         hypoMinPredIgnored: Boolean,
         offReason: String = "tier",
-    ): HyperTrajectoryReleaseResult =
-        HyperTrajectoryReleaseResult(
+        risk: BehavioralRiskPolicy? = null,
+    ): HyperTrajectoryReleaseResult {
+        val tier = classification.tier
+        val reasonSuffix = if (risk != null && risk.capsHtrRelease()) {
+            " tier=${tier.name} physio=${risk.phase.name}"
+        } else {
+            " tier=${tier.name}"
+        }
+        return HyperTrajectoryReleaseResult(
             active = false,
-            tier = classification.tier,
+            tier = tier,
             severityWeight = 0.0,
             smbFloorU = 0.0,
             v3SmbBeforeU = v3SmbU,
@@ -157,8 +187,12 @@ object HyperTrajectoryReleaseEvaluator {
             absorptionOffsetMgdl = 0.0,
             suppressTrajBasalShift = false,
             hypoMinPredIgnored = hypoMinPredIgnored,
-            reason = "HTR off ($offReason) tier=${classification.tier.name}",
+            reason = "HTR off ($offReason)$reasonSuffix",
         )
+    }
+
+    private fun HyperSeverityClassifier.Output.copyTier(tier: HyperSeverityTier): HyperSeverityClassifier.Output =
+        copy(tier = tier, plateauSustain = plateauSustain && tier == HyperSeverityTier.ESTABLISHED)
 
     internal fun absorptionDoseFactor(tier: HyperSeverityTier, plateauSustain: Boolean = false): Double =
         when {

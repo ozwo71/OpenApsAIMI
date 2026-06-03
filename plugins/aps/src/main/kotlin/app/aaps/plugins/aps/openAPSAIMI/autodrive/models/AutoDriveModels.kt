@@ -41,6 +41,7 @@ package app.aaps.plugins.aps.openAPSAIMI.autodrive.models
  * @property htrTierOrdinal [HyperSeverityTier.ordinal] from hyper trajectory release (0 = OFF).
  * @property htrProjectedDevMgdl Scenario best terminal minus target (mg/dL) for MPC feed-forward.
  * @property htrProjectionLeadMgdl Scenario best minus current BG (mg/dL).
+ * @property physioExtendedDawnGuard Extended dawn/hormonal guard (activity allowed, COB=0).
  */
 data class AutoDriveState(
     val bg: Double,
@@ -66,6 +67,7 @@ data class AutoDriveState(
     val htrTierOrdinal: Int = 0,
     val htrProjectedDevMgdl: Double = 0.0,
     val htrProjectionLeadMgdl: Double = 0.0,
+    val physioExtendedDawnGuard: Boolean = false,
 ) {
     init {
         require(bg in 30.0..600.0) { "BG out of safe bounds: $bg" }
@@ -108,6 +110,7 @@ data class AutoDriveState(
             htrTierOrdinal: Int = 0,
             htrProjectedDevMgdl: Double = 0.0,
             htrProjectionLeadMgdl: Double = 0.0,
+            physioExtendedDawnGuard: Boolean = false,
         ): AutoDriveState {
             return try {
                 AutoDriveState(
@@ -134,6 +137,7 @@ data class AutoDriveState(
                     htrTierOrdinal = htrTierOrdinal.coerceAtLeast(0),
                     htrProjectedDevMgdl = htrProjectedDevMgdl.coerceAtLeast(0.0),
                     htrProjectionLeadMgdl = htrProjectionLeadMgdl.coerceAtLeast(0.0),
+                    physioExtendedDawnGuard = physioExtendedDawnGuard,
                 )
             } catch (e: Exception) {
                 AutoDriveState(

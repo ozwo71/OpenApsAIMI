@@ -83,9 +83,12 @@ import app.aaps.plugins.aps.openAPSAIMI.risk.SafetyPredictionTerminalsResolver
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiLoopPhase
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiLoopTelemetry
 import app.aaps.plugins.aps.openAPSAIMI.physio.AimiHormonitorStudyExporterMTR
+import app.aaps.plugins.aps.openAPSAIMI.physio.BehavioralRiskPolicy
+import app.aaps.plugins.aps.openAPSAIMI.physio.HormonalScenarioTerminalCap
 import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorDecisionEventMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioDecisionTraceMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoGuard
 import app.aaps.plugins.aps.openAPSAIMI.safety.signalEventualDrop
@@ -184,6 +187,19 @@ internal data class AimiDecisionContext(
         var scenario_projection: ScenarioProjectionExport? = null,
         /** Hyper Trajectory Release (projection → SMB floor) */
         var hyper_trajectory_release: HyperTrajectoryReleaseExport? = null,
+        /** Physiological phase + behavioral risk policy (HTR / MPC / scenario) */
+        var physiological_phase: PhysiologicalPhaseExport? = null,
+    )
+
+    data class PhysiologicalPhaseExport(
+        val phase: String,
+        val confidence: Double,
+        val behavioral_risk: String,
+        val reason: String,
+        val extended_dawn_guard: Boolean,
+        val scenario_best_capped: Boolean,
+        val max_htr_tier: String,
+        val smb_floor_cap_u: Double?,
     )
 
     data class HyperTrajectoryReleaseExport(
@@ -399,6 +415,18 @@ internal data class AimiDecisionContext(
                 hJson.put("hypo_min_pred_ignored", h.hypo_min_pred_ignored)
                 hJson.put("reason", h.reason)
                 adj.put("hyper_trajectory_release", hJson)
+            }
+            adjustments.physiological_phase?.let { p ->
+                val pJson = org.json.JSONObject()
+                pJson.put("phase", p.phase)
+                pJson.put("confidence", p.confidence)
+                pJson.put("behavioral_risk", p.behavioral_risk)
+                pJson.put("reason", p.reason)
+                pJson.put("extended_dawn_guard", p.extended_dawn_guard)
+                pJson.put("scenario_best_capped", p.scenario_best_capped)
+                pJson.put("max_htr_tier", p.max_htr_tier)
+                pJson.put("smb_floor_cap_u", p.smb_floor_cap_u ?: org.json.JSONObject.NULL)
+                adj.put("physiological_phase", pJson)
             }
             json.put("adjustments", adj)
 
@@ -1240,6 +1268,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun buildDecisionContextInitRtSosAndFlatShadow(ctx: AimiTickContext): AimiTickDecisionRtBootstrap {
         lastIobSurveillanceExport = null
         lastHyperTrajectoryRelease = null
+        lastPhysiologicalPhaseOutput = null
         pendingTrajSpiralBasal = null
         val decisionCtx = AimiDecisionContext(
             event_id = "evt_${ctx.currentTime}",
@@ -2296,11 +2325,84 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
     }
 
+    private fun refreshPhysiologicalPhase(
+        rT: RT,
+        combinedDelta: Float,
+        stepsLast15m: Int,
+        heartRateBpm: Int,
+        restingHeartRateBpm: Int,
+    ) {
+        val scenario = lastScenarioProjection
+        val (floorT, rawBestT) = if (scenario != null) {
+            scenario.clinicalFloor.terminalMgdl to scenario.scenarioBest.terminalMgdl
+        } else {
+            val floor = minPredictedAcrossCurves(rT.predBGs) ?: bg
+            floor to bg
+        }
+        val htrClass = classifyHyperSeverityForTick(rT, combinedDelta, preferences.get(DoubleKey.OApsAIMITDD7))
+        ensureWCycleInfo()
+        val wInfo = wCycleInfoForRun
+        lastPhysiologicalPhaseOutput = PhysiologicalPhaseClassifier.classify(
+            PhysiologicalPhaseClassifier.Input(
+                bgMgdl = bg,
+                targetBgMgdl = targetBg.toDouble(),
+                highBgPreferenceMgdl = preferences.get(DoubleKey.OApsAIMIHighBg),
+                deltaMgdlPer5 = delta.toDouble(),
+                shortAvgDeltaMgdlPer5 = shortAvgDelta.toDouble(),
+                combinedDeltaMgdlPer5 = combinedDelta.toDouble(),
+                mealCobG = cob.toDouble(),
+                hourOfDay = hourOfDay,
+                stepsLast15m = stepsLast15m,
+                heartRateBpm = heartRateBpm,
+                restingHeartRateBpm = restingHeartRateBpm,
+                bestTerminalMgdl = rawBestT,
+                floorTerminalMgdl = floorT,
+                dwellAboveHighBgMinutes = dwellAboveHighBgMinutes(),
+                wCycleEnabled = wCyclePreferences.enabled(),
+                wCycleTrackingMode = wCyclePreferences.trackingMode(),
+                wCyclePhase = wInfo?.phase,
+                htrTier = htrClass.tier,
+                plateauSustain = htrClass.plateauSustain,
+            ),
+        )
+        val policy = lastPhysiologicalPhaseOutput?.policy
+        val cappedBest = HormonalScenarioTerminalCap.capBestTerminalMgdl(bg, rawBestT, policy)
+        lastScenarioBestCappedForPhysio = cappedBest < rawBestT - 0.5
+        if (lastScenarioBestCappedForPhysio) {
+            consoleLog.add(
+                "🌅 PHYSIO: scenario best capped ${rawBestT.toInt()}→${cappedBest.toInt()} " +
+                    "phase=${policy?.phase?.name} (${policy?.reason})",
+            )
+        }
+    }
+
+    private fun physiologicalPhaseExport(): AimiDecisionContext.PhysiologicalPhaseExport? {
+        val out = lastPhysiologicalPhaseOutput ?: return null
+        val policy = out.policy
+        val capU = policy.smbFloorCapU.takeIf { it.isFinite() && it < 100.0 }
+        return AimiDecisionContext.PhysiologicalPhaseExport(
+            phase = out.phase.name,
+            confidence = out.confidence,
+            behavioral_risk = policy.phase.name,
+            reason = policy.reason,
+            extended_dawn_guard = policy.extendedDawnGuard,
+            scenario_best_capped = lastScenarioBestCappedForPhysio,
+            max_htr_tier = policy.maxHtrTier.name,
+            smb_floor_cap_u = capU,
+        )
+    }
+
     /** Scenario terminals when available; otherwise eventual / prediction fallbacks for the same tick. */
     private fun resolveHtrScenarioTerminals(rT: RT): Pair<Double, Double> {
         val scenario = lastScenarioProjection
         if (scenario != null) {
-            return scenario.clinicalFloor.terminalMgdl to scenario.scenarioBest.terminalMgdl
+            val rawBest = scenario.scenarioBest.terminalMgdl
+            val capped = HormonalScenarioTerminalCap.capBestTerminalMgdl(
+                bg,
+                rawBest,
+                lastPhysiologicalPhaseOutput?.policy,
+            )
+            return scenario.clinicalFloor.terminalMgdl to capped
         }
         val floorTerminal = minPredictedAcrossCurves(rT.predBGs) ?: bg
         val bestTerminal = when {
@@ -2349,6 +2451,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 mealCobG = cob.toDouble(),
                 establishedDevOverrideMgdl = htrPrefs.establishedDevOverrideMgdl,
                 deepDevOverrideMgdl = htrPrefs.deepDevOverrideMgdl,
+                behavioralRisk = lastPhysiologicalPhaseOutput?.policy,
             ),
         )
     }
@@ -2469,6 +2572,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val tdd24hForHtr = resolveTdd24hForExport()
                 ?: (profile.max_daily_basal * 24.0).coerceAtLeast(1.0)
             val isNightAutodrive = hourOfDay >= 23 || hourOfDay < 6
+            refreshPhysiologicalPhase(
+                rT = rT,
+                combinedDelta = combinedDelta,
+                stepsLast15m = snapshot.stepsLast15m,
+                heartRateBpm = snapshot.hrNow,
+                restingHeartRateBpm = snapshot.rhrResting,
+            )
+            val physioPolicy = lastPhysiologicalPhaseOutput?.policy
             val htrClassification = classifyHyperSeverityForTick(
                 rT = rT,
                 combinedDelta = combinedDelta,
@@ -2511,7 +2622,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 htrTierOrdinal = mpcHints.tierOrdinal,
                 htrProjectedDevMgdl = mpcHints.projectedDevMgdl,
                 htrProjectionLeadMgdl = mpcHints.projectionLeadMgdl,
+                physioExtendedDawnGuard = physioPolicy?.extendedDawnGuard == true,
             )
+
+            if (physioPolicy != null && physioPolicy.capsHtrRelease()) {
+                consoleLog.add(
+                    "🌅 PHYSIO_RISK: ${physioPolicy.phase.name} conf=${"%.2f".format(lastPhysiologicalPhaseOutput?.confidence)} " +
+                        "${physioPolicy.reason}",
+                )
+            }
 
             if (adState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G6_NATIVE) {
                 consoleLog.add("🤖 SENSOR_AWARE: G6 Detected -> Engaging Lead Compensator (UKF +50% Vel).")
@@ -5295,6 +5414,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.safety_risk = lastSafetyRiskExport?.toDecisionContextExport()
         decisionCtx.adjustments.scenario_projection = lastScenarioProjection?.toDecisionContextExport()
         decisionCtx.adjustments.hyper_trajectory_release = lastHyperTrajectoryRelease?.toDecisionContextExport()
+        decisionCtx.adjustments.physiological_phase = physiologicalPhaseExport()
 
         val medicalJson = decisionCtx.toMedicalJson()
         consoleLog.add("AIMI_SNAPSHOT: $medicalJson")
@@ -5917,9 +6037,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             ),
         )
         lastScenarioProjection = scenario
-        ScenarioProjectionApplicator.applyToRt(rT, scenario)
-        this.predictedBg = scenario.scenarioBest.terminalMgdl.toFloat()
-        lastEventualBgSnapshot = scenario.scenarioBest.terminalMgdl
+        refreshPhysiologicalPhase(
+            rT = rT,
+            combinedDelta = delta,
+            stepsLast15m = 0,
+            heartRateBpm = 70,
+            restingHeartRateBpm = 60,
+        )
+        val cappedBest = resolveHtrScenarioTerminals(rT).second
+        this.predictedBg = cappedBest.toFloat()
+        lastEventualBgSnapshot = cappedBest
         lastPredictionSize = scenario.scenarioBest.pointsMgdl.size
         lastPredictionAvailable = scenario.scenarioBest.pointsMgdl.isNotEmpty()
         consoleLog.add(scenario.formatLogLine())
@@ -6191,6 +6318,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastSafetyRiskExport: SafetyRiskExportSnapshot? = null
     private var lastScenarioProjection: ScenarioProjectionPair? = null
     private var lastHyperTrajectoryRelease: HyperTrajectoryReleaseResult? = null
+    private var lastPhysiologicalPhaseOutput: PhysiologicalPhaseClassifier.Output? = null
+    private var lastScenarioBestCappedForPhysio: Boolean = false
     private var hyperDwellAboveHighBgSinceMs: Long = 0L
     private var pendingTrajSpiralBasal: PendingTrajSpiralBasal? = null
 

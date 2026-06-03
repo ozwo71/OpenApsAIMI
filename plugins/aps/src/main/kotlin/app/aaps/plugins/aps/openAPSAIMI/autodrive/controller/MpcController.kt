@@ -92,13 +92,19 @@ class MpcController @Inject constructor(
             // 🚀 DAWN GUARD CONSERVATISM
             // Si on suspecte un pic de cortisol (Matériel + Heure + Pas de glucides + Pas de pas), 
             // on rend l'IA extrêmement prudente sur l'envoi de bolus (SMB).
-            val isDawnWindow = state.hour in 5..9
+            val isDawnWindow = state.hour in 4..10
             val isLowActivity = state.steps < 200
-            val isDawnRiseSuspected = isDawnWindow && isLowActivity && (state.hr > state.rhr + 5) && state.cob < 0.1
+            val legacyDawnRise = isDawnWindow && isLowActivity && (state.hr > state.rhr + 5) && state.cob < 0.1
+            val isDawnRiseSuspected = (state.physioExtendedDawnGuard && state.cob < 0.1) || legacyDawnRise
 
             if (isDawnRiseSuspected) {
-                activeRInsulin = 100.0 // L'insuline est "très chère" : on préfère la basale lente
-                activeMaxSmb = state.maxSMB * 0.5 // On divise par 2 le plafond de bolus
+                val dawnCostMult = if (state.physioExtendedDawnGuard) {
+                    4.0
+                } else {
+                    1.0
+                }
+                activeRInsulin = 100.0 * dawnCostMult.coerceAtMost(4.0)
+                activeMaxSmb = state.maxSMB * if (state.physioExtendedDawnGuard) 0.45 else 0.5
             } else if (state.estimatedRa > 3.0 || htrTier >= HyperSeverityTier.ANTICIPATORY) {
                 // 🧨 DYNAMIC AGGRESSIVENESS (Phase 11 - Unannounced Meal Crushing) + HTR feed-forward
                 activeRInsulin = if (htrTier >= HyperSeverityTier.ANTICIPATORY) 12.0 else 10.0

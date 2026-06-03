@@ -4,7 +4,7 @@
 **Date :** 2026-06-01 (rev. seuils hyper dynamiques)  
 **Branche de référence :** `dev_OAPSAIMI_mergeDEV`  
 **Données terrain :** `AIMI_Support_Package_1780321706128` (déjeuner 1er juin, BG → 257 mg/dL)  
-**Documents liés :** [AIMI_SCENARIO_PROJECTION.md](AIMI_SCENARIO_PROJECTION.md), [AIMI_TUNING_AND_ADVISOR.md](AIMI_TUNING_AND_ADVISOR.md), [AIMI_RISK_ENVELOPE_SPEC.md](AIMI_RISK_ENVELOPE_SPEC.md) (si présent)
+**Documents liés :** [AIMI_SCENARIO_PROJECTION.md](AIMI_SCENARIO_PROJECTION.md), [AIMI_PHYSIOLOGICAL_PHASE.md](AIMI_PHYSIOLOGICAL_PHASE.md), [AIMI_TUNING_AND_ADVISOR.md](AIMI_TUNING_AND_ADVISOR.md), [AIMI_RISK_ENVELOPE_SPEC.md](AIMI_RISK_ENVELOPE_SPEC.md) (si présent)
 
 ---
 
