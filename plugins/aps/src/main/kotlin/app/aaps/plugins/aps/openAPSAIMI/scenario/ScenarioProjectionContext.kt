@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.scenario
 
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
 import app.aaps.plugins.aps.openAPSAIMI.safety.MealSafetyContext
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryAnalysis
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryType
@@ -19,6 +20,9 @@ data class ScenarioProjectionContext(
     val physioSmbFactor: Double = 1.0,
     val physioReactivityFactor: Double = 1.0,
     val physioBasalFactor: Double = 1.0,
+    val physiologicalPhase: PhysiologicalPhase = PhysiologicalPhase.OFF,
+    val suppressMealLikeUam: Boolean = false,
+    val scenarioBestCapAboveBgMgdl: Double? = null,
 ) {
     val mealIntent: Boolean get() = mealContext.hasMealIntent
 

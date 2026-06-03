@@ -435,7 +435,9 @@ data class PhysioMultipliersMTR(
     val confidence: Double = 0.0,     // Confidence in these multipliers
     val appliedCaps: String = "",     // Description of applied limits
     val source: String = "Deterministic", // "Deterministic" or "LLM-Assisted"
-    val detailedReason: String = ""       // 🌀 Internal Debug Info (e.g. Cosine Gate breakdown)
+    val detailedReason: String = "",       // 🌀 Internal Debug Info (e.g. Cosine Gate breakdown)
+    val physiologicalPhase: PhysiologicalPhase = PhysiologicalPhase.OFF,
+    val phaseConfidence: Double = 0.0,
 ) {
     fun isNeutral(): Boolean = 
         isfFactor == 1.0 && 

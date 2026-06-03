@@ -52,6 +52,14 @@ object ScenarioProjectionEngine {
                 contributors,
             )
         }
+        if (ctx.suppressMealLikeUam || ctx.scenarioBestCapAboveBgMgdl != null) {
+            applyPhysiologicalPhaseLayer(
+                bestRaw,
+                input.bgNowMgdl,
+                ctx,
+                contributors,
+            )
+        }
         if (ctx.contextSmbFactor < 0.98f) {
             applyContextSmbLayer(bestRaw, input.bgNowMgdl, ctx.contextSmbFactor, contributors)
         }
@@ -80,7 +88,7 @@ object ScenarioProjectionEngine {
             val cob = curves.cob.getOrElse(i) { candidate }
             if (ctx.mealIntent) {
                 candidate = max(candidate, max(uam, cob))
-            } else if (uam > candidate + 5.0) {
+            } else if (!ctx.suppressMealLikeUam && uam > candidate + 5.0) {
                 candidate = max(candidate, uam)
             }
             bestRaw[i] = candidate
@@ -103,12 +111,47 @@ object ScenarioProjectionEngine {
                 ),
             )
         }
-        if (!ctx.mealIntent && terminalLift > 5.0) {
+        if (!ctx.mealIntent && !ctx.suppressMealLikeUam && terminalLift > 5.0) {
             contributors.add(
                 ScenarioContributor(
                     id = ScenarioContributorId.PKPD_UAM_MOMENTUM,
                     summary = "UAM momentum uplift vs hybrid",
                     terminalDeltaMgdl = terminalLift,
+                ),
+            )
+        }
+    }
+
+    private fun applyPhysiologicalPhaseLayer(
+        bestRaw: MutableList<Double>,
+        bg: Double,
+        ctx: ScenarioProjectionContext,
+        contributors: MutableList<ScenarioContributor>,
+    ) {
+        val before = bestRaw.last()
+        val capAbove = ctx.scenarioBestCapAboveBgMgdl
+        if (capAbove != null && capAbove.isFinite()) {
+            val cap = bg + capAbove
+            for (i in bestRaw.indices) {
+                if (bestRaw[i] > cap) {
+                    bestRaw[i] = cap
+                }
+            }
+        }
+        if (ctx.suppressMealLikeUam) {
+            val hormonalBlend = 0.88
+            for (i in 1 until bestRaw.size) {
+                bestRaw[i] = bg + (bestRaw[i] - bg) * hormonalBlend
+            }
+        }
+        val delta = bestRaw.last() - before
+        if (abs(delta) > 0.5 || ctx.suppressMealLikeUam) {
+            contributors.add(
+                ScenarioContributor(
+                    id = ScenarioContributorId.PHYSIOLOGICAL_PHASE,
+                    summary = "Phase ${ctx.physiologicalPhase.name} cap=${ctx.scenarioBestCapAboveBgMgdl?.toInt() ?: "-"} " +
+                        "uamOff=${ctx.suppressMealLikeUam}",
+                    terminalDeltaMgdl = delta,
                 ),
             )
         }

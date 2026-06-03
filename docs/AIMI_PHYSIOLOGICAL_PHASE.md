@@ -1,15 +1,18 @@
 # AIMI — Phase physiologique et risque comportemental
 
-**Statut :** Implémenté (classifieur + HTR + MPC + scénario + JSONL)  
-**Lié :** [AIMI_HYPER_TRAJECTORY_RELEASE.md](AIMI_HYPER_TRAJECTORY_RELEASE.md), [research/TRAJECTORY_SIGNATURE_CLASSIFICATION.md](research/TRAJECTORY_SIGNATURE_CLASSIFICATION.md)
+**Statut :** Implémenté — classifieur, fusion Physio MTR, scénario, HTR, MPC, JSONL  
+**Lié :** [AIMI_HYPER_TRAJECTORY_RELEASE.md](AIMI_HYPER_TRAJECTORY_RELEASE.md), [AIMI_SCENARIO_PROJECTION.md](AIMI_SCENARIO_PROJECTION.md), [research/TRAJECTORY_SIGNATURE_CLASSIFICATION.md](research/TRAJECTORY_SIGNATURE_CLASSIFICATION.md)
 
 ---
 
 ## 1. Objectif
 
-Éviter de traiter une **montée hormonale** (cortisol matinal, profil circadien masculin, cycle féminin) comme un **repas non déclaré** (gros SMB HTR + V3 agressif), tout en conservant HTR pour les vraies montées repas (KFC, etc.).
+Éviter de traiter une **montée hormonale** (cortisol matinal, profil circadien masculin, cycle féminin) comme un **repas non déclaré** (gros SMB HTR + V3 agressif + UAM scénario), tout en conservant HTR pour les vraies montées repas (KFC, etc.).
 
-Une variable **`PhysiologicalPhase`** + **`BehavioralRiskPolicy`** est calculée à chaque tick et exportée dans `adjustments.physiological_phase` (JSONL).
+Deux couches partagent la même **`PhysiologicalPhase`** :
+
+1. **Doseur** — HTR, MPC, cap terminal après coup  
+2. **Scénario + Physio MTR** — fusion en amont dans `ScenarioProjectionEngine` et `PhysioMultipliersMTR`
 
 ---
 
@@ -17,13 +20,13 @@ Une variable **`PhysiologicalPhase`** + **`BehavioralRiskPolicy`** est calculée
 
 | Phase | Contexte | Politique doseur |
 |-------|----------|------------------|
-| `OFF` | Aucune phase dominante | HTR / MPC inchangés |
-| `DAWN_CORTISOL` | 4h–10h, COB≈0, rampe lente, proche cible | HTR **OFF**, bestT plafonné +50, Dawn Guard **étendu** |
+| `OFF` | Aucune phase dominante | HTR / MPC / scénario inchangés |
+| `DAWN_CORTISOL` | 4h–10h, COB≈0, rampe lente, proche cible | HTR **OFF**, bestT cap **+50**, UAM off, Dawn Guard étendu |
 | `MALE_CIRCADIAN_HORMONAL` | WCycle off ou ménopause, même signature | Idem |
 | `FEMALE_CYCLE_HORMONAL` | WCycle actif, lutéale/ovulation, matin | Idem |
 | `STRESS_CORTISOL` | FC↑, Δ aigu, COB=0 | HTR max **EMERGING**, SMB cap **0,75 U** |
 | `MEAL_DECLARED` | COB ≥ 5 g | Pas de restriction |
-| `MEAL_UNDECLARED` | Δ/gap/projection type repas | HTR plein |
+| `MEAL_UNDECLARED` | Δ/gap/projection type repas | HTR plein, UAM actif |
 | `HYPER_INSTALLED` | Plateau / tier établi + dwell | HTR `plateauSustain` |
 
 **Priorité :** MEAL_DECLARED → MEAL_UNDECLARED (si cinétique repas) → STRESS → HYPER_INSTALLED → hormonal matin → OFF.
@@ -41,36 +44,148 @@ Une variable **`PhysiologicalPhase`** + **`BehavioralRiskPolicy`** est calculée
 
 ---
 
-## 4. Consommateurs
+## 4. Architecture fusion (suite logique)
+
+```mermaid
+flowchart TB
+    subgraph inputs [Entrées tick]
+        ADAPTER[AIMIInsulinDecisionAdapterMTR]
+        CGM[BG Δ COB heure]
+        WC[WCycle]
+        PKPD[Curves hybrid/UAM]
+    end
+
+    subgraph fusion [PhysioPhaseFusion]
+        CLS[PhysiologicalPhaseClassifier]
+        POL[BehavioralRiskPolicy]
+        FUSE[applyPhaseToMultipliers]
+    end
+
+    subgraph consumers [Consommateurs]
+        SCEN[ScenarioProjectionEngine]
+        HTR[HyperTrajectoryReleaseEvaluator]
+        MPC[MpcController + PSE]
+    end
+
+    ADAPTER --> FUSE
+    CGM --> CLS
+    WC --> CLS
+    PKPD --> CLS
+    CLS --> POL
+    POL --> FUSE
+    POL --> SCEN
+    FUSE --> SCEN
+    POL --> HTR
+    POL --> MPC
+```
+
+| Fichier | Rôle |
+|---------|------|
+| `PhysiologicalPhase.kt` | Enum phases |
+| `PhysiologicalPhaseClassifier.kt` | Classification tick |
+| `BehavioralRiskPolicy.kt` | Plafonds HTR / SMB / scénario / Dawn |
+| `PhysioPhaseFusion.kt` | **Point unique** classify + fuse multipliers |
+| `HormonalScenarioTerminalCap.kt` | Cap `bestT` (HTR + redondance scénario) |
+
+### 4.1 `PhysioMultipliersMTR` enrichi
+
+Champs ajoutés (pas de nouvelle pref) :
+
+- `physiologicalPhase`  
+- `phaseConfidence`  
+- `source` peut devenir `Deterministic+Phase`
+
+En phase hormonale : **SMB× ≤ 0,92**, **react× ≤ 0,90**, **basal× ≥ 1,02** (léger renfort basale vs micro-bolus).
+
+### 4.2 `ScenarioProjectionContext` enrichi
+
+- `physiologicalPhase`  
+- `suppressMealLikeUam` — ne fusionne pas UAM « momentum » si faux repas  
+- `scenarioBestCapAboveBgMgdl` — plafond terminal (ex. **50**)
+
+Couche scénario : `ScenarioContributorId.PHYSIOLOGICAL_PHASE` — damp courbe + cap terminal.
+
+### 4.3 Ordre dans `DetermineBasalAIMI2`
+
+1. **T9** — `AIMIInsulinDecisionAdapterMTR` → `PhysioMultipliersMTR` (Health Connect / état physio MTR)  
+2. **Pred pipe** — preview `bestT` (hybrid ou rampe) → `classifyAndFuse` → `ScenarioProjectionEngine.build` avec contexte fusionné  
+3. **Post-scénario** — `refreshPhysiologicalPhase` (terminaux réels + tier HTR)  
+4. **Autodrive V3** — `physioExtendedDawnGuard` + HTR avec même `BehavioralRiskPolicy`
+
+---
+
+## 5. Pic de cortisol — traitement concret
+
+| Étape | Comportement |
+|-------|----------------|
+| Détection | 4h–10h + COB=0 + rampe lente + BG proche cible + pas de signature repas |
+| Scénario | **Pas d’uplift UAM** ; `bestT ≤ BG+50` ; couche PHYSIOLOGICAL_PHASE |
+| Physio assistant | SMB/react dampés dans `PhysioMultipliersMTR` |
+| HTR | **OFF** (tier max OFF) |
+| MPC | Dawn Guard même **avec activité** (pas &lt; 200 pas) |
+| PSE | Ra meal-like dampé (comme avant, élargi) |
+
+**Pas de mesure cortisol** — risque comportemental explicite dans les logs et JSONL.
+
+---
+
+## 6. Lien avec Physio MTR existant
+
+| Composant | Lien |
+|-----------|------|
+| `AIMIInsulinDecisionAdapterMTR` | Entrée **base** des multiplicateurs (état OPTIMAL/STRESS, cosine gate, etc.) |
+| `PhysioPhaseFusion` | Applique la **phase** par-dessus (ne remplace pas l’adapter) |
+| `CosineTrajectoryGate` / inflammation | Inchangés — phase ajoute une couche **hormonale matin** |
+| `AimiPhysioAssistantEnable` | Si OFF → multiplicateurs NEUTRAL, mais **classifieur phase** tourne quand même pour HTR/scénario |
+
+---
+
+## 7. Consommateurs doseur (rappel)
 
 | Module | Effet |
 |--------|--------|
-| `HormonalScenarioTerminalCap` | `bestT ≤ BG + 50` (hormonal) |
-| `HyperTrajectoryReleaseEvaluator` | Tier plafonné, HTR **off** si hormonal |
-| `MpcController` | `physioExtendedDawnGuard` → insuline chère, maxSMB ×0,45 |
-| `ContinuousStateEstimator` | Dawn Guard PSE sans exiger pas &lt; 200 |
+| `ScenarioProjectionEngine` | UAM off + cap + damp (source) |
+| `HormonalScenarioTerminalCap` | Cap `bestT` (filet HTR) |
+| `HyperTrajectoryReleaseEvaluator` | HTR off / plafonné |
+| `MpcController` | Dawn Guard étendu |
+| `ContinuousStateEstimator` | PSE Dawn élargi |
 
 ---
 
-## 5. JSONL
+## 8. JSONL
 
 ```json
 "physiological_phase": {
-  "phase": "DAWN_CORTISOL",
-  "confidence": 0.83,
-  "behavioral_risk": "DAWN_CORTISOL",
-  "reason": "dawnWindow COB=0 slowRamp",
+  "phase": "MALE_CIRCADIAN_HORMONAL",
+  "confidence": 0.84,
+  "behavioral_risk": "MALE_CIRCADIAN_HORMONAL",
+  "reason": "maleCircadian h=7",
   "extended_dawn_guard": true,
   "scenario_best_capped": true,
   "max_htr_tier": "OFF",
-  "smb_floor_cap_u": 0.55
+  "smb_floor_cap_u": 0.55,
+  "physio_smb_factor_fused": 0.92,
+  "physio_phase_source": "Deterministic+Phase"
 }
 ```
 
+`scenario_projection.contributors` peut contenir `PHYSIOLOGICAL_PHASE`.
+
+Logs : `🌅 PHYSIO_FUSE:` (fusion), `🌅 PHYSIO_RISK:` (autodrive).
+
 ---
 
-## 6. Validation terrain
+## 9. Options utilisateur
 
-- Matin ~120, Δ modéré, COB=0 : phase hormonal, **pas** de SMB 1,5–2 U HTR.  
-- KFC après-midi : `MEAL_UNDECLARED` ou `HYPER_INSTALLED`, HTR actif.  
-- Vérifier logs `🌅 PHYSIO_RISK` et `scenario best capped`.
+**Aucune nouvelle pref.** Tout est automatique si :
+
+- `AimiPhysioAssistantEnable` (modulation ISF/basal/SMB adapter — optionnelle mais fusion phase toujours active pour scénario/HTR)  
+- `OApsAIMIHyperTrajectoryRelease` + Autodrive actif  
+
+---
+
+## 10. Validation terrain
+
+- Matin ~120, Δ modéré, COB=0 : `MALE_CIRCADIAN` ou `DAWN_CORTISOL`, contributor `PHYSIOLOGICAL_PHASE`, pas de SMB HTR 1,5–2 U.  
+- KFC : `MEAL_UNDECLARED`, UAM contributor présent, HTR actif.  
+- Comparer `best_terminal` scénario avant/après sur JSONL matinal.

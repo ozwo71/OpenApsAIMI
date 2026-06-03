@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.scenario
 
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionCurves
 import app.aaps.plugins.aps.openAPSAIMI.safety.MealSafetyContext
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryMetrics
@@ -92,6 +93,35 @@ class ScenarioProjectionEngineTest {
         )
         assertTrue(after.scenarioBest.terminalMgdl <= before.scenarioBest.terminalMgdl)
         assertTrue(after.contributors.any { it.id == ScenarioContributorId.ACTIVITY_PROTECTION })
+    }
+
+    @Test
+    fun hormonalPhase_suppressesUamMomentumAndCapsTerminal() {
+        val without = ScenarioProjectionEngine.build(
+            ScenarioProjectionInput(
+                bgNowMgdl = 122.0,
+                deltaMgdlPer5 = 2.0f,
+                curves = flatCurves(122.0, 39.0),
+                context = ScenarioProjectionContext(effectiveCobG = 0.0),
+            ),
+        )
+        val withPhase = ScenarioProjectionEngine.build(
+            ScenarioProjectionInput(
+                bgNowMgdl = 122.0,
+                deltaMgdlPer5 = 2.0f,
+                curves = flatCurves(122.0, 39.0),
+                context = ScenarioProjectionContext(
+                    effectiveCobG = 0.0,
+                    physiologicalPhase = PhysiologicalPhase.DAWN_CORTISOL,
+                    suppressMealLikeUam = true,
+                    scenarioBestCapAboveBgMgdl = 50.0,
+                ),
+            ),
+        )
+        assertTrue(withPhase.scenarioBest.terminalMgdl <= 172.0)
+        assertTrue(withPhase.scenarioBest.terminalMgdl <= without.scenarioBest.terminalMgdl)
+        assertTrue(withPhase.contributors.any { it.id == ScenarioContributorId.PHYSIOLOGICAL_PHASE })
+        assertTrue(without.contributors.any { it.id == ScenarioContributorId.PKPD_UAM_MOMENTUM })
     }
 
     @Test

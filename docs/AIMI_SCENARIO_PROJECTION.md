@@ -3,7 +3,7 @@
 **Status:** IMPLEMENTED (proto v1) — 2026-05-29  
 **Branch:** `dev_OAPSAIMI`  
 **Package:** `app.aaps.plugins.aps.openAPSAIMI.scenario`  
-**Related:** [AIMI_RISK_ENVELOPE_SPEC.md](AIMI_RISK_ENVELOPE_SPEC.md), [LGS_PREDICTIVE_MEAL_BLIND_CASE_STUDY.md](LGS_PREDICTIVE_MEAL_BLIND_CASE_STUDY.md), [ARCHITECTURE.md](ARCHITECTURE.md)
+**Related:** [AIMI_RISK_ENVELOPE_SPEC.md](AIMI_RISK_ENVELOPE_SPEC.md), [AIMI_PHYSIOLOGICAL_PHASE.md](AIMI_PHYSIOLOGICAL_PHASE.md), [LGS_PREDICTIVE_MEAL_BLIND_CASE_STUDY.md](LGS_PREDICTIVE_MEAL_BLIND_CASE_STUDY.md), [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ---
 
@@ -57,6 +57,16 @@ flowchart TD
     BEST --> ENV
     engine --> JSON
 ```
+
+### 2.1 Couche phase physiologique (2026-06)
+
+Voir [AIMI_PHYSIOLOGICAL_PHASE.md](AIMI_PHYSIOLOGICAL_PHASE.md). Avant `ScenarioProjectionEngine.build`, `PhysioPhaseFusion` :
+
+1. Classifie `PhysiologicalPhase` (cortisol matin, cycle, repas, …)  
+2. Fusionne `PhysioMultipliersMTR` (SMB/react damp, basal léger↑)  
+3. Passe dans `ScenarioProjectionContext` : `suppressMealLikeUam`, `scenarioBestCapAboveBgMgdl`  
+
+Contributor stable : `PHYSIOLOGICAL_PHASE` — supprime l’uplift UAM « momentum » en montée hormonale près de la cible.
 
 ### Ordre pipeline (invariant 5 conservé)
 
@@ -131,6 +141,7 @@ Export JSONL : `adjustments.scenario_projection` + `adjustments.safety_risk`.
 | Thomas lunch — best > floor | `ScenarioProjectionEngineTest` |
 | OPEN_DIVERGING contributor | idem |
 | Activity protection cap | idem |
+| Hormonal phase — UAM suppressed | idem |
 | resolveFromScenario composite | `SafetyPredictionTerminalsResolverTest` |
 
 Commande :
