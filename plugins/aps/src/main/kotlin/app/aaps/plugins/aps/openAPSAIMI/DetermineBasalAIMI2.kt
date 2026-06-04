@@ -1197,6 +1197,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
         exerciseInsulinLockoutActive = false
+        exerciseHyperBasalOverrideActive = false
         aimiContextActivityActive = false
         pkpdAbsorptionGuardAppliedThisTick = false
         cachedRiskEnvelopeEarly = null
@@ -1736,6 +1737,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val dayOfWeek = calendarInstance[Calendar.DAY_OF_WEEK]
         val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
         this.bg = glucoseStatus.glucose
+        this.tickCombinedDelta = combinedDelta
         val getlastBolusSMB = latestSmbCached()
         val cacheSmbTimestamp = getlastBolusSMB?.timestamp ?: 0L
         // latestSmbCached() triggers async refresh — cache can lag one or more loop ticks after a legacy prebolus.
@@ -1932,17 +1934,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         refreshAimiContextActivityFlag()
         exerciseInsulinLockoutActive = sportTime || aimiContextActivityActive
+        refreshExerciseHyperBasalOverride(profile)
         if (exerciseInsulinLockoutActive) {
             this.maxSMB = 0.0
             this.maxSMBHB = 0.0
+            val basalHint = if (exerciseHyperBasalOverrideActive) {
+                "basale renforcée (hyper+activité)"
+            } else {
+                "basale autorisée seulement si BG>${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()} (T3c PI ou flux standard)"
+            }
             consoleLog.add(
-                "🏃 EXERCISE_LOCKOUT[therapy]: SMB off (sportTime=$sportTime aimiActivity=$aimiContextActivityActive) " +
-                    "| basale autorisée seulement si BG>${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()} (T3c PI ou flux standard)"
+                "🏃 EXERCISE_LOCKOUT[therapy]: SMB off (sportTime=$sportTime aimiActivity=$aimiContextActivityActive) | $basalHint"
             )
         }
 
         val t3cBrittle = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
-        if (t3cBrittle && exerciseInsulinLockoutActive && bg <= EXERCISE_BASAL_RESUME_BG_MGDL) {
+        if (t3cBrittle && exerciseInsulinLockoutActive && !exerciseHyperBasalOverrideActive &&
+            bg <= EXERCISE_BASAL_RESUME_BG_MGDL
+        ) {
             rT.reason.append(
                 "🏃 T3c + sport/contexte activité : basale & SMB arrêtés (BG≤${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()}).\n"
             )
@@ -1953,7 +1962,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 setTempBasal(0.0, 30, profile, rT, ctx.currentTemp, overrideSafetyLimits = false, adaptiveMultiplier = adaptiveMult)
             )
         }
-        if (!t3cBrittle && exerciseInsulinLockoutActive && bg <= EXERCISE_BASAL_RESUME_BG_MGDL) {
+        if (!t3cBrittle && exerciseInsulinLockoutActive && !exerciseHyperBasalOverrideActive &&
+            bg <= EXERCISE_BASAL_RESUME_BG_MGDL
+        ) {
             rT.reason.append(
                 "🏃 Sport / contexte AIMI activité : basale & SMB arrêtés (BG≤${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()}).\n"
             )
@@ -6453,6 +6464,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var aimiContextActivityActive = false
     /** Sport thérapie OU activité AIMI : SMB off ; basale off si BG ≤ [EXERCISE_BASAL_RESUME_BG_MGDL], sauf T3c/standard si BG > seuil. */
     private var exerciseInsulinLockoutActive = false
+    /** Hyper en montée pendant lockout exercice : basale non réduite (thyroïde / stress activité). SMB reste off par défaut. */
+    private var exerciseHyperBasalOverrideActive = false
+    /** Combined Δ G6-adjusted for the current tick (set in [runTickClockMaxSmbTirCarbAndGlucoseCopy]). */
+    private var tickCombinedDelta = 0f
     private var snackTime = false
     private var lowCarbTime = false
     private var highCarbTime = false
@@ -10781,13 +10796,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.activityStateIntense = (activityContext.state == app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.INTENSE)
         this.cachedActivityContext = activityContext
         val anyMealModeActive = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime
-        val basalFactor = when (activityContext.state) {
+        var basalFactor = when (activityContext.state) {
             app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.REST  -> 1.0f
             app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.LIGHT -> 1.0f
             app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.MODERATE -> if (anyMealModeActive) 0.9f else 0.8f
             app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.INTENSE  -> if (anyMealModeActive) 0.8f else 0.6f
         }
-        if (basalFactor < 1.0f) {
+        if (exerciseHyperBasalOverrideActive) {
+            val strongRise = delta >= 3.0f || tickCombinedDelta >= 3.0f
+            val resolved = app.aaps.plugins.aps.openAPSAIMI.activity.ExerciseHyperOverridePolicy.resolveBasalFactor(
+                basalFactor,
+                overrideActive = true,
+                strongRise = strongRise,
+            )
+            if (resolved != basalFactor) {
+                consoleLog.add(
+                    "🏃 HYPER_EXERCISE_OVERRIDE: basal x${"%.2f".format(basalFactor)} → x${"%.2f".format(resolved)} " +
+                        "(BG=${bg.toInt()} Δ=${"%.1f".format(delta)})"
+                )
+                basalFactor = resolved
+            }
+        }
+        if (basalFactor != 1.0f) {
             this.basalaimi *= basalFactor
             consoleLog.add("Basal Activity Redux: x${"%.2f".format(basalFactor)} -> ${"%.2f".format(this.basalaimi)}U/h")
         }
@@ -10801,6 +10831,29 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             aimiContextActivityActive = snap.hasActivity && snap.intentCount > 0
         } catch (_: Exception) {
             aimiContextActivityActive = false
+        }
+    }
+
+    private fun refreshExerciseHyperBasalOverride(profile: OapsProfileAimi) {
+        exerciseHyperBasalOverrideActive = false
+        if (!exerciseInsulinLockoutActive) return
+        val policyInput = app.aaps.plugins.aps.openAPSAIMI.activity.ExerciseHyperOverridePolicy.buildInput(
+            bgMgdl = bg.toDouble(),
+            targetBgMgdl = profile.target_bg,
+            highBgPreferenceMgdl = preferences.get(DoubleKey.OApsAIMIHighBg),
+            deltaMgdlPer5 = delta.toDouble(),
+            shortAvgDeltaMgdlPer5 = shortAvgDelta.toDouble(),
+            combinedDeltaMgdlPer5 = tickCombinedDelta.toDouble(),
+            thyroidEgpMultiplier = currentThyroidEffects.egpMultiplier,
+        )
+        exerciseHyperBasalOverrideActive =
+            app.aaps.plugins.aps.openAPSAIMI.activity.ExerciseHyperOverridePolicy
+                .isHyperRisingDuringExercise(policyInput)
+        if (exerciseHyperBasalOverrideActive) {
+            consoleLog.add(
+                "🏃 HYPER_EXERCISE_OVERRIDE active: BG=${bg.toInt()} Δ=${"%.1f".format(delta)} " +
+                    "combΔ=${"%.1f".format(tickCombinedDelta)} thyroidEGP=${"%.2f".format(currentThyroidEffects.egpMultiplier)}"
+            )
         }
     }
 
@@ -10844,7 +10897,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         intervalsmb = (intervalsmb + contextInfluence.extraIntervalMin).coerceIn(1, 20)
                         consoleLog.add("  Interval: %d→%dmin (+%d)".format(origInterval, intervalsmb, contextInfluence.extraIntervalMin))
                     }
-                    if (contextInfluence.preferBasal) {
+                    if (contextInfluence.preferBasal && !exerciseHyperBasalOverrideActive) {
                         consoleLog.add("  ⚠️ Prefers TEMP BASAL over SMB (SMB Disabled)")
                         maxSMB = 0.0
                         maxSMBHB = 0.0
@@ -10852,6 +10905,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                             contextTargetOverride = 150.0
                             consoleLog.add("  🎯 Sport Target Override -> 150 mg/dL")
                         }
+                    } else if (contextInfluence.preferBasal && exerciseHyperBasalOverrideActive) {
+                        consoleLog.add("  🏃 Activity preferBasal skipped (hyper+exercise basal override)")
                     }
                     contextInfluence.reasoningSteps.take(3).forEach { reason ->
                         consoleLog.add("  → $reason")

@@ -199,3 +199,31 @@ Logs : `🌅 PHYSIO_FUSE:` (fusion), `🌅 PHYSIO_RISK:` (autodrive).
 - Matin ~120, Δ modéré, COB=0 : `MALE_CIRCADIAN` ou `DAWN_CORTISOL`, contributor `PHYSIOLOGICAL_PHASE`, pas de SMB HTR 1,5–2 U.  
 - KFC : `MEAL_UNDECLARED`, UAM contributor présent, HTR actif.  
 - Comparer `best_terminal` scénario avant/après sur JSONL matinal.
+
+---
+
+## 11. AIMI Context — activité déclarée + hyper montante
+
+**Fichier :** `activity/ExerciseHyperOverridePolicy.kt`
+
+Par défaut, une **activité déclarée** (Contexte AIMI ou note sport) active `exerciseInsulinLockout` : **SMB = 0**, basale réduite (pas/FC), parfois **0 U/h** si BG ≤ 220 mg/dL. Adapté à l’hypo post-effort, **pas** à « marche + hyper + thyroïde » (EGP↑).
+
+**Override automatique** (pas de nouvelle pref) si :
+
+- lockout exercice actif **et**
+- BG ≥ ~92 % de `OApsAIMIHighBg` ou écart cible important **et**
+- montée (Δ, combinedΔ ou shortΔ) **ou**
+- thyroïde : `egpMultiplier ≥ 1,10` + BG déjà au-dessus de la cible.
+
+Effets :
+
+| Élément | Sans override | Avec override |
+|---------|---------------|---------------|
+| SMB | 0 (inchangé) | 0 (priorité hypo) |
+| Basale (pas/FC) | ×0,6–0,8 | **≥ ×1,02** (montée forte **×1,10**) |
+| Retour 0 U/h (BG≤220) | Oui | **Non** si hyper montante |
+| Context `preferBasal` | Coupe SMB | **Ignoré** |
+
+Logs : `🏃 HYPER_EXERCISE_OVERRIDE`, `HYPER_EXERCISE_OVERRIDE: basal x0.60 → x1.10`.
+
+**Profils différents :** femme + WCycle + thyroïde utilisent le même seuil avec biais EGP thyroïde ; le classifieur de **phase** reste distinct (cycle féminin vs circadien masculin).

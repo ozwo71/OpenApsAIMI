@@ -203,6 +203,8 @@ class ContextInfluenceEngine @Inject constructor(
         
         // Activity → High insulin sensitivity → Risk hypo
         // Strategy: Reduce SMB, increase interval, prefer basal
+        // When BG is already high and rising, [ExerciseHyperOverridePolicy] in DetermineBasalAIMI2
+        // lifts basal cuts and skips preferBasal SMB zeroing (SMB still off via exercise lockout).
         
         val (smbFactor, intervalAdd, preferBasal) = when (maxIntensity) {
             Intensity.EXTREME -> Triple(0.60f, 8, true)   // -40% SMB, +8min
