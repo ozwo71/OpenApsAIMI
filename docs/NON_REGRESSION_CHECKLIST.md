@@ -87,6 +87,18 @@ When this fork includes (or will include) the CAPTCG Eversense BLE plugin series
 - [ ] No `Thread.sleep` on any UI-related execution path.
 - [ ] No synchronous I/O in frequently triggered callbacks.
 
+### Database maintenance (May 2026 regression — `SQLITE_NOMEM` / freeze)
+
+Upstream once ran **inline `VACUUM`** inside `cleanupDatabase()`; `KeepAliveWorker` triggered it daily while the loop was active → crashes / OOM. Re-verify after every merge touching DB or workers.
+
+- [ ] **`KeepAliveWorker.databaseCleanup`** calls `cleanupDatabase(..., runVacuum = false)` only (daily retention trim, no VACUUM). File: `app/.../receivers/KeepAliveWorker.kt`.
+- [ ] **`AppRepository.cleanupDatabase`** does **not** run `VACUUM` unless `runVacuum == true` (comment documents SQLITE_NOMEM risk). Default path: `PRAGMA optimize` + deletes + `wal_checkpoint(TRUNCATE)` only. File: `database/impl/.../AppRepository.kt`.
+- [ ] **Startup VACUUM** remains in `MainApp.vacuumDatabaseIfDue()` (at most monthly, before plugins/loop, failures must not abort init). File: `app/.../MainApp.kt`, key `LongNonKey.LastVacuumRun`.
+- [ ] **Manual maintenance only:** `runVacuum = true` only from explicit UI (e.g. `MaintenanceViewModel`, NS client cleanup dialog), with `DatabaseMaintenanceCoordinator` around compaction in `AppRepository`.
+- [ ] **Merge conflicts:** resolving `AppRepository.kt` / `KeepAliveWorker.kt` / `PersistenceLayer.kt` did not re-inline `VACUUM` into the automatic cleanup path. See [MERGE_DEV_2026-05-20.md](MERGE_DEV_2026-05-20.md) (AppRepository combine note).
+
+Reference commits: upstream `16598541af` (regression), fork `11f409c58c` (optional `runVacuum` + KeepAlive fix), upstream `18b2dee6ef` (VACUUM at startup).
+
 ---
 
 ## 4) Smoke Test Matrix (Required)
@@ -117,6 +129,10 @@ Run after merge and before release build:
 - [ ] Missing-permission scenario handled without infinite retries/freezes.
 - [ ] xDrip / Dexcom high-frequency receive: no WorkManager inbox stall (post-merge `Inbox.kt` gate).
 
+### Database (optional on device, recommended after DB-related merge)
+- [ ] Cold start: no long hang / crash during “optimizing database” (monthly startup VACUUM path).
+- [ ] After 24h+ uptime: no `SQLITE_NOMEM` / DB freeze in logcat tied to `cleanupDatabase` or `KeepAliveWorker`.
+
 Pass criteria:
 - No freeze, no ANR, no blocking UI behavior, no critical feature regression.
 
@@ -133,6 +149,7 @@ Pass criteria:
 - [ ] Physio path verified
 - [ ] Hormonitor structure verified
 - [ ] Eversense merge constraint reviewed (if native plugin present on branch)
+- [ ] Database maintenance regression gate reviewed (KeepAlive `runVacuum=false`, no auto VACUUM in `cleanupDatabase`)
 - [ ] Async/freeze checklist reviewed
 - [ ] Smoke tests passed
 ```
