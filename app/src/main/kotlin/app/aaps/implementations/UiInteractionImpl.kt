@@ -10,26 +10,40 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 import app.aaps.ComposeMainActivity
 import app.aaps.compose.navigation.AppRoute
+import app.aaps.core.data.model.TE
+import app.aaps.core.data.ue.Action
+import app.aaps.core.data.ue.Sources
+import app.aaps.core.data.ue.ValueWithUnit
+import app.aaps.core.interfaces.configuration.Config
+import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.di.ApplicationScope
 import app.aaps.core.ui.compose.ScreenMode
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.AlarmIntent
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.ui.UiInteraction
+import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.objects.extensions.asAnnouncement
 import app.aaps.implementation.androidNotification.AlarmNotificationManager
 import app.aaps.ui.activities.ErrorActivity
 import app.aaps.ui.dialogs.AlertDialogs
 import dagger.Reusable
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 @Reusable
 class UiInteractionImpl @Inject constructor(
     private val context: Context,
     rxBus: RxBus,
-    preferences: Preferences,
+    private val preferences: Preferences,
     private val alarmNotificationManager: AlarmNotificationManager,
-    private val aapsLogger: AAPSLogger
+    private val aapsLogger: AAPSLogger,
+    private val persistenceLayer: PersistenceLayer,
+    private val config: Config,
+    @ApplicationScope private val appScope: CoroutineScope
 ) : UiInteraction {
 
     private val alertDialogs: AlertDialogs = AlertDialogs(preferences, rxBus)
@@ -41,6 +55,21 @@ class UiInteractionImpl @Inject constructor(
     override val unitsValues = arrayOf<CharSequence>("mg/dl", "mmol")
 
     override fun runAlarm(status: String, title: String, @RawRes soundId: Int) {
+        // Persist the error as an announcement at fire time — gated by the NS-announcement
+        // preference + APS build. Done here (not in ErrorActivity) so the record is written for
+        // every alarm with the true trigger time, regardless of whether/how it is later
+        // acknowledged (phone activity, Wear mute, OS-trimmed notification, or never opened).
+        if (config.APS && preferences.get(BooleanKey.NsClientCreateAnnouncementsFromErrors))
+            appScope.launch {
+                persistenceLayer.insertPumpTherapyEventIfNewByTimestamp(
+                    therapyEvent = TE.asAnnouncement(status),
+                    action = Action.CAREPORTAL,
+                    source = Sources.Aaps,
+                    note = status,
+                    listValues = listOf(ValueWithUnit.TEType(TE.Type.ANNOUNCEMENT))
+                )
+            }
+
         // ProcessLifecycleOwner.currentState requires main-thread access (officially @MainThread).
         // BLE callbacks, RxJava workers, and coroutine non-main dispatchers all call runAlarm
         // from non-main threads. From those contexts we skip the foreground-direct optimization

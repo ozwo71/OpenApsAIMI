@@ -4,6 +4,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 @Suppress("ConstPropertyName")
 object Versions {
 
+    // On change edit aaps-ci.yml (fork builds use AIMI suffix)
     const val appVersion = "4.0.0.0-dev.AIMI.040626"
     const val versionCode = 1500
 

@@ -62,6 +62,7 @@ fun OverviewScreenStacked(
     statusLightsDef: PreferenceSubScreenDef,
     onNavigate: (NavigationRequest) -> Unit,
     onTbrChipClick: () -> Unit,
+    onIobChipClick: () -> Unit,
     paddingValues: PaddingValues,
     useRingHeroHome: Boolean = false,
     activeSceneState: ActiveSceneState? = null,
@@ -145,6 +146,7 @@ fun OverviewScreenStacked(
                 cobUiState = cobUiState,
                 onNavigate = onNavigate,
                 onTbrChipClick = onTbrChipClick,
+                onIobChipClick = onIobChipClick,
                 modifier = Modifier
                     .weight(1f)
                     .padding(start = 8.dp)

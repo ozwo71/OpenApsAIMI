@@ -213,6 +213,19 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- WorkManager on-demand initialization: remove the default initializer so MainApp's
+             Configuration.Provider (with HiltWorkerFactory) is used instead. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+
         <!-- WorkManager (Android 14+): SystemForegroundService must declare a type when targetSdk >= 34.
              Without this merge, startForeground() can run as FGS type "none" and throw InvalidForegroundServiceTypeException. -->
         <service

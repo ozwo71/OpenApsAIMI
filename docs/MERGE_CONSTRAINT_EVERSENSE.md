@@ -8,6 +8,20 @@ Upstream reference repository: [CAPTCG/AndroidAPS-Eversense-](https://github.com
 
 The **CAPTCG patch series 0001–0005** was applied on `dev_OAPSAIMI` (with resolutions below). After this point, merges from Nightscout `dev` must **keep** `plugins:eversense`, DI registrations, `SourceSensor` **EVERSENSE_E3** / **EVERSENSE_365**, DB converters, `EversensePlugin`, and the Eversense preference strings in `core/keys`.
 
+### Merge `dev` → `dev_OAPSAIMI_mergeDEV` (2026-05-20)
+
+- Upstream Nightscout `dev` at `d1e22496f4` (AutoISF settings PR #4882, HiltWorker migration, DB `useWriterConnection`, scene UI).
+- **Conflicts resolved (combine, not theirs-only):**
+  - **AIMI / physio:** `AndroidManifest.xml` — Health Connect activities + WorkManager Hilt init + FGS `dataSync`.
+  - **Dashboard:** `MainScreen.kt` — kept `dashboardOverview` skin switch + upstream `activeSceneState` / `onIobChipClick`.
+  - **Hilt workers:** all `plugins/*` `build.gradle.kts` — `ksp(androidx.hilt.compiler)` + fork ONNX/Truth on `:plugins:aps`.
+  - **NS AIMI context:** `NSClientAddUpdateWorker` — `@HiltWorker` + `ContextManager` inject from NS.
+  - **Wear:** `WearPlugin.kt` — `collectResilient` + kept `throttleFirst` on loop/autosens resend.
+  - **DB:** `AppRepository.cleanupDatabase` — dev PRAGMA API + fork `runVacuum` → `vacuumDatabase()`.
+  - **Eversense:** `SourceModule.kt` — Eversense DI activities kept; BG workers = Hilt only (no duplicate `ContributesAndroidInjector`).
+- **Fork preserved:** `Versions.appVersion` AIMI suffix, ML model copy paths in `MainApp`, hormonitor export in `DetermineBasalAIMI2`, adaptive smoothing `calibratedOrValue`, `:plugins:eversense` in `settings.gradle`.
+- **Post-merge verify (user):** smoke per [NON_REGRESSION_CHECKLIST.md](NON_REGRESSION_CHECKLIST.md) §4.
+
 ### Merge `dev` → `dev_OAPSAIMI_mergeDEV` (2026-05-31)
 
 - Upstream commits through `d6e06f0087` (Data receive fix, calibration UI, jacoco/Compose tests).

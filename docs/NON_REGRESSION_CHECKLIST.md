@@ -4,6 +4,8 @@ Purpose: enforce repeatable quality gates to prevent freezes and functional regr
 
 Use this file for every merge from `dev` and every release candidate.
 
+**Latest merge log:** [MERGE_DEV_2026-05-20.md](MERGE_DEV_2026-05-20.md) (dev @ `d1e22496f4` → `dev_OAPSAIMI_mergeDEV`).
+
 ---
 
 ## 1) Mandatory Pre-Merge Checks

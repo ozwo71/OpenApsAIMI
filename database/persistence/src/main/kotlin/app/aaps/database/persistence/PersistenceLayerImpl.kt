@@ -165,6 +165,10 @@ class PersistenceLayerImpl @Inject constructor(
             repository.cleanupDatabase(keepDays, deleteTrackedChanges, runVacuum)
         }
 
+    override suspend fun vacuumDatabase() = withContext(Dispatchers.IO) {
+        repository.vacuumDatabase()
+    }
+
     // Flow-based change observation
     @Suppress("UNCHECKED_CAST")
     override fun <T : Any> observeChanges(type: Class<T>): Flow<List<T>> {

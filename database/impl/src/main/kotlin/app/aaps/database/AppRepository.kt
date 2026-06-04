@@ -1,6 +1,7 @@
 package app.aaps.database
 
-import androidx.room.withTransaction
+import androidx.room.Transactor.SQLiteTransactionType
+import androidx.room.useWriterConnection
 import app.aaps.database.entities.APSResult
 import app.aaps.database.entities.Bolus
 import app.aaps.database.entities.BolusCalculatorResult
@@ -95,9 +96,11 @@ class AppRepository @Inject internal constructor(
      */
     suspend fun <T> runTransactionSuspend(transaction: Transaction<T>) {
         val changes = mutableListOf<DBEntry>()
-        database.withTransaction {
-            transaction.database = DelegatedAppDatabase(changes, database)
-            transaction.run()
+        database.useWriterConnection { connection ->
+            connection.withTransaction(SQLiteTransactionType.IMMEDIATE) {
+                transaction.database = DelegatedAppDatabase(changes, database)
+                transaction.run()
+            }
         }
         // Emit to RxJava (existing) - for backwards compatibility
         changeSubject.onNext(changes)
@@ -115,9 +118,11 @@ class AppRepository @Inject internal constructor(
      */
     suspend fun <T : Any> runTransactionForResultSuspend(transaction: Transaction<T>): T {
         val changes = mutableListOf<DBEntry>()
-        val result = database.withTransaction {
-            transaction.database = DelegatedAppDatabase(changes, database)
-            transaction.run()
+        val result = database.useWriterConnection { connection ->
+            connection.withTransaction(SQLiteTransactionType.IMMEDIATE) {
+                transaction.database = DelegatedAppDatabase(changes, database)
+                transaction.run()
+            }
         }
         // Emit to RxJava (existing) - for backwards compatibility
         changeSubject.onNext(changes)
@@ -137,7 +142,7 @@ class AppRepository @Inject internal constructor(
     fun clearApsResults() = database.apsResultDao.deleteAllEntries()
 
     suspend fun cleanupDatabase(keepDays: Long, deleteTrackedChanges: Boolean, runVacuum: Boolean = false): String {
-        database.openHelper.writableDatabase.query("PRAGMA optimize").use { }
+        database.useWriterConnection { connection -> connection.usePrepared("PRAGMA optimize") { it.step() } }
         val than = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(keepDays)
         val removed = mutableListOf<Pair<String, Int>>()
         removed.add(Pair("APSResult", database.apsResultDao.deleteOlderThan(than)))
@@ -192,20 +197,34 @@ class AppRepository @Inject internal constructor(
         removed
             .filter { it.second > 0 }
             .forEach { ret.append(it.first + " " + it.second + "<br>") }
+        // VACUUM is intentionally NOT run inline here (SQLITE_NOMEM risk); use [vacuumDatabase] at startup
+        // or when [runVacuum] is requested from maintenance UI.
+        database.useWriterConnection { connection -> connection.usePrepared("PRAGMA wal_checkpoint(TRUNCATE)") { it.step() } }
         if (runVacuum) {
             DatabaseMaintenanceCoordinator.markCompactionStarted()
             try {
-                database.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(TRUNCATE)").use { }
-                try {
-                    database.openHelper.writableDatabase.execSQL("VACUUM")
-                } catch (e: android.database.sqlite.SQLiteException) {
-                    ret.append("VACUUM failed: ${e.message}<br>")
-                }
+                vacuumDatabase()
+            } catch (e: Exception) {
+                ret.append("VACUUM failed: ${e.message}<br>")
             } finally {
                 DatabaseMaintenanceCoordinator.markCompactionFinished()
             }
         }
         return ret.toString()
+    }
+
+    /**
+     * Full VACUUM: defragments the DB file and returns free pages to the OS. Heavy and memory
+     * intensive, so call only when nothing else is using the DB (e.g. at app startup before
+     * plugins/loop/sync start). [cleanupDatabase] only deletes; this reclaims and defragments.
+     * May throw if the DB is busy/locked; callers must handle that and treat only a clean return
+     * as success.
+     */
+    suspend fun vacuumDatabase() {
+        database.useWriterConnection { connection ->
+            connection.usePrepared("PRAGMA wal_checkpoint(TRUNCATE)") { it.step() }
+            connection.usePrepared("VACUUM") { it.step() }
+        }
     }
 
     suspend fun clearCachedTddData(from: Long) = database.totalDailyDoseDao.deleteNewerThan(from, InterfaceIDs.PumpType.CACHE)
