@@ -115,6 +115,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import rxdogtag2.RxDogTag
@@ -211,9 +212,8 @@ class MainApp : Application(), HasAndroidInjector, Configuration.Provider {
                 config.updateInitProgress(getString(R.string.migrating_preferences))
                 doMigrations()
 
-                // Defragment the DB while it is quiescent: plugins, loop, sync and UI all start
-                // later, so the (memory heavy) VACUUM has the DB to itself. Runs at most monthly.
-                vacuumDatabaseIfDue()
+                // Light DB maintenance while quiescent (no startup VACUUM — see maintainDatabaseIfDue).
+                maintainDatabaseIfDue()
 
                 // Register and initialize plugins
                 config.updateInitProgress(getString(R.string.initializing_plugins))
@@ -238,24 +238,22 @@ class MainApp : Application(), HasAndroidInjector, Configuration.Provider {
         }
     }
 
-    // Perform a full VACUUM at most once a month. VACUUM defragments the DB file and reclaims
-    // space, restoring query performance that degrades after long use. It is heavy and memory
-    // intensive, so it runs only here at startup while nothing else touches the DB (this avoids
-    // the SQLITE_NOMEM crash seen when VACUUM overlapped live DB activity).
-    private suspend fun vacuumDatabaseIfDue() {
+    // Monthly startup maintenance: PRAGMA optimize + WAL checkpoint only (no VACUUM). Full VACUUM
+    // remains available from Maintenance / NS cleanup (runVacuum=true) but caused SQLITE_NOMEM and
+    // startup crashes on large AIMI databases when run automatically at launch (May 2026).
+    private suspend fun maintainDatabaseIfDue() {
         val lastRun = preferences.get(LongNonKey.LastVacuumRun)
         if (lastRun < dateUtil.now() - T.days(30).msecs()) {
             config.updateInitProgress(getString(R.string.optimizing_database))
             try {
-                persistenceLayer.vacuumDatabase()
-                // Only advance the timestamp on success, so a transient failure (e.g. DB busy
-                // because a persisted worker is running) is retried on a future launch instead
-                // of being suppressed for a month.
+                withTimeout(T.mins(2).msecs()) {
+                    persistenceLayer.maintainDatabaseAtStartup()
+                }
                 preferences.put(LongNonKey.LastVacuumRun, dateUtil.now())
-                aapsLogger.debug(LTag.CORE, "Startup VACUUM done")
-            } catch (e: Exception) {
-                // DB maintenance must never abort app initialization.
-                aapsLogger.error(LTag.CORE, "Startup VACUUM failed", e)
+                aapsLogger.debug(LTag.CORE, "Startup DB maintenance done (no VACUUM)")
+            } catch (e: Throwable) {
+                // DB maintenance must never abort app initialization (includes OOM / timeout).
+                aapsLogger.error(LTag.CORE, "Startup DB maintenance failed", e)
             }
         }
     }

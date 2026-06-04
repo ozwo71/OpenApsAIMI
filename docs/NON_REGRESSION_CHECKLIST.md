@@ -93,7 +93,7 @@ Upstream once ran **inline `VACUUM`** inside `cleanupDatabase()`; `KeepAliveWork
 
 - [ ] **`KeepAliveWorker.databaseCleanup`** calls `cleanupDatabase(..., runVacuum = false)` only (daily retention trim, no VACUUM). File: `app/.../receivers/KeepAliveWorker.kt`.
 - [ ] **`AppRepository.cleanupDatabase`** does **not** run `VACUUM` unless `runVacuum == true` (comment documents SQLITE_NOMEM risk). Default path: `PRAGMA optimize` + deletes + `wal_checkpoint(TRUNCATE)` only. File: `database/impl/.../AppRepository.kt`.
-- [ ] **Startup VACUUM** remains in `MainApp.vacuumDatabaseIfDue()` (at most monthly, before plugins/loop, failures must not abort init). File: `app/.../MainApp.kt`, key `LongNonKey.LastVacuumRun`.
+- [ ] **Startup DB maintenance** uses `MainApp.maintainDatabaseIfDue()` → `maintainDatabaseAtStartup()` (**no automatic VACUUM** at launch; full VACUUM only via manual `runVacuum=true`). Key `LongNonKey.LastVacuumRun`, timeout 2 min, `catch (Throwable)`.
 - [ ] **Manual maintenance only:** `runVacuum = true` only from explicit UI (e.g. `MaintenanceViewModel`, NS client cleanup dialog), with `DatabaseMaintenanceCoordinator` around compaction in `AppRepository`.
 - [ ] **Merge conflicts:** resolving `AppRepository.kt` / `KeepAliveWorker.kt` / `PersistenceLayer.kt` did not re-inline `VACUUM` into the automatic cleanup path. See [MERGE_DEV_2026-05-20.md](MERGE_DEV_2026-05-20.md) (AppRepository combine note).
 
@@ -130,7 +130,7 @@ Run after merge and before release build:
 - [ ] xDrip / Dexcom high-frequency receive: no WorkManager inbox stall (post-merge `Inbox.kt` gate).
 
 ### Database (optional on device, recommended after DB-related merge)
-- [ ] Cold start: no long hang / crash during “optimizing database” (monthly startup VACUUM path).
+- [ ] Cold start: no crash during “optimizing database” (monthly checkpoint path, not full VACUUM).
 - [ ] After 24h+ uptime: no `SQLITE_NOMEM` / DB freeze in logcat tied to `cleanupDatabase` or `KeepAliveWorker`.
 
 Pass criteria:

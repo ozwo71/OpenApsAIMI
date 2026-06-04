@@ -26,6 +26,7 @@ import app.aaps.plugins.source.MM640gPlugin
 import app.aaps.plugins.source.PatchedSiAppPlugin
 import app.aaps.plugins.source.PatchedSinoAppPlugin
 import app.aaps.plugins.source.PoctechPlugin
+import app.aaps.plugins.source.OttaiWorker
 import app.aaps.plugins.source.SyaiPlugin
 import app.aaps.plugins.source.TomatoPlugin
 import app.aaps.plugins.source.XdripInbox
@@ -89,7 +90,15 @@ open class DataReceiver : DaggerBroadcastReceiver() {
                     }.build()
                 )
 
-            Intents.OTTAI_APP, Intents.OTTAI_APP_CN,
+            Intents.OTTAI_APP, Intents.OTTAI_APP_CN   ->
+                enqueueInline(
+                    context, OttaiWorker::class.java,
+                    Data.Builder().also {
+                        it.copyString("collection", bundle)
+                        it.copyString("data", bundle)
+                    }.build()
+                )
+
             Intents.SYAI_APP                          ->
                 enqueueInline(
                     context, SyaiPlugin.SyaiWorker::class.java,

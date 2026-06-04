@@ -50,9 +50,15 @@ interface PersistenceLayer {
     suspend fun cleanupDatabase(keepDays: Long, deleteTrackedChanges: Boolean, runVacuum: Boolean = false): String
 
     /**
+     * Light startup maintenance: PRAGMA optimize + WAL checkpoint (truncate). Does not run VACUUM
+     * (avoids SQLITE_NOMEM / process death on large DBs when combined with other I/O).
+     */
+    suspend fun maintainDatabaseAtStartup()
+
+    /**
      * Full VACUUM of the database: defragments the file and returns free pages to the OS.
-     * Heavy and memory intensive — only call when nothing else is using the DB (e.g. on startup
-     * before plugins/loop/sync start). May throw if the DB is busy/locked.
+     * Heavy and memory intensive — manual maintenance only; not used on automatic app startup.
+     * May throw if the DB is busy/locked.
      */
     suspend fun vacuumDatabase()
 
