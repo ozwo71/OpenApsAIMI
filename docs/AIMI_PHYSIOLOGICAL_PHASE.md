@@ -29,18 +29,28 @@ Deux couches partagent la même **`PhysiologicalPhase`** :
 | `MEAL_UNDECLARED` | Δ/gap/projection type repas | HTR plein, UAM actif |
 | `HYPER_INSTALLED` | Plateau / tier établi + dwell | HTR `plateauSustain` |
 
-**Priorité :** MEAL_DECLARED → MEAL_UNDECLARED (si cinétique repas) → STRESS → HYPER_INSTALLED → hormonal matin → OFF.
+**Priorité :** MEAL_DECLARED → **garde dawn proche cible** (4h–10h) → MEAL_UNDECLARED (`mealLike` puis `mealDominant`) → STRESS → HYPER_INSTALLED → hormonal matin (slowRamp) → OFF.
 
 ---
 
 ## 3. Discriminants repas vs hormonal
 
-**Repas non déclaré** (`mealLike`) si COB &lt; 1 g **et** montée rapide **et** projection qui mène au-dessus du BG :
+### Garde dawn proche cible (avant `mealLike`)
 
-- Δ ≥ 2,5 ou combinedΔ ≥ 3,2 ou sΔ ≥ 2,2  
-- `bestT ≥ BG + 0,35 × highBgBand` et gap scénario crédible  
+En **4h–10h**, si **dev &lt; 0,45 × highBgBand** (proche cible, ex. BG ~109 pour cible 100) et **pas** de pic repas aigu (`isAcuteMealSurgeAtDawn`) :
 
-**Hormonal** si COB &lt; 1 g, **dev &lt; highBgBand** (sous ~140), rampe lente, projection non « repas » (`bestT ≤ BG + 55` ou lead modéré).
+- classer **hormonal** même si UAM gonfle `bestT` après une nuit basse ;
+- évite `MEAL_UNDECLARED` + HTR anticipatoire sur rampe cortisol (terrain 04:11–04:21).
+
+Un **vrai repas matin** reste `MEAL_UNDECLARED` si dev ≥ 0,45×bande, combinedΔ ≥ 4,5, ou Δ ≥ 4 avec projection très haute **et** dev déjà significatif.
+
+### Repas non déclaré
+
+**`mealLike`** : COB &lt; 1 g, montée rapide, projection + gap crédibles (inchangé).
+
+**`mealDominant`** : même montée rapide, lead ≥ 0,85×bande (sans exiger le gap) — prioritaire sur **STRESS** pendant les montées type déjeuner (FC↑ + Δ aigu).
+
+**Hormonal (slowRamp)** : COB &lt; 1 g, dev &lt; highBgBand, rampe lente, projection non « repas » (`bestT ≤ BG + 55` ou lead modéré).
 
 ---
 

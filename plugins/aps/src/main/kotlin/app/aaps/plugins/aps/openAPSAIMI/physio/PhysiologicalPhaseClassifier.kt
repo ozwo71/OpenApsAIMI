@@ -52,9 +52,18 @@ object PhysiologicalPhaseClassifier {
             return out(PhysiologicalPhase.MEAL_DECLARED, 0.95, "COB>=5g")
         }
 
+        val dawnHormonal = classifyDawnHormonalIfNearTarget(input, highBand, dev, projectionLead)
+        if (dawnHormonal != null) {
+            return dawnHormonal
+        }
+
         val mealLikeRise = isMealLikeRise(input, highBand, projectionLead)
+        val mealDominantRise = isMealDominantRise(input, highBand, projectionLead)
         if (mealLikeRise) {
             return out(PhysiologicalPhase.MEAL_UNDECLARED, 0.88, "mealLike Δ/gap/proj")
+        }
+        if (mealDominantRise) {
+            return out(PhysiologicalPhase.MEAL_UNDECLARED, 0.84, "mealDominant Δ/proj")
         }
 
         if (isStressCortisol(input)) {
@@ -71,25 +80,8 @@ object PhysiologicalPhaseClassifier {
         }
 
         val hormonalKinetic = isHormonalKinetic(input, highBand, dev, projectionLead)
-        if (hormonalKinetic) {
-            val inDawnWindow = input.hourOfDay in 4..10
-            if (inDawnWindow) {
-                if (isFemaleCycleHormonal(input)) {
-                    return out(
-                        PhysiologicalPhase.FEMALE_CYCLE_HORMONAL,
-                        0.85,
-                        "wCycle ${input.wCyclePhase} dawnWindow",
-                    )
-                }
-                if (isMaleCircadianProfile(input)) {
-                    return out(
-                        PhysiologicalPhase.MALE_CIRCADIAN_HORMONAL,
-                        0.84,
-                        "maleCircadian h=${input.hourOfDay}",
-                    )
-                }
-                return out(PhysiologicalPhase.DAWN_CORTISOL, 0.83, "dawnWindow COB=0 slowRamp")
-            }
+        if (hormonalKinetic && input.hourOfDay in 4..10) {
+            return classifyHormonalMorning(input, "slowRamp dawnWindow")
         }
 
         return out(PhysiologicalPhase.OFF, 0.5, "noDominantPhase")
@@ -102,6 +94,80 @@ object PhysiologicalPhaseClassifier {
             confidence = conf,
             policy = BehavioralRiskPolicy.forPhase(phase, conf, reason),
         )
+    }
+
+    /**
+     * Dawn window (4h–10h): near-target ramp from night low BG must not become MEAL_UNDECLARED
+     * when UAM inflates [bestT] while dev is still small (field package 04:11–04:21).
+     */
+    private fun classifyDawnHormonalIfNearTarget(
+        input: Input,
+        highBand: Double,
+        dev: Double,
+        projectionLead: Double,
+    ): Output? {
+        if (input.hourOfDay !in 4..10) return null
+        if (input.mealCobG >= 1.0) return null
+        if (dev >= highBand * 0.45) return null
+        if (isAcuteMealSurgeAtDawn(input, highBand, dev, projectionLead)) return null
+        if (!isDawnNearTargetRamp(input, highBand, dev)) return null
+        return classifyHormonalMorning(input, "dawnNearTarget UAM ramp")
+    }
+
+    private fun classifyHormonalMorning(input: Input, reasonSuffix: String): Output {
+        if (isFemaleCycleHormonal(input)) {
+            return out(
+                PhysiologicalPhase.FEMALE_CYCLE_HORMONAL,
+                0.86,
+                "wCycle ${input.wCyclePhase} $reasonSuffix",
+            )
+        }
+        if (isMaleCircadianProfile(input)) {
+            return out(
+                PhysiologicalPhase.MALE_CIRCADIAN_HORMONAL,
+                0.85,
+                "maleCircadian h=${input.hourOfDay} $reasonSuffix",
+            )
+        }
+        return out(PhysiologicalPhase.DAWN_CORTISOL, 0.84, "dawnWindow $reasonSuffix")
+    }
+
+    internal fun isDawnNearTargetRamp(input: Input, highBand: Double, dev: Double): Boolean {
+        if (dev >= highBand) return false
+        val moderateRise = input.deltaMgdlPer5 >= 1.5 ||
+            input.shortAvgDeltaMgdlPer5 >= 1.2 ||
+            input.combinedDeltaMgdlPer5 >= 2.0
+        return moderateRise || dev < highBand * 0.25
+    }
+
+    internal fun isAcuteMealSurgeAtDawn(
+        input: Input,
+        highBand: Double,
+        dev: Double,
+        projectionLead: Double,
+    ): Boolean {
+        if (dev >= highBand * 0.45) return true
+        if (input.combinedDeltaMgdlPer5 >= 4.5) return true
+        if (input.deltaMgdlPer5 >= 4.0 && dev >= highBand * 0.35) return true
+        if (input.deltaMgdlPer5 >= 4.0 &&
+            input.bestTerminalMgdl >= input.bgMgdl + highBand * 2.0
+        ) {
+            return true
+        }
+        return projectionLead >= highBand * 2.2 &&
+            input.deltaMgdlPer5 >= 3.5 &&
+            dev >= highBand * 0.35
+    }
+
+    /** Meal-like rise without full gap/projection gate — used to block STRESS during lunch ramps. */
+    internal fun isMealDominantRise(input: Input, highBand: Double, projectionLead: Double): Boolean {
+        if (input.mealCobG >= 1.0) return false
+        val fastRise = input.deltaMgdlPer5 >= 2.5 ||
+            input.shortAvgDeltaMgdlPer5 >= 2.2 ||
+            input.combinedDeltaMgdlPer5 >= 3.2
+        if (!fastRise) return false
+        return projectionLead >= highBand * 0.85 ||
+            input.bestTerminalMgdl >= input.bgMgdl + highBand * 0.55
     }
 
     internal fun isMealLikeRise(input: Input, highBand: Double, projectionLead: Double): Boolean {

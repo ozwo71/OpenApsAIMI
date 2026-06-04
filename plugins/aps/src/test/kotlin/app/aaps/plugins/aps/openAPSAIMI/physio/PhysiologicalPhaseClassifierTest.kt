@@ -50,6 +50,50 @@ class PhysiologicalPhaseClassifierTest {
         assertEquals(PhysiologicalPhase.MEAL_UNDECLARED, out.phase)
     }
 
+    /** Field replay 04:16 — BG ~109, inflated UAM bestT, dev still near target. */
+    @Test
+    fun dawn_near_target_uam_ramp_not_meal() {
+        val out = PhysiologicalPhaseClassifier.classify(
+            dawnInput(
+                bg = 109.0,
+                delta = 3.8,
+                bestT = 242.0,
+            ).copy(
+                hourOfDay = 4,
+                shortAvgDeltaMgdlPer5 = 3.2,
+                combinedDeltaMgdlPer5 = 3.4,
+            ),
+        )
+        assertEquals(PhysiologicalPhase.MALE_CIRCADIAN_HORMONAL, out.phase)
+        assertTrue(out.policy.extendedDawnGuard)
+    }
+
+    @Test
+    fun meal_dominant_blocks_stress_during_lunch_ramp() {
+        val out = PhysiologicalPhaseClassifier.classify(
+            PhysiologicalPhaseClassifier.Input(
+                bgMgdl = 167.0,
+                targetBgMgdl = 100.0,
+                highBgPreferenceMgdl = 140.0,
+                deltaMgdlPer5 = 4.2,
+                shortAvgDeltaMgdlPer5 = 3.8,
+                combinedDeltaMgdlPer5 = 4.0,
+                mealCobG = 0.0,
+                hourOfDay = 11,
+                stepsLast15m = 200,
+                heartRateBpm = 105,
+                restingHeartRateBpm = 62,
+                bestTerminalMgdl = 201.0,
+                floorTerminalMgdl = 120.0,
+                dwellAboveHighBgMinutes = 10,
+                wCycleEnabled = false,
+                wCycleTrackingMode = null,
+                wCyclePhase = null,
+            ),
+        )
+        assertEquals(PhysiologicalPhase.MEAL_UNDECLARED, out.phase)
+    }
+
     @Test
     fun htr_off_under_hormonal_policy() {
         val phase = PhysiologicalPhaseClassifier.classify(dawnInput())
