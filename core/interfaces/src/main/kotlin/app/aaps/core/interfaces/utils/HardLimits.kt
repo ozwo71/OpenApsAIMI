@@ -17,6 +17,8 @@ interface HardLimits {
         val LIMIT_TEMP_TARGET_BG = doubleArrayOf(72.0, 200.0)
         val MIN_DIA = doubleArrayOf(5.0, 5.0, 4.0, 4.0, 4.0)
         val MAX_DIA = doubleArrayOf(9.0, 9.0, 9.0, 9.0, 12.0)
+        val MIN_DIA_INHALED = doubleArrayOf(1.5, 1.5, 1.5, 1.5, 1.5) // Inhaled insulin (e.g. Afrezza) has shorter DIA
+        val MAX_DIA_INHALED = doubleArrayOf(4.0, 4.0, 4.0, 4.0, 4.0)
         const val MIN_PEAK = 35 // mgdl
         const val MAX_PEAK = 120 // mgdl
         val MIN_IC = doubleArrayOf(2.0, 2.0, 2.0, 2.0, 0.3)
@@ -41,6 +43,8 @@ interface HardLimits {
     fun maxBasal(): Double
     fun minDia(): Double
     fun maxDia(): Double
+    fun minDiaInhaled(): Double
+    fun maxDiaInhaled(): Double
     fun minPeak(): Int
     fun maxPeak(): Int
     fun minIC(): Double

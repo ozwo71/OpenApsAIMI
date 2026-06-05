@@ -267,12 +267,14 @@ class InsulinManagementViewModel @Inject constructor(
         _uiState.update { it.copy(editorDiaHours = diaHours) }
     }
 
-    /** Load peak from a preset template (chips UI). Only sets peak, not DIA. */
+    /** Load peak from a preset template (chips UI). Sets peak; also DIA for inhaled presets (e.g. Afrezza). */
     fun loadPeakFromPreset(preset: InsulinType) {
+        val diaHours = preset.insulinEndTime / 3_600_000.0
         _uiState.update {
             it.copy(
                 editorTemplate = preset,
                 editorPeakMinutes = preset.iCfg.peak,
+                editorDiaHours = if (preset.isInhaled) diaHours else it.editorDiaHours,
                 editorNickname = rh.gs(preset.label),
                 autoNameEnabled = true
             )
@@ -313,8 +315,11 @@ class InsulinManagementViewModel @Inject constructor(
         editedICfg.setDia(state.editorDiaHours)
         editedICfg.setPeak(state.editorPeakMinutes)
 
-        // Validation
-        if (editedICfg.dia < hardLimits.minDia() || editedICfg.dia > hardLimits.maxDia()) {
+        // Validation — inhaled insulin (Afrezza) uses shorter DIA limits
+        val isInhaled = state.editorTemplate?.isInhaled == true
+        val minDia = if (isInhaled) hardLimits.minDiaInhaled() else hardLimits.minDia()
+        val maxDia = if (isInhaled) hardLimits.maxDiaInhaled() else hardLimits.maxDia()
+        if (editedICfg.dia < minDia || editedICfg.dia > maxDia) {
             showSnackbar(rh.gs(CoreUiR.string.value_out_of_hard_limits, rh.gs(CoreUiR.string.insulin_dia), editedICfg.dia))
             return false
         }
@@ -446,6 +451,13 @@ class InsulinManagementViewModel @Inject constructor(
     val concentrationEnabled: Boolean
         get() = preferences.get(BooleanKey.GeneralInsulinConcentration)
 
-    fun diaRange(): ClosedFloatingPointRange<Double> = hardLimits.minDia()..hardLimits.maxDia()
+    fun diaRange(): ClosedFloatingPointRange<Double> {
+        val isInhaled = uiState.value.editorTemplate?.isInhaled == true
+        return if (isInhaled) {
+            hardLimits.minDiaInhaled()..hardLimits.maxDiaInhaled()
+        } else {
+            hardLimits.minDia()..hardLimits.maxDia()
+        }
+    }
     fun peakRange(): ClosedFloatingPointRange<Double> = hardLimits.minPeak().toDouble()..hardLimits.maxPeak().toDouble()
 }
