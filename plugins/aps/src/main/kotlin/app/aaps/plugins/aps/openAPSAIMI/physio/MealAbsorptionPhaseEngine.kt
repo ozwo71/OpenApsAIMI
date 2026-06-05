@@ -112,7 +112,7 @@ object MealAbsorptionPhaseEngine {
                 input.bgMgdl >= 140.0 &&
                 dev >= highBand * 0.5 -> MealAbsorptionPhase.INTER_WAVE
             input.bgMgdl >= 180.0 &&
-                input.iobU >= InsulinStackingStance.iobFloorU(input.maxIobU) &&
+                input.iobU >= iobFloorU(input.maxIobU) &&
                 input.deltaMgdlPer5 <= 2.0 &&
                 (memoryActive || belief >= 0.45) -> MealAbsorptionPhase.PEAK_CORRECTION
             fastRise && belief >= 0.55 -> MealAbsorptionPhase.FIRST_WAVE
@@ -194,6 +194,12 @@ object MealAbsorptionPhaseEngine {
         input.deltaMgdlPer5 >= FAST_RISE_DELTA ||
             input.shortAvgDeltaMgdlPer5 >= FAST_RISE_SHORT ||
             input.combinedDeltaMgdlPer5 >= FAST_RISE_COMBINED
+
+    /** Mirrors [InsulinStackingStance.iobFloorU] — kept local to avoid physio→safety coupling. */
+    internal fun iobFloorU(maxIob: Double): Double {
+        val maxIobSafe = maxIob.coerceAtLeast(0.5)
+        return max(3.2, maxIobSafe * 0.26)
+    }
 
     internal fun mealDeliveryPriority(
         phase: MealAbsorptionPhase,
