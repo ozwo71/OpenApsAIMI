@@ -22,6 +22,22 @@ The **CAPTCG patch series 0001–0005** was applied on `dev_OAPSAIMI` (with reso
 - **Fork preserved:** `Versions.appVersion` AIMI suffix, ML model copy paths in `MainApp`, hormonitor export in `DetermineBasalAIMI2`, adaptive smoothing `calibratedOrValue`, `:plugins:eversense` in `settings.gradle`.
 - **Post-merge verify (user):** smoke per [NON_REGRESSION_CHECKLIST.md](NON_REGRESSION_CHECKLIST.md) §4.
 
+### CAPTCG sync 0006–0013 (2026-06-05)
+
+Full port of [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS-Eversense-) combined patch (post-0005 quality + pattern alignment):
+
+| Change | Notes |
+|--------|--------|
+| Package rename | `com.nightscout.eversense` → `app.aaps.plugins.eversense` (152 files) |
+| BLE reliability | `submitToExecutorAndSync`, 365 status-19 `gatt.connect()`, persistent 60s reconnect, E3 clock sync on KeepAlive |
+| 365 never-disconnect | `SetBleDisconnect365Packet(0)` |
+| Calibration | Post-cal `WAITING_POST_CALIBRATION` + readiness re-read on E3 |
+| Credentials | `username`/`password` on plugin, `syncCredentialsIfNeeded()`, token cache only on change |
+| Build / Sonar | `:core:interfaces` dep, manifest `usesCleartextTraffic=false` |
+| Battery % | `GetBatteryPercentagePacket` via `BatteryLevel` enum (kept % mapping, not raw 0–11) |
+
+**Fork kept:** Calibration activity readiness UI (CAPTCG strips it; we keep user-facing readiness text).
+
 ### Merge `dev` → `dev_OAPSAIMI_mergeDEV` (2026-05-31)
 
 - Upstream commits through `d6e06f0087` (Data receive fix, calibration UI, jacoco/Compose tests).

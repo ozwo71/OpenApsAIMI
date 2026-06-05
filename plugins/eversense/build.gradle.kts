@@ -8,10 +8,11 @@ plugins {
 }
 
 android {
-    namespace = "com.nightscout.eversense"
+    namespace = "app.aaps.plugins.eversense"
 }
 
 dependencies {
+    implementation(project(":core:interfaces"))
     api(libs.androidx.core)
     api(platform(libs.kotlinx.serialization.bom))
     api(libs.kotlinx.serialization.json)

@@ -14,14 +14,14 @@ import app.aaps.core.interfaces.profile.ProfileUtil
 import androidx.appcompat.app.AppCompatActivity
 import dagger.hilt.android.AndroidEntryPoint
 import app.aaps.plugins.source.R
-import com.nightscout.eversense.EversenseCGMPlugin
-import com.nightscout.eversense.callbacks.EversenseWatcher
-import com.nightscout.eversense.enums.CalibrationReadiness
-import com.nightscout.eversense.enums.EversenseType
-import com.nightscout.eversense.models.ActiveAlarm
-import com.nightscout.eversense.models.EversenseCGMResult
-import com.nightscout.eversense.models.EversenseState
-import com.nightscout.eversense.util.EversenseLogger
+import app.aaps.plugins.eversense.EversenseCGMPlugin
+import app.aaps.plugins.eversense.callbacks.EversenseWatcher
+import app.aaps.plugins.eversense.enums.CalibrationReadiness
+import app.aaps.plugins.eversense.enums.EversenseType
+import app.aaps.plugins.eversense.models.ActiveAlarm
+import app.aaps.plugins.eversense.models.EversenseCGMResult
+import app.aaps.plugins.eversense.models.EversenseState
+import app.aaps.plugins.eversense.util.EversenseLogger
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -191,7 +191,7 @@ class EversenseCalibrationActivity : AppCompatActivity() {
         CalibrationReadiness.SENSOR_EOL          -> "Sensor end of life"
         CalibrationReadiness.NO_SENSOR_LINKED    -> "No sensor linked to transmitter"
         CalibrationReadiness.UNSUPPORTED_MODE    -> "Transmitter in unsupported mode"
-        CalibrationReadiness.CALIBRATING         -> "Calibration already in progress"
+        CalibrationReadiness.WAITING_POST_CALIBRATION -> "Waiting for post-calibration processing"
         CalibrationReadiness.LED_DISCONNECT_DETECTED -> "Sensor disconnect detected"
         CalibrationReadiness.TRANSMITTER_EOL     -> "Transmitter end of life"
         CalibrationReadiness.UNKNOWN             -> "Unknown readiness state"

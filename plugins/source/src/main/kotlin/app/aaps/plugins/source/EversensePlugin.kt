@@ -13,7 +13,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationLevel
 import app.aaps.core.interfaces.notifications.NotificationManager
-import com.nightscout.eversense.models.ActiveAlarm
+import app.aaps.plugins.eversense.models.ActiveAlarm
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.model.TrendArrow
@@ -27,18 +27,18 @@ import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.source.BgSource
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
-import com.nightscout.eversense.EversenseCGMPlugin
-import com.nightscout.eversense.callbacks.EversenseScanCallback
-import com.nightscout.eversense.callbacks.EversenseWatcher
+import app.aaps.plugins.eversense.EversenseCGMPlugin
+import app.aaps.plugins.eversense.callbacks.EversenseScanCallback
+import app.aaps.plugins.eversense.callbacks.EversenseWatcher
 import app.aaps.plugins.source.compose.BgSourceComposeContent
-import com.nightscout.eversense.enums.CalibrationReadiness
-import com.nightscout.eversense.enums.EversenseAlarm
-import com.nightscout.eversense.enums.EversenseType
-import com.nightscout.eversense.models.EversenseCGMResult
-import com.nightscout.eversense.models.EversenseScanResult
-import com.nightscout.eversense.models.EversenseSecureState
-import com.nightscout.eversense.models.EversenseState
-import com.nightscout.eversense.util.StorageKeys
+import app.aaps.plugins.eversense.enums.CalibrationReadiness
+import app.aaps.plugins.eversense.enums.EversenseAlarm
+import app.aaps.plugins.eversense.enums.EversenseType
+import app.aaps.plugins.eversense.models.EversenseCGMResult
+import app.aaps.plugins.eversense.models.EversenseScanResult
+import app.aaps.plugins.eversense.models.EversenseSecureState
+import app.aaps.plugins.eversense.models.EversenseState
+import app.aaps.plugins.eversense.util.StorageKeys
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -133,8 +133,7 @@ class EversensePlugin @Inject constructor(
             aapsLogger.warn(LTag.BGSOURCE, "Bluetooth permissions not granted — requesting permissions")
             requestBluetoothPermissions()
         }
-        // Alert if 365 credentials are missing
-        if (eversense.is365()) checkCredentialsNotification()
+        checkCredentialsNotification()
     }
 
     override suspend fun onStop() {
@@ -157,6 +156,8 @@ class EversensePlugin @Inject constructor(
         }
     }
 
+    fun syncCredentialsIfNeeded() = checkCredentialsNotification()
+
     private fun checkCredentialsNotification() {
         val username = preferences.get(EversenseStringKey.EversenseUsername)
         val password = preferences.get(EversenseStringKey.EversensePassword)
@@ -167,6 +168,20 @@ class EversensePlugin @Inject constructor(
                 level = NotificationLevel.URGENT
             )
         } else {
+            val secureState = getSecureState()
+            val credentialsChanged = secureState.username != username || secureState.password != password
+            secureState.username = username
+            secureState.password = password
+            saveSecureState(secureState)
+            eversense.username = username
+            eversense.password = password
+            if (credentialsChanged) {
+                securePrefs.edit(commit = true) {
+                    remove(StorageKeys.ACCESS_TOKEN)
+                    remove(StorageKeys.ACCESS_TOKEN_EXPIRY)
+                }
+                aapsLogger.info(LTag.BGSOURCE, "Eversense: credentials synced to secure state")
+            }
             notificationManager.dismiss(NotificationId.EVERSENSE_CREDENTIALS)
         }
     }
@@ -322,11 +337,12 @@ class EversensePlugin @Inject constructor(
             )
         }
 
-        // Calibration due notification — fires once per nextCalibrationDate
+        // Calibration due notification — fires once per calendar day
+        val calDueDay = (state.nextCalibrationDate / 86_400_000L) * 86_400_000L
         if (state.nextCalibrationDate > 0
             && System.currentTimeMillis() >= state.nextCalibrationDate
-            && !isCalibrationDueDismissed(state.nextCalibrationDate)) {
-            setCalibrationDueDismissed(state.nextCalibrationDate)
+            && !isCalibrationDueDismissed(calDueDay)) {
+            setCalibrationDueDismissed(calDueDay)
             notificationManager.post(
                 NotificationId.EVERSENSE_ALARM,
                 "Eversense calibration is due — open AAPS to calibrate your sensor.",
@@ -359,8 +375,12 @@ class EversensePlugin @Inject constructor(
 
     override fun onConnectionChanged(connected: Boolean) {
         aapsLogger.info(LTag.BGSOURCE, "Connection changed — connected: $connected")
-        mainHandler.post {
-        }
+        mainHandler.post { }
+    }
+
+    override fun onTransmitterReady() {
+        aapsLogger.info(LTag.BGSOURCE, "Transmitter ready — scheduling immediate fullSync on bleExecutor")
+        eversense.submitToExecutorAndSync(force = true)
     }
 
     override fun onAlarmReceived(alarm: ActiveAlarm) {
@@ -425,18 +445,20 @@ class EversensePlugin @Inject constructor(
                 val username = preferences.get(EversenseStringKey.EversenseUsername)
                 val password = preferences.get(EversenseStringKey.EversensePassword)
                 if (username.isNotEmpty() && password.isNotEmpty()) {
-                    val secureState = getSecureState().also {
-                        it.username = username
-                        it.password = password
-                    }
+                    val secureState = getSecureState()
+                    val credentialsChanged = secureState.username != username || secureState.password != password
+                    secureState.username = username
+                    secureState.password = password
                     saveSecureState(secureState)
-                    // Invalidate cached token so next upload re-logs in with the new credentials
-                    val prefs2 = context.getSharedPreferences("EversenseCGMManager", android.content.Context.MODE_PRIVATE)
-                    prefs2.edit(commit = true) {
-                        remove(com.nightscout.eversense.util.StorageKeys.ACCESS_TOKEN)
-                        remove(com.nightscout.eversense.util.StorageKeys.ACCESS_TOKEN_EXPIRY)
+                    eversense.username = username
+                    eversense.password = password
+                    if (credentialsChanged) {
+                        securePrefs.edit(commit = true) {
+                            remove(StorageKeys.ACCESS_TOKEN)
+                            remove(StorageKeys.ACCESS_TOKEN_EXPIRY)
+                        }
+                        aapsLogger.info(LTag.BGSOURCE, "Eversense: credentials updated — token cache cleared, will re-login on next upload")
                     }
-                    aapsLogger.info(LTag.BGSOURCE, "Eversense: credentials updated — token cache cleared, will re-login on next upload")
                     notificationManager.dismiss(NotificationId.EVERSENSE_CREDENTIALS)
                 } else {
                     notificationManager.post(
@@ -451,7 +473,7 @@ class EversensePlugin @Inject constructor(
                         // E3 uses EU DMS endpoints; no PostEssentialLogs (no raw BLE hex on E3)
                         val latest = readings.firstOrNull() ?: return@launch
                         val portalOk = try {
-                            com.nightscout.eversense.util.EversenseHttpE3Util.putCurrentValues(
+                            app.aaps.plugins.eversense.util.EversenseHttpE3Util.putCurrentValues(
                                 preferences = prefs,
                                 glucose = latest.glucoseInMgDl,
                                 timestamp = latest.datetime,
@@ -464,7 +486,7 @@ class EversensePlugin @Inject constructor(
                             false
                         }
                         val eventsOk = try {
-                            com.nightscout.eversense.util.EversenseHttpE3Util.putDeviceEvents(
+                            app.aaps.plugins.eversense.util.EversenseHttpE3Util.putDeviceEvents(
                                 preferences = prefs,
                                 readings = readings,
                                 transmitterSerialNumber = state.transmitterSerialNumber
@@ -478,7 +500,7 @@ class EversensePlugin @Inject constructor(
                         portalOk && eventsOk
                     }
                     EversenseType.EVERSENSE_365 -> try {
-                        com.nightscout.eversense.util.EversenseHttp365Util.uploadGlucoseReadings(
+                        app.aaps.plugins.eversense.util.EversenseHttp365Util.uploadGlucoseReadings(
                             preferences = prefs,
                             readings = readings,
                             transmitterSerialNumber = state.transmitterName.ifEmpty { state.transmitterSerialNumber },
@@ -498,7 +520,7 @@ class EversensePlugin @Inject constructor(
                 if (type == EversenseType.EVERSENSE_365) {
                     val latest = readings.firstOrNull { it.rawResponseHex.isNotEmpty() } ?: readings.firstOrNull()
                     if (latest != null) {
-                        val portalOk = com.nightscout.eversense.util.EversenseHttp365Util.putCurrentValues(
+                        val portalOk = app.aaps.plugins.eversense.util.EversenseHttp365Util.putCurrentValues(
                             preferences = prefs,
                             glucose = latest.glucoseInMgDl,
                             timestamp = latest.datetime,
@@ -511,7 +533,7 @@ class EversensePlugin @Inject constructor(
 
                     val uploadableReadings = readings.filter { it.rawResponseHex.isNotEmpty() }
                     if (uploadableReadings.isNotEmpty()) {
-                        val eventsOk = com.nightscout.eversense.util.EversenseHttp365Util.putDeviceEvents(
+                        val eventsOk = app.aaps.plugins.eversense.util.EversenseHttp365Util.putDeviceEvents(
                             preferences = prefs,
                             readings = uploadableReadings,
                             transmitterSerialNumber = state.transmitterSerialNumber
