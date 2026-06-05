@@ -340,6 +340,15 @@
 
     <string name="aimi_adv_rec_htr_enable_title">Enable hyper trajectory SMB release (HTR)</string>
     <string name="aimi_adv_rec_htr_enable_desc">Sustained hyper with Autodrive V3 active but weak SMB delivery. HTR lifts V3 micro-bolus when scenario projection confirms a rise (not a fixed 200 mg/dL rule).</string>
+    <string name="aimi_adv_rec_rbt_shadow_title">Enable Recursive Belief Tree (shadow)</string>
+    <string name="aimi_adv_rec_rbt_shadow_desc">Autodrive V3 is active. Turn on RBT shadow mode to export multi-scale belief unfold in AIMI_Decisions.jsonl before enabling release authority.</string>
+    <string name="aimi_rbt_unfold_section_title">RECURSIVE BELIEF UNFOLD</string>
+    <string name="aimi_rbt_unfold_section_desc">Latest multi-scale belief export from AIMI_Decisions.jsonl (shadow or authority). Enable RBT shadow in AIMI settings when Autodrive V3 is active.</string>
+    <string name="aimi_rbt_unfold_mode">Mode: shadow=%1$s authority=%2$s wavelet=%3$s</string>
+    <string name="aimi_rbt_unfold_no_data">No recursive_belief export yet. Run the loop with RBT shadow enabled for at least one tick.</string>
+    <string name="aimi_rbt_unfold_summary">Last tick: auth=%1$s smb=%2$.2fU paradoxes=%3$d shadow=%4$s</string>
+    <string name="aimi_rbt_unfold_view_btn">View last unfold</string>
+    <string name="aimi_rbt_unfold_dialog_title">Recursive belief unfold</string>
     <string name="aimi_adv_rec_pkpd_relief_enable_title">Enable PKPD pragmatic relief</string>
     <string name="aimi_adv_rec_pkpd_relief_enable_desc">Hyper pattern with low hypo pressure detected. Enabling pragmatic relief helps preserve SMB intent in explicit meal/high-rise contexts.</string>
     <string name="aimi_adv_rec_pkpd_relief_factor_title">Increase PKPD relief minimum factor</string>

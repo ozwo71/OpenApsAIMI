@@ -1,0 +1,16 @@
+package app.aaps.plugins.aps.openAPSAIMI.recursive
+
+enum class BeliefParadoxId {
+    HYPER_VS_CLEARANCE,
+    BEST_VS_MPC,
+    FLOOR_VS_REALITY,
+    SPIRAL_VS_RISE,
+    STACK_VS_WAVE,
+    TRAJ_TBR_VS_HTR_SMB,
+    PHYSIO_DAMP_VS_MEAL,
+    ENDOG_VS_CORRECTION,
+    AUDITOR_VS_RELEASE,
+    NGR_VS_HYPER,
+    THYROID_VS_AGGRESS,
+    WCYCLE_VS_STABLE,
+}

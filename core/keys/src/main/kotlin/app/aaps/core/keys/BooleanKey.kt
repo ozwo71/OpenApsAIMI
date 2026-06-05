@@ -254,6 +254,33 @@ enum class BooleanKey(
         dependency = OApsAIMIHyperTrajectoryRelease,
     ),
     /**
+     * Recursive Belief Tree — export unfold to AIMI_Decisions.jsonl (shadow). See docs/AIMI_RECURSIVE_BELIEF.md.
+     */
+    OApsAIMIRecursiveBeliefShadow(
+        key = "key_aimi_recursive_belief_shadow",
+        defaultValue = true,
+        titleResId = R.string.pref_title_aimi_recursive_belief_shadow,
+        summaryResId = R.string.pref_summary_aimi_recursive_belief_shadow,
+        dependency = OApsAIMIautoDriveActive,
+    ),
+    /**
+     * When on (and shadow or this pref active), RBT [DoseChannelResolution] drives SMB floor / Traj-Bridge suppression.
+     */
+    OApsAIMIRecursiveBeliefAuthority(
+        key = "key_aimi_recursive_belief_authority",
+        defaultValue = true,
+        titleResId = R.string.pref_title_aimi_recursive_belief_authority,
+        summaryResId = R.string.pref_summary_aimi_recursive_belief_authority,
+        dependency = OApsAIMIRecursiveBeliefShadow,
+    ),
+    OApsAIMIRecursiveBeliefWavelet(
+        key = "key_aimi_recursive_belief_wavelet",
+        defaultValue = false,
+        titleResId = R.string.pref_title_aimi_recursive_belief_wavelet,
+        summaryResId = R.string.pref_summary_aimi_recursive_belief_wavelet,
+        dependency = OApsAIMIRecursiveBeliefShadow,
+    ),
+    /**
      * Trajectory-informed bounded tweak to DynISF (AutoISF-style CGM geometry). Requires dynamic sensitivity.
      * Default off: enable after monitoring shadow logs.
      */

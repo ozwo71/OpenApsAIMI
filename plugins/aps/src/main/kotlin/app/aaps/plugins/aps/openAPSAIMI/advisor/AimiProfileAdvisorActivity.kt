@@ -144,6 +144,9 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
 
                     // 1b. Tuning context (bundled pref adjustments)
                     rootLayout.addView(createTuningContextCard(report, cardColor))
+
+                    // 1c. Recursive belief unfold (JSONL snapshot)
+                    rootLayout.addView(createRecursiveBeliefUnfoldCard(cardColor))
             
                     // 2. Metrics Grid (2x2)
                     rootLayout.addView(createMetricsGrid(report.metrics, cardColor))
@@ -1168,6 +1171,131 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         column.addView(buttonRow)
         card.addView(column)
         return card
+    }
+
+    private fun createRecursiveBeliefUnfoldCard(cardColor: Int): CardView {
+        val shadowEnabled = preferences.get(BooleanKey.OApsAIMIRecursiveBeliefShadow)
+        val authorityEnabled = preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority)
+        val waveletEnabled = preferences.get(BooleanKey.OApsAIMIRecursiveBeliefWavelet)
+        val card = CardView(this).apply {
+            radius = 16f
+            setCardBackgroundColor(cardColor)
+            cardElevation = 0f
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { setMargins(0, 0, 0, 32) }
+        }
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 24, 24, 24)
+        }
+        column.addView(TextView(this).apply {
+            text = rh.gs(R.string.aimi_rbt_unfold_section_title)
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.parseColor("#94A3B8"))
+        })
+        column.addView(TextView(this).apply {
+            text = rh.gs(R.string.aimi_rbt_unfold_section_desc)
+            textSize = 13f
+            setTextColor(Color.parseColor("#CBD5E1"))
+            setPadding(0, 8, 0, 12)
+        })
+        column.addView(TextView(this).apply {
+            text = rh.gs(
+                R.string.aimi_rbt_unfold_mode,
+                shadowEnabled.toString(),
+                authorityEnabled.toString(),
+                waveletEnabled.toString(),
+            )
+            textSize = 12f
+            setTextColor(Color.parseColor("#94A3B8"))
+        })
+        val summaryText = TextView(this).apply {
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            setPadding(0, 12, 0, 0)
+        }
+        column.addView(summaryText)
+        val buttonRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(0, 16, 0, 0)
+        }
+        val viewBtn = Button(this).apply {
+            text = rh.gs(R.string.aimi_rbt_unfold_view_btn)
+            isEnabled = false
+        }
+        buttonRow.addView(viewBtn)
+        column.addView(buttonRow)
+        card.addView(column)
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            val lastExport = loadLastRecursiveBeliefJson()
+            withContext(Dispatchers.Main) {
+                if (isFinishing) return@withContext
+                if (lastExport == null) {
+                    summaryText.text = rh.gs(R.string.aimi_rbt_unfold_no_data)
+                    return@withContext
+                }
+                val resolution = lastExport.optJSONObject("resolution")
+                val auth = resolution?.optString("release_authority", "NONE") ?: "NONE"
+                val smb = resolution?.optDouble("smb_demand_u", 0.0) ?: 0.0
+                val paradoxCount = lastExport.optJSONArray("paradoxes")?.length() ?: 0
+                val shadowOnly = lastExport.optBoolean("shadow_only", true)
+                summaryText.text = rh.gs(
+                    R.string.aimi_rbt_unfold_summary,
+                    auth,
+                    smb,
+                    paradoxCount,
+                    shadowOnly.toString(),
+                )
+                viewBtn.isEnabled = true
+                viewBtn.setOnClickListener {
+                    showRecursiveBeliefUnfoldDialog(lastExport.toString(2))
+                }
+            }
+        }
+        return card
+    }
+
+    private fun loadLastRecursiveBeliefJson(): org.json.JSONObject? {
+        val externalDir = android.os.Environment.getExternalStoragePublicDirectory(
+            android.os.Environment.DIRECTORY_DOCUMENTS,
+        )
+        val jsonFile = java.io.File(externalDir, "AAPS/AIMI_Decisions.jsonl")
+        if (!jsonFile.exists() || !jsonFile.canRead()) return null
+        val tail = jsonFile.readLines().takeLast(80).asReversed()
+        for (line in tail) {
+            if (!line.contains("recursive_belief")) continue
+            try {
+                val root = org.json.JSONObject(line)
+                val adj = root.optJSONObject("adjustments") ?: continue
+                val rb = adj.optJSONObject("recursive_belief") ?: continue
+                return rb
+            } catch (_: Exception) {
+                continue
+            }
+        }
+        return null
+    }
+
+    private fun showRecursiveBeliefUnfoldDialog(prettyJson: String) {
+        val scroll = ScrollView(this).apply {
+            addView(TextView(this@AimiProfileAdvisorActivity).apply {
+                text = prettyJson
+                textSize = 11f
+                setTextColor(Color.parseColor("#E2E8F0"))
+                setPadding(32, 24, 32, 24)
+                setTextIsSelectable(true)
+            })
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(rh.gs(R.string.aimi_rbt_unfold_dialog_title))
+            .setView(scroll)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 
     private fun createTuningContextChipRow(): LinearLayout {
