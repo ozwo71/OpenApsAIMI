@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.release
 
 import app.aaps.plugins.aps.openAPSAIMI.physio.BehavioralRiskPolicy
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryType
 import kotlin.math.max
@@ -36,6 +37,8 @@ object HyperTrajectoryReleaseEvaluator {
         val establishedDevOverrideMgdl: Double = 0.0,
         val deepDevOverrideMgdl: Double = 0.0,
         val behavioralRisk: BehavioralRiskPolicy? = null,
+        val mealAbsorptionPhase: MealAbsorptionPhase = MealAbsorptionPhase.NONE,
+        val gapPrevMgdl: Double? = null,
     )
 
     fun evaluate(input: Input): HyperTrajectoryReleaseResult {
@@ -54,6 +57,8 @@ object HyperTrajectoryReleaseEvaluator {
                 trajectoryType = input.trajectoryType,
                 establishedDevOverrideMgdl = input.establishedDevOverrideMgdl,
                 deepDevOverrideMgdl = input.deepDevOverrideMgdl,
+                mealAbsorptionPhase = input.mealAbsorptionPhase,
+                gapPrevMgdl = input.gapPrevMgdl,
             ),
         )
 
@@ -95,7 +100,11 @@ object HyperTrajectoryReleaseEvaluator {
             input.shortAvgDeltaMgdlPer5,
             classification.plateauSustain,
         )
-        val absorptionOffset = absorptionOffsetMgdl(effectiveTier, classification.plateauSustain)
+        val mealRising = input.mealAbsorptionPhase.forcesHtrRise && input.deltaMgdlPer5 > 0.0
+        val absorptionOffset = absorptionOffsetMgdl(
+            effectiveTier,
+            classification.plateauSustain && !mealRising,
+        )
         val smbBaseU = smbBaseU(input.tdd24hU)
         val projectionLead = max(0.0, input.bestTerminalMgdl - input.bgMgdl)
         var projectionFactor = (0.35 + projectionLead / 55.0).coerceIn(0.65, 1.55)
@@ -105,7 +114,7 @@ object HyperTrajectoryReleaseEvaluator {
         val riseFactor = riseUrgencyFactor(input.deltaMgdlPer5, input.shortAvgDeltaMgdlPer5)
 
         var smbFloorU = smbBaseU * tierWeight * projectionFactor * riseFactor
-        smbFloorU *= absorptionDoseFactor(effectiveTier, classification.plateauSustain)
+        smbFloorU *= absorptionDoseFactor(effectiveTier, classification.plateauSustain && !mealRising)
         if (classification.plateauSustain) {
             smbFloorU *= plateauDwellUrgencyFactor(input.dwellAboveHighBgMinutes)
             smbFloorU = max(
@@ -126,6 +135,12 @@ object HyperTrajectoryReleaseEvaluator {
         }
         if (risk != null && risk.smbFloorCapU.isFinite()) {
             smbFloorU = min(smbFloorU, risk.smbFloorCapU)
+        }
+        if (input.mealAbsorptionPhase == MealAbsorptionPhase.SECOND_WAVE && input.deltaMgdlPer5 > 0.0) {
+            smbFloorU = max(smbFloorU, 1.5)
+        }
+        if (input.mealAbsorptionPhase == MealAbsorptionPhase.FIRST_WAVE && input.deltaMgdlPer5 >= 2.5) {
+            smbFloorU = max(smbFloorU, 1.2)
         }
         val iobHeadroom = max(0.0, input.maxIobU - input.iobU)
         smbFloorU = minOf(smbFloorU, input.maxSmbEffectiveU.coerceAtLeast(0.0), iobHeadroom)

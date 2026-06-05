@@ -64,6 +64,14 @@ object ScenarioProjectionEngine {
             applyContextSmbLayer(bestRaw, input.bgNowMgdl, ctx.contextSmbFactor, contributors)
         }
         blendTowardTarget(bestRaw, input.bgNowMgdl, ctx.targetBgMgdl, ctx.trajectoryType, contributors)
+        if (ctx.mealAbsorptionMemoryActive || ctx.mealAbsorptionPhase.isActive) {
+            applyMealAbsorptionTerminalFloor(
+                bestRaw,
+                input.bgNowMgdl,
+                ctx,
+                contributors,
+            )
+        }
 
         return ScenarioProjectionPair(
             clinicalFloor = ScenarioProjectionCurve.fromRawPoints(ScenarioProjectionKind.CLINICAL_FLOOR, floorRaw),
@@ -120,6 +128,32 @@ object ScenarioProjectionEngine {
                 ),
             )
         }
+    }
+
+    private fun applyMealAbsorptionTerminalFloor(
+        bestRaw: MutableList<Double>,
+        bg: Double,
+        ctx: ScenarioProjectionContext,
+        contributors: MutableList<ScenarioContributor>,
+    ) {
+        val floorAbove = ctx.mealAbsorptionBestTFloorAboveBgMgdl ?: return
+        if (!floorAbove.isFinite() || floorAbove <= 0.0) return
+        val floorTerminal = bg + floorAbove
+        val before = bestRaw.last()
+        if (before >= floorTerminal) return
+        for (i in bestRaw.indices) {
+            if (bestRaw[i] < floorTerminal) {
+                bestRaw[i] = floorTerminal
+            }
+        }
+        contributors.add(
+            ScenarioContributor(
+                id = ScenarioContributorId.PHYSIOLOGICAL_PHASE,
+                summary = "Meal absorption bestT floor +${floorAbove.toInt()} mg/dL " +
+                    "phase=${ctx.mealAbsorptionPhase.name}",
+                terminalDeltaMgdl = bestRaw.last() - before,
+            ),
+        )
     }
 
     private fun applyPhysiologicalPhaseLayer(

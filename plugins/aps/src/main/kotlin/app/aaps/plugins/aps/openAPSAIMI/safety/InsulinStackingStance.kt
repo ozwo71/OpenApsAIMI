@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.safety
 
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import kotlin.math.max
 import kotlin.math.min
 
@@ -14,6 +15,9 @@ object InsulinStackingStance {
     /** Above this rise (mg/dL/5m or short-avg), meal context bypasses surveillance so SMB stays aligned with carb absorption. */
     private const val MEAL_RISE_DELTA_BYPASS = 2.0
     private const val MEAL_RISE_SHORTAVG_BYPASS = 2.5
+    private const val SECOND_WAVE_DELTA_BYPASS = 1.2
+    private const val INTER_WAVE_SMB_MULT = 0.65
+    private const val INTER_WAVE_SMB_CAP_U = 0.55
 
     /**
      * OpenAPS / temp-target artifacts can yield nonsensical eventual BG (e.g. 400+ mg/dL).
@@ -103,6 +107,7 @@ object InsulinStackingStance {
         enabled: Boolean,
         mealPriorityContext: Boolean = false,
         endogenousCounterRegulatory: Boolean = false,
+        mealAbsorptionPhase: MealAbsorptionPhase = MealAbsorptionPhase.NONE,
     ): Evaluation {
         fun active(reason: String?) = Evaluation(
             kind = Kind.CORRECTION_ACTIVE,
@@ -116,9 +121,19 @@ object InsulinStackingStance {
         if (!enabled || isExplicitUserAction || !bg.isFinite() || !targetBg.isFinite()) {
             return active("disabled_explicit_or_invalid_input")
         }
+        if (!endogenousCounterRegulatory && mealAbsorptionPhase.bypassesIobSurveillance) {
+            return active("meal_absorption_${mealAbsorptionPhase.name.lowercase()}")
+        }
         if (mealPriorityContext &&
             !endogenousCounterRegulatory &&
-            (delta >= MEAL_RISE_DELTA_BYPASS || shortAvgDelta >= MEAL_RISE_SHORTAVG_BYPASS)
+            (
+                delta >= MEAL_RISE_DELTA_BYPASS ||
+                    shortAvgDelta >= MEAL_RISE_SHORTAVG_BYPASS ||
+                    (
+                        mealAbsorptionPhase == MealAbsorptionPhase.SECOND_WAVE &&
+                            delta >= SECOND_WAVE_DELTA_BYPASS
+                        )
+                )
         ) {
             return active("meal_absorption_rise_priority")
         }
@@ -168,8 +183,8 @@ object InsulinStackingStance {
             return active("no_stacking_prediction_signal")
         }
 
-        val mult = 0.32
-        val cap = 0.38
+        val mult = if (mealAbsorptionPhase.attenuatesIobSurveillance) INTER_WAVE_SMB_MULT else 0.32
+        val cap = if (mealAbsorptionPhase.attenuatesIobSurveillance) INTER_WAVE_SMB_CAP_U else 0.38
         val summary = buildString {
             append("SURVEILLANCE_IOB | ")
             append("risk=stacked_IOB+predicted_drop | ")

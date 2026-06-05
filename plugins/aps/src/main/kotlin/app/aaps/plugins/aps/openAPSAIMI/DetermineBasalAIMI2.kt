@@ -93,6 +93,9 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioPhaseFusion
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.EndogenousBasalBridgePolicy
 import app.aaps.plugins.aps.openAPSAIMI.physio.EndogenousPhaseHysteresis
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionMemory
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoGuard
@@ -194,6 +197,21 @@ internal data class AimiDecisionContext(
         var hyper_trajectory_release: HyperTrajectoryReleaseExport? = null,
         /** Physiological phase + behavioral risk policy (HTR / MPC / scenario) */
         var physiological_phase: PhysiologicalPhaseExport? = null,
+        /** Unified meal absorption belief + phase (IOB / HTR / SMB priority) */
+        var meal_absorption_phase: MealAbsorptionPhaseExport? = null,
+    )
+
+    data class MealAbsorptionPhaseExport(
+        val phase: String,
+        val belief: Double,
+        val reason: String,
+        val memory_active: Boolean,
+        val wave_count: Int,
+        val meal_delivery_priority: Boolean,
+        val chrono_prior: Double,
+        val kinetic_score: Double,
+        val trajectory_score: Double,
+        val physio_score: Double,
     )
 
     data class PhysiologicalPhaseExport(
@@ -436,6 +454,20 @@ internal data class AimiDecisionContext(
                 pJson.put("physio_smb_factor_fused", p.physio_smb_factor_fused ?: org.json.JSONObject.NULL)
                 pJson.put("physio_phase_source", p.physio_phase_source ?: org.json.JSONObject.NULL)
                 adj.put("physiological_phase", pJson)
+            }
+            adjustments.meal_absorption_phase?.let { m ->
+                val mJson = org.json.JSONObject()
+                mJson.put("phase", m.phase)
+                mJson.put("belief", m.belief)
+                mJson.put("reason", m.reason)
+                mJson.put("memory_active", m.memory_active)
+                mJson.put("wave_count", m.wave_count)
+                mJson.put("meal_delivery_priority", m.meal_delivery_priority)
+                mJson.put("chrono_prior", m.chrono_prior)
+                mJson.put("kinetic_score", m.kinetic_score)
+                mJson.put("trajectory_score", m.trajectory_score)
+                mJson.put("physio_score", m.physio_score)
+                adj.put("meal_absorption_phase", mJson)
             }
             json.put("adjustments", adj)
 
@@ -1279,6 +1311,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastIobSurveillanceExport = null
         lastHyperTrajectoryRelease = null
         lastPhysiologicalPhaseOutput = null
+        lastMealAbsorptionOutput = null
         EndogenousPhaseHysteresis.reset()
         pendingTrajSpiralBasal = null
         val decisionCtx = AimiDecisionContext(
@@ -2343,6 +2376,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 trajectoryType = trajectoryGuard.getLastAnalysis()?.classification,
                 establishedDevOverrideMgdl = htrPrefs.establishedDevOverrideMgdl,
                 deepDevOverrideMgdl = htrPrefs.deepDevOverrideMgdl,
+                mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
+                gapPrevMgdl = MealAbsorptionMemory.lastGapMgdl,
             ),
         )
     }
@@ -2424,6 +2459,76 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return fused.multipliers
     }
 
+    private fun refreshMealAbsorptionPhase(
+        combinedDelta: Float,
+        stepsLast15m: Int,
+        heartRateBpm: Int,
+        restingHeartRateBpm: Int,
+        mealContext: MealSafetyContext,
+        lastBolusTimeMs: Long?,
+        nowMs: Long,
+    ): MealAbsorptionPhaseEngine.Output {
+        val scenario = lastScenarioProjection
+        val floorT = scenario?.clinicalFloor?.terminalMgdl ?: bg
+        val bestT = scenario?.scenarioBest?.terminalMgdl ?: bg
+        val lateFatRise = isLateFatProteinRise(
+            bg = bg,
+            predictedBg = predictedBg.toDouble(),
+            delta = delta.toDouble(),
+            shortAvgDelta = shortAvgDelta.toDouble(),
+            longAvgDelta = longAvgDelta.toDouble(),
+            iob = iob.toDouble(),
+            cob = cob.toDouble(),
+            maxSMB = maxSMB,
+            lastBolusTimeMs = lastBolusTimeMs,
+            mealFlags = MealFlags(
+                mealTime = mealTime,
+                bfastTime = bfastTime,
+                lunchTime = lunchTime,
+                dinnerTime = dinnerTime,
+                highCarbTime = highCarbTime,
+            ),
+            nowMs = nowMs,
+        )
+        val hoursSinceBolus = lastBolusTimeMs?.let { (nowMs - it) / 3_600_000.0 }
+        val output = MealAbsorptionPhaseEngine.evaluate(
+            MealAbsorptionPhaseEngine.Input(
+                bgMgdl = bg,
+                targetBgMgdl = targetBg.toDouble(),
+                highBgPreferenceMgdl = preferences.get(DoubleKey.OApsAIMIHighBg),
+                deltaMgdlPer5 = delta.toDouble(),
+                shortAvgDeltaMgdlPer5 = shortAvgDelta.toDouble(),
+                combinedDeltaMgdlPer5 = combinedDelta.toDouble(),
+                deltaPrevMgdlPer5 = MealAbsorptionMemory.lastDeltaMgdlPer5,
+                mealCobG = cob.toDouble(),
+                hourOfDay = hourOfDay,
+                iobU = iob.toDouble(),
+                maxIobU = maxIob,
+                bestTerminalMgdl = bestT,
+                floorTerminalMgdl = floorT,
+                gapPrevMgdl = MealAbsorptionMemory.lastGapMgdl,
+                heartRateBpm = heartRateBpm,
+                restingHeartRateBpm = restingHeartRateBpm,
+                stepsLast15m = stepsLast15m,
+                uamConfidence = AimiUamHandler.confidenceOrZero(),
+                mealIntent = mealContext.hasMealIntent,
+                physiologicalPhase = lastPhysiologicalPhaseOutput?.phase ?: PhysiologicalPhase.OFF,
+                estimatedRa = continuousStateEstimator.getLastRa().takeIf { it.isFinite() && it > 0.0 },
+                hoursSinceBolus = hoursSinceBolus,
+                lateFatProteinRise = lateFatRise,
+                nowMs = nowMs,
+            ),
+        )
+        lastMealAbsorptionOutput = output
+        if (output.phase.isActive) {
+            consoleLog.add(
+                "🍽️ MEAL_ABSORPTION: ${output.phase.name} B=${"%.2f".format(output.belief)} " +
+                    "pri=${output.mealDeliveryPriority} waves=${output.waveCount} (${output.reason})",
+            )
+        }
+        return output
+    }
+
     private fun physiologicalPhaseExport(): AimiDecisionContext.PhysiologicalPhaseExport? {
         val out = lastPhysiologicalPhaseOutput ?: return null
         val policy = out.policy
@@ -2440,6 +2545,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             smb_floor_cap_u = capU,
             physio_smb_factor_fused = fused?.smbFactor,
             physio_phase_source = fused?.source,
+        )
+    }
+
+    private fun mealAbsorptionPhaseExport(): AimiDecisionContext.MealAbsorptionPhaseExport? {
+        val out = lastMealAbsorptionOutput ?: return null
+        return AimiDecisionContext.MealAbsorptionPhaseExport(
+            phase = out.phase.name,
+            belief = out.belief,
+            reason = out.reason,
+            memory_active = out.memoryActive,
+            wave_count = out.waveCount,
+            meal_delivery_priority = out.mealDeliveryPriority,
+            chrono_prior = out.chronoPrior,
+            kinetic_score = out.kineticScore,
+            trajectory_score = out.trajectoryScore,
+            physio_score = out.physioScore,
         )
     }
 
@@ -2477,6 +2598,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             updateHyperDwellAboveHighBgClock()
         }
         val isNight = hourOfDay >= 23 || hourOfDay < 6
+        val physioOut = lastPhysiologicalPhaseOutput
+        val mealOut = lastMealAbsorptionOutput
+        val effectiveRisk = if (physioOut != null && mealOut != null) {
+            BehavioralRiskPolicy.effectiveForHtr(
+                physiologicalPhase = physioOut.phase,
+                mealAbsorptionPhase = mealOut.phase,
+                confidence = physioOut.confidence,
+                reason = physioOut.policy.reason,
+            )
+        } else {
+            physioOut?.policy
+        }
         return HyperTrajectoryReleaseEvaluator.evaluate(
             HyperTrajectoryReleaseEvaluator.Input(
                 enabled = htrPrefs.masterEnabled,
@@ -2502,7 +2635,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 mealCobG = cob.toDouble(),
                 establishedDevOverrideMgdl = htrPrefs.establishedDevOverrideMgdl,
                 deepDevOverrideMgdl = htrPrefs.deepDevOverrideMgdl,
-                behavioralRisk = lastPhysiologicalPhaseOutput?.policy,
+                behavioralRisk = effectiveRisk,
+                mealAbsorptionPhase = mealOut?.phase ?: MealAbsorptionPhase.NONE,
+                gapPrevMgdl = MealAbsorptionMemory.lastGapMgdl,
             ),
         )
     }
@@ -2630,6 +2765,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 heartRateBpm = snapshot.hrNow,
                 restingHeartRateBpm = snapshot.rhrResting,
                 basePhysioMultipliers = lastBasePhysioMultipliers,
+            )
+            refreshMealAbsorptionPhase(
+                combinedDelta = combinedDelta,
+                stepsLast15m = snapshot.stepsLast15m,
+                heartRateBpm = snapshot.hrNow,
+                restingHeartRateBpm = snapshot.rhrResting,
+                mealContext = buildMealSafetyContext(isExplicitAdvisorRun = false, iobData = ctx.iobData),
+                lastBolusTimeMs = ctx.iobData.lastBolusTime.takeIf { it > 0L },
+                nowMs = dateUtil.now(),
             )
             val physioPolicy = lastPhysiologicalPhaseOutput?.policy
             val htrClassification = classifyHyperSeverityForTick(
@@ -4150,6 +4294,49 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 )
             }
 
+            lastMealAbsorptionOutput?.phase?.isActive == true &&
+                (
+                    lastMealAbsorptionOutput?.phase == MealAbsorptionPhase.FIRST_WAVE ||
+                        lastMealAbsorptionOutput?.phase == MealAbsorptionPhase.SECOND_WAVE ||
+                        lastMealAbsorptionOutput?.phase == MealAbsorptionPhase.INTER_WAVE ||
+                        lastMealAbsorptionOutput?.phase == MealAbsorptionPhase.PEAK_CORRECTION
+                    ) -> {
+                val runTime = MealAbsorptionMemory.lastActiveAtMs.takeIf { it > 0L }?.let {
+                    ((dateUtil.now() - it) / 60_000L).toInt().coerceAtLeast(0)
+                } ?: listOf(mealruntime, lunchruntime, dinnerruntime, highCarbrunTime, bfastruntime, snackrunTime)
+                    .maxOrNull() ?: 0
+                val target = targetBg
+                val rocketStart = delta > 5.0f || bg > targetBg + 40
+                val safeMax = if (rocketStart) profile.max_basal else if (mealModesMaxBasal > 0) mealModesMaxBasal else profileCurrentBasal * 2.0
+                val boostedRate = adjustBasalForMealHyper(
+                    suggestedBasalUph = profileCurrentBasal,
+                    bg = bg,
+                    targetBg = target,
+                    delta = delta.toDouble(),
+                    shortAvgDelta = shortAvgDelta.toDouble(),
+                    isMealModeActive = true,
+                    minutesSinceMealStart = runTime,
+                    mealMaxBasalUph = safeMax,
+                )
+                val optionalRate = if (boostedRate > profileCurrentBasal * 1.05) {
+                    calculateRate(
+                        basal,
+                        profileCurrentBasal,
+                        boostedRate / profileCurrentBasal,
+                        "Meal absorption ${lastMealAbsorptionOutput?.phase?.name} ($runTime m)",
+                        ctx.currentTemp,
+                        rT,
+                    )
+                } else {
+                    null
+                }
+                consoleLog.add(
+                    "🍽️ MEAL_ABSORPTION_BASAL: phase=${lastMealAbsorptionOutput?.phase?.name} " +
+                        "rate=${optionalRate?.let { r -> "%.2f".format(r) } ?: "skip"}",
+                )
+                AimiMealHyperBasalBoostOutcome.ContinueWithOptionalRate(optionalRate)
+            }
+
             lastPhysiologicalPhaseOutput?.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY &&
                 cob < 1.0f &&
                 estimatedCarbs < 1.0 -> {
@@ -5500,6 +5687,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.scenario_projection = lastScenarioProjection?.toDecisionContextExport()
         decisionCtx.adjustments.hyper_trajectory_release = lastHyperTrajectoryRelease?.toDecisionContextExport()
         decisionCtx.adjustments.physiological_phase = physiologicalPhaseExport()
+        decisionCtx.adjustments.meal_absorption_phase = mealAbsorptionPhaseExport()
 
         val medicalJson = decisionCtx.toMedicalJson()
         consoleLog.add("AIMI_SNAPSHOT: $medicalJson")
@@ -6123,6 +6311,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             physioMultipliers,
         )
         val phasePolicy = preScenarioFused.phaseOutput.policy
+        val nowMs = dateUtil.now()
+        val mealMemoryActive = MealAbsorptionMemory.isActive(nowMs)
+        val mealHighBand = HyperTrajectoryHypoCredibility.highBgBandMgdl(
+            targetBg.toDouble(),
+            preferences.get(DoubleKey.OApsAIMIHighBg),
+        )
+        val mealBestTFloorAbove = if (mealMemoryActive) {
+            min(mealHighBand * 0.35, 55.0)
+        } else {
+            null
+        }
         val scenarioCtx = ScenarioProjectionContext(
             mealContext = mealContext,
             effectiveCobG = effectiveCob,
@@ -6138,6 +6337,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             physiologicalPhase = phasePolicy.phase,
             suppressMealLikeUam = phasePolicy.suppressMealLikeScenario,
             scenarioBestCapAboveBgMgdl = phasePolicy.capScenarioBestAboveBgMgdl,
+            mealAbsorptionPhase = MealAbsorptionMemory.lastPhase,
+            mealAbsorptionMemoryActive = mealMemoryActive,
+            mealAbsorptionBestTFloorAboveBgMgdl = mealBestTFloorAbove,
         )
         val scenario = ScenarioProjectionEngine.build(
             ScenarioProjectionInput(
@@ -6155,6 +6357,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             heartRateBpm = heartRateBpm,
             restingHeartRateBpm = restingHeartRateBpm,
             basePhysioMultipliers = physioMultipliers,
+        )
+        refreshMealAbsorptionPhase(
+            combinedDelta = combinedDelta,
+            stepsLast15m = stepsLast15m,
+            heartRateBpm = heartRateBpm,
+            restingHeartRateBpm = restingHeartRateBpm,
+            mealContext = mealContext,
+            lastBolusTimeMs = iobData.lastBolusTime.takeIf { it > 0L },
+            nowMs = nowMs,
         )
         val cappedBest = scenario.scenarioBest.terminalMgdl
         this.predictedBg = cappedBest.toFloat()
@@ -6231,6 +6442,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             delta = delta,
             mealContext = mealContext,
             projection = scenario,
+            mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
         )
         val lgsTh = HypoThresholdMath.computeHypoThreshold(
             safetyTerminals.compositeMinMgdl,
@@ -6431,6 +6643,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastScenarioProjection: ScenarioProjectionPair? = null
     private var lastHyperTrajectoryRelease: HyperTrajectoryReleaseResult? = null
     private var lastPhysiologicalPhaseOutput: PhysiologicalPhaseClassifier.Output? = null
+    private var lastMealAbsorptionOutput: MealAbsorptionPhaseEngine.Output? = null
     private var lastBasePhysioMultipliers: PhysioMultipliersMTR = PhysioMultipliersMTR.NEUTRAL
     private var lastFusedPhysioMultipliers: PhysioMultipliersMTR? = null
     private var lastScenarioBestCappedForPhysio: Boolean = false
@@ -7973,12 +8186,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastDecisionSource = decisionSource
         lastSmbProposed = effectiveProposed
         val uamConfidence = AimiUamHandler.confidenceOrZero()
-        val mealPriorityContext =
+        val mealAbsorption = lastMealAbsorptionOutput
+        val mealDeliveryPriority = !isExplicitUserAction &&
+            (mealAbsorption?.mealDeliveryPriority == true)
+        val legacyMealPriority =
             !isExplicitUserAction &&
                 (isMealActive || mealData.mealCOB >= 6.0 || uamConfidence >= 0.45) &&
                 (this.bg >= 145.0) &&
                 (this.delta.toDouble() >= 1.8 || this.shortAvgDelta.toDouble() >= 1.5) &&
                 (this.iob.toDouble() < this.maxIob * 0.75)
+        val mealPriorityContext = mealDeliveryPriority || legacyMealPriority
         val highBgBandForHtr = HyperTrajectoryHypoCredibility.highBgBandMgdl(
             targetBg.toDouble(),
             preferences.get(DoubleKey.OApsAIMIHighBg),
@@ -7994,7 +8211,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog.add(
                 "🍽️ MEAL_PRIORITY_CONTEXT ON (BG=${"%.0f".format(this.bg)} Δ=${"%.1f".format(this.delta)} " +
                     "sΔ=${"%.1f".format(this.shortAvgDelta)} COB=${"%.1f".format(mealData.mealCOB)} " +
-                    "UAM=${"%.2f".format(uamConfidence)} IOB=${"%.2f".format(this.iob)}/${"%.2f".format(this.maxIob)})"
+                    "UAM=${"%.2f".format(uamConfidence)} phase=${mealAbsorption?.phase?.name ?: "legacy"} " +
+                    "IOB=${"%.2f".format(this.iob)}/${"%.2f".format(this.maxIob)})"
             )
         }
         if (hyperTrajectoryPriorityContext && !mealPriorityContext) {
@@ -8031,6 +8249,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             enabled = preferences.get(BooleanKey.OApsAIMIIobSurveillanceGuard),
             mealPriorityContext = smbDeliveryPriorityContext,
             endogenousCounterRegulatory = endogenousCounterRegulatory,
+            mealAbsorptionPhase = mealAbsorption?.phase ?: MealAbsorptionPhase.NONE,
         )
         var iobSurveillanceSuppressRedCarpet = stackingEval.suppressRedCarpetRestore
 

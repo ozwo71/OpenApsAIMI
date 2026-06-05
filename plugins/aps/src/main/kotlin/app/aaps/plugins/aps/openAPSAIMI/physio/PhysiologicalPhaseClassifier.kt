@@ -77,7 +77,7 @@ object PhysiologicalPhaseClassifier {
             return out(PhysiologicalPhase.MEAL_UNDECLARED, 0.84, "mealDominant Δ/proj")
         }
 
-        if (isStressCortisol(input)) {
+        if (isStressCortisol(input) && !MealAbsorptionMemory.isActive(System.currentTimeMillis())) {
             return out(PhysiologicalPhase.STRESS_CORTISOL, 0.82, "stress Δ+HR COB=0")
         }
 
@@ -226,6 +226,7 @@ object PhysiologicalPhaseClassifier {
 
     internal fun isStressCortisol(input: Input): Boolean {
         if (input.mealCobG >= 1.0) return false
+        if (MealAbsorptionMemory.isActive(System.currentTimeMillis())) return false
         val hrElevated = input.heartRateBpm > input.restingHeartRateBpm + 12
         val acute = input.deltaMgdlPer5 >= 4.0 || input.combinedDeltaMgdlPer5 >= 4.5
         return hrElevated && acute

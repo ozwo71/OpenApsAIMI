@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.risk
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionContext
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionEngine
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionPair
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.safety.MealSafetyContext
 import app.aaps.plugins.aps.openAPSAIMI.safety.PredictiveHypoConstants
 
@@ -59,11 +60,12 @@ object SafetyPredictionTerminalsResolver {
         delta: Float,
         mealContext: MealSafetyContext,
         projection: ScenarioProjectionPair,
+        mealAbsorptionPhase: MealAbsorptionPhase = MealAbsorptionPhase.NONE,
     ): SafetyPredictionTerminals {
         val floor = projection.clinicalFloor
         val best = projection.scenarioBest
         val scenarioCtx = ScenarioProjectionContext(mealContext = mealContext)
-        val mealRiseConfirmed = isMealRiseConfirmed(bg, delta, mealContext) ||
+        val mealRiseConfirmed = isMealRiseConfirmed(bg, delta, mealContext, mealAbsorptionPhase) ||
             ScenarioProjectionEngine.isMealRiseConfirmed(bg = bg, delta = delta, ctx = scenarioCtx)
         val floorPred = minOf(floor.pathMinMgdl, floor.terminalMgdl)
         val (adjPred, adjEventual) = adjustTerminals(
@@ -92,8 +94,10 @@ object SafetyPredictionTerminalsResolver {
         bg: Double,
         delta: Float,
         mealContext: MealSafetyContext,
+        mealAbsorptionPhase: MealAbsorptionPhase = MealAbsorptionPhase.NONE,
     ): Boolean =
-        mealContext.hasMealIntent ||
+        mealAbsorptionPhase.isActive ||
+            mealContext.hasMealIntent ||
             (delta >= PredictiveHypoConstants.RISING_MODERATE_DELTA.toFloat() && bg >= 90.0)
 
     internal fun adjustTerminals(

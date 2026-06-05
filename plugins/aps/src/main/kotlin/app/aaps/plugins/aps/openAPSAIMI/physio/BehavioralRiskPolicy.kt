@@ -23,6 +23,24 @@ data class BehavioralRiskPolicy(
             phase.isEndogenousRisk
 
     companion object {
+        fun effectiveForHtr(
+            physiologicalPhase: PhysiologicalPhase,
+            mealAbsorptionPhase: MealAbsorptionPhase,
+            confidence: Double,
+            reason: String,
+        ): BehavioralRiskPolicy {
+            if (mealAbsorptionPhase.usesMealHtrPolicy &&
+                physiologicalPhase == PhysiologicalPhase.STRESS_CORTISOL
+            ) {
+                return forPhase(
+                    PhysiologicalPhase.MEAL_UNDECLARED,
+                    confidence,
+                    "meal absorption overrides stress: $reason",
+                )
+            }
+            return forPhase(physiologicalPhase, confidence, reason)
+        }
+
         fun forPhase(phase: PhysiologicalPhase, confidence: Double, reason: String): BehavioralRiskPolicy =
             when (phase) {
                 PhysiologicalPhase.OFF -> BehavioralRiskPolicy(

@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.release
 
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryType
 import kotlin.math.max
 import kotlin.math.min
@@ -23,6 +24,8 @@ object HyperSeverityClassifier {
         val trajectoryType: TrajectoryType?,
         val establishedDevOverrideMgdl: Double = 0.0,
         val deepDevOverrideMgdl: Double = 0.0,
+        val mealAbsorptionPhase: MealAbsorptionPhase = MealAbsorptionPhase.NONE,
+        val gapPrevMgdl: Double? = null,
     )
 
     data class Output(
@@ -57,9 +60,12 @@ object HyperSeverityClassifier {
         val projectedDev = input.bestTerminalMgdl - target
         val gap = input.bestTerminalMgdl - input.floorTerminalMgdl
 
-        val riseActive = input.deltaMgdlPer5 >= 1.8 ||
+        var riseActive = input.deltaMgdlPer5 >= 1.8 ||
             input.shortAvgDeltaMgdlPer5 >= 1.5 ||
             input.combinedDeltaMgdlPer5 >= 3.0
+        if (input.mealAbsorptionPhase.forcesHtrRise) {
+            riseActive = true
+        }
 
         val gapMin = gapMinMgdl(input.tdd24hU)
         val projectionLeading = input.bestTerminalMgdl >= input.bgMgdl + highBand * 0.15
@@ -81,7 +87,11 @@ object HyperSeverityClassifier {
 
         val projectionQuiet = !riseActive && !projectionHyper
         val sustainedHyper = dev >= establishedDev || input.dwellAboveHighBgMinutes >= 30
-        val plateauSustain = sustainedHyper && projectionQuiet
+        val gapWidening = input.gapPrevMgdl != null && gap > input.gapPrevMgdl + 8.0
+        val suppressPlateau = input.mealAbsorptionPhase.forcesHtrRise ||
+            input.mealAbsorptionPhase == MealAbsorptionPhase.PEAK_CORRECTION ||
+            (input.mealAbsorptionPhase.isActive && gapWidening)
+        val plateauSustain = sustainedHyper && projectionQuiet && !suppressPlateau
 
         var tier = when {
             plateauSustain -> HyperSeverityTier.ESTABLISHED
