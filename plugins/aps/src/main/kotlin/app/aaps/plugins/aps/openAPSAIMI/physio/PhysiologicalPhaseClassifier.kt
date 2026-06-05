@@ -57,8 +57,19 @@ object PhysiologicalPhaseClassifier {
             return dawnHormonal
         }
 
-        val mealLikeRise = isMealLikeRise(input, highBand, projectionLead)
-        val mealDominantRise = isMealDominantRise(input, highBand, projectionLead)
+        val mealDiscriminantBestT = EndogenousCounterRegulatoryDetector.capBestTerminalForMealDiscriminant(
+            input,
+            highBand,
+            dev,
+        )
+        val mealProjectionLead = mealDiscriminantBestT - input.bgMgdl
+
+        if (EndogenousCounterRegulatoryDetector.isEndogenousRamp(input, highBand, dev, projectionLead)) {
+            return out(PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY, 0.87, "endogenous R_HGP ramp COB=0")
+        }
+
+        val mealLikeRise = isMealLikeRise(input, highBand, mealProjectionLead, mealDiscriminantBestT)
+        val mealDominantRise = isMealDominantRise(input, highBand, mealProjectionLead, mealDiscriminantBestT)
         if (mealLikeRise) {
             return out(PhysiologicalPhase.MEAL_UNDECLARED, 0.88, "mealLike Δ/gap/proj")
         }
@@ -160,28 +171,41 @@ object PhysiologicalPhaseClassifier {
     }
 
     /** Meal-like rise without full gap/projection gate — used to block STRESS during lunch ramps. */
-    internal fun isMealDominantRise(input: Input, highBand: Double, projectionLead: Double): Boolean {
+    internal fun isMealDominantRise(
+        input: Input,
+        highBand: Double,
+        projectionLead: Double,
+        bestTerminalForMeal: Double = input.bestTerminalMgdl,
+    ): Boolean {
         if (input.mealCobG >= 1.0) return false
         val fastRise = input.deltaMgdlPer5 >= 2.5 ||
             input.shortAvgDeltaMgdlPer5 >= 2.2 ||
             input.combinedDeltaMgdlPer5 >= 3.2
         if (!fastRise) return false
         return projectionLead >= highBand * 0.85 ||
-            input.bestTerminalMgdl >= input.bgMgdl + highBand * 0.55
+            bestTerminalForMeal >= input.bgMgdl + highBand * 0.55
     }
 
-    internal fun isMealLikeRise(input: Input, highBand: Double, projectionLead: Double): Boolean {
+    internal fun isMealLikeRise(
+        input: Input,
+        highBand: Double,
+        projectionLead: Double,
+        bestTerminalForMeal: Double = input.bestTerminalMgdl,
+    ): Boolean {
         if (input.mealCobG >= 1.0) return false
         val fastRise = input.deltaMgdlPer5 >= 2.5 ||
             input.shortAvgDeltaMgdlPer5 >= 2.2 ||
             input.combinedDeltaMgdlPer5 >= 3.2
         val strongProjection = projectionLead >= highBand * 1.1 &&
-            input.bestTerminalMgdl >= input.bgMgdl + highBand * 0.35
-        val gap = input.bestTerminalMgdl - input.floorTerminalMgdl
+            bestTerminalForMeal >= input.bgMgdl + highBand * 0.35
+        val gap = bestTerminalForMeal - input.floorTerminalMgdl
         val gapMin = HyperSeverityClassifier.gapMinMgdl(55.0)
         val projectionHyper = gap >= gapMin && strongProjection
         return fastRise && (strongProjection || projectionHyper)
     }
+
+    fun classifyWithHysteresis(input: Input): Output =
+        EndogenousPhaseHysteresis.stabilize(classify(input))
 
     internal fun isHormonalKinetic(
         input: Input,

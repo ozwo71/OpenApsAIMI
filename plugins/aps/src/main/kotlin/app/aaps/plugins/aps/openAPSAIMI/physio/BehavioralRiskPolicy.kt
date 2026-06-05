@@ -18,7 +18,9 @@ data class BehavioralRiskPolicy(
     val suppressMealLikeScenario: Boolean,
 ) {
     fun capsHtrRelease(): Boolean =
-        phase.isHormonalRisk || phase == PhysiologicalPhase.STRESS_CORTISOL
+        phase.isHormonalRisk ||
+            phase == PhysiologicalPhase.STRESS_CORTISOL ||
+            phase.isEndogenousRisk
 
     companion object {
         fun forPhase(phase: PhysiologicalPhase, confidence: Double, reason: String): BehavioralRiskPolicy =
@@ -48,6 +50,18 @@ data class BehavioralRiskPolicy(
                     extendedDawnGuard = true,
                     mpcInsulinCostMultiplier = 4.0,
                     mpcMaxSmbFraction = 0.45,
+                    suppressMealLikeScenario = true,
+                )
+                PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY -> BehavioralRiskPolicy(
+                    phase = phase,
+                    confidence = confidence,
+                    reason = reason,
+                    maxHtrTier = HyperSeverityTier.OFF,
+                    smbFloorCapU = 0.30,
+                    capScenarioBestAboveBgMgdl = 45.0,
+                    extendedDawnGuard = true,
+                    mpcInsulinCostMultiplier = 3.0,
+                    mpcMaxSmbFraction = 0.25,
                     suppressMealLikeScenario = true,
                 )
                 PhysiologicalPhase.STRESS_CORTISOL -> BehavioralRiskPolicy(

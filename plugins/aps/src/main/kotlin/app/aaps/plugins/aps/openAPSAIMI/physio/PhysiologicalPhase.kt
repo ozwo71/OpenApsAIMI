@@ -12,6 +12,8 @@ enum class PhysiologicalPhase {
     STRESS_CORTISOL,
     MEAL_DECLARED,
     MEAL_UNDECLARED,
+    /** Sustained hepatic / cortisol ramp, COB=0 — basal bridge only, not meal UAM. */
+    ENDOGENOUS_COUNTER_REGULATORY,
     HYPER_INSTALLED,
     ;
 
@@ -19,6 +21,9 @@ enum class PhysiologicalPhase {
         get() = this == DAWN_CORTISOL ||
             this == MALE_CIRCADIAN_HORMONAL ||
             this == FEMALE_CYCLE_HORMONAL
+
+    val isEndogenousRisk: Boolean
+        get() = this == ENDOGENOUS_COUNTER_REGULATORY
 
     val isMealRisk: Boolean
         get() = this == MEAL_DECLARED || this == MEAL_UNDECLARED

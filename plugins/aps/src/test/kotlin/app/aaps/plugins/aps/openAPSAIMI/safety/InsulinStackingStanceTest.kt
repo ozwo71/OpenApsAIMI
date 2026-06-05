@@ -159,6 +159,43 @@ class InsulinStackingStanceTest {
     }
 
     @Test
+    fun `endogenous mode blocks meal priority bypass on moderate rise`() {
+        val bypassed = InsulinStackingStance.evaluate(
+            bg = 129.0,
+            delta = 3.0,
+            shortAvgDelta = 2.5,
+            targetBg = 100.0,
+            iob = 1.5,
+            maxIob = 20.0,
+            eventualBg = 120.0,
+            minPredBg = 115.0,
+            trajectoryEnergy = null,
+            isExplicitUserAction = false,
+            enabled = true,
+            mealPriorityContext = true,
+            endogenousCounterRegulatory = false,
+        )
+        assertEquals("meal_absorption_rise_priority", bypassed.activeReason)
+
+        val endogenous = InsulinStackingStance.evaluate(
+            bg = 129.0,
+            delta = 3.0,
+            shortAvgDelta = 2.5,
+            targetBg = 100.0,
+            iob = 1.5,
+            maxIob = 20.0,
+            eventualBg = 120.0,
+            minPredBg = 115.0,
+            trajectoryEnergy = null,
+            isExplicitUserAction = false,
+            enabled = true,
+            mealPriorityContext = true,
+            endogenousCounterRegulatory = true,
+        )
+        assertEquals("iob_below_floor", endogenous.activeReason)
+    }
+
+    @Test
     fun `sanitize eventual strips hyper numeric artifact for stacking`() {
         assertEquals(null, InsulinStackingStance.sanitizeEventualMgdlForStackingSignals(160.0, 401.0))
         assertEquals(118.0, InsulinStackingStance.sanitizeEventualMgdlForStackingSignals(160.0, 118.0))

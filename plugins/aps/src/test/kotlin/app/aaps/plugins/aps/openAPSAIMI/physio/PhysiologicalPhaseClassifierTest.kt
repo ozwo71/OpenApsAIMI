@@ -124,6 +124,97 @@ class PhysiologicalPhaseClassifierTest {
         assertTrue(htr.reason.contains("physio"))
     }
 
+    /** Field replay 05/06 ~07:31 — UAM bestT inflated, COB=0; dawn hormonal near target, not meal. */
+    @Test
+    fun endogenous_cortisol_ramp_not_meal_undeclared() {
+        val out = PhysiologicalPhaseClassifier.classify(
+            PhysiologicalPhaseClassifier.Input(
+                bgMgdl = 119.0,
+                targetBgMgdl = 115.0,
+                highBgPreferenceMgdl = 140.0,
+                deltaMgdlPer5 = 3.0,
+                shortAvgDeltaMgdlPer5 = 2.5,
+                combinedDeltaMgdlPer5 = 2.8,
+                mealCobG = 0.0,
+                hourOfDay = 7,
+                stepsLast15m = 188,
+                heartRateBpm = 57,
+                restingHeartRateBpm = 62,
+                bestTerminalMgdl = 218.0,
+                floorTerminalMgdl = 100.0,
+                dwellAboveHighBgMinutes = 5,
+                wCycleEnabled = false,
+                wCycleTrackingMode = null,
+                wCyclePhase = null,
+            ),
+        )
+        assertEquals(PhysiologicalPhase.MALE_CIRCADIAN_HORMONAL, out.phase)
+        assertEquals(HyperSeverityTier.OFF, out.policy.maxHtrTier)
+        assertTrue(out.policy.suppressMealLikeScenario)
+        val mealFlip = PhysiologicalPhaseClassifier.classify(
+            PhysiologicalPhaseClassifier.Input(
+                bgMgdl = 127.0,
+                targetBgMgdl = 115.0,
+                highBgPreferenceMgdl = 140.0,
+                deltaMgdlPer5 = 3.0,
+                shortAvgDeltaMgdlPer5 = 2.5,
+                combinedDeltaMgdlPer5 = 2.8,
+                mealCobG = 0.0,
+                hourOfDay = 7,
+                stepsLast15m = 188,
+                heartRateBpm = 57,
+                restingHeartRateBpm = 62,
+                bestTerminalMgdl = 218.0,
+                floorTerminalMgdl = 100.0,
+                dwellAboveHighBgMinutes = 5,
+                wCycleEnabled = false,
+                wCycleTrackingMode = null,
+                wCyclePhase = null,
+            ),
+        )
+        assertEquals(PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY, mealFlip.phase)
+    }
+
+    @Test
+    fun endogenous_hysteresis_blocks_meal_flip() {
+        EndogenousPhaseHysteresis.reset()
+        val dawn = PhysiologicalPhaseClassifier.classifyWithHysteresis(
+            PhysiologicalPhaseClassifier.Input(
+                bgMgdl = 119.0,
+                targetBgMgdl = 115.0,
+                highBgPreferenceMgdl = 140.0,
+                deltaMgdlPer5 = 3.0,
+                shortAvgDeltaMgdlPer5 = 2.5,
+                combinedDeltaMgdlPer5 = 2.8,
+                mealCobG = 0.0,
+                hourOfDay = 7,
+                stepsLast15m = 50,
+                heartRateBpm = 57,
+                restingHeartRateBpm = 62,
+                bestTerminalMgdl = 218.0,
+                floorTerminalMgdl = 100.0,
+                dwellAboveHighBgMinutes = 5,
+                wCycleEnabled = false,
+                wCycleTrackingMode = null,
+                wCyclePhase = null,
+            ),
+        )
+        assertEquals(PhysiologicalPhase.MALE_CIRCADIAN_HORMONAL, dawn.phase)
+        val flipped = PhysiologicalPhaseClassifier.classify(
+            dawnInput(bg = 126.0, delta = 1.0, bestT = 64.0).copy(
+                floorTerminalMgdl = 60.0,
+            ),
+        )
+        assertEquals(PhysiologicalPhase.OFF, flipped.phase)
+        val held = PhysiologicalPhaseClassifier.classifyWithHysteresis(
+            dawnInput(bg = 126.0, delta = 1.0, bestT = 64.0).copy(
+                floorTerminalMgdl = 60.0,
+            ),
+        )
+        assertEquals(PhysiologicalPhase.MALE_CIRCADIAN_HORMONAL, held.phase)
+        EndogenousPhaseHysteresis.reset()
+    }
+
     @Test
     fun scenario_cap_limits_best_terminal() {
         val policy = BehavioralRiskPolicy.forPhase(

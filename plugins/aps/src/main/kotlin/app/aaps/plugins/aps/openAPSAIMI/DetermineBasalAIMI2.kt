@@ -91,6 +91,8 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioPhaseFusion
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
+import app.aaps.plugins.aps.openAPSAIMI.physio.EndogenousBasalBridgePolicy
+import app.aaps.plugins.aps.openAPSAIMI.physio.EndogenousPhaseHysteresis
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoGuard
@@ -1277,6 +1279,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastIobSurveillanceExport = null
         lastHyperTrajectoryRelease = null
         lastPhysiologicalPhaseOutput = null
+        EndogenousPhaseHysteresis.reset()
         pendingTrajSpiralBasal = null
         val decisionCtx = AimiDecisionContext(
             event_id = "evt_${ctx.currentTime}",
@@ -4147,12 +4150,44 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 )
             }
 
+            lastPhysiologicalPhaseOutput?.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY &&
+                cob < 1.0f &&
+                estimatedCarbs < 1.0 -> {
+                val autodriveMaxBasal = preferences.get(DoubleKey.autodriveMaxBasal)
+                val safeMax = if (autodriveMaxBasal > 0.1) autodriveMaxBasal else profile.max_basal
+                val bridge = EndogenousBasalBridgePolicy.computeBridgeRateUph(
+                    bgMgdl = bg.toDouble(),
+                    targetBgMgdl = targetBg,
+                    isfMgdlPerU = profile.sens,
+                    profileBasalUph = profileCurrentBasal,
+                    maxBasalUph = safeMax,
+                )
+                val optionalRate = bridge?.let {
+                    calculateRate(
+                        basal,
+                        profileCurrentBasal,
+                        it / profileCurrentBasal,
+                        "Endogenous basal bridge (R_HGP)",
+                        ctx.currentTemp,
+                        rT,
+                    )
+                }
+                consoleLog.add(
+                    "🌅 ENDOGENOUS_BRIDGE: rate=${optionalRate?.let { r -> "%.2f".format(r) } ?: "skip"} " +
+                        "ISF=${"%.1f".format(profile.sens)} profileBasal=${"%.2f".format(profileCurrentBasal)}",
+                )
+                AimiMealHyperBasalBoostOutcome.ContinueWithOptionalRate(optionalRate)
+            }
+
             run {
                 val aggression = correctionAggressionDecision
                 val htrActive = lastHyperTrajectoryRelease?.active == true
+                val endogenousActive =
+                    lastPhysiologicalPhaseOutput?.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY
                 val allowHyper = aggression?.allowGlobalHyperKicker == true &&
                     (delta >= 0.3 || shortAvgDelta >= 0.2) &&
-                    !htrActive
+                    !htrActive &&
+                    !endogenousActive
                 if (htrActive && aggression?.allowGlobalHyperKicker == true) {
                     consoleLog.add("🚀 HTR: Global Hyper Kicker skipped (trajectory SMB release active)")
                 }
@@ -4267,6 +4302,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ): AimiMealHyperBasalOverlayState {
         val basalBoostApplied = overlayRate != null
         val basalBoostSource: String? = when {
+            overlayRate != null && rT.reason.contains("Endogenous basal bridge") -> "EndogenousBridge"
             overlayRate != null && rT.reason.contains("Global Hyper Kicker") -> "HyperKicker"
             overlayRate != null && rT.reason.contains("Post-Meal Boost") -> "PostMealBoost"
             overlayRate != null && rT.reason.contains("Meal") -> "MealMode"
@@ -7979,6 +8015,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } else {
             rawMinPred
         }
+        val endogenousCounterRegulatory =
+            lastPhysiologicalPhaseOutput?.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY
         val stackingEval = InsulinStackingStance.evaluate(
             bg = this.bg,
             delta = this.delta.toDouble(),
@@ -7991,7 +8029,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             trajectoryEnergy = rT.trajectoryEnergy,
             isExplicitUserAction = isExplicitUserAction,
             enabled = preferences.get(BooleanKey.OApsAIMIIobSurveillanceGuard),
-            mealPriorityContext = smbDeliveryPriorityContext
+            mealPriorityContext = smbDeliveryPriorityContext,
+            endogenousCounterRegulatory = endogenousCounterRegulatory,
         )
         var iobSurveillanceSuppressRedCarpet = stackingEval.suppressRedCarpetRestore
 

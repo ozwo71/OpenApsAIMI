@@ -25,11 +25,14 @@ Deux couches partagent la même **`PhysiologicalPhase`** :
 | `MALE_CIRCADIAN_HORMONAL` | WCycle off ou ménopause, même signature | Idem |
 | `FEMALE_CYCLE_HORMONAL` | WCycle actif, lutéale/ovulation, matin | Idem |
 | `STRESS_CORTISOL` | FC↑, Δ aigu, COB=0 | HTR max **EMERGING**, SMB cap **0,75 U** |
+| `ENDOGENOUS_COUNTER_REGULATORY` | Rampe lente R_HGP / cortisol, COB=0, UAM gonflé sans gap repas | HTR **OFF**, SMB cap **0,30 U**, **basal bridge** uniquement |
 | `MEAL_DECLARED` | COB ≥ 5 g | Pas de restriction |
 | `MEAL_UNDECLARED` | Δ/gap/projection type repas | HTR plein, UAM actif |
 | `HYPER_INSTALLED` | Plateau / tier établi + dwell | HTR `plateauSustain` |
 
-**Priorité :** MEAL_DECLARED → **garde dawn proche cible** (4h–10h) → MEAL_UNDECLARED (`mealLike` puis `mealDominant`) → STRESS → HYPER_INSTALLED → hormonal matin (slowRamp) → OFF.
+**Priorité :** MEAL_DECLARED → **garde dawn proche cible** (4h–10h) → **ENDOGENOUS_COUNTER_REGULATORY** (4h–11h, rampe persistante COB=0) → MEAL_UNDECLARED (`mealLike` puis `mealDominant` avec bestT cap discriminant) → STRESS → HYPER_INSTALLED → hormonal matin (slowRamp) → OFF.
+
+**Hystérésis :** une fois `ENDOGENOUS_COUNTER_REGULATORY` ou phase hormonale matin, la phase est maintenue **4 ticks** contre flip `MEAL_UNDECLARED` / `OFF` (sauf COB≥5).
 
 ---
 
@@ -196,9 +199,24 @@ Logs : `🌅 PHYSIO_FUSE:` (fusion), `🌅 PHYSIO_RISK:` (autodrive).
 
 ## 10. Validation terrain
 
-- Matin ~120, Δ modéré, COB=0 : `MALE_CIRCADIAN` ou `DAWN_CORTISOL`, contributor `PHYSIOLOGICAL_PHASE`, pas de SMB HTR 1,5–2 U.  
+- Matin ~120, Δ modéré (+2 à +3), COB=0, UAM bestT gonflé : `ENDOGENOUS_COUNTER_REGULATORY` (ou hormonal si dev très faible), **pas** `MEAL_UNDECLARED`, pas de SMB HTR 2+ U, basale `Endogenous basal bridge` ≤ ~2× profil.  
 - KFC : `MEAL_UNDECLARED`, UAM contributor présent, HTR actif.  
-- Comparer `best_terminal` scénario avant/après sur JSONL matinal.
+- JSONL : `physiological_phase.phase`, `ENDOGENOUS_BRIDGE`, `iob_surveillance` sans `meal_absorption_rise_priority` en endogène.
+
+---
+
+## 12. ENDOGENOUS_COUNTER_REGULATORY (stress endogène / R_HGP)
+
+**Modèle :** \(dBG/dt \approx R_{HGP}(t) - S \cdot I_{eff}(t)\), COB≈0. Livraison cible : **basale lisse** (fraction 0,25 du déficit naïf sur 90 min), pas de pulse SMB.
+
+| Fichier | Rôle |
+|---------|------|
+| `EndogenousCounterRegulatoryDetector.kt` | Signature rampe + UAM sans gap repas |
+| `EndogenousPhaseHysteresis.kt` | 4 ticks de maintien |
+| `EndogenousBasalBridgePolicy.kt` | Calcul `target_basal_rate_uph` bridge |
+| `InsulinStackingStance.kt` | IOB floor réduit ×0,35 ; pas de bypass meal-priority |
+
+Logs : `🌅 ENDOGENOUS_BRIDGE`, `phase=ENDOGENOUS basal bridge`.
 
 ---
 

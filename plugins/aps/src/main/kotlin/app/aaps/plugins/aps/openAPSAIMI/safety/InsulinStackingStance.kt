@@ -101,7 +101,8 @@ object InsulinStackingStance {
         trajectoryEnergy: Double?,
         isExplicitUserAction: Boolean,
         enabled: Boolean,
-        mealPriorityContext: Boolean = false
+        mealPriorityContext: Boolean = false,
+        endogenousCounterRegulatory: Boolean = false,
     ): Evaluation {
         fun active(reason: String?) = Evaluation(
             kind = Kind.CORRECTION_ACTIVE,
@@ -115,12 +116,19 @@ object InsulinStackingStance {
         if (!enabled || isExplicitUserAction || !bg.isFinite() || !targetBg.isFinite()) {
             return active("disabled_explicit_or_invalid_input")
         }
-        if (mealPriorityContext && (delta >= MEAL_RISE_DELTA_BYPASS || shortAvgDelta >= MEAL_RISE_SHORTAVG_BYPASS)) {
+        if (mealPriorityContext &&
+            !endogenousCounterRegulatory &&
+            (delta >= MEAL_RISE_DELTA_BYPASS || shortAvgDelta >= MEAL_RISE_SHORTAVG_BYPASS)
+        ) {
             return active("meal_absorption_rise_priority")
         }
         val iobSafe = iob.coerceAtLeast(0.0)
         val maxIobSafe = maxIob.coerceAtLeast(0.5)
-        val iobFloor = iobFloorU(maxIob)
+        val iobFloor = if (endogenousCounterRegulatory) {
+            max(1.0, iobFloorU(maxIob) * 0.35)
+        } else {
+            iobFloorU(maxIob)
+        }
         if (iobSafe < iobFloor) {
             return active("iob_below_floor")
         }

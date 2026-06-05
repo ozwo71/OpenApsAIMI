@@ -33,7 +33,7 @@ object PhysioPhaseFusion {
         classifierInput: PhysiologicalPhaseClassifier.Input,
         baseMultipliers: PhysioMultipliersMTR,
     ): FusedPhysioTick {
-        val phaseOutput = PhysiologicalPhaseClassifier.classify(classifierInput)
+        val phaseOutput = PhysiologicalPhaseClassifier.classifyWithHysteresis(classifierInput)
         val fused = applyPhaseToMultipliers(baseMultipliers, phaseOutput.policy)
         return FusedPhysioTick(
             multipliers = fused,
@@ -61,6 +61,12 @@ object PhysioPhaseFusion {
                 react = min(react, 0.90)
                 basal = max(basal, 1.02).coerceAtMost(PhysioMultipliersMTR.BASAL_MAX)
                 detail.append(" | phase=${policy.phase.name} hormonal damp")
+            }
+            policy.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY -> {
+                smb = min(smb, 0.88)
+                react = min(react, 0.88)
+                basal = max(basal, 1.08).coerceAtMost(PhysioMultipliersMTR.BASAL_MAX)
+                detail.append(" | phase=ENDOGENOUS basal bridge")
             }
             policy.phase == PhysiologicalPhase.STRESS_CORTISOL -> {
                 smb = min(smb, 0.94)
