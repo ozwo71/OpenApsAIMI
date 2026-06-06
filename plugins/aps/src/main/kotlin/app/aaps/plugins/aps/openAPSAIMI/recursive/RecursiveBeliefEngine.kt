@@ -119,7 +119,9 @@ object RecursiveBeliefEngine {
         }
         val echo = RecursiveBeliefMemory.echo(tauMin)
         val echoDamp = if (echo > 0.85) 0.9 else 1.0
-        val waveletBoost = if (ctx.behavioralRisk?.capsHtrRelease() == true) {
+        val waveletBoost = if (ctx.behavioralRisk?.capsHtrRelease() == true ||
+            ctx.physiologicalPatterns?.suppressWaveletBoost == true
+        ) {
             0.0
         } else {
             ctx.waveletBands?.let { bands ->

@@ -3,7 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.recursive
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
-/** Verifies §15 adapter registry covers all 96 BeliefLeafId entries. */
+/** Verifies §15 adapter registry covers all 101 BeliefLeafId entries. */
 class BeliefLeafCoverageTest {
 
     @Test
@@ -22,7 +22,7 @@ class BeliefLeafCoverageTest {
         assertThat(BeliefLeafId.MICRO.size + BeliefLeafId.MESO.size +
             BeliefLeafId.MACRO.size + BeliefLeafId.META.size + BeliefLeafId.SHADOW.size)
             .isEqualTo(BeliefLeafId.entries.size)
-        assertThat(BeliefLeafId.entries.size).isAtLeast(96)
+        assertThat(BeliefLeafId.entries.size).isAtLeast(101)
     }
 
     @Test
@@ -44,6 +44,8 @@ class BeliefLeafCoverageTest {
         assertThat(readable.size).isAtLeast(80)
         assertThat(collected.size).isAtLeast(70)
         assertThat(readable.map { it.id }).contains(BeliefLeafId.HTR_RELEASE)
+        assertThat(readable.map { it.id }).contains(BeliefLeafId.PATTERN_RISK)
+        assertThat(readable.map { it.id }).contains(BeliefLeafId.SLEEP_DEBT)
         assertThat(readable.map { it.id }).contains(BeliefLeafId.SHADOW_ML_TRAIN)
         assertThat(collected.map { it.id }).contains(BeliefLeafId.DELTA_NOW)
         assertThat(collected.map { it.id }).contains(BeliefLeafId.SCEN_TRAJ_RISE)

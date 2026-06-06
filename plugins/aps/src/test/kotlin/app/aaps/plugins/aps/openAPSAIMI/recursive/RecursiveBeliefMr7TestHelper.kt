@@ -4,8 +4,13 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.BehavioralRiskPolicy
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioContextMTR
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioStateMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
+import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternId
+import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternReading
+import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperSeverityClassifier
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperSeverityTier
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryReleaseResult
@@ -209,6 +214,10 @@ object RecursiveBeliefMr7TestHelper {
             shadowVisionTriggered = true,
             shadowMlTrainActive = true,
             tuningContextLabel = "AUTO_BALANCE",
+            sleepDebtMinutes = 75.0,
+            physioMtrStateOrdinal = PhysioStateMTR.RECOVERY_NEEDED.ordinal,
+            hrvDeviationZ = -1.3,
+            sleepQualityScore = 0.42,
         )
         val trajectory = TrajectoryAnalysis(
             classification = TrajectoryType.OPEN_DIVERGING,
@@ -280,6 +289,32 @@ object RecursiveBeliefMr7TestHelper {
                 PhysiologicalPhase.STRESS_CORTISOL,
                 0.75,
                 "coverage",
+            ),
+            physioContext = PhysioContextMTR(
+                state = PhysioStateMTR.RECOVERY_NEEDED,
+                confidence = 0.78,
+                poorSleepDetected = true,
+                hrvDepressed = true,
+                hrvDeviationZ = -1.3,
+                features = app.aaps.plugins.aps.openAPSAIMI.physio.PhysioFeaturesMTR(
+                    sleepQualityScore = 0.42,
+                ),
+            ),
+            physiologicalPatterns = PhysiologicalPatternSnapshot(
+                active = listOf(
+                    PhysiologicalPatternReading(
+                        PhysiologicalPatternId.POOR_SLEEP_MORNING_RISE,
+                        0.82,
+                        "coverage",
+                    ),
+                ),
+                dominant = PhysiologicalPatternId.POOR_SLEEP_MORNING_RISE,
+                dominantConfidence = 0.82,
+                suppressMealInterpretation = true,
+                suppressHyperRelease = true,
+                suppressWaveletBoost = true,
+                smbCapU = 0.50,
+                reasonSummary = "POOR_SLEEP_MORNING_RISE@0.82",
             ),
             trajectoryAnalysis = trajectory,
             trajectoryRelevanceScore = 0.75,

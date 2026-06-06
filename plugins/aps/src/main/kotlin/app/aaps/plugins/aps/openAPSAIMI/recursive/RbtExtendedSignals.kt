@@ -57,6 +57,10 @@ data class RbtExtendedSignals(
     val shadowVisionTriggered: Boolean = false,
     val shadowMlTrainActive: Boolean = false,
     val tuningContextLabel: String? = null,
+    val sleepDebtMinutes: Double? = null,
+    val physioMtrStateOrdinal: Int? = null,
+    val hrvDeviationZ: Double? = null,
+    val sleepQualityScore: Double? = null,
 ) {
     companion object {
         val EMPTY = RbtExtendedSignals()

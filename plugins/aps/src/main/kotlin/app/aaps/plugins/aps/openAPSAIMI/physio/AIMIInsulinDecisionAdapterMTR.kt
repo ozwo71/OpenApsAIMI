@@ -84,6 +84,10 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
         return repo.getLastSnapshot()
     }
 
+    /** Semantic physio context (sleep/HRV/state) for RBT pattern catalog and meta leaves. */
+    fun getEffectiveContext(minConfidence: Double = 0.3): PhysioContextMTR =
+        contextStore.getEffectiveContext(minConfidence) ?: PhysioContextMTR.NEUTRAL
+
     fun getLastDecisionTrace(): PhysioDecisionTraceMTR? = lastDecisionTrace
 
     fun setFinalLoopDecisionType(decisionType: String) {

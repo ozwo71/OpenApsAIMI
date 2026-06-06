@@ -18,7 +18,8 @@ object RecursiveBeliefParadox {
         if (s15 != null && s180 != null && s15.urgency > 0.8 && s180.urgency < 0.0) {
             val physioReboundWait = ctx.behavioralRisk?.capsHtrRelease() == true ||
                 ctx.stackingStance?.kind == InsulinStackingStance.Kind.SURVEILLANCE_IOB ||
-                ctx.endogenousCounterRegulatory
+                ctx.endogenousCounterRegulatory ||
+                ctx.physiologicalPatterns?.suppressHyperRelease == true
             out += paradox(
                 BeliefParadoxId.HYPER_VS_CLEARANCE,
                 physioReboundWait,
@@ -70,6 +71,32 @@ object RecursiveBeliefParadox {
             (ctx.wCycleBasalMult ?: 1.0) != 1.0
         ) {
             out += paradox(BeliefParadoxId.WCYCLE_VS_STABLE, false, "SUPPRESS_RELEASE_STABLE_ORBIT")
+        }
+        val patterns = ctx.physiologicalPatterns
+        if (patterns?.suppressHyperRelease == true &&
+            ((ctx.htrResult?.active == true) || (ctx.v3SmbU ?: 0.0) > 0.3)
+        ) {
+            out += paradox(BeliefParadoxId.SLEEP_DEBT_VS_HYPER, true, "PATTERN_HYPER_SUPPRESS")
+        }
+        if (patterns?.suppressMealInterpretation == true &&
+            ctx.mealAbsorption?.mealDeliveryPriority == true
+        ) {
+            out += paradox(BeliefParadoxId.HRV_CRASH_VS_MEAL, true, "PATTERN_MEAL_SUPPRESS")
+        }
+        if (patterns?.suppressHyperRelease == true &&
+            (ctx.correctionAggressionLevel ?: 0.0) > 0.5
+        ) {
+            out += paradox(BeliefParadoxId.RECOVERY_VS_AGGRESS, true, "PATTERN_RECOVERY_CAP")
+        }
+        if (ctx.exerciseLockout &&
+            ((ctx.htrResult?.active == true) || (ctx.v3SmbU ?: 0.0) > 0.5)
+        ) {
+            val suppressed = patterns?.suppressHyperRelease == true
+            out += paradox(
+                BeliefParadoxId.EXERCISE_VS_CORRECTION,
+                suppressed,
+                if (suppressed) "PATTERN_EXERCISE_CAP" else "EXERCISE_LOCKOUT",
+            )
         }
         tensions.filter { it.magnitude > 0.55 }.forEach { t ->
             t.dominantParadoxId?.let { id ->

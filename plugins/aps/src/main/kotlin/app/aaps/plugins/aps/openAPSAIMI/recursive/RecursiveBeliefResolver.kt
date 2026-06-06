@@ -116,12 +116,12 @@ object RecursiveBeliefResolver {
             reasonCodes += "THYROID_GUARD"
         }
         if (paradoxes.any { it.id == BeliefParadoxId.ENDOG_VS_CORRECTION }) {
-            if (ctx.behavioralRisk?.capsHtrRelease() == true) {
+            if (ctx.behavioralRisk?.capsHtrRelease() == true || ctx.physiologicalPatterns?.suppressHyperRelease == true) {
                 releaseAuthority = ReleaseAuthority.NONE
                 reasonCodes += "ENDOG_CAP"
             }
         }
-        if (ctx.behavioralRisk?.capsHtrRelease() == true) {
+        if (ctx.behavioralRisk?.capsHtrRelease() == true || ctx.physiologicalPatterns?.suppressHyperRelease == true) {
             releaseAuthority = ReleaseAuthority.NONE
             reasonCodes += "PHYSIO_RISK_CAP"
         }
@@ -145,10 +145,11 @@ object RecursiveBeliefResolver {
         }
         val v3 = ctx.v3SmbU ?: 0.0
         if (releaseAuthority != ReleaseAuthority.NONE) {
-            val v3Lift = ctx.behavioralRisk
-                ?.takeIf { it.capsHtrRelease() }
-                ?.let { min(v3, it.smbFloorCapU) }
-                ?: v3
+            val patternCap = ctx.physiologicalPatterns?.smbCapU
+            val v3Lift = listOfNotNull(
+                ctx.behavioralRisk?.takeIf { it.capsHtrRelease() }?.smbFloorCapU,
+                patternCap,
+            ).minOrNull()?.let { min(v3, it) } ?: v3
             smbDemandU = max(smbDemandU, v3Lift)
         }
         if (ctx.mealAbsorption?.phase == MealAbsorptionPhase.SECOND_WAVE && ctx.deltaMgdlPer5 > 0 &&
@@ -171,9 +172,18 @@ object RecursiveBeliefResolver {
             smbDemandU = min(smbDemandU, ctx.stackingStance.smbAbsoluteCapU)
             reasonCodes += "STACK_CAP"
         }
+        if (ctx.physiologicalPatterns?.suppressMealInterpretation == true &&
+            ctx.mealAbsorption?.mealDeliveryPriority == true
+        ) {
+            reasonCodes += "PATTERN_MEAL_SUPPRESS"
+        }
         ctx.behavioralRisk?.takeIf { it.capsHtrRelease() }?.let { risk ->
             smbDemandU = min(smbDemandU, risk.smbFloorCapU)
             reasonCodes += "PHYSIO_SMB_CAP"
+        }
+        ctx.physiologicalPatterns?.smbCapU?.let { cap ->
+            smbDemandU = min(smbDemandU, cap)
+            reasonCodes += "PATTERN_SMB_CAP"
         }
         val iobHeadroom = max(0.0, ctx.maxIobU - ctx.iobU)
         smbDemandU = minOf(smbDemandU, ctx.maxSmbEffectiveU.coerceAtLeast(0.0), iobHeadroom)

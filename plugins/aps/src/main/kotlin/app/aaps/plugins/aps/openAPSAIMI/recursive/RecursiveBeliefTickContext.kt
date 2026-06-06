@@ -2,7 +2,9 @@ package app.aaps.plugins.aps.openAPSAIMI.recursive
 
 import app.aaps.plugins.aps.openAPSAIMI.physio.BehavioralRiskPolicy
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioContextMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
+import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionCurves
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperSeverityClassifier
@@ -32,6 +34,8 @@ data class RecursiveBeliefTickContext(
     val mealAbsorption: MealAbsorptionPhaseEngine.Output?,
     val physioPhase: PhysiologicalPhaseClassifier.Output?,
     val behavioralRisk: BehavioralRiskPolicy?,
+    val physioContext: PhysioContextMTR? = null,
+    val physiologicalPatterns: PhysiologicalPatternSnapshot? = null,
     val trajectoryAnalysis: TrajectoryAnalysis?,
     val trajectoryRelevanceScore: Double,
     val safetyTerminals: SafetyPredictionTerminals?,

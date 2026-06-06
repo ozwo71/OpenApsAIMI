@@ -36,10 +36,18 @@ object BeliefLeafAdapterRegistry {
         }
         if (ctx.waveletBands != null && tauMin in setOf(15, 60, 180)) {
             WaveletBeliefLeafAdapters.read(tauMin, ctx)?.let { w ->
-                if (out.none { it.id == w.id }) out += w
+                if (out.none { it.id == w.id }) out += applyPatternScale(ctx, w)
             }
         }
-        return out.filter { it.credibility >= EXPORT_MIN_CRED }
+        return out.map { applyPatternScale(ctx, it) }.filter { it.credibility >= EXPORT_MIN_CRED }
+    }
+
+    private fun applyPatternScale(ctx: RecursiveBeliefTickContext, reading: BeliefLeafReading): BeliefLeafReading {
+        val patterns = ctx.physiologicalPatterns ?: return reading
+        return reading.copy(
+            credibility = (reading.credibility * patterns.credibilityScaleFor(reading.id)).coerceIn(0.0, 1.0),
+            weight = reading.weight * patterns.weightScaleFor(reading.id),
+        )
     }
 
     private fun scalesFor(id: BeliefLeafId): Set<Int> = when (id) {
@@ -255,6 +263,29 @@ object BeliefLeafAdapterRegistry {
             BeliefLeafId.ONLINE_LEARN -> ext.onlineLearnFactor?.let { leaf(id, it, 0.65, 0.6, "online×${fmt2(it)}") }
             BeliefLeafId.ATTENTION -> ext.attentionGateScore?.let { leaf(id, it, 0.7, 0.65, "attention=${fmt2(it)}") }
             BeliefLeafId.EXERCISE_LOCK -> if (ctx.exerciseLockout) leaf(id, 1.0, 1.0, 1.0, "exercise lockout") else null
+            BeliefLeafId.SLEEP_QUALITY -> ctx.physioContext?.features?.sleepQualityScore?.takeIf { it > 0.0 }?.let {
+                leaf(id, it, 0.9, ctx.physioContext.confidence.coerceIn(0.15, 1.0), "sleepQ=${fmt2(it)}")
+            }
+            BeliefLeafId.HRV_DEVIATION -> ctx.physioContext?.takeIf { it.features != null }?.let { pc ->
+                val z = pc.hrvDeviationZ
+                leaf(id, z, 0.85, pc.confidence.coerceIn(0.15, 1.0), "hrvZ=${fmt2(z)}")
+            }
+            BeliefLeafId.SLEEP_DEBT -> ctx.extended.sleepDebtMinutes?.takeIf { it > 0.0 }?.let {
+                leaf(id, it, 0.85, 0.75, "sleepDebt=${it.toInt()}m")
+            } ?: ctx.physioContext?.takeIf { it.poorSleepDetected }?.let {
+                leaf(id, 60.0, 0.8, it.confidence.coerceIn(0.15, 1.0), "poorSleep")
+            }
+            BeliefLeafId.PHYSIO_MTR_STATE -> ctx.physioContext?.let { pc ->
+                leaf(id, pc.state.ordinal.toDouble(), 1.0, pc.confidence.coerceIn(0.15, 1.0), pc.state.name)
+            }
+            BeliefLeafId.PATTERN_RISK -> ctx.physiologicalPatterns?.takeIf { it.active.isNotEmpty() }?.let { snap ->
+                val risk = when {
+                    snap.suppressHyperRelease -> 0.85
+                    snap.suppressMealInterpretation -> 0.65
+                    else -> 0.35
+                }
+                leaf(id, risk, 1.0, snap.dominantConfidence.coerceIn(0.15, 1.0), snap.reasonSummary.take(80))
+            }
 
             // Shadow @ τ = 60
             BeliefLeafId.SHADOW_COMPARATOR -> ext.shadowComparatorDeltaU?.let {
@@ -333,7 +364,8 @@ object BeliefLeafAdapterRegistry {
 private object WaveletBeliefLeafAdapters {
     fun read(tauMin: Int, ctx: RecursiveBeliefTickContext): BeliefLeafReading? {
         val bands = ctx.waveletBands ?: return null
-        val physioGated = ctx.behavioralRisk?.capsHtrRelease() == true
+        val physioGated = ctx.behavioralRisk?.capsHtrRelease() == true ||
+            ctx.physiologicalPatterns?.suppressWaveletBoost == true
         val credScale = if (physioGated) 0.2 else 1.0
         val weightScale = if (physioGated) 0.35 else 1.0
         val tag = if (physioGated) "wavelet-gated" else "wavelet"
