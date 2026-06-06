@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.recursive
 
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
+import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinLoadGovernor
 import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinStackingStance
 import kotlin.math.abs
 import kotlin.math.max
@@ -27,12 +28,14 @@ object RecursiveBeliefResolver {
 
         val resolution = resolveChannels(input, paradoxes, tensions, trace)
         trace += "RESOLVE:${resolution.releaseAuthority}"
+        val loadGovernorExport = resolution.loadGovernorExport
 
         return RecursiveBeliefSnapshot(
             scales = input.scales,
             tensions = tensions,
             paradoxes = paradoxes,
             resolutions = resolution,
+            loadGovernor = loadGovernorExport,
             mr7Trace = trace,
             waveletBands = input.ctx.waveletBands,
         )
@@ -185,6 +188,56 @@ object RecursiveBeliefResolver {
             smbDemandU = min(smbDemandU, cap)
             reasonCodes += "PATTERN_SMB_CAP"
         }
+
+        val smbBeforeLoadGovernor = smbDemandU
+        val loadGovernorEval = InsulinLoadGovernor.evaluate(
+            InsulinLoadGovernor.Input(
+                iobU = ctx.iobU,
+                tdd24hU = ctx.tdd24hU,
+                patientWeightKg = ctx.patientWeightKg,
+                deltaMgdlPer5 = ctx.deltaMgdlPer5,
+                shortAvgDeltaMgdlPer5 = ctx.shortAvgDeltaMgdlPer5,
+                deltaPrevMgdlPer5 = ctx.deltaPrevMgdlPer5,
+                bgDerivShort = ctx.bgDerivShort,
+                bgMgdl = ctx.bgMgdl,
+                targetBgMgdl = ctx.targetBgMgdl,
+                bestTerminalMgdl = ctx.scenario.scenarioBest.terminalMgdl,
+                minPredictedBgMgdl = ctx.minPredictedBgMgdl,
+                eventualBgMgdl = ctx.eventualBgMgdl,
+                trajectoryEnergy = ctx.trajectoryAnalysis?.metrics?.energyBalance,
+                trajectoryCoherence = ctx.trajectoryAnalysis?.metrics?.coherence,
+                insulinActivityStageOrdinal = ctx.insulinActivityStageOrdinal,
+                insulinActivityNow = ctx.insulinActivityNow,
+                mealAbsorptionPhase = ctx.mealAbsorption?.phase ?: MealAbsorptionPhase.NONE,
+                mealDeliveryPriority = ctx.mealAbsorption?.mealDeliveryPriority == true,
+                lastMultiplierG = ctx.lastLoadGovernorMultiplierG,
+            ),
+        )
+        val loadGovernorApplied = input.authorityEnabled && loadGovernorEval.multiplierG < 0.999
+        if (loadGovernorApplied) {
+            smbDemandU *= loadGovernorEval.multiplierG
+            if (loadGovernorEval.smbTickCapU.isFinite()) {
+                smbDemandU = min(smbDemandU, loadGovernorEval.smbTickCapU)
+            }
+            reasonCodes += "LOAD_GOV_${loadGovernorEval.tier.name}"
+        }
+        trace += "LOADGOV:${"%.2f".format(loadGovernorEval.multiplierG)}"
+        val loadGovernorExport = LoadGovernorExport(
+            tier = loadGovernorEval.tier.name,
+            multiplierG = loadGovernorEval.multiplierG,
+            rawMultiplierG = loadGovernorEval.rawMultiplierG,
+            smbTickCapU = loadGovernorEval.smbTickCapU,
+            physBudgetU = loadGovernorEval.physBudgetU,
+            stackScore = loadGovernorEval.stackScore,
+            riseScore = loadGovernorEval.riseScore,
+            deltaDecelScore = loadGovernorEval.deltaDecelScore,
+            smbDemandBeforeU = smbBeforeLoadGovernor,
+            smbDemandAfterU = if (loadGovernorApplied) smbDemandU else smbBeforeLoadGovernor * loadGovernorEval.multiplierG,
+            applied = loadGovernorApplied,
+            reasonCodes = loadGovernorEval.reasonCodes,
+            summary = loadGovernorEval.summary,
+        )
+
         val iobHeadroom = max(0.0, ctx.maxIobU - ctx.iobU)
         smbDemandU = minOf(smbDemandU, ctx.maxSmbEffectiveU.coerceAtLeast(0.0), iobHeadroom)
 
@@ -194,6 +247,15 @@ object RecursiveBeliefResolver {
         if (u180 < 0.0 && ctx.iobU > ctx.tdd24hU * 0.15) {
             tbrFraction = 0.85
             reasonCodes += "P3"
+        }
+        if (loadGovernorApplied &&
+            (
+                loadGovernorEval.tier == InsulinLoadGovernor.Tier.SURVEILLANCE ||
+                    loadGovernorEval.tier == InsulinLoadGovernor.Tier.WAIT
+                )
+        ) {
+            tbrFraction = max(tbrFraction, 1.08)
+            reasonCodes += "LOAD_GOV_TBR"
         }
 
         // Channel interference — Traj-Bridge vs HTR (§6.4 discrete optimizer)
@@ -253,6 +315,7 @@ object RecursiveBeliefResolver {
 
         return DoseChannelResolution(
             smbDemandU = smbDemandU,
+            smbDemandBeforeLoadGovernorU = smbBeforeLoadGovernor,
             tbrDemandFraction = tbrFraction,
             waitBias = waitBias,
             dominantScaleMinutes = dominantScale,
@@ -263,6 +326,7 @@ object RecursiveBeliefResolver {
             suppressTrajBasalShift = suppressTraj,
             hypoMinPredIgnored = ctx.hypoMinPredIgnored,
             reasonCodes = reasonCodes,
+            loadGovernorExport = loadGovernorExport,
         )
     }
 

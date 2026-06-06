@@ -903,4 +903,89 @@ Textes visibles dans l’APK (anglais `values/` uniquement pour les changements 
 
 ---
 
+## 17) Insulin Load Governor (ILG) — surveillance élastique RBT
+
+**Statut :** intégré au resolver RBT (v0.2.1). **Appliqué à la pompe** uniquement quand `OApsAIMIRecursiveBeliefAuthority` est ON ; toujours **exporté** en JSONL quand RBT shadow ou authority est actif.
+
+### 17.1 Problème adressé
+
+Le chemin repas/HTR utilisait surtout `maxIob − iob` (headroom préférence) et bypassait stacking/spiral malgré TDD/poids déjà calculés. L’ILG module la **demande SMB RBT** sans mur IOB dur — pour éviter l’effet inverse (sous-doser une montée rapide légitime).
+
+### 17.2 Budget physiologique (réutilise prefs existantes)
+
+| Entrée | Source |
+|--------|--------|
+| TDD 24h | `tdd24hU` (blend plugin, même que HTR/spiral) |
+| Poids | `DoubleKey.OApsAIMIweight` |
+
+```
+physBudgetU = max(
+  tdd24hU × (8 / 55),
+  weightKg × (8 / 75)
+)
+```
+
+Aligné sur `tightSpiralSmbCapIobThresholdU` — **référence**, pas plafond Max-IOB.
+
+### 17.3 Signaux fusionnés
+
+| Signal | Source code | Rôle |
+|--------|-------------|------|
+| `stackScore` | IOB/budget, traj E, décélération Δ, stage insuline, ρ trajectoire | Anti-stack |
+| `riseScore` | accélération Δ, lead bestT, phase repas, sharp rise | Pro-correction |
+| `deltaDecelScore` | `delta < deltaPrev`, `bgDerivShort < 0` | Montée qui s’essouffle |
+| Escapes | Δ≥4.5, bestT−bg>80, IOB<budget×0.55 | Limite effet inverse |
+
+Formule continue :
+
+```
+rawG = clamp(1.0 − 0.65×stackScore + 0.25×riseScore, 0.35, 1.0)
+g = EMA(rawG, priorG)   // prior = tick précédent
+```
+
+### 17.4 Paliers produit
+
+| Tier | g typique | SMB tick cap | TBR |
+|------|-----------|--------------|-----|
+| FULL | ≥0.92 | aucun | normal |
+| SOFT | 0.72–0.91 | ~TDD×0.035 | normal |
+| SURVEILLANCE | 0.50–0.71 | ~TDD×0.018 | bias ≥1.08× |
+| WAIT | <0.50 | ~TDD×0.010 | bias ≥1.08× |
+
+### 17.5 Intégration pipeline
+
+```
+HTR floor / RBT smbDemand  →  × g  →  min(cap tier)  →  min(maxSmb, maxIob−iob)
+```
+
+- Fichier : `InsulinLoadGovernor.kt` (pure logic, tests unitaires)
+- Branché : `RecursiveBeliefResolver.resolveChannels` **après** caps stacking/pattern, **avant** headroom IOB
+- Contexte : `RecursiveBeliefTickContext` (+ weight, deltaPrev, eventual, activityNow, lastG)
+- Export : `recursive_belief.load_governor` dans JSONL (`UnfoldExporter`)
+
+### 17.6 JSONL — champs `load_governor`
+
+| Champ | Description |
+|-------|-------------|
+| `tier` | FULL / SOFT / SURVEILLANCE / WAIT |
+| `multiplier_g` | g lissé appliqué (ou shadow) |
+| `raw_multiplier_g` | g brut tick |
+| `phys_budget_u` | budget TDD/poids |
+| `stack_score`, `rise_score`, `delta_decel_score` | composantes 0–1 |
+| `smb_demand_before_u`, `smb_demand_after_u` | audit demande RBT |
+| `applied` | true si authority ON et g<1 |
+| `reason_codes` | DELTA_DECEL, TRAJ_ENERGY, SHARP_RISE, ESCAPE_*… |
+
+Console loop : `⚖️ LOAD_GOV …` + `🌳 RBT: … LG=SURVEILLANCE g=0.68✓`
+
+### 17.7 Rollout recommandé
+
+1. RBT **shadow** ON → revue JSONL `load_governor` vs doses réelles  
+2. Replay `AIMI_Decisions.jsonl` — vérifier que les ticks IOB 15–18 U + decel Δ auraient `g<0.85`  
+3. RBT **authority** ON — valider repas rapide (pas de sous-dose) et repas plateau (moins de stacking)
+
+**Tuning :** pas de nouvelle pref — coefficients dans `InsulinLoadGovernor.kt` ; analystes : `load_governor.tuning_reference` en JSONL.
+
+---
+
 *Document rédigé pour OpenApsAIMI — Recursive Belief Tree v0.2. Contribuer : brancher d'abord en shadow, prouver en JSONL, autoriser ensuite.*

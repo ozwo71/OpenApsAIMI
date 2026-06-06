@@ -53,8 +53,25 @@ data class BeliefParadox(
     val resolution: String,
 )
 
+data class LoadGovernorExport(
+    val tier: String,
+    val multiplierG: Double,
+    val rawMultiplierG: Double,
+    val smbTickCapU: Double,
+    val physBudgetU: Double,
+    val stackScore: Double,
+    val riseScore: Double,
+    val deltaDecelScore: Double,
+    val smbDemandBeforeU: Double,
+    val smbDemandAfterU: Double,
+    val applied: Boolean,
+    val reasonCodes: List<String>,
+    val summary: String,
+)
+
 data class DoseChannelResolution(
     val smbDemandU: Double,
+    val smbDemandBeforeLoadGovernorU: Double = smbDemandU,
     val tbrDemandFraction: Double,
     val waitBias: Double,
     val dominantScaleMinutes: Int,
@@ -65,6 +82,7 @@ data class DoseChannelResolution(
     val suppressTrajBasalShift: Boolean,
     val hypoMinPredIgnored: Boolean,
     val reasonCodes: List<String>,
+    val loadGovernorExport: LoadGovernorExport? = null,
 )
 
 data class RecursiveBeliefSnapshot(
@@ -72,6 +90,7 @@ data class RecursiveBeliefSnapshot(
     val tensions: List<ScaleTension>,
     val paradoxes: List<BeliefParadox>,
     val resolutions: DoseChannelResolution,
+    val loadGovernor: LoadGovernorExport? = null,
     val mr7Trace: List<String>,
     val waveletBands: WaveletBelief.Bands? = null,
 )
@@ -85,6 +104,7 @@ data class RecursiveBeliefExport(
     val tensions: List<TensionExport>,
     val paradoxes: List<ParadoxExport>,
     val resolution: ResolutionExport,
+    val loadGovernor: LoadGovernorExport?,
     val mr7Trace: List<String>,
 )
 

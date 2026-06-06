@@ -59,6 +59,7 @@ object UnfoldExporter {
                 hypoMinPredIgnored = snapshot.resolutions.hypoMinPredIgnored,
                 reasonCodes = snapshot.resolutions.reasonCodes,
             ),
+            loadGovernor = snapshot.loadGovernor,
             mr7Trace = snapshot.mr7Trace,
         )
 
@@ -117,14 +118,37 @@ object UnfoldExporter {
             put("hypo_min_pred_ignored", export.resolution.hypoMinPredIgnored)
             put("reason_codes", JSONArray(export.resolution.reasonCodes))
         })
+        export.loadGovernor?.let { lg ->
+            root.put("load_governor", JSONObject().apply {
+                put("tier", lg.tier)
+                put("multiplier_g", lg.multiplierG)
+                put("raw_multiplier_g", lg.rawMultiplierG)
+                put("smb_tick_cap_u", lg.smbTickCapU)
+                put("phys_budget_u", lg.physBudgetU)
+                put("stack_score", lg.stackScore)
+                put("rise_score", lg.riseScore)
+                put("delta_decel_score", lg.deltaDecelScore)
+                put("smb_demand_before_u", lg.smbDemandBeforeU)
+                put("smb_demand_after_u", lg.smbDemandAfterU)
+                put("applied", lg.applied)
+                put("reason_codes", JSONArray(lg.reasonCodes))
+                put("summary", lg.summary)
+                put("tuning_reference", "InsulinLoadGovernor.kt; applied when RBT authority ON")
+            })
+        }
         root.put("mr7_trace", JSONArray(export.mr7Trace))
         return root
     }
 
     fun formatLogLine(snapshot: RecursiveBeliefSnapshot): String {
         val r = snapshot.resolutions
+        val lg = snapshot.loadGovernor
+        val lgNote = lg?.let {
+            " LG=${it.tier} g=${"%.2f".format(it.multiplierG)}" +
+                if (it.applied) "✓" else "shadow"
+        } ?: ""
         return "🌳 RBT: auth=${r.releaseAuthority} smb=${"%.2f".format(r.smbDemandU)}U " +
             "tbr×${"%.2f".format(r.tbrDemandFraction)} paradoxes=${snapshot.paradoxes.size} " +
-            "τ*=${r.dominantScaleMinutes}"
+            "τ*=${r.dominantScaleMinutes}$lgNote"
     }
 }

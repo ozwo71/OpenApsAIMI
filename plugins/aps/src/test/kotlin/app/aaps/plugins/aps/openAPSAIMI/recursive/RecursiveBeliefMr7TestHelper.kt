@@ -78,6 +78,7 @@ object RecursiveBeliefMr7TestHelper {
             maxIobU = maxIob,
             maxSmbEffectiveU = 5.0,
             tdd24hU = 40.0,
+            patientWeightKg = 70.0,
             curves = curves,
             scenario = scenario,
             mealAbsorption = MealAbsorptionPhaseEngine.Output(
@@ -259,6 +260,7 @@ object RecursiveBeliefMr7TestHelper {
             maxIobU = 12.0,
             maxSmbEffectiveU = 5.0,
             tdd24hU = 40.0,
+            patientWeightKg = 70.0,
             curves = curves,
             scenario = scenario,
             mealAbsorption = MealAbsorptionPhaseEngine.Output(

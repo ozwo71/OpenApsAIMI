@@ -29,6 +29,12 @@ data class RecursiveBeliefTickContext(
     val maxIobU: Double,
     val maxSmbEffectiveU: Double,
     val tdd24hU: Double,
+    val patientWeightKg: Double,
+    val deltaPrevMgdlPer5: Double? = null,
+    val eventualBgMgdl: Double? = null,
+    val insulinActivityNow: Double? = null,
+    /** EMA-smoothed prior tick multiplier (InsulinLoadGovernor). */
+    val lastLoadGovernorMultiplierG: Double = 1.0,
     val curves: AdvancedPredictionCurves,
     val scenario: ScenarioProjectionPair,
     val mealAbsorption: MealAbsorptionPhaseEngine.Output?,

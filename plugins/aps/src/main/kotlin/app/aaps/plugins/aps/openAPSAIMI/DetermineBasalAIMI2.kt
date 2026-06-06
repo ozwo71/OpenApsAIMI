@@ -1338,6 +1338,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastIobSurveillanceExport = null
         lastHyperTrajectoryRelease = null
         lastRecursiveBeliefSnapshot = null
+        lastLoadGovernorMultiplierG = 1.0
         lastPhysiologicalPhaseOutput = null
         lastPhysiologicalPatternSnapshot = null
         lastMealAbsorptionOutput = null
@@ -2893,6 +2894,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             maxIobU = maxIob,
             maxSmbEffectiveU = maxSMBHB.coerceAtLeast(maxSMB),
             tdd24hU = tdd24hU,
+            patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
+            deltaPrevMgdlPer5 = MealAbsorptionMemory.lastDeltaMgdlPer5,
+            eventualBgMgdl = eventualBG.takeIf { it.isFinite() },
+            insulinActivityNow = tickInsulinActionState?.activityNow,
+            lastLoadGovernorMultiplierG = lastLoadGovernorMultiplierG,
             curves = curves,
             scenario = scenario,
             mealAbsorption = lastMealAbsorptionOutput,
@@ -3259,6 +3265,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
             lastRecursiveBeliefSnapshot = rbtSnapshot
             rbtSnapshot?.let { snap ->
+                snap.loadGovernor?.let { lg ->
+                    lastLoadGovernorMultiplierG = lg.multiplierG
+                    if (lg.applied || lg.multiplierG < 0.99) {
+                        consoleLog.add("⚖️ ${lg.summary}${if (lg.applied) "" else " [shadow]"}")
+                    }
+                }
                 consoleLog.add(UnfoldExporter.formatLogLine(snap))
             }
             val rbtPrefs = RecursiveBeliefPreferences.from(preferences)
@@ -7094,6 +7106,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastSafetyTerminalsForRbt: SafetyPredictionTerminals? = null
     private var lastHyperTrajectoryRelease: HyperTrajectoryReleaseResult? = null
     private var lastRecursiveBeliefSnapshot: RecursiveBeliefSnapshot? = null
+    private var lastLoadGovernorMultiplierG: Double = 1.0
     private var lastPhysiologicalPhaseOutput: PhysiologicalPhaseClassifier.Output? = null
     private var lastPhysiologicalPatternSnapshot: PhysiologicalPatternSnapshot? = null
     private var lastMealAbsorptionOutput: MealAbsorptionPhaseEngine.Output? = null
