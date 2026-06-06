@@ -21,6 +21,7 @@ import app.aaps.core.ui.compose.ScreenMode
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.AlarmIntent
+import app.aaps.core.interfaces.notifications.AlarmSoundPlayer
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.keys.BooleanKey
@@ -40,6 +41,7 @@ class UiInteractionImpl @Inject constructor(
     rxBus: RxBus,
     private val preferences: Preferences,
     private val alarmNotificationManager: AlarmNotificationManager,
+    private val alarmSoundPlayer: AlarmSoundPlayer,
     private val aapsLogger: AAPSLogger,
     private val persistenceLayer: PersistenceLayer,
     private val config: Config,
@@ -101,17 +103,20 @@ class UiInteractionImpl @Inject constructor(
     }
 
     override fun postNotificationSoundAlarm(notificationKey: Int, @RawRes soundId: Int, title: String, body: String, urgent: Boolean) {
-        alarmNotificationManager.postSoundAlarmNotification(
+        alarmNotificationManager.postSilentAlarmNotification(
             notificationKey = notificationKey,
-            soundId = soundId,
             title = title,
             body = body,
             urgent = urgent
         )
+        if (soundId != 0) {
+            alarmSoundPlayer.play(soundId, AlarmSoundPlayer.OWNER_INTERNAL)
+        }
     }
 
     override fun cancelNotificationSoundAlarm(notificationKey: Int) {
         alarmNotificationManager.cancelSoundAlarm(notificationKey)
+        alarmSoundPlayer.stop(AlarmSoundPlayer.OWNER_INTERNAL)
     }
 
     override fun stopAlarm(reason: String) {

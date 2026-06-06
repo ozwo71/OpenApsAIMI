@@ -428,6 +428,11 @@ class GraphViewModel @AssistedInject constructor(
                     it.toTime
                 }
                 Pair(it.fromTime, upper)
+            } ?: run {
+                // Clean DB: no data and no cached range (worker never ran) — fall back to the
+                // default window so the axis frame still renders instead of staying blank.
+                val now = dateUtil.now()
+                Pair(now - Constants.GRAPH_TIME_RANGE_HOURS * 3600_000L, now)
             }
         } else {
             val minTime = allTimestamps.minOrNull() ?: return@combine null

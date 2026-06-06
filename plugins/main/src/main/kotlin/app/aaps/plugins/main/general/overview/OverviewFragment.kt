@@ -1648,6 +1648,7 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, View.OnLongClic
             holder.binding.text.text = dateUtil.timeString(notification.date) + " " + notification.text
             when (notification.level) {
                 NotificationLevel.URGENT       -> holder.binding.cv.setBackgroundColor(rh.gac(app.aaps.core.ui.R.attr.notificationUrgent))
+                NotificationLevel.IMPORTANT    -> holder.binding.cv.setBackgroundColor(rh.gac(app.aaps.core.ui.R.attr.notificationUrgent))
                 NotificationLevel.NORMAL       -> holder.binding.cv.setBackgroundColor(rh.gac(app.aaps.core.ui.R.attr.notificationNormal))
                 NotificationLevel.LOW          -> holder.binding.cv.setBackgroundColor(rh.gac(app.aaps.core.ui.R.attr.notificationLow))
                 NotificationLevel.INFO         -> holder.binding.cv.setBackgroundColor(rh.gac(app.aaps.core.ui.R.attr.notificationInfo))

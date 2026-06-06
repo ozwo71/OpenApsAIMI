@@ -360,6 +360,7 @@ internal fun MaintenanceBottomSheetContent(
             onClick = onResetDbClick,
             danger = true
         )
+
     }
 }
 
