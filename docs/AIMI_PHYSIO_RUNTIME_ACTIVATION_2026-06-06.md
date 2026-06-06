@@ -320,6 +320,52 @@ Vérifier :
 - que `authority_effective` passe bien par `NONE -> SOFT -> HARD` seulement quand le contexte est crédible ;
 - que les raisons de blocage ou de limitation remontent bien dans l’export qualité.
 
+### 7.4 Raffinement SMB ML (`AimiSmbTrainer`) — distinct de `modelUAM.tflite`
+
+AIMI a **deux** pipelines ML indépendants :
+
+| Pipeline | Fichier / pref | Rôle | Impact de cette passe |
+|----------|----------------|------|------------------------|
+| **UAM TFLite** | `modelUAM.tflite` | Prédiction repas / SMB UAM | **Features inchangées** — ajout d’un garde-fou `UamInputSchemaValidator` (mismatch → SMB UAM = 0 + log) |
+| **Raffinement CSV** | `AimiSmbTrainer`, pref `OApsAIMIMLtraining` | Affine le SMB **après** le calcul AIMI (± min(0.05 U, 25 %)) | **Vecteur étendu** 11 → **15** entrées |
+
+#### Vecteur `AimiSmbTrainer` (runtime et entraînement)
+
+```
+[10 base] + [4 latent PhysioLatentState] + [1 trendIndicator] = 15 floats
+```
+
+| Groupe | Colonnes | Source |
+|--------|----------|--------|
+| Base (obligatoires) | `bg`, `iob`, `cob`, `delta`, `shortAvgDelta`, `longAvgDelta`, `tdd7DaysPerHour`, `tdd2DaysPerHour`, `tddPerHour`, `tdd24HrsPerHour` | tick loop (inchangé) |
+| Latent (nouvelles) | `mealProb`, `endogenousGlucoseDrive`, `circadianSiFactor`, `transientResistanceProb` | `PhysioLatentState` (même état que PKPD / RBT) |
+| Meta | `trendIndicator` | calculé à l’inférence ; approximé offline à l’entraînement |
+
+Schéma centralisé : `SmbRefinementFeatureSchema.kt`. CSV enrichi : `logDataMLToCsv` → fichier `oapsaimiML2_records.csv` (ou fallback du même nom).
+
+#### Compatibilité et comportement sans action utilisateur
+
+- **Ancien modèle sauvegardé (11 entrées)** : `refine()` détecte `features.size != 15` → retourne le SMB prédit **sans** correction ML. Pas de crash.
+- **Anciennes lignes CSV sans colonnes latent** : à l’entraînement, valeurs **neutres** injectées (`mealProb=0`, `endogenous=0`, `circadianSi=1.0`, `resistance=0`).
+- **Header CSV** : les nouvelles colonnes latent apparaissent dès le prochain enregistrement ; l’entraînement async exige toujours les 10 colonnes base + `smbGiven`.
+- **Loop principal** : non modifié — le raffinement ML ne s’applique que si `mlRefined > predictedSMB && bg > 150 && delta > 5`.
+
+#### Checklist si `OApsAIMIMLtraining = ON`
+
+1. Laisser tourner plusieurs jours — le CSV se remplit avec les 4 colonnes latent.
+2. Attendre **≥ 200 nouvelles lignes** et un cycle d’entraînement (rate limit **6 h** entre runs).
+3. Log attendu : `AimiSmbTrainer: Model trained and saved successfully (15 inputs)` (ou équivalent avec `INPUT_SIZE=15`).
+4. Jusqu’au retrain : raffinement ML **inactif** (fallback transparent sur `calculateSMBFromModel()`).
+5. Ne pas confondre avec **UAM TFLite** — celui-ci n’a pas été retrainé ; seul le petit réseau CSV est dimensionné sur la physio partagée.
+
+#### Signaux d’alerte
+
+| Symptôme | Interprétation |
+|----------|----------------|
+| Log `UAM input schema mismatch` | TFLite vs vecteur UAM — SMB UAM forcé à 0 |
+| Pas de log « Model trained » après semaines | CSV insuffisant, colonnes manquantes, ou circuit breaker ML (6 h après 3 échecs) |
+| Raffinement jamais visible | Normal tant que modèle 11 entrées non régénéré ; ou conditions `bg/delta` non remplies |
+
 ---
 
 ## 8. Logs et exports à regarder
