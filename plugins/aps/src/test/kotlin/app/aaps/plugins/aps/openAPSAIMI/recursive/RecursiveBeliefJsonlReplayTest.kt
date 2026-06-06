@@ -61,11 +61,20 @@ class RecursiveBeliefJsonlReplayTest {
             snapshot = snapshot,
             shadowOnly = false,
             authorityApplied = true,
+            authorityGate = RecursiveBeliefAuthorityGate.Decision(
+                requestedAuthority = ReleaseAuthority.HARD,
+                maxAllowedAuthority = ReleaseAuthority.SOFT,
+                effectiveAuthority = ReleaseAuthority.SOFT,
+                readinessScore = 0.64,
+                liftBlend = 0.68,
+                reasonCodes = listOf("MEAL_SUPPRESS"),
+            ),
         )
         val json = UnfoldExporter.toJsonObject(export)
         assertThat(json.getInt("version")).isEqualTo(1)
         assertThat(json.getJSONArray("scales").length()).isEqualTo(4)
         assertThat(json.getJSONObject("resolution").getDouble("smb_demand_u")).isGreaterThan(0.0)
+        assertThat(json.getJSONObject("authority_gate").getString("effective_authority")).isEqualTo("SOFT")
     }
 
     @Test

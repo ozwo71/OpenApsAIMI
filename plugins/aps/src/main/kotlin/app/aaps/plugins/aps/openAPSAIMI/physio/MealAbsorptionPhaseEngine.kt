@@ -146,16 +146,7 @@ object MealAbsorptionPhaseEngine {
         )
     }
 
-    internal fun chronoPrior(hourOfDay: Int): Double = when (hourOfDay) {
-        in 5..8 -> 0.22
-        in 9..10 -> 0.42
-        in 11..14 -> 0.85
-        in 17..21 -> 0.80
-        in 15..16 -> 0.65
-        in 22..23 -> 0.45
-        in 4..4 -> 0.18
-        else -> 0.15
-    }
+    internal fun chronoPrior(hourOfDay: Int): Double = CircadianMealProfileStore.priorForHour(hourOfDay)
 
     internal fun kineticScore(input: Input): Double {
         val d = input.deltaMgdlPer5.coerceAtLeast(0.0)

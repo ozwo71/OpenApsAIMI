@@ -31,8 +31,8 @@ object AimiSmbTrainer {
 
     private const val TAG = "AimiSmbTrainer"
 
-    // Input dimension: 10 physio features + 1 trendIndicator
-    const val INPUT_SIZE = 11
+    // Input dimension: 10 base features + 4 latent physio features + 1 trendIndicator
+    const val INPUT_SIZE = SmbRefinementFeatureSchema.INPUT_SIZE
 
     // Circuit breaker settings
     private const val CB_MAX_FAILURES = 3
@@ -150,16 +150,10 @@ object AimiSmbTrainer {
         }
 
         val headers = allLines.firstOrNull()?.split(",")?.map { it.trim() } ?: return
-        val featureNames = listOf(
-            "bg","iob","cob","delta","shortAvgDelta","longAvgDelta",
-            "tdd7DaysPerHour","tdd2DaysPerHour","tddPerHour","tdd24HrsPerHour"
-        )
         val targetName = "smbGiven"
-
-        val featureIndices = featureNames.map { headers.indexOf(it) }
         val targetIndex    = headers.indexOf(targetName)
 
-        if (featureIndices.any { it == -1 } || targetIndex == -1) {
+        if (targetIndex == -1) {
             Log.w(TAG, "CSV missing required columns — skip training")
             return
         }
@@ -171,10 +165,7 @@ object AimiSmbTrainer {
             val cols = line.split(",").map { it.trim() }
             if (cols.size <= targetIndex) continue
 
-            val rawFeatures = featureIndices.map { idx -> cols.getOrNull(idx)?.toFloatOrNull() }
-            if (rawFeatures.any { it == null }) continue
-
-            val raw = rawFeatures.map { it!! }.toFloatArray()
+            val raw = SmbRefinementFeatureSchema.parseTrainingFeatures(headers, cols) ?: continue
 
             // Approximate trendIndicator for offline training
             val trendIndicator = computeTrendIndicator(raw)

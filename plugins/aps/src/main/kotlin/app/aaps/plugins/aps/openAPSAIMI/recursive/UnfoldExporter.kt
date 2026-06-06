@@ -3,18 +3,31 @@ package app.aaps.plugins.aps.openAPSAIMI.recursive
 import org.json.JSONArray
 import org.json.JSONObject
 
-object UnfoldExporter {
+internal object UnfoldExporter {
 
     fun toExport(
         snapshot: RecursiveBeliefSnapshot,
         shadowOnly: Boolean,
         authorityApplied: Boolean,
         waveletBands: WaveletBelief.Bands? = null,
+        authorityGate: RecursiveBeliefAuthorityGate.Decision? = null,
     ): RecursiveBeliefExport =
         RecursiveBeliefExport(
             version = 1,
             shadowOnly = shadowOnly,
             authorityApplied = authorityApplied,
+            authorityGate = authorityGate?.let {
+                AuthorityGateExport(
+                    requestedAuthority = it.requestedAuthority.name,
+                    maxAllowedAuthority = it.maxAllowedAuthority.name,
+                    effectiveAuthority = it.effectiveAuthority.name,
+                    readinessScore = it.readinessScore,
+                    liftBlend = it.liftBlend,
+                    shadowOnly = it.shadowOnly,
+                    softLimited = it.softLimited,
+                    reasonCodes = it.reasonCodes,
+                )
+            },
             waveletBands = waveletBands?.let { WaveletExport(it.high, it.mid, it.low) },
             scales = snapshot.scales.map { scale ->
                 ScaleExport(
@@ -68,6 +81,18 @@ object UnfoldExporter {
         root.put("version", export.version)
         root.put("shadow_only", export.shadowOnly)
         root.put("authority_applied", export.authorityApplied)
+        export.authorityGate?.let { gate ->
+            root.put("authority_gate", JSONObject().apply {
+                put("requested_authority", gate.requestedAuthority)
+                put("max_allowed_authority", gate.maxAllowedAuthority)
+                put("effective_authority", gate.effectiveAuthority)
+                put("readiness_score", gate.readinessScore)
+                put("lift_blend", gate.liftBlend)
+                put("shadow_only", gate.shadowOnly)
+                put("soft_limited", gate.softLimited)
+                put("reason_codes", JSONArray(gate.reasonCodes))
+            })
+        }
         export.waveletBands?.let { bands ->
             root.put("wavelet_bands", JSONObject().apply {
                 put("high", bands.high)

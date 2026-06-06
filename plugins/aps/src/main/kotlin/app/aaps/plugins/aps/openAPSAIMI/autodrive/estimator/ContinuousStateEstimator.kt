@@ -115,10 +115,14 @@ class ContinuousStateEstimator @Inject constructor(
         // 7. Règles physiologiques d'Écrêtage (Clipping)
         // On limite le maximum de Ra possible (Vitesse d'absorption) pendant le Dawn Guard
         val baseMaxRa = (actualState.patientWeightKg / 10.0) * 1.5
+        val inflammationRecovery = actualState.physiologicalStressMask.getOrNull(1)?.coerceIn(0.0, 1.0) ?: 0.0
+        val hormonalCircadian = actualState.physiologicalStressMask.getOrNull(2)?.coerceIn(0.0, 1.0) ?: 0.0
+        val weightRaFactor = (75.0 / actualState.patientWeightKg).coerceIn(0.84, 1.08)
+        val physioRaFactor = (1.0 - inflammationRecovery * 0.18 - hormonalCircadian * 0.12).coerceIn(0.72, 1.02)
         val maxBiologicalRa = when {
-            isHypoRecoveryGuard -> baseMaxRa * 0.3
-            isDawnGuardActive -> baseMaxRa * 0.5
-            else -> baseMaxRa
+            isHypoRecoveryGuard -> baseMaxRa * weightRaFactor * physioRaFactor * 0.3
+            isDawnGuardActive -> baseMaxRa * weightRaFactor * physioRaFactor * 0.5
+            else -> baseMaxRa * weightRaFactor * physioRaFactor
         }
         estimatedRa = estimatedRa.coerceIn(0.0, maxBiologicalRa)
 
@@ -135,7 +139,7 @@ class ContinuousStateEstimator @Inject constructor(
 
         aapsLogger.debug(
             LTag.APS,
-            "👽 [PSE UKF] dBG_attendu=${expectedNaturalDelta.format(2)} | dBG_vrai=${actualState.bgVelocity.format(2)} (G6?=$isG6) | Innov=${innovation.format(2)} | hypoRec=$isHypoRecoveryGuard || 🍽️ Ra_estimé = ${estimatedRa.format(2)} mg/dL/min"
+            "👽 [PSE UKF] dBG_attendu=${expectedNaturalDelta.format(2)} | dBG_vrai=${actualState.bgVelocity.format(2)} (G6?=$isG6) | Innov=${innovation.format(2)} | hypoRec=$isHypoRecoveryGuard | maxRa=${maxBiologicalRa.format(2)} || 🍽️ Ra_estimé = ${estimatedRa.format(2)} mg/dL/min"
         )
 
         // Renvoie l'état enrichi avec le modèle de digestion fantôme calculé

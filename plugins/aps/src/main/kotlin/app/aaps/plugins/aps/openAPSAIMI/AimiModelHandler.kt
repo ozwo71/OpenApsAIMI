@@ -175,6 +175,16 @@ object AimiUamHandler {
             return 0f
         }
 
+        val expectedFeatureCount = runCatching {
+            UamInputSchemaValidator.expectedFeatureCount(itp.getInputTensor(0).shape())
+        }.getOrNull()
+        if (expectedFeatureCount != null && inputs.size != expectedFeatureCount) {
+            val mismatchReason = UamInputSchemaValidator.mismatchReason(expectedFeatureCount, inputs.size)
+            reason?.appendLine(mismatchReason)
+            Log.w(TAG, mismatchReason)
+            return 0f
+        }
+
         val raw = try {
             runModel(itp, inputs)
         } catch (e: Throwable) {

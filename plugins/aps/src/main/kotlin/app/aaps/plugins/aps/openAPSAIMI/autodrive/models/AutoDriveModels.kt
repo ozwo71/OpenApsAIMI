@@ -25,7 +25,9 @@ package app.aaps.plugins.aps.openAPSAIMI.autodrive.models
  * @property estimatedSI Estimated Insulin Sensitivity factor at time T.
  * @property estimatedRa Estimated Rate of Appearance of carbs.
  * @property patientWeightKg Body weight in Kg (used for Volume of Distribution calculations).
- * @property physiologicalStressMask Vector representing stress/sickness attention levels.
+ * @property physiologicalStressMask Three-axis attention vector:
+ * `mask[0] = autonomic stress`, `mask[1] = inflammation / recovery burden`,
+ * `mask[2] = hormonal / circadian resistance`.
  * @property isNight Night mode flag (Sleep mode reduces algorithm aggressiveness).
  * @property hour Local hour (0-23), used for circadian adjustments like Dawn Guard.
  * @property steps Accumulated steps over the last 15 minutes.

@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.pkpd
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -54,6 +55,94 @@ class PkPdIntegrationTest {
             tdd24h = 40.0
         )
         assertNotNull(result)
+    }
+
+    @Test
+    fun `physio resistance lowers fused isf while preserving bounded factors`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        mockPkpdDefaults()
+        val baseline = PkPdIntegration(preferences).computeRuntime(
+            epochMillis = 1000,
+            bg = 160.0,
+            deltaMgDlPer5 = 3.5,
+            iobU = 2.2,
+            carbsActiveG = 18.0,
+            windowMin = 60,
+            exerciseFlag = false,
+            profileIsf = 50.0,
+            tdd24h = 40.0,
+            mealContext = MealAggressionContext(
+                mealModeActive = true,
+                predictedBgMgdl = 210.0,
+                targetBgMgdl = 110.0,
+            ),
+            patientWeightKg = 75.0,
+        )
+        val resistant = PkPdIntegration(preferences).computeRuntime(
+            epochMillis = 1000,
+            bg = 160.0,
+            deltaMgDlPer5 = 3.5,
+            iobU = 2.2,
+            carbsActiveG = 18.0,
+            windowMin = 60,
+            exerciseFlag = false,
+            profileIsf = 50.0,
+            tdd24h = 40.0,
+            mealContext = MealAggressionContext(
+                mealModeActive = true,
+                predictedBgMgdl = 210.0,
+                targetBgMgdl = 110.0,
+            ),
+            patientWeightKg = 75.0,
+            physioLatentState = PhysioLatentState(
+                circadianSiFactor = 0.84,
+                transientResistanceProb = 0.90,
+                sensorConfidence = 1.0,
+                mealProb = 0.60,
+            ),
+            estimatedRaMgdlPerMin = 3.5,
+        )
+
+        assertNotNull(baseline)
+        assertNotNull(resistant)
+        assertTrue(resistant!!.fusedIsf < baseline!!.fusedIsf)
+        assertTrue(resistant.physioSiFactor < 1.0)
+        assertTrue(resistant.physioAbsorptionFactor >= 1.0)
+    }
+
+    @Test
+    fun `heavier weight reduces kinetic factor and pkpd scale`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        mockPkpdDefaults()
+        val lighter = PkPdIntegration(preferences).computeRuntime(
+            epochMillis = 1000,
+            bg = 140.0,
+            deltaMgDlPer5 = 2.0,
+            iobU = 1.8,
+            carbsActiveG = 10.0,
+            windowMin = 60,
+            exerciseFlag = false,
+            profileIsf = 50.0,
+            tdd24h = 40.0,
+            patientWeightKg = 60.0,
+        )
+        val heavier = PkPdIntegration(preferences).computeRuntime(
+            epochMillis = 1000,
+            bg = 140.0,
+            deltaMgDlPer5 = 2.0,
+            iobU = 1.8,
+            carbsActiveG = 10.0,
+            windowMin = 60,
+            exerciseFlag = false,
+            profileIsf = 50.0,
+            tdd24h = 40.0,
+            patientWeightKg = 105.0,
+        )
+
+        assertNotNull(lighter)
+        assertNotNull(heavier)
+        assertTrue(lighter!!.weightKineticFactor > heavier!!.weightKineticFactor)
+        assertTrue(lighter.pkpdScale > heavier.pkpdScale)
     }
 
     @Test

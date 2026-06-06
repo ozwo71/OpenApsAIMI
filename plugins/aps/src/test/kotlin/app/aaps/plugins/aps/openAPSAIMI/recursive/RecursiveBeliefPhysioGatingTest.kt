@@ -69,6 +69,38 @@ class RecursiveBeliefPhysioGatingTest {
         assertThat(snapshot.resolutions.smbDemandU).isAtMost(0.55)
     }
 
+    @Test
+    fun uam_multi_hypothesis_downgrades_false_meal_release() {
+        val scales = listOf(
+            scale(15, belief = 0.82, urgency = 1.8, terminal = 250.0),
+            scale(60, belief = 0.74, urgency = 1.4, terminal = 280.0),
+            scale(180, belief = 0.30, urgency = -0.2, terminal = 118.0),
+        )
+        val ctx = RecursiveBeliefMr7TestHelper.minimalCtx(
+            v3Smb = 1.4,
+            replaceHtrRelease = true,
+            behavioralRisk = null,
+            extended = RbtExtendedSignals(
+                latentMealProb = 0.38,
+                latentEndogenousGlucoseDrive = 0.84,
+                uamHypothesisDominant = "DAWN_ENDOGENOUS",
+                uamMealProb = 0.32,
+                uamEndogenousProb = 0.84,
+                uamStressProb = 0.14,
+                uamPostHypoProb = 0.10,
+                uamSuppressMealInterpretation = true,
+            ),
+        )
+        val snapshot = RecursiveBeliefResolver.resolve(
+            RecursiveBeliefResolver.Input(ctx = ctx, scales = scales, authorityEnabled = true),
+        )
+
+        assertThat(snapshot.resolutions.releaseAuthority).isEqualTo(ReleaseAuthority.SOFT)
+        assertThat(snapshot.resolutions.mealChannel).isEqualTo(MealChannelHint.SUPPRESS)
+        assertThat(snapshot.resolutions.reasonCodes).contains("UAM_ALT_DAWN_ENDOGENOUS")
+        assertThat(snapshot.resolutions.reasonCodes).doesNotContain("FIRST_WAVE")
+    }
+
     private fun scale(tau: Int, belief: Double, urgency: Double, terminal: Double) =
         BeliefScaleNode(
             horizonMinutes = tau,

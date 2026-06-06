@@ -32,6 +32,9 @@ class SmbDomainHeuristicsTest {
             profileIsf = 45.0,
             tddIsf = 45.0,
             pkpdScale = 1.0,
+            weightKineticFactor = 1.0,
+            physioAbsorptionFactor = 1.0,
+            physioSiFactor = 1.0,
             damping = SmbDamping(),
             activity = InsulinActivityState(
                 window = InsulinActivityWindow(

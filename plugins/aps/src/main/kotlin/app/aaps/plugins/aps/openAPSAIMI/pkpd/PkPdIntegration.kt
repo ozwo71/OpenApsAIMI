@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.pkpd
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
@@ -82,7 +83,10 @@ class PkPdIntegration(private val preferences: Preferences) {
         mealContext: MealAggressionContext? = null,
         consoleLog: MutableList<String>? = null,
         combinedDelta: Double? = null,
-        uamConfidence: Double = 0.0
+        uamConfidence: Double = 0.0,
+        patientWeightKg: Double? = null,
+        physioLatentState: PhysioLatentState? = null,
+        estimatedRaMgdlPerMin: Double? = null,
     ): PkPdRuntime? {
         val structural = readStructuralConfig()
         val previousStructural = cachedStructuralConfig
@@ -149,10 +153,24 @@ class PkPdIntegration(private val preferences: Preferences) {
             } else 0.0
             0.05 + 0.15 * normalizedRise
         } ?: 0.0
+        val weightKineticFactor = buildWeightKineticFactor(patientWeightKg)
+        val physioAbsorptionFactor = buildPhysioAbsorptionFactor(
+            physioLatentState = physioLatentState,
+            mealContext = mealContext,
+            estimatedRaMgdlPerMin = estimatedRaMgdlPerMin,
+        )
         val minScale = if (mealContext?.mealModeActive == true) 0.9 else 0.8
         val maxScale = if (mealContext?.mealModeActive == true) 1.5 else 1.4
-        val pkpdScale = (1.0 + 0.12 * tailFraction + 0.22 * activityBlend + anticipatoryBoost + mealBoost)
-            .coerceIn(minScale, maxScale)
+        val pkpdScale = (
+            1.0 +
+                0.12 * tailFraction +
+                0.22 * activityBlend +
+                anticipatoryBoost +
+                mealBoost
+            )
+            .times(weightKineticFactor)
+            .times(physioAbsorptionFactor)
+            .coerceIn(minScale * 0.92, maxScale * 1.06)
 
         val effectiveDelta = combinedDelta ?: deltaMgDlPer5
         val isRising = effectiveDelta > 0.5
@@ -167,6 +185,16 @@ class PkPdIntegration(private val preferences: Preferences) {
             aggressionMultiplier *= uamBoost.coerceIn(0.8, 1.0)
             consoleLog?.add("🧠 UAM detected (conf=${"%.2f".format(uamConfidence)}) -> Extra ISF Boost")
         }
+        val physioSiFactor = buildPhysioSiFactor(physioLatentState)
+        aggressionMultiplier = (aggressionMultiplier * physioSiFactor).coerceIn(0.55, 1.08)
+        physioLatentState?.takeIf { it.isActive() }?.let { latent ->
+            consoleLog?.add(
+                "PKPD_PHYSIO: wK=${"%.2f".format(weightKineticFactor)} " +
+                    "abs=${"%.2f".format(physioAbsorptionFactor)} si=${"%.2f".format(physioSiFactor)} " +
+                    "meal=${"%.2f".format(latent.mealProb)} endo=${"%.2f".format(latent.endogenousGlucoseDrive)} " +
+                    "resist=${"%.2f".format(latent.transientResistanceProb)} postHypo=${"%.2f".format(latent.postHypoReboundProb)}"
+            )
+        }
 
         val fusedIsf = fusion.fused(profileIsf, tddIsf, pkpdScale, isRising, aggressionMultiplier)
         return PkPdRuntime(
@@ -176,6 +204,9 @@ class PkPdIntegration(private val preferences: Preferences) {
             profileIsf = profileIsf,
             tddIsf = tddIsf,
             pkpdScale = pkpdScale,
+            weightKineticFactor = weightKineticFactor,
+            physioAbsorptionFactor = physioAbsorptionFactor,
+            physioSiFactor = physioSiFactor,
             damping = damping,
             activity = activityState
         )
@@ -405,6 +436,40 @@ class PkPdIntegration(private val preferences: Preferences) {
 
         return clamped.coerceIn(5.0, 400.0)
     }
+
+    private fun buildWeightKineticFactor(patientWeightKg: Double?): Double {
+        val safeWeight = patientWeightKg?.takeIf { it.isFinite() && it >= 40.0 } ?: return 1.0
+        return (75.0 / safeWeight).coerceIn(0.84, 1.08)
+    }
+
+    private fun buildPhysioAbsorptionFactor(
+        physioLatentState: PhysioLatentState?,
+        mealContext: MealAggressionContext?,
+        estimatedRaMgdlPerMin: Double?,
+    ): Double {
+        if (physioLatentState == null) return 1.0
+        val mealSupport = if (mealContext?.mealModeActive == true) {
+            physioLatentState.mealProb * 0.10
+        } else {
+            0.0
+        }
+        val endogenousBrake = physioLatentState.endogenousGlucoseDrive * 0.08
+        val reboundBrake = physioLatentState.postHypoReboundProb * 0.08
+        val raSupport = estimatedRaMgdlPerMin
+            ?.takeIf { it.isFinite() && it > 0.0 }
+            ?.let { (it / 12.0).coerceIn(0.0, 0.08) }
+            ?: 0.0
+        return (1.0 + mealSupport + raSupport - endogenousBrake - reboundBrake).coerceIn(0.86, 1.18)
+    }
+
+    private fun buildPhysioSiFactor(physioLatentState: PhysioLatentState?): Double {
+        if (physioLatentState == null) return 1.0
+        val rawFactor = physioLatentState.circadianSiFactor *
+            (1.0 - physioLatentState.transientResistanceProb * 0.14) *
+            (1.0 + physioLatentState.postHypoReboundProb * 0.08)
+        val confidence = physioLatentState.sensorConfidence.coerceIn(0.0, 1.0)
+        return (1.0 + ((rawFactor - 1.0) * confidence)).coerceIn(0.78, 1.08)
+    }
 }
 
 class PkPdRuntime(
@@ -414,6 +479,9 @@ class PkPdRuntime(
     val profileIsf: Double,
     val tddIsf: Double,
     val pkpdScale: Double,
+    val weightKineticFactor: Double,
+    val physioAbsorptionFactor: Double,
+    val physioSiFactor: Double,
     private val damping: SmbDamping,
     val activity: InsulinActivityState
 ) {

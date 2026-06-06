@@ -99,6 +99,7 @@ data class RecursiveBeliefExport(
     val version: Int,
     val shadowOnly: Boolean,
     val authorityApplied: Boolean,
+    val authorityGate: AuthorityGateExport? = null,
     val waveletBands: WaveletExport?,
     val scales: List<ScaleExport>,
     val tensions: List<TensionExport>,
@@ -106,6 +107,17 @@ data class RecursiveBeliefExport(
     val resolution: ResolutionExport,
     val loadGovernor: LoadGovernorExport?,
     val mr7Trace: List<String>,
+)
+
+data class AuthorityGateExport(
+    val requestedAuthority: String,
+    val maxAllowedAuthority: String,
+    val effectiveAuthority: String,
+    val readinessScore: Double,
+    val liftBlend: Double,
+    val shadowOnly: Boolean,
+    val softLimited: Boolean,
+    val reasonCodes: List<String>,
 )
 
 data class ScaleExport(

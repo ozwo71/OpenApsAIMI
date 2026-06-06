@@ -90,6 +90,27 @@ object RecursiveBeliefResolver {
 
         var releaseAuthority = ReleaseAuthority.NONE
         val reasonCodes = mutableListOf<String>()
+        val mealHypothesisProb = max(
+            ctx.extended.uamMealProb ?: ctx.extended.latentMealProb ?: 0.0,
+            (ctx.extended.uamLateFatProb ?: 0.0) * 0.88,
+        )
+        val nonMealHypothesisProb = max(
+            ctx.extended.uamEndogenousProb ?: ctx.extended.latentEndogenousGlucoseDrive ?: 0.0,
+            max(
+                ctx.extended.uamStressProb ?: 0.0,
+                ctx.extended.uamPostHypoProb ?: 0.0,
+            ),
+        )
+        val suppressMealInterpretation =
+            ctx.extended.uamSuppressMealInterpretation ||
+                (
+                    nonMealHypothesisProb >= mealHypothesisProb + 0.08 &&
+                        nonMealHypothesisProb >= 0.60
+                    )
+        val mealWaveBoostAllowed =
+            !suppressMealInterpretation &&
+                mealHypothesisProb >= nonMealHypothesisProb &&
+                mealHypothesisProb >= 0.45
 
         // P2 — short-scale dominance
         val hyperVsClearance = paradoxes.any { it.id == BeliefParadoxId.HYPER_VS_CLEARANCE && !it.suppressed }
@@ -128,6 +149,14 @@ object RecursiveBeliefResolver {
             releaseAuthority = ReleaseAuthority.NONE
             reasonCodes += "PHYSIO_RISK_CAP"
         }
+        if (suppressMealInterpretation && releaseAuthority != ReleaseAuthority.NONE) {
+            releaseAuthority = if (releaseAuthority == ReleaseAuthority.HARD) {
+                ReleaseAuthority.SOFT
+            } else {
+                ReleaseAuthority.NONE
+            }
+            reasonCodes += "UAM_ALT_${ctx.extended.uamHypothesisDominant ?: "NON_MEAL"}"
+        }
 
         // P1 — hypo credibility
         val hypoGuardMode = when {
@@ -156,12 +185,14 @@ object RecursiveBeliefResolver {
             smbDemandU = max(smbDemandU, v3Lift)
         }
         if (ctx.mealAbsorption?.phase == MealAbsorptionPhase.SECOND_WAVE && ctx.deltaMgdlPer5 > 0 &&
+            mealWaveBoostAllowed &&
             ctx.behavioralRisk?.capsHtrRelease() != true
         ) {
             smbDemandU = max(smbDemandU, 1.5)
             reasonCodes += "SECOND_WAVE"
         }
         if (ctx.mealAbsorption?.phase == MealAbsorptionPhase.FIRST_WAVE && ctx.deltaMgdlPer5 >= 2.5 &&
+            mealWaveBoostAllowed &&
             ctx.behavioralRisk?.capsHtrRelease() != true
         ) {
             smbDemandU = max(smbDemandU, 1.2)
@@ -179,6 +210,9 @@ object RecursiveBeliefResolver {
             ctx.mealAbsorption?.mealDeliveryPriority == true
         ) {
             reasonCodes += "PATTERN_MEAL_SUPPRESS"
+        }
+        if (suppressMealInterpretation && ctx.mealAbsorption?.mealDeliveryPriority == true) {
+            reasonCodes += "UAM_MEAL_SUPPRESS"
         }
         ctx.behavioralRisk?.takeIf { it.capsHtrRelease() }?.let { risk ->
             smbDemandU = min(smbDemandU, risk.smbFloorCapU)
@@ -209,7 +243,9 @@ object RecursiveBeliefResolver {
                 insulinActivityStageOrdinal = ctx.insulinActivityStageOrdinal,
                 insulinActivityNow = ctx.insulinActivityNow,
                 mealAbsorptionPhase = ctx.mealAbsorption?.phase ?: MealAbsorptionPhase.NONE,
-                mealDeliveryPriority = ctx.mealAbsorption?.mealDeliveryPriority == true,
+                mealDeliveryPriority =
+                    ctx.mealAbsorption?.mealDeliveryPriority == true &&
+                        !suppressMealInterpretation,
                 lastMultiplierG = ctx.lastLoadGovernorMultiplierG,
             ),
         )
@@ -284,6 +320,7 @@ object RecursiveBeliefResolver {
         }
 
         val mealChannel = when {
+            suppressMealInterpretation -> MealChannelHint.SUPPRESS
             ctx.mealAbsorption?.mealDeliveryPriority == true -> MealChannelHint.PRIORITY
             ctx.behavioralRisk?.suppressMealLikeScenario == true -> MealChannelHint.SUPPRESS
             else -> MealChannelHint.NORMAL

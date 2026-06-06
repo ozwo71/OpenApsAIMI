@@ -12,6 +12,7 @@ class MealAbsorptionPhaseEngineTest {
     fun reset() {
         MealAbsorptionMemory.reset()
         MealAbsorptionPhaseHysteresis.reset()
+        CircadianMealProfileStore.resetForTests()
     }
 
     private fun baseInput(
@@ -127,6 +128,34 @@ class MealAbsorptionPhaseEngineTest {
             baseInput(bg = 95.0, delta = 2.6, shortAvg = 2.3, bestT = 160.0, hour = 12),
         )
         assertTrue(out.belief >= 0.45)
+    }
+
+    @Test
+    fun learned_breakfast_center_raises_late_morning_prior() {
+        CircadianMealProfileStore.replaceProfileForTests(
+            CircadianMealProfileSnapshot(
+                breakfastCenterHour = 9.75,
+                breakfastSamples = 12,
+            ),
+        )
+        val prior = MealAbsorptionPhaseEngine.chronoPrior(10)
+        assertTrue(prior > CircadianMealProfileStore.defaultPriorForHour(10))
+        assertTrue(prior >= 0.55)
+    }
+
+    @Test
+    fun learned_dawn_center_suppresses_false_meal_prior_early_morning() {
+        CircadianMealProfileStore.replaceProfileForTests(
+            CircadianMealProfileSnapshot(
+                breakfastCenterHour = 9.50,
+                breakfastSamples = 10,
+                dawnCenterHour = 6.00,
+                dawnSamples = 12,
+            ),
+        )
+        val prior = MealAbsorptionPhaseEngine.chronoPrior(6)
+        assertTrue(prior < CircadianMealProfileStore.defaultPriorForHour(6))
+        assertTrue(prior <= 0.15)
     }
 
     @Test
