@@ -107,14 +107,14 @@ object MealAbsorptionPhaseEngine {
             input.lateFatProteinRise && input.mealCobG < 1.0 -> MealAbsorptionPhase.LATE_FAT
             memoryActive && reAcceleration && input.bgMgdl >= 160.0 -> MealAbsorptionPhase.SECOND_WAVE
             memoryActive && gapWidening && moderateRise && input.bgMgdl >= 140.0 -> MealAbsorptionPhase.SECOND_WAVE
-            memoryActive &&
-                input.deltaMgdlPer5 <= INTER_WAVE_DELTA_MAX &&
-                input.bgMgdl >= 140.0 &&
-                dev >= highBand * 0.5 -> MealAbsorptionPhase.INTER_WAVE
             input.bgMgdl >= 180.0 &&
                 input.iobU >= iobFloorU(input.maxIobU) &&
                 input.deltaMgdlPer5 <= 2.0 &&
                 (memoryActive || belief >= 0.45) -> MealAbsorptionPhase.PEAK_CORRECTION
+            memoryActive &&
+                input.deltaMgdlPer5 <= INTER_WAVE_DELTA_MAX &&
+                input.bgMgdl >= 140.0 &&
+                dev >= highBand * 0.5 -> MealAbsorptionPhase.INTER_WAVE
             fastRise && belief >= 0.55 -> MealAbsorptionPhase.FIRST_WAVE
             memoryActive && moderateRise && belief >= 0.40 -> MealAbsorptionPhase.INTER_WAVE
             belief >= 0.55 && moderateRise && chrono >= 0.55 -> MealAbsorptionPhase.FIRST_WAVE
@@ -147,12 +147,13 @@ object MealAbsorptionPhaseEngine {
     }
 
     internal fun chronoPrior(hourOfDay: Int): Double = when (hourOfDay) {
-        in 7..10 -> 0.55
+        in 5..8 -> 0.22
+        in 9..10 -> 0.42
         in 11..14 -> 0.85
         in 17..21 -> 0.80
         in 15..16 -> 0.65
         in 22..23 -> 0.45
-        in 4..6 -> 0.20
+        in 4..4 -> 0.18
         else -> 0.15
     }
 
@@ -208,6 +209,15 @@ object MealAbsorptionPhaseEngine {
         fastRise: Boolean,
         moderateRise: Boolean,
     ): Boolean {
+        if (input.mealCobG < 6.0 && !input.mealIntent &&
+            (
+                input.physiologicalPhase.isHormonalRisk ||
+                    input.physiologicalPhase == PhysiologicalPhase.STRESS_CORTISOL ||
+                    input.physiologicalPhase.isEndogenousRisk
+                )
+        ) {
+            return false
+        }
         if (phase.bypassesIobSurveillance) return true
         if (phase == MealAbsorptionPhase.INTER_WAVE && belief >= 0.40) return true
         if (phase == MealAbsorptionPhase.LATE_FAT) return false

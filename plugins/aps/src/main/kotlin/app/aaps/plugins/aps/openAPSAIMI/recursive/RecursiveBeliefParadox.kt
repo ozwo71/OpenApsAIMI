@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.recursive
 
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
+import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinStackingStance
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioContributorId
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryType
 import kotlin.math.abs
@@ -15,7 +16,14 @@ object RecursiveBeliefParadox {
         val out = mutableListOf<BeliefParadox>()
 
         if (s15 != null && s180 != null && s15.urgency > 0.8 && s180.urgency < 0.0) {
-            out += paradox(BeliefParadoxId.HYPER_VS_CLEARANCE, false, "P2_SHORT_SCALE_DOMINANCE")
+            val physioReboundWait = ctx.behavioralRisk?.capsHtrRelease() == true ||
+                ctx.stackingStance?.kind == InsulinStackingStance.Kind.SURVEILLANCE_IOB ||
+                ctx.endogenousCounterRegulatory
+            out += paradox(
+                BeliefParadoxId.HYPER_VS_CLEARANCE,
+                physioReboundWait,
+                if (physioReboundWait) "PHYSIO_REBOUND_WAIT" else "P2_SHORT_SCALE_DOMINANCE",
+            )
         }
         val bestT = ctx.scenario.scenarioBest.terminalMgdl
         val v3 = ctx.v3SmbU ?: 0.0

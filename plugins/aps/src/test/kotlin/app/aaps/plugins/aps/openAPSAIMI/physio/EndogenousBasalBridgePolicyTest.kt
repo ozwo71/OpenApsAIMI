@@ -10,7 +10,7 @@ class EndogenousBasalBridgePolicyTest {
     @Test
     fun bridge_rate_modest_above_profile() {
         val rate = EndogenousBasalBridgePolicy.computeBridgeRateUph(
-            bgMgdl = 129.0,
+            bgMgdl = 300.0,
             targetBgMgdl = 100.0,
             isfMgdlPerU = 40.0,
             profileBasalUph = 0.7,

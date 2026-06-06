@@ -2797,6 +2797,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             endogenousCounterRegulatory = endogenousCounterRegulatory,
             mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
         )
+        lastInsulinStackingEvaluation = stackingEval
         ensureWCycleInfo()
         val wCycle = wCycleInfoForRun
         val extended = buildRbtExtendedSignals(
@@ -3187,14 +3188,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleLog.add(UnfoldExporter.formatLogLine(snap))
             }
             val rbtPrefs = RecursiveBeliefPreferences.from(preferences)
+            val physioCapU = lastPhysiologicalPhaseOutput?.policy
+                ?.takeIf { it.capsHtrRelease() }
+                ?.smbFloorCapU
+            val stackingCapU = lastInsulinStackingEvaluation?.takeIf {
+                it.kind == InsulinStackingStance.Kind.SURVEILLANCE_IOB
+            }?.smbAbsoluteCapU
             val rbtAuthority = rbtPrefs.authorityEnabled &&
                 rbtSnapshot?.resolutions?.releaseAuthority != ReleaseAuthority.NONE
-            val effectiveHtr = if (rbtAuthority && rbtSnapshot != null) {
+            val effectiveHtr = if (rbtSnapshot != null && (rbtAuthority || physioCapU != null || stackingCapU != null)) {
                 val r = rbtSnapshot.resolutions
-                val lifted = max(htr.v3SmbBeforeU, r.smbDemandU)
+                val rawLifted = if (rbtAuthority) {
+                    max(htr.v3SmbBeforeU, r.smbDemandU)
+                } else {
+                    htr.v3SmbBeforeU
+                }
+                var lifted = rawLifted
+                physioCapU?.let { lifted = min(lifted, it) }
+                stackingCapU?.let { lifted = min(lifted, it) }
                 htr.copy(
                     active = lifted > htr.v3SmbBeforeU + 0.02,
-                    smbFloorU = r.smbDemandU,
+                    smbFloorU = if (rbtAuthority) min(r.smbDemandU, lifted) else min(htr.smbFloorU, lifted),
                     v3SmbAfterU = lifted,
                     suppressTrajBasalShift = r.suppressTrajBasalShift || htr.suppressTrajBasalShift,
                     hypoMinPredIgnored = r.hypoMinPredIgnored,
@@ -7001,6 +7015,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastRecursiveBeliefSnapshot: RecursiveBeliefSnapshot? = null
     private var lastPhysiologicalPhaseOutput: PhysiologicalPhaseClassifier.Output? = null
     private var lastMealAbsorptionOutput: MealAbsorptionPhaseEngine.Output? = null
+    private var lastInsulinStackingEvaluation: InsulinStackingStance.Evaluation? = null
     private var lastBasePhysioMultipliers: PhysioMultipliersMTR = PhysioMultipliersMTR.NEUTRAL
     private var lastFusedPhysioMultipliers: PhysioMultipliersMTR? = null
     private var lastScenarioBestCappedForPhysio: Boolean = false

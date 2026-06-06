@@ -333,10 +333,32 @@ object BeliefLeafAdapterRegistry {
 private object WaveletBeliefLeafAdapters {
     fun read(tauMin: Int, ctx: RecursiveBeliefTickContext): BeliefLeafReading? {
         val bands = ctx.waveletBands ?: return null
+        val physioGated = ctx.behavioralRisk?.capsHtrRelease() == true
+        val credScale = if (physioGated) 0.2 else 1.0
+        val weightScale = if (physioGated) 0.35 else 1.0
+        val tag = if (physioGated) "wavelet-gated" else "wavelet"
         return when (tauMin) {
-            15 -> BeliefLeafReading(BeliefLeafId.BG_DERIV, bands.high, 0.9, 0.75, "wavelet-H=${"%.2f".format(bands.high)}")
-            60 -> BeliefLeafReading(BeliefLeafId.TRAJ_GEOM, bands.mid, 0.85, 0.7, "wavelet-M=${"%.2f".format(bands.mid)}")
-            180 -> BeliefLeafReading(BeliefLeafId.MPC_HORIZON, bands.low, 0.8, 0.65, "wavelet-L=${"%.2f".format(bands.low)}")
+            15 -> BeliefLeafReading(
+                BeliefLeafId.BG_DERIV,
+                bands.high,
+                0.9 * weightScale,
+                0.75 * credScale,
+                "$tag-H=${"%.2f".format(bands.high)}",
+            )
+            60 -> BeliefLeafReading(
+                BeliefLeafId.TRAJ_GEOM,
+                bands.mid,
+                0.85 * weightScale,
+                0.7 * credScale,
+                "$tag-M=${"%.2f".format(bands.mid)}",
+            )
+            180 -> BeliefLeafReading(
+                BeliefLeafId.MPC_HORIZON,
+                bands.low,
+                0.8 * weightScale,
+                0.65 * credScale,
+                "$tag-L=${"%.2f".format(bands.low)}",
+            )
             else -> null
         }
     }

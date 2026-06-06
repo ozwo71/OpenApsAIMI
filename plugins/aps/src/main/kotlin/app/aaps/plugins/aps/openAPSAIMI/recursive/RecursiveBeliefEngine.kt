@@ -119,14 +119,18 @@ object RecursiveBeliefEngine {
         }
         val echo = RecursiveBeliefMemory.echo(tauMin)
         val echoDamp = if (echo > 0.85) 0.9 else 1.0
-        val waveletBoost = ctx.waveletBands?.let { bands ->
-            when (tauMin) {
-                15    -> bands.high / 10.0
-                60    -> bands.mid / 15.0
-                180   -> bands.low / 20.0
-                else  -> 0.0
-            }
-        } ?: 0.0
+        val waveletBoost = if (ctx.behavioralRisk?.capsHtrRelease() == true) {
+            0.0
+        } else {
+            ctx.waveletBands?.let { bands ->
+                when (tauMin) {
+                    15    -> bands.high / 10.0
+                    60    -> bands.mid / 15.0
+                    180   -> bands.low / 20.0
+                    else  -> 0.0
+                }
+            } ?: 0.0
+        }
         return (dev + 0.35 * deltaFactor + 0.25 * belief + 0.15 * waveletBoost) * echoDamp
     }
 

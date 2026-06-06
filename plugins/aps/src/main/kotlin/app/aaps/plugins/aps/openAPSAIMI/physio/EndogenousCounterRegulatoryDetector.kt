@@ -24,6 +24,7 @@ object EndogenousCounterRegulatoryDetector {
         if (input.deltaMgdlPer5 < 1.0) return false
         if (input.deltaMgdlPer5 >= 4.0 || input.combinedDeltaMgdlPer5 >= 4.5) return false
         if (devAboveTargetMgdl >= highBandMgdl * 1.15) return false
+        if (projectionLeadMgdl < highBandMgdl * 0.72) return false
 
         val moderateRise = input.deltaMgdlPer5 >= 1.5 ||
             input.shortAvgDeltaMgdlPer5 >= 1.2 ||

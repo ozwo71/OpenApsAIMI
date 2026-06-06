@@ -121,6 +121,10 @@ object RecursiveBeliefResolver {
                 reasonCodes += "ENDOG_CAP"
             }
         }
+        if (ctx.behavioralRisk?.capsHtrRelease() == true) {
+            releaseAuthority = ReleaseAuthority.NONE
+            reasonCodes += "PHYSIO_RISK_CAP"
+        }
 
         // P1 — hypo credibility
         val hypoGuardMode = when {
@@ -141,13 +145,21 @@ object RecursiveBeliefResolver {
         }
         val v3 = ctx.v3SmbU ?: 0.0
         if (releaseAuthority != ReleaseAuthority.NONE) {
-            smbDemandU = max(smbDemandU, v3)
+            val v3Lift = ctx.behavioralRisk
+                ?.takeIf { it.capsHtrRelease() }
+                ?.let { min(v3, it.smbFloorCapU) }
+                ?: v3
+            smbDemandU = max(smbDemandU, v3Lift)
         }
-        if (ctx.mealAbsorption?.phase == MealAbsorptionPhase.SECOND_WAVE && ctx.deltaMgdlPer5 > 0) {
+        if (ctx.mealAbsorption?.phase == MealAbsorptionPhase.SECOND_WAVE && ctx.deltaMgdlPer5 > 0 &&
+            ctx.behavioralRisk?.capsHtrRelease() != true
+        ) {
             smbDemandU = max(smbDemandU, 1.5)
             reasonCodes += "SECOND_WAVE"
         }
-        if (ctx.mealAbsorption?.phase == MealAbsorptionPhase.FIRST_WAVE && ctx.deltaMgdlPer5 >= 2.5) {
+        if (ctx.mealAbsorption?.phase == MealAbsorptionPhase.FIRST_WAVE && ctx.deltaMgdlPer5 >= 2.5 &&
+            ctx.behavioralRisk?.capsHtrRelease() != true
+        ) {
             smbDemandU = max(smbDemandU, 1.2)
             reasonCodes += "FIRST_WAVE"
         }
@@ -158,6 +170,10 @@ object RecursiveBeliefResolver {
         if (ctx.stackingStance?.kind == InsulinStackingStance.Kind.SURVEILLANCE_IOB) {
             smbDemandU = min(smbDemandU, ctx.stackingStance.smbAbsoluteCapU)
             reasonCodes += "STACK_CAP"
+        }
+        ctx.behavioralRisk?.takeIf { it.capsHtrRelease() }?.let { risk ->
+            smbDemandU = min(smbDemandU, risk.smbFloorCapU)
+            reasonCodes += "PHYSIO_SMB_CAP"
         }
         val iobHeadroom = max(0.0, ctx.maxIobU - ctx.iobU)
         smbDemandU = minOf(smbDemandU, ctx.maxSmbEffectiveU.coerceAtLeast(0.0), iobHeadroom)

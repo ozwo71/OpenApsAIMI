@@ -68,6 +68,13 @@ object PhysiologicalPhaseClassifier {
             return out(PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY, 0.87, "endogenous R_HGP ramp COB=0")
         }
 
+        classifyMorningCortisolPrior(
+            input = input,
+            highBand = highBand,
+            dev = dev,
+            projectionLead = projectionLead,
+        )?.let { return it }
+
         val mealLikeRise = isMealLikeRise(input, highBand, mealProjectionLead, mealDiscriminantBestT)
         val mealDominantRise = isMealDominantRise(input, highBand, mealProjectionLead, mealDiscriminantBestT)
         if (mealLikeRise) {
@@ -119,7 +126,7 @@ object PhysiologicalPhaseClassifier {
     ): Output? {
         if (input.hourOfDay !in 4..10) return null
         if (input.mealCobG >= 1.0) return null
-        if (dev >= highBand * 0.45) return null
+        if (dev >= highBand * 0.35) return null
         if (isAcuteMealSurgeAtDawn(input, highBand, dev, projectionLead)) return null
         if (!isDawnNearTargetRamp(input, highBand, dev)) return null
         return classifyHormonalMorning(input, "dawnNearTarget UAM ramp")
@@ -215,6 +222,8 @@ object PhysiologicalPhaseClassifier {
     ): Boolean {
         if (input.mealCobG >= 1.0) return false
         if (dev >= highBand * 1.25) return false
+        if (input.bestTerminalMgdl < input.bgMgdl - 10.0) return false
+        if (projectionLead < -5.0) return false
         val slowRamp = input.deltaMgdlPer5 < 4.0 &&
             input.shortAvgDeltaMgdlPer5 < 3.5 &&
             input.combinedDeltaMgdlPer5 < 3.5
@@ -226,10 +235,48 @@ object PhysiologicalPhaseClassifier {
 
     internal fun isStressCortisol(input: Input): Boolean {
         if (input.mealCobG >= 1.0) return false
-        if (MealAbsorptionMemory.isActive(System.currentTimeMillis())) return false
+        val morningCortisolWindow = input.hourOfDay in 5..11
+        if (!morningCortisolWindow && MealAbsorptionMemory.isActive(System.currentTimeMillis())) {
+            return false
+        }
         val hrElevated = input.heartRateBpm > input.restingHeartRateBpm + 12
         val acute = input.deltaMgdlPer5 >= 4.0 || input.combinedDeltaMgdlPer5 >= 4.5
         return hrElevated && acute
+    }
+
+    /**
+     * Morning chrono prior (COB=0): cortisol / circadian hormonal wins over mealLike when UAM inflates bestT.
+     * Window 5h–11h local — individual wake shifts absorbed by HR + rise shape, not only near-target dawn.
+     */
+    internal fun classifyMorningCortisolPrior(
+        input: Input,
+        highBand: Double,
+        dev: Double,
+        projectionLead: Double,
+    ): Output? {
+        if (input.mealCobG >= 1.0) return null
+        if (input.hourOfDay !in 5..10) return null
+
+        if (isStressCortisol(input)) {
+            return out(PhysiologicalPhase.STRESS_CORTISOL, 0.86, "morningStress Δ+HR COB=0")
+        }
+
+        val hrElevated = input.heartRateBpm > input.restingHeartRateBpm + 8
+        val moderateRise = input.deltaMgdlPer5 >= 2.5 ||
+            input.shortAvgDeltaMgdlPer5 >= 2.0 ||
+            input.combinedDeltaMgdlPer5 >= 3.0
+        if (hrElevated && moderateRise && dev < highBand * 1.45) {
+            return out(PhysiologicalPhase.STRESS_CORTISOL, 0.84, "morningChrono rebound COB=0")
+        }
+
+        if (isAcuteMealSurgeAtDawn(input, highBand, dev, projectionLead)) return null
+
+        classifyDawnHormonalIfNearTarget(input, highBand, dev, projectionLead)?.let { return it }
+
+        if (isHormonalKinetic(input, highBand, dev, projectionLead)) {
+            return classifyHormonalMorning(input, "morningChrono COB=0")
+        }
+        return null
     }
 
     internal fun isFemaleCycleHormonal(input: Input): Boolean {

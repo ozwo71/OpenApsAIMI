@@ -36,6 +36,7 @@ object RecursiveBeliefMr7TestHelper {
         dwellMin: Int = 30,
         replaceHtrRelease: Boolean = false,
         hypoMinPredIgnored: Boolean = true,
+        behavioralRisk: BehavioralRiskPolicy? = null,
         extended: RbtExtendedSignals = RbtExtendedSignals.EMPTY,
     ): RecursiveBeliefTickContext {
         val hybrid = listOf(120.0, 150.0, bestTerminal)
@@ -90,7 +91,7 @@ object RecursiveBeliefMr7TestHelper {
                 physioScore = 0.5,
             ),
             physioPhase = null,
-            behavioralRisk = null,
+            behavioralRisk = behavioralRisk,
             trajectoryAnalysis = null,
             trajectoryRelevanceScore = 0.7,
             safetyTerminals = null,

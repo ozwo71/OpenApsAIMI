@@ -43,9 +43,21 @@ class PhysiologicalPhaseClassifierTest {
     }
 
     @Test
-    fun meal_like_rise_overrides_hormonal() {
+    fun fast_morning_rise_prefers_stress_cortisol_over_meal() {
         val out = PhysiologicalPhaseClassifier.classify(
-            dawnInput(delta = 4.0, bestT = 220.0, steps = 50),
+            dawnInput(delta = 4.0, bestT = 220.0, steps = 50).copy(
+                heartRateBpm = 85,
+                restingHeartRateBpm = 62,
+            ),
+        )
+        assertEquals(PhysiologicalPhase.STRESS_CORTISOL, out.phase)
+        assertEquals(HyperSeverityTier.EMERGING, out.policy.maxHtrTier)
+    }
+
+    @Test
+    fun meal_like_rise_overrides_hormonal_at_lunch() {
+        val out = PhysiologicalPhaseClassifier.classify(
+            dawnInput(delta = 4.0, bestT = 220.0, steps = 50).copy(hourOfDay = 12),
         )
         assertEquals(PhysiologicalPhase.MEAL_UNDECLARED, out.phase)
     }

@@ -1,0 +1,80 @@
+package app.aaps.plugins.aps.openAPSAIMI.recursive
+
+import app.aaps.plugins.aps.openAPSAIMI.physio.BehavioralRiskPolicy
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
+import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinStackingStance
+import com.google.common.truth.Truth.assertThat
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+
+class RecursiveBeliefPhysioGatingTest {
+
+    @BeforeEach
+    fun resetMemory() {
+        RecursiveBeliefMemory.clearForTests()
+    }
+
+    @Test
+    fun wavelet_urgency_boost_suppressed_under_physio_cap() {
+        val bands = WaveletBelief.Bands(high = 8.0, mid = 6.0, low = 4.0)
+        val baseCtx = RecursiveBeliefMr7TestHelper.minimalCtx()
+        val plain = baseCtx.copy(waveletBands = bands)
+        val gated = baseCtx.copy(
+            waveletBands = bands,
+            behavioralRisk = BehavioralRiskPolicy.forPhase(
+                PhysiologicalPhase.MALE_CIRCADIAN_HORMONAL,
+                0.85,
+                "test",
+            ),
+        )
+        val uPlain = RecursiveBeliefEngine.deviate(15, plain, 160.0, 0.7)
+        val uGated = RecursiveBeliefEngine.deviate(15, gated, 160.0, 0.7)
+        assertThat(uGated).isLessThan(uPlain)
+    }
+
+    @Test
+    fun physio_hormonal_suppresses_hyper_vs_clearance_and_caps_v3() {
+        val hormonal = BehavioralRiskPolicy.forPhase(
+            PhysiologicalPhase.MALE_CIRCADIAN_HORMONAL,
+            0.85,
+            "morning cortisol",
+        )
+        val scales = listOf(
+            scale(15, belief = 0.82, urgency = 1.8, terminal = 260.0),
+            scale(60, belief = 0.76, urgency = 2.4, terminal = 401.0),
+            scale(180, belief = 0.44, urgency = -0.3, terminal = 118.0),
+        )
+        val ctx = RecursiveBeliefMr7TestHelper.minimalCtx(
+            v3Smb = 2.5,
+            replaceHtrRelease = true,
+            behavioralRisk = hormonal,
+        ).copy(
+            v3SmbU = 2.5,
+            stackingStance = InsulinStackingStance.Evaluation(
+                kind = InsulinStackingStance.Kind.SURVEILLANCE_IOB,
+                smbMultiplier = 0.7,
+                smbAbsoluteCapU = 0.5,
+                suppressRedCarpetRestore = true,
+                tbrBoostFloor = 1.1,
+                summary = "test stacking",
+            ),
+        )
+        val snapshot = RecursiveBeliefResolver.resolve(
+            RecursiveBeliefResolver.Input(ctx = ctx, scales = scales, authorityEnabled = true),
+        )
+        val hyperParadox = snapshot.paradoxes.first { it.id == BeliefParadoxId.HYPER_VS_CLEARANCE }
+        assertThat(hyperParadox.suppressed).isTrue()
+        assertThat(snapshot.resolutions.releaseAuthority).isEqualTo(ReleaseAuthority.NONE)
+        assertThat(snapshot.resolutions.reasonCodes).contains("PHYSIO_RISK_CAP")
+        assertThat(snapshot.resolutions.smbDemandU).isAtMost(0.55)
+    }
+
+    private fun scale(tau: Int, belief: Double, urgency: Double, terminal: Double) =
+        BeliefScaleNode(
+            horizonMinutes = tau,
+            belief = belief,
+            terminalMgdl = terminal,
+            urgency = urgency,
+            leaves = emptyList(),
+        )
+}

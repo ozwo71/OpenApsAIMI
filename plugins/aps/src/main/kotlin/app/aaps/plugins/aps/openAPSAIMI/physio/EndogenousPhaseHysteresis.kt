@@ -24,7 +24,8 @@ object EndogenousPhaseHysteresis {
             return raw
         }
         if (raw.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY ||
-            raw.phase.isHormonalRisk
+            raw.phase.isHormonalRisk ||
+            raw.phase == PhysiologicalPhase.STRESS_CORTISOL
         ) {
             holdTicksRemaining = HOLD_TICKS_DEFAULT
             heldPhase = raw.phase
