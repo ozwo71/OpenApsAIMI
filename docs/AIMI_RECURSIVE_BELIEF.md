@@ -880,4 +880,27 @@ Chaque classe source existante → **un** adaptateur ; pas de duplication logiqu
 
 ---
 
+## 16) Documentation in-app (cartographie)
+
+Textes visibles dans l’APK (anglais `values/` uniquement pour les changements fork) — alignés merge dev 2026-06-05.
+
+| Sujet | Où dans l’app | Clés / fichiers |
+|-------|----------------|-----------------|
+| **Description plugin AIMI** | Config Builder | `plugins/aps/.../strings.xml` → `description_openapsaimi` |
+| **RBT shadow / authority / wavelet** | AIMI → Autodrive prefs | `core/keys/.../strings.xml` → `pref_*_aimi_recursive_belief_*` |
+| **HTR** | Idem | `pref_*_aimi_hyper_trajectory_release*` |
+| **Catalogue patterns (28)** | AIMI → Physiological Assistant | `aimi_physio_*`, `ApsIntentKey.AimiPhysioPatternCatalogInfo` → dialog `aimi_physio_pattern_catalog_detail` |
+| **Hypo risk unifiée** | Loop notification + dashboard + AIMI SOS | `hypo_risk_notification_*` (`plugins/aps` + `plugins/main`), `aimi_hypo_risk_alarm_summary`, `NotificationId.HYPO_RISK_ALARM` |
+| **RBT unfold (JSONL)** | AIMI Advisor | `aimi_rbt_unfold_*`, section dans `AimiProfileAdvisorActivity` |
+| **Parcours advisor RBT** | Advisor recommendations | `aimi_adv_rec_rbt_shadow_*`, `aimi_adv_rec_rbt_authority_*` (`AimiAdvisorService`) |
+| **Eversense natif** | Config Builder → BG Source | `plugins/source/.../strings.xml` → `description_source_eversense`, `eversense_plugin_summary`, `EversenseIntentKey.EversenseAbout` |
+| **Doc repo patterns** | Hors APK | `docs/AIMI_PHYSIOLOGICAL_PATTERN_CATALOG.md` |
+| **Alarm unification AAPS** | Global (pas RBT-specific) | `ALARM_UNIFICATION_PLAN.md`, `AlarmSoundPlayer`, tier `URGENT` |
+
+**Ordre utilisateur recommandé (RBT) :** Autodrive V3 → shadow ON → revue JSONL (`recursive_belief` + `physiological_patterns`) → authority ON (HTR parallèle alors ignoré si release authority active).
+
+**Eversense + AIMI :** glucose via driver BLE natif ; physio assistant = Health Connect séparé ; hypo loop = `HYPO_RISK_ALARM` AIMI, pas les alarmes capteur Eversense (`EVERSENSE_*`).
+
+---
+
 *Document rédigé pour OpenApsAIMI — Recursive Belief Tree v0.2. Contribuer : brancher d'abord en shadow, prouver en JSONL, autoriser ensuite.*

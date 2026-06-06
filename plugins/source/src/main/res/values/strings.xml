@@ -55,7 +55,11 @@
     <string name="permission_notification_listener_description">Required to read glucose values from CGM app notifications</string>
     <!-- Eversense plugin -->
     <string name="source_eversense">Eversense</string>
-    <string name="description_source_eversense">Eversense E3/365 driver</string>
+    <string name="description_source_eversense">Native BLE driver for Eversense E3 (180-day) and E365 (365-day) transmitters. Pair in Config Builder, set 365 cloud credentials if needed, calibrate from Status. Works with AIMI loop, adaptive smoothing, and unified AAPS alarms.</string>
+    <string name="eversense_plugin_summary">Native CGM over BLE — not the notification reader. Supports E3/E365, calibration, placement guide, optional cloud upload, and coexistence with the official Eversense app.</string>
+    <string name="eversense_about_title">About Eversense in OpenApsAIMI</string>
+    <string name="eversense_about_summary">Tap for setup notes, AIMI integration, and alarm behaviour.</string>
+    <string name="eversense_about_detail">Setup: enable this source in Config Builder, scan and pair your transmitter, open Status for battery and sync, use Calibration when ready, and Placement if signal is weak.\n\nE365: enter DMS username/password under Credentials for cloud-backed readings.\n\nAIMI: glucose flows into the AIMI loop like any CGM; no extra AIMI preference is required. Physio assistant uses Health Connect separately (not Eversense BLE).\n\nAlarms: sensor/placement/credential issues use unified AAPS notifications (EVERSENSE_* ids). Hypo-risk while looping is handled by AIMI HYPO_RISK_ALARM, not the Eversense driver.\n\nCoexistence / Release: optional modes let the official Eversense app connect periodically.</string>
     <string name="eversense_information_title">Information</string>
     <string name="eversense_information_connected">Connected</string>
     <string name="eversense_information_battery">Battery percentage</string>

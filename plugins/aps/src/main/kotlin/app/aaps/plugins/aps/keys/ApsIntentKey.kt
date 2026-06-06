@@ -53,4 +53,18 @@ enum class ApsIntentKey(
         preferenceType = PreferenceType.ACTIVITY,
         activityClass = AIMIHealthConnectPermissionActivityMTR::class.java,
     ),
+
+    AimiPhysioPatternCatalogInfo(
+        key = "aimi_physio_pattern_catalog_info",
+        titleResId = R.string.aimi_physio_pattern_catalog_title,
+        summaryResId = R.string.aimi_physio_pattern_catalog_summary,
+        preferenceType = PreferenceType.CLICK,
+    ),
+
+    AimiHypoRiskAlarmInfo(
+        key = "aimi_hypo_risk_alarm_info",
+        titleResId = R.string.hypo_risk_notification_title,
+        summaryResId = R.string.aimi_hypo_risk_alarm_summary,
+        preferenceType = PreferenceType.CLICK,
+    ),
 }

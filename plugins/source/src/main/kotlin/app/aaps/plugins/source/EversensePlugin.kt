@@ -200,7 +200,15 @@ class EversensePlugin @Inject constructor(
     override fun getPreferenceScreenContent() = PreferenceSubScreenDef(
         key = "eversense_settings",
         titleResId = R.string.source_eversense,
+        summaryResId = R.string.eversense_plugin_summary,
         items = listOf(
+            EversenseIntentKey.EversenseAbout.withClick {
+                AlertDialog.Builder(context)
+                    .setTitle(rh.gs(R.string.eversense_about_title))
+                    .setMessage(rh.gs(R.string.eversense_about_detail))
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show()
+            },
             EversenseIntentKey.EversenseStatus.withActivity(EversenseStatusActivity::class.java),
             BooleanKey.EversenseCloudUploadEnabled,
             PreferenceSubScreenDef(

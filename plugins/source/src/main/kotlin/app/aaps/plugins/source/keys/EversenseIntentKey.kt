@@ -35,6 +35,12 @@ enum class EversenseIntentKey(
         key = "eversense_sign_out",
         titleResId = R.string.eversense_sign_out,
         preferenceType = PreferenceType.CLICK
+    ),
+    EversenseAbout(
+        key = "eversense_about",
+        titleResId = R.string.eversense_about_title,
+        summaryResId = R.string.eversense_about_summary,
+        preferenceType = PreferenceType.CLICK
     )
 }
 

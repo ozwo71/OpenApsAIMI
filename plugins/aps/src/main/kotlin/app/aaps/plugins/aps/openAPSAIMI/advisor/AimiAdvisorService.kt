@@ -491,6 +491,7 @@ class AimiAdvisorService {
             val autodriveV3Active = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
             val htrEnabled = preferences.get(BooleanKey.OApsAIMIHyperTrajectoryRelease)
             val rbtShadowEnabled = preferences.get(BooleanKey.OApsAIMIRecursiveBeliefShadow)
+            val rbtAuthorityEnabled = preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority)
             if (autodriveV3Active && !rbtShadowEnabled) {
                 recs.add(
                     AimiRecommendation(
@@ -506,7 +507,22 @@ class AimiAdvisorService {
                     ),
                 )
             }
-            if (autodriveV3Active && !htrEnabled && ctx.metrics.timeAbove180 > 0.22 && ctx.metrics.timeBelow70 < 0.05) {
+            if (autodriveV3Active && rbtShadowEnabled && !rbtAuthorityEnabled) {
+                recs.add(
+                    AimiRecommendation(
+                        titleResId = R.string.aimi_adv_rec_rbt_authority_title,
+                        descriptionResId = R.string.aimi_adv_rec_rbt_authority_desc,
+                        priority = app.aaps.plugins.aps.openAPSAIMI.model.AimiPriority.High,
+                        domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
+                        action = app.aaps.plugins.aps.openAPSAIMI.model.AimiAction.PreferenceUpdate(
+                            key = BooleanKey.OApsAIMIRecursiveBeliefAuthority,
+                            newValue = true,
+                            reason = "Enable RBT authority after shadow JSONL review when Autodrive V3 is active.",
+                        ),
+                    ),
+                )
+            }
+            if (autodriveV3Active && !htrEnabled && !rbtAuthorityEnabled && ctx.metrics.timeAbove180 > 0.22 && ctx.metrics.timeBelow70 < 0.05) {
                 recs.add(
                     AimiRecommendation(
                         titleResId = R.string.aimi_adv_rec_htr_enable_title,

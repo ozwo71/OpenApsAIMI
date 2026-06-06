@@ -62,6 +62,8 @@ import app.aaps.core.keys.interfaces.PreferenceItem
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.StringKey
+import androidx.appcompat.app.AlertDialog
+import app.aaps.core.keys.interfaces.withClick
 import app.aaps.core.keys.interfaces.withCompose
 import app.aaps.core.keys.interfaces.withEntries
 import app.aaps.core.ui.compose.ComposeScreenContent
@@ -1501,6 +1503,15 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     add(StringKey.AimiEmergencySosPhone)
                     add(IntKey.AimiEmergencySosThreshold)
                     add(ApsIntentKey.AimiSosPermissions)
+                    add(
+                        ApsIntentKey.AimiHypoRiskAlarmInfo.withClick {
+                            AlertDialog.Builder(context)
+                                .setTitle(rh.gs(R.string.hypo_risk_notification_title))
+                                .setMessage(rh.gs(R.string.aimi_hypo_risk_alarm_summary))
+                                .setPositiveButton(android.R.string.ok, null)
+                                .show()
+                        },
+                    )
                 },
             )
         )
@@ -1510,6 +1521,15 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 titleResId = R.string.aimi_physio_title,
                 items = buildList {
                     add(BooleanKey.AimiPhysioAssistantEnable)
+                    add(
+                        ApsIntentKey.AimiPhysioPatternCatalogInfo.withClick {
+                            AlertDialog.Builder(context)
+                                .setTitle(rh.gs(R.string.aimi_physio_pattern_catalog_title))
+                                .setMessage(rh.gs(R.string.aimi_physio_pattern_catalog_detail))
+                                .setPositiveButton(android.R.string.ok, null)
+                                .show()
+                        },
+                    )
                     add(ApsIntentKey.AimiHealthConnectPermissions)
                     add(AimiStringKey.ActivitySourceMode)
                     add(BooleanKey.AimiPhysioSleepDataEnable)

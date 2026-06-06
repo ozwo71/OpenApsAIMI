@@ -182,7 +182,7 @@
     <string name="openapsaimi">"AIMI 3.3"</string>
     <string name="openapsaimi_maxsmb_summary">Max SMB value when BG is below 120</string>
     <string name="openapsaimi_maxsmb_title">Max SMB LOW BG</string>
-    <string name="description_openapsaimi">Small micro-boluses based on Artificial Intelligence and Machine Learning.</string>
+    <string name="description_openapsaimi">AIMI loop: adaptive PK/PD, Autodrive V3, physiological assistant (Health Connect + 28-pattern catalogue), optional Recursive Belief Tree (RBT/HTR), and unified hypo-risk alarms. Native Eversense E3/365 and standard CGM sources supported.</string>
     <!-- ❌ TIME-BASED REACTIVITY TITLES/SUMMARIES REMOVED -->
     <string name="DynISFAdjusthyper_summary"><![CDATA[Increasing this value will increase the speed to send SMB when BG > 120]]></string>
     <string name="DynISFAdjusthyper_title"><![CDATA[DynISF Adjustment factor % BG > 120]]></string>
@@ -342,8 +342,10 @@
     <string name="aimi_adv_rec_htr_enable_desc">Sustained hyper with Autodrive V3 active but weak SMB delivery. HTR lifts V3 micro-bolus when scenario projection confirms a rise (not a fixed 200 mg/dL rule).</string>
     <string name="aimi_adv_rec_rbt_shadow_title">Enable Recursive Belief Tree (shadow)</string>
     <string name="aimi_adv_rec_rbt_shadow_desc">Autodrive V3 is active. Turn on RBT shadow mode to export multi-scale belief unfold in AIMI_Decisions.jsonl before enabling release authority.</string>
+    <string name="aimi_adv_rec_rbt_authority_title">Enable Recursive Belief Tree authority</string>
+    <string name="aimi_adv_rec_rbt_authority_desc">RBT shadow is on and JSONL unfold looks stable. Enable authority so cross-scale tensions drive SMB release (replaces parallel HTR when release authority is active). Review the unfold section below first.</string>
     <string name="aimi_rbt_unfold_section_title">RECURSIVE BELIEF UNFOLD</string>
-    <string name="aimi_rbt_unfold_section_desc">Latest multi-scale belief export from AIMI_Decisions.jsonl (shadow or authority). Enable RBT shadow in AIMI settings when Autodrive V3 is active.</string>
+    <string name="aimi_rbt_unfold_section_desc">Latest multi-scale belief export from AIMI_Decisions.jsonl (recursive_belief and physiological_patterns sections). Enable RBT shadow first, review several loop ticks, then enable authority if unfold looks coherent.</string>
     <string name="aimi_rbt_unfold_mode">Mode: shadow=%1$s authority=%2$s wavelet=%3$s</string>
     <string name="aimi_rbt_unfold_no_data">No recursive_belief export yet. Run the loop with RBT shadow enabled for at least one tick.</string>
     <string name="aimi_rbt_unfold_summary">Last tick: auth=%1$s smb=%2$.2fU paradoxes=%3$d shadow=%4$s</string>
@@ -1174,7 +1176,9 @@
     <string name="oaps_aimi_delta_pos_release_title">Positive Δ to release (mg/dL/5 min)</string>
     <string name="oaps_aimi_delta_pos_release_summary">If Δ exceeds this value, reduce/relax the intensification.</string>
 
-    <string name="hypo_risk_notification_text">Hypo risk detected: Rapid drop!</string>
+    <string name="hypo_risk_notification_title">Hypo Risk</string>
+    <string name="hypo_risk_notification_text">Hypo risk: rapid drop detected. Check your glucose now.</string>
+    <string name="aimi_hypo_risk_alarm_summary">AIMI posts a unified URGENT alarm (NotificationId.HYPO_RISK_ALARM) with AAPS alarm sound. Snooze or dismiss from the notification list or dashboard dialog.</string>
     <string name="meal_dinner_maintain">Dinner mode maintain (%.1f floor)</string>
     <string name="reason_bg_dropping_floor">Drop (Δ%.1f), safety floor (%.2f)</string>
 
@@ -1442,7 +1446,10 @@
     <!-- Physiological Assistant Strings -->
     <string name="aimi_physio_title">🏥 Physiological Assistant</string>
     <string name="aimi_physio_enable_title">Enable Assistant</string>
-    <string name="aimi_physio_enable_summary">Adjusts insulin based on sleep, activity, and heart rate patterns.</string>
+    <string name="aimi_physio_enable_summary">Adjusts insulin using Health Connect vitals and a 28-pattern physiological catalogue (dawn, meals, stress, recovery). Active patterns export to AIMI_Decisions.jsonl and feed RBT leaves and HTR caps.</string>
+    <string name="aimi_physio_pattern_catalog_title">Physiological pattern catalogue</string>
+    <string name="aimi_physio_pattern_catalog_summary">28 hysteresis-gated patterns (sleep, HRV, meals, stress, cycle). Tap for details.</string>
+    <string name="aimi_physio_pattern_catalog_detail">When the assistant is enabled, each loop tick runs the pattern detector on physio + CGM context. Matches export as physiological_patterns in AIMI_Decisions.jsonl and can cap HTR or inform RBT belief leaves. Requires Health Connect permissions for sleep and HRV when those sources are enabled. See repo docs/AIMI_PHYSIOLOGICAL_PATTERN_CATALOG.md for the full list.</string>
     <string name="aimi_physio_data_sources_title">Data Sources</string>
     <string name="aimi_physio_sleep_enable_title">Sync Sleep Data</string>
     <string name="aimi_physio_sleep_enable_summary">Use Health Connect to fetch sleep stages and efficiency.</string>

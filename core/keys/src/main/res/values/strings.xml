@@ -549,9 +549,9 @@
     <string name="pref_title_aimi_hyper_trajectory_release_aggressive">HTR aggressive floors</string>
     <string name="pref_summary_aimi_hyper_trajectory_release_aggressive">Raises HTR SMB floors ~15%% when scenario confirms hyper rise. Use only if default release feels too weak.</string>
     <string name="pref_title_aimi_recursive_belief_shadow">Recursive belief tree (shadow export)</string>
-    <string name="pref_summary_aimi_recursive_belief_shadow">Build multi-scale belief tree each loop and export recursive_belief to AIMI_Decisions.jsonl. Required for RBT authority.</string>
+    <string name="pref_summary_aimi_recursive_belief_shadow">Build multi-scale belief tree each loop and export recursive_belief (and physiological_patterns when the physio assistant is on) to AIMI_Decisions.jsonl. Required before RBT authority.</string>
     <string name="pref_title_aimi_recursive_belief_authority">Recursive belief tree authority</string>
-    <string name="pref_summary_aimi_recursive_belief_authority">When on, RBT resolves SMB demand and Traj-Bridge suppression from cross-scale tensions (replaces parallel HTR when release authority is active).</string>
+    <string name="pref_summary_aimi_recursive_belief_authority">When on, RBT resolves SMB demand and Traj-Bridge suppression from cross-scale tensions (replaces parallel HTR when release authority is active). Enable only after shadow JSONL review.</string>
     <string name="pref_title_aimi_recursive_belief_wavelet">RBT wavelet belief (experimental)</string>
     <string name="pref_summary_aimi_recursive_belief_wavelet">Haar 3-band BG decomposition for micro/meso/macro leaves. Off by default.</string>
     <string name="pref_title_aimi_hyper_established_dev">HTR established deviation (mg/dL above target)</string>
