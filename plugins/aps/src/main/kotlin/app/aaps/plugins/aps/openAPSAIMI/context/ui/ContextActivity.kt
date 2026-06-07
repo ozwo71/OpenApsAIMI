@@ -22,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.minutes
@@ -202,9 +203,14 @@ class ContextActivity : TranslatedDaggerAppCompatActivity() {
     private fun startPatientStateRefresh() {
         patientStateRefreshJob?.cancel()
         patientStateRefreshJob = activityScope.launch {
+            launch {
+                PatientStateRuntimeRepository.updates.collectLatest {
+                    refreshPatientRuntimeUi()
+                }
+            }
             while (isActive) {
                 refreshPatientRuntimeUi()
-                delay(15_000L)
+                delay(60_000L)
             }
         }
     }
@@ -229,9 +235,17 @@ class ContextActivity : TranslatedDaggerAppCompatActivity() {
         binding.textPatientStateUpdated.text = presentation.updatedSummary
         binding.textPatientStateMode.text = presentation.modeHeadline
         binding.textPatientStateNarrative.text = presentation.narrative
+        binding.textPatientStateLiveBody.text = presentation.physioLiveSummary
         binding.textPatientStatePhaseValue.text = presentation.physiologySummary
         binding.textPatientStateIntentValue.text = presentation.intentSummary
         binding.textPatientStateSignalsValue.text = presentation.signalSummary
+        PatientSignalGaugeBinder.bindAll(
+            mealContainer = binding.layoutPatientSignalGaugeMeal.root,
+            endogenousContainer = binding.layoutPatientSignalGaugeEndogenous.root,
+            resistanceContainer = binding.layoutPatientSignalGaugeResistance.root,
+            sensorContainer = binding.layoutPatientSignalGaugeSensor.root,
+            gauges = presentation.signalGauges,
+        )
         binding.textPatientStateDeliveryValue.text = presentation.deliverySummary
         binding.textPatientStateReasonsValue.text = presentation.reasonSummary
     }

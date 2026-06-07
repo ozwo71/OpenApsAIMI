@@ -54,5 +54,9 @@ class PatientStatePresentationBuilderTest {
         assertThat(presentation.signalSummary).contains("Endogenous 88%")
         assertThat(presentation.deliverySummary).contains("Basal Bridge")
         assertThat(presentation.reasonSummary).contains("False meal suppression")
+        assertThat(presentation.physioLiveSummary).contains("Body signals pending")
+        assertThat(presentation.signalGauges).hasSize(4)
+        assertThat(presentation.signalGauges[1].label).isEqualTo("Endogenous")
+        assertThat(presentation.signalGauges[1].percent).isEqualTo(88)
     }
 }

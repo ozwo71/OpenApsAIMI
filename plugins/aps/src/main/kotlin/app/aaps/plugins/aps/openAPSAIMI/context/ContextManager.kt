@@ -9,6 +9,7 @@ import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.*
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRefresher
 import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
 import javax.inject.Inject
@@ -130,6 +131,7 @@ class ContextManager @Inject constructor(
         // Cleanup expired and SAVE
         cleanupExpired(System.currentTimeMillis())
         saveToStorage()
+        notifyPatientStateChanged()
         
         return ids
     }
@@ -188,6 +190,7 @@ class ContextManager @Inject constructor(
         // Cleanup expired and SAVE
         cleanupExpired(System.currentTimeMillis())
         saveToStorage()
+        notifyPatientStateChanged()
         
         return id
     }
@@ -213,6 +216,7 @@ class ContextManager @Inject constructor(
                     aapsLogger.error(LTag.APS, "[ContextManager] Failed to invalidate sync record for $id: ${e.message}", e)
                 }
             }
+            notifyPatientStateChanged()
 
             return true
         }
@@ -234,6 +238,7 @@ class ContextManager @Inject constructor(
         if (toRemove.isNotEmpty()) {
             aapsLogger.info(LTag.APS, "[ContextManager] Removed ${toRemove.size} intent(s) of type ${intentClass.simpleName}")
             saveToStorage()
+            notifyPatientStateChanged()
         }
         
         return toRemove.size
@@ -248,6 +253,7 @@ class ContextManager @Inject constructor(
         activeIntents.clear()
         aapsLogger.info(LTag.APS, "[ContextManager] Cleared all intents (removed $count)")
         saveToStorage()
+        notifyPatientStateChanged()
         
         ioScope.launch {
             try {
@@ -329,6 +335,7 @@ class ContextManager @Inject constructor(
         
         aapsLogger.info(LTag.APS, "[ContextManager] Extended intent $id by ${additionalDuration.inWholeMinutes}min")
         saveToStorage()
+        notifyPatientStateChanged()
         
         return true
     }
@@ -600,5 +607,18 @@ class ContextManager @Inject constructor(
         aapsLogger.info(LTag.APS, "[ContextManager] ✅ Injected context from NS: $intentId -> $intent")
         
         saveToStorage()
+        notifyPatientStateChanged()
+    }
+
+    private fun notifyPatientStateChanged() {
+        val snapshot = try {
+            getSnapshot(dateUtil.now())
+        } catch (_: Exception) {
+            null
+        }
+        PatientStateRuntimeRefresher.refreshFromContextIntents(
+            contextSnapshot = snapshot,
+            nowMs = dateUtil.now(),
+        )
     }
 }

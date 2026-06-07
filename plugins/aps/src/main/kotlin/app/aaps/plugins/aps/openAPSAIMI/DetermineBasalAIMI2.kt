@@ -156,9 +156,14 @@ import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiLoopTickRecovery
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientRefreshSource
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateEngine
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateLoopCache
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientRuntimeSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStatePresentationBuilder
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.patient.PhysioLiveDigest
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleInfo
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
@@ -1395,7 +1400,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastContextSnapshot = null
         lastPatientState = null
         lastPatientModeDecision = null
-        PatientStateRuntimeRepository.clear()
         EndogenousPhaseHysteresis.reset()
         pendingTrajSpiralBasal = null
         val decisionCtx = AimiDecisionContext(
@@ -2705,15 +2709,68 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         lastUamHypothesisState = hypothesisState
         lastPhysioLatentState = latentState
-        refreshPatientStateRuntime()
+        refreshPatientStateRuntime(
+            nowMs = dateUtil.now(),
+            contextSnapshot = lastContextSnapshot,
+            healthSnapshot = snapshot,
+            sourceSensor = sourceSensor,
+        )
         return latentState
+    }
+
+    private fun resolvePatientRuntimeSnapshotForExport(timestampMs: Long): PatientRuntimeSnapshot? {
+        PatientStateRuntimeRepository.getLatest()?.let { return it }
+        val patientState = lastPatientState ?: return null
+        val patientModeDecision = lastPatientModeDecision ?: return null
+        return PatientRuntimeSnapshot(
+            patientState = patientState,
+            patientModeDecision = patientModeDecision,
+            updatedAtMs = timestampMs,
+        )
+    }
+
+    private fun publishPatientStateAfterPhysiologyRefresh(
+        glucoseStatus: GlucoseStatusAIMI,
+        nowMs: Long,
+    ) {
+        val wearableSnap = try {
+            physioAdapter.getLatestSnapshot()
+        } catch (_: Exception) {
+            HealthContextSnapshot()
+        }
+        val contextSnap = try {
+            if (preferences.get(BooleanKey.OApsAIMIContextEnabled)) {
+                contextManager.getSnapshot(nowMs)
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+        lastContextSnapshot = contextSnap
+        updatePhysioLatentState(
+            snapshot = wearableSnap,
+            sourceSensor = glucoseStatus.sourceSensor,
+            patternSnapshot = lastPhysiologicalPatternSnapshot,
+        )
     }
 
     private fun refreshPatientStateRuntime(
         nowMs: Long = dateUtil.now(),
         contextSnapshot: ContextSnapshot? = lastContextSnapshot,
+        healthSnapshot: HealthContextSnapshot? = null,
+        sourceSensor: SourceSensor? = lastPatientSourceSensor,
+        refreshSource: PatientRefreshSource = PatientRefreshSource.LOOP_TICK,
     ): PatientStateSnapshot {
         lastContextSnapshot = contextSnapshot
+        if (sourceSensor != null) {
+            lastPatientSourceSensor = sourceSensor
+        }
+        val wearableSnap = healthSnapshot ?: try {
+            physioAdapter.getLatestSnapshot()
+        } catch (_: Exception) {
+            HealthContextSnapshot()
+        }
         val patientState = PatientStateEngine.build(
             timestampMs = nowMs,
             phaseOutput = lastPhysiologicalPhaseOutput,
@@ -2726,10 +2783,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastPatientState = patientState
         val patientModeDecision = PatientModeOrchestrator.evaluate(patientState)
         lastPatientModeDecision = patientModeDecision
+        val loopCache = PatientStateLoopCache(
+            phaseOutput = lastPhysiologicalPhaseOutput,
+            mealAbsorptionOutput = lastMealAbsorptionOutput,
+            patternSnapshot = lastPhysiologicalPatternSnapshot,
+            contextSnapshot = lastContextSnapshot,
+            sourceSensor = lastPatientSourceSensor,
+            correctionAggressionDecision = correctionAggressionDecision,
+            chronicInflammation = lastInflammationResult,
+            physioContext = physioAdapter.getEffectiveContext(),
+            physioTrace = physioAdapter.getLastDecisionTrace(),
+            hypothesisState = lastUamHypothesisState,
+            uamConfidence = AimiUamHandler.confidenceOrZero(),
+        )
         PatientStateRuntimeRepository.publish(
             patientState = patientState,
             patientModeDecision = patientModeDecision,
             updatedAtMs = nowMs,
+            physioLive = PhysioLiveDigest.from(wearableSnap, nowMs),
+            loopCache = loopCache,
+            refreshSource = refreshSource,
         )
         return patientState
     }
@@ -6432,6 +6505,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val wCycleInfo = wCycleInfoForRun
             val traceForExport = physioAdapter.getLastDecisionTrace() ?: fallbackTrace
             val safetyExport = lastSafetyRiskExport
+            val patientRuntimeSnapshot = resolvePatientRuntimeSnapshotForExport(decisionCtx.timestamp)
+            val patientPresentation = patientRuntimeSnapshot?.let { runtimeSnapshot ->
+                PatientStatePresentationBuilder.build(
+                    snapshot = runtimeSnapshot,
+                    nowMs = decisionCtx.timestamp,
+                )
+            }
             val event = HormonitorDecisionEventMTR(
                 eventId = decisionCtx.event_id,
                 eventTimestamp = decisionCtx.timestamp,
@@ -6474,6 +6554,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 safetyUamTerminalMgdl = safetyExport?.uamTerminalMgdl,
                 decisionCompositeMinMgdl = safetyExport?.decisionCompositeMinMgdl,
                 safetyReconcileDeltaMgdl = safetyExport?.reconcileDeltaMgdl,
+                patientMode = patientRuntimeSnapshot?.patientModeDecision?.mode?.name,
+                patientModeConfidence = patientRuntimeSnapshot?.patientModeDecision?.confidence,
+                patientStrategyHint = patientRuntimeSnapshot?.patientModeDecision?.strategyHint?.name,
+                patientNarrative = patientPresentation?.narrative,
+                patientReasonCodes = patientRuntimeSnapshot?.patientModeDecision?.reasonCodes,
+                patientPhysioLive = patientRuntimeSnapshot?.physioLive
+                    ?: PhysioLiveDigest.from(latestSnapshot, decisionCtx.timestamp),
             )
             hormonitorStudyExporter.export(event)
             hormonitorStudyExporter.exportShadowContributions(event)
@@ -7089,6 +7176,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             lastBolusTimeMs = iobData.lastBolusTime.takeIf { it > 0L },
             nowMs = nowMs,
         )
+        publishPatientStateAfterPhysiologyRefresh(
+            glucoseStatus = glucoseStatus,
+            nowMs = nowMs,
+        )
         val cappedBest = scenario.scenarioBest.terminalMgdl
         this.predictedBg = cappedBest.toFloat()
         lastEventualBgSnapshot = cappedBest
@@ -7488,6 +7579,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastContextSnapshot: ContextSnapshot? = null
     private var lastPatientState: PatientStateSnapshot? = null
     private var lastPatientModeDecision: PatientModeOrchestrator.Decision? = null
+    private var lastPatientSourceSensor: SourceSensor? = null
     /** Latest IOB surveillance snapshot for JSONL (updated each [finalizeAndCapSMB]). */
     private var lastIobSurveillanceExport: AimiDecisionContext.IobSurveillanceExport? = null
     private var lastSmbCapped: Double = 0.0

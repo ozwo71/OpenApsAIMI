@@ -12,9 +12,11 @@ Cette checklist sert à valider la couche produit récente :
 
 - `PatientStateSnapshot`
 - `PatientModeOrchestrator`
+- `PatientStateRuntimeRepository` + `PatientStateRuntimeRefresher`
 - `RecursiveBeliefAuthorityGate` modulé par le mode patient
 - export `ReplayQualityExport` enrichi
-- affichage clinique dans `ContextActivity`
+- export Hormonitor `patient_story` (schéma `1.2.0`)
+- affichage clinique dans `ContextActivity` (jauges + live body signals)
 
 Elle ne déclare pas le système "terminé". Elle sert à décider si la passe est assez cohérente pour une montée supervisée.
 
@@ -48,6 +50,14 @@ Chaque scénario de replay doit renseigner de façon cohérente :
 - `context_intent_active`
 - `context_intent_count`
 - `context_intent_dominant`
+
+Dans **Hormonitor event stream** (`schema_version = 1.2.0`), vérifier aussi :
+
+- `patient_story.patient_mode`
+- `patient_story.patient_strategy_hint`
+- `patient_story.patient_narrative`
+- `patient_story.patient_reason_codes`
+- `patient_story.physio_live` (steps, FC, activité cohérents avec le tick)
 
 Si ces champs sont absents ou incohérents, le scénario est `NO-GO`.
 
@@ -133,7 +143,10 @@ Le lot peut être monté en supervision si :
 - les scénarios protecteurs n’ouvrent pas `HARD` ;
 - dawn, stress et post-hypo ne déclenchent pas de faux `FAST_MEAL` dominants ;
 - les exports replay montrent bien le mode patient et ses raisons ;
-- l’écran `AIMI Context` affiche une lecture cohérente du corps au moment du replay.
+- l’écran `AIMI Context` affiche une lecture cohérente du corps au moment du replay ;
+- la carte se met à jour **à chaque tick loop**, pas seulement après SMB / Autodrive ;
+- les *Live body signals* bougent quand steps ou FC changent (sans attendre le tick suivant) ;
+- l’ajout d’un intent contexte met à jour la carte immédiatement (*· user context*).
 
 ### NO-GO
 
@@ -143,7 +156,9 @@ Le lot doit être bloqué si un des cas suivants apparaît :
 - `DAWN_ENDOGENOUS` avec `meal_bias` dominant sans preuve repas claire ;
 - `ABSORPTION_UNCERTAIN` qui ouvre une posture agressive ;
 - champs replay patient manquants ou vides ;
-- divergence flagrante entre l’écran clinique et l’export JSONL.
+- `patient_story` absent ou vide dans Hormonitor `1.2.0` ;
+- divergence flagrante entre l’écran clinique et l’export JSONL ;
+- carte Context figée entre deux ticks alors que steps / FC évoluent.
 
 ---
 
@@ -153,5 +168,17 @@ Ordre conseillé :
 
 1. replay shadow sur jeux ciblés ;
 2. revue manuelle de `patient_mode` et `patient_strategy_hint` ;
-3. vérification UI `AIMI Context` ;
+3. vérification UI `AIMI Context` (§7) ;
 4. seulement ensuite ouverture progressive de l’autorité RBT.
+
+---
+
+## 7. Validation UI Context (device)
+
+Checklist rapide sur appareil :
+
+1. Ouvrir **AIMI Context** — la carte ne doit pas rester vide après le premier tick loop.
+2. Attendre un tick (~5 min) — headline, narrative et jauges se mettent à jour.
+3. Marcher ou monter la FC — *Live body signals* change sans dose SMB.
+4. Ajouter preset Stress — mise à jour immédiate avec *· user context*.
+5. Comparer avec JSONL / Hormonitor — même `patient_mode` et raisons dominantes.

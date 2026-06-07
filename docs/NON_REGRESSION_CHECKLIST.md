@@ -62,6 +62,7 @@ When this fork includes (or will include) the CAPTCG Eversense BLE plugin series
 - [ ] Required structural flows/interfaces remain intact.
 - [ ] No rename/removal of expected keys or records.
 - [ ] Historical compatibility preserved for study data consumption.
+- [ ] Schema `1.2.0` additive block `patient_story` present when patient runtime is active (no breaking rename of `1.1.0` keys).
 
 ---
 

@@ -3,7 +3,8 @@ package app.aaps.plugins.aps.openAPSAIMI.physio
 import android.content.Context
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.plugins.aps.openAPSAIMI.steps.StepsResult
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRefresher
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
 import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -166,11 +167,29 @@ class HealthContextRepository @Inject constructor(
                 source = snapshot.source,
             )
             lastSnapshot = merged
+            maybeRefreshPatientStateFromPhysio(merged)
             return merged
         }
 
         lastSnapshot = snapshot
+        maybeRefreshPatientStateFromPhysio(snapshot)
         return snapshot
+    }
+
+    private fun maybeRefreshPatientStateFromPhysio(snapshot: HealthContextSnapshot) {
+        val previous = PatientStateRuntimeRepository.getLatest()?.physioLive
+        val stepsChanged = previous == null || previous.stepsLast15m != snapshot.stepsLast15m ||
+            previous.stepsLast60m != snapshot.stepsLast60m
+        val hrChanged = previous == null || previous.hrNowBpm != snapshot.hrNow ||
+            previous.hrAvg15mBpm != snapshot.hrAvg15m
+        val activityChanged = previous == null || previous.activityState != snapshot.activityState
+        if (!stepsChanged && !hrChanged && !activityChanged) {
+            return
+        }
+        PatientStateRuntimeRefresher.refreshFromHealthSnapshot(
+            healthSnapshot = snapshot,
+            nowMs = System.currentTimeMillis(),
+        )
     }
 
     // Pass-through for legacy or specific access if needed

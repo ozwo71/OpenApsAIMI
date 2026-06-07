@@ -83,6 +83,21 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="14dp"
+                        android:text="@string/context_patient_state_live_body_label"
+                        style="@style/ContextPatientStateLabel"/>
+
+                    <TextView
+                        android:id="@+id/textPatientStateLiveBody"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        style="@style/ContextPatientStateBody"
+                        tools:text="Walking · 820 steps/15m · 98 bpm"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
                         android:text="@string/context_patient_state_phase_label"
                         style="@style/ContextPatientStateLabel"/>
 
@@ -115,6 +130,41 @@
                         android:layout_marginTop="12dp"
                         android:text="@string/context_patient_state_probabilities_label"
                         style="@style/ContextPatientStateLabel"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/context_patient_state_signals_gauge_label"
+                        style="@style/ContextPatientStateMeta"/>
+
+                    <include
+                        android:id="@+id/layoutPatientSignalGaugeMeal"
+                        layout="@layout/item_patient_signal_gauge"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"/>
+
+                    <include
+                        android:id="@+id/layoutPatientSignalGaugeEndogenous"
+                        layout="@layout/item_patient_signal_gauge"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"/>
+
+                    <include
+                        android:id="@+id/layoutPatientSignalGaugeResistance"
+                        layout="@layout/item_patient_signal_gauge"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"/>
+
+                    <include
+                        android:id="@+id/layoutPatientSignalGaugeSensor"
+                        layout="@layout/item_patient_signal_gauge"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"/>
 
                     <TextView
                         android:id="@+id/textPatientStateSignalsValue"

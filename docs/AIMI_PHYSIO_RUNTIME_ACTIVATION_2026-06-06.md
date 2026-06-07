@@ -255,6 +255,46 @@ But :
 - rendre l’état patient lisible sans ouvrir les logs ;
 - donner une explication clinique compacte de la posture AIMI ;
 - préparer la validation replay / go-no-go sur un support visible en UI.
+
+### 3.12 Rafraîchissement live du mode patient (2026-06-06)
+
+**Problème corrigé :** la carte *Current AIMI Understanding* ne se mettait à jour que sur les branches Autodrive V3 / RBT (souvent perçu comme « seulement après un SMB »). Entre deux ticks, steps / FC / contexte utilisateur ne poussaient pas l’UI.
+
+**Architecture actuelle :**
+
+| Composant | Rôle |
+|-----------|------|
+| `PatientStateRuntimeRepository` | Snapshot in-memory + `SharedFlow` pour push UI |
+| `PatientStateLoopCache` | Derniers outputs loop (phase, repas, latent, contexte) |
+| `PatientStateRuntimeRefresher` | Rebuild mode patient entre ticks |
+| `PhysioLiveDigest` | Steps, FC, activité, dette sommeil pour l’UI et Hormonitor |
+
+**Quand le mode patient est publié :**
+
+1. **Chaque tick loop** — fin de `runAdvancedPredictionsAndPredPipePrep()` → `publishPatientStateAfterPhysiologyRefresh()` (plus de `clear()` au début du tick).
+2. **Signaux corps entre ticks** — `HealthContextRepository` si steps / FC / activité changent.
+3. **Contexte utilisateur** — `ContextManager` à l’ajout, suppression ou prolongation d’intent.
+
+**UI Context (`ContextActivity`) :**
+
+- section *Live body signals* (activité, steps/15 min, FC) ;
+- jauges Meal / Endogenous / Resistance / Sensor ;
+- rafraîchissement immédiat via `PatientStateRuntimeRepository.updates` ;
+- suffixe *Updated … · live body signals* ou *· user context* selon la source.
+
+**Export Hormonitor — schéma `1.2.0` :**
+
+Nouveau bloc `patient_story` dans `AIMI_HORMONITOR_event_stream_v1.jsonl` :
+
+- `patient_mode`, `patient_mode_confidence`, `patient_strategy_hint`
+- `patient_narrative`, `patient_reason_codes`
+- `physio_live` (steps, FC, activité, dette sommeil, source)
+
+Fichiers :
+
+- `plugins/aps/.../patient/PatientStateRuntimeRefresher.kt`
+- `plugins/aps/.../patient/PhysioLiveDigest.kt`
+- `plugins/aps/.../physio/AimiHormonitorStudyExporterMTR.kt` (`SCHEMA_VERSION = 1.2.0`)
 - le modèle interne sauvegardé sera naturellement recréé si la dimension d’entrée diverge.
 
 ---

@@ -3,13 +3,20 @@ package app.aaps.plugins.aps.openAPSAIMI.patient
 import java.util.Locale
 import kotlin.math.roundToInt
 
+data class PatientSignalGauge(
+    val label: String,
+    val percent: Int,
+)
+
 data class PatientStatePresentation(
     val updatedSummary: String,
     val modeHeadline: String,
     val narrative: String,
     val physiologySummary: String,
+    val physioLiveSummary: String,
     val intentSummary: String,
     val signalSummary: String,
+    val signalGauges: List<PatientSignalGauge>,
     val deliverySummary: String,
     val reasonSummary: String,
 )
@@ -22,20 +29,22 @@ internal object PatientStatePresentationBuilder {
         val modeLabel = humanize(patientMode.mode.name)
         val strategyLabel = humanize(patientMode.strategyHint.name)
         return PatientStatePresentation(
-            updatedSummary = buildUpdatedSummary(snapshot.updatedAtMs, nowMs),
+            updatedSummary = buildUpdatedSummary(snapshot.updatedAtMs, nowMs, snapshot.refreshSource),
             modeHeadline = "$modeLabel (${percent(patientMode.confidence)})",
             narrative = buildNarrative(patientMode),
             physiologySummary = buildPhysiologySummary(patientState),
+            physioLiveSummary = buildPhysioLiveSummary(snapshot.physioLive),
             intentSummary = buildIntentSummary(patientState),
             signalSummary = buildSignalSummary(patientState),
+            signalGauges = buildSignalGauges(patientState),
             deliverySummary = "$strategyLabel · meal bias ${percent(patientMode.mealBias)} · protection ${percent(patientMode.protectionBias)}",
             reasonSummary = patientMode.reasonCodes.joinToString(", ") { humanizeReason(it) },
         )
     }
 
-    private fun buildUpdatedSummary(updatedAtMs: Long, nowMs: Long): String {
+    private fun buildUpdatedSummary(updatedAtMs: Long, nowMs: Long, refreshSource: PatientRefreshSource): String {
         val ageMinutes = ((nowMs - updatedAtMs).coerceAtLeast(0L)) / 60_000L
-        return when {
+        val ageLabel = when {
             ageMinutes <= 0L -> "Updated just now"
             ageMinutes == 1L -> "Updated 1 minute ago"
             ageMinutes < 60L -> "Updated ${ageMinutes} minutes ago"
@@ -49,6 +58,12 @@ internal object PatientStatePresentationBuilder {
                 }
             }
         }
+        val sourceSuffix = when (refreshSource) {
+            PatientRefreshSource.LOOP_TICK -> ""
+            PatientRefreshSource.PHYSIO_SIGNAL -> " · live body signals"
+            PatientRefreshSource.CONTEXT_INTENT -> " · user context"
+        }
+        return ageLabel + sourceSuffix
     }
 
     private fun buildNarrative(decision: PatientModeOrchestrator.Decision): String =
@@ -72,6 +87,24 @@ internal object PatientStatePresentationBuilder {
     private fun buildPhysiologySummary(state: PatientStateSnapshot): String =
         "Phase ${humanize(state.phase.name)} · Absorption ${humanize(state.mealAbsorptionPhase.name)} · UAM ${humanize(state.uamDominant.name)}"
 
+    private fun buildPhysioLiveSummary(digest: PhysioLiveDigest): String {
+        if (digest.stepsLast15m == 0 && digest.hrNowBpm == 0 && digest.hrAvg15mBpm == 0) {
+            return "Body signals pending · waiting for steps or heart-rate data"
+        }
+        val activity = humanize(digest.activityState)
+        val hrLabel = when {
+            digest.hrNowBpm > 0 -> "${digest.hrNowBpm} bpm"
+            digest.hrAvg15mBpm > 0 -> "${digest.hrAvg15mBpm} bpm avg"
+            else -> "HR n/a"
+        }
+        val sleepLabel = if (digest.sleepDebtMinutes > 0) {
+            " · sleep debt ${digest.sleepDebtMinutes} min"
+        } else {
+            ""
+        }
+        return "$activity · ${digest.stepsLast15m} steps/15m · $hrLabel$sleepLabel"
+    }
+
     private fun buildIntentSummary(state: PatientStateSnapshot): String {
         if (!state.userIntent.hasAnyIntent()) {
             return "No active user intent"
@@ -82,6 +115,17 @@ internal object PatientStatePresentationBuilder {
 
     private fun buildSignalSummary(state: PatientStateSnapshot): String =
         "Meal ${percent(state.mealProb)} · Endogenous ${percent(state.endogenousGlucoseDrive)} · Resistance ${percent(state.transientResistanceProb)} · Sensor ${percent(state.sensorConfidence)}"
+
+    private fun buildSignalGauges(state: PatientStateSnapshot): List<PatientSignalGauge> =
+        listOf(
+            PatientSignalGauge("Meal", gaugePercent(state.mealProb)),
+            PatientSignalGauge("Endogenous", gaugePercent(state.endogenousGlucoseDrive)),
+            PatientSignalGauge("Resistance", gaugePercent(state.transientResistanceProb)),
+            PatientSignalGauge("Sensor", gaugePercent(state.sensorConfidence)),
+        )
+
+    private fun gaugePercent(value: Double): Int =
+        (value.coerceIn(0.0, 1.0) * 100.0).roundToInt()
 
     private fun humanize(value: String): String =
         value.lowercase(Locale.US)
@@ -112,5 +156,5 @@ internal object PatientStatePresentationBuilder {
             else -> humanize(code)
         }
 
-    private fun percent(value: Double): String = "${(value.coerceIn(0.0, 1.0) * 100.0).roundToInt()}%"
+    private fun percent(value: Double): String = "${gaugePercent(value)}%"
 }

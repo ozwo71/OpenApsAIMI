@@ -1419,7 +1419,9 @@
     <string name="context_title">AIMI Context</string>
     <string name="context_description">Describe your current situation to help AIMI adapt insulin delivery</string>
     <string name="context_patient_state_title">Current AIMI Understanding</string>
-    <string name="context_patient_state_empty">No recent AIMI patient state yet. The summary will appear after the next loop tick.</string>
+    <string name="context_patient_state_empty">No AIMI understanding yet. It updates on each loop tick and when body signals or user context change.</string>
+    <string name="context_patient_state_live_body_label">Live body signals</string>
+    <string name="context_patient_state_signals_gauge_label">Signal strength</string>
     <string name="context_patient_state_phase_label">Physiology</string>
     <string name="context_patient_state_intent_label">User intent</string>
     <string name="context_patient_state_probabilities_label">Signals</string>
