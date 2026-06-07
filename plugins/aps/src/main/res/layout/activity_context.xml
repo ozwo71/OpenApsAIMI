@@ -17,7 +17,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/context_description"
-            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textSize="16sp"
+            android:textColor="?android:attr/textColorPrimary"
             android:layout_marginBottom="8dp"/>
 
         <com.google.android.material.card.MaterialCardView
@@ -32,18 +33,17 @@
                 android:padding="16dp">
 
                 <TextView
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/context_patient_state_title"
-                    android:textAppearance="?attr/textAppearanceHeadlineSmall"/>
+                    style="@style/ContextPatientStateSectionTitle"/>
 
                 <TextView
                     android:id="@+id/textPatientStateUpdated"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:textAppearance="?attr/textAppearanceBodyMedium"
-                    android:textColor="?android:attr/textColorSecondary"
+                    android:layout_marginTop="6dp"
+                    style="@style/ContextPatientStateMeta"
                     tools:text="Updated 3 minutes ago"/>
 
                 <TextView
@@ -51,10 +51,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
-                    android:lineSpacingMultiplier="1.15"
                     android:text="@string/context_patient_state_empty"
-                    android:textAppearance="?attr/textAppearanceBodyLarge"
-                    android:textColor="?android:attr/textColorSecondary"
+                    style="@style/ContextPatientStateBody"
                     tools:text="No recent AIMI patient state yet. The summary will appear after the next loop tick."/>
 
                 <LinearLayout
@@ -70,16 +68,15 @@
                         android:id="@+id/textPatientStateMode"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:textAppearance="?attr/textAppearanceTitleLarge"
+                        style="@style/ContextPatientStateHeadline"
                         tools:text="Dawn Endogenous (88%)"/>
 
                     <TextView
                         android:id="@+id/textPatientStateNarrative"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:lineSpacingMultiplier="1.2"
-                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        android:layout_marginTop="10dp"
+                        style="@style/ContextPatientStateBody"
                         tools:text="AIMI sees more endogenous drive than meal evidence and favors basal bridging."/>
 
                     <TextView
@@ -87,79 +84,74 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="14dp"
                         android:text="@string/context_patient_state_phase_label"
-                        android:textAppearance="?attr/textAppearanceTitleSmall"/>
+                        style="@style/ContextPatientStateLabel"/>
 
                     <TextView
                         android:id="@+id/textPatientStatePhaseValue"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:lineSpacingMultiplier="1.15"
-                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        android:layout_marginTop="4dp"
+                        style="@style/ContextPatientStateBody"
                         tools:text="Phase Dawn Cortisol · Absorption None · UAM Dawn Endogenous"/>
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
+                        android:layout_marginTop="12dp"
                         android:text="@string/context_patient_state_intent_label"
-                        android:textAppearance="?attr/textAppearanceTitleSmall"/>
+                        style="@style/ContextPatientStateLabel"/>
 
                     <TextView
                         android:id="@+id/textPatientStateIntentValue"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:lineSpacingMultiplier="1.15"
-                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        android:layout_marginTop="4dp"
+                        style="@style/ContextPatientStateBody"
                         tools:text="Dominant Stress · 82% confidence across 1 context"/>
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
+                        android:layout_marginTop="12dp"
                         android:text="@string/context_patient_state_probabilities_label"
-                        android:textAppearance="?attr/textAppearanceTitleSmall"/>
+                        style="@style/ContextPatientStateLabel"/>
 
                     <TextView
                         android:id="@+id/textPatientStateSignalsValue"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:lineSpacingMultiplier="1.15"
-                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        android:layout_marginTop="4dp"
+                        style="@style/ContextPatientStateBody"
                         tools:text="Meal 22% · Endogenous 88% · Resistance 52% · Sensor 86%"/>
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
+                        android:layout_marginTop="12dp"
                         android:text="@string/context_patient_state_bias_label"
-                        android:textAppearance="?attr/textAppearanceTitleSmall"/>
+                        style="@style/ContextPatientStateLabel"/>
 
                     <TextView
                         android:id="@+id/textPatientStateDeliveryValue"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:lineSpacingMultiplier="1.15"
-                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        android:layout_marginTop="4dp"
+                        style="@style/ContextPatientStateBody"
                         tools:text="Basal Bridge · meal bias 16% · protection 78%"/>
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
+                        android:layout_marginTop="12dp"
                         android:text="@string/context_patient_state_reasons_label"
-                        android:textAppearance="?attr/textAppearanceTitleSmall"/>
+                        style="@style/ContextPatientStateLabel"/>
 
                     <TextView
                         android:id="@+id/textPatientStateReasonsValue"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:lineSpacingMultiplier="1.15"
-                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        android:layout_marginTop="4dp"
+                        style="@style/ContextPatientStateBody"
                         tools:text="Endogenous glucose drive, false meal suppression"/>
                 </LinearLayout>
             </LinearLayout>
