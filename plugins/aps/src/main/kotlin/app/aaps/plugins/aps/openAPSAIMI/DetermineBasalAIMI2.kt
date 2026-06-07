@@ -46,6 +46,7 @@ import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAnticipation
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cTrajectoryContext
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
 import app.aaps.core.interfaces.ui.UiInteraction
+import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
 import app.aaps.core.data.model.HR
@@ -153,6 +154,11 @@ import app.aaps.plugins.aps.openAPSAIMI.comparison.AimiSmbComparator
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiDetermineBasalTickOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiLoopTickRecovery
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateEngine
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleInfo
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
@@ -236,6 +242,10 @@ internal data class AimiDecisionContext(
         var physio_latent_state: org.json.JSONObject? = null,
         /** Multi-hypothesis UAM interpretation for meal vs endogenous vs stress vs rebound. */
         var uam_hypotheses: org.json.JSONObject? = null,
+        /** Unified patient-state snapshot bridging physiology, meal state and user intent. */
+        var patient_state: org.json.JSONObject? = null,
+        /** High-level patient mode and strategy derived from the shared state. */
+        var patient_mode: org.json.JSONObject? = null,
     )
 
     data class MealAbsorptionPhaseExport(
@@ -523,6 +533,12 @@ internal data class AimiDecisionContext(
             }
             adjustments.uam_hypotheses?.let { hypotheses ->
                 adj.put("uam_hypotheses", hypotheses)
+            }
+            adjustments.patient_state?.let { patientState ->
+                adj.put("patient_state", patientState)
+            }
+            adjustments.patient_mode?.let { patientMode ->
+                adj.put("patient_mode", patientMode)
             }
             json.put("adjustments", adj)
 
@@ -1376,6 +1392,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastMealAbsorptionOutput = null
         lastPhysioLatentState = null
         lastUamHypothesisState = null
+        lastContextSnapshot = null
+        lastPatientState = null
+        lastPatientModeDecision = null
+        PatientStateRuntimeRepository.clear()
         EndogenousPhaseHysteresis.reset()
         pendingTrajSpiralBasal = null
         val decisionCtx = AimiDecisionContext(
@@ -2685,7 +2705,33 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         lastUamHypothesisState = hypothesisState
         lastPhysioLatentState = latentState
+        refreshPatientStateRuntime()
         return latentState
+    }
+
+    private fun refreshPatientStateRuntime(
+        nowMs: Long = dateUtil.now(),
+        contextSnapshot: ContextSnapshot? = lastContextSnapshot,
+    ): PatientStateSnapshot {
+        lastContextSnapshot = contextSnapshot
+        val patientState = PatientStateEngine.build(
+            timestampMs = nowMs,
+            phaseOutput = lastPhysiologicalPhaseOutput,
+            mealAbsorptionOutput = lastMealAbsorptionOutput,
+            patternSnapshot = lastPhysiologicalPatternSnapshot,
+            latentState = lastPhysioLatentState,
+            hypothesisState = lastUamHypothesisState,
+            contextSnapshot = lastContextSnapshot,
+        )
+        lastPatientState = patientState
+        val patientModeDecision = PatientModeOrchestrator.evaluate(patientState)
+        lastPatientModeDecision = patientModeDecision
+        PatientStateRuntimeRepository.publish(
+            patientState = patientState,
+            patientModeDecision = patientModeDecision,
+            updatedAtMs = nowMs,
+        )
+        return patientState
     }
 
     private fun observeCircadianMealProfile(nowMs: Long) {
@@ -2814,6 +2860,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         val latentState = lastPhysioLatentState
         val hypothesisState = lastUamHypothesisState
+        val patientState = lastPatientState
+        val patientModeDecision = lastPatientModeDecision
         return RbtExtendedSignals(
             tubeAdvisorCapScale = lastTubeAdvisorSmbCapScale,
             insulinActivityStageOrdinal = tickInsulinActionState?.activityStage?.ordinal
@@ -2871,6 +2919,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             uamPostHypoProb = hypothesisState?.postHypoProb,
             uamLateFatProb = hypothesisState?.lateFatProb,
             uamSuppressMealInterpretation = hypothesisState?.suppressMealInterpretation == true,
+            patientMode = patientModeDecision?.mode?.name,
+            patientModeConfidence = patientModeDecision?.confidence,
+            patientStrategyHint = patientModeDecision?.strategyHint?.name,
+            patientModeMealBias = patientModeDecision?.mealBias,
+            patientModeProtectionBias = patientModeDecision?.protectionBias,
+            contextIntentDominant = patientState?.userIntent?.dominantIntent,
+            contextIntentConfidence = patientModeDecision?.userIntentConfidence,
             physioMtrStateOrdinal = physioCtx.state.ordinal,
             hrvDeviationZ = physioCtx.hrvDeviationZ.takeIf { physioCtx.confidence > 0.0 },
             sleepQualityScore = physioCtx.features?.sleepQualityScore,
@@ -3010,6 +3065,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         val patternSnapshot = PhysiologicalPatternDetector.detect(patternInput)
         lastPhysiologicalPatternSnapshot = patternSnapshot
+        lastContextSnapshot = contextSnap
         updatePhysioLatentState(
             snapshot = wearableSnap,
             sourceSensor = glucoseStatus?.sourceSensor,
@@ -3022,6 +3078,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     "mealSupp=${patternSnapshot.suppressMealInterpretation} " +
                     "hyperSupp=${patternSnapshot.suppressHyperRelease} | ${patternSnapshot.reasonSummary}",
             )
+        }
+        lastPatientModeDecision?.takeIf {
+            it.mode != PatientMode.STABLE_BASELINE ||
+                it.confidence >= 0.60 ||
+                (lastContextSnapshot?.intentCount ?: 0) > 0
+        }?.let { modeDecision ->
+            consoleLog.add("🫀 PATIENT_MODE: ${modeDecision.summary()}")
         }
         val ctx = RecursiveBeliefTickContext(
             bgMgdl = bg,
@@ -3432,6 +3495,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     patternSnapshot = lastPhysiologicalPatternSnapshot,
                     latentState = lastPhysioLatentState,
                     hypothesisState = lastUamHypothesisState,
+                    patientState = lastPatientState,
+                    patientModeDecision = lastPatientModeDecision,
                     safetyRiskExport = lastSafetyRiskExport,
                 ),
             )
@@ -6317,11 +6382,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.recursive_authority_gate = lastRecursiveAuthorityGateDecision?.toJsonObject()
         decisionCtx.adjustments.physio_latent_state = lastPhysioLatentState?.toJsonObject()
         decisionCtx.adjustments.uam_hypotheses = lastUamHypothesisState?.toJsonObject()
+        decisionCtx.adjustments.patient_state = lastPatientState?.toJsonObject()
+        decisionCtx.adjustments.patient_mode = lastPatientModeDecision?.toJsonObject()
         decisionCtx.adjustments.replay_quality = ReplayQualityExportBuilder.toJsonObject(
             ReplayQualityExportBuilder.build(
                 phaseOutput = lastPhysiologicalPhaseOutput,
                 mealAbsorptionOutput = lastMealAbsorptionOutput,
                 hypothesisState = lastUamHypothesisState,
+                patientState = lastPatientState,
+                patientModeDecision = lastPatientModeDecision,
                 patternSnapshot = lastPhysiologicalPatternSnapshot,
                 iobSurveillanceExport = lastIobSurveillanceExport,
                 safetyRiskExport = lastSafetyRiskExport,
@@ -7416,6 +7485,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastSmbProposed: Double = 0.0
     private var lastPhysioLatentState: PhysioLatentState? = null
     private var lastUamHypothesisState: UamHypothesisState? = null
+    private var lastContextSnapshot: ContextSnapshot? = null
+    private var lastPatientState: PatientStateSnapshot? = null
+    private var lastPatientModeDecision: PatientModeOrchestrator.Decision? = null
     /** Latest IOB surveillance snapshot for JSONL (updated each [finalizeAndCapSMB]). */
     private var lastIobSurveillanceExport: AimiDecisionContext.IobSurveillanceExport? = null
     private var lastSmbCapped: Double = 0.0
@@ -8683,6 +8755,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val usFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm")
         val dateStr = dateUtil.dateAndTimeString(dateUtil.now()).format(usFormatter)
         val latentFeatures = SmbRefinementFeatureSchema.latentFeatureValues(lastPhysioLatentState)
+        val modeFeatures = SmbRefinementFeatureSchema.modeFeatureValues(lastPatientModeDecision)
 
         val headerRow =
             "dateStr, ${SmbRefinementFeatureSchema.csvFeatureNames.joinToString(", ")}, predictedSMB, smbGiven, dynamicPeak, adjustedDia\n"
@@ -8690,6 +8763,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             "$bg,$iob,$cob,$delta,$shortAvgDelta,$longAvgDelta," +
             "$tdd7DaysPerHour,$tdd2DaysPerHour,$tddPerHour,$tdd24HrsPerHour," +
             "${latentFeatures[0]},${latentFeatures[1]},${latentFeatures[2]},${latentFeatures[3]}," +
+            "${modeFeatures[0]},${modeFeatures[1]},${modeFeatures[2]}," +
             "$predictedSMB,$smbToGive," +
             "$peakintermediaire,$latestAdjustedDia"
         appendCsvSafely(
@@ -10762,6 +10836,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             baseFeatures = baseFeatures,
             trendIndicator = trendIndicator.toFloat(),
             physioLatentState = lastPhysioLatentState,
+            patientModeDecision = lastPatientModeDecision,
         )
 
         // 🔥 Trigger async training (fire-and-forget, rate-limited to 1/6h, never blocks)

@@ -4,6 +4,9 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.safety.SafetyRiskExportSnapshot
 import org.json.JSONArray
@@ -25,6 +28,8 @@ internal object RecursiveBeliefAuthorityGate {
         val patternSnapshot: PhysiologicalPatternSnapshot?,
         val latentState: PhysioLatentState?,
         val hypothesisState: UamHypothesisState?,
+        val patientState: PatientStateSnapshot?,
+        val patientModeDecision: PatientModeOrchestrator.Decision?,
         val safetyRiskExport: SafetyRiskExportSnapshot?,
     )
 
@@ -77,6 +82,7 @@ internal object RecursiveBeliefAuthorityGate {
         val mealProb = latentState?.mealProb ?: 0.0
         val postHypoProb = latentState?.postHypoReboundProb ?: 0.0
         val transientResistanceProb = latentState?.transientResistanceProb ?: 0.0
+        val patientModeDecision = input.patientModeDecision
         val hyperReleaseSuppressed =
             input.patternSnapshot?.suppressHyperRelease == true ||
                 input.phaseOutput?.policy?.capsHtrRelease() == true
@@ -122,6 +128,35 @@ internal object RecursiveBeliefAuthorityGate {
             if (postHypoProb >= POST_HYPO_SOFT_THRESHOLD && mealProb < 0.50) {
                 reasonCodes += "POST_HYPO_CAUTION"
                 maxAllowedAuthority = ReleaseAuthority.SOFT
+            }
+            if ((patientModeDecision?.confidence ?: 0.0) >= 0.60) {
+                when (patientModeDecision?.mode) {
+                    PatientMode.POST_HYPO_RECOVERY -> {
+                        reasonCodes += "MODE_POST_HYPO_RECOVERY"
+                        maxAllowedAuthority = ReleaseAuthority.NONE
+                    }
+                    PatientMode.DAWN_ENDOGENOUS -> {
+                        reasonCodes += "MODE_DAWN_ENDOGENOUS"
+                        maxAllowedAuthority = ReleaseAuthority.SOFT
+                    }
+                    PatientMode.EXERCISE_AFTERBURN -> {
+                        reasonCodes += "MODE_EXERCISE_AFTERBURN"
+                        maxAllowedAuthority = ReleaseAuthority.SOFT
+                    }
+                    PatientMode.STRESS_RESISTANCE -> {
+                        reasonCodes += "MODE_STRESS_RESISTANCE"
+                        maxAllowedAuthority = ReleaseAuthority.SOFT
+                    }
+                    PatientMode.POOR_SLEEP_DAY -> {
+                        reasonCodes += "MODE_POOR_SLEEP_DAY"
+                        maxAllowedAuthority = ReleaseAuthority.SOFT
+                    }
+                    PatientMode.ABSORPTION_UNCERTAIN -> {
+                        reasonCodes += "MODE_ABSORPTION_UNCERTAIN"
+                        maxAllowedAuthority = ReleaseAuthority.SOFT
+                    }
+                    else -> Unit
+                }
             }
         }
 
@@ -194,6 +229,16 @@ internal object RecursiveBeliefAuthorityGate {
         if (hasDominantNonMealHypothesis(input.hypothesisState)) {
             score -= 0.10
         }
+        val patientModeDecision = input.patientModeDecision
+        if (patientModeDecision != null) {
+            score -= patientModeDecision.protectionBias.coerceIn(0.0, 1.0) * 0.10
+            if (hasProtectivePatientMode(patientModeDecision.mode)) {
+                score -= patientModeDecision.confidence.coerceIn(0.0, 1.0) * 0.08
+            }
+        }
+        if (input.patientState?.userIntent?.hasAnyIntent() == true && patientModeDecision?.mode != PatientMode.FAST_MEAL) {
+            score -= input.patientState.userIntent.avgConfidence.coerceIn(0.0, 1.0) * 0.05
+        }
 
         return score.coerceIn(0.0, 1.0)
     }
@@ -209,4 +254,16 @@ internal object RecursiveBeliefAuthorityGate {
             else -> false
         }
     }
+
+    private fun hasProtectivePatientMode(mode: PatientMode): Boolean =
+        when (mode) {
+            PatientMode.DAWN_ENDOGENOUS,
+            PatientMode.POST_HYPO_RECOVERY,
+            PatientMode.STRESS_RESISTANCE,
+            PatientMode.EXERCISE_AFTERBURN,
+            PatientMode.POOR_SLEEP_DAY,
+            PatientMode.ABSORPTION_UNCERTAIN,
+            -> true
+            else -> false
+        }
 }

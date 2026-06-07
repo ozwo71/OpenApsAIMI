@@ -7,6 +7,11 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStrategyHint
+import app.aaps.plugins.aps.openAPSAIMI.patient.UserIntentSummary
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternId
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternReading
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
@@ -56,6 +61,35 @@ class ReplayQualityExportBuilderTest {
                 dominant = UamHypothesisId.DAWN_ENDOGENOUS,
                 dominantConfidence = 0.88,
                 suppressMealInterpretation = true,
+            ),
+            patientState = PatientStateSnapshot(
+                timestampMs = 1_718_000_000_000L,
+                phase = PhysiologicalPhase.DAWN_CORTISOL,
+                phaseConfidence = 0.84,
+                mealProb = 0.22,
+                endogenousGlucoseDrive = 0.88,
+                transientResistanceProb = 0.52,
+                postHypoReboundProb = 0.78,
+                sensorConfidence = 0.86,
+                falseMealSuppression = true,
+                uamDominant = UamHypothesisId.DAWN_ENDOGENOUS,
+                uamDominantConfidence = 0.88,
+                userIntent = UserIntentSummary(
+                    enabled = true,
+                    intentCount = 1,
+                    avgConfidence = 0.82,
+                    hasStress = true,
+                    dominantIntent = "STRESS",
+                ),
+            ),
+            patientModeDecision = PatientModeOrchestrator.Decision(
+                mode = PatientMode.DAWN_ENDOGENOUS,
+                confidence = 0.88,
+                strategyHint = PatientStrategyHint.BASAL_BRIDGE,
+                mealBias = 0.16,
+                protectionBias = 0.78,
+                userIntentConfidence = 0.82,
+                reasonCodes = listOf("LATENT_ENDOGENOUS", "FALSE_MEAL_SUPPRESS"),
             ),
             patternSnapshot = PhysiologicalPatternSnapshot(
                 active = listOf(
@@ -127,6 +161,8 @@ class ReplayQualityExportBuilderTest {
         assertThat(export.uamHypothesisDominant).isEqualTo("DAWN_ENDOGENOUS")
         assertThat(export.uamMealInterpretationSuppressed).isTrue()
         assertThat(export.mealInterpretationSuppressed).isTrue()
+        assertThat(export.patientMode).isEqualTo("DAWN_ENDOGENOUS")
+        assertThat(export.patientStrategyHint).isEqualTo("BASAL_BRIDGE")
         assertThat(export.postHypoGuardState).isEqualTo("CORRECTION_REBOUND_GUARD")
         assertThat(export.predictiveHypoSuppressed).isTrue()
         assertThat(export.rbtMode).isEqualTo("SHADOW_GATED")
@@ -137,6 +173,8 @@ class ReplayQualityExportBuilderTest {
         assertThat(export.qualityTags).contains("post_hypo_guard_active")
         assertThat(export.qualityTags).contains("prediction_missing")
         assertThat(export.qualityTags).contains("rbt_authority_blocked")
+        assertThat(export.qualityTags).contains("user_intent_active")
+        assertThat(export.qualityTags).contains("patient_mode_dawn_endogenous")
     }
 
     @Test
@@ -174,6 +212,35 @@ class ReplayQualityExportBuilderTest {
                 dominant = UamHypothesisId.MEAL,
                 dominantConfidence = 0.90,
                 suppressMealInterpretation = false,
+            ),
+            patientState = PatientStateSnapshot(
+                timestampMs = 1_718_000_000_000L,
+                phase = PhysiologicalPhase.MEAL_UNDECLARED,
+                phaseConfidence = 0.86,
+                mealAbsorptionPhase = MealAbsorptionPhase.FIRST_WAVE,
+                mealAbsorptionBelief = 0.91,
+                mealProb = 0.90,
+                endogenousGlucoseDrive = 0.08,
+                transientResistanceProb = 0.05,
+                sensorConfidence = 0.96,
+                uamDominant = UamHypothesisId.MEAL,
+                uamDominantConfidence = 0.90,
+                userIntent = UserIntentSummary(
+                    enabled = true,
+                    intentCount = 1,
+                    avgConfidence = 0.90,
+                    hasMealRisk = true,
+                    dominantIntent = "MEAL_RISK",
+                ),
+            ),
+            patientModeDecision = PatientModeOrchestrator.Decision(
+                mode = PatientMode.FAST_MEAL,
+                confidence = 0.91,
+                strategyHint = PatientStrategyHint.SMB_PRIORITY,
+                mealBias = 0.90,
+                protectionBias = 0.18,
+                userIntentConfidence = 0.90,
+                reasonCodes = listOf("MEAL_FIRST_WAVE", "UAM_MEAL"),
             ),
             patternSnapshot = PhysiologicalPatternSnapshot(
                 active = listOf(
@@ -220,10 +287,12 @@ class ReplayQualityExportBuilderTest {
         assertThat(export.mealHypothesisState).isEqualTo("FIRST_WAVE")
         assertThat(export.mealHypothesisConfidence).isWithin(1e-9).of(0.91)
         assertThat(export.uamHypothesisDominant).isEqualTo("MEAL")
+        assertThat(export.patientMode).isEqualTo("FAST_MEAL")
         assertThat(export.stackingGuardState).isEqualTo("PATTERN_IOB_STACKING_SURVEILLANCE")
         assertThat(export.stackingGuardActive).isTrue()
         assertThat(export.qualityTags).contains("meal_hypothesis_active")
         assertThat(export.qualityTags).contains("stacking_guard_active")
+        assertThat(export.qualityTags).contains("patient_mode_meal")
         assertThat(export.rbtMode).isEqualTo("OFF")
     }
 }

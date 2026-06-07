@@ -1,5 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.ml
 
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStrategyHint
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
@@ -22,11 +25,23 @@ class SmbRefinementFeatureSchemaTest {
                 falseMealSuppression = false,
                 source = "test",
             ),
+            patientModeDecision = PatientModeOrchestrator.Decision(
+                mode = PatientMode.FAST_MEAL,
+                confidence = 0.89,
+                strategyHint = PatientStrategyHint.SMB_PRIORITY,
+                mealBias = 0.90,
+                protectionBias = 0.18,
+                userIntentConfidence = 0.84,
+                reasonCodes = listOf("MEAL_FIRST_WAVE"),
+            ),
         )
 
         assertThat(features.size).isEqualTo(SmbRefinementFeatureSchema.INPUT_SIZE)
         assertThat(features.copyOfRange(10, 14).toList())
             .containsExactly(0.41f, 0.28f, 0.91f, 0.64f)
+            .inOrder()
+        assertThat(features.copyOfRange(14, 17).toList())
+            .containsExactly(0.90f, 0.18f, 0.84f)
             .inOrder()
         assertThat(features.last()).isEqualTo(0.73f)
     }
@@ -69,8 +84,8 @@ class SmbRefinementFeatureSchemaTest {
         assertThat(parsed).isNotNull()
         parsed!!
         assertThat(parsed.size).isEqualTo(SmbRefinementFeatureSchema.INPUT_SIZE - 1)
-        assertThat(parsed.copyOfRange(10, 14).toList())
-            .containsExactly(0f, 0f, 1f, 0f)
+        assertThat(parsed.copyOfRange(10, 17).toList())
+            .containsExactly(0f, 0f, 1f, 0f, 0.45f, 0.22f, 0f)
             .inOrder()
     }
 }

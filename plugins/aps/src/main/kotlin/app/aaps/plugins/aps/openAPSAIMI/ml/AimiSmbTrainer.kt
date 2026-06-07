@@ -31,7 +31,7 @@ object AimiSmbTrainer {
 
     private const val TAG = "AimiSmbTrainer"
 
-    // Input dimension: 10 base features + 4 latent physio features + 1 trendIndicator
+    // Input dimension: 10 base features + 4 latent physio features + 3 patient-mode features + 1 trendIndicator
     const val INPUT_SIZE = SmbRefinementFeatureSchema.INPUT_SIZE
 
     // Circuit breaker settings

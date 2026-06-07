@@ -13,12 +13,16 @@ import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.databinding.ActivityContextBinding
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextManager
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextPreset
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStatePresentationBuilder
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import dagger.android.HasAndroidInjector
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.minutes
 
@@ -38,6 +42,7 @@ class ContextActivity : TranslatedDaggerAppCompatActivity() {
     private lateinit var adapter: ContextIntentAdapter
     
     private val activityScope = CoroutineScope(Dispatchers.Main + Job())
+    private var patientStateRefreshJob: Job? = null
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +58,24 @@ class ContextActivity : TranslatedDaggerAppCompatActivity() {
         setupUI()
         setupPresets()
         refreshUI()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshUI()
+        startPatientStateRefresh()
+    }
+
+    override fun onPause() {
+        patientStateRefreshJob?.cancel()
+        patientStateRefreshJob = null
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        patientStateRefreshJob?.cancel()
+        activityScope.cancel()
+        super.onDestroy()
     }
     
     private fun setupUI() {
@@ -173,6 +196,44 @@ class ContextActivity : TranslatedDaggerAppCompatActivity() {
         // Settings
         binding.switchContextEnabled.isChecked = sp.getBoolean(app.aaps.core.keys.BooleanKey.OApsAIMIContextEnabled.key, false)
         binding.switchLLMEnabled.isChecked = sp.getBoolean(app.aaps.core.keys.BooleanKey.OApsAIMIContextLLMEnabled.key, false)
+        refreshPatientRuntimeUi()
+    }
+
+    private fun startPatientStateRefresh() {
+        patientStateRefreshJob?.cancel()
+        patientStateRefreshJob = activityScope.launch {
+            while (isActive) {
+                refreshPatientRuntimeUi()
+                delay(15_000L)
+            }
+        }
+    }
+
+    private fun refreshPatientRuntimeUi() {
+        val runtimeSnapshot = PatientStateRuntimeRepository.getLatest()
+        val presentation = runtimeSnapshot?.let {
+            PatientStatePresentationBuilder.build(
+                snapshot = it,
+                nowMs = System.currentTimeMillis(),
+            )
+        }
+        if (presentation == null) {
+            binding.layoutPatientStateDetails.visibility = View.GONE
+            binding.textPatientStateEmpty.visibility = View.VISIBLE
+            binding.textPatientStateEmpty.text = rh.gs(R.string.context_patient_state_empty)
+            return
+        }
+
+        binding.layoutPatientStateDetails.visibility = View.VISIBLE
+        binding.textPatientStateEmpty.visibility = View.GONE
+        binding.textPatientStateUpdated.text = presentation.updatedSummary
+        binding.textPatientStateMode.text = presentation.modeHeadline
+        binding.textPatientStateNarrative.text = presentation.narrative
+        binding.textPatientStatePhaseValue.text = presentation.physiologySummary
+        binding.textPatientStateIntentValue.text = presentation.intentSummary
+        binding.textPatientStateSignalsValue.text = presentation.signalSummary
+        binding.textPatientStateDeliveryValue.text = presentation.deliverySummary
+        binding.textPatientStateReasonsValue.text = presentation.reasonSummary
     }
     
     private fun addPreset(preset: ContextPreset) {

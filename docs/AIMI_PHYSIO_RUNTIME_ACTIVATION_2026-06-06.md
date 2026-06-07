@@ -3,7 +3,7 @@
 **Statut :** implémenté en code et validé par tests ciblés  
 **Date :** 2026-06-06  
 **Branche :** `dev_OAPSAIMI_mergeDEV`  
-**Docs liées :** [AIMI_PHYSIOLOGICAL_PHASE.md](AIMI_PHYSIOLOGICAL_PHASE.md), [AIMI_RECURSIVE_BELIEF.md](AIMI_RECURSIVE_BELIEF.md), [AIMI_MEAL_ABSORPTION_PHASE.md](AIMI_MEAL_ABSORPTION_PHASE.md), [PKPD_ABSORPTION_GUARD_AUDIT.md](PKPD_ABSORPTION_GUARD_AUDIT.md)
+**Docs liées :** [AIMI_PHYSIOLOGICAL_PHASE.md](AIMI_PHYSIOLOGICAL_PHASE.md), [AIMI_RECURSIVE_BELIEF.md](AIMI_RECURSIVE_BELIEF.md), [AIMI_MEAL_ABSORPTION_PHASE.md](AIMI_MEAL_ABSORPTION_PHASE.md), [PKPD_ABSORPTION_GUARD_AUDIT.md](PKPD_ABSORPTION_GUARD_AUDIT.md), [AIMI_PATIENT_MODE_REPLAY_CHECKLIST_2026-06-06.md](AIMI_PATIENT_MODE_REPLAY_CHECKLIST_2026-06-06.md)
 
 ---
 
@@ -35,6 +35,8 @@ Les noms décrits ici sont volontairement alignés sur les structures déjà pr�
 
 - `PhysioLatentState`
 - `UamHypothesisState`
+- `PatientStateSnapshot`
+- `PatientModeOrchestrator`
 - `PhysiologicalStressMask`
 - `RecursiveBeliefAuthorityGate`
 - `ReplayQualityExport`
@@ -183,6 +185,78 @@ But :
 - garder un fonctionnement shadow même si la préférence d’autorité est activée ;
 - moduler le lift HTR / RBT via `liftBlend` selon la qualité du contexte.
 
+### 3.9 Couche produit — état patient unifié
+
+Une couche produit explicite a été ajoutée au-dessus des briques physio existantes.
+
+Briques clés :
+
+- `plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/patient/PatientStateSnapshot.kt`
+- `plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/patient/PatientModeOrchestrator.kt`
+- `DetermineBasalAIMI2.kt`
+
+Ce qui est désormais produit par tick :
+
+- un `PatientStateSnapshot` qui agrège phase physio, phase d’absorption repas, signaux latents, hypothèse UAM dominante et intention utilisateur active ;
+- une décision `PatientModeOrchestrator.Decision` qui choisit un mode haut niveau ;
+- une stratégie runtime dérivée, exportée dans `AIMI_Decisions.jsonl`.
+
+Modes actuellement câblés :
+
+- `STABLE_BASELINE`
+- `FAST_MEAL`
+- `PROLONGED_MEAL`
+- `DAWN_ENDOGENOUS`
+- `POST_HYPO_RECOVERY`
+- `STRESS_RESISTANCE`
+- `EXERCISE_AFTERBURN`
+- `POOR_SLEEP_DAY`
+- `ABSORPTION_UNCERTAIN`
+
+But :
+
+- donner à tous les moteurs une même lecture produit du patient ;
+- éviter qu’un repas, un dawn, un post-hypo ou une récupération d’effort soient traités comme des cas équivalents ;
+- rendre l’explication runtime beaucoup plus lisible.
+
+### 3.10 Alignement ML sur le mode patient
+
+Le raffinement SMB apprend maintenant sur un langage plus cohérent avec le runtime.
+
+Dans `SmbRefinementFeatureSchema`, trois features supplémentaires ont été ajoutées :
+
+- `patientModeMealBias`
+- `patientModeProtectionBias`
+- `contextIntentConfidence`
+
+Effet :
+
+- le trainer CSV asynchrone peut apprendre un comportement plus aligné avec le mode produit ;
+- les anciens CSV restent compatibles grâce aux valeurs neutres de fallback ;
+
+### 3.11 Surface clinique runtime
+
+L’écran `AIMI Context` expose maintenant la lecture AIMI du corps à partir des structures runtime existantes.
+
+Point d’entrée UI :
+
+- `plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/context/ui/ContextActivity.kt`
+
+Ce qui est affiché :
+
+- le `patient_mode` courant ;
+- la stratégie insulinique suggérée ;
+- les signaux dominants ;
+- les raisons principales ;
+- la fraîcheur de la dernière lecture.
+
+But :
+
+- rendre l’état patient lisible sans ouvrir les logs ;
+- donner une explication clinique compacte de la posture AIMI ;
+- préparer la validation replay / go-no-go sur un support visible en UI.
+- le modèle interne sauvegardé sera naturellement recréé si la dimension d’entrée diverge.
+
 ---
 
 ## 4. Préférences existantes qui pilotent le runtime
@@ -248,7 +322,8 @@ Préférence existante :
 Fonction :
 
 - permet au trainer CSV asynchrone de compléter le résultat du modèle UAM de base ;
-- ne remplace pas `modelUAM.tflite`, il l’affine.
+- ne remplace pas `modelUAM.tflite`, il l’affine ;
+- exploite désormais aussi le mode patient et la confiance d’intention comme contexte de raffinement.
 
 ---
 
@@ -258,6 +333,25 @@ Certaines briques codées restent dépendantes de l’environnement fonctionnel 
 
 - `AimiPhysioAssistantEnable`
 - `AimiPhysioSleepDataEnable`
+
+## 6. Explication runtime disponible
+
+Le runtime exporte maintenant, sans nouvelle préférence :
+
+- `adjustments.patient_state`
+- `adjustments.patient_mode`
+- `adjustments.replay_quality.patient_mode`
+- `adjustments.replay_quality.patient_strategy_hint`
+- `adjustments.replay_quality.context_intent_*`
+
+En pratique, cela permet de voir dans le JSON si AIMI a interprété le tick comme :
+
+- un repas rapide ;
+- un repas prolongé ;
+- un drive endogène de type dawn ;
+- une récupération post-hypo ;
+- une phase d’effort / afterburn ;
+- une absorption incertaine.
 - `AimiPhysioHRVDataEnable`
 - `AimiPhysioLLMAnalysisEnable`
 - `AimiPhysioDebugLogs`
@@ -409,4 +503,3 @@ Pour utiliser la passe récente :
 2. démarrer avec `RecursiveBeliefShadow` ;
 3. n’ouvrir `RecursiveBeliefAuthority` qu’après observation ;
 4. suivre les exports qualité sur les premiers cas dawn / repas / correction.
-

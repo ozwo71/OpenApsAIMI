@@ -6,6 +6,9 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternId
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.recursive.RecursiveBeliefAuthorityGate
@@ -26,6 +29,13 @@ internal data class ReplayQualityExport(
     val uamHypothesisDominantConfidence: Double?,
     val uamMealInterpretationSuppressed: Boolean,
     val mealInterpretationSuppressed: Boolean,
+    val patientMode: String?,
+    val patientModeConfidence: Double?,
+    val patientStrategyHint: String?,
+    val patientModeReasons: List<String>,
+    val contextIntentActive: Boolean,
+    val contextIntentCount: Int?,
+    val contextIntentDominant: String?,
     val patternDominant: String?,
     val stackingGuardState: String,
     val stackingGuardActive: Boolean,
@@ -54,12 +64,14 @@ internal object ReplayQualityExportBuilder {
 
     private const val VERSION = 1
     private const val TUNING_REFERENCE =
-        "AIMI_Decisions.jsonl#adjustments.replay_quality + iob_surveillance + safety_risk + recursive_belief"
+        "AIMI_Decisions.jsonl#adjustments.replay_quality + patient_mode + iob_surveillance + safety_risk + recursive_belief"
 
     fun build(
         phaseOutput: PhysiologicalPhaseClassifier.Output?,
         mealAbsorptionOutput: MealAbsorptionPhaseEngine.Output?,
         hypothesisState: UamHypothesisState?,
+        patientState: PatientStateSnapshot?,
+        patientModeDecision: PatientModeOrchestrator.Decision?,
         patternSnapshot: PhysiologicalPatternSnapshot?,
         iobSurveillanceExport: AimiDecisionContext.IobSurveillanceExport?,
         safetyRiskExport: SafetyRiskExportSnapshot?,
@@ -84,6 +96,11 @@ internal object ReplayQualityExportBuilder {
             patternSnapshot?.suppressMealInterpretation == true ||
                 uamMealInterpretationSuppressed ||
                 falseMealGuardState.startsWith("SUPPRESS_")
+        val contextIntentActive = patientState?.userIntent?.hasAnyIntent() == true
+        val patientMode = patientModeDecision?.mode?.name
+        val patientModeConfidence = patientModeDecision?.confidence
+        val patientStrategyHint = patientModeDecision?.strategyHint?.name
+        val patientModeReasons = patientModeDecision?.reasonCodes ?: emptyList()
         val stackingGuardState = stackingGuardState(
             patternSnapshot = patternSnapshot,
             iobSurveillanceExport = iobSurveillanceExport,
@@ -123,6 +140,16 @@ internal object ReplayQualityExportBuilder {
             else if (rbtPreferences.shadowEnabled) add("rbt_shadow_active")
             if (authorityGateDecision?.softLimited == true) add("rbt_authority_soft_only")
             if (!predictionAvailable) add("prediction_missing")
+            if (contextIntentActive) add("user_intent_active")
+            if ((patientModeDecision?.mealBias ?: 0.0) >= 0.70) add("patient_mode_meal")
+            if ((patientModeDecision?.protectionBias ?: 0.0) >= 0.70) add("patient_mode_protective")
+            when (patientModeDecision?.mode) {
+                PatientMode.DAWN_ENDOGENOUS -> add("patient_mode_dawn_endogenous")
+                PatientMode.POST_HYPO_RECOVERY -> add("patient_mode_post_hypo_recovery")
+                PatientMode.EXERCISE_AFTERBURN -> add("patient_mode_exercise_afterburn")
+                PatientMode.ABSORPTION_UNCERTAIN -> add("patient_mode_absorption_uncertain")
+                else -> Unit
+            }
         }.toList()
 
         return ReplayQualityExport(
@@ -134,6 +161,13 @@ internal object ReplayQualityExportBuilder {
             uamHypothesisDominantConfidence = uamHypothesisDominantConfidence,
             uamMealInterpretationSuppressed = uamMealInterpretationSuppressed,
             mealInterpretationSuppressed = mealInterpretationSuppressed,
+            patientMode = patientMode,
+            patientModeConfidence = patientModeConfidence,
+            patientStrategyHint = patientStrategyHint,
+            patientModeReasons = patientModeReasons,
+            contextIntentActive = contextIntentActive,
+            contextIntentCount = patientState?.userIntent?.intentCount,
+            contextIntentDominant = patientState?.userIntent?.dominantIntent,
             patternDominant = patternSnapshot?.dominant?.name,
             stackingGuardState = stackingGuardState,
             stackingGuardActive = stackingGuardActive,
@@ -169,6 +203,13 @@ internal object ReplayQualityExportBuilder {
             put("uam_hypothesis_dominant_confidence", export.uamHypothesisDominantConfidence ?: JSONObject.NULL)
             put("uam_meal_interpretation_suppressed", export.uamMealInterpretationSuppressed)
             put("meal_interpretation_suppressed", export.mealInterpretationSuppressed)
+            put("patient_mode", export.patientMode ?: JSONObject.NULL)
+            put("patient_mode_confidence", export.patientModeConfidence ?: JSONObject.NULL)
+            put("patient_strategy_hint", export.patientStrategyHint ?: JSONObject.NULL)
+            put("patient_mode_reasons", JSONArray(export.patientModeReasons))
+            put("context_intent_active", export.contextIntentActive)
+            put("context_intent_count", export.contextIntentCount ?: JSONObject.NULL)
+            put("context_intent_dominant", export.contextIntentDominant ?: JSONObject.NULL)
             put("pattern_dominant", export.patternDominant ?: JSONObject.NULL)
             put("stacking_guard_state", export.stackingGuardState)
             put("stacking_guard_active", export.stackingGuardActive)

@@ -20,6 +20,151 @@
             android:textAppearance="?attr/textAppearanceBodyMedium"
             android:layout_marginBottom="8dp"/>
 
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/context_patient_state_title"
+                    android:textAppearance="?attr/textAppearanceHeadlineSmall"/>
+
+                <TextView
+                    android:id="@+id/textPatientStateUpdated"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    android:textColor="?android:attr/textColorSecondary"
+                    tools:text="Updated 3 minutes ago"/>
+
+                <TextView
+                    android:id="@+id/textPatientStateEmpty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:lineSpacingMultiplier="1.15"
+                    android:text="@string/context_patient_state_empty"
+                    android:textAppearance="?attr/textAppearanceBodyLarge"
+                    android:textColor="?android:attr/textColorSecondary"
+                    tools:text="No recent AIMI patient state yet. The summary will appear after the next loop tick."/>
+
+                <LinearLayout
+                    android:id="@+id/layoutPatientStateDetails"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    tools:visibility="visible">
+
+                    <TextView
+                        android:id="@+id/textPatientStateMode"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="?attr/textAppearanceTitleLarge"
+                        tools:text="Dawn Endogenous (88%)"/>
+
+                    <TextView
+                        android:id="@+id/textPatientStateNarrative"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:lineSpacingMultiplier="1.2"
+                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        tools:text="AIMI sees more endogenous drive than meal evidence and favors basal bridging."/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:text="@string/context_patient_state_phase_label"
+                        android:textAppearance="?attr/textAppearanceTitleSmall"/>
+
+                    <TextView
+                        android:id="@+id/textPatientStatePhaseValue"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:lineSpacingMultiplier="1.15"
+                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        tools:text="Phase Dawn Cortisol · Absorption None · UAM Dawn Endogenous"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/context_patient_state_intent_label"
+                        android:textAppearance="?attr/textAppearanceTitleSmall"/>
+
+                    <TextView
+                        android:id="@+id/textPatientStateIntentValue"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:lineSpacingMultiplier="1.15"
+                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        tools:text="Dominant Stress · 82% confidence across 1 context"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/context_patient_state_probabilities_label"
+                        android:textAppearance="?attr/textAppearanceTitleSmall"/>
+
+                    <TextView
+                        android:id="@+id/textPatientStateSignalsValue"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:lineSpacingMultiplier="1.15"
+                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        tools:text="Meal 22% · Endogenous 88% · Resistance 52% · Sensor 86%"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/context_patient_state_bias_label"
+                        android:textAppearance="?attr/textAppearanceTitleSmall"/>
+
+                    <TextView
+                        android:id="@+id/textPatientStateDeliveryValue"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:lineSpacingMultiplier="1.15"
+                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        tools:text="Basal Bridge · meal bias 16% · protection 78%"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/context_patient_state_reasons_label"
+                        android:textAppearance="?attr/textAppearanceTitleSmall"/>
+
+                    <TextView
+                        android:id="@+id/textPatientStateReasonsValue"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:lineSpacingMultiplier="1.15"
+                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        tools:text="Endogenous glucose drive, false meal suppression"/>
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -74,7 +219,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Quick Presets"
+            android:text="@string/context_quick_presets_title"
             android:textAppearance="?attr/textAppearanceHeadlineSmall"
             android:layout_marginTop="16dp"
             android:layout_marginBottom="8dp"/>

@@ -3,6 +3,10 @@ package app.aaps.plugins.aps.openAPSAIMI.recursive
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStrategyHint
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.risk.AimiRiskPhase
 import app.aaps.plugins.aps.openAPSAIMI.safety.SafetyRiskExportSnapshot
@@ -22,6 +26,8 @@ class RecursiveBeliefAuthorityGateTest {
                 patternSnapshot = null,
                 latentState = PhysioLatentState(sensorConfidence = 0.92, source = "test"),
                 hypothesisState = null,
+                patientState = null,
+                patientModeDecision = null,
                 safetyRiskExport = null,
             ),
         )
@@ -56,6 +62,8 @@ class RecursiveBeliefAuthorityGateTest {
                     dominantConfidence = 0.88,
                     suppressMealInterpretation = true,
                 ),
+                patientState = null,
+                patientModeDecision = null,
                 safetyRiskExport = null,
             ),
         )
@@ -93,6 +101,8 @@ class RecursiveBeliefAuthorityGateTest {
                     dominantConfidence = 0.90,
                     suppressMealInterpretation = false,
                 ),
+                patientState = null,
+                patientModeDecision = null,
                 safetyRiskExport = SafetyRiskExportSnapshot(
                     phase = AimiRiskPhase.DECISION,
                     predictiveHypoSuppressed = false,
@@ -112,5 +122,52 @@ class RecursiveBeliefAuthorityGateTest {
         assertThat(decision.effectiveAuthority).isEqualTo(ReleaseAuthority.HARD)
         assertThat(decision.reasonCodes).containsExactly("READY")
         assertThat(decision.liftBlend).isEqualTo(1.0)
+    }
+
+    @Test
+    fun evaluate_soft_limits_exercise_afterburn_mode_even_when_other_signals_are_clean() {
+        val patientState = PatientStateSnapshot(
+            timestampMs = 1_718_000_000_000L,
+            mealProb = 0.22,
+            endogenousGlucoseDrive = 0.12,
+            transientResistanceProb = 0.18,
+            sensorConfidence = 0.94,
+        )
+        val decision = RecursiveBeliefAuthorityGate.evaluate(
+            RecursiveBeliefAuthorityGate.Input(
+                authorityEnabled = true,
+                requestedAuthority = ReleaseAuthority.HARD,
+                predictionAvailable = true,
+                phaseOutput = null,
+                patternSnapshot = PhysiologicalPatternSnapshot.EMPTY,
+                latentState = PhysioLatentState(
+                    mealProb = 0.22,
+                    endogenousGlucoseDrive = 0.12,
+                    transientResistanceProb = 0.18,
+                    sensorConfidence = 0.94,
+                    source = "test",
+                ),
+                hypothesisState = UamHypothesisState(
+                    mealProb = 0.22,
+                    dominant = UamHypothesisId.NONE,
+                    dominantConfidence = 0.0,
+                    suppressMealInterpretation = false,
+                ),
+                patientState = patientState,
+                patientModeDecision = PatientModeOrchestrator.Decision(
+                    mode = PatientMode.EXERCISE_AFTERBURN,
+                    confidence = 0.82,
+                    strategyHint = PatientStrategyHint.CONSERVATIVE_OBSERVE,
+                    mealBias = 0.18,
+                    protectionBias = 0.82,
+                    userIntentConfidence = 0.86,
+                    reasonCodes = listOf("CTX_ACTIVITY"),
+                ),
+                safetyRiskExport = null,
+            ),
+        )
+
+        assertThat(decision.effectiveAuthority).isEqualTo(ReleaseAuthority.SOFT)
+        assertThat(decision.reasonCodes).contains("MODE_EXERCISE_AFTERBURN")
     }
 }
