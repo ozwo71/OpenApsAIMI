@@ -332,6 +332,38 @@ AIMI Context allows you to **inform the algorithm** about factors that affect in
 | 🍷 **Alcohol** | ⬇️⬆️ Complex (initial drop, then rise) | 4-12 hours |
 | 🔄 **Luteal Phase** | ⬆️ +10 to +20% | 14 days |
 
+### Current AIMI Understanding (body state card)
+
+At the top of **AIMI Context**, AIMI shows how it reads your body **before** insulin posture:
+
+- **Mode headline** — e.g. Dawn Endogenous, Fast Meal, Stress Resistance
+- **Narrative** — plain-language summary of therapeutic posture
+- **Live body signals** — steps/15 min, heart rate, activity, sleep debt (Health Connect)
+- **Thermal rhythm** — skin temperature evolution vs your personal baseline (Garmin or Oura via Health Connect)
+- **Signal gauges** — Meal, Endogenous, Resistance, **Thermal**, Sensor
+
+#### Thermal rhythm (Garmin / Oura)
+
+AIMI does **not** dose from absolute body temperature. It tracks **how skin temperature moves** relative to your own nightly baseline:
+
+| Reading | Meaning |
+|---------|---------|
+| *Stable around baseline* | Normal rhythm — no thermal stress signal |
+| *Progressive warming* | Possible inflammatory or illness stress (combined with HR, sleep, context) |
+| *Cooling + sleep debt* | Recovery burden — conservative posture |
+| *Luteal BBT rise* | Cycle physiology (women) — read before insulin, not treated as infection |
+| *Pending* | Enable **Skin Temperature** and **Basal Body Temperature** in Health Connect for Garmin/Oura |
+
+**Setup:**
+
+1. Garmin Connect or Oura → sync to **Health Connect**
+2. AIMI → grant **Skin Temperature** + **Basal Body Temperature** permissions
+3. Open Context — **Thermal rhythm** updates between loop ticks when wearable data changes
+
+**Noise handling:** variations smaller than **0.03 °C** are ignored so normal wearable jitter does not trigger false alerts.
+
+**Effect on insulin:** thermal signals influence AIMI’s **understanding** (resistance/recovery probabilities, patient mode, recursive belief authority). They do **not** add a fixed “+X% for fever” bolus. Dosing still flows through the belief tree and safety gates.
+
 ---
 
 ## 🛡️ Safety Features

@@ -174,8 +174,13 @@ the Oura API directly.
 | `HeartRateVariabilityRmssdRecord` | Nocturnal RMSSD (Oura night HRV prioritized) | `AIMIPhysioFeatureExtractorMTR` |
 | `RestingHeartRateRecord` / `HeartRateRecord` | RHR, HR now, HR avg | Context engine + tick |
 | `StepsRecord` | Activity / sedentary vs exercise | Pattern + Bio-Sync |
+| `SkinTemperatureRecord` | Skin temperature **deltas** (Garmin, Oura wrist/finger) | `ThermalBeliefEngine` via `AIMIPhysioDataRepositoryMTR` |
+| `BasalBodyTemperatureRecord` | Cycle basal temperature (BBT) | wcycle hints + `CYCLE_BBT_RISE` hypothesis |
 
-Permissions are centralized in `AIMIHealthConnectPermissions.kt` — **no stress-specific record**.
+Permissions are centralized in `AIMIHealthConnectPermissions.kt` — **no stress-specific record**.  
+Thermal permissions: **Skin Temperature** and **Basal Body Temperature** (required for thermal rhythm in Context and Hormonitor `thermal_belief`).
+
+**Thermal noise floor:** AIMI ignores skin delta variations below **0.03 °C** and slopes below **0.01 °C/h** before computing beliefs — wearable 0.01 °C ticks alone do not trigger inflammatory drift.
 
 ### What Oura exports to Health Connect (official)
 

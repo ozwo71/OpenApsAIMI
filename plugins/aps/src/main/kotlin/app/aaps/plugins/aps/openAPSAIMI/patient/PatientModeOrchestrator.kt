@@ -145,6 +145,35 @@ internal object PatientModeOrchestrator {
             )
         }
 
+        if (state.thermalInflammationIndex >= 0.62 &&
+            (state.userIntent.hasIllness || state.transientResistanceProb >= 0.55)
+        ) {
+            reasons += "THERMAL_INFLAMMATORY_DRIFT"
+            if (state.userIntent.hasIllness) reasons += "CTX_ILLNESS"
+            return decision(
+                mode = PatientMode.STRESS_RESISTANCE,
+                confidence = maxOf(state.thermalInflammationIndex, state.transientResistanceProb, state.userIntent.avgConfidence),
+                strategyHint = PatientStrategyHint.CONSERVATIVE_OBSERVE,
+                mealBias = 0.20,
+                protectionBias = 0.80,
+                state = state,
+                reasonCodes = reasons,
+            )
+        }
+
+        if (state.thermalHypothesis == "CYCLE_BBT_RISE" && state.thermalInflammationIndex < 0.70) {
+            reasons += "THERMAL_CYCLE_BBT"
+            return decision(
+                mode = PatientMode.STRESS_RESISTANCE,
+                confidence = maxOf(state.thermalInflammationIndex, 0.58),
+                strategyHint = PatientStrategyHint.CONSERVATIVE_OBSERVE,
+                mealBias = 0.30,
+                protectionBias = 0.62,
+                state = state,
+                reasonCodes = reasons,
+            )
+        }
+
         if (state.transientResistanceProb >= 0.70 &&
             (state.userIntent.hasStress || state.userIntent.hasIllness || state.uamDominant == UamHypothesisId.STRESS)
         ) {
@@ -158,6 +187,20 @@ internal object PatientModeOrchestrator {
                 strategyHint = PatientStrategyHint.CONSERVATIVE_OBSERVE,
                 mealBias = 0.24,
                 protectionBias = 0.72,
+                state = state,
+                reasonCodes = reasons,
+            )
+        }
+
+        if (state.thermalRecoveryBurden >= 0.60 && state.sleepDebtScore >= 0.45) {
+            reasons += "THERMAL_RECOVERY_COOLING"
+            reasons += "LATENT_SLEEP_DEBT"
+            return decision(
+                mode = PatientMode.POOR_SLEEP_DAY,
+                confidence = maxOf(state.thermalRecoveryBurden, state.sleepDebtScore, 0.58),
+                strategyHint = PatientStrategyHint.CONSERVATIVE_OBSERVE,
+                mealBias = 0.26,
+                protectionBias = 0.74,
                 state = state,
                 reasonCodes = reasons,
             )

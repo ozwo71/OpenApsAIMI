@@ -16,15 +16,17 @@ internal object PatientSignalGaugeBinder {
         mealContainer: View,
         endogenousContainer: View,
         resistanceContainer: View,
+        thermalContainer: View,
         sensorContainer: View,
         gauges: List<PatientSignalGauge>,
     ) {
-        if (gauges.size < 4) {
+        if (gauges.size < 5) {
             return
         }
         bind(mealContainer, gauges[0])
         bind(endogenousContainer, gauges[1])
         bind(resistanceContainer, gauges[2])
-        bind(sensorContainer, gauges[3])
+        bind(thermalContainer, gauges[3])
+        bind(sensorContainer, gauges[4])
     }
 }

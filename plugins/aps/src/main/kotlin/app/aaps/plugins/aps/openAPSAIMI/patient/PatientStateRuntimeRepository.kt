@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.patient
 
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefDigest
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -10,6 +11,7 @@ internal data class PatientRuntimeSnapshot(
     val patientModeDecision: PatientModeOrchestrator.Decision,
     val updatedAtMs: Long = patientState.timestampMs,
     val physioLive: PhysioLiveDigest = PhysioLiveDigest(),
+    val thermalBelief: ThermalBeliefDigest = ThermalBeliefDigest.EMPTY,
     val refreshSource: PatientRefreshSource = PatientRefreshSource.LOOP_TICK,
 )
 
@@ -29,6 +31,7 @@ internal object PatientStateRuntimeRepository {
         patientModeDecision: PatientModeOrchestrator.Decision,
         updatedAtMs: Long = patientState.timestampMs,
         physioLive: PhysioLiveDigest = PhysioLiveDigest(),
+        thermalBelief: ThermalBeliefDigest = ThermalBeliefDigest.EMPTY,
         loopCache: PatientStateLoopCache? = null,
         refreshSource: PatientRefreshSource = PatientRefreshSource.LOOP_TICK,
     ) {
@@ -38,6 +41,7 @@ internal object PatientStateRuntimeRepository {
                 patientModeDecision = patientModeDecision,
                 updatedAtMs = updatedAtMs,
                 physioLive = physioLive,
+                thermalBelief = thermalBelief,
                 refreshSource = refreshSource,
             ),
             loopCache = loopCache,

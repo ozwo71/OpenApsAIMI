@@ -110,10 +110,18 @@ internal object PhysioLatentStateBuilder {
             physioContext = physioContext,
             patternSnapshot = patternSnapshot,
         )
+        val thermalInflammation = snapshot.thermalBelief.inflammationIndex
+        val thermalRecovery = snapshot.thermalBelief.recoveryBurden
+        val inflammationRecoveryMerged = combineSignals(
+            inflammationRecovery,
+            thermalInflammation * 0.55,
+            thermalRecovery * 0.35,
+        )
         val transientResistanceProb = combineSignals(
             autonomicStress * 0.70,
-            inflammationRecovery,
+            inflammationRecoveryMerged,
             hormonalCircadian * 0.75,
+            thermalInflammation * 0.40,
             (hypothesisState?.stressProb ?: 0.0) * 0.45,
             if (physioContext?.state == PhysioStateMTR.STRESS_DETECTED) 0.45 else 0.0,
             if (physioContext?.state == PhysioStateMTR.INFECTION_RISK) 0.55 else 0.0,
@@ -144,7 +152,7 @@ internal object PhysioLatentStateBuilder {
             sleepDebtScore = sleepDebtScore,
             sensorConfidence = sensorConfidence,
             autonomicStress = autonomicStress.coerceIn(0.0, 1.0),
-            inflammationRecovery = inflammationRecovery.coerceIn(0.0, 1.0),
+            inflammationRecovery = inflammationRecoveryMerged.coerceIn(0.0, 1.0),
             hormonalCircadian = hormonalCircadian.coerceIn(0.0, 1.0),
             postHypoReboundProb = postHypoReboundProb,
             falseMealSuppression = falseMealSuppression,

@@ -17,6 +17,10 @@ data class PhysioLiveDigest(
     val snapshotAgeMs: Long = 0L,
     val source: String = "Unknown",
     val confidence: Double = 0.0,
+    val thermalHypothesis: String = "DATA_PENDING",
+    val thermalDeltaVsBaselineC: Double = 0.0,
+    val thermalInflammationIndex: Double = 0.0,
+    val thermalNarrative: String = "",
 ) {
     fun toJsonObject(): JSONObject =
         JSONObject().apply {
@@ -30,6 +34,10 @@ data class PhysioLiveDigest(
             put("snapshot_age_ms", snapshotAgeMs)
             put("source", source)
             put("confidence", confidence)
+            put("thermal_hypothesis", thermalHypothesis)
+            put("thermal_delta_vs_baseline_c", thermalDeltaVsBaselineC)
+            put("thermal_inflammation_index", thermalInflammationIndex)
+            put("thermal_narrative", thermalNarrative)
         }
 
     companion object {
@@ -50,6 +58,10 @@ data class PhysioLiveDigest(
                 snapshotAgeMs = ageMs,
                 source = snapshot.source,
                 confidence = snapshot.confidence,
+                thermalHypothesis = snapshot.thermalBelief.hypothesis.name,
+                thermalDeltaVsBaselineC = snapshot.thermalBelief.deltaVsBaselineC,
+                thermalInflammationIndex = snapshot.thermalBelief.inflammationIndex,
+                thermalNarrative = snapshot.thermalBelief.narrative,
             )
         }
     }

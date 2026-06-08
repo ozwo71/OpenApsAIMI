@@ -98,6 +98,21 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="14dp"
+                        android:text="@string/context_patient_state_thermal_label"
+                        style="@style/ContextPatientStateLabel"/>
+
+                    <TextView
+                        android:id="@+id/textPatientStateThermal"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        style="@style/ContextPatientStateBody"
+                        tools:text="AIMI sees a progressive skin warming (+0.4°C vs baseline) consistent with inflammatory stress."/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
                         android:text="@string/context_patient_state_phase_label"
                         style="@style/ContextPatientStateLabel"/>
 
@@ -154,6 +169,13 @@
 
                     <include
                         android:id="@+id/layoutPatientSignalGaugeResistance"
+                        layout="@layout/item_patient_signal_gauge"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"/>
+
+                    <include
+                        android:id="@+id/layoutPatientSignalGaugeThermal"
                         layout="@layout/item_patient_signal_gauge"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"

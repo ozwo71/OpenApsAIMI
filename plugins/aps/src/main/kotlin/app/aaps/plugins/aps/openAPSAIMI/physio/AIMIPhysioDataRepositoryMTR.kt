@@ -2,11 +2,18 @@ package app.aaps.plugins.aps.openAPSAIMI.physio
 
 import android.content.Context
 import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.HealthConnectFeatures
+import androidx.health.connect.client.records.BasalBodyTemperatureRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
+import androidx.health.connect.client.records.SkinTemperatureRecord
 import androidx.health.connect.client.records.StepsRecord
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.BasalBodyTemperatureMTR
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalDataCache
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalDataWindowMTR
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalSampleMTR
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.time.TimeRangeFilter
@@ -760,6 +767,134 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
         
         return true
     }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // THERMAL DATA (Garmin / Oura via Health Connect)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Fetches skin-temperature deltas and latest basal body temperature for thermal belief.
+     */
+    internal suspend fun fetchThermalWindow(daysBack: Int = 3): ThermalDataWindowMTR {
+        val cacheKey = "thermal_${daysBack}d"
+        val cached = cache[cacheKey] as? CachedData<ThermalDataWindowMTR>
+        if (cached?.isValid() == true) {
+            return cached.data ?: ThermalDataWindowMTR()
+        }
+
+        val client = healthConnectClient ?: return ThermalDataWindowMTR()
+        val fetchedAtMs = System.currentTimeMillis()
+
+        return try {
+            withTimeout(API_TIMEOUT_MS) {
+                withContext(Dispatchers.IO) {
+                    val now = Instant.now()
+                    val start = now.minusSeconds(daysBack * 24L * 60L * 60L)
+                    val skinSamples = fetchSkinTemperatureSamples(client, start, now)
+                    val basal = fetchLatestBasalBodyTemperature(client, start, now)
+                    val window = ThermalDataWindowMTR(
+                        skinSamples = skinSamples,
+                        basalBodyTemperature = basal,
+                        fetchedAtMs = fetchedAtMs,
+                    )
+                    cache[cacheKey] = CachedData(window, System.currentTimeMillis())
+                    ThermalDataCache.update(window)
+                    if (skinSamples.isNotEmpty() || basal != null) {
+                        aapsLogger.info(
+                            LTag.APS,
+                            "[$TAG] ✅ Thermal: ${skinSamples.size} skin samples, basal=${basal?.temperatureCelsius}",
+                        )
+                    }
+                    window
+                }
+            }
+        } catch (e: Exception) {
+            aapsLogger.warn(LTag.APS, "[$TAG] Thermal fetch failed: ${e.message}")
+            ThermalDataWindowMTR(fetchedAtMs = fetchedAtMs)
+        }
+    }
+
+    private suspend fun fetchSkinTemperatureSamples(
+        client: HealthConnectClient,
+        start: Instant,
+        end: Instant,
+    ): List<ThermalSampleMTR> {
+        val featureStatus = try {
+            client.features.getFeatureStatus(HealthConnectFeatures.FEATURE_SKIN_TEMPERATURE)
+        } catch (_: Exception) {
+            HealthConnectFeatures.FEATURE_STATUS_UNAVAILABLE
+        }
+        if (featureStatus != HealthConnectFeatures.FEATURE_STATUS_AVAILABLE) {
+            return emptyList()
+        }
+
+        return try {
+            val response = client.readRecords(
+                ReadRecordsRequest(
+                    recordType = SkinTemperatureRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(start, end),
+                ),
+            )
+            val samples = mutableListOf<ThermalSampleMTR>()
+            for (record in response.records) {
+                val origin = record.metadata.dataOrigin.packageName
+                val location = skinMeasurementLocationLabel(record.measurementLocation)
+                var cumulative = record.baseline?.inCelsius ?: 0.0
+                for (delta in record.deltas) {
+                    cumulative += delta.delta.inCelsius
+                    samples += ThermalSampleMTR(
+                        timestampMs = delta.time.toEpochMilli(),
+                        deltaCelsius = cumulative - (record.baseline?.inCelsius ?: 0.0),
+                        measurementLocation = location,
+                        dataOrigin = origin,
+                    )
+                }
+                if (record.deltas.isEmpty() && record.baseline != null) {
+                    samples += ThermalSampleMTR(
+                        timestampMs = record.endTime.toEpochMilli(),
+                        deltaCelsius = 0.0,
+                        measurementLocation = location,
+                        dataOrigin = origin,
+                    )
+                }
+            }
+            samples.sortedBy { it.timestampMs }
+        } catch (e: Exception) {
+            aapsLogger.warn(LTag.APS, "[$TAG] Skin temperature read failed: ${e.message}")
+            emptyList()
+        }
+    }
+
+    private suspend fun fetchLatestBasalBodyTemperature(
+        client: HealthConnectClient,
+        start: Instant,
+        end: Instant,
+    ): BasalBodyTemperatureMTR? =
+        try {
+            val response = client.readRecords(
+                ReadRecordsRequest(
+                    recordType = BasalBodyTemperatureRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(start, end),
+                ),
+            )
+            val latest = response.records.maxByOrNull { it.time } ?: return null
+            BasalBodyTemperatureMTR(
+                timestampMs = latest.time.toEpochMilli(),
+                temperatureCelsius = latest.temperature.inCelsius,
+                dataOrigin = latest.metadata.dataOrigin.packageName,
+            )
+        } catch (e: Exception) {
+            aapsLogger.warn(LTag.APS, "[$TAG] Basal body temperature read failed: ${e.message}")
+            null
+        }
+
+    private fun skinMeasurementLocationLabel(location: Int): String =
+        when (location) {
+            SkinTemperatureRecord.MEASUREMENT_LOCATION_WRIST -> "WRIST"
+            SkinTemperatureRecord.MEASUREMENT_LOCATION_FINGER -> "FINGER"
+            SkinTemperatureRecord.MEASUREMENT_LOCATION_TOE -> "TOE"
+            else -> "UNKNOWN"
+        }
     
     // ═══════════════════════════════════════════════════════════════════════
     // UTILITIES

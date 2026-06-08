@@ -236,6 +236,7 @@ class ContextActivity : TranslatedDaggerAppCompatActivity() {
         binding.textPatientStateMode.text = presentation.modeHeadline
         binding.textPatientStateNarrative.text = presentation.narrative
         binding.textPatientStateLiveBody.text = presentation.physioLiveSummary
+        binding.textPatientStateThermal.text = presentation.thermalSummary
         binding.textPatientStatePhaseValue.text = presentation.physiologySummary
         binding.textPatientStateIntentValue.text = presentation.intentSummary
         binding.textPatientStateSignalsValue.text = presentation.signalSummary
@@ -243,6 +244,7 @@ class ContextActivity : TranslatedDaggerAppCompatActivity() {
             mealContainer = binding.layoutPatientSignalGaugeMeal.root,
             endogenousContainer = binding.layoutPatientSignalGaugeEndogenous.root,
             resistanceContainer = binding.layoutPatientSignalGaugeResistance.root,
+            thermalContainer = binding.layoutPatientSignalGaugeThermal.root,
             sensorContainer = binding.layoutPatientSignalGaugeSensor.root,
             gauges = presentation.signalGauges,
         )

@@ -10,6 +10,7 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysioLiveDigest
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefDigest
 import java.io.File
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
@@ -72,6 +73,7 @@ data class HormonitorDecisionEventMTR(
     val patientNarrative: String? = null,
     val patientReasonCodes: List<String>? = null,
     val patientPhysioLive: PhysioLiveDigest? = null,
+    val patientThermalBelief: ThermalBeliefDigest? = null,
 ) {
     fun toJSON(datasetId: String, generatedAtIsoUtc: String, appVersion: String, schemaVersion: String): JSONObject =
         JSONObject().apply {
@@ -143,6 +145,10 @@ data class HormonitorDecisionEventMTR(
                         "physio_live",
                         patientPhysioLive?.toJsonObject() ?: JSONObject.NULL,
                     )
+                    put(
+                        "thermal_belief",
+                        patientThermalBelief?.toJsonObject() ?: JSONObject.NULL,
+                    )
                 },
             )
         }
@@ -154,7 +160,7 @@ class AimiHormonitorStudyExporterMTR(
     private val preferences: Preferences
 ) {
     companion object {
-        private const val SCHEMA_VERSION = "1.2.0"
+        private const val SCHEMA_VERSION = "1.3.0"
         private const val FILE_NAME = "AIMI_HORMONITOR_event_stream_v1.jsonl"
         private const val DAILY_FILE_NAME = "AIMI_HORMONITOR_daily_outcomes_v1.jsonl"
         private const val QA_FILE_NAME = "AIMI_HORMONITOR_dataset_qa_v1.jsonl"

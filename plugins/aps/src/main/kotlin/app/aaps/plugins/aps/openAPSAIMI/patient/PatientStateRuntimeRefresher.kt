@@ -127,6 +127,7 @@ internal object PatientStateRuntimeRefresher {
             latentState = latentState,
             hypothesisState = hypothesisState,
             contextSnapshot = contextSnapshot,
+            thermalBelief = healthSnapshot.thermalBelief,
         )
         val patientModeDecision = PatientModeOrchestrator.evaluate(patientState)
         val runtimeSnapshot = PatientRuntimeSnapshot(
@@ -134,6 +135,7 @@ internal object PatientStateRuntimeRefresher {
             patientModeDecision = patientModeDecision,
             updatedAtMs = nowMs,
             physioLive = PhysioLiveDigest.from(healthSnapshot, nowMs),
+            thermalBelief = healthSnapshot.thermalBelief,
             refreshSource = PatientRefreshSource.PHYSIO_SIGNAL,
         )
         PatientStateRuntimeRepository.publishRuntime(runtimeSnapshot, loopCache = cache)

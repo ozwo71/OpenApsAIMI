@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefDigest
 import org.json.JSONObject
 
 /**
@@ -33,6 +34,9 @@ data class HealthContextSnapshot(
     // 🩸 Cardiovascular
     val bpSys: Int = 0,
     val bpDia: Int = 0,
+
+    // 🌡️ Thermal rhythm (skin delta evolution — Garmin / Oura via Health Connect)
+    val thermalBelief: ThermalBeliefDigest = ThermalBeliefDigest.EMPTY,
     
     // ℹ️ Metadata
     val timestamp: Long = System.currentTimeMillis(),

@@ -5,6 +5,8 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRefresher
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefEngine
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalDataWindowMTR
 import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -47,6 +49,7 @@ class HealthContextRepository @Inject constructor(
     private val sleepRef = AtomicReference<Any?>(null)
     private val hrvRef = AtomicReference<List<Any>>(emptyList())
     private val rhrRef = AtomicReference<List<Any>>(emptyList())
+    private val thermalRef = AtomicReference<ThermalDataWindowMTR?>(null)
     private val refreshInFlight = AtomicBoolean(false)
     
     /**
@@ -138,6 +141,19 @@ class HealthContextRepository @Inject constructor(
             confidence += 0.3
         }
 
+        val thermalWindow = thermalRef.get() ?: ThermalDataWindowMTR()
+        val thermalBelief = ThermalBeliefEngine.build(
+            window = thermalWindow,
+            hrNowBpm = currentHR,
+            rhrRestingBpm = rhr,
+            sleepDebtMinutes = sleepDebt,
+            hrvRmssd = hrv,
+            wCyclePhase = null,
+        )
+        if (thermalBelief.hasUsableData()) {
+            confidence = (confidence + 0.15).coerceAtMost(1.0)
+        }
+
         val snapshot = HealthContextSnapshot(
             stepsLast5m = steps5,
             stepsLast15m = steps15,
@@ -149,6 +165,7 @@ class HealthContextRepository @Inject constructor(
             rhrResting = rhr,
             sleepDebtMinutes = sleepDebt,
             sleepEfficiency = sleepEfficiency,
+            thermalBelief = thermalBelief,
             timestamp = System.currentTimeMillis(),
             confidence = confidence.coerceIn(0.0, 1.0),
             source = "Merged(Unified+HC)",
@@ -183,7 +200,10 @@ class HealthContextRepository @Inject constructor(
         val hrChanged = previous == null || previous.hrNowBpm != snapshot.hrNow ||
             previous.hrAvg15mBpm != snapshot.hrAvg15m
         val activityChanged = previous == null || previous.activityState != snapshot.activityState
-        if (!stepsChanged && !hrChanged && !activityChanged) {
+        val thermalChanged = previous == null ||
+            previous.thermalHypothesis != snapshot.thermalBelief.hypothesis.name ||
+            kotlin.math.abs(previous.thermalDeltaVsBaselineC - snapshot.thermalBelief.deltaVsBaselineC) >= 0.05
+        if (!stepsChanged && !hrChanged && !activityChanged && !thermalChanged) {
             return
         }
         PatientStateRuntimeRefresher.refreshFromHealthSnapshot(
@@ -212,10 +232,12 @@ class HealthContextRepository @Inject constructor(
                 sleepRef.set(hcRepo.fetchSleepData())
                 hrvRef.set(hcRepo.fetchHRVData(daysHrv))
                 rhrRef.set(hcRepo.fetchMorningRHR(7))
+                thermalRef.set(hcRepo.fetchThermalWindow(daysBack = 3))
             } catch (_: Exception) {
                 sleepRef.set(null)
                 hrvRef.set(emptyList())
                 rhrRef.set(emptyList())
+                thermalRef.set(null)
             } finally {
                 refreshInFlight.set(false)
             }

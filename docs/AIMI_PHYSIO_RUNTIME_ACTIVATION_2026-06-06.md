@@ -278,24 +278,63 @@ But :
 **UI Context (`ContextActivity`) :**
 
 - section *Live body signals* (activité, steps/15 min, FC) ;
-- jauges Meal / Endogenous / Resistance / Sensor ;
+- jauges Meal / Endogenous / Resistance / **Thermal** / Sensor ;
+- section **Thermal rhythm** (narrative + delta vs baseline) ;
 - rafraîchissement immédiat via `PatientStateRuntimeRepository.updates` ;
 - suffixe *Updated … · live body signals* ou *· user context* selon la source.
 
-**Export Hormonitor — schéma `1.2.0` :**
+**Export Hormonitor — schéma `1.2.0` → `1.3.0` :**
 
-Nouveau bloc `patient_story` dans `AIMI_HORMONITOR_event_stream_v1.jsonl` :
+Bloc `patient_story` dans `AIMI_HORMONITOR_event_stream_v1.jsonl` :
 
 - `patient_mode`, `patient_mode_confidence`, `patient_strategy_hint`
 - `patient_narrative`, `patient_reason_codes`
-- `physio_live` (steps, FC, activité, dette sommeil, source)
+- `physio_live` (steps, FC, activité, dette sommeil, champs thermiques)
+- `thermal_belief` (**1.3.0** — voir § 3.13)
 
 Fichiers :
 
 - `plugins/aps/.../patient/PatientStateRuntimeRefresher.kt`
 - `plugins/aps/.../patient/PhysioLiveDigest.kt`
-- `plugins/aps/.../physio/AimiHormonitorStudyExporterMTR.kt` (`SCHEMA_VERSION = 1.2.0`)
+- `plugins/aps/.../physio/AimiHormonitorStudyExporterMTR.kt` (`SCHEMA_VERSION = 1.3.0`)
 - le modèle interne sauvegardé sera naturellement recréé si la dimension d’entrée diverge.
+
+### 3.13 Couche Thermal Belief — rythme thermique wearable (2026-06-06)
+
+**Principe produit :** lire l’**évolution** de la température cutanée vs une baseline personnelle (nuits 2h–5h), pas une fièvre absolue. Sources : **Garmin** et **Oura** via Health Connect.
+
+Briques :
+
+| Fichier | Rôle |
+|---------|------|
+| `physio/thermal/ThermalBeliefEngine.kt` | Hypothèses, indices inflammation/récupération, narrative |
+| `physio/thermal/ThermalBaselineStore.kt` | Baseline nocturne personnelle |
+| `physio/AIMIPhysioDataRepositoryMTR.kt` | Lecture HC `SkinTemperatureRecord` + `BasalBodyTemperatureRecord` |
+| `physio/AIMIHealthConnectPermissions.kt` | Permissions skin + BBT |
+| `physio/HealthContextRepository.kt` | Fetch async + refresh UI si thermal change |
+
+**Plancher de bruit (deadband) :**
+
+| Constante | Valeur |
+|-----------|--------|
+| `NOISE_FLOOR_DELTA_C` | 0,03 °C — variations &lt; 0,03 ignorées pour indices/hypothèses |
+| `NOISE_FLOOR_SLOPE_C_PER_H` | 0,01 °C/h — pentes sous ce seuil → 0 |
+| Mise à jour baseline nocturne | &gt; 0,03 °C vs dernière médiane |
+
+Les ticks 0,01–0,02 °C typiques des montres ne doivent **pas** déclencher de dérive inflammatoire.
+
+**Hypothèses :** `BASELINE_STABLE`, `INFLAMMATORY_DRIFT`, `RECOVERY_COOLING`, `CYCLE_BBT_RISE`, `HYPO_SYMPATHETIC_COOLING`, `FATIGUE_DYSREGULATION`, `DATA_PENDING`.
+
+**Impact RBT et décisions (indirect, pas de dose directe) :**
+
+1. **`PhysioLatentState`** — `inflammationIndex` / `recoveryBurden` thermiques fusionnés dans `transientResistanceProb` et recovery.
+2. **`PatientModeOrchestrator`** — raisons `THERMAL_INFLAMMATORY_DRIFT`, `THERMAL_CYCLE_BBT`, `THERMAL_RECOVERY_COOLING` → modes `STRESS_RESISTANCE` ou `POOR_SLEEP_DAY` avec `CONSERVATIVE_OBSERVE`.
+3. **`RecursiveBeliefAuthorityGate`** — modes protecteurs plafonnent l’autorité RBT à `SOFT` ; `protectionBias` abaisse le `readinessScore` et le `liftBlend`.
+4. **Pas de multiplicateur SMB dédié à la température** — la dose suit l’arbitrage belief tree + ILG après lecture du corps.
+
+**wcycle :** BBT + phase cycle (lutéale, ovulation, menstruation) pour distinguer physiologie hormonale et stress infectieux.
+
+**Aucune nouvelle préférence** — activer les permissions Health Connect skin temperature + basal body temperature.
 
 ---
 

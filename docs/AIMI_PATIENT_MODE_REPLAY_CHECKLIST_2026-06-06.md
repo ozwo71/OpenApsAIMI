@@ -15,8 +15,8 @@ Cette checklist sert à valider la couche produit récente :
 - `PatientStateRuntimeRepository` + `PatientStateRuntimeRefresher`
 - `RecursiveBeliefAuthorityGate` modulé par le mode patient
 - export `ReplayQualityExport` enrichi
-- export Hormonitor `patient_story` (schéma `1.2.0`)
-- affichage clinique dans `ContextActivity` (jauges + live body signals)
+- export Hormonitor `patient_story` + `thermal_belief` (schéma `1.3.0`)
+- affichage clinique dans `ContextActivity` (jauges + live body signals + thermal rhythm)
 
 Elle ne déclare pas le système "terminé". Elle sert à décider si la passe est assez cohérente pour une montée supervisée.
 
@@ -51,13 +51,18 @@ Chaque scénario de replay doit renseigner de façon cohérente :
 - `context_intent_count`
 - `context_intent_dominant`
 
-Dans **Hormonitor event stream** (`schema_version = 1.2.0`), vérifier aussi :
+Dans **Hormonitor event stream** (`schema_version = 1.3.0`), vérifier aussi :
 
 - `patient_story.patient_mode`
 - `patient_story.patient_strategy_hint`
 - `patient_story.patient_narrative`
 - `patient_story.patient_reason_codes`
-- `patient_story.physio_live` (steps, FC, activité cohérents avec le tick)
+- `patient_story.physio_live` (steps, FC, activité, champs thermiques cohérents avec le tick)
+- `patient_story.thermal_belief` (hypothesis, delta_vs_baseline_c, inflammation_index, narrative)
+
+**Codes raison thermiques :** `THERMAL_INFLAMMATORY_DRIFT`, `THERMAL_CYCLE_BBT`, `THERMAL_RECOVERY_COOLING`
+
+**Plancher de bruit :** deltas &lt; 0,03 °C ne doivent pas sortir de `BASELINE_STABLE` ni gonfler `transientResistanceProb` de façon visible.
 
 Si ces champs sont absents ou incohérents, le scénario est `NO-GO`.
 

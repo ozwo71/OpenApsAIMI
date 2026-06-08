@@ -10,6 +10,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefDigest
 import org.json.JSONObject
 import java.util.Locale
 
@@ -62,6 +63,9 @@ data class PatientStateSnapshot(
     val uamDominant: UamHypothesisId = UamHypothesisId.NONE,
     val uamDominantConfidence: Double = 0.0,
     val userIntent: UserIntentSummary = UserIntentSummary.EMPTY,
+    val thermalInflammationIndex: Double = 0.0,
+    val thermalRecoveryBurden: Double = 0.0,
+    val thermalHypothesis: String = "DATA_PENDING",
     val source: String = "patient_state_v1",
 ) {
     fun toJsonObject(): JSONObject =
@@ -83,6 +87,9 @@ data class PatientStateSnapshot(
             put("uam_dominant", uamDominant.name)
             put("uam_dominant_confidence", uamDominantConfidence)
             put("user_intent", userIntent.toJsonObject())
+            put("thermal_inflammation_index", thermalInflammationIndex)
+            put("thermal_recovery_burden", thermalRecoveryBurden)
+            put("thermal_hypothesis", thermalHypothesis)
             put("source", source)
         }
 
@@ -104,8 +111,10 @@ internal object PatientStateEngine {
         latentState: PhysioLatentState?,
         hypothesisState: UamHypothesisState?,
         contextSnapshot: ContextSnapshot?,
+        thermalBelief: ThermalBeliefDigest? = null,
     ): PatientStateSnapshot {
         val userIntent = buildUserIntentSummary(contextSnapshot)
+        val thermal = thermalBelief ?: ThermalBeliefDigest.EMPTY
         return PatientStateSnapshot(
             timestampMs = timestampMs,
             phase = phaseOutput?.phase ?: PhysiologicalPhase.OFF,
@@ -125,6 +134,9 @@ internal object PatientStateEngine {
             uamDominant = hypothesisState?.dominant ?: UamHypothesisId.NONE,
             uamDominantConfidence = hypothesisState?.dominantConfidence ?: 0.0,
             userIntent = userIntent,
+            thermalInflammationIndex = thermal.inflammationIndex,
+            thermalRecoveryBurden = thermal.recoveryBurden,
+            thermalHypothesis = thermal.hypothesis.name,
             source = "patient_state_v2",
         )
     }

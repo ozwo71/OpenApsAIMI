@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.patient
 
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefDigest
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalHypothesis
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -14,6 +16,7 @@ data class PatientStatePresentation(
     val narrative: String,
     val physiologySummary: String,
     val physioLiveSummary: String,
+    val thermalSummary: String,
     val intentSummary: String,
     val signalSummary: String,
     val signalGauges: List<PatientSignalGauge>,
@@ -34,9 +37,10 @@ internal object PatientStatePresentationBuilder {
             narrative = buildNarrative(patientMode),
             physiologySummary = buildPhysiologySummary(patientState),
             physioLiveSummary = buildPhysioLiveSummary(snapshot.physioLive),
+            thermalSummary = buildThermalSummary(snapshot.thermalBelief),
             intentSummary = buildIntentSummary(patientState),
             signalSummary = buildSignalSummary(patientState),
-            signalGauges = buildSignalGauges(patientState),
+            signalGauges = buildSignalGauges(patientState, snapshot.thermalBelief),
             deliverySummary = "$strategyLabel · meal bias ${percent(patientMode.mealBias)} · protection ${percent(patientMode.protectionBias)}",
             reasonSummary = patientMode.reasonCodes.joinToString(", ") { humanizeReason(it) },
         )
@@ -113,16 +117,51 @@ internal object PatientStatePresentationBuilder {
         return "Dominant ${humanize(state.userIntent.dominantIntent)} · ${percent(state.userIntent.avgConfidence)} confidence across ${state.userIntent.intentCount} ${countLabel}"
     }
 
-    private fun buildSignalSummary(state: PatientStateSnapshot): String =
-        "Meal ${percent(state.mealProb)} · Endogenous ${percent(state.endogenousGlucoseDrive)} · Resistance ${percent(state.transientResistanceProb)} · Sensor ${percent(state.sensorConfidence)}"
+    private fun buildThermalSummary(thermal: ThermalBeliefDigest): String {
+        if (!thermal.hasUsableData()) {
+            return thermal.narrative.ifBlank {
+                "Thermal rhythm pending · enable skin temperature in Garmin or Oura via Health Connect"
+            }
+        }
+        val deltaLabel = String.format(Locale.US, "%+.1f", thermal.deltaVsBaselineC)
+        val wCycleLabel = thermal.wCycleHint?.let { hint ->
+            " · ${humanizeWCycleHint(hint)}"
+        } ?: ""
+        return "${thermal.narrative} ($deltaLabel°C vs baseline$wCycleLabel)"
+    }
 
-    private fun buildSignalGauges(state: PatientStateSnapshot): List<PatientSignalGauge> =
-        listOf(
+    private fun humanizeWCycleHint(hint: String): String =
+        when (hint) {
+            "LUTEAL_BBT_RISE" -> "luteal BBT pattern"
+            "OVULATION_THERMAL_SHIFT" -> "ovulation thermal shift"
+            "MENSTRUAL_THERMAL_DIP" -> "menstrual thermal dip"
+            else -> humanize(hint)
+        }
+
+    private fun buildSignalSummary(state: PatientStateSnapshot): String =
+        "Meal ${percent(state.mealProb)} · Endogenous ${percent(state.endogenousGlucoseDrive)} · " +
+            "Resistance ${percent(state.transientResistanceProb)} · Thermal ${percent(state.thermalInflammationIndex)} · " +
+            "Sensor ${percent(state.sensorConfidence)}"
+
+    private fun buildSignalGauges(
+        state: PatientStateSnapshot,
+        thermal: ThermalBeliefDigest,
+    ): List<PatientSignalGauge> {
+        val thermalPercent = when (thermal.hypothesis) {
+            ThermalHypothesis.RECOVERY_COOLING,
+            ThermalHypothesis.HYPO_SYMPATHETIC_COOLING,
+            ThermalHypothesis.FATIGUE_DYSREGULATION,
+            -> gaugePercent(state.thermalRecoveryBurden)
+            else -> gaugePercent(state.thermalInflammationIndex)
+        }
+        return listOf(
             PatientSignalGauge("Meal", gaugePercent(state.mealProb)),
             PatientSignalGauge("Endogenous", gaugePercent(state.endogenousGlucoseDrive)),
             PatientSignalGauge("Resistance", gaugePercent(state.transientResistanceProb)),
+            PatientSignalGauge("Thermal", thermalPercent),
             PatientSignalGauge("Sensor", gaugePercent(state.sensorConfidence)),
         )
+    }
 
     private fun gaugePercent(value: Double): Int =
         (value.coerceIn(0.0, 1.0) * 100.0).roundToInt()
@@ -153,6 +192,9 @@ internal object PatientStatePresentationBuilder {
             "LATENT_SLEEP_DEBT" -> "Sleep debt"
             "SENSOR_LOW" -> "Low sensor confidence"
             "BASELINE" -> "Balanced baseline"
+            "THERMAL_INFLAMMATORY_DRIFT" -> "Thermal inflammatory drift"
+            "THERMAL_CYCLE_BBT" -> "Cycle basal temperature rise"
+            "THERMAL_RECOVERY_COOLING" -> "Thermal recovery cooling"
             else -> humanize(code)
         }
 

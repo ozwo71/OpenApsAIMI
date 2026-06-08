@@ -164,6 +164,7 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStatePresentationBuilder
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysioLiveDigest
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefEngine
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleInfo
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
@@ -2749,10 +2750,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         lastContextSnapshot = contextSnap
         updatePhysioLatentState(
-            snapshot = wearableSnap,
+            snapshot = enrichThermalSnapshot(wearableSnap),
             sourceSensor = glucoseStatus.sourceSensor,
             patternSnapshot = lastPhysiologicalPatternSnapshot,
         )
+    }
+
+    private fun enrichThermalSnapshot(snapshot: HealthContextSnapshot): HealthContextSnapshot {
+        val thermalBelief = ThermalBeliefEngine.buildFromCache(
+            hrNowBpm = snapshot.hrNow,
+            rhrRestingBpm = snapshot.rhrResting,
+            sleepDebtMinutes = snapshot.sleepDebtMinutes,
+            hrvRmssd = snapshot.hrvRmssd,
+            wCyclePhase = wCycleInfoForRun?.phase,
+        )
+        return snapshot.copy(thermalBelief = thermalBelief)
     }
 
     private fun refreshPatientStateRuntime(
@@ -2771,6 +2783,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } catch (_: Exception) {
             HealthContextSnapshot()
         }
+        val enrichedSnap = enrichThermalSnapshot(wearableSnap)
         val patientState = PatientStateEngine.build(
             timestampMs = nowMs,
             phaseOutput = lastPhysiologicalPhaseOutput,
@@ -2779,6 +2792,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             latentState = lastPhysioLatentState,
             hypothesisState = lastUamHypothesisState,
             contextSnapshot = lastContextSnapshot,
+            thermalBelief = enrichedSnap.thermalBelief,
         )
         lastPatientState = patientState
         val patientModeDecision = PatientModeOrchestrator.evaluate(patientState)
@@ -2800,7 +2814,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             patientState = patientState,
             patientModeDecision = patientModeDecision,
             updatedAtMs = nowMs,
-            physioLive = PhysioLiveDigest.from(wearableSnap, nowMs),
+            physioLive = PhysioLiveDigest.from(enrichedSnap, nowMs),
+            thermalBelief = enrichedSnap.thermalBelief,
             loopCache = loopCache,
             refreshSource = refreshSource,
         )
@@ -6561,6 +6576,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 patientReasonCodes = patientRuntimeSnapshot?.patientModeDecision?.reasonCodes,
                 patientPhysioLive = patientRuntimeSnapshot?.physioLive
                     ?: PhysioLiveDigest.from(latestSnapshot, decisionCtx.timestamp),
+                patientThermalBelief = patientRuntimeSnapshot?.thermalBelief
+                    ?: enrichThermalSnapshot(latestSnapshot).thermalBelief,
             )
             hormonitorStudyExporter.export(event)
             hormonitorStudyExporter.exportShadowContributions(event)

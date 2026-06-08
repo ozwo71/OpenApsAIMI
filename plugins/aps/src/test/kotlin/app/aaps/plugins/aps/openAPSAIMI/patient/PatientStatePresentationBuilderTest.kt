@@ -3,6 +3,8 @@ package app.aaps.plugins.aps.openAPSAIMI.patient
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefDigest
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalHypothesis
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
@@ -41,6 +43,12 @@ class PatientStatePresentationBuilderTest {
                     userIntentConfidence = 0.82,
                     reasonCodes = listOf("LATENT_ENDOGENOUS", "FALSE_MEAL_SUPPRESS"),
                 ),
+                thermalBelief = ThermalBeliefDigest(
+                    hypothesis = ThermalHypothesis.BASELINE_STABLE,
+                    deltaVsBaselineC = 0.05,
+                    confidence = 0.7,
+                    narrative = "Skin temperature rhythm is stable around your personal baseline.",
+                ),
                 updatedAtMs = 1_718_000_000_000L,
             ),
             nowMs = 1_718_000_180_000L,
@@ -55,7 +63,8 @@ class PatientStatePresentationBuilderTest {
         assertThat(presentation.deliverySummary).contains("Basal Bridge")
         assertThat(presentation.reasonSummary).contains("False meal suppression")
         assertThat(presentation.physioLiveSummary).contains("Body signals pending")
-        assertThat(presentation.signalGauges).hasSize(4)
+        assertThat(presentation.thermalSummary).contains("baseline")
+        assertThat(presentation.signalGauges).hasSize(5)
         assertThat(presentation.signalGauges[1].label).isEqualTo("Endogenous")
         assertThat(presentation.signalGauges[1].percent).isEqualTo(88)
     }
