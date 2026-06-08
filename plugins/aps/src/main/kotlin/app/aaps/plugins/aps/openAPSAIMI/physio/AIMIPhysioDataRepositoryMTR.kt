@@ -748,17 +748,25 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
             aapsLogger.info(LTag.APS, "[$TAG]    Granted (System):   ${grantedPerms.map { it.substringAfterLast(".") }}")
             
             // Use the centralized source of truth for checking
-            val requiredPerms = AIMIHealthConnectPermissions.PHYSIO_REQUIRED_PERMISSIONS
-            val missing = requiredPerms.filter { !grantedPerms.contains(it) }
-            
-            if (missing.isNotEmpty()) {
-                val missingNames = missing.map { 
-                    AIMIHealthConnectPermissions.PERMISSION_NAMES[it] ?: it.substringAfterLast(".") 
-                }
-                aapsLogger.warn(LTag.APS, "[$TAG] ⚠️ Missing Health Connect permissions: ${missingNames.joinToString(", ")}")
+            val missingCore = AIMIHealthConnectPermissions.getMissingPermissions(grantedPerms)
+            val missingThermal = AIMIHealthConnectPermissions.getMissingOptionalThermalPermissions(grantedPerms)
+
+            if (missingCore.isNotEmpty()) {
+                aapsLogger.warn(
+                    LTag.APS,
+                    "[$TAG] ⚠️ Missing core Health Connect permissions: " +
+                        AIMIHealthConnectPermissions.getMissingPermissionsSummary(grantedPerms),
+                )
                 aapsLogger.warn(LTag.APS, "[$TAG] ⚠️ Grant permissions in: Settings > Apps > AAPS > Health Connect")
             } else {
-                aapsLogger.info(LTag.APS, "[$TAG] ✅ All required Health Connect permissions granted for Physio")
+                aapsLogger.info(LTag.APS, "[$TAG] ✅ Core Health Connect permissions granted for Physio")
+                if (missingThermal.isNotEmpty()) {
+                    aapsLogger.info(
+                        LTag.APS,
+                        "[$TAG] ℹ️ Optional thermal not granted: " +
+                            AIMIHealthConnectPermissions.getMissingOptionalThermalSummary(grantedPerms),
+                    )
+                }
             }
             
         } catch (e: Exception) {

@@ -62,9 +62,8 @@ import app.aaps.core.keys.interfaces.PreferenceItem
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.StringKey
-import androidx.appcompat.app.AlertDialog
-import app.aaps.core.keys.interfaces.withClick
 import app.aaps.core.keys.interfaces.withCompose
+import app.aaps.plugins.aps.openAPSAIMI.context.ui.AimiPreferenceInfoScreen
 import app.aaps.core.keys.interfaces.withEntries
 import app.aaps.core.ui.compose.ComposeScreenContent
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
@@ -1504,13 +1503,15 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     add(IntKey.AimiEmergencySosThreshold)
                     add(ApsIntentKey.AimiSosPermissions)
                     add(
-                        ApsIntentKey.AimiHypoRiskAlarmInfo.withClick {
-                            AlertDialog.Builder(context)
-                                .setTitle(rh.gs(R.string.hypo_risk_notification_title))
-                                .setMessage(rh.gs(R.string.aimi_hypo_risk_alarm_summary))
-                                .setPositiveButton(android.R.string.ok, null)
-                                .show()
-                        },
+                        ApsIntentKey.AimiHypoRiskAlarmInfo.withCompose(
+                            ComposeScreenContent { onBack ->
+                                AimiPreferenceInfoScreen(
+                                    titleResId = R.string.hypo_risk_notification_title,
+                                    messageResId = R.string.aimi_hypo_risk_alarm_summary,
+                                    onBack = onBack,
+                                )
+                            },
+                        ),
                     )
                 },
             )
@@ -1522,13 +1523,15 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 items = buildList {
                     add(BooleanKey.AimiPhysioAssistantEnable)
                     add(
-                        ApsIntentKey.AimiPhysioPatternCatalogInfo.withClick {
-                            AlertDialog.Builder(context)
-                                .setTitle(rh.gs(R.string.aimi_physio_pattern_catalog_title))
-                                .setMessage(rh.gs(R.string.aimi_physio_pattern_catalog_detail))
-                                .setPositiveButton(android.R.string.ok, null)
-                                .show()
-                        },
+                        ApsIntentKey.AimiPhysioPatternCatalogInfo.withCompose(
+                            ComposeScreenContent { onBack ->
+                                AimiPreferenceInfoScreen(
+                                    titleResId = R.string.aimi_physio_pattern_catalog_title,
+                                    messageResId = R.string.aimi_physio_pattern_catalog_detail,
+                                    onBack = onBack,
+                                )
+                            },
+                        ),
                     )
                     add(ApsIntentKey.AimiHealthConnectPermissions)
                     add(AimiStringKey.ActivitySourceMode)
