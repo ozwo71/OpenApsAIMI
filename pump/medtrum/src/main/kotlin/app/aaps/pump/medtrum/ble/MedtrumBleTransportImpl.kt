@@ -37,6 +37,8 @@ import app.aaps.pump.medtrum.comm.ManufacturerData
 import app.aaps.pump.medtrum.comm.ReadDataPacket
 import app.aaps.pump.medtrum.comm.WriteCommandPackets
 import app.aaps.pump.medtrum.extension.toInt
+import app.aaps.pump.medtrum.keys.MedtrumBooleanKey
+import app.aaps.pump.medtrum.util.BLEDiagnostics
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -51,12 +53,18 @@ class MedtrumBleTransportImpl @Inject constructor(
     private val aapsLogger: AAPSLogger,
     private val context: Context,
     private val preferences: Preferences,
-    private val rxBus: RxBus
+    private val rxBus: RxBus,
+    private val bleDiagnostics: BLEDiagnostics
 ) : MedtrumBleTransport {
 
     companion object {
 
         private const val WRITE_DELAY_MILLIS = 10L
+        private const val DISCONNECT_FORCE_RESET_TIMEOUT_MS = 1500L
+        private const val ZOMBIE_CHECK_INTERVAL_MS = 30_000L
+        private const val CONNECTING_ZOMBIE_THRESHOLD_MS = 45_000L
+        private const val CONNECTED_STALE_THRESHOLD_MS = 360_000L
+        private const val GATT_REFRESH_DELAY_MS = 150L
         private const val SERVICE_UUID = "669A9001-0008-968F-E311-6050405558B3"
         private const val READ_UUID = "669a9120-0008-968f-e311-6050405558b3"
         private const val WRITE_UUID = "669a9101-0008-968f-e311-6050405558b3"
@@ -79,6 +87,10 @@ class MedtrumBleTransportImpl @Inject constructor(
     // Connection tracking
     private var isConnected = false
     private var isConnecting = false
+    private var lastBleActivityMs = 0L
+    private val pendingRunnables = mutableListOf<Runnable>()
+    private var zombieCheckRunnable: Runnable? = null
+    private var disconnectTimeoutRunnable: Runnable? = null
 
     // Write/read packet reassembly
     private var writePackets: WriteCommandPackets? = null
@@ -143,6 +155,16 @@ class MedtrumBleTransportImpl @Inject constructor(
         isConnecting = true
         writePackets = null
         readPacket = null
+        touchBleActivity()
+        startZombieWatchdog()
+        bleDiagnostics.logConnectionState(
+            "connect",
+            bluetoothGatt,
+            isConnected,
+            isConnecting,
+            lastBleActivityMs,
+            pendingRunnables.size
+        )
 
         val wizardAddr = wizardSelectedAddress?.also { wizardSelectedAddress = null }
         when {
@@ -180,19 +202,35 @@ class MedtrumBleTransportImpl @Inject constructor(
             stopConnectionScan()
             SystemClock.sleep(100)
         }
-        if (isConnected) {
-            aapsLogger.debug(LTag.PUMPBTCOMM, "Connected, disconnecting")
+        cancelDisconnectTimeout()
+        if (bluetoothGatt != null) {
+            aapsLogger.debug(LTag.PUMPBTCOMM, "Gatt present, requesting disconnect with force-reset fallback")
+            val timeoutRunnable = Runnable {
+                synchronized(this@MedtrumBleTransportImpl) {
+                    if (bluetoothGatt != null) {
+                        aapsLogger.warn(
+                            LTag.PUMPBTCOMM,
+                            "Disconnect timeout (${DISCONNECT_FORCE_RESET_TIMEOUT_MS}ms), forcing GATT reset"
+                        )
+                        forceResetBluetoothGatt("disconnect_timeout")
+                        medtrumCallback?.onDisconnected()
+                    }
+                }
+            }
+            disconnectTimeoutRunnable = timeoutRunnable
+            pendingRunnables.add(timeoutRunnable)
+            handler.postDelayed(timeoutRunnable, DISCONNECT_FORCE_RESET_TIMEOUT_MS)
             bluetoothGatt?.disconnect()
         } else {
-            aapsLogger.debug(LTag.PUMPBTCOMM, "Not connected, closing gatt")
-            gatt.close()
-            isConnected = false
+            aapsLogger.debug(LTag.PUMPBTCOMM, "Gatt is null, ensuring closed state")
+            forceResetBluetoothGatt("disconnect_null_gatt")
             medtrumCallback?.onDisconnected()
         }
     }
 
     @Synchronized
     override fun sendMessage(message: ByteArray) {
+        touchBleActivity()
         aapsLogger.debug(LTag.PUMPBTCOMM, "sendMessage: ${message.contentToString()}")
         if (writePackets?.allPacketsConsumed() == false) {
             aapsLogger.error(LTag.PUMPBTCOMM, "sendMessage: previous packets not consumed, dropping")
@@ -215,15 +253,18 @@ class MedtrumBleTransportImpl @Inject constructor(
     private val gattCallback = object : BluetoothGattCallback() {
 
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+            touchBleActivity()
             onConnectionStateChangeSynchronized(gatt, status, newState)
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            touchBleActivity()
             aapsLogger.debug(LTag.PUMPBTCOMM, "onServicesDiscovered status: $status")
             if (status == BluetoothGatt.GATT_SUCCESS) findCharacteristic()
         }
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+            touchBleActivity()
             aapsLogger.debug(LTag.PUMPBTCOMM, "onCharacteristicChanged UUID: ${characteristic.uuid}")
             val value = characteristic.value
             when (characteristic.uuid) {
@@ -233,6 +274,7 @@ class MedtrumBleTransportImpl @Inject constructor(
         }
 
         override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
+            touchBleActivity()
             aapsLogger.debug(LTag.PUMPBTCOMM, "onCharacteristicWrite status: $status")
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 writePackets?.let { packets ->
@@ -247,11 +289,13 @@ class MedtrumBleTransportImpl @Inject constructor(
         }
 
         override fun onDescriptorWrite(gatt: BluetoothGatt?, descriptor: BluetoothGattDescriptor?, status: Int) {
+            touchBleActivity()
             aapsLogger.debug(LTag.PUMPBTCOMM, "onDescriptorWrite status: $status")
             if (status == BluetoothGatt.GATT_SUCCESS) readDescriptor(descriptor)
         }
 
         override fun onDescriptorRead(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+            touchBleActivity()
             aapsLogger.debug(LTag.PUMPBTCOMM, "onDescriptorRead status: $status")
             if (status == BluetoothGatt.GATT_SUCCESS) checkDescriptor(descriptor)
         }
@@ -281,8 +325,10 @@ class MedtrumBleTransportImpl @Inject constructor(
     private fun connectGatt(device: BluetoothDevice) {
         stopConnectionScan()
         writeSequenceNumber = 0
-        closeExistingGatt()
+        touchBleActivity()
+        forceResetBluetoothGatt("connectGatt_prepare")
         handler.post {
+            cancelBluetoothDiscoveryBeforeConnect()
             MedtrumBleBondUtil.logBondStateIfRelevant(device, aapsLogger)
             val gatt = openGattConnection(device)
             if (gatt == null) {
@@ -312,55 +358,39 @@ class MedtrumBleTransportImpl @Inject constructor(
         }
 
     @Synchronized
-    private fun closeExistingGatt() {
-        bluetoothGatt?.let { gatt ->
-            try {
-                gatt.disconnect()
-            } catch (_: Exception) {
-            }
-            try {
-                gatt.close()
-            } catch (_: Exception) {
-            }
-        }
-        bluetoothGatt = null
-        uartRead = null
-        uartWrite = null
-    }
-
-    @Synchronized
     private fun onConnectionStateChangeSynchronized(gatt: BluetoothGatt, status: Int, newState: Int) {
         aapsLogger.debug(LTag.PUMPBTCOMM, "onConnectionStateChange newState: $newState status: $status")
+        if (bluetoothGatt != null && bluetoothGatt !== gatt) {
+            aapsLogger.debug(LTag.PUMPBTCOMM, "Ignoring stale GATT callback for ${gatt.device.address}")
+            return
+        }
         if (newState == BluetoothProfile.STATE_CONNECTED) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                aapsLogger.error(LTag.PUMPBTCOMM, "GATT connect failed status=$status, closing")
+                aapsLogger.error(LTag.PUMPBTCOMM, "GATT connect failed status=$status, force reset")
                 isConnecting = false
                 isConnected = false
-                cachedDeviceAddress = null
-                gatt.close()
-                bluetoothGatt = null
+                clearCachedAddressIfScanOnError("connect_failed")
+                forceResetBluetoothGatt("connect_failed")
                 medtrumCallback?.onDisconnected()
                 return
             }
+            cancelDisconnectTimeout()
             isConnected = true
             isConnecting = false
+            touchBleActivity()
+            startZombieWatchdog()
             gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
             gatt.discoverServices()
         } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
             if (status != BluetoothGatt.GATT_SUCCESS && status != 0) {
                 aapsLogger.warn(LTag.PUMPBTCOMM, "GATT disconnected with status=$status")
             }
+            cancelDisconnectTimeout()
             if (isConnecting) {
-                aapsLogger.warn(LTag.PUMPBTCOMM, "Disconnected while connecting, clearing cached BLE address for rescan")
-                cachedDeviceAddress = null
+                clearCachedAddressIfScanOnError("disconnected_while_connecting")
                 SystemClock.sleep(2000)
             }
-            gatt.close()
-            bluetoothGatt = null
-            uartRead = null
-            uartWrite = null
-            isConnected = false
-            isConnecting = false
+            forceResetBluetoothGatt("onConnectionStateChange_disconnected")
             medtrumCallback?.onDisconnected()
             aapsLogger.debug(LTag.PUMPBTCOMM, "Device disconnected: ${gatt.device.name}")
         }
@@ -406,6 +436,9 @@ class MedtrumBleTransportImpl @Inject constructor(
         if (allEnabled) {
             aapsLogger.debug(LTag.PUMPBTCOMM, "All notifications enabled, connected!")
             cachedDeviceAddress = bluetoothGatt?.device?.address
+            touchBleActivity()
+            bleDiagnostics.clearHistory()
+            startZombieWatchdog()
             medtrumCallback?.onConnected()
         }
     }
@@ -476,6 +509,145 @@ class MedtrumBleTransportImpl @Inject constructor(
         isConnecting = false
         isConnected = false
         medtrumCallback?.onDisconnected()
+    }
+
+    private fun touchBleActivity() {
+        lastBleActivityMs = System.currentTimeMillis()
+    }
+
+    private fun clearCachedAddressIfScanOnError(context: String) {
+        if (preferences.get(MedtrumBooleanKey.MedtrumScanOnConnectionErrors)) {
+            aapsLogger.warn(LTag.PUMPBTCOMM, "$context: clearing cached BLE address (scan on connection errors enabled)")
+            cachedDeviceAddress = null
+        }
+    }
+
+    private fun cancelBluetoothDiscoveryBeforeConnect() {
+        try {
+            if (bluetoothAdapter?.isDiscovering == true) {
+                aapsLogger.debug(LTag.PUMPBTCOMM, "Cancelling classic BT discovery before GATT connect")
+                bluetoothAdapter?.cancelDiscovery()
+            }
+        } catch (e: Exception) {
+            aapsLogger.warn(LTag.PUMPBTCOMM, "cancelDiscovery failed: ${e.message}")
+        }
+    }
+
+    private fun cancelDisconnectTimeout() {
+        disconnectTimeoutRunnable?.let { runnable ->
+            handler.removeCallbacks(runnable)
+            pendingRunnables.remove(runnable)
+        }
+        disconnectTimeoutRunnable = null
+    }
+
+    private fun clearPendingRunnablesExceptZombie() {
+        val zombie = zombieCheckRunnable
+        pendingRunnables.forEach { runnable ->
+            if (runnable !== zombie) {
+                handler.removeCallbacks(runnable)
+            }
+        }
+        pendingRunnables.removeAll { it !== zombie }
+        disconnectTimeoutRunnable = null
+    }
+
+    @Synchronized
+    private fun forceResetBluetoothGatt(reason: String) {
+        aapsLogger.warn(LTag.PUMPBTCOMM, "=== FORCE RESET BLUETOOTH GATT ($reason) START ===")
+        bleDiagnostics.logConnectionState(
+            "forceReset_before",
+            bluetoothGatt,
+            isConnected,
+            isConnecting,
+            lastBleActivityMs,
+            pendingRunnables.size
+        )
+
+        val gattToClose = bluetoothGatt
+        stopZombieWatchdog()
+        clearPendingRunnablesExceptZombie()
+        stopConnectionScan()
+
+        if (gattToClose != null) {
+            try {
+                aapsLogger.debug(LTag.PUMPBTCOMM, "Force reset: calling disconnect()")
+                gattToClose.disconnect()
+                SystemClock.sleep(GATT_REFRESH_DELAY_MS)
+                try {
+                    val refreshMethod = gattToClose.javaClass.getMethod("refresh")
+                    val refreshResult = refreshMethod.invoke(gattToClose) as? Boolean
+                    aapsLogger.debug(LTag.PUMPBTCOMM, "Force reset: GATT cache refresh result: $refreshResult")
+                    SystemClock.sleep(GATT_REFRESH_DELAY_MS)
+                } catch (e: Exception) {
+                    aapsLogger.error(LTag.PUMPBTCOMM, "Force reset: failed to refresh GATT cache", e)
+                }
+                aapsLogger.debug(LTag.PUMPBTCOMM, "Force reset: calling close()")
+                gattToClose.close()
+            } catch (e: Exception) {
+                aapsLogger.error(LTag.PUMPBTCOMM, "Force reset: exception during cleanup", e)
+            }
+        }
+
+        bluetoothGatt = null
+        uartRead = null
+        uartWrite = null
+        writePackets = null
+        readPacket = null
+        isConnected = false
+        isConnecting = false
+        bleDiagnostics.clearHistory()
+        aapsLogger.warn(LTag.PUMPBTCOMM, "=== FORCE RESET BLUETOOTH GATT ($reason) COMPLETE ===")
+    }
+
+    private fun startZombieWatchdog() {
+        if (zombieCheckRunnable != null) return
+        val runnable = object : Runnable {
+            override fun run() {
+                synchronized(this@MedtrumBleTransportImpl) {
+                    val now = System.currentTimeMillis()
+                    val inactivityMs = now - lastBleActivityMs
+                    val gatt = bluetoothGatt
+
+                    if (gatt != null && isConnecting && inactivityMs > CONNECTING_ZOMBIE_THRESHOLD_MS) {
+                        aapsLogger.error(
+                            LTag.PUMPBTCOMM,
+                            "ZOMBIE: connecting stalled for ${inactivityMs}ms (threshold ${CONNECTING_ZOMBIE_THRESHOLD_MS}ms)"
+                        )
+                        clearCachedAddressIfScanOnError("connecting_zombie")
+                        forceResetBluetoothGatt("connecting_zombie")
+                        medtrumCallback?.onDisconnected()
+                    } else if (gatt != null && isConnected && inactivityMs > CONNECTED_STALE_THRESHOLD_MS) {
+                        aapsLogger.error(
+                            LTag.PUMPBTCOMM,
+                            "ZOMBIE: connected but stale for ${inactivityMs}ms (threshold ${CONNECTED_STALE_THRESHOLD_MS}ms)"
+                        )
+                        forceResetBluetoothGatt("connected_stale")
+                        medtrumCallback?.onDisconnected()
+                    } else if (gatt != null && isConnected && inactivityMs > CONNECTED_STALE_THRESHOLD_MS / 2) {
+                        aapsLogger.warn(
+                            LTag.PUMPBTCOMM,
+                            "BLE communication slow: ${inactivityMs}ms since last activity"
+                        )
+                    }
+
+                    if (zombieCheckRunnable != null) {
+                        handler.postDelayed(this, ZOMBIE_CHECK_INTERVAL_MS)
+                    }
+                }
+            }
+        }
+        zombieCheckRunnable = runnable
+        pendingRunnables.add(runnable)
+        handler.postDelayed(runnable, ZOMBIE_CHECK_INTERVAL_MS)
+    }
+
+    private fun stopZombieWatchdog() {
+        zombieCheckRunnable?.let { runnable ->
+            handler.removeCallbacks(runnable)
+            pendingRunnables.remove(runnable)
+        }
+        zombieCheckRunnable = null
     }
 
     // --- Connection scan (auto-connects on SN match) ---
@@ -619,11 +791,7 @@ class MedtrumBleTransportImpl @Inject constructor(
         }
 
         override fun close() {
-            bluetoothGatt?.close()
-            SystemClock.sleep(100)
-            bluetoothGatt = null
-            uartRead = null
-            uartWrite = null
+            forceResetBluetoothGatt("gatt_close")
         }
 
         override fun discoverServices() {
