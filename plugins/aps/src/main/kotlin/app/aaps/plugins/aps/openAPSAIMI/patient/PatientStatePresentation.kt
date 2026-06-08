@@ -120,7 +120,7 @@ internal object PatientStatePresentationBuilder {
     private fun buildThermalSummary(thermal: ThermalBeliefDigest): String {
         if (!thermal.hasUsableData()) {
             return thermal.narrative.ifBlank {
-                "Thermal rhythm pending · enable skin temperature in Garmin or Oura via Health Connect"
+                "Thermal rhythm pending · sync sleep and RHR via Health Connect, or add an Oura API token"
             }
         }
         val deltaLabel = String.format(Locale.US, "%+.1f", thermal.deltaVsBaselineC)

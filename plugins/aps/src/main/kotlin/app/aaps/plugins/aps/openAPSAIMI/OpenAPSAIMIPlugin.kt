@@ -1535,6 +1535,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     )
                     add(ApsIntentKey.AimiHealthConnectPermissions)
                     add(AimiStringKey.ActivitySourceMode)
+                    add(AimiStringKey.OuraPersonalAccessToken)
                     add(BooleanKey.AimiPhysioSleepDataEnable)
                     add(BooleanKey.AimiPhysioHRVDataEnable)
                     add(BooleanKey.AimiPhysioLLMAnalysisEnable)

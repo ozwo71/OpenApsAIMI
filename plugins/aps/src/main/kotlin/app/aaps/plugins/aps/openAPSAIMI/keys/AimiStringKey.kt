@@ -37,6 +37,15 @@ enum class AimiStringKey(
         isPin = true
     ),
 
+    OuraPersonalAccessToken(
+        key = "aimi_oura_personal_access_token",
+        defaultValue = "",
+        titleResId = R.string.aimi_oura_pat_title,
+        summaryResId = R.string.aimi_oura_pat_summary,
+        isPassword = true,
+        exportable = false,
+    ),
+
     /** Steps & heart-rate source (same key as [UnifiedActivityProviderMTR.PREF_KEY_SOURCE_MODE]). */
     ActivitySourceMode(
         key = UnifiedActivityProviderMTR.PREF_KEY_SOURCE_MODE,

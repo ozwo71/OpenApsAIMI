@@ -11,9 +11,13 @@ import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.SkinTemperatureRecord
 import androidx.health.connect.client.records.StepsRecord
 import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.BasalBodyTemperatureMTR
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.HcRecoveryProxyThermalSource
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.OuraApiThermalClient
 import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalDataCache
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalDataOrigins
 import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalDataWindowMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalSampleMTR
+import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalSourceTier
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.time.TimeRangeFilter
@@ -52,7 +56,8 @@ import kotlin.math.sqrt
 @Singleton
 class AIMIPhysioDataRepositoryMTR @Inject constructor(
     private val context: Context,
-    private val aapsLogger: AAPSLogger
+    private val aapsLogger: AAPSLogger,
+    private val ouraApiThermalClient: OuraApiThermalClient,
 ) {
     
     companion object {
@@ -781,7 +786,10 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
     // ═══════════════════════════════════════════════════════════════════════
 
     /**
-     * Fetches skin-temperature deltas and latest basal body temperature for thermal belief.
+     * Fetches thermal data using a source chain:
+     * 1) Health Connect skin temperature (Samsung / future writers)
+     * 2) Oura API daily readiness deviation (Garmin/Oura do not write skin temp to HC)
+     * 3) HC recovery proxy from RHR + HRV (Garmin and Oura via HC)
      */
     internal suspend fun fetchThermalWindow(daysBack: Int = 3): ThermalDataWindowMTR {
         val cacheKey = "thermal_${daysBack}d"
@@ -790,7 +798,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
             return cached.data ?: ThermalDataWindowMTR()
         }
 
-        val client = healthConnectClient ?: return ThermalDataWindowMTR()
+        val client = healthConnectClient
         val fetchedAtMs = System.currentTimeMillis()
 
         return try {
@@ -798,28 +806,83 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
                 withContext(Dispatchers.IO) {
                     val now = Instant.now()
                     val start = now.minusSeconds(daysBack * 24L * 60L * 60L)
-                    val skinSamples = fetchSkinTemperatureSamples(client, start, now)
-                    val basal = fetchLatestBasalBodyTemperature(client, start, now)
-                    val window = ThermalDataWindowMTR(
-                        skinSamples = skinSamples,
-                        basalBodyTemperature = basal,
-                        fetchedAtMs = fetchedAtMs,
-                    )
-                    cache[cacheKey] = CachedData(window, System.currentTimeMillis())
-                    ThermalDataCache.update(window)
-                    if (skinSamples.isNotEmpty() || basal != null) {
-                        aapsLogger.info(
-                            LTag.APS,
-                            "[$TAG] ✅ Thermal: ${skinSamples.size} skin samples, basal=${basal?.temperatureCelsius}",
+
+                    if (client != null) {
+                        val hcSkin = fetchSkinTemperatureSamples(client, start, now)
+                        val basal = fetchLatestBasalBodyTemperature(client, start, now)
+                        if (hcSkin.isNotEmpty() || basal != null) {
+                            return@withContext storeThermalWindow(
+                                cacheKey = cacheKey,
+                                window = ThermalDataWindowMTR(
+                                    skinSamples = hcSkin,
+                                    basalBodyTemperature = basal,
+                                    fetchedAtMs = fetchedAtMs,
+                                    sourceTier = ThermalSourceTier.MEASURED,
+                                    resolvedSource = ThermalDataOrigins.HC_SKIN,
+                                ),
+                                logLabel = "HC skin: ${hcSkin.size} samples, basal=${basal?.temperatureCelsius}",
+                            )
+                        }
+                    }
+
+                    val ouraSamples = ouraApiThermalClient.fetchSamples(daysBack)
+                    if (ouraSamples.isNotEmpty()) {
+                        return@withContext storeThermalWindow(
+                            cacheKey = cacheKey,
+                            window = ThermalDataWindowMTR(
+                                skinSamples = ouraSamples,
+                                fetchedAtMs = fetchedAtMs,
+                                sourceTier = ThermalSourceTier.MEASURED,
+                                resolvedSource = ThermalDataOrigins.OURA_API,
+                            ),
+                            logLabel = "Oura API: ${ouraSamples.size} readiness samples",
                         )
                     }
-                    window
+
+                    val vitalsDays = daysBack.coerceAtLeast(7)
+                    val rhr = fetchMorningRHR(vitalsDays)
+                    val hrv = fetchHRVData(vitalsDays)
+                    val proxySamples = HcRecoveryProxyThermalSource.build(
+                        rhrPoints = rhr,
+                        hrvPoints = hrv,
+                        daysBack = daysBack,
+                        nowMs = fetchedAtMs,
+                    )
+                    if (proxySamples.isNotEmpty()) {
+                        val origin = proxySamples.last().dataOrigin
+                        return@withContext storeThermalWindow(
+                            cacheKey = cacheKey,
+                            window = ThermalDataWindowMTR(
+                                skinSamples = proxySamples,
+                                fetchedAtMs = fetchedAtMs,
+                                sourceTier = ThermalSourceTier.INFERRED,
+                                resolvedSource = origin,
+                            ),
+                            logLabel = "HC proxy: ${proxySamples.size} recovery samples ($origin)",
+                        )
+                    }
+
+                    ThermalDataWindowMTR(fetchedAtMs = fetchedAtMs).also {
+                        cache[cacheKey] = CachedData(it, System.currentTimeMillis())
+                        ThermalDataCache.update(it)
+                    }
                 }
             }
         } catch (e: Exception) {
             aapsLogger.warn(LTag.APS, "[$TAG] Thermal fetch failed: ${e.message}")
             ThermalDataWindowMTR(fetchedAtMs = fetchedAtMs)
         }
+    }
+
+    private fun storeThermalWindow(
+        cacheKey: String,
+        window: ThermalDataWindowMTR,
+        logLabel: String,
+    ): ThermalDataWindowMTR {
+        cache[cacheKey] = CachedData(window, System.currentTimeMillis())
+        ThermalDataCache.update(window)
+        aapsLogger.info(LTag.APS, "[$TAG] ✅ Thermal: $logLabel")
+        return window
     }
 
     private suspend fun fetchSkinTemperatureSamples(

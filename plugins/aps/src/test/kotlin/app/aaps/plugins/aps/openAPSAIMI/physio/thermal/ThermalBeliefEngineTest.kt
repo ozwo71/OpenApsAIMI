@@ -89,4 +89,34 @@ class ThermalBeliefEngineTest {
         assertThat(digest.deltaVsBaselineC).isWithin(0.001)
         assertThat(digest.inflammationIndex).isLessThan(0.15)
     }
+
+    @Test
+    fun build_caps_confidence_for_inferred_recovery_proxy() {
+        val nowMs = 1_718_000_000_000L
+        val samples = (0 until 6).map { index ->
+            ThermalSampleMTR(
+                timestampMs = nowMs - (5 - index) * 24 * 3_600_000L,
+                deltaCelsius = index * 0.15,
+                measurementLocation = "WRIST",
+                dataOrigin = "${ThermalDataOrigins.HC_INFERRED}:Garmin",
+            )
+        }
+        val digest = ThermalBeliefEngine.build(
+            window = ThermalDataWindowMTR(
+                skinSamples = samples,
+                fetchedAtMs = nowMs,
+                sourceTier = ThermalSourceTier.INFERRED,
+                resolvedSource = "${ThermalDataOrigins.HC_INFERRED}:Garmin",
+            ),
+            hrNowBpm = 95,
+            rhrRestingBpm = 65,
+            sleepDebtMinutes = 120,
+            hrvRmssd = 18.0,
+            wCyclePhase = null,
+        )
+
+        assertThat(digest.sourceTier).isEqualTo(ThermalSourceTier.INFERRED)
+        assertThat(digest.confidence).isAtMost(0.50)
+        assertThat(digest.narrative).contains("inferred")
+    }
 }

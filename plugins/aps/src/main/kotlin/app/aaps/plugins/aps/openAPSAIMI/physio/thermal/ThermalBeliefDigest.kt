@@ -29,6 +29,7 @@ data class ThermalBeliefDigest(
     val basalBodyTempC: Double? = null,
     val sampleCount: Int = 0,
     val dataOrigin: String = "Unknown",
+    val sourceTier: ThermalSourceTier = ThermalSourceTier.MEASURED,
 ) {
     fun hasUsableData(): Boolean =
         hypothesis != ThermalHypothesis.DATA_PENDING && confidence >= 0.35
@@ -48,6 +49,7 @@ data class ThermalBeliefDigest(
             put("basal_body_temp_c", basalBodyTempC ?: JSONObject.NULL)
             put("sample_count", sampleCount)
             put("data_origin", dataOrigin)
+            put("source_tier", sourceTier.name)
         }
 
     companion object {

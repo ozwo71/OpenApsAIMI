@@ -23,6 +23,8 @@ internal data class ThermalDataWindowMTR(
     val skinSamples: List<ThermalSampleMTR> = emptyList(),
     val basalBodyTemperature: BasalBodyTemperatureMTR? = null,
     val fetchedAtMs: Long = 0L,
+    val sourceTier: ThermalSourceTier = ThermalSourceTier.MEASURED,
+    val resolvedSource: String = ThermalDataOrigins.HC_SKIN,
 ) {
     fun hasSkinData(): Boolean = skinSamples.isNotEmpty()
 }

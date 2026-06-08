@@ -107,8 +107,8 @@ flowchart TB
 
 | Deliverable | Role in study |
 |-------------|----------------|
-| `ThermalBeliefEngine` + `ThermalBaselineStore` | Skin-temperature **evolution vs personal baseline** (not absolute fever) |
-| Health Connect `SkinTemperatureRecord` + `BasalBodyTemperatureRecord` | Garmin / Oura wearable path |
+| `ThermalBeliefEngine` + `ThermalBaselineStore` | Temperature **evolution vs personal baseline** (not absolute fever) |
+| **Source chain (auto):** HC skin → Oura API → HC recovery proxy | Garmin/Oura do **not** export skin temp to HC; proxy uses HC sleep/RHR/HRV; Oura PAT adds measured deviation |
 | Noise floor (`0.03 °C` level, `0.01 °C/h` slope) | Ignores wearable tick noise before indices and hypotheses |
 | wcycle integration | Cycle BBT rise / ovulation shift / menstrual dip hints |
 | Context UI **Thermal rhythm** | 5th signal gauge + narrative in “Current AIMI Understanding” |
@@ -158,7 +158,8 @@ flowchart TB
     "recovery_burden": 0.12,
     "confidence": 0.72,
     "wcycle_hint": null,
-    "data_origin": "com.garmin.android.apps.healthconnect"
+    "data_origin": "OURA_API",
+    "source_tier": "MEASURED"
   }
 }
 ```

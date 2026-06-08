@@ -1466,6 +1466,8 @@
     <string name="aimi_physio_sleep_enable_summary">Use Health Connect to fetch sleep stages and efficiency.</string>
     <string name="aimi_physio_hrv_enable_title">Sync HRV &amp; RHR</string>
     <string name="aimi_physio_hrv_enable_summary">Use heart rate variability to detect stress/fatigue.</string>
+    <string name="aimi_oura_pat_title">Oura temperature API token (optional)</string>
+    <string name="aimi_oura_pat_summary">Personal access token from cloud.ouraring.com — enables measured skin temperature deviation when Oura does not export it to Health Connect. Garmin users rely on inferred recovery rhythm from HC sleep/RHR.</string>
     <string name="aimi_physio_advanced_title">Analysis &amp; Logs</string>
     <string name="aimi_physio_llm_enable_title">LLM Narrative Analysis</string>
     <string name="aimi_physio_llm_enable_summary">Send physio data to LLM for daily health summaries (Optional).</string>

@@ -23,7 +23,7 @@ internal object ThermalBeliefEngine {
         val samples = window.skinSamples.sortedBy { it.timestampMs }
         if (samples.isEmpty() && window.basalBodyTemperature == null) {
             return ThermalBeliefDigest.EMPTY.copy(
-                narrative = "Thermal rhythm pending · connect Garmin or Oura skin temperature to Health Connect",
+                narrative = "Thermal rhythm pending · sync sleep and RHR via Health Connect, or add an Oura API token in Physio settings",
             )
         }
 
@@ -78,10 +78,11 @@ internal object ThermalBeliefEngine {
             deltaVsBaseline = deltaVsBaseline,
             hasBaseline = ThermalBaselineStore.personalBaselineDeltaC() != null,
             hasBasalBody = basalC != null,
+            sourceTier = window.sourceTier,
         )
-        val dataOrigin = latest?.dataOrigin
-            ?: window.basalBodyTemperature?.dataOrigin
-            ?: "Unknown"
+        val dataOrigin = window.resolvedSource.ifBlank {
+            latest?.dataOrigin ?: window.basalBodyTemperature?.dataOrigin ?: "Unknown"
+        }
 
         return ThermalBeliefDigest(
             hypothesis = hypothesis,
@@ -92,11 +93,12 @@ internal object ThermalBeliefEngine {
             inflammationIndex = inflammationIndex,
             recoveryBurden = recoveryBurden,
             confidence = confidence,
-            narrative = buildNarrative(hypothesis, deltaVsBaseline, wCycleHint),
+            narrative = buildNarrative(hypothesis, deltaVsBaseline, wCycleHint, window),
             wCycleHint = wCycleHint,
             basalBodyTempC = basalC,
             sampleCount = samples.size,
             dataOrigin = dataOrigin,
+            sourceTier = window.sourceTier,
         )
     }
 
@@ -197,6 +199,7 @@ internal object ThermalBeliefEngine {
         deltaVsBaseline: Double,
         hasBaseline: Boolean,
         hasBasalBody: Boolean,
+        sourceTier: ThermalSourceTier,
     ): Double {
         var score = 0.25
         if (sampleCount >= 3) score += 0.20
@@ -204,28 +207,55 @@ internal object ThermalBeliefEngine {
         if (hasBaseline) score += 0.20
         if (hasBasalBody) score += 0.10
         if (abs(deltaVsBaseline) >= 0.08) score += 0.10
-        return score.coerceIn(0.0, 1.0)
+        val capped = score.coerceIn(0.0, 1.0)
+        return if (sourceTier == ThermalSourceTier.INFERRED) {
+            capped.coerceAtMost(0.50)
+        } else {
+            capped
+        }
     }
 
     private fun buildNarrative(
         hypothesis: ThermalHypothesis,
         deltaVsBaseline: Double,
         wCycleHint: String?,
+        window: ThermalDataWindowMTR,
     ): String {
+        val prefix = when {
+            window.resolvedSource.startsWith(ThermalDataOrigins.OURA_API) ->
+                "Oura temperature deviation vs your baseline. "
+            window.resolvedSource.startsWith(ThermalDataOrigins.HC_INFERRED) ->
+                "Recovery rhythm inferred from Health Connect sleep, RHR, and HRV (not measured skin temperature). "
+            window.resolvedSource.startsWith(ThermalDataOrigins.HC_SKIN) ->
+                ""
+            else -> ""
+        }
         val magnitude = String.format(Locale.US, "%.1f", abs(deltaVsBaseline))
-        return when (hypothesis) {
+        val body = when (hypothesis) {
             ThermalHypothesis.DATA_PENDING ->
-                "Thermal rhythm pending · connect Garmin or Oura skin temperature to Health Connect"
+                "Thermal rhythm pending · sync sleep and RHR via Health Connect, or add an Oura API token in Physio settings"
             ThermalHypothesis.BASELINE_STABLE ->
-                "Skin temperature rhythm is stable around your personal baseline."
+                if (window.sourceTier == ThermalSourceTier.INFERRED) {
+                    "Recovery signals are stable around your personal baseline."
+                } else {
+                    "Skin temperature rhythm is stable around your personal baseline."
+                }
             ThermalHypothesis.INFLAMMATORY_DRIFT ->
-                "AIMI sees a progressive skin warming (+${magnitude}°C vs baseline) consistent with inflammatory or illness stress."
+                if (window.sourceTier == ThermalSourceTier.INFERRED) {
+                    "AIMI sees warming recovery stress (+${magnitude}°C proxy vs baseline) consistent with inflammatory or illness load."
+                } else {
+                    "AIMI sees a progressive skin warming (+${magnitude}°C vs baseline) consistent with inflammatory or illness stress."
+                }
             ThermalHypothesis.RECOVERY_COOLING ->
-                "AIMI sees a cooling skin drift that may reflect recovery burden or reduced metabolic drive."
+                if (window.sourceTier == ThermalSourceTier.INFERRED) {
+                    "AIMI sees a cooling recovery drift that may reflect reduced metabolic drive or recovery burden."
+                } else {
+                    "AIMI sees a cooling skin drift that may reflect recovery burden or reduced metabolic drive."
+                }
             ThermalHypothesis.HYPO_SYMPATHETIC_COOLING ->
-                "AIMI sees rapid skin cooling with elevated heart rate — cross-check CGM for sympathetic hypo stress."
+                "AIMI sees rapid cooling with elevated heart rate — cross-check CGM for sympathetic hypo stress."
             ThermalHypothesis.FATIGUE_DYSREGULATION ->
-                "AIMI sees thermal rhythm disruption that may reflect fatigue or poor recovery."
+                "AIMI sees rhythm disruption that may reflect fatigue or poor recovery."
             ThermalHypothesis.CYCLE_BBT_RISE ->
                 when (wCycleHint) {
                     "LUTEAL_BBT_RISE" ->
@@ -236,6 +266,7 @@ internal object ThermalBeliefEngine {
                         "Cycle-related temperature shift detected — AIMI reads hormonal physiology before insulin posture."
                 }
         }
+        return if (hypothesis == ThermalHypothesis.DATA_PENDING) body else prefix + body
     }
 
     private fun positive(value: Double): Double = value.coerceAtLeast(0.0)
