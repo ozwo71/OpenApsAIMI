@@ -698,6 +698,13 @@ class OmnipodDashManagerImpl @Inject constructor(
         ).interceptPodEvents()
     }
 
+    override fun teardownPodSession() {
+        logger.debug(LTag.PUMP, "Teardown Dash pod session")
+        bleManager.disconnect(closeGatt = true)
+        bleManager.removeBond()
+        podStateManager.reset()
+    }
+
     inner class PodEventInterceptor : Consumer<PodEvent> {
 
         override fun accept(event: PodEvent) {

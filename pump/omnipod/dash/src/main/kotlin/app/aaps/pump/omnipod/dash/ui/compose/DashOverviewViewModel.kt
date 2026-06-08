@@ -16,6 +16,7 @@ import androidx.lifecycle.viewModelScope
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.PumpInsulin
@@ -387,6 +388,16 @@ class DashOverviewViewModel @Inject constructor(
 
     private fun onActivatePodClicked() {
         viewModelScope.launch {
+            if (podStateManager.activationProgress != ActivationProgress.NOT_STARTED &&
+                !podStateManager.isActivationCompleted &&
+                !podStateManager.isPodRunning
+            ) {
+                aapsLogger.warn(
+                    LTag.PUMP,
+                    "Stale Dash activation state (${podStateManager.activationProgress}) — forcing pod teardown before new activation",
+                )
+                omnipodDashPumpPlugin.teardownPodSession()
+            }
             val type = if (podStateManager.activationProgress.isAtLeast(ActivationProgress.PRIME_COMPLETED)) {
                 ActivationType.SHORT
             } else {
@@ -406,7 +417,7 @@ class DashOverviewViewModel @Inject constructor(
     }
 
     fun confirmDiscardPod() {
-        podStateManager.reset()
+        omnipodDashPumpPlugin.teardownPodSession()
     }
 
     // endregion

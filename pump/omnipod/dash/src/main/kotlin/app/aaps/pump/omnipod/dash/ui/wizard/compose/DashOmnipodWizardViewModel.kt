@@ -244,7 +244,7 @@ class DashOmnipodWizardViewModel @Inject constructor(
     // region Pod state queries
 
     override fun discardPod() {
-        podStateManager.reset()
+        omnipodManager.teardownPodSession()
         notificationManager.dismiss(NotificationId.OMNIPOD_POD_FAULT)
     }
 

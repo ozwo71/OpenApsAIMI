@@ -239,6 +239,8 @@ class OmnipodDashPumpPlugin @Inject constructor(
         }
     }
 
+    override fun isConfigured(): Boolean = podStateManager.isUniqueIdSet
+
     override fun isInitialized(): Boolean {
         return podStateManager.isPodRunning
     }
@@ -313,6 +315,12 @@ class OmnipodDashPumpPlugin @Inject constructor(
         podStateManager.incrementFailedConnectionsAfterRetries()
         stopConnecting?.countDown()
         omnipodManager.disconnect(true)
+    }
+
+    /** Full pod teardown: BLE disconnect, bond removal, persisted state reset. */
+    fun teardownPodSession() {
+        omnipodManager.teardownPodSession()
+        notificationManager.dismiss(NotificationId.OMNIPOD_POD_FAULT)
     }
 
     override suspend fun getPumpStatus(reason: String) {
@@ -1148,8 +1156,7 @@ class OmnipodDashPumpPlugin @Inject constructor(
             if (podStateManager.activeCommand != null) {
                 success = false
             } else {
-                podStateManager.reset()
-                notificationManager.dismiss(NotificationId.OMNIPOD_POD_FAULT)
+                teardownPodSession()
             }
         }.toPumpEnactResultImpl()
         if (!success) {
