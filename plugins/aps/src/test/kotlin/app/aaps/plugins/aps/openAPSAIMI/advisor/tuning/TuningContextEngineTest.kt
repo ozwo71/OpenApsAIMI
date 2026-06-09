@@ -7,10 +7,10 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorMetrics
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 class TuningContextEngineTest {
 
@@ -135,6 +135,66 @@ class TuningContextEngineTest {
         assertTrue(plan.changes.any { it.key == DoubleKey.OApsAIMIDinnerFactor })
     }
 
+    // ── SMB tail damping directions ─────────────────────────────────────────────
+    // Stored pref is a multiplicative FLOOR (lower = stronger damping):
+    // hyper contexts must RAISE it (weaken guard), hypo contexts must LOWER it (strengthen guard).
+
+    @Test
+    fun `meal rise weakens tail damping by raising the floor`() {
+        val plan = TuningContextEngine.computePlan(
+            AimiTuningContext.MEAL_RISE,
+            baseMetrics(timeAbove180 = 0.42, timeBelow70 = 0.02),
+            mockPreferences(),
+            t3cBrittleMode = false,
+        )
+        val change = plan.changes.first { it.key == DoubleKey.OApsAIMISmbTailDamping }
+        assertEquals(0.85, change.oldValue)
+        assertTrue((change.newValue as Double) > 0.85)
+        assertTrue((change.newValue as Double) <= 0.92)
+    }
+
+    @Test
+    fun `hyper stable weakens tail damping by raising the floor`() {
+        val plan = TuningContextEngine.computePlan(
+            AimiTuningContext.HYPER_STABLE,
+            baseMetrics(timeAbove180 = 0.30, timeBelow70 = 0.01),
+            mockPreferences(),
+            t3cBrittleMode = false,
+        )
+        val change = plan.changes.first { it.key == DoubleKey.OApsAIMISmbTailDamping }
+        assertTrue((change.newValue as Double) > 0.85)
+        assertTrue((change.newValue as Double) <= 0.92)
+    }
+
+    @Test
+    fun `hypo guard strengthens tail damping by lowering the floor`() {
+        val plan = TuningContextEngine.computePlan(
+            AimiTuningContext.HYPO_GUARD,
+            baseMetrics(timeBelow70 = 0.07, timeAbove180 = 0.10),
+            mockPreferences(),
+            t3cBrittleMode = false,
+        )
+        val change = plan.changes.first { it.key == DoubleKey.OApsAIMISmbTailDamping }
+        assertTrue((change.newValue as Double) < 0.85)
+        assertTrue((change.newValue as Double) >= 0.70)
+    }
+
+    @Test
+    fun `tail damping proposal never enters legacy zone from legacy stored value`() {
+        val prefs = mockPreferences()
+        every { prefs.get(DoubleKey.OApsAIMISmbTailDamping) } returns 0.5
+        val plan = TuningContextEngine.computePlan(
+            AimiTuningContext.HYPO_GUARD,
+            baseMetrics(timeBelow70 = 0.07, timeAbove180 = 0.10),
+            prefs,
+            t3cBrittleMode = false,
+        )
+        val change = plan.changes.first { it.key == DoubleKey.OApsAIMISmbTailDamping }
+        // Legacy 0.5 normalised to effective 0.85 before strengthening; result stays in [0.70, 0.92].
+        assertTrue((change.newValue as Double) >= 0.70)
+        assertTrue((change.newValue as Double) < 0.85)
+    }
+
     @Test
     fun `auto resolves to mixed when both burdens significant`() {
         val effective = TuningContextEngine.resolveAutoContext(
@@ -159,8 +219,9 @@ class TuningContextEngineTest {
 
     @Test
     fun `auto balance resolves to hypo guard when lows lead clearly`() {
+        // "Lows lead clearly" requires hypo*1.15 >= hyper (resolveAutoContext); 6% lows vs 5% highs.
         val effective = TuningContextEngine.resolveAutoContext(
-            baseMetrics(timeBelow70 = 0.06, timeAbove180 = 0.15),
+            baseMetrics(timeBelow70 = 0.06, timeAbove180 = 0.05),
         )
         assertEquals(AimiTuningContext.HYPO_GUARD, effective)
     }

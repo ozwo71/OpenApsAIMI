@@ -1,8 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.compose
 
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
 
 class PkpdSettingsSupportTest {
 

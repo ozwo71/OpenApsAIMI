@@ -4,6 +4,7 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorMetrics
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -218,10 +219,10 @@ object TuningContextEngine {
         }
 
         if (!t3cBrittle && !moderateHypoRisk) {
-            proposeDoubleDecrease(
-                out, preferences, DoubleKey.OApsAIMISmbTailDamping,
+            proposeTailDampingWeaken(
+                out, preferences,
                 step(cappedTier, micro = 0.04, moderate = 0.06, strong = 0.10), cappedTier,
-                "Reduce SMB tail damping when hypers dominate and hypos are rare.",
+                "Weaken SMB tail damping (raise tail floor) when hypers dominate and hypos are rare.",
             )
         }
         return out
@@ -297,10 +298,10 @@ object TuningContextEngine {
             "Raise PKPD relief minimum for clearer correction intent.",
         )
         if (!t3cBrittle && metrics.timeBelow70 < 0.035) {
-            proposeDoubleDecrease(
-                out, preferences, DoubleKey.OApsAIMISmbTailDamping,
+            proposeTailDampingWeaken(
+                out, preferences,
                 step(tier, micro = 0.03, moderate = 0.05, strong = 0.08), tier,
-                "Slightly reduce tail damping when hypers dominate.",
+                "Slightly weaken tail damping (raise tail floor) when hypers dominate.",
             )
         }
         return out
@@ -345,10 +346,10 @@ object TuningContextEngine {
         )
 
         if (!t3cBrittle) {
-            proposeDoubleIncrease(
-                out, preferences, DoubleKey.OApsAIMISmbTailDamping,
+            proposeTailDampingStrengthen(
+                out, preferences,
                 step(tier, micro = 0.05, moderate = 0.08, strong = 0.12), tier,
-                "Increase SMB tail damping to soften late corrections.",
+                "Strengthen SMB tail damping (lower tail floor) to soften late corrections.",
             )
         }
 
@@ -448,6 +449,40 @@ object TuningContextEngine {
         if (abs(proposed - current) < EPS) return
         if (proposed >= current - EPS) return
         out += TuningChange(key, key.key, current, proposed, reason, tier)
+    }
+
+    /**
+     * SMB tail damping proposals. The stored pref is a multiplicative FLOOR applied at high tail
+     * IOB (lower value = stronger damping — see [PkpdSmbTailDamping]). Both helpers operate on the
+     * effective value (legacy ≤0.55 values are first normalised to neutral) and clamp inside the
+     * slider band [0.70, 0.92] so the guard is never disabled nor pushed into the legacy zone.
+     */
+    private fun proposeTailDampingWeaken(
+        out: MutableList<TuningChange>,
+        preferences: Preferences,
+        delta: Double,
+        tier: TuningStepTier,
+        reason: String,
+    ) {
+        val stored = preferences.get(DoubleKey.OApsAIMISmbTailDamping)
+        val current = PkpdSmbTailDamping.effectiveStoredValue(stored)
+        val proposed = round3(PkpdSmbTailDamping.clampForAdvisor(current + delta))
+        if (proposed <= current + EPS) return
+        out += TuningChange(DoubleKey.OApsAIMISmbTailDamping, DoubleKey.OApsAIMISmbTailDamping.key, stored, proposed, reason, tier)
+    }
+
+    private fun proposeTailDampingStrengthen(
+        out: MutableList<TuningChange>,
+        preferences: Preferences,
+        delta: Double,
+        tier: TuningStepTier,
+        reason: String,
+    ) {
+        val stored = preferences.get(DoubleKey.OApsAIMISmbTailDamping)
+        val current = PkpdSmbTailDamping.effectiveStoredValue(stored)
+        val proposed = round3(PkpdSmbTailDamping.clampForAdvisor(current - delta))
+        if (proposed >= current - EPS) return
+        out += TuningChange(DoubleKey.OApsAIMISmbTailDamping, DoubleKey.OApsAIMISmbTailDamping.key, stored, proposed, reason, tier)
     }
 
     private fun round3(value: Double): Double = (value * 1000.0).roundToInt() / 1000.0

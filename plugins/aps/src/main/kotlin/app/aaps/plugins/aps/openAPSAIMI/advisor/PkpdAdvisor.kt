@@ -6,6 +6,7 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefAnalysisReport
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefDataSufficiency
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefGlycemicPriority
 import app.aaps.plugins.aps.openAPSAIMI.model.*
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
 import kotlin.math.min
 import kotlin.math.max
 
@@ -133,11 +134,13 @@ class PkpdAdvisor {
                 )
             }
 
-            // D) SMB damping very high while hypers dominate and hypos are rare — allow slightly more tail delivery
-            if (pkpd.smbTailDamping > 0.72 && metrics.timeBelow70 < 0.035) {
-                val newDamping = max(0.35, pkpd.smbTailDamping - 0.08)
-                if (newDamping < pkpd.smbTailDamping - 0.01) {
-                    val explanation = rh.gs(R.string.aimi_pkpd_hyper_damping_reduce, pkpd.smbTailDamping.toString(), newDamping.toString())
+            // D) Tail damping very strong while hypers dominate and hypos are rare — allow slightly more tail delivery.
+            // Stored pref is a multiplicative FLOOR (lower = stronger damping): weakening the guard means RAISING the floor.
+            val effectiveDampingHyper = PkpdSmbTailDamping.effectiveStoredValue(pkpd.smbTailDamping)
+            if (effectiveDampingHyper < PkpdSmbTailDamping.DAMPING_LIGHT - 0.02 && metrics.timeBelow70 < 0.035) {
+                val newDamping = PkpdSmbTailDamping.clampForAdvisor(effectiveDampingHyper + 0.08)
+                if (newDamping > effectiveDampingHyper + 0.01) {
+                    val explanation = rh.gs(R.string.aimi_pkpd_hyper_damping_reduce, effectiveDampingHyper.toString(), newDamping.toString())
                     val action = AimiAction.PreferenceUpdate(
                         key = app.aaps.core.keys.DoubleKey.OApsAIMISmbTailDamping,
                         newValue = newDamping,
@@ -151,7 +154,7 @@ class PkpdAdvisor {
                         priority = AimiPriority.Medium,
                         domain = AimiDomain.Pkpd,
                         action = action,
-                        descriptionArgs = listOf(pkpd.smbTailDamping.toString(), newDamping.toString())
+                        descriptionArgs = listOf(effectiveDampingHyper.toString(), newDamping.toString())
                     )
                 }
             }
@@ -203,25 +206,29 @@ class PkpdAdvisor {
                 )
             }
 
-            // C) SMB Damping too weak?
-            if (pkpd.smbTailDamping < 0.8) {
-                val newDamping = pkpd.smbTailDamping + 0.1
-                val explanation = rh.gs(R.string.aimi_pkpd_hypo_damping)
-                val action = AimiAction.PreferenceUpdate(
-                    key = app.aaps.core.keys.DoubleKey.OApsAIMISmbTailDamping,
-                    newValue = newDamping,
-                    reason = explanation,
-                    domain = AimiDomain.Pkpd,
-                    priority = AimiPriority.Critical
-                )
-                suggestions += AimiRecommendation(
-                    titleResId = R.string.aimi_pkpd_title_damping,
-                    descriptionResId = R.string.aimi_pkpd_hypo_damping,
-                    priority = AimiPriority.Critical,
-                    domain = AimiDomain.Pkpd,
-                    action = action,
-                    descriptionArgs = listOf(newDamping.toString())
-                )
+            // C) Tail damping too weak for the hypo pattern?
+            // Stored pref is a multiplicative FLOOR (lower = stronger damping): strengthening the guard means LOWERING the floor.
+            val effectiveDampingHypo = PkpdSmbTailDamping.effectiveStoredValue(pkpd.smbTailDamping)
+            if (effectiveDampingHypo > PkpdSmbTailDamping.DAMPING_STRONG + 0.05) {
+                val newDamping = PkpdSmbTailDamping.clampForAdvisor(effectiveDampingHypo - 0.1)
+                if (newDamping < effectiveDampingHypo - 0.01) {
+                    val explanation = rh.gs(R.string.aimi_pkpd_hypo_damping)
+                    val action = AimiAction.PreferenceUpdate(
+                        key = app.aaps.core.keys.DoubleKey.OApsAIMISmbTailDamping,
+                        newValue = newDamping,
+                        reason = explanation,
+                        domain = AimiDomain.Pkpd,
+                        priority = AimiPriority.Critical
+                    )
+                    suggestions += AimiRecommendation(
+                        titleResId = R.string.aimi_pkpd_title_damping,
+                        descriptionResId = R.string.aimi_pkpd_hypo_damping,
+                        priority = AimiPriority.Critical,
+                        domain = AimiDomain.Pkpd,
+                        action = action,
+                        descriptionArgs = listOf(newDamping.toString())
+                    )
+                }
             }
 
             // D) ISF fusion headroom already high — reduce max fusion to cap aggressive corrections during lows

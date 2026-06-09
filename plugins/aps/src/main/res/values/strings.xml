@@ -1398,9 +1398,9 @@
     <string name="aimi_pkpd_hyper_isf">Résistance détectée : Augmenter la fusion ISF (Max x2.0) pour des corrections plus fortes.</string>
     <string name="aimi_pkpd_hypo_dia">Hypoglycémies détectées : Allonger la DIA (%1$s -> %2$sh) pour réduire l\'empilement (stacking).</string>
     <string name="aimi_pkpd_hypo_peak">Hypoglycémies précoces : Retarder le pic (%1$s min) pour adoucir la courbe.</string>
-    <string name="aimi_pkpd_hypo_damping">Risque hypo : Augmenter l\'amortissement (Damping) pour réduire les SMB en fin de DIA.</string>
+    <string name="aimi_pkpd_hypo_damping">Risque hypo : renforcer l\'amortissement de fin de DIA (plancher SMB abaissé à %1$s) pour réduire les SMB tardifs.</string>
     <string name="aimi_pkpd_hypo_isf_reduce">Frequent lows with high ISF-fusion headroom: consider lowering max fusion from %1$sx to ~%2$sx with your clinician to cap aggressive corrections.</string>
-    <string name="aimi_pkpd_hyper_damping_reduce">Persistent highs with strong SMB tail damping (%1$s): if hypos are rare, discuss a modest damping decrease to ~%2$s instead of only ever increasing it.</string>
+    <string name="aimi_pkpd_hyper_damping_reduce">Persistent highs with strong SMB tail damping (floor %1$s): if hypos are rare, consider weakening the damping by raising the tail floor to ~%2$s to allow more late delivery.</string>
     <string name="aimi_meal_advisor_title">AIMI Meal Advisor</string>
 
 

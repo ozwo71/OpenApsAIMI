@@ -67,7 +67,11 @@ object PkpdCorrectionPrudence {
     private fun lerp(a: Double, b: Double, t: Double): Double = a + (b - a) * t
 }
 
-/** Maps a 0–1 slider to SMB tail damping (higher slider = more tail delivery). */
+/**
+ * Maps a 0–1 prudence slider to the SMB tail damping floor.
+ * Higher slider = more prudence = lower floor (0.92 → 0.70) = stronger damping = LESS tail delivery.
+ * See [PkpdSmbTailDamping] for the authoritative semantics.
+ */
 object PkpdTailPrudence {
     fun readLevel(preferences: Preferences): Double =
         readLevelFromDamping(preferences.get(DoubleKey.OApsAIMISmbTailDamping))
