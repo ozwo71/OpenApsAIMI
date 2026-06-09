@@ -1,7 +1,7 @@
 # AIMI — Hormonitor Study Notes (4–6 Jun 2026)
 
 **Audience:** Hormonitor study / clinical replay reviewers  
-**Branch:** `dev_OAPSAIMI_mergeDEV`  
+**Branch:** `dev_OAPSAIMI`  
 **Hormonitor schema:** `1.1.0` → **`1.2.0`** → **`1.3.0`** (additive)  
 **Status:** implemented in code — field validation required before claiming production readiness
 
@@ -115,6 +115,26 @@ flowchart TB
 | **Hormonitor `patient_story.thermal_belief` (schema 1.3.0)** | Study replay of thermal interpretation |
 
 **Design rule:** temperature does **not** directly command insulin units. It enriches latent resistance / recovery, patient mode, UI, and Hormonitor — upstream of RBT and dose channels.
+
+### Phase D — Live steps / Context refresh (≈ 6 Jun)
+
+| Deliverable | Role in study |
+|-------------|----------------|
+| `UnifiedActivityProviderMTR.resolveStepsTotalSince` | Fenêtres 15/60 min : si `steps15min`… est **0** mais que la source ne remplit que `steps5min` (ex. **Garmin HTTP delta**), agrégation par buckets 5 min au lieu d’afficher 0 |
+| `ContextActivity.refreshPhysioSnapshot()` | À l’ouverture de **AIMI Context**, `HealthContextRepository.fetchSnapshot()` sur IO → steps/FC à jour sans attendre le prochain tick loop |
+| Commit `29e42fcec6` | Corrige *Live body signals* bloqué à `0 steps/15m` alors que la FC est à jour |
+
+**Cause racine :** la sync Garmin HTTP (`GarminPlugin.ingestHttpTotalSteps`) ne stocke que le delta dans `steps5min` ; `steps15min` reste à 0. L’agrégateur interprétait ce 0 comme « aucun pas » au lieu de « colonne non renseignée ».
+
+**Impact Hormonitor / replay :** `patient_story.physio_live.steps_last_15m`, `activity_state`, feuilles RBT `STEPS_15M`, gating Autodrive activité — alignés avec le dashboard pas/FC.
+
+### Phase E — Pompes (fork, pas de changement Equil)
+
+| Driver | Changement sur branche | Equil |
+|--------|------------------------|-------|
+| Medtrum | `47e65888d1` — zombie GATT, watchdog, `forceResetBluetoothGatt` | — |
+| Omnipod Dash | `3c2ad4ac5d` — `isConfigured()`, `teardownPodSession()`, garde activation | — |
+| Equil | **Aucun diff** vs `origin/dev_OAPSAIMI` | Pas de régression introduite par le fork ; lacunes BLE préexistantes (voir §9) |
 
 ---
 
@@ -281,8 +301,27 @@ For full tree replay, pair Hormonitor events with `AIMI_Decisions.jsonl`:
 - [ ] No `POST_HYPO_RECOVERY` with effective RBT authority `HARD` in shadow replay
 - [ ] UI “Current AIMI Understanding” matches Hormonitor `patient_story` on same timestamp (±1 tick)
 - [ ] Context UI **Thermal rhythm** narrative matches `thermal_belief.narrative`
+- [ ] **Live body signals** : `steps/15m` > 0 après marche (Garmin HTTP ou HC) ; cohérent avec `physio_live.steps_last_15m` au même instant
+- [ ] Ouverture **AIMI Context** rafraîchit steps/FC sans tick loop intermédiaire (suffixe *Updated just now* + pas non nuls si activité récente)
 
 See also: [AIMI_PATIENT_MODE_REPLAY_CHECKLIST_2026-06-06.md](AIMI_PATIENT_MODE_REPLAY_CHECKLIST_2026-06-06.md), [AIMI_PHYSIO_RUNTIME_ACTIVATION_2026-06-06.md](AIMI_PHYSIO_RUNTIME_ACTIVATION_2026-06-06.md), [AIMI_RECURSIVE_BELIEF.md](AIMI_RECURSIVE_BELIEF.md).
+
+---
+
+## 9. Equil pump driver — régression fork (revue 6 Jun)
+
+**Verdict :** aucune modification Equil sur `dev_OAPSAIMI` depuis `origin` ; **pas de régression accidentelle** introduite par les commits Medtrum / Dash / AIMI.
+
+**Lacunes préexistantes** (non corrigées sur cette branche, à surveiller en support) :
+
+| Risque | Détail |
+|--------|--------|
+| `isConfigured() = true` toujours | Volontaire (wizard / émulateur) ; la queue peut tourner avant activation complète — mitigé par `isInitialized()` |
+| Unpair sans teardown BLE | `confirmUnpair()` efface prefs/état mais n’appelle pas `disconnect()` + `unBond()` (contrairement à Dash `teardownPodSession()`) |
+| `stopConnecting()` vide | Timeout queue ne coupe pas le scan BLE Equil |
+| Pas de watchdog zombie GATT | Pattern Medtrum (`47e65888d1`) non porté sur Equil |
+
+**Recommandation :** durcissement Equil optionnel (session teardown à l’unpair, watchdog connect, `stopConnecting()` réel) — hors scope des fixes AIMI du 6 Jun.
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Statut :** implémenté en code et validé par tests ciblés  
 **Date :** 2026-06-06  
-**Branche :** `dev_OAPSAIMI_mergeDEV`  
+**Branche :** `dev_OAPSAIMI`  
 **Docs liées :** [AIMI_PHYSIOLOGICAL_PHASE.md](AIMI_PHYSIOLOGICAL_PHASE.md), [AIMI_RECURSIVE_BELIEF.md](AIMI_RECURSIVE_BELIEF.md), [AIMI_MEAL_ABSORPTION_PHASE.md](AIMI_MEAL_ABSORPTION_PHASE.md), [PKPD_ABSORPTION_GUARD_AUDIT.md](PKPD_ABSORPTION_GUARD_AUDIT.md), [AIMI_PATIENT_MODE_REPLAY_CHECKLIST_2026-06-06.md](AIMI_PATIENT_MODE_REPLAY_CHECKLIST_2026-06-06.md)
 
 ---
@@ -281,6 +281,7 @@ But :
 - jauges Meal / Endogenous / Resistance / **Thermal** / Sensor ;
 - section **Thermal rhythm** (narrative + delta vs baseline) ;
 - rafraîchissement immédiat via `PatientStateRuntimeRepository.updates` ;
+- à l’**ouverture / reprise** de l’écran : `healthContextRepository.fetchSnapshot()` sur IO (commit `29e42fcec6`) ;
 - suffixe *Updated … · live body signals* ou *· user context* selon la source.
 
 **Export Hormonitor — schéma `1.2.0` → `1.3.0` :**
@@ -335,6 +336,22 @@ Les ticks 0,01–0,02 °C typiques des montres ne doivent **pas** déclencher de
 **wcycle :** BBT + phase cycle (lutéale, ovulation, menstruation) pour distinguer physiologie hormonale et stress infectieux.
 
 **Aucune nouvelle préférence** — activer les permissions Health Connect skin temperature + basal body temperature.
+
+### 3.14 Fix steps/15m bloqués à zéro (2026-06-06)
+
+**Symptôme signalé :** *Live body signals* affichait `0 steps/15m` alors que la FC était à jour (ex. `64 bpm`).
+
+**Cause :** sources type **Garmin HTTP** n’écrivent que `steps5min` (delta) ; `steps15min` reste 0. `UnifiedActivityProviderMTR` traitait ce 0 comme un total valide au lieu de sommer les buckets 5 min.
+
+**Correctif :**
+
+| Fichier | Changement |
+|---------|------------|
+| `steps/UnifiedActivityProviderMTR.kt` | `stepsFromPrefilledWindowFields` : fenêtre > 5 min avec valeur 0 → fallback bucket ; logique extraite dans `resolveStepsTotalSince()` |
+| `context/ui/ContextActivity.kt` | `refreshPhysioSnapshot()` au `onResume` |
+| `UnifiedActivityProviderMTRTest.kt` | Garmin HTTP, HC prefilled, idle |
+
+**Chaîne données :** DB `[SC]` → `HealthContextRepository.fetchSnapshot()` → `PhysioLiveDigest` → UI Context + Hormonitor `physio_live.steps_last_15m`.
 
 ---
 
