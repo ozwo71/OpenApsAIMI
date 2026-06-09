@@ -78,6 +78,7 @@ class EquilBLE @Inject constructor(
     override fun onServicesDiscovered(success: Boolean) {
         if (!success) {
             aapsLogger.debug(LTag.PUMPBTCOMM, "onServicesDiscovered failed")
+            disconnect()
             return
         }
         bleTransport.gatt.enableNotifications()
@@ -298,6 +299,8 @@ class EquilBLE @Inject constructor(
         autoScan = true
         baseCmd = null
         startScan()
+        handler.removeMessages(TIME_OUT_CONNECT_WHAT)
+        handler.sendEmptyMessageDelayed(TIME_OUT_CONNECT_WHAT, EquilConst.EQUIL_BLE_CONNECT_TIMEOUT_MS)
     }
 
     fun stopScan() {
@@ -312,6 +315,34 @@ class EquilBLE @Inject constructor(
     fun unBond(transmitterMAC: String?) {
         if (transmitterMAC == null) return
         bleTransport.adapter.removeBond(transmitterMAC)
+    }
+
+    /** Abort an in-flight scan/connect attempt (queue connection timeout). */
+    fun stopConnecting() {
+        handler.removeMessages(TIME_OUT_CONNECT_WHAT)
+        stopScan()
+        connecting = false
+        if (!isConnected) {
+            equilManager?.equilState?.bluetoothConnectionState = BluetoothConnectionState.DISCONNECTED
+        }
+    }
+
+    /** Full BLE teardown: stop scan, disconnect GATT, remove Android bond. */
+    fun teardownSession(bondAddress: String?) {
+        handler.removeMessages(TIME_OUT_WHAT)
+        handler.removeMessages(TIME_OUT_CONNECT_WHAT)
+        stopScan()
+        baseCmd = null
+        preCmd = null
+        if (isConnected || connecting) {
+            disconnect()
+        } else {
+            connecting = false
+            autoScan = false
+            equilManager?.equilState?.bluetoothConnectionState = BluetoothConnectionState.DISCONNECTED
+        }
+        bondAddress?.takeIf { it.isNotEmpty() }?.let { unBond(it) }
+        macAddress = null
     }
 
     var handler: Handler = object : Handler(HandlerThread(this::class.simpleName + "MessageHandler").also { it.start() }.looper) {

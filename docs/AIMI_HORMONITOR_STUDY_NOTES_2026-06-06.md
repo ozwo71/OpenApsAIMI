@@ -134,7 +134,7 @@ flowchart TB
 |--------|------------------------|-------|
 | Medtrum | `47e65888d1` — zombie GATT, watchdog, `forceResetBluetoothGatt` | — |
 | Omnipod Dash | `3c2ad4ac5d` — `isConfigured()`, `teardownPodSession()`, garde activation | — |
-| Equil | **Aucun diff** vs `origin/dev_OAPSAIMI` | Pas de régression introduite par le fork ; lacunes BLE préexistantes (voir §9) |
+| Equil | **`teardownEquilSession()`** — disconnect GATT, `unBond`, `clearData` ; `stopConnecting()` réel ; garde activation stale avant re-pair | Durci sur branche (voir commit Equil BLE) |
 
 ---
 
@@ -310,18 +310,20 @@ See also: [AIMI_PATIENT_MODE_REPLAY_CHECKLIST_2026-06-06.md](AIMI_PATIENT_MODE_R
 
 ## 9. Equil pump driver — régression fork (revue 6 Jun)
 
-**Verdict :** aucune modification Equil sur `dev_OAPSAIMI` depuis `origin` ; **pas de régression accidentelle** introduite par les commits Medtrum / Dash / AIMI.
+**Verdict initial :** aucune modification Equil sur `dev_OAPSAIMI` depuis `origin` avant durcissement BLE — **pas de régression accidentelle** introduite par les commits Medtrum / Dash / AIMI.
 
-**Lacunes préexistantes** (non corrigées sur cette branche, à surveiller en support) :
+**Durcissement ajouté (aligné Medtrum/Dash) :**
 
-| Risque | Détail |
-|--------|--------|
-| `isConfigured() = true` toujours | Volontaire (wizard / émulateur) ; la queue peut tourner avant activation complète — mitigé par `isInitialized()` |
-| Unpair sans teardown BLE | `confirmUnpair()` efface prefs/état mais n’appelle pas `disconnect()` + `unBond()` (contrairement à Dash `teardownPodSession()`) |
-| `stopConnecting()` vide | Timeout queue ne coupe pas le scan BLE Equil |
-| Pas de watchdog zombie GATT | Pattern Medtrum (`47e65888d1`) non porté sur Equil |
+| Changement | Fichiers |
+|------------|----------|
+| `teardownEquilSession()` | `EquilPumpPlugin` — disconnect + unBond + `clearData` |
+| Unpair wizard | `EquilWizardViewModel.confirmUnpair()` appelle teardown avec MAC capturée |
+| Garde activation stale | `EquilOverviewViewModel` avant nouveau pair |
+| `stopConnecting()` | `EquilPumpPlugin` → `EquilBLE.stopConnecting()` |
+| Timeout connect keepalive | `EquilBLE.connect()` — 15 s via `EquilConst.EQUIL_BLE_CONNECT_TIMEOUT_MS` |
+| GATT services failure | `onServicesDiscovered(false)` → `disconnect()` |
 
-**Recommandation :** durcissement Equil optionnel (session teardown à l’unpair, watchdog connect, `stopConnecting()` réel) — hors scope des fixes AIMI du 6 Jun.
+**Toujours volontaire :** `isConfigured() = true` (wizard / émulateur) — mitigé par `isInitialized()` et garde activation.
 
 ---
 

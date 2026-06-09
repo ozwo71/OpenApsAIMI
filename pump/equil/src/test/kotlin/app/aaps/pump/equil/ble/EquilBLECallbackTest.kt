@@ -219,6 +219,31 @@ class EquilBLECallbackTest : TestBase() {
         assertFalse(equilBLE.autoScan)
     }
 
+    @Test
+    fun `teardownSession should disconnect and remove bond`() {
+        initWithManager()
+        equilBLE.isConnected = true
+
+        equilBLE.teardownSession("AA:BB:CC:DD:EE:FF")
+
+        verify(gatt).disconnect()
+        verify(gatt).close()
+        verify(bleAdapter).removeBond("AA:BB:CC:DD:EE:FF")
+        assertNull(equilBLE.macAddress)
+    }
+
+    @Test
+    fun `stopConnecting should stop scan and clear connecting`() {
+        initWithManager()
+        equilBLE.connecting = true
+
+        equilBLE.stopConnecting()
+
+        verify(scanner).stopScan()
+        assertFalse(equilBLE.connecting)
+        assertEquals(BluetoothConnectionState.DISCONNECTED, equilState.bluetoothConnectionState)
+    }
+
     // --- unBond ---
 
     @Test

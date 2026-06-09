@@ -20,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.Mock
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
 class EquilPumpPluginTest : TestBaseWithProfile() {
@@ -202,5 +203,18 @@ class EquilPumpPluginTest : TestBaseWithProfile() {
     @Test
     fun `pumpDescription should have correct pump type`() {
         assertEquals(PumpType.EQUIL, equilPumpPlugin.pumpDescription.pumpType)
+    }
+
+    @Test
+    fun `teardownEquilSession should teardown BLE and clear pod state`() {
+        equilPumpPlugin.teardownEquilSession("AA:BB:CC:DD:EE:FF")
+        verify(equilManager).teardownBleSession("AA:BB:CC:DD:EE:FF")
+        verify(equilManager).clearPodState()
+    }
+
+    @Test
+    fun `stopConnecting should delegate to equilManager`() {
+        equilPumpPlugin.stopConnecting()
+        verify(equilManager).stopBleConnecting()
     }
 }

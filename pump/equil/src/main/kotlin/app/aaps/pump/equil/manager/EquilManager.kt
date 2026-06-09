@@ -109,6 +109,14 @@ class EquilManager @Inject constructor(
         equilBLE.closeBleAuto()
     }
 
+    fun teardownBleSession(bondAddress: String?) {
+        equilBLE.teardownSession(bondAddress)
+    }
+
+    fun stopBleConnecting() {
+        equilBLE.stopConnecting()
+    }
+
     fun connect() {
         equilBLE.connect("EquilManager::connect")
     }

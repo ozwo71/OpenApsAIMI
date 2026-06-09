@@ -324,7 +324,17 @@ class EquilPumpPlugin @Inject constructor(
         equilManager.closeBleAuto()
     }
 
-    override fun stopConnecting() {}
+    override fun stopConnecting() {
+        aapsLogger.info(LTag.PUMPCOMM, "stopConnecting")
+        equilManager.stopBleConnecting()
+    }
+
+    /** Full session teardown: BLE disconnect, bond removal, persisted state reset. */
+    fun teardownEquilSession(bondAddress: String? = equilManager.equilState?.address?.takeIf { it.isNotEmpty() }) {
+        aapsLogger.info(LTag.PUMPCOMM, "Teardown Equil session bondAddress=$bondAddress")
+        equilManager.teardownBleSession(bondAddress)
+        clearData()
+    }
 
     override suspend fun setTempBasalPercent(percent: Int, durationInMinutes: Int, enforceNew: Boolean, tbrType: TemporaryBasalType): PumpEnactResult =
         error("Pump doesn't support percent basal rate")
