@@ -118,6 +118,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentStateBuilder
 import app.aaps.plugins.aps.openAPSAIMI.physio.CircadianMealProfileStore
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisStateBuilder
+import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PatternCapHold
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternDetector
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternExport
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternInputBuilder
@@ -3595,7 +3596,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val stackingCapU = lastInsulinStackingEvaluation?.takeIf {
                 it.kind == InsulinStackingStance.Kind.SURVEILLANCE_IOB
             }?.smbAbsoluteCapU
-            val patternCapU = lastPhysiologicalPatternSnapshot?.smbCapU
+            // Hysteresis: keep the last pattern cap alive a few ticks while BG is still rising so
+            // pattern flapping (e.g. SEDENTARY_DAY) cannot silently drop cap coverage mid rise.
+            val patternCapU = patternCapHold.resolve(
+                rawCapU = lastPhysiologicalPatternSnapshot?.smbCapU,
+                rising = delta > 0f,
+            )
+            if (patternCapHold.holding && patternCapU != null) {
+                consoleLog.add("🧷 Pattern cap hold: keeping ${"%.2f".format(patternCapU)}U during rise (pattern flapped)")
+            }
             consoleLog.add("🪜 RBT_GATE: ${authorityGate.summary()}")
             val rbtAuthority = authorityGate.effectiveAuthority != ReleaseAuthority.NONE
             val effectiveHtr = if (rbtSnapshot != null &&
@@ -7480,6 +7489,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastLoadGovernorMultiplierG: Double = 1.0
     private var lastPhysiologicalPhaseOutput: PhysiologicalPhaseClassifier.Output? = null
     private var lastPhysiologicalPatternSnapshot: PhysiologicalPatternSnapshot? = null
+    private val patternCapHold = PatternCapHold()
     private var lastMealAbsorptionOutput: MealAbsorptionPhaseEngine.Output? = null
     private var lastInsulinStackingEvaluation: InsulinStackingStance.Evaluation? = null
     private var lastBasePhysioMultipliers: PhysioMultipliersMTR = PhysioMultipliersMTR.NEUTRAL

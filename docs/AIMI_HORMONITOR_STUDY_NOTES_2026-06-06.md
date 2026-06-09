@@ -327,6 +327,36 @@ See also: [AIMI_PATIENT_MODE_REPLAY_CHECKLIST_2026-06-06.md](AIMI_PATIENT_MODE_R
 
 ---
 
+## 10. Corrections sécurité SMB (revue rapports utilisateurs, 9 Jun)
+
+### 10.1 Inversion sémantique tail damping (rapport message-26) — corrigé
+
+La pref `OApsAIMISmbTailDamping` est un **plancher multiplicatif** (`tailMult = floor + (1−floor)×relief`, cf. `SmbDamping.kt`) : **valeur basse = amortissement fort**. Plusieurs couches advisory raisonnaient à l'envers :
+
+| Composant | Avant (inversé) | Après |
+|-----------|-----------------|-------|
+| `PkpdAdvisor` règle C (hypo, Critical) | `+0.1` → affaiblissait le guard | `−0.1` sur la valeur **effective**, clamp `[0.70, 0.92]` |
+| `PkpdAdvisor` règle D (hyper) | `max(0.35, −0.08)` → renforçait + zone legacy | `+0.08` sur valeur effective, clamp `[0.70, 0.92]` |
+| `TuningContextEngine` (3 sites) | decrease en hyper / increase en hypo | helpers dédiés `proposeTailDampingWeaken/Strengthen` (valeur effective + clamp band) |
+| `PkpdSmbTailDamping` | `DAMPING_CAUTIOUS=0.92` / `DAMPING_PERMISSIVE=0.70` (noms inversés) | `DAMPING_LIGHT=0.92` / `DAMPING_STRONG=0.70` + docstring sémantique + `clampForAdvisor()` |
+| `PkpdSettingsSupport` docstring | « higher slider = more tail delivery » | corrigé (higher = more prudence = less delivery) |
+| Strings `aimi_pkpd_hypo_damping` / `aimi_pkpd_hyper_damping_reduce` | descriptions contraires à l'effet | réécrites (plancher abaissé / relevé) |
+
+Les propositions advisor opèrent désormais sur `effectiveStoredValue()` (les valeurs legacy ≤ 0.55 sont normalisées à 0.85 avant delta) et ne peuvent ni désactiver le guard (1.0) ni retomber dans la zone legacy.
+
+### 10.2 Trou de couverture cap SMB en meal-rise (rapport message-25) — corrigé
+
+Trois couches pouvaient annuler simultanément tout cap pendant une montée repas (bypass stacking `MAX_VALUE` + meal patterns sans `smbCapU` + branche min-cap conditionnelle sautée) — aggravé par le fix steps qui déclassifie `SEDENTARY_DAY` plus souvent.
+
+- **Option B** — les 4 meal patterns portent désormais leur propre cap : `MEAL_DECLARED` 1.50 U, `MEAL_UNDECLARED_FAST` / `MEAL_FIRST_WAVE` 1.20 U, `MEAL_SECOND_WAVE` 1.00 U (`PhysiologicalPatternCatalog`). La continuité de cap est intrinsèque à la classification meal.
+- **Option C** — hystérèse `PatternCapHold` (3 ticks) dans `DetermineBasalAIMI2` : le dernier `patternCapU` connu survit au flapping de pattern tant que la montée continue (`delta > 0`), log `🧷 Pattern cap hold`.
+
+**Tests** : `PkpdAdvisorTailDampingTest` (8), `PatternCapHoldTest` (5), directions tail damping dans `TuningContextEngineTest` (+4), caps meal dans `PhysiologicalPatternCatalogTest` (+1).
+
+**Note infra tests** : `plugins:aps` tourne sur JUnit Platform **sans** vintage engine → les tests `org.junit.Test` (JUnit 4) compilaient mais ne s'exécutaient jamais (`failOnNoDiscoveredTests = false`). `TuningContextEngineTest`, `PkpdSettingsSupportTest` et `SmbDampingTest` ont été convertis en JUnit 5 ; un test pré-existant (`auto balance resolves to hypo guard`) était faux et a été corrigé. D'autres fichiers JUnit 4 du module restent silencieusement ignorés — audit à prévoir.
+
+---
+
 ## 8. One-sentence pitch (for Hormonitor study abstract)
 
 **AIMI now unfolds glycemic decisions as a recursive belief tree, interprets physiological and wearable state (including thermal rhythm from Garmin/Oura) before adjusting insulin, and exports that clinical story in Hormonitor `patient_story` and `thermal_belief` so study replay can follow body understanding — not only delivered units.**

@@ -38,25 +38,32 @@ object PhysiologicalPatternCatalog {
             smbCapU = 0.45,
             hyperLeafCredScale = 0.55,
         ),
+        // Meal patterns carry their own (generous) SMB cap so cap coverage stays continuous when a
+        // meal classification displaces a capped pattern mid-rise (e.g. SEDENTARY_DAY flapping) —
+        // otherwise patternCapU goes null and the HTR min-cap branch can be skipped entirely.
         PatternDefinition(
             id = PhysiologicalPatternId.MEAL_DECLARED,
             category = PhysiologicalPatternCategory.MEAL,
             dominantScaleMinutes = 60,
+            smbCapU = 1.50,
         ),
         PatternDefinition(
             id = PhysiologicalPatternId.MEAL_UNDECLARED_FAST,
             category = PhysiologicalPatternCategory.MEAL,
             dominantScaleMinutes = 60,
+            smbCapU = 1.20,
         ),
         PatternDefinition(
             id = PhysiologicalPatternId.MEAL_FIRST_WAVE,
             category = PhysiologicalPatternCategory.MEAL,
             dominantScaleMinutes = 15,
+            smbCapU = 1.20,
         ),
         PatternDefinition(
             id = PhysiologicalPatternId.MEAL_SECOND_WAVE,
             category = PhysiologicalPatternCategory.MEAL,
             dominantScaleMinutes = 60,
+            smbCapU = 1.00,
         ),
         PatternDefinition(
             id = PhysiologicalPatternId.LATE_FAT_PROTEIN,
