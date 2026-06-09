@@ -6,6 +6,7 @@ import android.view.View
 import android.widget.Toast
 import androidx.recyclerview.widget.LinearLayoutManager
 import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.ui.activities.TranslatedDaggerAppCompatActivity
@@ -15,6 +16,7 @@ import app.aaps.plugins.aps.openAPSAIMI.context.ContextManager
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextPreset
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStatePresentationBuilder
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
+import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextRepository
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +40,7 @@ class ContextActivity : TranslatedDaggerAppCompatActivity() {
     @Inject lateinit var sp: SP
     @Inject lateinit var rh: ResourceHelper
     @Inject lateinit var aapsLogger: AAPSLogger
+    @Inject lateinit var healthContextRepository: HealthContextRepository
     
     private lateinit var binding: ActivityContextBinding
     private lateinit var adapter: ContextIntentAdapter
@@ -64,6 +67,7 @@ class ContextActivity : TranslatedDaggerAppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshUI()
+        refreshPhysioSnapshot()
         startPatientStateRefresh()
     }
 
@@ -198,6 +202,16 @@ class ContextActivity : TranslatedDaggerAppCompatActivity() {
         binding.switchContextEnabled.isChecked = sp.getBoolean(app.aaps.core.keys.BooleanKey.OApsAIMIContextEnabled.key, false)
         binding.switchLLMEnabled.isChecked = sp.getBoolean(app.aaps.core.keys.BooleanKey.OApsAIMIContextLLMEnabled.key, false)
         refreshPatientRuntimeUi()
+    }
+
+    private fun refreshPhysioSnapshot() {
+        activityScope.launch(Dispatchers.IO) {
+            try {
+                healthContextRepository.fetchSnapshot()
+            } catch (e: Exception) {
+                aapsLogger.error(LTag.APS, "ContextActivity physio snapshot refresh failed", e)
+            }
+        }
     }
 
     private fun startPatientStateRefresh() {

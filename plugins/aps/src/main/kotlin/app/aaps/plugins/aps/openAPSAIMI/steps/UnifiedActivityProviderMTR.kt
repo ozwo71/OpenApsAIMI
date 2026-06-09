@@ -21,9 +21,10 @@ import kotlinx.coroutines.runBlocking
  *
  * **Window totals:** Health Connect and phone sync store, on each [SC] row, both per-interval
  * counts (`steps5min`, `steps15min`, …) for the same sync instant. For standard windows (5–180 min),
- * the **latest** row’s matching field is used when fresh enough — summing only `steps5min` across
- * sparse 5‑minute buckets **under-counted** 15/60 min totals and confused physio vs dashboard.
- * Long or non-standard windows still use per-bucket max(`steps5min`) aggregation.
+ * the **latest** row’s matching field is used when fresh enough and non-zero. Sources that only
+ * populate `steps5min` (e.g. Garmin HTTP delta) leave longer windows at zero — those are treated
+ * as unset and fall back to per-bucket max(`steps5min`) aggregation across the requested span.
+ * Long or non-standard windows still use bucket aggregation only.
  *
  * DB reads are **synchronous** on the calling thread to avoid empty results from fire-and-forget
  * async loads (race with immediate cache read).
@@ -69,6 +70,84 @@ class UnifiedActivityProviderMTR @Inject constructor(
          * Picks the freshest HR row for [mode] (Garmin / Wear / HC priority).
          * [records] should be sorted by [HR.timestamp] descending when possible.
          */
+        /**
+         * Aggregates step totals for [startMs]..[nowMs] from pre-loaded [records] and [mode] source priority.
+         */
+        internal fun resolveStepsTotalSince(
+            records: List<SC>,
+            mode: String,
+            startMs: Long,
+            nowMs: Long,
+        ): StepsResult? {
+            if (mode == MODE_DISABLED || records.isEmpty()) return null
+
+            val filtered = filterStepsRecordsForMode(records, mode)
+            if (filtered.isEmpty()) return null
+
+            val durationMs = nowMs - startMs
+            val latest = filtered.maxByOrNull { it.timestamp }!!
+            val stalenessMs = nowMs - latest.timestamp
+
+            val fromPrefilledWindow = stepsFromPrefilledWindowFields(latest, durationMs, stalenessMs)
+            val bucketTotal = sumMaxSteps5PerFiveMinuteBucket(filtered)
+            val totalSteps = fromPrefilledWindow ?: bucketTotal
+
+            return StepsResult(
+                steps = totalSteps,
+                timestamp = nowMs,
+                source = latest.device,
+                duration = durationMs,
+            )
+        }
+
+        private fun filterStepsRecordsForMode(records: List<SC>, mode: String): List<SC> =
+            when (mode) {
+                MODE_PREFER_WEAR ->
+                    records.filter { isWearDevice(it.device) }
+                        .ifEmpty { records.filter { it.device == SOURCE_GARMIN } }
+
+                MODE_HEALTH_CONNECT_ONLY ->
+                    records.filter { it.device == SOURCE_HC }
+
+                MODE_AUTO_FALLBACK -> {
+                    val garmin = records.filter { it.device == SOURCE_GARMIN }
+                    val wear = records.filter { isWearDevice(it.device) }
+                    val hcPhone = records.filter { it.device == SOURCE_HC || it.device == SOURCE_PHONE }
+                    when {
+                        garmin.isNotEmpty() -> garmin
+                        wear.isNotEmpty() -> wear
+                        else -> hcPhone
+                    }
+                }
+                else -> emptyList()
+            }
+
+        internal fun stepsFromPrefilledWindowFields(latest: SC, durationMs: Long, stalenessMs: Long): Int? {
+            if (stalenessMs > MAX_ROW_AGE_MS) return null
+            fun near(minutes: Int): Boolean {
+                val target = minutes * MINUTE_MS
+                return kotlin.math.abs(durationMs - target) <= WINDOW_SLACK_MS
+            }
+            val v = when {
+                near(5) -> latest.steps5min
+                near(10) -> latest.steps10min
+                near(15) -> latest.steps15min
+                near(30) -> latest.steps30min
+                near(60) -> latest.steps60min
+                near(180) -> latest.steps180min
+                else -> return null
+            }
+            // Garmin HTTP stores only steps5min; zero in longer windows means "unset", not "no steps".
+            if (v == 0 && !near(5)) return null
+            return v.coerceAtLeast(0)
+        }
+
+        internal fun sumMaxSteps5PerFiveMinuteBucket(filtered: List<SC>): Int =
+            filtered
+                .groupBy { it.timestamp / (5 * MINUTE_MS) }
+                .values
+                .sumOf { bucket -> bucket.maxOfOrNull { it.steps5min.coerceAtLeast(0) } ?: 0 }
+
         internal fun resolveLatestHeartRate(records: List<HR>, mode: String): HrResult? {
             if (mode == MODE_DISABLED || records.isEmpty()) return null
 
@@ -147,47 +226,7 @@ class UnifiedActivityProviderMTR @Inject constructor(
 
         return try {
             val records = loadStepsRecords(startMs, now).sortedBy { it.timestamp }
-
-            if (records.isEmpty()) return null
-
-            val filtered = when (mode) {
-                MODE_PREFER_WEAR ->
-                    records.filter { isWearDevice(it.device) }
-                        .ifEmpty { records.filter { it.device == SOURCE_GARMIN } }
-
-                MODE_HEALTH_CONNECT_ONLY ->
-                    records.filter { it.device == SOURCE_HC }
-
-                MODE_AUTO_FALLBACK -> {
-                    val garmin = records.filter { it.device == SOURCE_GARMIN }
-                    val wear = records.filter { isWearDevice(it.device) }
-                    val hcPhone = records.filter { it.device == SOURCE_HC || it.device == SOURCE_PHONE }
-                    when {
-                        garmin.isNotEmpty() -> garmin
-                        wear.isNotEmpty() -> wear
-                        else -> hcPhone
-                    }
-                }
-                else -> emptyList()
-            }
-
-            if (filtered.isEmpty()) return null
-
-            val durationMs = now - startMs
-            val latest = filtered.maxByOrNull { it.timestamp }!!
-            val stalenessMs = now - latest.timestamp
-
-            val fromPrefilledWindow = stepsFromPrefilledWindowFields(latest, durationMs, stalenessMs)
-            val bucketTotal = sumMaxSteps5PerFiveMinuteBucket(filtered)
-            val totalSteps = fromPrefilledWindow ?: bucketTotal
-
-            val result = StepsResult(
-                steps = totalSteps,
-                timestamp = now,
-                source = latest.device,
-                duration = durationMs
-            )
-            result
+            resolveStepsTotalSince(records, mode, startMs, now)
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "[$TAG] Error fetching total steps", e)
             null
@@ -253,32 +292,4 @@ class UnifiedActivityProviderMTR @Inject constructor(
         }
     }
 
-    /**
-     * When [latest] is fresh, use the pre-aggregated window column that matches the requested span
-     * (same semantics as HC / phone sync rows).
-     */
-    private fun stepsFromPrefilledWindowFields(latest: SC, durationMs: Long, stalenessMs: Long): Int? {
-        if (stalenessMs > MAX_ROW_AGE_MS) return null
-        fun near(minutes: Int): Boolean {
-            val target = minutes * MINUTE_MS
-            return kotlin.math.abs(durationMs - target) <= WINDOW_SLACK_MS
-        }
-        val v = when {
-            near(5) -> latest.steps5min
-            near(10) -> latest.steps10min
-            near(15) -> latest.steps15min
-            near(30) -> latest.steps30min
-            near(60) -> latest.steps60min
-            near(180) -> latest.steps180min
-            else -> return null
-        }
-        return v.coerceAtLeast(0)
-    }
-
-    private fun sumMaxSteps5PerFiveMinuteBucket(filtered: List<SC>): Int {
-        return filtered
-            .groupBy { it.timestamp / (5 * MINUTE_MS) }
-            .values
-            .sumOf { bucket -> bucket.maxOfOrNull { it.steps5min.coerceAtLeast(0) } ?: 0 }
-    }
 }
