@@ -29,6 +29,7 @@ object AdvancedPredictionEngine {
         profile: OapsProfileAimi,
         delta: Double = 0.0,
         horizonMinutes: Int = 240,
+        modulation: PredictionPhysioModulation = PredictionPhysioModulation(),
     ): List<Double> =
         predictCurves(
             currentBG = currentBG,
@@ -38,6 +39,7 @@ object AdvancedPredictionEngine {
             profile = profile,
             delta = delta,
             horizonMinutes = horizonMinutes,
+            modulation = modulation,
         ).hybrid
 
     /**
@@ -53,6 +55,7 @@ object AdvancedPredictionEngine {
         profile: OapsProfileAimi,
         delta: Double = 0.0,
         horizonMinutes: Int = 240,
+        modulation: PredictionPhysioModulation = PredictionPhysioModulation(),
     ): AdvancedPredictionCurves {
         val effectiveHorizonMinutes = maxOf(Constants.PREDICTION_GRAPH_MIN_MINUTES, horizonMinutes)
         val iobSeries = mutableListOf(currentBG)
@@ -73,15 +76,22 @@ object AdvancedPredictionEngine {
         val steps = maxOf(1, effectiveHorizonMinutes / STEP_MINUTES)
         val now = System.currentTimeMillis()
         val carbRatio = profile.carb_ratio.takeIf { it > 0 } ?: 10.0
+        val effectiveSensitivity = modulation.effectiveSensitivityMgdlPerU
+            .takeIf { it.isFinite() && it > 0.0 }
+            ?: finalSensitivity
         val csf = finalSensitivity / carbRatio
 
         val currentEntry = iobArray.minByOrNull { abs(it.time - now) }
         val currentActivity = currentEntry?.activity ?: 0.0
-        val expectedDeltaFromInsulin = -(currentActivity * finalSensitivity * STEP_MINUTES.toDouble())
-        val initialCarbImpact = if (cobG > 0) (cobG * csf) / (CARB_ABSORPTION_MINUTES / STEP_MINUTES) else 0.0
+        val expectedDeltaFromInsulin = -(currentActivity * effectiveSensitivity * STEP_MINUTES.toDouble() * modulation.insulinImpactFactor)
+        val initialCarbImpact = if (cobG > 0) {
+            ((cobG * csf) / (CARB_ABSORPTION_MINUTES / STEP_MINUTES)) * modulation.carbImpactFactor
+        } else {
+            0.0
+        }
         val expectedDelta = expectedDeltaFromInsulin + initialCarbImpact
         val deviation = delta - expectedDelta
-        var momentum = deviation
+        var hybridMomentum = deviation * modulation.hybridMomentumFactor
 
         val iobDampingFactor = when {
             delta > 10.0 -> 0.40
@@ -89,23 +99,25 @@ object AdvancedPredictionEngine {
             delta > 2.0 -> 0.80
             else -> 1.0
         }
-        val momentumDecay = if (delta > 3.0) 0.92 else 0.85
+        val momentumDecay = ((if (delta > 3.0) 0.92 else 0.85) * modulation.momentumDecayFactor)
+            .coerceIn(0.72, 0.96)
 
         var lastIob = currentBG
         var lastCob = currentBG
         var lastUam = currentBG
         var lastZt = currentBG
         var lastHybrid = currentBG
-        var uamMomentum = momentum
+        var uamMomentum = deviation * modulation.uamMomentumFactor
 
         repeat(steps) { stepIndex ->
             val minutesInFuture = (stepIndex + 1) * STEP_MINUTES
             val targetTime = now + (minutesInFuture * 60_000L)
             val entry = iobArray.minByOrNull { abs(it.time - targetTime) }
             val activityRate = entry?.activity ?: 0.0
-            val insulinImpact = activityRate * finalSensitivity * STEP_MINUTES.toDouble()
+            val insulinImpact =
+                activityRate * effectiveSensitivity * STEP_MINUTES.toDouble() * modulation.insulinImpactFactor
             val carbImpact = if (cobG > 0 && minutesInFuture < CARB_ABSORPTION_MINUTES) {
-                (cobG * csf) / (CARB_ABSORPTION_MINUTES / STEP_MINUTES)
+                ((cobG * csf) / (CARB_ABSORPTION_MINUTES / STEP_MINUTES)) * modulation.carbImpactFactor
             } else {
                 0.0
             }
@@ -116,9 +128,9 @@ object AdvancedPredictionEngine {
                 .coerceIn(NUMERIC_FLOOR, NUMERIC_CEILING)
             uamMomentum *= momentumDecay
             lastZt = lastIob
-            lastHybrid = (lastHybrid - insulinImpact * iobDampingFactor + carbImpact + momentum)
+            lastHybrid = (lastHybrid - insulinImpact * iobDampingFactor + carbImpact + hybridMomentum)
                 .coerceIn(NUMERIC_FLOOR, NUMERIC_CEILING)
-            momentum *= momentumDecay
+            hybridMomentum *= momentumDecay
 
             iobSeries.add(lastIob)
             cobSeries.add(lastCob)

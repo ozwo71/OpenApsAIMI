@@ -10,6 +10,13 @@ data class AimiRiskEnvelope(
     val deltaMgdlPer5: Float,
     val predTerminalMgdl: Double,
     val eventualTerminalMgdl: Double,
+    val pkpdEventualMgdl: Double? = null,
+    val scenarioFloorTerminalMgdl: Double? = null,
+    val scenarioBestTerminalMgdl: Double? = null,
+    val decisionSource: DecisionPredictionSource = DecisionPredictionSource.PKPD_ONLY,
+    val scenarioUpliftApplied: Boolean = false,
+    val falseMealSuppression: Boolean = false,
+    val decisionReason: String? = null,
     val pathMinRawMgdl: Double?,
     val pathMinClampedMgdl: Double?,
     val pathMinHitNumericFloor: Boolean,
@@ -45,6 +52,13 @@ object AimiRiskEnvelopeBuilder {
             deltaMgdlPer5 = delta,
             predTerminalMgdl = predTerminal,
             eventualTerminalMgdl = eventualTerminal,
+            pkpdEventualMgdl = eventualTerminal,
+            scenarioFloorTerminalMgdl = null,
+            scenarioBestTerminalMgdl = null,
+            decisionSource = DecisionPredictionSource.PKPD_ONLY,
+            scenarioUpliftApplied = false,
+            falseMealSuppression = false,
+            decisionReason = null,
             pathMinRawMgdl = path.pathMinRawMgdl,
             pathMinClampedMgdl = path.pathMinClampedMgdl,
             pathMinHitNumericFloor = path.pathMinHitNumericFloor,
@@ -67,19 +81,29 @@ object AimiRiskEnvelopeBuilder {
         iobConsensus: IobConsensusResult,
         lgsThreshold: Int?,
         naiveEbgSignGuardApplied: Boolean,
+        predictionAuthority: DecisionPredictionAuthority? = null,
     ): AimiRiskEnvelope {
+        val predForDecision = predictionAuthority?.predTerminalMgdl ?: predTerminal
+        val eventualForDecision = predictionAuthority?.eventualTerminalMgdl ?: eventualTerminal
         val composite = PredictionPathMath.compositeMinMgdl(
             bg = bg,
-            predTerminal = predTerminal,
-            eventualTerminal = eventualTerminal,
+            predTerminal = predForDecision,
+            eventualTerminal = eventualForDecision,
         )
         val hypoTh = HypoThresholdMath.computeHypoThreshold(composite, lgsThreshold)
         return AimiRiskEnvelope(
             phase = AimiRiskPhase.DECISION,
             bgNowMgdl = bg,
             deltaMgdlPer5 = delta,
-            predTerminalMgdl = predTerminal,
-            eventualTerminalMgdl = eventualTerminal,
+            predTerminalMgdl = predForDecision,
+            eventualTerminalMgdl = eventualForDecision,
+            pkpdEventualMgdl = predictionAuthority?.pkpdEventualMgdl ?: eventualTerminal,
+            scenarioFloorTerminalMgdl = predictionAuthority?.scenarioFloorTerminalMgdl,
+            scenarioBestTerminalMgdl = predictionAuthority?.scenarioBestTerminalMgdl,
+            decisionSource = predictionAuthority?.source ?: DecisionPredictionSource.PKPD_ONLY,
+            scenarioUpliftApplied = predictionAuthority?.scenarioUpliftApplied == true,
+            falseMealSuppression = predictionAuthority?.falseMealSuppression == true,
+            decisionReason = predictionAuthority?.reason,
             pathMinRawMgdl = pathBounds.pathMinRawMgdl,
             pathMinClampedMgdl = pathBounds.pathMinClampedMgdl,
             pathMinHitNumericFloor = pathBounds.pathMinHitNumericFloor,
@@ -103,13 +127,28 @@ object AimiRiskEnvelopeBuilder {
         val iobPart =
             if (envelope.phase == AimiRiskPhase.DECISION) {
                 " iob=${"%.2f".format(envelope.aapsIobUnits)}→${"%.2f".format(envelope.iobDecisionUnits)}" +
-                    "(${envelope.iobSource.name})"
+                    "(${envelope.iobSource.name})" +
+                    " src=${envelope.decisionSource.name}" +
+                    envelope.pkpdEventualMgdl?.let { " pkpd=${"%.0f".format(it)}" }.orEmpty() +
+                    envelope.scenarioBestTerminalMgdl?.let { " best=${"%.0f".format(it)}" }.orEmpty()
             } else {
                 ""
             }
         val floorFlag = if (envelope.pathMinHitNumericFloor) " floorHit=1" else ""
+        val mealFlag =
+            if (envelope.phase == AimiRiskPhase.DECISION && envelope.falseMealSuppression) {
+                " mealSupp=1"
+            } else {
+                ""
+            }
+        val upliftFlag =
+            if (envelope.phase == AimiRiskPhase.DECISION && envelope.scenarioUpliftApplied) {
+                " uplift=1"
+            } else {
+                ""
+            }
         return "$tag: compositeMin=${envelope.compositeMinMgdl.toInt()} hypoTh=${envelope.hypoThresholdMgdl.toInt()} " +
             "predT=${envelope.predTerminalMgdl.toInt()} evT=${envelope.eventualTerminalMgdl.toInt()} " +
-            "pathRaw=$pathRaw pathClamp=$pathClamp$floorFlag$iobPart"
+            "pathRaw=$pathRaw pathClamp=$pathClamp$floorFlag$mealFlag$upliftFlag$iobPart"
     }
 }

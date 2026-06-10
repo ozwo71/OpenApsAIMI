@@ -9,6 +9,17 @@ class AimiRiskEnvelopeBuilderTest {
     @Test
     fun decisionEnvelopeUsesPostPkpdCompositeAndHypoThreshold() {
         val consensus = IobConsensus.resolve(aapsIobUnits = -0.2, pkpdIobUnits = 0.5)
+        val authority = DecisionPredictionAuthority(
+            predTerminalMgdl = 96.0,
+            eventualTerminalMgdl = 184.0,
+            pkpdEventualMgdl = 125.0,
+            scenarioFloorTerminalMgdl = 96.0,
+            scenarioBestTerminalMgdl = 184.0,
+            source = DecisionPredictionSource.SCENARIO_MEAL_UPLIFT,
+            scenarioUpliftApplied = true,
+            falseMealSuppression = false,
+            reason = "test",
+        )
         val envelope = AimiRiskEnvelopeBuilder.buildDecision(
             bg = 118.0,
             delta = -1f,
@@ -23,11 +34,14 @@ class AimiRiskEnvelopeBuilderTest {
             iobConsensus = consensus,
             lgsThreshold = 70,
             naiveEbgSignGuardApplied = false,
+            predictionAuthority = authority,
         )
         assertEquals(AimiRiskPhase.DECISION, envelope.phase)
-        assertEquals(118.0, envelope.compositeMinMgdl, 0.001)
+        assertEquals(96.0, envelope.compositeMinMgdl, 0.001)
         assertTrue(envelope.pathMinHitNumericFloor)
         assertEquals(0.5, envelope.iobDecisionUnits, 0.001)
+        assertEquals(DecisionPredictionSource.SCENARIO_MEAL_UPLIFT, envelope.decisionSource)
+        assertEquals(184.0, envelope.eventualTerminalMgdl, 0.001)
     }
 
     @Test

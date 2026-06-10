@@ -64,6 +64,7 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdBolusSample
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLogRow
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfTddProvider
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PredictionPhysioModulationResolver
 import app.aaps.plugins.aps.openAPSAIMI.ports.PkpdPort
 import app.aaps.plugins.aps.openAPSAIMI.prediction.NaiveEventualBgSignGuard
 import app.aaps.plugins.aps.openAPSAIMI.prediction.PredictionSanityResult
@@ -90,6 +91,7 @@ import app.aaps.plugins.aps.openAPSAIMI.prediction.PredictionDivergenceAuditor
 import app.aaps.plugins.aps.openAPSAIMI.prediction.sanitizePredictionValues
 import app.aaps.plugins.aps.openAPSAIMI.risk.AimiRiskEnvelope
 import app.aaps.plugins.aps.openAPSAIMI.risk.AimiRiskEnvelopeBuilder
+import app.aaps.plugins.aps.openAPSAIMI.risk.DecisionPredictionAuthorityResolver
 import app.aaps.plugins.aps.openAPSAIMI.risk.IobConsensus
 import app.aaps.plugins.aps.openAPSAIMI.risk.IobDecisionSource
 import app.aaps.plugins.aps.openAPSAIMI.risk.PredictionPathBounds
@@ -1651,26 +1653,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val earlyAutosensRatio = 1.0
         val earlySens = ctx.profile.sens / earlyAutosensRatio
 
-        val earlyPkpdPredictions = computePkpdPredictions(
-            currentBg = glucoseStatus.glucose,
-            iobArray = ctx.iobDataArray,
-            finalSensitivity = earlySens,
-            cobG = ctx.mealData.mealCOB,
-            profile = ctx.profile,
-            rT = rT,
-            delta = glucoseStatus.delta
-        )
-
-        this.eventualBG = earlyPkpdPredictions.eventual
-        this.predictedBg = earlyPkpdPredictions.eventual.toFloat()
-        rT.eventualBG = earlyPkpdPredictions.eventual
-
         val iobForEarlyPkpd = ctx.iobDataArray.firstOrNull()
         val earlyPkpdWindowSinceDoseMin = if (iobForEarlyPkpd != null && iobForEarlyPkpd.lastBolusTime > 0L) {
             ((dateUtil.now() - iobForEarlyPkpd.lastBolusTime) / 60000.0).toInt().coerceAtLeast(0)
         } else {
             90
         }
+        val earlyPkpdMealContext = buildPkpdMealContext(
+            mealData = ctx.mealData,
+            predictedBgMgdl = glucoseStatus.glucose,
+            targetBgMgdl = ctx.profile.target_bg,
+        )
         this.cachedPkpdRuntime = try {
             pkpdIntegration.setRecentBolusSamples(
                 buildRecentPkpdBolusSamples(
@@ -1688,7 +1681,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 exerciseFlag = sportTime,
                 profileIsf = earlySens,
                 tdd24h = ctx.profile.max_daily_basal * 24.0,
-                mealContext = null,
+                mealContext = earlyPkpdMealContext,
                 consoleLog = consoleLog,
                 combinedDelta = glucoseStatus.combinedDelta,
                 uamConfidence = AimiUamHandler.confidenceOrZero(),
@@ -1700,6 +1693,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleError.add("❌ Early PKPD Runtime init failed: ${e.message}")
             null
         }
+
+        val earlyPkpdPredictions = computePkpdPredictions(
+            currentBg = glucoseStatus.glucose,
+            iobArray = ctx.iobDataArray,
+            finalSensitivity = earlySens,
+            cobG = ctx.mealData.mealCOB,
+            profile = ctx.profile,
+            rT = rT,
+            delta = glucoseStatus.delta,
+            pkpdRuntime = this.cachedPkpdRuntime,
+            mealAbsorptionOutput = lastMealAbsorptionOutput,
+            hypothesisState = lastUamHypothesisState,
+            latentState = lastPhysioLatentState,
+            uamConfidence = AimiUamHandler.confidenceOrZero(),
+        )
+
+        this.eventualBG = earlyPkpdPredictions.eventual
+        this.predictedBg = earlyPkpdPredictions.eventual.toFloat()
+        rT.eventualBG = earlyPkpdPredictions.eventual
 
         var pkpdRuntime = this.cachedPkpdRuntime
 
@@ -4385,6 +4397,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         profile: OapsProfileAimi,
         rT: RT,
         glucoseStatus: GlucoseStatusAIMI,
+        pkpdRuntime: PkPdRuntime?,
         iobData: IobTotal,
         bg: Double,
         delta: Float,
@@ -4401,10 +4414,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             iobArray = ctx.iobDataArray,
             finalSensitivity = effectiveSens,
             cobG = ctx.mealData.mealCOB,
-
             profile = profile,
             rT = rT,
-            delta = delta.toDouble()
+            delta = delta.toDouble(),
+            pkpdRuntime = pkpdRuntime,
+            mealAbsorptionOutput = lastMealAbsorptionOutput,
+            hypothesisState = lastUamHypothesisState,
+            latentState = lastPhysioLatentState,
+            uamConfidence = AimiUamHandler.confidenceOrZero(),
         )
         this.eventualBG = pkpdPredictions.eventual
         this.predictedBg = pkpdPredictions.eventual.toFloat()
@@ -4458,6 +4475,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         val naiveEventualBg = naiveEbgResolution.naiveEventualBgMgdl
         val legacyEventual = naiveEventualBg + deviation
+        val decisionPrediction = DecisionPredictionAuthorityResolver.resolve(
+            bgMgdl = bg,
+            pkpdEventualMgdl = pkpdPredictions.eventual,
+            scenarioProjection = lastScenarioProjection,
+            mealAbsorptionOutput = lastMealAbsorptionOutput,
+            hypothesisState = lastUamHypothesisState,
+            latentState = lastPhysioLatentState,
+            trajectoryAnalysis = trajectoryGuard.getLastAnalysis(),
+            physioPolicy = lastPhysiologicalPhaseOutput?.policy,
+            uamConfidence = AimiUamHandler.confidenceOrZero(),
+        )
+        consoleLog.add(DecisionPredictionAuthorityResolver.formatLogLine(decisionPrediction))
 
         cachedRiskEnvelopeDecision = AimiRiskEnvelopeBuilder.buildDecision(
             bg = bg,
@@ -4469,6 +4498,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             iobConsensus = iobConsensus,
             lgsThreshold = profile.lgsThreshold,
             naiveEbgSignGuardApplied = naiveEbgResolution.signGuardApplied,
+            predictionAuthority = decisionPrediction,
         )
         consoleLog.add(AimiRiskEnvelopeBuilder.formatLogLine(cachedRiskEnvelopeDecision!!))
         reconcileSafetyRiskWithDecisionEnvelope()
@@ -6963,11 +6993,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val windowSinceDoseInt = windowSinceDoseMin.toInt()
         lastBolusAgeMinutes = windowSinceDoseMin
         val carbsActiveG = ctx.mealData.mealCOB.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
-        val mealModeActiveNow = isMealContextActive(ctx.mealData)
-        val pkpdMealContext = MealAggressionContext(
-            mealModeActive = mealModeActiveNow,
+        val pkpdMealContext = buildPkpdMealContext(
+            mealData = ctx.mealData,
             predictedBgMgdl = predictedBg.toDouble(),
-            targetBgMgdl = targetBg.toDouble()
+            targetBgMgdl = targetBg.toDouble(),
         )
         pkpdIntegration.setRecentBolusSamples(
             buildRecentPkpdBolusSamples(
@@ -9176,10 +9205,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache.get(300_000)?.verdict?.confidence
         } catch (e: Exception) { null }
         
+        val decisionEventualBgForSmb =
+            cachedRiskEnvelopeDecision?.eventualTerminalMgdl?.takeIf { it.isFinite() } ?: this.eventualBG
         val baseLimit = app.aaps.plugins.aps.openAPSAIMI.safety.SafetyNet.calculateSafeSmbLimit(
             bg = this.bg,
             targetBg = targetBg.toDouble(),
-            eventualBg = this.eventualBG,
+            eventualBg = decisionEventualBgForSmb,
             delta = this.delta.toDouble(),
             shortAvgDelta = this.shortAvgDelta.toDouble(),
             maxSmbLow = this.maxSMB,
@@ -10364,6 +10395,34 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return manualFlags || cobActive
     }
 
+    private fun buildPkpdMealContext(
+        mealData: MealData,
+        predictedBgMgdl: Double,
+        targetBgMgdl: Double,
+    ): MealAggressionContext {
+        val explicitMeal = isMealContextActive(mealData)
+        val mealPhaseActive = lastMealAbsorptionOutput?.phase?.isActive == true
+        val mealDeliveryPriority = lastMealAbsorptionOutput?.mealDeliveryPriority == true
+        val mealCompatibleProb = lastUamHypothesisState?.mealCompatibleProb() ?: 0.0
+        val competingNonMealProb = lastUamHypothesisState?.competingNonMealProb() ?: 0.0
+        val falseMealSuppression =
+            lastUamHypothesisState?.suppressMealInterpretation == true ||
+                lastPhysioLatentState?.falseMealSuppression == true
+        val implicitMeal = !falseMealSuppression &&
+            (
+                mealPhaseActive ||
+                    mealDeliveryPriority ||
+                    mealCompatibleProb >= 0.55 ||
+                    (AimiUamHandler.confidenceOrZero() >= 0.45 && mealCompatibleProb >= 0.40)
+                ) &&
+            competingNonMealProb < mealCompatibleProb + 0.08
+        return MealAggressionContext(
+            mealModeActive = explicitMeal || implicitMeal,
+            predictedBgMgdl = predictedBgMgdl,
+            targetBgMgdl = targetBgMgdl,
+        )
+    }
+
     private fun computeMealAggressionWeights(mealData: MealData, hypoThreshold: Double): MealAggressionWeights {
         if (!isMealContextActive(mealData)) return MealAggressionWeights(false, 1.0, 0.0, false, 0.0)
         val predicted = predictedBg.toDouble()
@@ -11211,12 +11270,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         iobArray: Array<IobTotal>,
         finalSensitivity: Double,
         cobG: Double,
-
         profile: OapsProfileAimi,
         rT: RT,
-        delta: Double
+        delta: Double,
+        pkpdRuntime: PkPdRuntime? = null,
+        mealAbsorptionOutput: MealAbsorptionPhaseEngine.Output? = null,
+        hypothesisState: UamHypothesisState? = null,
+        latentState: PhysioLatentState? = null,
+        uamConfidence: Double = 0.0,
     ): PredictionResult {
         consoleLog.add("Debug: computePkpdPredictions called with delta=$delta")
+        val predictionModulation = PredictionPhysioModulationResolver.resolve(
+            fallbackSensitivityMgdlPerU = finalSensitivity,
+            pkpdRuntime = pkpdRuntime,
+            mealAbsorptionOutput = mealAbsorptionOutput,
+            hypothesisState = hypothesisState,
+            latentState = latentState,
+            uamConfidence = uamConfidence,
+        )
+        if (!predictionModulation.isNeutral() || predictionModulation.falseMealSuppression) {
+            consoleLog.add(PredictionPhysioModulationResolver.formatLogLine(predictionModulation))
+        }
         val curves = try {
             AdvancedPredictionEngine.predictCurves(
                 currentBG = currentBg,
@@ -11225,6 +11299,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 cobG = cobG,
                 profile = profile,
                 delta = delta,
+                modulation = predictionModulation,
             )
         } catch (e: Exception) {
             consoleLog.add("Error in AdvancedPredictionEngine: ${e.message}")
@@ -12727,6 +12802,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             profile = profile,
             rT = rT,
             glucoseStatus = glucoseStatus,
+            pkpdRuntime = pkpdRuntime,
             iobData = iob_data,
             bg = bg,
             delta = delta,
