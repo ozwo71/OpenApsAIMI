@@ -240,6 +240,8 @@ internal data class AimiDecisionContext(
         var physiological_patterns: org.json.JSONObject? = null,
         /** Unified meal absorption belief + phase (IOB / HTR / SMB priority) */
         var meal_absorption_phase: MealAbsorptionPhaseExport? = null,
+        /** PKPD vs scenario eventual-BG divergence audit (PredictionDivergenceAuditor) */
+        var pred_divergence: org.json.JSONObject? = null,
         /** Recursive Belief Tree — full JSON object for AIMI_Decisions.jsonl */
         var recursive_belief: org.json.JSONObject? = null,
         /** Progressive RBT authority gate decision for shadow -> soft -> hard transitions. */
@@ -526,6 +528,9 @@ internal data class AimiDecisionContext(
                 mJson.put("trajectory_score", m.trajectory_score)
                 mJson.put("physio_score", m.physio_score)
                 adj.put("meal_absorption_phase", mJson)
+            }
+            adjustments.pred_divergence?.let { pd ->
+                adj.put("pred_divergence", pd)
             }
             adjustments.recursive_belief?.let { rb ->
                 adj.put("recursive_belief", rb)
@@ -1317,6 +1322,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         cachedRiskEnvelopeDecision = null
         lastSafetyRiskExport = null
         lastScenarioProjection = null
+        lastPredDivergenceExport = null
         isConfirmedHighRiseThisTick = false
         correctionAggressionDecision = null
         mealAdvisorOneShotThisTick = false
@@ -4403,19 +4409,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.eventualBG = pkpdPredictions.eventual
         this.predictedBg = pkpdPredictions.eventual.toFloat()
         rT.eventualBG = pkpdPredictions.eventual
-        // Audit instrumentation (log-only): divergence between the PKPD eventual consumed by the
-        // SMB gates and the physio-enriched scenario terminal computed earlier in this tick.
-        consoleLog.add(
-            PredictionDivergenceAuditor.formatLogLine(
-                audit = PredictionDivergenceAuditor.audit(
-                    bgMgdl = bg,
-                    pkpdEventualMgdl = pkpdPredictions.eventual,
-                    scenarioBestMgdl = lastScenarioProjection?.scenarioBest?.terminalMgdl,
-                ),
-                physioPhase = lastPhysiologicalPhaseOutput?.phase?.name,
-                mealPhase = lastMealAbsorptionOutput?.phase?.name,
+        // Audit instrumentation (log + JSONL export, no behaviour impact): divergence between the
+        // PKPD eventual consumed by the SMB gates and the physio-enriched scenario terminal
+        // computed earlier in this tick.
+        run {
+            val divergenceAudit = PredictionDivergenceAuditor.audit(
+                bgMgdl = bg,
+                pkpdEventualMgdl = pkpdPredictions.eventual,
+                scenarioBestMgdl = lastScenarioProjection?.scenarioBest?.terminalMgdl,
             )
-        )
+            val physioPhaseName = lastPhysiologicalPhaseOutput?.phase?.name
+            val mealPhaseName = lastMealAbsorptionOutput?.phase?.name
+            consoleLog.add(PredictionDivergenceAuditor.formatLogLine(divergenceAudit, physioPhaseName, mealPhaseName))
+            lastPredDivergenceExport = PredictionDivergenceAuditor.toJsonObject(divergenceAudit, physioPhaseName, mealPhaseName)
+        }
         val iobConsensus = IobConsensus.resolve(
             aapsIobUnits = iobData.iob,
             pkpdIobUnits = pkpdIntegration.reconstructedIobUnits().takeIf { cachedPkpdRuntime != null },
@@ -6477,6 +6484,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             decisionCtx.adjustments.physiological_patterns = PhysiologicalPatternExport.toJsonObject(patterns)
         }
         decisionCtx.adjustments.meal_absorption_phase = mealAbsorptionPhaseExport()
+        decisionCtx.adjustments.pred_divergence = lastPredDivergenceExport
         val rbtPrefs = RecursiveBeliefPreferences.from(preferences)
         lastRecursiveBeliefSnapshot?.let { snap ->
             val export = UnfoldExporter.toExport(
@@ -7495,6 +7503,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var cachedRiskEnvelopeDecision: AimiRiskEnvelope? = null
     private var lastSafetyRiskExport: SafetyRiskExportSnapshot? = null
     private var lastScenarioProjection: ScenarioProjectionPair? = null
+
+    /** PKPD vs scenario divergence audit of the current tick (PredictionDivergenceAuditor). */
+    private var lastPredDivergenceExport: org.json.JSONObject? = null
     private var lastAdvancedPredictionCurves: AdvancedPredictionCurves? = null
     private var lastSafetyTerminalsForRbt: SafetyPredictionTerminals? = null
     private var lastHyperTrajectoryRelease: HyperTrajectoryReleaseResult? = null

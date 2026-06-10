@@ -392,7 +392,10 @@ La **forme temporelle** de la compréhension physio (cortisol, post-sport, stres
 
 - `PredictionDivergenceAuditor` (`prediction/`, pur, log-only) — calcule par tick `evPkpd`, `bestScn`, Δ, phase physio, phase meal, et le flag **`⚠️CLAMP_DISAGREE`** (le PKPD déclencherait le clamp low-max zone 2, le scénario enrichi non).
 - Ligne `PRED_DIVERGENCE` émise chaque tick depuis `runPkpdPredictionsBgiDeviationAndNoisyTargetsStage` (juste après l'assignation `eventualBG`).
-- Tests : `PredictionDivergenceAuditorTest` (6).
+- Export JSONL : objet `adjustments.pred_divergence` dans `AIMI_Decisions.jsonl` (mêmes champs que la ligne de log, snake_case ; reset par tick comme `safety_risk`).
+- Tests : `PredictionDivergenceAuditorTest` (7).
+
+**Note trajectoire** : le PKPD eventual n'est pas aveugle à la tendance — `AdvancedPredictionEngine` intègre un momentum sur `delta` (déviation vs delta attendu, décroissance 0.85–0.92, amorti au-delà de Δ>2). Mais c'est la tendance *instantanée*, pas l'analyse de trajectoire structurée (`TrajectoryGuard` phase-space) ni la dynamique physio. Les contournements aval (UAM rocket Δ>6 sous 120, `mealPriorityContext`/HTR priority qui bypassent le clamp zone 2, `trajectoryEnergy` dans la stacking stance) revalorisent la *décision* mais pas l'eventual lui-même — le clamp zone 2 hors contexte meal/HTR reste tenu par le seul PKPD. D'où l'attendu : `CLAMP_DISAGREE` devrait s'allumer surtout en **début de montée lente** (absorption précoce, résistance cortisol à delta modéré), là où ni le momentum ni les bypasses ne s'activent.
 
 **Étape suivante (après quelques jours de données)** : si `CLAMP_DISAGREE` est fréquent dans les phases cortisol/meal, cible = fusion **paramétrique** (la physio module les *entrées* du PKPD — profil d'absorption, sensibilité temporelle, décalage de pic — pas une courbe concurrente aux gates), avec le `clinicalFloor` du scénario conservé comme borne hypo indépendante.
 

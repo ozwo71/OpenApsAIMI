@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.prediction
 
+import org.json.JSONObject
 import kotlin.math.roundToInt
 
 /**
@@ -54,6 +55,23 @@ object PredictionDivergenceAuditor {
             scenarioTriggersLowClamp = scenarioClamp,
             lowClampDisagreement = pkpdClamp && scenarioClamp == false,
         )
+    }
+
+    /** `adjustments.pred_divergence` object for AIMI_Decisions.jsonl (same fields as the log line). */
+    fun toJsonObject(
+        audit: PredictionDivergenceAudit,
+        physioPhase: String?,
+        mealPhase: String?,
+    ): JSONObject = JSONObject().apply {
+        put("bg_mgdl", audit.bgMgdl)
+        put("pkpd_eventual_mgdl", audit.pkpdEventualMgdl)
+        put("scenario_best_mgdl", audit.scenarioBestMgdl ?: JSONObject.NULL)
+        put("divergence_mgdl", audit.divergenceMgdl ?: JSONObject.NULL)
+        put("physio_phase", physioPhase ?: JSONObject.NULL)
+        put("meal_phase", mealPhase ?: JSONObject.NULL)
+        put("pkpd_triggers_low_clamp", audit.pkpdTriggersLowClamp)
+        put("scenario_triggers_low_clamp", audit.scenarioTriggersLowClamp ?: JSONObject.NULL)
+        put("low_clamp_disagreement", audit.lowClampDisagreement)
     }
 
     fun formatLogLine(

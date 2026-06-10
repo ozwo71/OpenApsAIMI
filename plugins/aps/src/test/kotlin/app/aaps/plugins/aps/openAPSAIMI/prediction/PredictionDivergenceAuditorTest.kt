@@ -64,6 +64,22 @@ class PredictionDivergenceAuditorTest {
     }
 
     @Test
+    fun `json export carries the audit fields`() {
+        val audit = PredictionDivergenceAuditor.audit(bgMgdl = 145.0, pkpdEventualMgdl = 95.0, scenarioBestMgdl = 160.0)
+        val json = PredictionDivergenceAuditor.toJsonObject(audit, physioPhase = "CORTISOL_MORNING_RISE", mealPhase = null)
+
+        assertEquals(145.0, json.getDouble("bg_mgdl"), 1e-9)
+        assertEquals(95.0, json.getDouble("pkpd_eventual_mgdl"), 1e-9)
+        assertEquals(160.0, json.getDouble("scenario_best_mgdl"), 1e-9)
+        assertEquals(65.0, json.getDouble("divergence_mgdl"), 1e-9)
+        assertEquals("CORTISOL_MORNING_RISE", json.getString("physio_phase"))
+        assertTrue(json.isNull("meal_phase"))
+        assertTrue(json.getBoolean("pkpd_triggers_low_clamp"))
+        assertFalse(json.getBoolean("scenario_triggers_low_clamp"))
+        assertTrue(json.getBoolean("low_clamp_disagreement"))
+    }
+
+    @Test
     fun `log line handles missing scenario and phases`() {
         val audit = PredictionDivergenceAuditor.audit(bgMgdl = 100.0, pkpdEventualMgdl = 110.0, scenarioBestMgdl = null)
         val line = PredictionDivergenceAuditor.formatLogLine(audit, physioPhase = null, mealPhase = null)
