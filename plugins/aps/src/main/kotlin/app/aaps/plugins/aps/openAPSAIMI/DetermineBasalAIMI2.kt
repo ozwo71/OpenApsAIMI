@@ -86,6 +86,7 @@ import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryReleaseEvaluator
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryReleasePreferences
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryReleaseResult
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoLgsBlockReason
+import app.aaps.plugins.aps.openAPSAIMI.prediction.PredictionDivergenceAuditor
 import app.aaps.plugins.aps.openAPSAIMI.prediction.sanitizePredictionValues
 import app.aaps.plugins.aps.openAPSAIMI.risk.AimiRiskEnvelope
 import app.aaps.plugins.aps.openAPSAIMI.risk.AimiRiskEnvelopeBuilder
@@ -4402,6 +4403,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.eventualBG = pkpdPredictions.eventual
         this.predictedBg = pkpdPredictions.eventual.toFloat()
         rT.eventualBG = pkpdPredictions.eventual
+        // Audit instrumentation (log-only): divergence between the PKPD eventual consumed by the
+        // SMB gates and the physio-enriched scenario terminal computed earlier in this tick.
+        consoleLog.add(
+            PredictionDivergenceAuditor.formatLogLine(
+                audit = PredictionDivergenceAuditor.audit(
+                    bgMgdl = bg,
+                    pkpdEventualMgdl = pkpdPredictions.eventual,
+                    scenarioBestMgdl = lastScenarioProjection?.scenarioBest?.terminalMgdl,
+                ),
+                physioPhase = lastPhysiologicalPhaseOutput?.phase?.name,
+                mealPhase = lastMealAbsorptionOutput?.phase?.name,
+            )
+        )
         val iobConsensus = IobConsensus.resolve(
             aapsIobUnits = iobData.iob,
             pkpdIobUnits = pkpdIntegration.reconstructedIobUnits().takeIf { cachedPkpdRuntime != null },

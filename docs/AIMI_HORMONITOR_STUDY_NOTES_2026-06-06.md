@@ -377,6 +377,27 @@ Trois couches pouvaient annuler simultanément tout cap pendant une montée repa
 
 ---
 
+## 12. Divergence prédictions PKPD vs scénario enrichi — instrumentation (10 Jun)
+
+**Constat architecture** (investigation suite au fix §11/PredictionSanity) : deux chemins d'eventual BG coexistent.
+
+| Chemin | Source | Voit la physio ? | Consommé par |
+|---|---|---|---|
+| `this.eventualBG` | `computePkpdPredictions().eventual` (cinétique PKPD) | facteur ISF scalaire seulement (`variableSensitivity × isfFactor`) | gates SMB : `SafetyNet.calculateSafeSmbLimit`, `InsulinStackingStance`, gate meal-mode |
+| `scenarioBest.terminalMgdl` | `ScenarioProjectionEngine` (couches meal absorption, phase physio, trajectoire, activité) | ✅ dynamique complète | pipeline hypo/sécurité (`SafetyPredictionTerminalsResolver`, pred-pipe, risk envelope) |
+
+La **forme temporelle** de la compréhension physio (cortisol, post-sport, stress → dynamique d'absorption) n'atteint donc pas les gates de dosage ; les rustines existantes (`risingFast`, `isExplosive`, `mealPriorityContext`, `sanitizeEventualMgdlForSmbZones`) en sont les symptômes. Point sensible identifié : le clamp prédictif zone 2 de `SafetyNet` (`bg<170 && eventual<120 → maxSmbLow`) ne lit que le PKPD.
+
+**Décision** : pas de fusion sans données (« comprendre la réalité, pas envoyer des superprédictions »). Instrumentation d'abord :
+
+- `PredictionDivergenceAuditor` (`prediction/`, pur, log-only) — calcule par tick `evPkpd`, `bestScn`, Δ, phase physio, phase meal, et le flag **`⚠️CLAMP_DISAGREE`** (le PKPD déclencherait le clamp low-max zone 2, le scénario enrichi non).
+- Ligne `PRED_DIVERGENCE` émise chaque tick depuis `runPkpdPredictionsBgiDeviationAndNoisyTargetsStage` (juste après l'assignation `eventualBG`).
+- Tests : `PredictionDivergenceAuditorTest` (6).
+
+**Étape suivante (après quelques jours de données)** : si `CLAMP_DISAGREE` est fréquent dans les phases cortisol/meal, cible = fusion **paramétrique** (la physio module les *entrées* du PKPD — profil d'absorption, sensibilité temporelle, décalage de pic — pas une courbe concurrente aux gates), avec le `clinicalFloor` du scénario conservé comme borne hypo indépendante.
+
+---
+
 ## 8. One-sentence pitch (for Hormonitor study abstract)
 
 **AIMI now unfolds glycemic decisions as a recursive belief tree, interprets physiological and wearable state (including thermal rhythm from Garmin/Oura) before adjusting insulin, and exports that clinical story in Hormonitor `patient_story` and `thermal_belief` so study replay can follow body understanding — not only delivered units.**
