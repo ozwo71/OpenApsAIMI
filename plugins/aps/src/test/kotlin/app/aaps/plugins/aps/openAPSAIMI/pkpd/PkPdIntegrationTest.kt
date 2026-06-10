@@ -3,7 +3,10 @@ package app.aaps.plugins.aps.openAPSAIMI.pkpd
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStateId
+import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
+import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -144,6 +147,53 @@ class PkPdIntegrationTest {
         assertNotNull(heavier)
         assertTrue(lighter!!.weightKineticFactor > heavier!!.weightKineticFactor)
         assertTrue(lighter.pkpdScale > heavier.pkpdScale)
+    }
+
+    @Test
+    fun `protective causal context skips pkpd learning while preserving baseline params`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        mockPkpdDefaults()
+        val logs = mutableListOf<String>()
+        var runtime: PkPdRuntime? = null
+
+        repeat(12) { tick ->
+            runtime = integration.computeRuntime(
+                epochMillis = (tick + 1L) * 5L * 60L * 1000L,
+                bg = 132.0,
+                deltaMgDlPer5 = 1.8,
+                iobU = 1.8,
+                carbsActiveG = 4.0,
+                windowMin = 60,
+                exerciseFlag = false,
+                profileIsf = 50.0,
+                tdd24h = 40.0,
+                consoleLog = logs,
+                physioLatentState = PhysioLatentState(
+                    circadianSiFactor = 0.90,
+                    transientResistanceProb = 0.52,
+                    endogenousGlucoseDrive = 0.72,
+                    sensorConfidence = 0.93,
+                ),
+                causalStatePosterior = CausalStatePosterior(
+                    fastMealProb = 0.12,
+                    prolongedMealProb = 0.08,
+                    dawnEndogenousProb = 0.82,
+                    postHypoRecoveryProb = 0.10,
+                    stressResistanceProb = 0.22,
+                    exerciseAfterburnProb = 0.05,
+                    inflammatoryDriftProb = 0.10,
+                    absorptionUncertainProb = 0.18,
+                    dominant = CausalStateId.DAWN_ENDOGENOUS,
+                    dominantConfidence = 0.82,
+                    learningQuality = 0.24,
+                ),
+            )
+        }
+
+        assertNotNull(runtime)
+        assertEquals(6.0, runtime!!.params.diaHrs, 1e-9)
+        assertEquals(55.0, runtime!!.params.peakMin, 1e-9)
+        assertThat(logs.any { it.contains("PKPD_LEARN skip: causal_dawn_endogenous") }).isTrue()
     }
 
     @Test

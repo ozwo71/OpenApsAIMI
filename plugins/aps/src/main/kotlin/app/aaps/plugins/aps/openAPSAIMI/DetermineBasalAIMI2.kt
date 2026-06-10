@@ -1688,6 +1688,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
                 physioLatentState = lastPhysioLatentState,
                 estimatedRaMgdlPerMin = continuousStateEstimator.getLastRa().takeIf { it.isFinite() && it > 0.0 },
+                causalStatePosterior = lastPatientState?.causalPosterior,
             )
         } catch (e: Exception) {
             consoleError.add("❌ Early PKPD Runtime init failed: ${e.message}")
@@ -3032,6 +3033,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             patientStrategyHint = patientModeDecision?.strategyHint?.name,
             patientModeMealBias = patientModeDecision?.mealBias,
             patientModeProtectionBias = patientModeDecision?.protectionBias,
+            causalDominantState = patientState?.causalPosterior?.dominant?.name,
+            causalDominantConfidence = patientState?.causalPosterior?.dominantConfidence,
+            causalMealConfidence = patientState?.causalPosterior?.mealConfidence,
+            causalProtectiveConfidence = patientState?.causalPosterior?.protectiveConfidence,
+            causalLearningQuality = patientState?.causalPosterior?.learningQuality,
             contextIntentDominant = patientState?.userIntent?.dominantIntent,
             contextIntentConfidence = patientModeDecision?.userIntentConfidence,
             physioMtrStateOrdinal = physioCtx.state.ordinal,
@@ -4482,6 +4488,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             mealAbsorptionOutput = lastMealAbsorptionOutput,
             hypothesisState = lastUamHypothesisState,
             latentState = lastPhysioLatentState,
+            causalStatePosterior = lastPatientState?.causalPosterior,
             trajectoryAnalysis = trajectoryGuard.getLastAnalysis(),
             physioPolicy = lastPhysiologicalPhaseOutput?.policy,
             uamConfidence = AimiUamHandler.confidenceOrZero(),
@@ -7022,6 +7029,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
                 physioLatentState = lastPhysioLatentState,
                 estimatedRaMgdlPerMin = continuousStateEstimator.getLastRa().takeIf { it.isFinite() && it > 0.0 },
+                causalStatePosterior = lastPatientState?.causalPosterior,
             )
         } catch (e: Exception) {
             consoleError.add("❌ PKPD runtime failed: ${e.message}")
@@ -8929,6 +8937,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val dateStr = dateUtil.dateAndTimeString(dateUtil.now()).format(usFormatter)
         val latentFeatures = SmbRefinementFeatureSchema.latentFeatureValues(lastPhysioLatentState)
         val modeFeatures = SmbRefinementFeatureSchema.modeFeatureValues(lastPatientModeDecision)
+        val causalFeatures = SmbRefinementFeatureSchema.causalFeatureValues(lastPatientState?.causalPosterior)
 
         val headerRow =
             "dateStr, ${SmbRefinementFeatureSchema.csvFeatureNames.joinToString(", ")}, predictedSMB, smbGiven, dynamicPeak, adjustedDia\n"
@@ -8937,6 +8946,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             "$tdd7DaysPerHour,$tdd2DaysPerHour,$tddPerHour,$tdd24HrsPerHour," +
             "${latentFeatures[0]},${latentFeatures[1]},${latentFeatures[2]},${latentFeatures[3]}," +
             "${modeFeatures[0]},${modeFeatures[1]},${modeFeatures[2]}," +
+            "${causalFeatures[0]},${causalFeatures[1]},${causalFeatures[2]}," +
             "$predictedSMB,$smbToGive," +
             "$peakintermediaire,$latestAdjustedDia"
         appendCsvSafely(
@@ -11040,6 +11050,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             trendIndicator = trendIndicator.toFloat(),
             physioLatentState = lastPhysioLatentState,
             patientModeDecision = lastPatientModeDecision,
+            causalStatePosterior = lastPatientState?.causalPosterior,
         )
 
         // 🔥 Trigger async training (fire-and-forget, rate-limited to 1/6h, never blocks)

@@ -92,5 +92,8 @@ class PatientStateEngineTest {
         assertThat(snapshot.userIntent.hasAnyIntent()).isTrue()
         assertThat(snapshot.userIntent.dominantIntent).isEqualTo("ACTIVITY")
         assertThat(snapshot.uamDominant).isEqualTo(UamHypothesisId.MEAL)
+        assertThat(snapshot.causalPosterior.dominant).isEqualTo(CausalStateId.FAST_MEAL)
+        assertThat(snapshot.causalPosterior.mealConfidence)
+            .isGreaterThan(snapshot.causalPosterior.protectiveConfidence)
     }
 }

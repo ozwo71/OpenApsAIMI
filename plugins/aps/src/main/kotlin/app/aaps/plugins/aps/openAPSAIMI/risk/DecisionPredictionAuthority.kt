@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.risk
 
+import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStateId
+import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
 import app.aaps.plugins.aps.openAPSAIMI.physio.BehavioralRiskPolicy
 import app.aaps.plugins.aps.openAPSAIMI.physio.HormonalScenarioTerminalCap
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
@@ -40,6 +42,7 @@ object DecisionPredictionAuthorityResolver {
         mealAbsorptionOutput: MealAbsorptionPhaseEngine.Output?,
         hypothesisState: UamHypothesisState?,
         latentState: PhysioLatentState?,
+        causalStatePosterior: CausalStatePosterior?,
         trajectoryAnalysis: TrajectoryAnalysis?,
         physioPolicy: BehavioralRiskPolicy?,
         uamConfidence: Double,
@@ -55,10 +58,24 @@ object DecisionPredictionAuthorityResolver {
             )
         }
         val predTerminal = rawScenarioFloor ?: pkpd
+        val causalMealConfidence = causalStatePosterior?.mealConfidence ?: 0.0
+        val causalProtectiveConfidence = causalStatePosterior?.protectiveConfidence ?: 0.0
+        val causalDominant = causalStatePosterior?.dominant ?: CausalStateId.UNKNOWN
+        val posteriorSuppressMeal =
+            causalDominant in setOf(
+                CausalStateId.DAWN_ENDOGENOUS,
+                CausalStateId.POST_HYPO_RECOVERY,
+                CausalStateId.STRESS_RESISTANCE,
+                CausalStateId.INFLAMMATORY_DRIFT,
+                CausalStateId.ABSORPTION_UNCERTAIN,
+            ) &&
+                causalProtectiveConfidence >= causalMealConfidence + 0.08 &&
+                (causalStatePosterior?.dominantConfidence ?: 0.0) >= 0.60
         val falseMealSuppression =
             hypothesisState?.suppressMealInterpretation == true ||
                 latentState?.falseMealSuppression == true ||
-                physioPolicy?.suppressMealLikeScenario == true
+                physioPolicy?.suppressMealLikeScenario == true ||
+                posteriorSuppressMeal
 
         if (scenarioBest == null || rawScenarioFloor == null) {
             return DecisionPredictionAuthority(
@@ -77,17 +94,18 @@ object DecisionPredictionAuthorityResolver {
         val scenarioLead = scenarioBest - pkpd
         val mealPhaseActive = mealAbsorptionOutput?.phase?.isActive == true
         val mealDeliveryPriority = mealAbsorptionOutput?.mealDeliveryPriority == true
-        val mealCompatibleProb = hypothesisState?.mealCompatibleProb() ?: 0.0
-        val competingNonMealProb = hypothesisState?.competingNonMealProb() ?: 0.0
+        val mealCompatibleProb = max(hypothesisState?.mealCompatibleProb() ?: 0.0, causalMealConfidence)
+        val competingNonMealProb = max(hypothesisState?.competingNonMealProb() ?: 0.0, causalProtectiveConfidence)
         val trajectoryType = trajectoryAnalysis?.classification
         val trajectorySupportsUplift =
             trajectoryType == TrajectoryType.OPEN_DIVERGING ||
                 trajectoryType == TrajectoryType.SLOW_DRIFT
-        val strongRiseProjection = scenarioBest > bgMgdl + 15.0
+        val strongRiseProjection = scenarioBest > bgMgdl + if (causalDominant == CausalStateId.FAST_MEAL) 12.0 else 15.0
         val mealEvidence =
             mealPhaseActive ||
                 mealDeliveryPriority ||
                 mealCompatibleProb >= 0.55 ||
+                causalMealConfidence >= 0.55 ||
                 uamConfidence >= 0.45
 
         if (scenarioLead <= 5.0) {
@@ -115,11 +133,11 @@ object DecisionPredictionAuthorityResolver {
                 source = DecisionPredictionSource.SCENARIO_SUPPRESSED_NON_MEAL,
                 scenarioUpliftApplied = false,
                 falseMealSuppression = true,
-                reason = "non_meal_guard prob=${"%.2f".format(competingNonMealProb)}",
+                reason = "non_meal_guard prob=${"%.2f".format(competingNonMealProb)} cause=${causalDominant.name}",
             )
         }
 
-        if (strongRiseProjection && mealEvidence && scenarioLead >= 15.0) {
+        if (strongRiseProjection && mealEvidence && scenarioLead >= if (causalDominant == CausalStateId.FAST_MEAL) 12.0 else 15.0) {
             val uplift = max(pkpd, scenarioBest)
             return DecisionPredictionAuthority(
                 predTerminalMgdl = predTerminal,
@@ -130,7 +148,8 @@ object DecisionPredictionAuthorityResolver {
                 source = DecisionPredictionSource.SCENARIO_MEAL_UPLIFT,
                 scenarioUpliftApplied = uplift > pkpd + 0.5,
                 falseMealSuppression = falseMealSuppression,
-                reason = "meal_evidence phase=${mealAbsorptionOutput?.phase?.name ?: "NONE"} lead=${"%.1f".format(scenarioLead)}",
+                reason = "meal_evidence phase=${mealAbsorptionOutput?.phase?.name ?: "NONE"} " +
+                    "lead=${"%.1f".format(scenarioLead)} cause=${causalDominant.name}",
             )
         }
 

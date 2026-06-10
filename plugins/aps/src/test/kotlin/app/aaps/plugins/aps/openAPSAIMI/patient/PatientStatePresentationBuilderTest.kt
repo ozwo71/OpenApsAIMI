@@ -33,6 +33,14 @@ class PatientStatePresentationBuilderTest {
                         hasStress = true,
                         dominantIntent = "STRESS",
                     ),
+                    causalPosterior = CausalStatePosterior(
+                        dawnEndogenousProb = 0.88,
+                        postHypoRecoveryProb = 0.22,
+                        stressResistanceProb = 0.30,
+                        dominant = CausalStateId.DAWN_ENDOGENOUS,
+                        dominantConfidence = 0.88,
+                        learningQuality = 0.62,
+                    ),
                 ),
                 patientModeDecision = PatientModeOrchestrator.Decision(
                     mode = PatientMode.DAWN_ENDOGENOUS,
@@ -58,8 +66,10 @@ class PatientStatePresentationBuilderTest {
         assertThat(presentation.modeHeadline).isEqualTo("Dawn Endogenous (88%)")
         assertThat(presentation.narrative).contains("endogenous drive")
         assertThat(presentation.physiologySummary).contains("Dawn Cortisol")
+        assertThat(presentation.physiologySummary).contains("Cause Dawn Endogenous")
         assertThat(presentation.intentSummary).contains("Dominant Stress")
         assertThat(presentation.signalSummary).contains("Endogenous 88%")
+        assertThat(presentation.signalSummary).contains("Protect 88%")
         assertThat(presentation.deliverySummary).contains("Basal Bridge")
         assertThat(presentation.reasonSummary).contains("False meal suppression")
         assertThat(presentation.physioLiveSummary).contains("Body signals pending")

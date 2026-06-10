@@ -38,7 +38,7 @@ internal object PatientModeOrchestrator {
         val protectionBias: Double,
         val userIntentConfidence: Double,
         val reasonCodes: List<String>,
-        val source: String = "patient_mode_v1",
+        val source: String = "patient_mode_v2",
     ) {
         fun toJsonObject(): JSONObject =
             JSONObject().apply {
@@ -62,6 +62,21 @@ internal object PatientModeOrchestrator {
 
     fun evaluate(state: PatientStateSnapshot): Decision {
         val reasons = linkedSetOf<String>()
+        val causal = state.causalPosterior
+
+        if (causal.dominant == CausalStateId.POST_HYPO_RECOVERY && causal.dominantConfidence >= 0.65) {
+            reasons += "CAUSAL_POST_HYPO"
+            if (state.userIntent.hasAlcohol) reasons += "CTX_ALCOHOL"
+            return decision(
+                mode = PatientMode.POST_HYPO_RECOVERY,
+                confidence = maxOf(causal.dominantConfidence, causal.protectiveConfidence, state.userIntent.avgConfidence),
+                strategyHint = PatientStrategyHint.HYPO_RECOVERY,
+                mealBias = 0.08,
+                protectionBias = 0.94,
+                state = state,
+                reasonCodes = reasons,
+            )
+        }
 
         if (state.postHypoReboundProb >= 0.72 ||
             (state.uamDominant == UamHypothesisId.POST_HYPO && state.uamDominantConfidence >= 0.65) ||
@@ -72,10 +87,29 @@ internal object PatientModeOrchestrator {
             if (state.userIntent.hasAlcohol) reasons += "CTX_ALCOHOL"
             return decision(
                 mode = PatientMode.POST_HYPO_RECOVERY,
-                confidence = maxOf(state.postHypoReboundProb, state.uamDominantConfidence, state.userIntent.avgConfidence),
+                confidence = maxOf(
+                    state.postHypoReboundProb,
+                    state.uamDominantConfidence,
+                    state.userIntent.avgConfidence,
+                    causal.dominantConfidence,
+                ),
                 strategyHint = PatientStrategyHint.HYPO_RECOVERY,
                 mealBias = 0.08,
                 protectionBias = 0.92,
+                state = state,
+                reasonCodes = reasons,
+            )
+        }
+
+        if (causal.dominant == CausalStateId.FAST_MEAL && causal.dominantConfidence >= 0.68) {
+            reasons += "CAUSAL_FAST_MEAL"
+            if (state.userIntent.hasMealRisk) reasons += "CTX_MEAL_RISK"
+            return decision(
+                mode = PatientMode.FAST_MEAL,
+                confidence = maxOf(causal.dominantConfidence, causal.mealConfidence, state.mealAbsorptionBelief),
+                strategyHint = PatientStrategyHint.SMB_PRIORITY,
+                mealBias = 0.92,
+                protectionBias = 0.16,
                 state = state,
                 reasonCodes = reasons,
             )
@@ -91,10 +125,28 @@ internal object PatientModeOrchestrator {
             if (state.userIntent.hasMealRisk) reasons += "CTX_MEAL_RISK"
             return decision(
                 mode = PatientMode.FAST_MEAL,
-                confidence = maxOf(state.mealAbsorptionBelief, state.mealProb, state.uamDominantConfidence),
+                confidence = maxOf(
+                    state.mealAbsorptionBelief,
+                    state.mealProb,
+                    state.uamDominantConfidence,
+                    causal.dominantConfidence,
+                ),
                 strategyHint = PatientStrategyHint.SMB_PRIORITY,
                 mealBias = 0.90,
                 protectionBias = 0.18,
+                state = state,
+                reasonCodes = reasons,
+            )
+        }
+
+        if (causal.dominant == CausalStateId.PROLONGED_MEAL && causal.dominantConfidence >= 0.60) {
+            reasons += "CAUSAL_PROLONGED_MEAL"
+            return decision(
+                mode = PatientMode.PROLONGED_MEAL,
+                confidence = maxOf(causal.dominantConfidence, causal.mealConfidence, state.mealAbsorptionBelief),
+                strategyHint = PatientStrategyHint.MEAL_SUPPORT,
+                mealBias = 0.76,
+                protectionBias = 0.28,
                 state = state,
                 reasonCodes = reasons,
             )
@@ -109,10 +161,29 @@ internal object PatientModeOrchestrator {
             if (state.uamDominant == UamHypothesisId.LATE_FAT) reasons += "UAM_LATE_FAT"
             return decision(
                 mode = PatientMode.PROLONGED_MEAL,
-                confidence = maxOf(state.mealAbsorptionBelief, state.mealProb, state.uamDominantConfidence),
+                confidence = maxOf(
+                    state.mealAbsorptionBelief,
+                    state.mealProb,
+                    state.uamDominantConfidence,
+                    causal.dominantConfidence,
+                ),
                 strategyHint = PatientStrategyHint.MEAL_SUPPORT,
                 mealBias = 0.72,
                 protectionBias = 0.30,
+                state = state,
+                reasonCodes = reasons,
+            )
+        }
+
+        if (causal.dominant == CausalStateId.DAWN_ENDOGENOUS && causal.dominantConfidence >= 0.62) {
+            reasons += "CAUSAL_DAWN_ENDOGENOUS"
+            if (state.falseMealSuppression) reasons += "FALSE_MEAL_SUPPRESS"
+            return decision(
+                mode = PatientMode.DAWN_ENDOGENOUS,
+                confidence = maxOf(causal.dominantConfidence, causal.protectiveConfidence, state.phaseConfidence),
+                strategyHint = PatientStrategyHint.BASAL_BRIDGE,
+                mealBias = 0.14,
+                protectionBias = 0.82,
                 state = state,
                 reasonCodes = reasons,
             )
@@ -123,10 +194,29 @@ internal object PatientModeOrchestrator {
             if (state.falseMealSuppression) reasons += "FALSE_MEAL_SUPPRESS"
             return decision(
                 mode = PatientMode.DAWN_ENDOGENOUS,
-                confidence = maxOf(state.endogenousGlucoseDrive, state.phaseConfidence, state.patternDominantConfidence),
+                confidence = maxOf(
+                    state.endogenousGlucoseDrive,
+                    state.phaseConfidence,
+                    state.patternDominantConfidence,
+                    causal.dominantConfidence,
+                ),
                 strategyHint = PatientStrategyHint.BASAL_BRIDGE,
                 mealBias = 0.16,
                 protectionBias = 0.78,
+                state = state,
+                reasonCodes = reasons,
+            )
+        }
+
+        if (causal.dominant == CausalStateId.EXERCISE_AFTERBURN && causal.dominantConfidence >= 0.58) {
+            reasons += "CAUSAL_EXERCISE_AFTERBURN"
+            if (state.userIntent.hasActivity) reasons += "CTX_ACTIVITY"
+            return decision(
+                mode = PatientMode.EXERCISE_AFTERBURN,
+                confidence = maxOf(causal.dominantConfidence, causal.protectiveConfidence, state.userIntent.avgConfidence),
+                strategyHint = PatientStrategyHint.CONSERVATIVE_OBSERVE,
+                mealBias = 0.16,
+                protectionBias = 0.84,
                 state = state,
                 reasonCodes = reasons,
             )
@@ -136,10 +226,29 @@ internal object PatientModeOrchestrator {
             reasons += "CTX_ACTIVITY"
             return decision(
                 mode = PatientMode.EXERCISE_AFTERBURN,
-                confidence = maxOf(state.userIntent.avgConfidence, state.sensorConfidence, 0.58),
+                confidence = maxOf(
+                    state.userIntent.avgConfidence,
+                    state.sensorConfidence,
+                    0.58,
+                    causal.dominantConfidence,
+                ),
                 strategyHint = PatientStrategyHint.CONSERVATIVE_OBSERVE,
                 mealBias = 0.18,
                 protectionBias = 0.82,
+                state = state,
+                reasonCodes = reasons,
+            )
+        }
+
+        if (causal.dominant == CausalStateId.INFLAMMATORY_DRIFT && causal.dominantConfidence >= 0.60) {
+            reasons += "CAUSAL_INFLAMMATORY_DRIFT"
+            if (state.userIntent.hasIllness) reasons += "CTX_ILLNESS"
+            return decision(
+                mode = PatientMode.STRESS_RESISTANCE,
+                confidence = maxOf(causal.dominantConfidence, causal.protectiveConfidence, state.thermalInflammationIndex),
+                strategyHint = PatientStrategyHint.CONSERVATIVE_OBSERVE,
+                mealBias = 0.18,
+                protectionBias = 0.84,
                 state = state,
                 reasonCodes = reasons,
             )
@@ -152,7 +261,12 @@ internal object PatientModeOrchestrator {
             if (state.userIntent.hasIllness) reasons += "CTX_ILLNESS"
             return decision(
                 mode = PatientMode.STRESS_RESISTANCE,
-                confidence = maxOf(state.thermalInflammationIndex, state.transientResistanceProb, state.userIntent.avgConfidence),
+                confidence = maxOf(
+                    state.thermalInflammationIndex,
+                    state.transientResistanceProb,
+                    state.userIntent.avgConfidence,
+                    causal.dominantConfidence,
+                ),
                 strategyHint = PatientStrategyHint.CONSERVATIVE_OBSERVE,
                 mealBias = 0.20,
                 protectionBias = 0.80,
@@ -165,10 +279,25 @@ internal object PatientModeOrchestrator {
             reasons += "THERMAL_CYCLE_BBT"
             return decision(
                 mode = PatientMode.STRESS_RESISTANCE,
-                confidence = maxOf(state.thermalInflammationIndex, 0.58),
+                confidence = maxOf(state.thermalInflammationIndex, 0.58, causal.dominantConfidence),
                 strategyHint = PatientStrategyHint.CONSERVATIVE_OBSERVE,
                 mealBias = 0.30,
                 protectionBias = 0.62,
+                state = state,
+                reasonCodes = reasons,
+            )
+        }
+
+        if (causal.dominant == CausalStateId.STRESS_RESISTANCE && causal.dominantConfidence >= 0.64) {
+            reasons += "CAUSAL_STRESS_RESISTANCE"
+            if (state.userIntent.hasStress) reasons += "CTX_STRESS"
+            if (state.userIntent.hasIllness) reasons += "CTX_ILLNESS"
+            return decision(
+                mode = PatientMode.STRESS_RESISTANCE,
+                confidence = maxOf(causal.dominantConfidence, causal.protectiveConfidence, state.transientResistanceProb),
+                strategyHint = PatientStrategyHint.CONSERVATIVE_OBSERVE,
+                mealBias = 0.22,
+                protectionBias = 0.76,
                 state = state,
                 reasonCodes = reasons,
             )
@@ -183,7 +312,12 @@ internal object PatientModeOrchestrator {
             if (state.uamDominant == UamHypothesisId.STRESS) reasons += "UAM_STRESS"
             return decision(
                 mode = PatientMode.STRESS_RESISTANCE,
-                confidence = maxOf(state.transientResistanceProb, state.uamDominantConfidence, state.userIntent.avgConfidence),
+                confidence = maxOf(
+                    state.transientResistanceProb,
+                    state.uamDominantConfidence,
+                    state.userIntent.avgConfidence,
+                    causal.dominantConfidence,
+                ),
                 strategyHint = PatientStrategyHint.CONSERVATIVE_OBSERVE,
                 mealBias = 0.24,
                 protectionBias = 0.72,
@@ -197,7 +331,7 @@ internal object PatientModeOrchestrator {
             reasons += "LATENT_SLEEP_DEBT"
             return decision(
                 mode = PatientMode.POOR_SLEEP_DAY,
-                confidence = maxOf(state.thermalRecoveryBurden, state.sleepDebtScore, 0.58),
+                confidence = maxOf(state.thermalRecoveryBurden, state.sleepDebtScore, 0.58, causal.dominantConfidence),
                 strategyHint = PatientStrategyHint.CONSERVATIVE_OBSERVE,
                 mealBias = 0.26,
                 protectionBias = 0.74,
@@ -210,10 +344,24 @@ internal object PatientModeOrchestrator {
             reasons += "LATENT_SLEEP_DEBT"
             return decision(
                 mode = PatientMode.POOR_SLEEP_DAY,
-                confidence = maxOf(state.sleepDebtScore, state.endogenousGlucoseDrive, 0.55),
+                confidence = maxOf(state.sleepDebtScore, state.endogenousGlucoseDrive, 0.55, causal.dominantConfidence),
                 strategyHint = PatientStrategyHint.CONSERVATIVE_OBSERVE,
                 mealBias = 0.28,
                 protectionBias = 0.68,
+                state = state,
+                reasonCodes = reasons,
+            )
+        }
+
+        if (causal.dominant == CausalStateId.ABSORPTION_UNCERTAIN && causal.dominantConfidence >= 0.55) {
+            reasons += "CAUSAL_ABSORPTION_UNCERTAIN"
+            if (state.falseMealSuppression) reasons += "FALSE_MEAL_SUPPRESS"
+            return decision(
+                mode = PatientMode.ABSORPTION_UNCERTAIN,
+                confidence = maxOf(causal.dominantConfidence, causal.protectiveConfidence, 1.0 - state.sensorConfidence),
+                strategyHint = PatientStrategyHint.PKPD_REASSESS,
+                mealBias = 0.30,
+                protectionBias = 0.86,
                 state = state,
                 reasonCodes = reasons,
             )
@@ -226,7 +374,12 @@ internal object PatientModeOrchestrator {
             if (state.falseMealSuppression) reasons += "FALSE_MEAL_SUPPRESS"
             return decision(
                 mode = PatientMode.ABSORPTION_UNCERTAIN,
-                confidence = maxOf(1.0 - state.sensorConfidence, state.mealProb, state.patternDominantConfidence),
+                confidence = maxOf(
+                    1.0 - state.sensorConfidence,
+                    state.mealProb,
+                    state.patternDominantConfidence,
+                    causal.dominantConfidence,
+                ),
                 strategyHint = PatientStrategyHint.PKPD_REASSESS,
                 mealBias = 0.32,
                 protectionBias = 0.84,
@@ -238,7 +391,11 @@ internal object PatientModeOrchestrator {
         reasons += "BASELINE"
         return decision(
             mode = PatientMode.STABLE_BASELINE,
-            confidence = maxOf(state.sensorConfidence, 0.50),
+            confidence = maxOf(
+                state.sensorConfidence,
+                0.50,
+                if (causal.dominant != CausalStateId.UNKNOWN) causal.learningQuality * 0.85 else 0.0,
+            ),
             strategyHint = PatientStrategyHint.BASELINE_BALANCE,
             mealBias = 0.45,
             protectionBias = 0.22,

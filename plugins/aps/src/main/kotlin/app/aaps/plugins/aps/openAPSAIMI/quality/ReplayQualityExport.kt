@@ -33,6 +33,11 @@ internal data class ReplayQualityExport(
     val patientModeConfidence: Double?,
     val patientStrategyHint: String?,
     val patientModeReasons: List<String>,
+    val causalStateDominant: String?,
+    val causalStateConfidence: Double?,
+    val causalMealConfidence: Double?,
+    val causalProtectiveConfidence: Double?,
+    val causalLearningQuality: Double?,
     val contextIntentActive: Boolean,
     val contextIntentCount: Int?,
     val contextIntentDominant: String?,
@@ -62,7 +67,7 @@ internal data class ReplayQualityExport(
 
 internal object ReplayQualityExportBuilder {
 
-    private const val VERSION = 1
+    private const val VERSION = 2
     private const val TUNING_REFERENCE =
         "AIMI_Decisions.jsonl#adjustments.replay_quality + patient_mode + iob_surveillance + safety_risk + recursive_belief"
 
@@ -96,6 +101,7 @@ internal object ReplayQualityExportBuilder {
             patternSnapshot?.suppressMealInterpretation == true ||
                 uamMealInterpretationSuppressed ||
                 falseMealGuardState.startsWith("SUPPRESS_")
+        val causalPosterior = patientState?.causalPosterior
         val contextIntentActive = patientState?.userIntent?.hasAnyIntent() == true
         val patientMode = patientModeDecision?.mode?.name
         val patientModeConfidence = patientModeDecision?.confidence
@@ -141,6 +147,17 @@ internal object ReplayQualityExportBuilder {
             if (authorityGateDecision?.softLimited == true) add("rbt_authority_soft_only")
             if (!predictionAvailable) add("prediction_missing")
             if (contextIntentActive) add("user_intent_active")
+            when (causalPosterior?.dominant?.name) {
+                "FAST_MEAL" -> add("causal_fast_meal")
+                "PROLONGED_MEAL" -> add("causal_prolonged_meal")
+                "DAWN_ENDOGENOUS" -> add("causal_dawn_endogenous")
+                "POST_HYPO_RECOVERY" -> add("causal_post_hypo_recovery")
+                "STRESS_RESISTANCE" -> add("causal_stress_resistance")
+                "EXERCISE_AFTERBURN" -> add("causal_exercise_afterburn")
+                "INFLAMMATORY_DRIFT" -> add("causal_inflammatory_drift")
+                "ABSORPTION_UNCERTAIN" -> add("causal_absorption_uncertain")
+            }
+            if ((causalPosterior?.learningQuality ?: 1.0) < 0.58) add("causal_learning_unclean")
             if ((patientModeDecision?.mealBias ?: 0.0) >= 0.70) add("patient_mode_meal")
             if ((patientModeDecision?.protectionBias ?: 0.0) >= 0.70) add("patient_mode_protective")
             when (patientModeDecision?.mode) {
@@ -165,6 +182,11 @@ internal object ReplayQualityExportBuilder {
             patientModeConfidence = patientModeConfidence,
             patientStrategyHint = patientStrategyHint,
             patientModeReasons = patientModeReasons,
+            causalStateDominant = causalPosterior?.dominant?.name,
+            causalStateConfidence = causalPosterior?.dominantConfidence,
+            causalMealConfidence = causalPosterior?.mealConfidence,
+            causalProtectiveConfidence = causalPosterior?.protectiveConfidence,
+            causalLearningQuality = causalPosterior?.learningQuality,
             contextIntentActive = contextIntentActive,
             contextIntentCount = patientState?.userIntent?.intentCount,
             contextIntentDominant = patientState?.userIntent?.dominantIntent,
@@ -207,6 +229,11 @@ internal object ReplayQualityExportBuilder {
             put("patient_mode_confidence", export.patientModeConfidence ?: JSONObject.NULL)
             put("patient_strategy_hint", export.patientStrategyHint ?: JSONObject.NULL)
             put("patient_mode_reasons", JSONArray(export.patientModeReasons))
+            put("causal_state_dominant", export.causalStateDominant ?: JSONObject.NULL)
+            put("causal_state_confidence", export.causalStateConfidence ?: JSONObject.NULL)
+            put("causal_meal_confidence", export.causalMealConfidence ?: JSONObject.NULL)
+            put("causal_protective_confidence", export.causalProtectiveConfidence ?: JSONObject.NULL)
+            put("causal_learning_quality", export.causalLearningQuality ?: JSONObject.NULL)
             put("context_intent_active", export.contextIntentActive)
             put("context_intent_count", export.contextIntentCount ?: JSONObject.NULL)
             put("context_intent_dominant", export.contextIntentDominant ?: JSONObject.NULL)

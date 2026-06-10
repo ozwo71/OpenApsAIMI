@@ -3,9 +3,12 @@ package app.aaps.plugins.aps.openAPSAIMI.pkpd
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStateId
+import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
+import kotlin.math.max
 
 data class MealAggressionContext(
     val mealModeActive: Boolean,
@@ -87,6 +90,7 @@ class PkPdIntegration(private val preferences: Preferences) {
         patientWeightKg: Double? = null,
         physioLatentState: PhysioLatentState? = null,
         estimatedRaMgdlPerMin: Double? = null,
+        causalStatePosterior: CausalStatePosterior? = null,
     ): PkPdRuntime? {
         val structural = readStructuralConfig()
         val previousStructural = cachedStructuralConfig
@@ -122,16 +126,28 @@ class PkPdIntegration(private val preferences: Preferences) {
                     "(bounds ${AdaptivePkPdEstimator.LEARNING_WINDOW_MIN_MIN}-${AdaptivePkPdEstimator.LEARNING_WINDOW_MAX_MIN})",
             )
         }
-        logPkpdLearningSkipReason(bg, iobU, carbsActiveG, deltaMgDlPer5, exerciseFlag, consoleLog)
-        estimator.update(
-            epochMin = epochMin,
+        val learningContextClean = causalStatePosterior?.learningContextClean() ?: true
+        logPkpdLearningSkipReason(
             bg = bg,
-            deltaMgDlPer5 = deltaMgDlPer5,
             iobU = iobU,
             carbsActiveG = carbsActiveG,
-            windowMin = learningWindowMin,
-            exerciseFlag = exerciseFlag
+            deltaMgDlPer5 = deltaMgDlPer5,
+            exerciseFlag = exerciseFlag,
+            causalStatePosterior = causalStatePosterior,
+            learningContextClean = learningContextClean,
+            consoleLog = consoleLog,
         )
+        if (learningContextClean) {
+            estimator.update(
+                epochMin = epochMin,
+                bg = bg,
+                deltaMgDlPer5 = deltaMgDlPer5,
+                iobU = iobU,
+                carbsActiveG = carbsActiveG,
+                windowMin = learningWindowMin,
+                exerciseFlag = exerciseFlag
+            )
+        }
         val params = estimator.params()
         persistStateIfNeeded(params, structural.bounds)
         val tailFraction = estimator.iobResidualAt(windowMin.toDouble()).coerceIn(0.0, 1.0)
@@ -156,6 +172,7 @@ class PkPdIntegration(private val preferences: Preferences) {
         val weightKineticFactor = buildWeightKineticFactor(patientWeightKg)
         val physioAbsorptionFactor = buildPhysioAbsorptionFactor(
             physioLatentState = physioLatentState,
+            causalStatePosterior = causalStatePosterior,
             mealContext = mealContext,
             estimatedRaMgdlPerMin = estimatedRaMgdlPerMin,
         )
@@ -185,14 +202,16 @@ class PkPdIntegration(private val preferences: Preferences) {
             aggressionMultiplier *= uamBoost.coerceIn(0.8, 1.0)
             consoleLog?.add("🧠 UAM detected (conf=${"%.2f".format(uamConfidence)}) -> Extra ISF Boost")
         }
-        val physioSiFactor = buildPhysioSiFactor(physioLatentState)
+        val physioSiFactor = buildPhysioSiFactor(physioLatentState, causalStatePosterior)
         aggressionMultiplier = (aggressionMultiplier * physioSiFactor).coerceIn(0.55, 1.08)
         physioLatentState?.takeIf { it.isActive() }?.let { latent ->
             consoleLog?.add(
                 "PKPD_PHYSIO: wK=${"%.2f".format(weightKineticFactor)} " +
                     "abs=${"%.2f".format(physioAbsorptionFactor)} si=${"%.2f".format(physioSiFactor)} " +
                     "meal=${"%.2f".format(latent.mealProb)} endo=${"%.2f".format(latent.endogenousGlucoseDrive)} " +
-                    "resist=${"%.2f".format(latent.transientResistanceProb)} postHypo=${"%.2f".format(latent.postHypoReboundProb)}"
+                    "resist=${"%.2f".format(latent.transientResistanceProb)} postHypo=${"%.2f".format(latent.postHypoReboundProb)} " +
+                    "cause=${causalStatePosterior?.dominant?.name ?: "UNKNOWN"} " +
+                    "learnQ=${"%.2f".format(causalStatePosterior?.learningQuality ?: 0.0)}"
             )
         }
 
@@ -407,6 +426,8 @@ class PkPdIntegration(private val preferences: Preferences) {
         carbsActiveG: Double,
         deltaMgDlPer5: Double,
         exerciseFlag: Boolean,
+        causalStatePosterior: CausalStatePosterior?,
+        learningContextClean: Boolean,
         consoleLog: MutableList<String>?,
     ) {
         val reason = when {
@@ -417,6 +438,7 @@ class PkPdIntegration(private val preferences: Preferences) {
             carbsActiveG > 15.0 -> "cob>15"
             exerciseFlag -> "exercise"
             deltaMgDlPer5 > 5.0 -> "delta>5"
+            !learningContextClean -> "causal_${causalStatePosterior?.dominant?.name?.lowercase() ?: "unclean"}"
             else -> null
         }
         if (reason != null) {
@@ -444,30 +466,61 @@ class PkPdIntegration(private val preferences: Preferences) {
 
     private fun buildPhysioAbsorptionFactor(
         physioLatentState: PhysioLatentState?,
+        causalStatePosterior: CausalStatePosterior?,
         mealContext: MealAggressionContext?,
         estimatedRaMgdlPerMin: Double?,
     ): Double {
-        if (physioLatentState == null) return 1.0
+        if (physioLatentState == null && causalStatePosterior == null) return 1.0
+        val mealSupportProb = max(
+            physioLatentState?.mealProb ?: 0.0,
+            causalStatePosterior?.mealConfidence ?: 0.0,
+        )
         val mealSupport = if (mealContext?.mealModeActive == true) {
-            physioLatentState.mealProb * 0.10
+            mealSupportProb * 0.12
         } else {
             0.0
         }
-        val endogenousBrake = physioLatentState.endogenousGlucoseDrive * 0.08
-        val reboundBrake = physioLatentState.postHypoReboundProb * 0.08
+        val endogenousBrake = max(
+            physioLatentState?.endogenousGlucoseDrive ?: 0.0,
+            causalStatePosterior?.dawnEndogenousProb ?: 0.0,
+        ) * 0.10
+        val reboundBrake = max(
+            physioLatentState?.postHypoReboundProb ?: 0.0,
+            causalStatePosterior?.postHypoRecoveryProb ?: 0.0,
+        ) * 0.09
+        val protectiveBrake = (causalStatePosterior?.protectiveConfidence ?: 0.0) * 0.06
         val raSupport = estimatedRaMgdlPerMin
             ?.takeIf { it.isFinite() && it > 0.0 }
             ?.let { (it / 12.0).coerceIn(0.0, 0.08) }
             ?: 0.0
-        return (1.0 + mealSupport + raSupport - endogenousBrake - reboundBrake).coerceIn(0.86, 1.18)
+        val dominantMealBoost = when (causalStatePosterior?.dominant) {
+            CausalStateId.FAST_MEAL -> 0.03
+            CausalStateId.PROLONGED_MEAL -> 0.02
+            else -> 0.0
+        }
+        return (1.0 + mealSupport + raSupport + dominantMealBoost - endogenousBrake - reboundBrake - protectiveBrake)
+            .coerceIn(0.82, 1.18)
     }
 
-    private fun buildPhysioSiFactor(physioLatentState: PhysioLatentState?): Double {
-        if (physioLatentState == null) return 1.0
-        val rawFactor = physioLatentState.circadianSiFactor *
-            (1.0 - physioLatentState.transientResistanceProb * 0.14) *
-            (1.0 + physioLatentState.postHypoReboundProb * 0.08)
-        val confidence = physioLatentState.sensorConfidence.coerceIn(0.0, 1.0)
+    private fun buildPhysioSiFactor(
+        physioLatentState: PhysioLatentState?,
+        causalStatePosterior: CausalStatePosterior?,
+    ): Double {
+        if (physioLatentState == null && causalStatePosterior == null) return 1.0
+        val latent = physioLatentState ?: PhysioLatentState()
+        var rawFactor = latent.circadianSiFactor *
+            (1.0 - latent.transientResistanceProb * 0.14) *
+            (1.0 + latent.postHypoReboundProb * 0.08)
+        rawFactor *= when (causalStatePosterior?.dominant) {
+            CausalStateId.DAWN_ENDOGENOUS -> 0.97
+            CausalStateId.STRESS_RESISTANCE -> 0.94
+            CausalStateId.INFLAMMATORY_DRIFT -> 0.95
+            CausalStateId.POST_HYPO_RECOVERY -> 1.02
+            else -> 1.0
+        }
+        rawFactor *= 1.0 - (causalStatePosterior?.stressResistanceProb ?: 0.0) * 0.05
+        rawFactor *= 1.0 - (causalStatePosterior?.inflammatoryDriftProb ?: 0.0) * 0.04
+        val confidence = max(latent.sensorConfidence, causalStatePosterior?.learningQuality ?: 0.0).coerceIn(0.0, 1.0)
         return (1.0 + ((rawFactor - 1.0) * confidence)).coerceIn(0.78, 1.08)
     }
 }

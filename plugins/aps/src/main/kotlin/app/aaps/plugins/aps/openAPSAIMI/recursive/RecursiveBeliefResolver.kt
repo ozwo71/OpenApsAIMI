@@ -91,11 +91,17 @@ object RecursiveBeliefResolver {
         var releaseAuthority = ReleaseAuthority.NONE
         val reasonCodes = mutableListOf<String>()
         val mealHypothesisProb = max(
-            ctx.extended.uamMealProb ?: ctx.extended.latentMealProb ?: 0.0,
+            max(
+                ctx.extended.uamMealProb ?: ctx.extended.latentMealProb ?: 0.0,
+                ctx.extended.causalMealConfidence ?: 0.0,
+            ),
             (ctx.extended.uamLateFatProb ?: 0.0) * 0.88,
         )
         val nonMealHypothesisProb = max(
-            ctx.extended.uamEndogenousProb ?: ctx.extended.latentEndogenousGlucoseDrive ?: 0.0,
+            max(
+                ctx.extended.uamEndogenousProb ?: ctx.extended.latentEndogenousGlucoseDrive ?: 0.0,
+                ctx.extended.causalProtectiveConfidence ?: 0.0,
+            ),
             max(
                 ctx.extended.uamStressProb ?: 0.0,
                 ctx.extended.uamPostHypoProb ?: 0.0,
@@ -155,7 +161,7 @@ object RecursiveBeliefResolver {
             } else {
                 ReleaseAuthority.NONE
             }
-            reasonCodes += "UAM_ALT_${ctx.extended.uamHypothesisDominant ?: "NON_MEAL"}"
+            reasonCodes += "UAM_ALT_${ctx.extended.uamHypothesisDominant ?: ctx.extended.causalDominantState ?: "NON_MEAL"}"
         }
 
         // P1 — hypo credibility

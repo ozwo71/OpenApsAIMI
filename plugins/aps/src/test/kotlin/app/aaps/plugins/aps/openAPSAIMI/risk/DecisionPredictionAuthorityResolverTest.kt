@@ -2,6 +2,8 @@ package app.aaps.plugins.aps.openAPSAIMI.risk
 
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
+import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStateId
+import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
@@ -32,6 +34,7 @@ class DecisionPredictionAuthorityResolverTest {
                 dominantConfidence = 0.78,
             ),
             latentState = PhysioLatentState(),
+            causalStatePosterior = null,
             trajectoryAnalysis = trajectory(TrajectoryType.OPEN_DIVERGING),
             physioPolicy = null,
             uamConfidence = 0.62,
@@ -57,6 +60,13 @@ class DecisionPredictionAuthorityResolverTest {
                 suppressMealInterpretation = true,
             ),
             latentState = PhysioLatentState(falseMealSuppression = true),
+            causalStatePosterior = CausalStatePosterior(
+                dawnEndogenousProb = 0.84,
+                stressResistanceProb = 0.22,
+                dominant = CausalStateId.DAWN_ENDOGENOUS,
+                dominantConfidence = 0.84,
+                learningQuality = 0.34,
+            ),
             trajectoryAnalysis = trajectory(TrajectoryType.SLOW_DRIFT),
             physioPolicy = null,
             uamConfidence = 0.18,
@@ -82,6 +92,7 @@ class DecisionPredictionAuthorityResolverTest {
                 dominantConfidence = 0.76,
             ),
             latentState = PhysioLatentState(),
+            causalStatePosterior = null,
             trajectoryAnalysis = trajectory(TrajectoryType.CLOSING_CONVERGING),
             physioPolicy = null,
             uamConfidence = 0.10,
@@ -91,6 +102,31 @@ class DecisionPredictionAuthorityResolverTest {
         assertFalse(authority.scenarioUpliftApplied)
         assertEquals(111.0, authority.eventualTerminalMgdl, 0.001)
         assertEquals(108.0, authority.predTerminalMgdl, 0.001)
+    }
+
+    @Test
+    fun causalFastMealAllowsEarlierScenarioMealUplift() {
+        val authority = DecisionPredictionAuthorityResolver.resolve(
+            bgMgdl = 150.0,
+            pkpdEventualMgdl = 118.0,
+            scenarioProjection = scenario(floorTerminal = 112.0, bestTerminal = 163.0),
+            mealAbsorptionOutput = mealOutput(MealAbsorptionPhase.NONE, priority = false),
+            hypothesisState = UamHypothesisState(mealProb = 0.34),
+            latentState = PhysioLatentState(mealProb = 0.28),
+            causalStatePosterior = CausalStatePosterior(
+                fastMealProb = 0.76,
+                dominant = CausalStateId.FAST_MEAL,
+                dominantConfidence = 0.76,
+                learningQuality = 0.82,
+            ),
+            trajectoryAnalysis = trajectory(TrajectoryType.CLOSING_CONVERGING),
+            physioPolicy = null,
+            uamConfidence = 0.20,
+        )
+
+        assertEquals(DecisionPredictionSource.SCENARIO_MEAL_UPLIFT, authority.source)
+        assertTrue(authority.scenarioUpliftApplied)
+        assertEquals(163.0, authority.eventualTerminalMgdl, 0.001)
     }
 
     private fun scenario(

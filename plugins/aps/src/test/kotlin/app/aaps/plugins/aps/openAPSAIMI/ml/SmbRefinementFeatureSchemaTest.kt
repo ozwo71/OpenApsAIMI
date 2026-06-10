@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.ml
 
+import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStateId
+import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStrategyHint
@@ -34,6 +36,19 @@ class SmbRefinementFeatureSchemaTest {
                 userIntentConfidence = 0.84,
                 reasonCodes = listOf("MEAL_FIRST_WAVE"),
             ),
+            causalStatePosterior = CausalStatePosterior(
+                fastMealProb = 0.83,
+                prolongedMealProb = 0.18,
+                dawnEndogenousProb = 0.12,
+                postHypoRecoveryProb = 0.04,
+                stressResistanceProb = 0.10,
+                exerciseAfterburnProb = 0.06,
+                inflammatoryDriftProb = 0.08,
+                absorptionUncertainProb = 0.11,
+                dominant = CausalStateId.FAST_MEAL,
+                dominantConfidence = 0.83,
+                learningQuality = 0.79,
+            ),
         )
 
         assertThat(features.size).isEqualTo(SmbRefinementFeatureSchema.INPUT_SIZE)
@@ -42,6 +57,9 @@ class SmbRefinementFeatureSchemaTest {
             .inOrder()
         assertThat(features.copyOfRange(14, 17).toList())
             .containsExactly(0.90f, 0.18f, 0.84f)
+            .inOrder()
+        assertThat(features.copyOfRange(17, 20).toList())
+            .containsExactly(0.83f, 0.12f, 0.79f)
             .inOrder()
         assertThat(features.last()).isEqualTo(0.73f)
     }
@@ -84,8 +102,8 @@ class SmbRefinementFeatureSchemaTest {
         assertThat(parsed).isNotNull()
         parsed!!
         assertThat(parsed.size).isEqualTo(SmbRefinementFeatureSchema.INPUT_SIZE - 1)
-        assertThat(parsed.copyOfRange(10, 17).toList())
-            .containsExactly(0f, 0f, 1f, 0f, 0.45f, 0.22f, 0f)
+        assertThat(parsed.copyOfRange(10, 20).toList())
+            .containsExactly(0f, 0f, 1f, 0f, 0.45f, 0.22f, 0f, 0f, 0f, 1f)
             .inOrder()
     }
 }

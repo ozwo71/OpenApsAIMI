@@ -63,6 +63,7 @@ data class PatientStateSnapshot(
     val uamDominant: UamHypothesisId = UamHypothesisId.NONE,
     val uamDominantConfidence: Double = 0.0,
     val userIntent: UserIntentSummary = UserIntentSummary.EMPTY,
+    val causalPosterior: CausalStatePosterior = CausalStatePosterior.EMPTY,
     val thermalInflammationIndex: Double = 0.0,
     val thermalRecoveryBurden: Double = 0.0,
     val thermalHypothesis: String = "DATA_PENDING",
@@ -87,6 +88,7 @@ data class PatientStateSnapshot(
             put("uam_dominant", uamDominant.name)
             put("uam_dominant_confidence", uamDominantConfidence)
             put("user_intent", userIntent.toJsonObject())
+            put("causal_posterior", causalPosterior.toJsonObject())
             put("thermal_inflammation_index", thermalInflammationIndex)
             put("thermal_recovery_burden", thermalRecoveryBurden)
             put("thermal_hypothesis", thermalHypothesis)
@@ -96,7 +98,7 @@ data class PatientStateSnapshot(
     fun summary(): String =
         "phase=${phase.name} meal=${fmt(mealProb)} endo=${fmt(endogenousGlucoseDrive)} " +
             "resist=${fmt(transientResistanceProb)} sensor=${fmt(sensorConfidence)} " +
-            "intent=${userIntent.dominantIntent}"
+            "intent=${userIntent.dominantIntent} cause=${causalPosterior.dominant.name}"
 
     private fun fmt(value: Double): String = String.format(Locale.US, "%.2f", value)
 }
@@ -115,6 +117,17 @@ internal object PatientStateEngine {
     ): PatientStateSnapshot {
         val userIntent = buildUserIntentSummary(contextSnapshot)
         val thermal = thermalBelief ?: ThermalBeliefDigest.EMPTY
+        val falseMealSuppression = latentState?.falseMealSuppression == true ||
+            hypothesisState?.suppressMealInterpretation == true
+        val causalPosterior = CausalStatePosteriorBuilder.build(
+            mealAbsorptionOutput = mealAbsorptionOutput,
+            latentState = latentState,
+            hypothesisState = hypothesisState,
+            patternSnapshot = patternSnapshot,
+            userIntent = userIntent,
+            thermalBelief = thermal,
+            falseMealSuppression = falseMealSuppression,
+        )
         return PatientStateSnapshot(
             timestampMs = timestampMs,
             phase = phaseOutput?.phase ?: PhysiologicalPhase.OFF,
@@ -129,15 +142,15 @@ internal object PatientStateEngine {
             sleepDebtScore = latentState?.sleepDebtScore ?: 0.0,
             postHypoReboundProb = latentState?.postHypoReboundProb ?: 0.0,
             sensorConfidence = latentState?.sensorConfidence ?: 0.0,
-            falseMealSuppression = latentState?.falseMealSuppression == true ||
-                hypothesisState?.suppressMealInterpretation == true,
+            falseMealSuppression = falseMealSuppression,
             uamDominant = hypothesisState?.dominant ?: UamHypothesisId.NONE,
             uamDominantConfidence = hypothesisState?.dominantConfidence ?: 0.0,
             userIntent = userIntent,
+            causalPosterior = causalPosterior,
             thermalInflammationIndex = thermal.inflammationIndex,
             thermalRecoveryBurden = thermal.recoveryBurden,
             thermalHypothesis = thermal.hypothesis.name,
-            source = "patient_state_v2",
+            source = "patient_state_v3",
         )
     }
 

@@ -7,6 +7,8 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
+import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStateId
+import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
@@ -80,6 +82,19 @@ class ReplayQualityExportBuilderTest {
                     avgConfidence = 0.82,
                     hasStress = true,
                     dominantIntent = "STRESS",
+                ),
+                causalPosterior = CausalStatePosterior(
+                    fastMealProb = 0.18,
+                    prolongedMealProb = 0.08,
+                    dawnEndogenousProb = 0.89,
+                    postHypoRecoveryProb = 0.74,
+                    stressResistanceProb = 0.48,
+                    exerciseAfterburnProb = 0.05,
+                    inflammatoryDriftProb = 0.26,
+                    absorptionUncertainProb = 0.21,
+                    dominant = CausalStateId.DAWN_ENDOGENOUS,
+                    dominantConfidence = 0.89,
+                    learningQuality = 0.44,
                 ),
             ),
             patientModeDecision = PatientModeOrchestrator.Decision(
@@ -163,6 +178,8 @@ class ReplayQualityExportBuilderTest {
         assertThat(export.mealInterpretationSuppressed).isTrue()
         assertThat(export.patientMode).isEqualTo("DAWN_ENDOGENOUS")
         assertThat(export.patientStrategyHint).isEqualTo("BASAL_BRIDGE")
+        assertThat(export.causalStateDominant).isEqualTo("DAWN_ENDOGENOUS")
+        assertThat(export.causalLearningQuality).isWithin(1e-9).of(0.44)
         assertThat(export.postHypoGuardState).isEqualTo("CORRECTION_REBOUND_GUARD")
         assertThat(export.predictiveHypoSuppressed).isTrue()
         assertThat(export.rbtMode).isEqualTo("SHADOW_GATED")
@@ -174,6 +191,8 @@ class ReplayQualityExportBuilderTest {
         assertThat(export.qualityTags).contains("prediction_missing")
         assertThat(export.qualityTags).contains("rbt_authority_blocked")
         assertThat(export.qualityTags).contains("user_intent_active")
+        assertThat(export.qualityTags).contains("causal_dawn_endogenous")
+        assertThat(export.qualityTags).contains("causal_learning_unclean")
         assertThat(export.qualityTags).contains("patient_mode_dawn_endogenous")
     }
 
@@ -232,6 +251,19 @@ class ReplayQualityExportBuilderTest {
                     hasMealRisk = true,
                     dominantIntent = "MEAL_RISK",
                 ),
+                causalPosterior = CausalStatePosterior(
+                    fastMealProb = 0.92,
+                    prolongedMealProb = 0.18,
+                    dawnEndogenousProb = 0.06,
+                    postHypoRecoveryProb = 0.04,
+                    stressResistanceProb = 0.05,
+                    exerciseAfterburnProb = 0.03,
+                    inflammatoryDriftProb = 0.02,
+                    absorptionUncertainProb = 0.08,
+                    dominant = CausalStateId.FAST_MEAL,
+                    dominantConfidence = 0.92,
+                    learningQuality = 0.88,
+                ),
             ),
             patientModeDecision = PatientModeOrchestrator.Decision(
                 mode = PatientMode.FAST_MEAL,
@@ -288,8 +320,10 @@ class ReplayQualityExportBuilderTest {
         assertThat(export.mealHypothesisConfidence).isWithin(1e-9).of(0.91)
         assertThat(export.uamHypothesisDominant).isEqualTo("MEAL")
         assertThat(export.patientMode).isEqualTo("FAST_MEAL")
+        assertThat(export.causalStateDominant).isEqualTo("FAST_MEAL")
         assertThat(export.stackingGuardState).isEqualTo("PATTERN_IOB_STACKING_SURVEILLANCE")
         assertThat(export.stackingGuardActive).isTrue()
+        assertThat(export.qualityTags).contains("causal_fast_meal")
         assertThat(export.qualityTags).contains("meal_hypothesis_active")
         assertThat(export.qualityTags).contains("stacking_guard_active")
         assertThat(export.qualityTags).contains("patient_mode_meal")

@@ -89,7 +89,8 @@ internal object PatientStatePresentationBuilder {
         }
 
     private fun buildPhysiologySummary(state: PatientStateSnapshot): String =
-        "Phase ${humanize(state.phase.name)} · Absorption ${humanize(state.mealAbsorptionPhase.name)} · UAM ${humanize(state.uamDominant.name)}"
+        "Phase ${humanize(state.phase.name)} · Absorption ${humanize(state.mealAbsorptionPhase.name)} · " +
+            "UAM ${humanize(state.uamDominant.name)} · Cause ${humanize(state.causalPosterior.dominant.name)}"
 
     private fun buildPhysioLiveSummary(digest: PhysioLiveDigest): String {
         if (digest.stepsLast15m == 0 && digest.hrNowBpm == 0 && digest.hrAvg15mBpm == 0) {
@@ -140,8 +141,8 @@ internal object PatientStatePresentationBuilder {
 
     private fun buildSignalSummary(state: PatientStateSnapshot): String =
         "Meal ${percent(state.mealProb)} · Endogenous ${percent(state.endogenousGlucoseDrive)} · " +
-            "Resistance ${percent(state.transientResistanceProb)} · Thermal ${percent(state.thermalInflammationIndex)} · " +
-            "Sensor ${percent(state.sensorConfidence)}"
+        "Resistance ${percent(state.transientResistanceProb)} · Thermal ${percent(state.thermalInflammationIndex)} · " +
+            "Protect ${percent(state.causalPosterior.protectiveConfidence)} · Sensor ${percent(state.sensorConfidence)}"
 
     private fun buildSignalGauges(
         state: PatientStateSnapshot,
@@ -173,6 +174,14 @@ internal object PatientStatePresentationBuilder {
 
     private fun humanizeReason(code: String): String =
         when (code) {
+            "CAUSAL_POST_HYPO" -> "Causal post-hypo recovery"
+            "CAUSAL_FAST_MEAL" -> "Causal fast meal"
+            "CAUSAL_PROLONGED_MEAL" -> "Causal prolonged meal"
+            "CAUSAL_DAWN_ENDOGENOUS" -> "Causal dawn endogenous drive"
+            "CAUSAL_EXERCISE_AFTERBURN" -> "Causal exercise afterburn"
+            "CAUSAL_INFLAMMATORY_DRIFT" -> "Causal inflammatory drift"
+            "CAUSAL_STRESS_RESISTANCE" -> "Causal stress resistance"
+            "CAUSAL_ABSORPTION_UNCERTAIN" -> "Causal absorption uncertainty"
             "LATENT_POST_HYPO" -> "Latent post-hypo rebound"
             "UAM_POST_HYPO" -> "UAM post-hypo signal"
             "CTX_ALCOHOL" -> "Alcohol context"

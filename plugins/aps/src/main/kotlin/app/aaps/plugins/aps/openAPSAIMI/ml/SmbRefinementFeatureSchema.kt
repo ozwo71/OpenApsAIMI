@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.ml
 
+import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 
@@ -8,7 +9,8 @@ internal object SmbRefinementFeatureSchema {
     const val BASE_FEATURE_COUNT = 10
     private const val LATENT_FEATURE_COUNT = 4
     private const val MODE_FEATURE_COUNT = 3
-    const val INPUT_SIZE = BASE_FEATURE_COUNT + LATENT_FEATURE_COUNT + MODE_FEATURE_COUNT + 1
+    private const val CAUSAL_FEATURE_COUNT = 3
+    const val INPUT_SIZE = BASE_FEATURE_COUNT + LATENT_FEATURE_COUNT + MODE_FEATURE_COUNT + CAUSAL_FEATURE_COUNT + 1
 
     private const val NEUTRAL_MEAL_PROB = 0f
     private const val NEUTRAL_ENDOGENOUS_GLUCOSE_DRIVE = 0f
@@ -17,6 +19,9 @@ internal object SmbRefinementFeatureSchema {
     private const val NEUTRAL_PATIENT_MODE_MEAL_BIAS = 0.45f
     private const val NEUTRAL_PATIENT_MODE_PROTECTION_BIAS = 0.22f
     private const val NEUTRAL_CONTEXT_INTENT_CONFIDENCE = 0f
+    private const val NEUTRAL_CAUSAL_MEAL_CONFIDENCE = 0f
+    private const val NEUTRAL_CAUSAL_PROTECTIVE_CONFIDENCE = 0f
+    private const val NEUTRAL_CAUSAL_LEARNING_QUALITY = 1f
 
     val requiredTrainingFeatureNames: List<String> = listOf(
         "bg",
@@ -44,13 +49,20 @@ internal object SmbRefinementFeatureSchema {
         "contextIntentConfidence",
     )
 
-    val csvFeatureNames: List<String> = requiredTrainingFeatureNames + latentFeatureNames + modeFeatureNames
+    val causalFeatureNames: List<String> = listOf(
+        "causalMealConfidence",
+        "causalProtectiveConfidence",
+        "causalLearningQuality",
+    )
+
+    val csvFeatureNames: List<String> = requiredTrainingFeatureNames + latentFeatureNames + modeFeatureNames + causalFeatureNames
 
     fun buildRuntimeFeatures(
         baseFeatures: FloatArray,
         trendIndicator: Float,
         physioLatentState: PhysioLatentState?,
         patientModeDecision: PatientModeOrchestrator.Decision?,
+        causalStatePosterior: CausalStatePosterior?,
     ): FloatArray {
         require(baseFeatures.size == BASE_FEATURE_COUNT) {
             "Expected $BASE_FEATURE_COUNT base features, got ${baseFeatures.size}"
@@ -58,10 +70,15 @@ internal object SmbRefinementFeatureSchema {
 
         val latentFeatures = latentFeatureValues(physioLatentState)
         val modeFeatures = modeFeatureValues(patientModeDecision)
+        val causalFeatures = causalFeatureValues(causalStatePosterior)
         return FloatArray(INPUT_SIZE).also { out ->
             baseFeatures.copyInto(out, endIndex = baseFeatures.size)
             latentFeatures.copyInto(out, destinationOffset = baseFeatures.size)
             modeFeatures.copyInto(out, destinationOffset = baseFeatures.size + latentFeatures.size)
+            causalFeatures.copyInto(
+                out,
+                destinationOffset = baseFeatures.size + latentFeatures.size + modeFeatures.size,
+            )
             out[INPUT_SIZE - 1] = trendIndicator
         }
     }
@@ -82,8 +99,12 @@ internal object SmbRefinementFeatureSchema {
             val index = headers.indexOf(name)
             cols.getOrNull(index)?.toFloatOrNull() ?: neutralValueFor(name)
         }
+        val causalFeatures = causalFeatureNames.map { name ->
+            val index = headers.indexOf(name)
+            cols.getOrNull(index)?.toFloatOrNull() ?: neutralValueFor(name)
+        }
 
-        return (requiredFeatures + latentFeatures + modeFeatures).toFloatArray()
+        return (requiredFeatures + latentFeatures + modeFeatures + causalFeatures).toFloatArray()
     }
 
     fun latentFeatureValues(physioLatentState: PhysioLatentState?): FloatArray =
@@ -101,6 +122,20 @@ internal object SmbRefinementFeatureSchema {
             patientModeDecision?.userIntentConfidence?.toFloat() ?: NEUTRAL_CONTEXT_INTENT_CONFIDENCE,
         )
 
+    fun causalFeatureValues(causalStatePosterior: CausalStatePosterior?): FloatArray =
+        floatArrayOf(
+            causalStatePosterior?.mealConfidence?.toFloat() ?: NEUTRAL_CAUSAL_MEAL_CONFIDENCE,
+            causalStatePosterior?.protectiveConfidence?.toFloat() ?: NEUTRAL_CAUSAL_PROTECTIVE_CONFIDENCE,
+            causalStatePosterior?.learningQuality?.toFloat() ?: NEUTRAL_CAUSAL_LEARNING_QUALITY,
+        )
+
+    fun shouldUseForTraining(rawFeatures: FloatArray): Boolean {
+        val causalStart = BASE_FEATURE_COUNT + LATENT_FEATURE_COUNT + MODE_FEATURE_COUNT
+        val protectiveConfidence = rawFeatures.getOrElse(causalStart + 1) { NEUTRAL_CAUSAL_PROTECTIVE_CONFIDENCE }
+        val learningQuality = rawFeatures.getOrElse(causalStart + 2) { NEUTRAL_CAUSAL_LEARNING_QUALITY }
+        return learningQuality >= 0.52f && protectiveConfidence < 0.86f
+    }
+
     private fun neutralValueFor(name: String): Float =
         when (name) {
             "mealProb" -> NEUTRAL_MEAL_PROB
@@ -110,6 +145,9 @@ internal object SmbRefinementFeatureSchema {
             "patientModeMealBias" -> NEUTRAL_PATIENT_MODE_MEAL_BIAS
             "patientModeProtectionBias" -> NEUTRAL_PATIENT_MODE_PROTECTION_BIAS
             "contextIntentConfidence" -> NEUTRAL_CONTEXT_INTENT_CONFIDENCE
+            "causalMealConfidence" -> NEUTRAL_CAUSAL_MEAL_CONFIDENCE
+            "causalProtectiveConfidence" -> NEUTRAL_CAUSAL_PROTECTIVE_CONFIDENCE
+            "causalLearningQuality" -> NEUTRAL_CAUSAL_LEARNING_QUALITY
             else -> 0f
         }
 }

@@ -9,6 +9,38 @@ import org.junit.jupiter.api.Test
 class PatientModeOrchestratorTest {
 
     @Test
+    fun evaluate_prefers_causal_fast_meal_when_posterior_is_decisive() {
+        val decision = PatientModeOrchestrator.evaluate(
+            PatientStateSnapshot(
+                timestampMs = 1_718_000_000_000L,
+                phase = PhysiologicalPhase.OFF,
+                mealAbsorptionPhase = MealAbsorptionPhase.NONE,
+                mealProb = 0.34,
+                endogenousGlucoseDrive = 0.18,
+                transientResistanceProb = 0.10,
+                sensorConfidence = 0.90,
+                causalPosterior = CausalStatePosterior(
+                    fastMealProb = 0.79,
+                    prolongedMealProb = 0.18,
+                    dawnEndogenousProb = 0.12,
+                    postHypoRecoveryProb = 0.06,
+                    stressResistanceProb = 0.08,
+                    exerciseAfterburnProb = 0.04,
+                    inflammatoryDriftProb = 0.05,
+                    absorptionUncertainProb = 0.10,
+                    dominant = CausalStateId.FAST_MEAL,
+                    dominantConfidence = 0.79,
+                    learningQuality = 0.82,
+                ),
+            ),
+        )
+
+        assertThat(decision.mode).isEqualTo(PatientMode.FAST_MEAL)
+        assertThat(decision.reasonCodes).contains("CAUSAL_FAST_MEAL")
+        assertThat(decision.mealBias).isGreaterThan(0.85)
+    }
+
+    @Test
     fun evaluate_prefers_dawn_endogenous_when_endogenous_drive_dominates() {
         val decision = PatientModeOrchestrator.evaluate(
             PatientStateSnapshot(
