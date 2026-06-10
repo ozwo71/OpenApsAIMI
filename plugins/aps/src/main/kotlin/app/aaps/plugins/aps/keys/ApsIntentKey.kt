@@ -38,6 +38,13 @@ enum class ApsIntentKey(
         preferenceType = PreferenceType.ACTIVITY,
     ),
 
+    AimiControlCenter(
+        key = "aimi_control_center_compose",
+        titleResId = R.string.aimi_control_center_entry_title,
+        summaryResId = R.string.aimi_control_center_entry_summary,
+        preferenceType = PreferenceType.ACTIVITY,
+    ),
+
     AimiSosPermissions(
         key = "aimi_sos_permissions_compose",
         titleResId = R.string.aimi_sos_permissions_title,

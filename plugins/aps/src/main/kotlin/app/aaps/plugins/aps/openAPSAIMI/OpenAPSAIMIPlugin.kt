@@ -121,6 +121,7 @@ import androidx.core.net.toUri
 import kotlin.math.abs
 import kotlin.math.exp
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorService
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiControlCenterScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiPkpdSettingsScreen
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
 import kotlinx.coroutines.withContext
@@ -1500,6 +1501,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // Single string pref: inline avoids an extra nested sub-screen + full-screen drill-down
         // (same UX as other lone keys, e.g. pregnancy date).
         add(AimiStringKey.RemoteControlPin)
+        add(
+            ApsIntentKey.AimiControlCenter.withCompose(
+                ComposeScreenContent { onBack ->
+                    AimiControlCenterScreen(
+                        preferences = preferences,
+                        onBack = onBack,
+                    )
+                },
+            ),
+        )
         add(
             PreferenceSubScreenDef(
                 key = "aimi_compose_sos",
