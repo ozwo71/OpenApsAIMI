@@ -42,6 +42,9 @@ internal fun sanitizePredictionValues(
     val rising = delta >= 0f
     if (rising && baseBg > 140 && largeDrop > 80) {
         predBg = (baseBg + delta * 6).coerceIn(25.0, 600.0)
+        // Same repair as the moderate branch: a drop deemed unrealistic for predBg is just as
+        // unrealistic for eventualBg; leaving it raw suppressed SMBs while high and rising.
+        eventualBg = maxOf(eventualBg, predBg)
         anomalies.add("jumpClamp")
     } else if (rising && baseBg > 110 && largeDrop > 60) {
         predBg = (baseBg + delta * 4).coerceIn(25.0, 600.0)

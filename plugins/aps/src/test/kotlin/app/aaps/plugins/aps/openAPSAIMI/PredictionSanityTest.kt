@@ -3,7 +3,6 @@ package app.aaps.plugins.aps.openAPSAIMI
 import app.aaps.core.interfaces.aps.Predictions
 import app.aaps.plugins.aps.openAPSAIMI.prediction.sanitizePredictionValues
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 
 class PredictionSanityTest {
@@ -25,12 +24,6 @@ class PredictionSanityTest {
     }
 
     @Test
-    @Disabled(
-        "Triage 2026-06-10: predBg IS clamped to 252 as expected, but the strong jumpClamp branch " +
-            "in sanitizePredictionValues leaves eventualBg at the unrealistic raw value (70) while " +
-            "the moderate branch lifts it. Likely production inconsistency (under-dosing flavor) - " +
-            "pending decision: add eventualBg = maxOf(eventualBg, predBg) to the strong branch."
-    )
     fun unrealisticDropIsClampedForSafety() {
         val series = Predictions(IOB = listOf(240, 80, 70, 60, 55))
         val result = sanitizePredictionValues(
