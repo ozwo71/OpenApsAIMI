@@ -203,6 +203,7 @@ fun NavGraphBuilder.appNavGraph(
                     navController.navigate(AppRoute.ProfileActivation.createRoute(index))
                 }
             },
+            onAddProfile = { navController.navigate(AppRoute.ProfileEditorNew.route) },
             onInsulinManager = { navController.navigate(AppRoute.InsulinManagement.createRoute(mode)) }
         )
     }
@@ -419,6 +420,7 @@ fun NavGraphBuilder.appNavGraph(
             initialTimestamp = profileManagementViewModel.dateUtil.nowWithoutMilliseconds(),
             rh = rh,
             onNavigateBack = { navController.safePopBackStack() },
+            checkPumpCompatible = { percentage -> profileManagementViewModel.isPumpCompatible(profileIndex, percentage) },
             onActivate = { duration, percentage, timeshift, withTT, notes, timestamp, timeChanged ->
                 coroutineScope.launch {
                     profileManagementViewModel.activateProfile(
@@ -446,6 +448,20 @@ fun NavGraphBuilder.appNavGraph(
         LaunchedEffect(Unit) {
             if (!initialized.value) {
                 profileEditorViewModel.selectProfile(profileIndex)
+                initialized.value = true
+            }
+        }
+        ProfileEditorScreen(
+            viewModel = profileEditorViewModel,
+            onBackClick = { navController.safePopBackStack() }
+        )
+    }
+
+    composable(AppRoute.ProfileEditorNew.route) {
+        val initialized = rememberSaveable { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            if (!initialized.value) {
+                profileEditorViewModel.startNewProfileDraft()
                 initialized.value = true
             }
         }

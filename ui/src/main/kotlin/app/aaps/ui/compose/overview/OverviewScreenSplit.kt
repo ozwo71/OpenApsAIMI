@@ -51,6 +51,7 @@ fun OverviewScreenSplit(
     tempTargetSceneManaged: Boolean = false,
     runningMode: RM.Mode,
     runningModeText: String,
+    runningModeRemaining: String,
     runningModeProgress: Float,
     runningModeSceneManaged: Boolean = false,
     tbrState: TbrState,
@@ -136,16 +137,15 @@ fun OverviewScreenSplit(
                                 timeAgoText = bgInfoState.timeAgoText
                             )
                         }
-                        SensitivityChipBlock(state = sensitivityUiState)
                     }
 
                     OverviewChipsColumn(
                         runningMode = runningMode,
                         runningModeText = runningModeText,
+                        runningModeRemaining = runningModeRemaining,
                         runningModeProgress = runningModeProgress,
                         runningModeSceneManaged = runningModeSceneManaged,
                         smbEnabled = smbEnabled,
-                        isSimpleMode = isSimpleMode,
                         profileName = profileName,
                         isProfileModified = isProfileModified,
                         profileProgress = profileProgress,
@@ -158,6 +158,7 @@ fun OverviewScreenSplit(
                         tbrState = tbrState,
                         iobUiState = iobUiState,
                         cobUiState = cobUiState,
+                        sensitivityUiState = sensitivityUiState,
                         onNavigate = onNavigate,
                         onTbrChipClick = onTbrChipClick,
                         onIobChipClick = onIobChipClick,

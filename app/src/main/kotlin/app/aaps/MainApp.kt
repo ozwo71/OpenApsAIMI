@@ -19,6 +19,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.Configuration
 import app.aaps.core.data.configuration.Constants
@@ -59,6 +60,7 @@ import app.aaps.core.interfaces.protection.ExportPasswordDataStore
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventAppInitialized
+import app.aaps.core.interfaces.rx.events.EventShowSnackbar
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.interfaces.tempTargets.toJson
 import app.aaps.core.interfaces.ui.UiInteraction
@@ -90,8 +92,10 @@ import app.aaps.implementation.plugin.PluginStore
 import app.aaps.implementation.receivers.NetworkChangeReceiver
 import app.aaps.plugins.aps.loop.runningMode.RunningModeExpiryScheduler
 import app.aaps.plugins.aps.loop.runningMode.RunningModeReconciler
+import app.aaps.plugins.aps.openAPSAIMI.AimiUamHandler
 import app.aaps.plugins.constraints.objectives.keys.ObjectivesLongComposedKey
 import app.aaps.plugins.aps.openAPSAIMI.StepService
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.constraints.signatureVerifier.SignatureVerifierPlugin
 import app.aaps.receivers.BTReceiver
 import app.aaps.receivers.ChargingStateReceiver
@@ -179,6 +183,7 @@ class MainApp : Application(), HasAndroidInjector, Configuration.Provider {
     @Inject lateinit var widgetUpdater: WidgetUpdater
     @Inject lateinit var runningModeReconciler: RunningModeReconciler
     @Inject lateinit var runningModeExpiryScheduler: RunningModeExpiryScheduler
+    @Inject lateinit var storageHelper: AimiStorageHelper
     @Inject @ApplicationScope lateinit var appScope: CoroutineScope
 
     private lateinit var insulinLabel: String
@@ -198,6 +203,25 @@ class MainApp : Application(), HasAndroidInjector, Configuration.Provider {
         copyModelToInternalStorage(this)
         aapsLogger.debug("onCreate - après copyModelToFileSystem")
         ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleListener.get())
+        appScope.launch {
+            rxBus.toFlow(EventShowSnackbar::class.java).collect { event ->
+                val uiVisible = ProcessLifecycleOwner.get().lifecycle.currentState
+                    .isAtLeast(Lifecycle.State.STARTED)
+                if (!uiVisible) {
+                    notificationManager.post(
+                        id = NotificationId.SNACKBAR_FALLBACK,
+                        text = event.message,
+                        level = when (event.type) {
+                            EventShowSnackbar.Type.Error   -> NotificationLevel.NORMAL
+                            EventShowSnackbar.Type.Warning -> NotificationLevel.NORMAL
+                            EventShowSnackbar.Type.Success -> NotificationLevel.INFO
+                            EventShowSnackbar.Type.Info    -> NotificationLevel.INFO
+                        },
+                        validMinutes = 30
+                    )
+                }
+            }
+        }
         // Configure LeakCanary with Firebase reporting
         // Memory leaks will be uploaded to Firebase Crashlytics via FabricPrivacy.logException
         configureLeakCanary(
@@ -446,10 +470,11 @@ class MainApp : Application(), HasAndroidInjector, Configuration.Provider {
             val assetManager = context.assets
             aapsLogger.debug("copyModelToInternalStorage - assetManager : $assetManager")
 
-            // Définition du répertoire cible dans le stockage externe
-            val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS/ml")
-            if (!externalDir.exists() && !externalDir.mkdirs()) {
-                Log.e("ModelCopyError", "Impossible de créer le répertoire : ${externalDir.absolutePath}")
+            val modelDestination = storageHelper.getAimiFile("ml", "model.tflite")
+            val uamDestination = storageHelper.getAimiFile("ml", "modelUAM.tflite")
+            val modelDir = uamDestination.parentFile
+            if (modelDir == null || (!modelDir.exists() && !modelDir.mkdirs())) {
+                Log.e("ModelCopyError", "Impossible de créer le répertoire : ${modelDir?.absolutePath ?: "unknown"}")
                 return
             }
 
@@ -469,26 +494,25 @@ class MainApp : Application(), HasAndroidInjector, Configuration.Provider {
             }
 
             // Copie des fichiers nécessaires
-            copyAssetToFile("model.tflite", File(externalDir, "model.tflite"))
-            copyAssetToFile("modelUAM.tflite", File(externalDir, "modelUAM.tflite"))
+            copyAssetToFile("model.tflite", modelDestination)
+            copyAssetToFile("modelUAM.tflite", uamDestination)
 
             // Vérification si les fichiers existent après copie
-            val modelFilePath = "${externalDir.absolutePath}/model.tflite"
-            val modelFile = File(modelFilePath)
-            if (modelFile.exists()) {
-                Log.d("FileCheck", "Le fichier existe à l'emplacement $modelFilePath")
+            if (modelDestination.exists()) {
+                Log.d("FileCheck", "Le fichier existe à l'emplacement ${modelDestination.absolutePath}")
             } else {
-                Log.e("FileCheck", "Le fichier n'existe pas à l'emplacement $modelFilePath")
+                Log.e("FileCheck", "Le fichier n'existe pas à l'emplacement ${modelDestination.absolutePath}")
             }
 
-            val uamFilePath = "${externalDir.absolutePath}/modelUAM.tflite"
-            val uamFile = File(uamFilePath)
-            if (uamFile.exists()) {
-                Log.d("FileCheck", "Le fichier existe à l'emplacement $uamFilePath")
+            if (uamDestination.exists()) {
+                Log.d("FileCheck", "Le fichier existe à l'emplacement ${uamDestination.absolutePath}")
+                AimiUamHandler.configureUamModel(uamDestination, context)
             } else {
-                Log.e("FileCheck", "Le fichier n'existe pas à l'emplacement $uamFilePath")
+                Log.e("FileCheck", "Le fichier n'existe pas à l'emplacement ${uamDestination.absolutePath}")
             }
 
+            val (status, path, error) = storageHelper.getStorageStatus()
+            aapsLogger.info(LTag.APS, "AIMI model storage status=$status path=${path ?: "n/a"} error=${error ?: "none"}")
             aapsLogger.debug("copyModelToInternalStorage - Copie terminée")
 
         } catch (e: Exception) {

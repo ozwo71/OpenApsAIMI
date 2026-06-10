@@ -7499,11 +7499,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var consoleError = mutableListOf<String>()
     private var consoleLog = mutableListOf<String>()
     private var lastAutodriveActionTime: Long = 0L  // FCL 14.1 Cooldown State
-    private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
+    private val externalDir by lazy { storageHelper.getAimiDirectory() }
     //private val modelFile = File(externalDir, "ml/model.tflite")
     //private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
-    private val csvfile = File(externalDir, "oapsaimiML2_records.csv")
-    private val csvfile2 = File(externalDir, "oapsaimi2_records.csv")
+    private val csvfile by lazy { storageHelper.getAimiFile("oapsaimiML2_records.csv") }
+    private val csvfile2 by lazy { storageHelper.getAimiFile("oapsaimi2_records.csv") }
     private val appExternalFallbackDir = File(context.getExternalFilesDir(null), "AAPS")
     private val hormonitorStudyExporter by lazy { AimiHormonitorStudyExporterMTR(context, aapsLogger, preferences) }
     private var csvPrimaryStorageDeniedLogged = false

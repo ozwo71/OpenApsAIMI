@@ -8,6 +8,7 @@ import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleEstimator
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleFacade
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -31,8 +32,8 @@ object WCycleModule {
 
     @Provides
     @Singleton
-    fun provideWCycleLearner(context: Context): WCycleLearner =
-        WCycleLearner(ctx = context)
+    fun provideWCycleLearner(context: Context, storageHelper: AimiStorageHelper): WCycleLearner =
+        WCycleLearner(ctx = context, storageHelper = storageHelper)
 
     @Provides
     @Singleton
@@ -45,8 +46,8 @@ object WCycleModule {
 
     @Provides
     @Singleton
-    fun provideWCycleCsvLogger(context: Context): WCycleCsvLogger =
-        WCycleCsvLogger(context)
+    fun provideWCycleCsvLogger(context: Context, storageHelper: AimiStorageHelper): WCycleCsvLogger =
+        WCycleCsvLogger(context, storageHelper)
 
     @Provides
     @Singleton
