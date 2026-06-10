@@ -3,7 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor.oref
 import app.aaps.core.interfaces.aps.Predictions
 import app.aaps.core.interfaces.aps.RT
 import com.google.common.truth.Truth.assertThat
-import org.junit.Test
+import org.junit.jupiter.api.Test
 
 class OrefPredictionReasonSuffixTest {
 

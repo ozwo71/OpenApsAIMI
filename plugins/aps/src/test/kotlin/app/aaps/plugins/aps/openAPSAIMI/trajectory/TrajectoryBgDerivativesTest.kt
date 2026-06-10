@@ -1,9 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.trajectory
 
 import app.aaps.core.data.iob.InMemoryGlucoseValue
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 /**
  * Synthetic CGM series → δ / accel shape (RFC C.3).
@@ -42,7 +42,7 @@ class TrajectoryBgDerivativesTest {
         assertEquals(-10.0, d1, 0.05)
         assertEquals(-5.0, d2, 0.05)
         val a1 = TrajectoryBgDerivatives.accelAt(t1, series)
-        assertTrue("expected accel > 0 when |delta| decreases, got $a1", a1 > 0.0)
+        assertTrue(a1 > 0.0, "expected accel > 0 when |delta| decreases, got $a1")
     }
 
     private fun fiveMinuteSeries(

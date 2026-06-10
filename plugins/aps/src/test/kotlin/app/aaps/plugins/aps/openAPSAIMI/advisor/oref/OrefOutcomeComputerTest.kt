@@ -1,7 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.oref
 
 import com.google.common.truth.Truth.assertThat
-import org.junit.Test
+import org.junit.jupiter.api.Test
 
 class OrefOutcomeComputerTest {
 

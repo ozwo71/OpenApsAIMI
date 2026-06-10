@@ -357,6 +357,26 @@ Trois couches pouvaient annuler simultanément tout cap pendant une montée repa
 
 ---
 
+## 11. Audit JUnit 4 dormants — réactivation (10 Jun)
+
+**Cause** : `test-module-dependencies` n'embarque que Jupiter (`useJUnitPlatform()`, depuis oct. 2023, convention upstream). Seuls `core:ui` et `plugins:calibration` ont le vintage engine (via `compose-test-module-dependencies`, requis par Robolectric) ; `plugins:source` l'a aussi en local pour `InstaraStaleCheckWorkerTest`. Les tests AIMI du fork (nov. 2025+) écrits en JUnit 4 n'avaient **jamais exécuté** : 57 fichiers / ~155 méthodes dans `plugins:aps`.
+
+**Vérification empirique** (vintage injecté temporairement) : 155 tests dormants exécutés → 133 verts, 22 rouges.
+
+**Remédiation** :
+- Les 57 fichiers convertis en JUnit 5 (imports, `@Before`→`@BeforeEach`, réordonnancement des asserts message-first). Pas de vintage engine ajouté.
+- Triage immédiat des échecs « sécurité » :
+  - `SmbQuantizerTest` (2) — le « safety floor » (boost au step) a été **délibérément retiré** du code (surdose ×3 sur pompes à gros step, ex. Combo 0.1U) ; tests réécrits pour verrouiller l'arrondi standard.
+  - `BasalPlannerTest` (4) — attentes figées sur les anciens seuils hypo codés en dur (60/75) ; le code utilise des seuils dérivés du LGS (`lgs−15` / `lgs`). Tests réalignés + nouveau test anti-stall.
+  - `IsfBlenderTest` (1) — le 1er blend est ancré sur `fusedIsf` (budget 0 à elapsed 0, conservateur) et le budget effectif est min(5 %/tick, 20 %/h) ; attentes réalignées.
+  - `PredictionSanityTest::unrealisticDropIsClampedForSafety` — **incohérence produit plausible** : la branche `jumpClamp` forte clampe `predBg` mais laisse `eventualBg` à la valeur brute irréaliste (la branche modérée, elle, le relève). Saveur sous-dosage (SMB retenus en hyper). `@Disabled` documenté, **décision en attente** : ajouter `eventualBg = maxOf(eventualBg, predBg)` à la branche forte.
+- Les 14 autres échecs (attentes périmées / mocks cassés : `PkPdIntegrationTest`, `AdaptivePkPdEstimatorTest`, `CarbsAdvisorTest`, `AdvancedPredictionEngineTest`, `NightGrowthResistanceMonitorTest`, `OrefReasonParserTest`, `BasalHistoryUtilsTest`, `SmbInstructionExecutorTest`, `IsfFusionTest`, `TrajectorySyntheticPhaseSpaceTest`) : `@Disabled("Dormant JUnit4 test… needs triage (audit 2026-06-10)")` — à trier au fil de l'eau.
+- Fix flaky `UnifiedActivityProviderMTRTest` : horloge épinglée à 4 min dans un bucket de 5 min (le test échouait quand `now % 5min < 30s` faisait tomber deux rows dans le même bucket).
+
+**État final suite `plugins:aps`** : 733 tests, 15 skipped (@Disabled documentés), 24 échecs **pré-existants hors périmètre** (déjà rouges avant l'audit) : ~20 NPE d'environnement `getExternalFilesDir()=null` dans le constructeur `DetermineBasalaimiSMB2` (tests scénario `DetermineBasalAimi*`, `EngineBenchmarks`) + 4 échecs réels à investiguer (`SmbDomainHeuristicsTest`, `TherapySportDetectionTest` ×2, `DetermineBasalInvocationCachesTest` ×3, `BasalNeuralLearnerGovernanceTest` ×4).
+
+---
+
 ## 8. One-sentence pitch (for Hormonitor study abstract)
 
 **AIMI now unfolds glycemic decisions as a recursive belief tree, interprets physiological and wearable state (including thermal rhythm from Garmin/Oura) before adjusting insulin, and exports that clinical story in Hormonitor `patient_story` and `thermal_belief` so study replay can follow body understanding — not only delivered units.**

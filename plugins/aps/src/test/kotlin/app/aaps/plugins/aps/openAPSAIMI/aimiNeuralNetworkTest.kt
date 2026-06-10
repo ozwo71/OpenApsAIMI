@@ -1,8 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 class aimiNeuralNetworkTest {
 
@@ -45,6 +45,6 @@ class aimiNeuralNetworkTest {
         nn.trainWithValidation(inputs, targets, inputs, targets)
         val finalLoss = nn.validate(inputs, targets)
 
-        assertTrue("Loss should decrease", finalLoss < initialLoss)
+        assertTrue(finalLoss < initialLoss, "Loss should decrease")
     }
 }

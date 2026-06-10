@@ -1,9 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.pkpd
 
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.PhaseSpaceState
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 class TrajectoryPeakMismatchScorerTest {
 
@@ -61,7 +61,7 @@ class TrajectoryPeakMismatchScorerTest {
             lastBolusAgeMinutes = 45,
             cobGrams = 5.0,
         )
-        assertTrue("expected positive nudge, got $n", n > 0.05)
+        assertTrue(n > 0.05, "expected positive nudge, got $n")
         assertTrue(n <= 2.01)
     }
 

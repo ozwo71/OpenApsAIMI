@@ -1,7 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 class AuditorPromptSafeguardsTest {
 
@@ -16,32 +16,24 @@ class AuditorPromptSafeguardsTest {
         // Then it must contain critical safety sections (Audit compliance)
         
         // 1. Section Header
-        assertTrue("Prompt must contain Safety Assertions section", 
-            prompt.contains("SAFETY ASSERTIONS (REQUIRED)"))
+        assertTrue(prompt.contains("SAFETY ASSERTIONS (REQUIRED)"), "Prompt must contain Safety Assertions section")
             
         // 2. Critical Rules
-        assertTrue("Prompt must contain DATA_INTEGRITY rule for missing data", 
-            prompt.contains("DATA_INTEGRITY"))
+        assertTrue(prompt.contains("DATA_INTEGRITY"), "Prompt must contain DATA_INTEGRITY rule for missing data")
             
-        assertTrue("Prompt must contain HYPO_RULE for low BG safety", 
-            prompt.contains("HYPO_RULE"))
+        assertTrue(prompt.contains("HYPO_RULE"), "Prompt must contain HYPO_RULE for low BG safety")
         
-        assertTrue("Prompt must contain STACKING_RULE for IOB peaks", 
-            prompt.contains("STACKING_RULE"))
+        assertTrue(prompt.contains("STACKING_RULE"), "Prompt must contain STACKING_RULE for IOB peaks")
             
-        assertTrue("Prompt must contain ANTI-HALLUCINATION safeguards", 
-            prompt.contains("ANTI-HALLUCINATION"))
+        assertTrue(prompt.contains("ANTI-HALLUCINATION"), "Prompt must contain ANTI-HALLUCINATION safeguards")
             
         // 3. Specific Bound Checks
-        assertTrue("Prompt must enforce strict hypo threshold (75mg/dL)", 
-            prompt.contains("< 75 mg/dL"))
+        assertTrue(prompt.contains("< 75 mg/dL"), "Prompt must enforce strict hypo threshold (75mg/dL)")
             
-        assertTrue("Prompt must allow flagging uncertain data", 
-            prompt.contains("uncertain_data"))
+        assertTrue(prompt.contains("uncertain_data"), "Prompt must allow flagging uncertain data")
             
         // 4. Instructions
-        assertTrue("Prompt must contain instructions on degraded mode",
-            prompt.contains("degradedMode"))
+        assertTrue(prompt.contains("degradedMode"), "Prompt must contain instructions on degraded mode")
     }
 
     private fun createDummyInput(): AuditorInput {

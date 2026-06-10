@@ -6,8 +6,8 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import io.mockk.every
 import io.mockk.mockk
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 class MpcControllerCalculateOptimalDoseTest {
 

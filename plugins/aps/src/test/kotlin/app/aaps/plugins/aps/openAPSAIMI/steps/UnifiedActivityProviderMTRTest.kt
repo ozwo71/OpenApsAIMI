@@ -13,7 +13,10 @@ import org.junit.jupiter.api.Test
 
 class UnifiedActivityProviderMTRTest {
 
-    private val now = System.currentTimeMillis()
+    // Fixed clock pinned 4 min into a 5-min aggregation bucket: rows at now-30s, now-5m and
+    // now-10m must land in three distinct buckets. With System.currentTimeMillis() the test was
+    // wall-clock flaky (now-30s and now-5m share a bucket whenever now % 5min < 30s).
+    private val now = (1_780_000_000_000L / (5 * 60_000L)) * (5 * 60_000L) + 4 * 60_000L
     private val persistenceLayer = mockk<PersistenceLayer>()
     private val sp = mockk<SP>()
     private val aapsLogger = mockk<AAPSLogger>(relaxed = true)

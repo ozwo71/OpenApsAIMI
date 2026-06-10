@@ -4,8 +4,8 @@ import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryAnalysis
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryMetrics
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryModulation
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryType
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
 
 class TrajectoryPeakBiasTest {
 

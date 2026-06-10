@@ -10,10 +10,10 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.KernelType
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioStateMTR
 import io.mockk.every
 import io.mockk.mockk
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Before
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
 
 class CosineTrajectoryGateTest {
 
@@ -21,7 +21,7 @@ class CosineTrajectoryGateTest {
     private lateinit var prefs: Preferences
     private lateinit var logger: AAPSLogger
 
-    @Before
+    @BeforeEach
     fun setup() {
         prefs = mockk(relaxed = true)
         logger = mockk(relaxed = true)
@@ -73,8 +73,8 @@ class CosineTrajectoryGateTest {
         val result = gate.compute(input)
 
         assertEquals(KernelType.STRESS, result.dominantKernel)
-        assertTrue("Sens < 1.0 for stress", result.effectiveSensitivityMultiplier < 0.95)
-        assertTrue("Shift > 0 for stress", result.peakTimeShiftMinutes > 5)
+        assertTrue(result.effectiveSensitivityMultiplier < 0.95, "Sens < 1.0 for stress")
+        assertTrue(result.peakTimeShiftMinutes > 5, "Shift > 0 for stress")
     }
 
     @Test
@@ -87,7 +87,7 @@ class CosineTrajectoryGateTest {
         val result = gate.compute(input)
 
         assertEquals(KernelType.ACTIVITY, result.dominantKernel)
-        assertTrue("Sens > 1.0 for activity", result.effectiveSensitivityMultiplier > 1.1)
+        assertTrue(result.effectiveSensitivityMultiplier > 1.1, "Sens > 1.0 for activity")
     }
 
     @Test

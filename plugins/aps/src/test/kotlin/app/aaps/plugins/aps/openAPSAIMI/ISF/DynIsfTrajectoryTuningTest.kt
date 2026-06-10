@@ -1,8 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.ISF
 
 import app.aaps.core.interfaces.aps.GlucoseStatusAutoIsf
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 class DynIsfTrajectoryTuningTest {
 
@@ -18,8 +18,8 @@ class DynIsfTrajectoryTuningTest {
             corrSqu = 0.72,
         )
         val (rise, fall) = trajectoryRiseFallScores(gs)
-        assertTrue("rise=$rise", rise >= 0.85)
-        assertTrue("fall=$fall", fall < 0.35)
+        assertTrue(rise >= 0.85, "rise=$rise")
+        assertTrue(fall < 0.35, "fall=$fall")
     }
 
     @Test
@@ -34,8 +34,8 @@ class DynIsfTrajectoryTuningTest {
             corrSqu = 0.4,
         )
         val (rise, fall) = trajectoryRiseFallScores(gs)
-        assertTrue("rise=$rise", rise < 0.15)
-        assertTrue("fall=$fall", fall < 0.15)
+        assertTrue(rise < 0.15, "rise=$rise")
+        assertTrue(fall < 0.15, "fall=$fall")
     }
 
     @Test
@@ -50,6 +50,6 @@ class DynIsfTrajectoryTuningTest {
             corrSqu = 0.35,
         )
         val (rise, _) = trajectoryRiseFallScores(gs)
-        assertTrue("rise should not be driven by accel alone when corr low rise=$rise", rise < 0.35)
+        assertTrue(rise < 0.35, "rise should not be driven by accel alone when corr low rise=$rise")
     }
 }

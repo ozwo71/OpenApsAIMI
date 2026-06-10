@@ -12,10 +12,10 @@ import app.aaps.core.keys.IntKey
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Before
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
 
 class GlucoseStatusCalculatorAimiTest {
 
@@ -28,7 +28,7 @@ class GlucoseStatusCalculatorAimiTest {
 
     private lateinit var calculator: GlucoseStatusCalculatorAimi
 
-    @Before
+    @BeforeEach
     fun setUp() {
         calculator = GlucoseStatusCalculatorAimi(log, iobCobCalculator, dateUtil, fmt, deltaCalculator, preferences)
         every { dateUtil.now() } returns 1000000L
