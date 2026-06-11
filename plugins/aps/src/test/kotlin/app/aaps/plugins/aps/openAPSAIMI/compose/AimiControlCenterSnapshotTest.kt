@@ -34,32 +34,34 @@ class AimiControlCenterSnapshotTest {
     fun `default snapshot keeps autonomy in observation and physio in moderate mode`() {
         val snapshot = buildAimiControlCenterSnapshot(preferences)
 
-        val autonomy = snapshot.families.first { it.titleResId == R.string.aimi_control_center_autonomy_title }
-        val physio = snapshot.families.first { it.titleResId == R.string.aimi_control_center_physio_title }
+        val autonomy = snapshot.families.first { it.id == AimiBehaviorFamilyId.Autonomy }
+        val physio = snapshot.families.first { it.id == AimiBehaviorFamilyId.Physio }
 
         assertThat(autonomy.levelLabelResId).isEqualTo(R.string.aimi_control_center_autonomy_observation)
-        assertThat(autonomy.status).isEqualTo(AimiProjectionStatus.EquivalentCurrent)
+        assertThat(autonomy.status).isEqualTo(AimiProjectionStatus.CoherentProfile)
         assertThat(physio.levelLabelResId).isEqualTo(R.string.aimi_control_center_physio_level_moderate)
         assertThat(snapshot.contextSection.details).hasSize(9)
+        assertThat(snapshot.sourceSection.details).hasSize(2)
     }
 
     @Test
     fun `autodrive v3 stack projects a more assertive meal family and controlled autonomy`() {
-        every { preferences.get(BooleanKey.OApsAIMIautoDrive) } returns true
         every { preferences.get(BooleanKey.OApsAIMIautoDriveActive) } returns true
+        every { preferences.get(BooleanKey.OApsAIMIautoDrive) } returns true
         every { preferences.get(BooleanKey.OApsAIMIHyperTrajectoryRelease) } returns true
+        every { preferences.get(BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive) } returns true
+        every { preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative) } returns true
         every { preferences.get(BooleanKey.OApsAIMIRecursiveBeliefShadow) } returns true
         every { preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority) } returns true
-        every { preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative) } returns true
         every { preferences.get(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep) } returns 0.11
         every { preferences.get(DoubleKey.OApsAIMIautodrivePrebolus) } returns 5.0
         every { preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus) } returns 1.5
 
         val snapshot = buildAimiControlCenterSnapshot(preferences)
-        val meal = snapshot.families.first { it.titleResId == R.string.aimi_control_center_meal_title }
-        val autonomy = snapshot.families.first { it.titleResId == R.string.aimi_control_center_autonomy_title }
+        val meal = snapshot.families.first { it.id == AimiBehaviorFamilyId.MealCapture }
+        val autonomy = snapshot.families.first { it.id == AimiBehaviorFamilyId.Autonomy }
 
-        assertThat(meal.levelLabelResId).isEqualTo(R.string.aimi_control_center_meal_level_very_assertive)
+        assertThat(meal.levelLabelResId).isEqualTo(R.string.aimi_control_center_meal_level_assertive)
         assertThat(autonomy.levelLabelResId).isEqualTo(R.string.aimi_control_center_autonomy_controlled)
         assertThat(meal.confidence).isGreaterThan(0.55f)
     }

@@ -629,6 +629,27 @@ Important:
 - preview des impacts avant validation
 - badge `Expert personnalise` preserve
 
+### Lot 2 - Statut de livraison actuel
+
+Le `AIMI Control Center` permet maintenant de preparer de vrais changements produit:
+
+- chaque famille AIMI dispose d'un controle Compose actionnable,
+- l'utilisateur voit le `profil actuel` puis la `cible apres application`,
+- un bloc `Preview impacts` affiche les cles legacy qui seront modifiees,
+- rien n'est ecrit tant que l'utilisateur n'a pas valide explicitement l'application.
+
+Le comportement choisi pour ce lot reste volontairement prudent:
+
+- les changements sont toujours ecrits dans les preferences legacy existantes,
+- les familles `Contexte patient` et `Sources / connecteurs` restent separees,
+- une famille ne pousse pas de reconfiguration silencieuse hors de son role produit,
+- le ML et l'auditor restent hors du write-back automatique de l'autonomie pour eviter un effet de bord non intentionnel.
+
+Avant / apres observable:
+
+- avant: l'utilisateur comprend ce que AIMI fait, mais ne peut pas encore le deplacer simplement,
+- apres: il peut choisir une intention clinique lisible, voir l'impact exact, puis appliquer.
+
 ### Lot 3 - AIMI Advisor oriente familles
 
 - recommandations de comportements

@@ -9,8 +9,16 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.R as CoreUiR
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
-import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
+import java.util.Locale
 import kotlin.math.abs
+
+internal enum class AimiBehaviorFamilyId {
+    Protection,
+    MealCapture,
+    Stability,
+    Physio,
+    Autonomy,
+}
 
 internal data class AimiControlCenterSnapshot(
     val families: List<AimiBehaviorFamilySnapshot>,
@@ -19,6 +27,7 @@ internal data class AimiControlCenterSnapshot(
 )
 
 internal data class AimiBehaviorFamilySnapshot(
+    val id: AimiBehaviorFamilyId,
     @StringRes val titleResId: Int,
     @StringRes val questionResId: Int,
     @StringRes val leftAnchorResId: Int,
@@ -44,7 +53,8 @@ internal data class AimiControlDetail(
 )
 
 internal enum class AimiProjectionStatus(@StringRes val labelResId: Int) {
-    EquivalentCurrent(R.string.aimi_control_center_equivalent_current),
+    CoherentProfile(R.string.aimi_control_center_coherent_profile),
+    MixedLegacy(R.string.aimi_control_center_mixed_legacy),
     ExpertPersonalized(R.string.aimi_control_center_expert_personalized),
 }
 
@@ -72,6 +82,7 @@ private fun buildProtectionFamily(preferences: Preferences): AimiBehaviorFamilyS
     )
     val projection = project(scores)
     return AimiBehaviorFamilySnapshot(
+        id = AimiBehaviorFamilyId.Protection,
         titleResId = R.string.aimi_control_center_protection_title,
         questionResId = R.string.aimi_control_center_protection_question,
         leftAnchorResId = R.string.aimi_control_center_protection_left,
@@ -93,30 +104,23 @@ private fun buildProtectionFamily(preferences: Preferences): AimiBehaviorFamilyS
 }
 
 private fun buildMealCaptureFamily(preferences: Preferences): AimiBehaviorFamilySnapshot {
-    val autoDrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
     val autoDriveActive = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
     val hyperTrajectory = autoDriveActive && preferences.get(BooleanKey.OApsAIMIHyperTrajectoryRelease)
-    val recursiveShadow = autoDriveActive && preferences.get(BooleanKey.OApsAIMIRecursiveBeliefShadow)
-    val recursiveAuthority = recursiveShadow && preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority)
+    val aggressiveTrajectory = hyperTrajectory && preferences.get(BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive)
 
     val scores = mutableListOf<Float>()
-    scores += when {
-        autoDriveActive -> 0.76f
-        autoDrive       -> 0.44f
-        else            -> 0.12f
-    }
-    if (autoDriveActive) {
-        scores += boolScore(hyperTrajectory, whenFalse = 0.34f, whenTrue = 0.82f)
-        scores += boolScore(recursiveShadow, whenFalse = 0.38f, whenTrue = 0.70f)
-        scores += boolScore(recursiveAuthority, whenFalse = 0.50f, whenTrue = 0.95f)
-        scores += normalize(preferences.get(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep), DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep)
-        scores += normalize(preferences.get(DoubleKey.OApsAIMIautodrivePrebolus), DoubleKey.OApsAIMIautodrivePrebolus)
-        scores += normalize(preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus), DoubleKey.OApsAIMIautodrivesmallPrebolus)
-        scores += inverseNormalize(preferences.get(DoubleKey.OApsAIMIHyperEstablishedDevMgdl), DoubleKey.OApsAIMIHyperEstablishedDevMgdl)
-        scores += inverseNormalize(preferences.get(DoubleKey.OApsAIMIHyperDeepDevMgdl), DoubleKey.OApsAIMIHyperDeepDevMgdl)
-    }
+    scores += if (autoDriveActive) 0.58f else 0.18f
+    scores += boolScore(hyperTrajectory, whenFalse = 0.28f, whenTrue = 0.68f)
+    scores += boolScore(aggressiveTrajectory, whenFalse = 0.46f, whenTrue = 0.88f)
+    scores += normalize(preferences.get(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep), DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep)
+    scores += normalize(preferences.get(DoubleKey.OApsAIMIautodrivePrebolus), DoubleKey.OApsAIMIautodrivePrebolus)
+    scores += normalize(preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus), DoubleKey.OApsAIMIautodrivesmallPrebolus)
+    scores += inverseNormalize(preferences.get(DoubleKey.OApsAIMIHyperEstablishedDevMgdl), DoubleKey.OApsAIMIHyperEstablishedDevMgdl)
+    scores += inverseNormalize(preferences.get(DoubleKey.OApsAIMIHyperDeepDevMgdl), DoubleKey.OApsAIMIHyperDeepDevMgdl)
+
     val projection = project(scores)
     return AimiBehaviorFamilySnapshot(
+        id = AimiBehaviorFamilyId.MealCapture,
         titleResId = R.string.aimi_control_center_meal_title,
         questionResId = R.string.aimi_control_center_meal_question,
         leftAnchorResId = R.string.aimi_control_center_meal_left,
@@ -127,29 +131,32 @@ private fun buildMealCaptureFamily(preferences: Preferences): AimiBehaviorFamily
         rawPreferenceCount = 8,
         status = projection.status,
         details = listOf(
-            boolDetail(R.string.oaps_aimi_enableMlautoDrive_title, autoDrive),
             boolDetail(R.string.oaps_aimi_enableMlautoDriveActive_title, autoDriveActive),
-            boolDetail(BooleanKey.OApsAIMIHyperTrajectoryRelease, isEnabled = hyperTrajectory),
-            boolDetail(BooleanKey.OApsAIMIRecursiveBeliefShadow, isEnabled = recursiveShadow),
-            boolDetail(BooleanKey.OApsAIMIRecursiveBeliefAuthority, isEnabled = recursiveAuthority),
+            boolDetail(BooleanKey.OApsAIMIHyperTrajectoryRelease, hyperTrajectory),
+            boolDetail(BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, aggressiveTrajectory),
             detail(R.string.aimi_mpc_u_per_kg_title, preferences.get(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep), "U/kg/5m"),
             detail(R.string.prebolus_autodrive_mode_title, preferences.get(DoubleKey.OApsAIMIautodrivePrebolus), "U"),
             detail(R.string.prebolussmall_autodrive_mode_title, preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus), "U"),
+            detail(DoubleKey.OApsAIMIHyperEstablishedDevMgdl, preferences.get(DoubleKey.OApsAIMIHyperEstablishedDevMgdl), "mg/dL"),
+            detail(DoubleKey.OApsAIMIHyperDeepDevMgdl, preferences.get(DoubleKey.OApsAIMIHyperDeepDevMgdl), "mg/dL"),
         ),
     )
 }
 
 private fun buildStabilityFamily(preferences: Preferences): AimiBehaviorFamilySnapshot {
+    val dynIsfEnabled = preferences.get(BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled)
+    val adaptiveBasalEnabled = preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)
     val scores = listOf(
         normalize(preferences.get(DoubleKey.OApsAIMISmbTailDamping), DoubleKey.OApsAIMISmbTailDamping),
         normalize(preferences.get(DoubleKey.OApsAIMISmbExerciseDamping), DoubleKey.OApsAIMISmbExerciseDamping),
         normalize(preferences.get(DoubleKey.OApsAIMISmbLateFatDamping), DoubleKey.OApsAIMISmbLateFatDamping),
-        boolScore(preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled), whenFalse = 0.35f, whenTrue = 0.66f),
-        boolScore(preferences.get(BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled), whenFalse = 0.32f, whenTrue = 0.72f),
+        boolScore(adaptiveBasalEnabled, whenFalse = 0.35f, whenTrue = 0.66f),
+        boolScore(dynIsfEnabled, whenFalse = 0.32f, whenTrue = 0.72f),
         normalize(preferences.get(DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction), DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction),
     )
     val projection = project(scores)
     return AimiBehaviorFamilySnapshot(
+        id = AimiBehaviorFamilyId.Stability,
         titleResId = R.string.aimi_control_center_stability_title,
         questionResId = R.string.aimi_control_center_stability_question,
         leftAnchorResId = R.string.aimi_control_center_stability_left,
@@ -163,30 +170,26 @@ private fun buildStabilityFamily(preferences: Preferences): AimiBehaviorFamilySn
             detail(R.string.oaps_aimi_smb_tail_damping_title, preferences.get(DoubleKey.OApsAIMISmbTailDamping), null),
             detail(R.string.oaps_aimi_smb_exercise_damping_title, preferences.get(DoubleKey.OApsAIMISmbExerciseDamping), null),
             detail(R.string.oaps_aimi_smb_late_fat_damping_title, preferences.get(DoubleKey.OApsAIMISmbLateFatDamping), null),
-            boolDetail(R.string.oaps_aimi_adaptive_basal_title, preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)),
-            boolDetail(BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled),
+            boolDetail(R.string.oaps_aimi_adaptive_basal_title, adaptiveBasalEnabled),
+            boolDetail(BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled, dynIsfEnabled),
             detail(DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, preferences.get(DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction), null),
         ),
     )
 }
 
 private fun buildPhysioFamily(preferences: Preferences): AimiBehaviorFamilySnapshot {
+    val assistantEnabled = preferences.get(BooleanKey.AimiPhysioAssistantEnable)
     val sleepEnabled = preferences.get(BooleanKey.AimiPhysioSleepDataEnable)
     val hrvEnabled = preferences.get(BooleanKey.AimiPhysioHRVDataEnable)
-    val assistantEnabled = preferences.get(BooleanKey.AimiPhysioAssistantEnable)
-    val ouraConfigured = preferences.get(AimiStringKey.OuraPersonalAccessToken).isNotBlank()
-    val sourceMode = preferences.get(AimiStringKey.ActivitySourceMode)
-    val sourceEnabled = sourceMode != UnifiedActivityProviderMTR.MODE_DISABLED
 
     val scores = listOf(
-        boolScore(assistantEnabled, whenFalse = 0.38f, whenTrue = 0.82f),
-        boolScore(sleepEnabled, whenFalse = 0.22f, whenTrue = 0.72f),
+        boolScore(assistantEnabled, whenFalse = 0.14f, whenTrue = 0.72f),
+        boolScore(sleepEnabled, whenFalse = 0.20f, whenTrue = 0.60f),
         boolScore(hrvEnabled, whenFalse = 0.22f, whenTrue = 0.78f),
-        boolScore(sourceEnabled, whenFalse = 0.20f, whenTrue = 0.70f),
-        boolScore(ouraConfigured, whenFalse = 0.48f, whenTrue = 0.92f),
     )
     val projection = project(scores)
     return AimiBehaviorFamilySnapshot(
+        id = AimiBehaviorFamilyId.Physio,
         titleResId = R.string.aimi_control_center_physio_title,
         questionResId = R.string.aimi_control_center_physio_question,
         leftAnchorResId = R.string.aimi_control_center_physio_left,
@@ -194,25 +197,12 @@ private fun buildPhysioFamily(preferences: Preferences): AimiBehaviorFamilySnaps
         levelLabelResId = physioLevelLabel(projection.score),
         normalizedScore = projection.score,
         confidence = projection.confidence,
-        rawPreferenceCount = 5,
+        rawPreferenceCount = 3,
         status = projection.status,
         details = listOf(
             boolDetail(R.string.aimi_physio_enable_title, assistantEnabled),
             boolDetail(R.string.aimi_physio_sleep_enable_title, sleepEnabled),
             boolDetail(R.string.aimi_physio_hrv_enable_title, hrvEnabled),
-            AimiControlDetail(
-                titleResId = AimiStringKey.ActivitySourceMode.titleResId,
-                valueText = sourceMode,
-                valueResId = AimiStringKey.ActivitySourceMode.entries[sourceMode],
-            ),
-            AimiControlDetail(
-                titleResId = AimiStringKey.OuraPersonalAccessToken.titleResId,
-                valueResId = if (ouraConfigured) {
-                    R.string.aimi_control_center_configured
-                } else {
-                    R.string.aimi_control_center_not_configured
-                },
-            ),
         ),
     )
 }
@@ -221,13 +211,12 @@ private fun buildAutonomyFamily(preferences: Preferences): AimiBehaviorFamilySna
     val autoDrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
     val autoDriveActive = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
     val authoritative = autoDriveActive && preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative)
-    val recursiveAuthority = autoDriveActive && preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority)
-    val mlTraining = preferences.get(BooleanKey.OApsAIMIMLtraining)
-    val auditorEnabled = preferences.get(BooleanKey.AimiAuditorEnabled)
+    val recursiveShadow = autoDriveActive && preferences.get(BooleanKey.OApsAIMIRecursiveBeliefShadow)
+    val recursiveAuthority = recursiveShadow && preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority)
 
     val levelLabelResId = when {
         !autoDrive && !autoDriveActive -> R.string.aimi_control_center_autonomy_observation
-        autoDrive && !autoDriveActive  -> R.string.aimi_control_center_autonomy_recommendations
+        autoDrive && !autoDriveActive -> R.string.aimi_control_center_autonomy_recommendations
         authoritative || recursiveAuthority -> R.string.aimi_control_center_autonomy_controlled
         else -> R.string.aimi_control_center_autonomy_assisted
     }
@@ -239,6 +228,7 @@ private fun buildAutonomyFamily(preferences: Preferences): AimiBehaviorFamilySna
     }
 
     return AimiBehaviorFamilySnapshot(
+        id = AimiBehaviorFamilyId.Autonomy,
         titleResId = R.string.aimi_control_center_autonomy_title,
         questionResId = R.string.aimi_control_center_autonomy_question,
         leftAnchorResId = R.string.aimi_control_center_autonomy_left,
@@ -246,15 +236,14 @@ private fun buildAutonomyFamily(preferences: Preferences): AimiBehaviorFamilySna
         levelLabelResId = levelLabelResId,
         normalizedScore = score,
         confidence = 1.0f,
-        rawPreferenceCount = 6,
-        status = AimiProjectionStatus.EquivalentCurrent,
+        rawPreferenceCount = 5,
+        status = AimiProjectionStatus.CoherentProfile,
         details = listOf(
             boolDetail(R.string.oaps_aimi_enableMlautoDrive_title, autoDrive),
             boolDetail(R.string.oaps_aimi_enableMlautoDriveActive_title, autoDriveActive),
-            boolDetail(BooleanKey.OApsAIMIautoDriveAuthoritative, isEnabled = authoritative),
-            boolDetail(BooleanKey.OApsAIMIRecursiveBeliefAuthority, isEnabled = recursiveAuthority),
-            boolDetail(R.string.oaps_aimi_enableMlTraining_title, mlTraining),
-            boolDetail(R.string.aimi_auditor_enabled_title, auditorEnabled),
+            boolDetail(BooleanKey.OApsAIMIRecursiveBeliefShadow, recursiveShadow),
+            boolDetail(BooleanKey.OApsAIMIRecursiveBeliefAuthority, recursiveAuthority),
+            boolDetail(BooleanKey.OApsAIMIautoDriveAuthoritative, authoritative),
         ),
     )
 }
@@ -302,14 +291,11 @@ private fun buildSourceSection(preferences: Preferences): AimiControlSectionSnap
         titleResId = R.string.aimi_control_center_sources_title,
         summaryResId = R.string.aimi_control_center_sources_summary,
         details = listOf(
-            boolDetail(R.string.aimi_physio_enable_title, preferences.get(BooleanKey.AimiPhysioAssistantEnable)),
             AimiControlDetail(
                 titleResId = AimiStringKey.ActivitySourceMode.titleResId,
                 valueText = sourceMode,
                 valueResId = sourceResId,
             ),
-            boolDetail(R.string.aimi_physio_sleep_enable_title, preferences.get(BooleanKey.AimiPhysioSleepDataEnable)),
-            boolDetail(R.string.aimi_physio_hrv_enable_title, preferences.get(BooleanKey.AimiPhysioHRVDataEnable)),
             AimiControlDetail(
                 titleResId = AimiStringKey.OuraPersonalAccessToken.titleResId,
                 valueResId = if (ouraConfigured) R.string.aimi_control_center_configured else R.string.aimi_control_center_not_configured,
@@ -328,12 +314,12 @@ private fun project(scores: List<Float>): AimiScoreProjection {
     val safeScores = scores.ifEmpty { listOf(0.5f) }
     val score = safeScores.average().toFloat().coerceIn(0f, 1f)
     val meanDistance = safeScores.map { abs(it - score) }.average().toFloat()
-    val confidence = (1f - meanDistance * 1.75f).coerceIn(0.42f, 1f)
+    val confidence = (1f - meanDistance * 1.75f).coerceIn(0.40f, 1f)
     val spread = (safeScores.maxOrNull() ?: score) - (safeScores.minOrNull() ?: score)
-    val status = if (confidence < 0.58f && spread > 0.45f) {
-        AimiProjectionStatus.ExpertPersonalized
-    } else {
-        AimiProjectionStatus.EquivalentCurrent
+    val status = when {
+        confidence < 0.58f && spread > 0.45f -> AimiProjectionStatus.ExpertPersonalized
+        confidence < 0.74f || spread > 0.24f -> AimiProjectionStatus.MixedLegacy
+        else -> AimiProjectionStatus.CoherentProfile
     }
     return AimiScoreProjection(score = score, confidence = confidence, status = status)
 }
@@ -355,7 +341,7 @@ private fun boolScore(enabled: Boolean, whenFalse: Float, whenTrue: Float): Floa
 private fun detail(key: DoublePreferenceKey, value: Double, unit: String?): AimiControlDetail =
     AimiControlDetail(
         titleResId = key.titleResId,
-        valueText = formatValue(value = value, unit = unit),
+        valueText = formatControlCenterDoubleValue(value = value, unit = unit),
     )
 
 private fun detail(
@@ -365,16 +351,16 @@ private fun detail(
 ): AimiControlDetail =
     AimiControlDetail(
         titleResId = titleResId,
-        valueText = formatValue(value = value, unit = unit),
+        valueText = formatControlCenterDoubleValue(value = value, unit = unit),
     )
 
 private fun boolDetail(
     key: BooleanPreferenceKey,
-    isEnabled: Boolean? = null,
+    enabled: Boolean,
 ): AimiControlDetail =
     AimiControlDetail(
         titleResId = key.titleResId,
-        valueResId = if (isEnabled ?: false) CoreUiR.string.yes else CoreUiR.string.no,
+        valueResId = if (enabled) CoreUiR.string.yes else CoreUiR.string.no,
     )
 
 private fun boolDetail(
@@ -386,49 +372,81 @@ private fun boolDetail(
         valueResId = if (enabled) CoreUiR.string.yes else CoreUiR.string.no,
     )
 
-private fun formatValue(value: Double, unit: String?): String {
+internal fun formatControlCenterDoubleValue(value: Double, unit: String?): String {
     val formatted = when {
         abs(value - value.toInt().toDouble()) < 0.005 -> value.toInt().toString()
-        value >= 10.0 -> String.format("%.1f", value)
-        else -> String.format("%.2f", value)
+        value >= 10.0 -> String.format(Locale.US, "%.1f", value)
+        else -> String.format(Locale.US, "%.2f", value)
     }
     return if (unit.isNullOrBlank()) formatted else "$formatted $unit"
 }
 
-@StringRes
-internal fun protectionLevelLabel(score: Float): Int =
+internal fun fiveStepIndex(score: Float): Int =
     when {
-        score < 0.18f -> R.string.aimi_control_center_protection_level_very_protective
-        score < 0.36f -> R.string.aimi_control_center_protection_level_protective
-        score < 0.60f -> R.string.aimi_control_center_protection_level_balanced
-        score < 0.80f -> R.string.aimi_control_center_protection_level_corrective
+        score < 0.18f -> 0
+        score < 0.36f -> 1
+        score < 0.60f -> 2
+        score < 0.80f -> 3
+        else -> 4
+    }
+
+internal fun threeStepIndex(score: Float): Int =
+    when {
+        score < 0.34f -> 0
+        score < 0.68f -> 1
+        else -> 2
+    }
+
+@StringRes
+internal fun protectionLevelLabelForIndex(index: Int): Int =
+    when (index.coerceIn(0, 4)) {
+        0 -> R.string.aimi_control_center_protection_level_very_protective
+        1 -> R.string.aimi_control_center_protection_level_protective
+        2 -> R.string.aimi_control_center_protection_level_balanced
+        3 -> R.string.aimi_control_center_protection_level_corrective
         else -> R.string.aimi_control_center_protection_level_very_corrective
     }
 
 @StringRes
-internal fun mealLevelLabel(score: Float): Int =
-    when {
-        score < 0.18f -> R.string.aimi_control_center_meal_level_prudent
-        score < 0.36f -> R.string.aimi_control_center_meal_level_standard
-        score < 0.60f -> R.string.aimi_control_center_meal_level_active
-        score < 0.80f -> R.string.aimi_control_center_meal_level_assertive
+internal fun protectionLevelLabel(score: Float): Int =
+    protectionLevelLabelForIndex(fiveStepIndex(score))
+
+@StringRes
+internal fun mealLevelLabelForIndex(index: Int): Int =
+    when (index.coerceIn(0, 4)) {
+        0 -> R.string.aimi_control_center_meal_level_prudent
+        1 -> R.string.aimi_control_center_meal_level_standard
+        2 -> R.string.aimi_control_center_meal_level_active
+        3 -> R.string.aimi_control_center_meal_level_assertive
         else -> R.string.aimi_control_center_meal_level_very_assertive
     }
 
 @StringRes
-internal fun stabilityLevelLabel(score: Float): Int =
-    when {
-        score < 0.18f -> R.string.aimi_control_center_stability_level_very_smooth
-        score < 0.36f -> R.string.aimi_control_center_stability_level_smooth
-        score < 0.60f -> R.string.aimi_control_center_stability_level_balanced
-        score < 0.80f -> R.string.aimi_control_center_stability_level_responsive
+internal fun mealLevelLabel(score: Float): Int =
+    mealLevelLabelForIndex(fiveStepIndex(score))
+
+@StringRes
+internal fun stabilityLevelLabelForIndex(index: Int): Int =
+    when (index.coerceIn(0, 4)) {
+        0 -> R.string.aimi_control_center_stability_level_very_smooth
+        1 -> R.string.aimi_control_center_stability_level_smooth
+        2 -> R.string.aimi_control_center_stability_level_balanced
+        3 -> R.string.aimi_control_center_stability_level_responsive
         else -> R.string.aimi_control_center_stability_level_very_responsive
     }
 
 @StringRes
-internal fun physioLevelLabel(score: Float): Int =
-    when {
-        score < 0.34f -> R.string.aimi_control_center_physio_level_low
-        score < 0.68f -> R.string.aimi_control_center_physio_level_moderate
+internal fun stabilityLevelLabel(score: Float): Int =
+    stabilityLevelLabelForIndex(fiveStepIndex(score))
+
+@StringRes
+internal fun physioLevelLabelForIndex(index: Int): Int =
+    when (index.coerceIn(0, 2)) {
+        0 -> R.string.aimi_control_center_physio_level_low
+        1 -> R.string.aimi_control_center_physio_level_moderate
         else -> R.string.aimi_control_center_physio_level_strong
     }
+
+@StringRes
+internal fun physioLevelLabel(score: Float): Int =
+    physioLevelLabelForIndex(threeStepIndex(score))
