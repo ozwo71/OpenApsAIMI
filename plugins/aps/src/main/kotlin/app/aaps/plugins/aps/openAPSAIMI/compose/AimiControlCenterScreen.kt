@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.compose
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -85,7 +86,21 @@ fun AimiControlCenterScreen(
             targetDraft = targetDraft,
         )
     }
+    val advisorRecommendations = remember(
+        preferenceRevision,
+        protectionLevel,
+        mealCaptureLevel,
+        stabilityLevel,
+        physioLevel,
+        autonomyMode,
+    ) {
+        buildAimiControlCenterAdvisorRecommendations(
+            preferences = preferences,
+            draft = targetDraft,
+        )
+    }
     val appliedMessage = stringResource(R.string.aimi_control_center_apply_done)
+    val recommendationLoadedMessage = stringResource(R.string.aimi_control_center_advisor_loaded)
 
     fun resetDraft() {
         protectionLevel = currentDraft.protectionLevel
@@ -93,6 +108,14 @@ fun AimiControlCenterScreen(
         stabilityLevel = currentDraft.stabilityLevel
         physioLevel = currentDraft.physioLevel
         autonomyMode = currentDraft.autonomyMode
+    }
+
+    fun loadDraft(draft: AimiControlCenterDraft) {
+        protectionLevel = draft.protectionLevel
+        mealCaptureLevel = draft.mealCaptureLevel
+        stabilityLevel = draft.stabilityLevel
+        physioLevel = draft.physioLevel
+        autonomyMode = draft.autonomyMode
     }
 
     fun applyDraft() {
@@ -161,6 +184,14 @@ fun AimiControlCenterScreen(
                     ControlCenterIntroCard(
                         familyCount = currentSnapshot.families.size,
                         expertFamilyCount = currentSnapshot.families.count { it.status == AimiProjectionStatus.ExpertPersonalized },
+                    )
+
+                    AdvisorRecommendationsCard(
+                        recommendations = advisorRecommendations,
+                        onLoadRecommendation = { recommendation ->
+                            loadDraft(recommendation.targetDraft)
+                            scope.launch { snackbarHostState.showSnackbar(recommendationLoadedMessage) }
+                        },
                     )
 
                     currentSnapshot.families.forEach { family ->
@@ -291,6 +322,90 @@ private fun ControlCenterIntroCard(
                 ControlPill(text = stringResource(R.string.aimi_control_center_preserve_note))
                 ControlPill(text = stringResource(R.string.aimi_control_center_family_count, familyCount))
                 ControlPill(text = stringResource(R.string.aimi_control_center_expert_count, expertFamilyCount))
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdvisorRecommendationsCard(
+    recommendations: List<AimiControlCenterAdvisorRecommendation>,
+    onLoadRecommendation: (AimiControlCenterAdvisorRecommendation) -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(AapsSpacing.extraLarge),
+            verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
+        ) {
+            Text(
+                text = stringResource(R.string.aimi_control_center_advisor_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                text = stringResource(R.string.aimi_control_center_advisor_summary),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (recommendations.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.aimi_control_center_advisor_none),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            } else {
+                recommendations.forEach { recommendation ->
+                    AdvisorRecommendationItem(
+                        recommendation = recommendation,
+                        onLoadRecommendation = { onLoadRecommendation(recommendation) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdvisorRecommendationItem(
+    recommendation: AimiControlCenterAdvisorRecommendation,
+    onLoadRecommendation: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AapsSpacing.medium),
+            verticalArrangement = Arrangement.spacedBy(AapsSpacing.small),
+        ) {
+            Text(
+                text = stringResource(recommendation.titleResId),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = stringResource(recommendation.bodyResId),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(AapsSpacing.small),
+            ) {
+                recommendation.affectedFamilies.forEach { familyId ->
+                    ControlPill(text = stringResource(familyId.titleResId()))
+                }
+            }
+            TextButton(
+                onClick = onLoadRecommendation,
+                modifier = Modifier.align(Alignment.End),
+            ) {
+                Text(stringResource(R.string.aimi_control_center_advisor_load))
             }
         }
     }
@@ -645,3 +760,13 @@ private fun ControlPill(text: String) {
         )
     }
 }
+
+@StringRes
+private fun AimiBehaviorFamilyId.titleResId(): Int =
+    when (this) {
+        AimiBehaviorFamilyId.Protection -> R.string.aimi_control_center_protection_title
+        AimiBehaviorFamilyId.MealCapture -> R.string.aimi_control_center_meal_title
+        AimiBehaviorFamilyId.Stability -> R.string.aimi_control_center_stability_title
+        AimiBehaviorFamilyId.Physio -> R.string.aimi_control_center_physio_title
+        AimiBehaviorFamilyId.Autonomy -> R.string.aimi_control_center_autonomy_title
+    }

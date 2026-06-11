@@ -55,6 +55,14 @@ internal object SmbRefinementFeatureSchema {
         "causalLearningQuality",
     )
 
+    val familyAuditFeatureNames: List<String> = listOf(
+        "familyProtectionLevel",
+        "familyMealLevel",
+        "familyStabilityLevel",
+        "familyPhysioLevel",
+        "familyAutonomyLevel",
+    )
+
     val csvFeatureNames: List<String> = requiredTrainingFeatureNames + latentFeatureNames + modeFeatureNames + causalFeatureNames
 
     fun buildRuntimeFeatures(

@@ -656,11 +656,70 @@ Avant / apres observable:
 - apply au niveau famille
 - justification clinique lisible
 
+### Lot 3 - Statut de livraison actuel
+
+Le `AIMI Control Center` embarque maintenant un premier Advisor directement oriente familles:
+
+- un bloc `AIMI family advisor` apparait au-dessus des cartes,
+- les recommandations sont formulees en langage produit et non en raw keys,
+- chaque recommandation charge un `brouillon recommande` au niveau famille,
+- l'utilisateur garde ensuite la meme preview d'impacts et la meme confirmation explicite avant tout write-back legacy.
+
+Le perimetre volontairement choisi pour ce lot reste pragmatique:
+
+- l'Advisor corrige d'abord les incoherences de comportement entre `Meal capture`, `Autonomy` et `Physio`,
+- il ne pousse pas encore de relecture outcome-basee complete a partir de l'historique glycemique,
+- il reste donc predictible, explicable et sans effet de bord silencieux.
+
 ### Lot 4 - Reduction de la surface legacy
 
 - ecran standard epure
 - raw prefs bascules en `AIMI Lab`
 - documentation utilisateur alignee
+
+### Lot 4 - Statut de livraison actuel
+
+La navigation AIMI standard est maintenant recentree sur les blocs qui portent une vraie intention produit:
+
+- `AIMI Control Center`
+- `PKPD guide`
+- `Contexte patient`
+- `Physio / connecteurs`
+- `SOS`
+- `AIMI Lab` pour les reglages experts ou R&D
+
+La reduction de surface appliquee dans ce lot suit une logique de non-regression:
+
+- les reglages legacy bruts les plus techniques restent disponibles, mais sortent du flux standard,
+- les familles visibles dans le Control Center restent la voie recommandee pour modifier le comportement,
+- le write-back continue d'ecrire dans les cles legacy existantes pour ne pas casser les invariants runtime,
+- aucune option supplementaire n'est a activer pour beneficier de cette simplification produit.
+
+Avant / apres observable:
+
+- avant: l'utilisateur traverse un grand nombre de switches et sous-ecrans experts pour trouver le bon comportement,
+- apres: le parcours standard commence par l'intention clinique, puis AIMI Lab ne sert plus qu'au reglage avance.
+
+### Lot 5 - Harmonisation runtime pilotee par familles
+
+- UAM / faux repas sensible aux familles
+- PKPD module par familles
+- ML encadre par familles
+- export d'audit aligne
+
+### Lot 5 - Statut de livraison actuel
+
+Le runtime ne se contente plus d'utiliser les familles pour le visuel ou le write-back:
+
+- `Meal capture`, `Physio` et `Autonomy` modulent maintenant les seuils de competition `repas vs non-repas` dans l'arbitre UAM,
+- `Protection`, `Meal capture`, `Stability` et `Physio` modulent la facon dont PKPD applique ses facteurs d'absorption, de resistance et d'agressivite,
+- le raffinement ML garde le meme schema de modele, mais son autorite de correction est maintenant bornee par le profil famille courant,
+- les exports CSV de raffinement embarquent des colonnes d'audit famille pour permettre une analyse offline sans casser le schema existant du modele.
+
+Avant / apres observable:
+
+- avant: les familles agissaient surtout comme une couche UI et de projection sur des cles legacy,
+- apres: les familles deviennent aussi une couche runtime de coherence entre trajectoire, etat physiologique, PKPD et affinage ML.
 
 ---
 

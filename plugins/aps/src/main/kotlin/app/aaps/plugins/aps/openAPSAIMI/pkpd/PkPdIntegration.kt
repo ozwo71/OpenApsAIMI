@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.pkpd
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.compose.readAimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStateId
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
@@ -169,13 +170,19 @@ class PkPdIntegration(private val preferences: Preferences) {
             } else 0.0
             0.05 + 0.15 * normalizedRise
         } ?: 0.0
+        val behaviorProfile = readAimiBehaviorRuntimeProfile(preferences)
         val weightKineticFactor = buildWeightKineticFactor(patientWeightKg)
-        val physioAbsorptionFactor = buildPhysioAbsorptionFactor(
+        val rawPhysioAbsorptionFactor = buildPhysioAbsorptionFactor(
             physioLatentState = physioLatentState,
             causalStatePosterior = causalStatePosterior,
             mealContext = mealContext,
             estimatedRaMgdlPerMin = estimatedRaMgdlPerMin,
         )
+        val physioAbsorptionFactor = blendTowardNeutral(
+            value = rawPhysioAbsorptionFactor,
+            blendFraction = behaviorProfile.pkpdPhysioBlendFraction(),
+        )
+        val familyMealFactor = behaviorProfile.pkpdMealAbsorptionFactor(mealContext?.mealModeActive == true)
         val minScale = if (mealContext?.mealModeActive == true) 0.9 else 0.8
         val maxScale = if (mealContext?.mealModeActive == true) 1.5 else 1.4
         val pkpdScale = (
@@ -187,6 +194,7 @@ class PkPdIntegration(private val preferences: Preferences) {
             )
             .times(weightKineticFactor)
             .times(physioAbsorptionFactor)
+            .times(familyMealFactor)
             .coerceIn(minScale * 0.92, maxScale * 1.06)
 
         val effectiveDelta = combinedDelta ?: deltaMgDlPer5
@@ -202,8 +210,18 @@ class PkPdIntegration(private val preferences: Preferences) {
             aggressionMultiplier *= uamBoost.coerceIn(0.8, 1.0)
             consoleLog?.add("🧠 UAM detected (conf=${"%.2f".format(uamConfidence)}) -> Extra ISF Boost")
         }
-        val physioSiFactor = buildPhysioSiFactor(physioLatentState, causalStatePosterior)
-        aggressionMultiplier = (aggressionMultiplier * physioSiFactor).coerceIn(0.55, 1.08)
+        val rawPhysioSiFactor = buildPhysioSiFactor(physioLatentState, causalStatePosterior)
+        val physioSiFactor = blendTowardNeutral(
+            value = rawPhysioSiFactor,
+            blendFraction = behaviorProfile.pkpdPhysioBlendFraction(),
+        )
+        aggressionMultiplier = (
+            aggressionMultiplier *
+                physioSiFactor *
+                behaviorProfile.pkpdCorrectionAggressionFactor() *
+                behaviorProfile.pkpdStabilityAggressionFactor(isRising)
+            )
+            .coerceIn(0.55, 1.08)
         physioLatentState?.takeIf { it.isActive() }?.let { latent ->
             consoleLog?.add(
                 "PKPD_PHYSIO: wK=${"%.2f".format(weightKineticFactor)} " +
@@ -214,6 +232,11 @@ class PkPdIntegration(private val preferences: Preferences) {
                     "learnQ=${"%.2f".format(causalStatePosterior?.learningQuality ?: 0.0)}"
             )
         }
+        consoleLog?.add(
+            "PKPD_FAMILY: prot=${behaviorProfile.protectionLevel} meal=${behaviorProfile.mealCaptureLevel} " +
+                "stab=${behaviorProfile.stabilityLevel} phys=${behaviorProfile.physioLevel} auto=${behaviorProfile.autonomyLevel} " +
+                "mealF=${"%.2f".format(familyMealFactor)} physBlend=${"%.2f".format(behaviorProfile.pkpdPhysioBlendFraction())}",
+        )
 
         val fusedIsf = fusion.fused(profileIsf, tddIsf, pkpdScale, isRising, aggressionMultiplier)
         return PkPdRuntime(
@@ -457,6 +480,11 @@ class PkPdIntegration(private val preferences: Preferences) {
         )
 
         return clamped.coerceIn(5.0, 400.0)
+    }
+
+    private fun blendTowardNeutral(value: Double, blendFraction: Double): Double {
+        val safeBlend = blendFraction.coerceIn(0.0, 1.0)
+        return 1.0 + ((value - 1.0) * safeBlend)
     }
 
     private fun buildWeightKineticFactor(patientWeightKg: Double?): Double {

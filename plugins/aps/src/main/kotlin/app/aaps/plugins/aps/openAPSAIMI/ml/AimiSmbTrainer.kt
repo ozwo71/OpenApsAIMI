@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.ml
 import android.util.Log
 import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
 import app.aaps.plugins.aps.openAPSAIMI.TrainingConfig
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorRuntimeProfile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -105,7 +106,11 @@ object AimiSmbTrainer {
      *   or any exception is thrown.
      * - Clamps the ML correction to ±min(0.05U, 25% of predictedSmb).
      */
-    fun refine(predictedSmb: Float, features: FloatArray): Float {
+    internal fun refine(
+        predictedSmb: Float,
+        features: FloatArray,
+        behaviorProfile: AimiBehaviorRuntimeProfile? = null,
+    ): Float {
         if (features.size != INPUT_SIZE) return predictedSmb
 
         val now = System.currentTimeMillis()
@@ -119,8 +124,7 @@ object AimiSmbTrainer {
             val mlOut = out.firstOrNull()?.toFloat() ?: return predictedSmb
             if (!mlOut.isFinite()) return predictedSmb
 
-            // Clamp: max correction is the smaller of 0.05U or 25% of predictedSmb
-            val maxDelta = min(0.05f, predictedSmb * 0.25f).coerceAtLeast(0f)
+            val maxDelta = correctionClamp(predictedSmb, behaviorProfile)
             val delta    = (mlOut - predictedSmb).coerceIn(-maxDelta, maxDelta)
             val refined  = predictedSmb + delta
 
@@ -237,6 +241,15 @@ object AimiSmbTrainer {
         val baseTrend = (combinedDelta * 5.0f) + (stressScore * 0.1).toFloat() - (metabolicLoad * 0.5).toFloat()
         val sig = (1f / (1f + exp(-baseTrend.toDouble()))).toFloat()
         return 0.5f + sig * 0.7f
+    }
+
+    internal fun correctionClamp(
+        predictedSmb: Float,
+        behaviorProfile: AimiBehaviorRuntimeProfile? = null,
+    ): Float {
+        val baseClamp = min(0.05f, predictedSmb * 0.25f).coerceAtLeast(0f)
+        val multiplier = behaviorProfile?.mlCorrectionFractionMultiplier() ?: 1.0f
+        return (baseClamp * multiplier).coerceAtLeast(0f)
     }
 
 

@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiAutonomyMode
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternId
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternReading
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
@@ -102,6 +104,136 @@ class UamHypothesisStateBuilderTest {
         assertThat(hypotheses.suppressMealInterpretation).isFalse()
         assertThat(hypotheses.mealCompatibleProb()).isAtLeast(0.60)
         assertThat(hypotheses.postHypoProb).isGreaterThan(0.70)
+    }
+
+    @Test
+    fun cautious_meal_profile_strengthens_false_meal_guard_under_endogenous_competition() {
+        val defaultHypotheses = UamHypothesisStateBuilder.build(
+            phaseOutput = phaseOutput(
+                phase = PhysiologicalPhase.DAWN_CORTISOL,
+                confidence = 0.80,
+                reason = "dawn competition",
+            ),
+            mealAbsorptionOutput = MealAbsorptionPhaseEngine.Output(
+                phase = MealAbsorptionPhase.FIRST_WAVE,
+                belief = 0.59,
+                reason = "moderate meal-like rise",
+                deltaMgdlPer5 = 2.8,
+                gapMgdl = 30.0,
+                bestTerminalMgdl = 176.0,
+                memoryActive = true,
+                waveCount = 1,
+                mealDeliveryPriority = false,
+                chronoPrior = 0.20,
+                kineticScore = 0.58,
+                trajectoryScore = 0.55,
+                physioScore = 0.26,
+            ),
+            patternSnapshot = null,
+            correctionAggressionDecision = null,
+            uamConfidence = 0.0,
+        )
+        val cautiousHypotheses = UamHypothesisStateBuilder.build(
+            phaseOutput = phaseOutput(
+                phase = PhysiologicalPhase.DAWN_CORTISOL,
+                confidence = 0.80,
+                reason = "dawn competition",
+            ),
+            mealAbsorptionOutput = MealAbsorptionPhaseEngine.Output(
+                phase = MealAbsorptionPhase.FIRST_WAVE,
+                belief = 0.59,
+                reason = "moderate meal-like rise",
+                deltaMgdlPer5 = 2.8,
+                gapMgdl = 30.0,
+                bestTerminalMgdl = 176.0,
+                memoryActive = true,
+                waveCount = 1,
+                mealDeliveryPriority = false,
+                chronoPrior = 0.20,
+                kineticScore = 0.58,
+                trajectoryScore = 0.55,
+                physioScore = 0.26,
+            ),
+            patternSnapshot = null,
+            correctionAggressionDecision = null,
+            uamConfidence = 0.0,
+            behaviorProfile = AimiBehaviorRuntimeProfile(
+                protectionLevel = 1,
+                mealCaptureLevel = 1,
+                stabilityLevel = 2,
+                physioLevel = 1,
+                autonomyMode = AimiAutonomyMode.Recommendations,
+            ),
+        )
+
+        assertThat(defaultHypotheses.suppressMealInterpretation).isFalse()
+        assertThat(cautiousHypotheses.suppressMealInterpretation).isTrue()
+        assertThat(cautiousHypotheses.mealProb).isLessThan(defaultHypotheses.mealProb)
+    }
+
+    @Test
+    fun assertive_family_profile_keeps_meal_interpretation_when_competition_is_ambiguous() {
+        val defaultHypotheses = UamHypothesisStateBuilder.build(
+            phaseOutput = phaseOutput(
+                phase = PhysiologicalPhase.DAWN_CORTISOL,
+                confidence = 0.86,
+                reason = "ambiguous dawn vs meal",
+            ),
+            mealAbsorptionOutput = MealAbsorptionPhaseEngine.Output(
+                phase = MealAbsorptionPhase.FIRST_WAVE,
+                belief = 0.60,
+                reason = "strong meal-like rise",
+                deltaMgdlPer5 = 3.1,
+                gapMgdl = 36.0,
+                bestTerminalMgdl = 190.0,
+                memoryActive = true,
+                waveCount = 1,
+                mealDeliveryPriority = true,
+                chronoPrior = 0.24,
+                kineticScore = 0.64,
+                trajectoryScore = 0.62,
+                physioScore = 0.22,
+            ),
+            patternSnapshot = null,
+            correctionAggressionDecision = null,
+            uamConfidence = 0.0,
+        )
+        val assertiveHypotheses = UamHypothesisStateBuilder.build(
+            phaseOutput = phaseOutput(
+                phase = PhysiologicalPhase.DAWN_CORTISOL,
+                confidence = 0.86,
+                reason = "ambiguous dawn vs meal",
+            ),
+            mealAbsorptionOutput = MealAbsorptionPhaseEngine.Output(
+                phase = MealAbsorptionPhase.FIRST_WAVE,
+                belief = 0.60,
+                reason = "strong meal-like rise",
+                deltaMgdlPer5 = 3.1,
+                gapMgdl = 36.0,
+                bestTerminalMgdl = 190.0,
+                memoryActive = true,
+                waveCount = 1,
+                mealDeliveryPriority = true,
+                chronoPrior = 0.24,
+                kineticScore = 0.64,
+                trajectoryScore = 0.62,
+                physioScore = 0.22,
+            ),
+            patternSnapshot = null,
+            correctionAggressionDecision = null,
+            uamConfidence = 0.0,
+            behaviorProfile = AimiBehaviorRuntimeProfile(
+                protectionLevel = 2,
+                mealCaptureLevel = 4,
+                stabilityLevel = 3,
+                physioLevel = 1,
+                autonomyMode = AimiAutonomyMode.ControlledAuthority,
+            ),
+        )
+
+        assertThat(defaultHypotheses.suppressMealInterpretation).isTrue()
+        assertThat(assertiveHypotheses.suppressMealInterpretation).isFalse()
+        assertThat(assertiveHypotheses.mealProb).isGreaterThan(defaultHypotheses.mealProb)
     }
 
     private fun phaseOutput(

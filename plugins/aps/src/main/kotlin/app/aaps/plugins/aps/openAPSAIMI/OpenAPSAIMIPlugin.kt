@@ -1464,8 +1464,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 items = aimiComposeUserPreferenceItems(),
             )
         )
-        add(aimiComposeManualModesSubScreen())
-        add(aimiComposeAutodriveSubScreen())
     }
 
     private fun aimiComposeStringArrayMap(@ArrayRes valuesId: Int, @ArrayRes labelsId: Int): Map<String, String> {
@@ -1511,6 +1509,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 },
             ),
         )
+        add(aimiComposePkpdGuidedSubScreen())
+        add(aimiComposePatientContextSubScreen())
         add(
             PreferenceSubScreenDef(
                 key = "aimi_compose_sos",
@@ -1561,29 +1561,81 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 },
             )
         )
-        add(BooleanKey.OApsAIMIMLtraining)
-        add(DoubleKey.OApsAIMIMaxSMB)
-        add(DoubleKey.OApsAIMIHighBGMaxSMB)
-        add(DoubleKey.OApsAIMIweight)
-        add(DoubleKey.OApsAIMICHO)
-        add(DoubleKey.OApsAIMITDD7)
-        add(aimiComposePkpdSubScreen())
-        add(aimiComposeAdaptiveBasalSubScreen())
-        add(aimiComposeT3cSubScreen())
-        add(aimiComposeTrajectorySubScreen())
-        add(BooleanKey.OApsxdriponeminute)
-        add(aimiComposeWomenCycleSubScreen())
-        add(aimiComposeInflammatorySubScreen())
-        add(aimiComposeThyroidModuleSubScreen())
-        add(BooleanKey.OApsAIMIpregnancy)
-        add(AimiStringKey.PregnancyDueDateString)
-        add(BooleanKey.OApsAIMIhoneymoon)
-        add(BooleanKey.OApsAIMInight)
-        add(BooleanKey.OApsAIMIUnifiedReactivityEnabled)
-        add(aimiComposeEndometriosisSubScreen())
-        add(aimiComposeAiAuditorSubScreen())
-        add(aimiComposeNightGrowthSubScreen())
+        add(aimiComposeLabSubScreen())
     }
+
+    private fun aimiComposePkpdSetupItem(): PreferenceItem =
+        ApsIntentKey.PkpdSetup.withCompose(
+            ComposeScreenContent { onBack ->
+                AimiPkpdSettingsScreen(
+                    preferences = preferences,
+                    onBack = onBack,
+                    loadProfileInsulin = {
+                        val profile = profileFunction.getProfile() as? EffectiveProfile
+                        profile?.iCfg?.dia to profile?.iCfg?.peak?.toDouble()
+                    },
+                    loadPkpdRecommendations = {
+                        withContext(Dispatchers.IO) {
+                            AimiAdvisorService(
+                                profileFunction = profileFunction,
+                                persistenceLayer = persistenceLayer,
+                                preferences = preferences,
+                                rh = rh,
+                                unifiedReactivityLearner = unifiedReactivityLearner,
+                                tddCalculator = tddCalculator,
+                            ).pkpdRecommendationsForSettings(7)
+                        }
+                    },
+                )
+            }
+        )
+
+    private fun aimiComposePkpdGuidedSubScreen(): PreferenceSubScreenDef =
+        PreferenceSubScreenDef(
+            key = "aimi_compose_pkpd_guided",
+            titleResId = R.string.aimi_pkpd_guided_title,
+            items = listOf(aimiComposePkpdSetupItem()),
+        )
+
+    private fun aimiComposePatientContextSubScreen(): PreferenceSubScreenDef =
+        PreferenceSubScreenDef(
+            key = "aimi_compose_patient_context",
+            titleResId = R.string.aimi_patient_context_title,
+            items = buildList {
+                add(DoubleKey.OApsAIMIweight)
+                add(DoubleKey.OApsAIMICHO)
+                add(DoubleKey.OApsAIMITDD7)
+                add(BooleanKey.OApsAIMIpregnancy)
+                add(AimiStringKey.PregnancyDueDateString)
+                add(BooleanKey.OApsAIMIhoneymoon)
+                add(BooleanKey.OApsAIMInight)
+                add(aimiComposeWomenCycleSubScreen())
+                add(aimiComposeInflammatorySubScreen())
+                add(aimiComposeThyroidModuleSubScreen())
+                add(aimiComposeEndometriosisSubScreen())
+                add(aimiComposeNightGrowthSubScreen())
+            },
+        )
+
+    private fun aimiComposeLabSubScreen(): PreferenceSubScreenDef =
+        PreferenceSubScreenDef(
+            key = "aimi_compose_lab",
+            titleResId = R.string.aimi_lab_title,
+            items = buildList {
+                add(BooleanKey.OApsAIMIMLtraining)
+                add(DoubleKey.OApsAIMIMaxSMB)
+                add(DoubleKey.OApsAIMIHighBGMaxSMB)
+                add(aimiComposePkpdSubScreen())
+                add(aimiComposeAdaptiveBasalSubScreen())
+                add(aimiComposeT3cSubScreen())
+                add(aimiComposeTrajectorySubScreen())
+                add(aimiComposeManualModesSubScreen())
+                add(aimiComposeAutodriveSubScreen())
+                add(BooleanKey.OApsxdriponeminute)
+                add(BooleanKey.OApsAIMIUnifiedReactivityEnabled)
+                add(aimiComposeAiAuditorSubScreen())
+            },
+        )
 
     private fun aimiComposeAdaptiveBasalSubScreen(): PreferenceSubScreenDef =
         PreferenceSubScreenDef(
@@ -1861,32 +1913,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             key = "aimi_compose_pkpd",
             titleResId = R.string.oaps_aimi_pkpd_section_title,
             items = buildList {
-                add(
-                    ApsIntentKey.PkpdSetup.withCompose(
-                        ComposeScreenContent { onBack ->
-                            AimiPkpdSettingsScreen(
-                                preferences = preferences,
-                                onBack = onBack,
-                                loadProfileInsulin = {
-                                    val profile = profileFunction.getProfile() as? EffectiveProfile
-                                    profile?.iCfg?.dia to profile?.iCfg?.peak?.toDouble()
-                                },
-                                loadPkpdRecommendations = {
-                                    withContext(Dispatchers.IO) {
-                                        AimiAdvisorService(
-                                            profileFunction = profileFunction,
-                                            persistenceLayer = persistenceLayer,
-                                            preferences = preferences,
-                                            rh = rh,
-                                            unifiedReactivityLearner = unifiedReactivityLearner,
-                                            tddCalculator = tddCalculator,
-                                        ).pkpdRecommendationsForSettings(7)
-                                    }
-                                },
-                            )
-                        }
-                    )
-                )
+                add(aimiComposePkpdSetupItem())
                 add(BooleanKey.OApsAIMIPkpdEnabled)
                 add(BooleanKey.OApsAIMIPeakGovernorEnabled)
                 add(DoubleKey.OApsAIMIPeakGovernorLearnedWeight)

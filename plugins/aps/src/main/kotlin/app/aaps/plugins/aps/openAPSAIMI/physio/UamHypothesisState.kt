@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternId
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
@@ -54,6 +55,7 @@ internal object UamHypothesisStateBuilder {
         patternSnapshot: PhysiologicalPatternSnapshot?,
         correctionAggressionDecision: CorrectionAggressionGate.Decision?,
         uamConfidence: Double,
+        behaviorProfile: AimiBehaviorRuntimeProfile? = null,
     ): UamHypothesisState {
         val patternSuppressMeal = patternSnapshot?.suppressMealInterpretation == true
         val mealProb = buildMealProb(
@@ -83,10 +85,13 @@ internal object UamHypothesisStateBuilder {
             dawnEndogenousProb,
             max(stressProb, postHypoProb),
         )
+        val dominanceMargin = behaviorProfile?.competingNonMealDominanceMargin() ?: 0.10
+        val dominanceFloor = behaviorProfile?.competingNonMealConfidenceFloor() ?: 0.60
+        val suppressionCap = behaviorProfile?.mealSuppressionCap() ?: 0.32
         val dampedMealProb = when {
-            patternSuppressMeal -> mealProb.coerceAtMost(0.32)
-            competingNonMeal >= mealProb + 0.10 && competingNonMeal >= 0.60 ->
-                (mealProb * 0.58).coerceAtMost(0.45)
+            patternSuppressMeal -> mealProb.coerceAtMost(suppressionCap)
+            competingNonMeal >= mealProb + dominanceMargin && competingNonMeal >= dominanceFloor ->
+                (mealProb * 0.58).coerceAtMost(suppressionCap)
 
             else -> mealProb
         }
@@ -112,8 +117,8 @@ internal object UamHypothesisStateBuilder {
                     UamHypothesisId.STRESS,
                     UamHypothesisId.POST_HYPO,
                 ) &&
-                    dominantConfidence >= dampedMealProb + 0.08 &&
-                    dominantConfidence >= 0.60
+                    dominantConfidence >= dampedMealProb + (behaviorProfile?.suppressMealDecisionMargin() ?: 0.08) &&
+                    dominantConfidence >= (behaviorProfile?.suppressMealDecisionFloor() ?: 0.60)
                 )
 
         return UamHypothesisState(

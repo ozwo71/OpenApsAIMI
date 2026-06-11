@@ -133,6 +133,7 @@ import app.aaps.plugins.aps.openAPSAIMI.safety.signalMinPredDrop
 import app.aaps.plugins.aps.openAPSAIMI.safety.capSmbDose
 import app.aaps.plugins.aps.openAPSAIMI.safety.clampSmbToMaxSmbAndMaxIob
 import app.aaps.plugins.aps.openAPSAIMI.control.StraightLineTubeAdvisor
+import app.aaps.plugins.aps.openAPSAIMI.compose.readAimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.safety.signalTrajectoryStack
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoThresholdMath
 import app.aaps.plugins.aps.openAPSAIMI.safety.MealSafetyContext
@@ -2704,6 +2705,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             patternSnapshot = patternSnapshot,
             correctionAggressionDecision = correctionAggressionDecision,
             uamConfidence = AimiUamHandler.confidenceOrZero(),
+            behaviorProfile = readAimiBehaviorRuntimeProfile(preferences),
         )
         val stressMask = PhysiologicalStressMaskBuilder.build(
             snapshot = snapshot,
@@ -8938,15 +8940,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val latentFeatures = SmbRefinementFeatureSchema.latentFeatureValues(lastPhysioLatentState)
         val modeFeatures = SmbRefinementFeatureSchema.modeFeatureValues(lastPatientModeDecision)
         val causalFeatures = SmbRefinementFeatureSchema.causalFeatureValues(lastPatientState?.causalPosterior)
+        val behaviorProfile = readAimiBehaviorRuntimeProfile(preferences)
 
         val headerRow =
-            "dateStr, ${SmbRefinementFeatureSchema.csvFeatureNames.joinToString(", ")}, predictedSMB, smbGiven, dynamicPeak, adjustedDia\n"
+            "dateStr, ${SmbRefinementFeatureSchema.csvFeatureNames.joinToString(", ")}, " +
+                "${SmbRefinementFeatureSchema.familyAuditFeatureNames.joinToString(", ")}, " +
+                "predictedSMB, smbGiven, dynamicPeak, adjustedDia\n"
         val valuesToRecord = "$dateStr," +
             "$bg,$iob,$cob,$delta,$shortAvgDelta,$longAvgDelta," +
             "$tdd7DaysPerHour,$tdd2DaysPerHour,$tddPerHour,$tdd24HrsPerHour," +
             "${latentFeatures[0]},${latentFeatures[1]},${latentFeatures[2]},${latentFeatures[3]}," +
             "${modeFeatures[0]},${modeFeatures[1]},${modeFeatures[2]}," +
             "${causalFeatures[0]},${causalFeatures[1]},${causalFeatures[2]}," +
+            "${behaviorProfile.protectionLevel},${behaviorProfile.mealCaptureLevel},${behaviorProfile.stabilityLevel}," +
+            "${behaviorProfile.physioLevel},${behaviorProfile.autonomyLevel}," +
             "$predictedSMB,$smbToGive," +
             "$peakintermediaire,$latestAdjustedDia"
         appendCsvSafely(
@@ -11052,6 +11059,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             patientModeDecision = lastPatientModeDecision,
             causalStatePosterior = lastPatientState?.causalPosterior,
         )
+        val behaviorProfile = readAimiBehaviorRuntimeProfile(preferences)
 
         // 🔥 Trigger async training (fire-and-forget, rate-limited to 1/6h, never blocks)
         AimiSmbTrainer.maybeTrainAsync(
@@ -11060,7 +11068,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
 
         // 🎯 Inference-only O(1): fallback to predictedSMB on any issue
-        val mlRefined = AimiSmbTrainer.refine(finalRefinedSMB, features)
+        val mlRefined = AimiSmbTrainer.refine(finalRefinedSMB, features, behaviorProfile)
 
         if (mlRefined > predictedSMB && bg > 150 && delta > 5) {
             return mlRefined

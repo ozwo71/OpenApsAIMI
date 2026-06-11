@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
+import kotlin.math.abs
 
 class PkPdIntegrationTest {
 
@@ -147,6 +148,72 @@ class PkPdIntegrationTest {
         assertNotNull(heavier)
         assertTrue(lighter!!.weightKineticFactor > heavier!!.weightKineticFactor)
         assertTrue(lighter.pkpdScale > heavier.pkpdScale)
+    }
+
+    @Test
+    fun `strong physio family applies more of latent pkpd modulation than low physio family`() {
+        val lowPhysioPrefs: Preferences = mockk(relaxed = true)
+        val strongPhysioPrefs: Preferences = mockk(relaxed = true)
+        every { lowPhysioPrefs.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        every { strongPhysioPrefs.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        mockPkpdDefaults(lowPhysioPrefs)
+        mockPkpdDefaults(strongPhysioPrefs)
+        every { lowPhysioPrefs.get(BooleanKey.AimiPhysioAssistantEnable) } returns false
+        every { lowPhysioPrefs.get(BooleanKey.AimiPhysioSleepDataEnable) } returns false
+        every { lowPhysioPrefs.get(BooleanKey.AimiPhysioHRVDataEnable) } returns false
+        every { strongPhysioPrefs.get(BooleanKey.AimiPhysioAssistantEnable) } returns true
+        every { strongPhysioPrefs.get(BooleanKey.AimiPhysioSleepDataEnable) } returns true
+        every { strongPhysioPrefs.get(BooleanKey.AimiPhysioHRVDataEnable) } returns true
+
+        val latent = PhysioLatentState(
+            circadianSiFactor = 0.84,
+            transientResistanceProb = 0.88,
+            postHypoReboundProb = 0.14,
+            sensorConfidence = 1.0,
+            mealProb = 0.58,
+        )
+        val mealContext = MealAggressionContext(
+            mealModeActive = true,
+            predictedBgMgdl = 205.0,
+            targetBgMgdl = 110.0,
+        )
+
+        val lowProfile = PkPdIntegration(lowPhysioPrefs).computeRuntime(
+            epochMillis = 1000,
+            bg = 158.0,
+            deltaMgDlPer5 = 3.2,
+            iobU = 2.1,
+            carbsActiveG = 14.0,
+            windowMin = 60,
+            exerciseFlag = false,
+            profileIsf = 50.0,
+            tdd24h = 40.0,
+            mealContext = mealContext,
+            patientWeightKg = 75.0,
+            physioLatentState = latent,
+            estimatedRaMgdlPerMin = 3.2,
+        )
+        val strongProfile = PkPdIntegration(strongPhysioPrefs).computeRuntime(
+            epochMillis = 1000,
+            bg = 158.0,
+            deltaMgDlPer5 = 3.2,
+            iobU = 2.1,
+            carbsActiveG = 14.0,
+            windowMin = 60,
+            exerciseFlag = false,
+            profileIsf = 50.0,
+            tdd24h = 40.0,
+            mealContext = mealContext,
+            patientWeightKg = 75.0,
+            physioLatentState = latent,
+            estimatedRaMgdlPerMin = 3.2,
+        )
+
+        assertNotNull(lowProfile)
+        assertNotNull(strongProfile)
+        assertTrue(strongProfile!!.physioSiFactor < lowProfile!!.physioSiFactor)
+        assertTrue(abs(strongProfile.physioAbsorptionFactor - 1.0) > abs(lowProfile.physioAbsorptionFactor - 1.0))
+        assertTrue(strongProfile.fusedIsf < lowProfile.fusedIsf)
     }
 
     @Test
@@ -331,22 +398,26 @@ class PkPdIntegrationTest {
     }
 
     private fun mockPkpdDefaults() {
-        every { preferences.get(DoubleKey.OApsAIMIPkpdStateDiaH) } returns 6.0
-        every { preferences.get(DoubleKey.OApsAIMIPkpdStatePeakMin) } returns 55.0
-        every { preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMinH) } returns 5.0
-        every { preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMaxH) } returns 8.0
-        every { preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMin) } returns 35.0
-        every { preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax) } returns 95.0
-        every { preferences.get(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH) } returns 0.5
-        every { preferences.get(DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin) } returns 5.0
-        every { preferences.get(DoubleKey.OApsAIMIPkpdAnchorDiaH) } returns 4.0
-        every { preferences.get(DoubleKey.OApsAIMIPkpdAnchorPeakMin) } returns 55.0
-        every { preferences.get(DoubleKey.OApsAIMIIsfFusionMinFactor) } returns 0.7
-        every { preferences.get(DoubleKey.OApsAIMIIsfFusionMaxFactor) } returns 1.5
-        every { preferences.get(DoubleKey.OApsAIMIIsfFusionMaxChangePerTick) } returns 0.2
-        every { preferences.get(DoubleKey.OApsAIMISmbTailThreshold) } returns 1.0
-        every { preferences.get(DoubleKey.OApsAIMISmbTailDamping) } returns 0.85
-        every { preferences.get(DoubleKey.OApsAIMISmbExerciseDamping) } returns 0.8
-        every { preferences.get(DoubleKey.OApsAIMISmbLateFatDamping) } returns 0.8
+        mockPkpdDefaults(preferences)
+    }
+
+    private fun mockPkpdDefaults(target: Preferences) {
+        every { target.get(DoubleKey.OApsAIMIPkpdStateDiaH) } returns 6.0
+        every { target.get(DoubleKey.OApsAIMIPkpdStatePeakMin) } returns 55.0
+        every { target.get(DoubleKey.OApsAIMIPkpdBoundsDiaMinH) } returns 5.0
+        every { target.get(DoubleKey.OApsAIMIPkpdBoundsDiaMaxH) } returns 8.0
+        every { target.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMin) } returns 35.0
+        every { target.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax) } returns 95.0
+        every { target.get(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH) } returns 0.5
+        every { target.get(DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin) } returns 5.0
+        every { target.get(DoubleKey.OApsAIMIPkpdAnchorDiaH) } returns 4.0
+        every { target.get(DoubleKey.OApsAIMIPkpdAnchorPeakMin) } returns 55.0
+        every { target.get(DoubleKey.OApsAIMIIsfFusionMinFactor) } returns 0.7
+        every { target.get(DoubleKey.OApsAIMIIsfFusionMaxFactor) } returns 1.5
+        every { target.get(DoubleKey.OApsAIMIIsfFusionMaxChangePerTick) } returns 0.2
+        every { target.get(DoubleKey.OApsAIMISmbTailThreshold) } returns 1.0
+        every { target.get(DoubleKey.OApsAIMISmbTailDamping) } returns 0.85
+        every { target.get(DoubleKey.OApsAIMISmbExerciseDamping) } returns 0.8
+        every { target.get(DoubleKey.OApsAIMISmbLateFatDamping) } returns 0.8
     }
 }

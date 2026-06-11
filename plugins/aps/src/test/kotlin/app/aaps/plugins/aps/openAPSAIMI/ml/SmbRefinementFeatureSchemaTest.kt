@@ -106,4 +106,76 @@ class SmbRefinementFeatureSchemaTest {
             .containsExactly(0f, 0f, 1f, 0f, 0.45f, 0.22f, 0f, 0f, 0f, 1f)
             .inOrder()
     }
+
+    @Test
+    fun parse_training_features_ignores_family_audit_columns() {
+        val headers = listOf(
+            "dateStr",
+            "bg",
+            "iob",
+            "cob",
+            "delta",
+            "shortAvgDelta",
+            "longAvgDelta",
+            "tdd7DaysPerHour",
+            "tdd2DaysPerHour",
+            "tddPerHour",
+            "tdd24HrsPerHour",
+            "mealProb",
+            "endogenousGlucoseDrive",
+            "circadianSiFactor",
+            "transientResistanceProb",
+            "patientModeMealBias",
+            "patientModeProtectionBias",
+            "contextIntentConfidence",
+            "causalMealConfidence",
+            "causalProtectiveConfidence",
+            "causalLearningQuality",
+            "familyProtectionLevel",
+            "familyMealLevel",
+            "familyStabilityLevel",
+            "familyPhysioLevel",
+            "familyAutonomyLevel",
+            "predictedSMB",
+            "smbGiven",
+        )
+        val cols = listOf(
+            "06/11/2026 08:00",
+            "148",
+            "1.0",
+            "8.0",
+            "3.0",
+            "2.4",
+            "1.6",
+            "0.8",
+            "0.7",
+            "0.9",
+            "1.0",
+            "0.44",
+            "0.19",
+            "0.92",
+            "0.58",
+            "0.74",
+            "0.33",
+            "0.65",
+            "0.71",
+            "0.12",
+            "0.82",
+            "2",
+            "4",
+            "3",
+            "1",
+            "3",
+            "0.35",
+            "0.30",
+        )
+
+        val parsed = SmbRefinementFeatureSchema.parseTrainingFeatures(headers, cols)
+
+        assertThat(parsed).isNotNull()
+        assertThat(parsed!!.size).isEqualTo(SmbRefinementFeatureSchema.INPUT_SIZE - 1)
+        assertThat(parsed.copyOfRange(17, 20).toList())
+            .containsExactly(0.71f, 0.12f, 0.82f)
+            .inOrder()
+    }
 }
