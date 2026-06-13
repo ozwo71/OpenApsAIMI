@@ -189,10 +189,24 @@ private fun buildMealCapturePlan(
     currentLevel: Int,
     targetLevel: Int,
 ): AimiFamilyWritebackPlan {
+    val targetAutodriveMaxBasal = directionalMealCaptureCap(
+        currentValue = preferences.get(DoubleKey.autodriveMaxBasal),
+        currentLevel = currentLevel,
+        targetLevel = targetLevel,
+        recommendedValue = mealCaptureAutodriveMaxBasalForLevel(targetLevel),
+    )
+    val targetMealModeMaxBasal = directionalMealCaptureCap(
+        currentValue = preferences.get(DoubleKey.meal_modes_MaxBasal),
+        currentLevel = currentLevel,
+        targetLevel = targetLevel,
+        recommendedValue = mealCaptureMealModeMaxBasalForLevel(targetLevel),
+    )
     val changes = when (targetLevel.coerceIn(0, 4)) {
         0 -> listOfNotNull(
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, false),
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, false),
+            doubleChange(preferences, DoubleKey.autodriveMaxBasal, targetAutodriveMaxBasal, DoubleKey.autodriveMaxBasal.titleResId, "U/h"),
+            doubleChange(preferences, DoubleKey.meal_modes_MaxBasal, targetMealModeMaxBasal, DoubleKey.meal_modes_MaxBasal.titleResId, "U/h"),
             doubleChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, 0.045, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
             doubleChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, 0.50, R.string.prebolus_autodrive_mode_title, "U"),
             doubleChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, 0.05, R.string.prebolussmall_autodrive_mode_title, "U"),
@@ -202,6 +216,8 @@ private fun buildMealCapturePlan(
         1 -> listOfNotNull(
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, true),
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, false),
+            doubleChange(preferences, DoubleKey.autodriveMaxBasal, targetAutodriveMaxBasal, DoubleKey.autodriveMaxBasal.titleResId, "U/h"),
+            doubleChange(preferences, DoubleKey.meal_modes_MaxBasal, targetMealModeMaxBasal, DoubleKey.meal_modes_MaxBasal.titleResId, "U/h"),
             doubleChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, 0.060, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
             doubleChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, 0.80, R.string.prebolus_autodrive_mode_title, "U"),
             doubleChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, 0.10, R.string.prebolussmall_autodrive_mode_title, "U"),
@@ -211,6 +227,8 @@ private fun buildMealCapturePlan(
         2 -> listOfNotNull(
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, true),
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, false),
+            doubleChange(preferences, DoubleKey.autodriveMaxBasal, targetAutodriveMaxBasal, DoubleKey.autodriveMaxBasal.titleResId, "U/h"),
+            doubleChange(preferences, DoubleKey.meal_modes_MaxBasal, targetMealModeMaxBasal, DoubleKey.meal_modes_MaxBasal.titleResId, "U/h"),
             doubleChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, 0.075, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
             doubleChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, 1.20, R.string.prebolus_autodrive_mode_title, "U"),
             doubleChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, 0.20, R.string.prebolussmall_autodrive_mode_title, "U"),
@@ -220,6 +238,8 @@ private fun buildMealCapturePlan(
         3 -> listOfNotNull(
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, true),
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, true),
+            doubleChange(preferences, DoubleKey.autodriveMaxBasal, targetAutodriveMaxBasal, DoubleKey.autodriveMaxBasal.titleResId, "U/h"),
+            doubleChange(preferences, DoubleKey.meal_modes_MaxBasal, targetMealModeMaxBasal, DoubleKey.meal_modes_MaxBasal.titleResId, "U/h"),
             doubleChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, 0.090, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
             doubleChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, 1.80, R.string.prebolus_autodrive_mode_title, "U"),
             doubleChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, 0.35, R.string.prebolussmall_autodrive_mode_title, "U"),
@@ -229,6 +249,8 @@ private fun buildMealCapturePlan(
         else -> listOfNotNull(
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, true),
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, true),
+            doubleChange(preferences, DoubleKey.autodriveMaxBasal, targetAutodriveMaxBasal, DoubleKey.autodriveMaxBasal.titleResId, "U/h"),
+            doubleChange(preferences, DoubleKey.meal_modes_MaxBasal, targetMealModeMaxBasal, DoubleKey.meal_modes_MaxBasal.titleResId, "U/h"),
             doubleChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, 0.105, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
             doubleChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, 2.80, R.string.prebolus_autodrive_mode_title, "U"),
             doubleChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, 0.60, R.string.prebolussmall_autodrive_mode_title, "U"),
@@ -330,6 +352,32 @@ private fun buildPhysioPlan(
         changes = changes,
     )
 }
+
+private fun directionalMealCaptureCap(
+    currentValue: Double,
+    currentLevel: Int,
+    targetLevel: Int,
+    recommendedValue: Double,
+): Double =
+    if (targetLevel > currentLevel) maxOf(currentValue, recommendedValue) else recommendedValue
+
+private fun mealCaptureAutodriveMaxBasalForLevel(level: Int): Double =
+    when (level.coerceIn(0, 4)) {
+        0 -> 3.0
+        1 -> 4.5
+        2 -> 6.0
+        3 -> 7.5
+        else -> 9.0
+    }
+
+private fun mealCaptureMealModeMaxBasalForLevel(level: Int): Double =
+    when (level.coerceIn(0, 4)) {
+        0 -> 4.0
+        1 -> 5.5
+        2 -> 7.0
+        3 -> 8.5
+        else -> 10.0
+    }
 
 private fun buildAutonomyPlan(
     preferences: Preferences,

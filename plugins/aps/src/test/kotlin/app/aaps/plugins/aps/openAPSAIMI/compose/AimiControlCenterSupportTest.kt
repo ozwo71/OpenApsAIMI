@@ -103,4 +103,22 @@ class AimiControlCenterSupportTest {
         verify { preferences.put(DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.60) }
         verify { preferences.put(DoubleKey.OApsAIMIRedCarpetRestoreThreshold, 0.60) }
     }
+
+    @Test
+    fun `meal capture max writes basal ceilings used by autodrive and meal modes`() {
+        every { preferences.get(DoubleKey.autodriveMaxBasal) } returns 4.0
+        every { preferences.get(DoubleKey.meal_modes_MaxBasal) } returns 5.0
+
+        val currentDraft = readAimiControlCenterDraft(preferences)
+        val pending = buildAimiControlCenterPendingChanges(
+            preferences = preferences,
+            currentDraft = currentDraft,
+            targetDraft = currentDraft.copy(mealCaptureLevel = 4),
+        )
+
+        applyAimiControlCenterPendingChanges(preferences, pending)
+
+        verify { preferences.put(DoubleKey.autodriveMaxBasal, 9.0) }
+        verify { preferences.put(DoubleKey.meal_modes_MaxBasal, 10.0) }
+    }
 }

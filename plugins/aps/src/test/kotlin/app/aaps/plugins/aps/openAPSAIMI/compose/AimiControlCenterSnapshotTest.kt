@@ -54,6 +54,8 @@ class AimiControlCenterSnapshotTest {
         every { preferences.get(BooleanKey.OApsAIMIRecursiveBeliefShadow) } returns true
         every { preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority) } returns true
         every { preferences.get(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep) } returns 0.11
+        every { preferences.get(DoubleKey.autodriveMaxBasal) } returns 9.0
+        every { preferences.get(DoubleKey.meal_modes_MaxBasal) } returns 10.0
         every { preferences.get(DoubleKey.OApsAIMIautodrivePrebolus) } returns 5.0
         every { preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus) } returns 1.5
 
@@ -61,8 +63,9 @@ class AimiControlCenterSnapshotTest {
         val meal = snapshot.families.first { it.id == AimiBehaviorFamilyId.MealCapture }
         val autonomy = snapshot.families.first { it.id == AimiBehaviorFamilyId.Autonomy }
 
-        assertThat(meal.levelLabelResId).isEqualTo(R.string.aimi_control_center_meal_level_assertive)
+        assertThat(meal.levelLabelResId).isEqualTo(R.string.aimi_control_center_meal_level_very_assertive)
         assertThat(autonomy.levelLabelResId).isEqualTo(R.string.aimi_control_center_autonomy_controlled)
+        assertThat(meal.rawPreferenceCount).isEqualTo(10)
         assertThat(meal.confidence).isGreaterThan(0.55f)
     }
 }

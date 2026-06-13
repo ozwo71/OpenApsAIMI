@@ -3559,7 +3559,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (v3CommandSafe) {
                 val v3TbrRate = adCommand!!.temporaryBasalRate
                 if (v3TbrRate != null && v3TbrRate >= 0.0) {
-                    setTempBasal(v3TbrRate, 30, profile, rT, ctx.currentTemp, overrideSafetyLimits = true, adaptiveMultiplier = adaptiveMult)
+                    val v3AdaptiveMult = AutodriveBasalPolicy.adaptiveMultiplierForDirectTbr(
+                        requestedRateUph = v3TbrRate,
+                        bgMgdl = bg,
+                        targetBgMgdl = ctx.profile.target_bg.toDouble(),
+                        profileMaxBasalUph = profile.max_basal.toDouble(),
+                        learnedAdaptiveMultiplier = adaptiveMult,
+                    )
+                    if (v3AdaptiveMult > adaptiveMult + 0.001) {
+                        consoleLog.add(
+                            "🚀 AUTODRIVE_V3_CAP_KEEP: adaptive ${"%.2f".format(adaptiveMult)}x -> " +
+                                "${"%.2f".format(v3AdaptiveMult)}x at BG=${"%.0f".format(bg)}",
+                        )
+                    }
+                    setTempBasal(
+                        v3TbrRate,
+                        30,
+                        profile,
+                        rT,
+                        ctx.currentTemp,
+                        overrideSafetyLimits = true,
+                        adaptiveMultiplier = v3AdaptiveMult,
+                    )
                 }
             } else {
                 consoleLog.add("🧘 [AUTODRIVE V3] Command not safe — HTR may still lift SMB (${adCommand?.reason ?: "null"})")
@@ -3765,7 +3786,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         if (autoRes is DecisionResult.Applied) {
             if (autoRes.tbrUph != null) {
-                setTempBasal(autoRes.tbrUph, autoRes.tbrMin ?: 30, profile, rT, ctx.currentTemp, overrideSafetyLimits = false, adaptiveMultiplier = adaptiveMult)
+                val v2AdaptiveMult = AutodriveBasalPolicy.adaptiveMultiplierForDirectTbr(
+                    requestedRateUph = autoRes.tbrUph,
+                    bgMgdl = bg,
+                    targetBgMgdl = targetBgMgdl.toDouble(),
+                    profileMaxBasalUph = profile.max_basal.toDouble(),
+                    learnedAdaptiveMultiplier = adaptiveMult,
+                )
+                if (v2AdaptiveMult > adaptiveMult + 0.001) {
+                    consoleLog.add(
+                        "🚀 AUTODRIVE_V2_CAP_KEEP: adaptive ${"%.2f".format(adaptiveMult)}x -> " +
+                            "${"%.2f".format(v2AdaptiveMult)}x at BG=${"%.0f".format(bg)}",
+                    )
+                }
+                setTempBasal(
+                    autoRes.tbrUph,
+                    autoRes.tbrMin ?: 30,
+                    profile,
+                    rT,
+                    ctx.currentTemp,
+                    overrideSafetyLimits = false,
+                    adaptiveMultiplier = v2AdaptiveMult,
+                )
             }
 
             val intentBolus = autoRes.bolusU ?: 0.0
@@ -4942,14 +4984,30 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         val isMealChaos = (ctx.mealData.mealCOB > 10.0 && delta > 5.0)
         val isExplicitAction = isMealAdvisorOneShot
+        val implicitMealCorrection = resolveMealCorrectionContext(
+            mealData = ctx.mealData,
+            bgMgdl = bg,
+            deltaMgdlPer5 = delta.toDouble(),
+            shortAvgDeltaMgdlPer5 = shortAvgDelta.toDouble(),
+        )
 
         val isRedCarpetSituation =
-            isExplicitAction || anyMealModeForGuard || isConfirmedHighRiseLocal || (isMealChaos && smbExecution.finalSmb > 0.5)
+            isExplicitAction ||
+                anyMealModeForGuard ||
+                implicitMealCorrection.redCarpetEligible ||
+                isConfirmedHighRiseLocal ||
+                (isMealChaos && smbExecution.finalSmb > 0.5)
 
         val gatedUnits = smbToGiveLocal
         val proposedUnits = smbExecution.finalSmb.toFloat()
 
         if (isRedCarpetSituation && proposedUnits > 0.0) {
+            if (implicitMealCorrection.redCarpetEligible && !anyMealModeForGuard && !isExplicitAction) {
+                consoleLog.add(
+                    "🍽️ IMPLICIT_MEAL_REDCARPET ${implicitMealCorrection.summary().ifBlank { "signals" }} " +
+                        "(BG=${"%.0f".format(bg)} Δ=${"%.1f".format(delta)} sΔ=${"%.1f".format(shortAvgDelta)})"
+                )
+            }
             val baseRestoreThreshold = 0.60f
             val restoreThreshold = if (isAggressivePriorityContext && pkpdReliefEnabled) {
                 max(baseRestoreThreshold, redCarpetRestoreThresholdPref)
@@ -4978,7 +5036,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             smbToGiveLocal = mealBolus
 
             if (smbToGiveLocal.toDouble() > gatedUnits + 0.1) {
-                val reason = if (isExplicitAction) "UserAction" else if (isMealChaos) "CarbChaos" else "MealMode"
+                val reason = when {
+                    isExplicitAction -> "UserAction"
+                    isMealChaos -> "CarbChaos"
+                    implicitMealCorrection.redCarpetEligible -> "ImplicitMeal:${implicitMealCorrection.summary().ifBlank { "signals" }}"
+                    else -> "MealMode"
+                }
                 consoleLog.add("🍱 MEAL_FORCE_EXECUTED ($reason): ${"%.2f".format(smbToGiveLocal)} U (Overrides minor safety checks)")
             }
         } else {
@@ -9137,6 +9200,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val mealDeliveryPriority = !isExplicitUserAction &&
             !suppressMealInterpretation &&
             (mealAbsorption?.mealDeliveryPriority == true)
+        val mealCorrectionContext = resolveMealCorrectionContext(
+            mealData = mealData,
+            bgMgdl = this.bg,
+            deltaMgdlPer5 = this.delta.toDouble(),
+            shortAvgDeltaMgdlPer5 = this.shortAvgDelta.toDouble(),
+        )
         val legacyMealPriority =
             !isExplicitUserAction &&
                 !suppressMealInterpretation &&
@@ -9149,7 +9218,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 (this.bg >= 145.0) &&
                 (this.delta.toDouble() >= 1.8 || this.shortAvgDelta.toDouble() >= 1.5) &&
                 (this.iob.toDouble() < this.maxIob * 0.75)
-        val mealPriorityContext = mealDeliveryPriority || legacyMealPriority
+        val mealPriorityContext =
+            mealDeliveryPriority ||
+                legacyMealPriority ||
+                (!isExplicitUserAction && mealCorrectionContext.mealPriorityEligible)
         val highBgBandForHtr = HyperTrajectoryHypoCredibility.highBgBandMgdl(
             targetBg.toDouble(),
             preferences.get(DoubleKey.OApsAIMIHighBg),
@@ -9166,7 +9238,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 "🍽️ MEAL_PRIORITY_CONTEXT ON (BG=${"%.0f".format(this.bg)} Δ=${"%.1f".format(this.delta)} " +
                     "sΔ=${"%.1f".format(this.shortAvgDelta)} COB=${"%.1f".format(mealData.mealCOB)} " +
                     "UAM=${"%.2f".format(uamConfidence)} phase=${mealAbsorption?.phase?.name ?: "legacy"} " +
-                    "IOB=${"%.2f".format(this.iob)}/${"%.2f".format(this.maxIob)})"
+                    "IOB=${"%.2f".format(this.iob)}/${"%.2f".format(this.maxIob)} " +
+                    "implicit=${mealCorrectionContext.summary().ifBlank { "none" }})"
             )
         }
         if (hyperTrajectoryPriorityContext && !mealPriorityContext) {
@@ -9451,12 +9524,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Helper interne pour vérifier AIMI Context (RContext) - supposer true si mealData indique un repas récent
         // Dans une implémentation idéale, on injecterait le ContextRepository, mais ici on utilise les proxies disponibles
         // 🐛 FIX: 'mealData.isMealStart' n'existe pas. On utilise la variable locale 'isMealActive' calculée plus haut.
-        val isAimiContextMeal = isMealActive || (mealData.mealCOB > 5.0 && delta > 2.0)
+        val isAimiContextMeal = !isExplicitUserAction && mealCorrectionContext.redCarpetEligible
 
         val isRedCarpetSituation = isExplicitUserAction || isMealModeCondition() || isAimiContextMeal || ((isMealChaos || isMealActive) && proposedUnits > 0.5f)
 
         // On entre dans la logique forcée si on est en situation "Red Carpet" et qu'il y a une demande
         if (isRedCarpetSituation && proposedUnits > 0.0 && !iobSurveillanceSuppressRedCarpet) {
+            if (isAimiContextMeal && !isMealModeCondition()) {
+                consoleLog.add(
+                    "🍽️ IMPLICIT_MEAL_REDCARPET ${mealCorrectionContext.summary().ifBlank { "signals" }} " +
+                        "(BG=${"%.0f".format(this.bg)} Δ=${"%.1f".format(this.delta)} sΔ=${"%.1f".format(this.shortAvgDelta)})"
+                )
+            }
             
             // 1. Restauration de la demande
             // Si les sécurités mineures ont coupé plus de 40% du bolus, on restaure la demande initiale.
@@ -9491,7 +9570,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             
             // Log explicite pour le debugging
             if (finalUnits > gatedUnits + 0.1) {
-                val reason = if (isExplicitUserAction) "UserAction" else if (isMealChaos) "CarbChaos" else "MealMode/Context"
+                val reason = when {
+                    isExplicitUserAction -> "UserAction"
+                    isMealChaos -> "CarbChaos"
+                    isAimiContextMeal -> "ImplicitMeal:${mealCorrectionContext.summary().ifBlank { "signals" }}"
+                    else -> "MealMode/Context"
+                }
                 consoleLog.add("🍱 MEAL_FORCE_EXECUTED ($reason): ${"%.2f".format(finalUnits)} U (Overrides minor safety checks)")
             }
 
@@ -10415,29 +10499,37 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return manualFlags || cobActive
     }
 
+    private fun resolveMealCorrectionContext(
+        mealData: MealData,
+        bgMgdl: Double = bg,
+        deltaMgdlPer5: Double = delta.toDouble(),
+        shortAvgDeltaMgdlPer5: Double = shortAvgDelta.toDouble(),
+        explicitMealMode: Boolean = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime,
+    ): MealCorrectionContextResolver.Output =
+        MealCorrectionContextResolver.resolve(
+            MealCorrectionContextResolver.Input(
+                bgMgdl = bgMgdl,
+                deltaMgdlPer5 = deltaMgdlPer5,
+                shortAvgDeltaMgdlPer5 = shortAvgDeltaMgdlPer5,
+                explicitMealMode = explicitMealMode,
+                mealCobG = mealData.mealCOB,
+                mealAbsorptionOutput = lastMealAbsorptionOutput,
+                hypothesisState = lastUamHypothesisState,
+                latentState = lastPhysioLatentState,
+                patientModeDecision = lastPatientModeDecision,
+                patientState = lastPatientState,
+            ),
+        )
+
     private fun buildPkpdMealContext(
         mealData: MealData,
         predictedBgMgdl: Double,
         targetBgMgdl: Double,
     ): MealAggressionContext {
         val explicitMeal = isMealContextActive(mealData)
-        val mealPhaseActive = lastMealAbsorptionOutput?.phase?.isActive == true
-        val mealDeliveryPriority = lastMealAbsorptionOutput?.mealDeliveryPriority == true
-        val mealCompatibleProb = lastUamHypothesisState?.mealCompatibleProb() ?: 0.0
-        val competingNonMealProb = lastUamHypothesisState?.competingNonMealProb() ?: 0.0
-        val falseMealSuppression =
-            lastUamHypothesisState?.suppressMealInterpretation == true ||
-                lastPhysioLatentState?.falseMealSuppression == true
-        val implicitMeal = !falseMealSuppression &&
-            (
-                mealPhaseActive ||
-                    mealDeliveryPriority ||
-                    mealCompatibleProb >= 0.55 ||
-                    (AimiUamHandler.confidenceOrZero() >= 0.45 && mealCompatibleProb >= 0.40)
-                ) &&
-            competingNonMealProb < mealCompatibleProb + 0.08
+        val mealCorrectionContext = resolveMealCorrectionContext(mealData = mealData)
         return MealAggressionContext(
-            mealModeActive = explicitMeal || implicitMeal,
+            mealModeActive = explicitMeal || mealCorrectionContext.mealPriorityEligible,
             predictedBgMgdl = predictedBgMgdl,
             targetBgMgdl = targetBgMgdl,
         )
@@ -13765,11 +13857,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val rawAutoMax = preferences.get(DoubleKey.autodriveMaxBasal) ?: 0.0
         val scalarAuto: Double = if (rawAutoMax > 0.1) rawAutoMax.toDouble() else profile.max_basal.toDouble()
         
-        // 🛡️ TIERED AUTODRIVE BASAL (Lyra Optimization)
-        // If "Early", we use only 50% of the allowed max (Soft Start).
-        // If "Confirmed", we use 100%.
-        val tierFactor = if (stateReason.startsWith("Early")) 0.5 else 1.0
+        // 🛡️ TIERED AUTODRIVE BASAL (Lyra Optimization + severe hyper harmonization)
+        // Early rises stay progressive, but deep hyper must be allowed to reach the configured correction cap.
+        val tierFactor = AutodriveBasalPolicy.tierFactor(
+            stateReason = stateReason,
+            bgMgdl = bg,
+            targetBgMgdl = targetBg.toDouble(),
+        )
         val effectiveAutoMax = scalarAuto * tierFactor
+        if (stateReason.startsWith("Early") && tierFactor > 0.5) {
+            consoleLog.add(
+                "🚀 AUTODRIVE_EARLY_PROMOTION BG=${"%.0f".format(bg)} target=${"%.0f".format(targetBg)} " +
+                    "tier=${"%.2f".format(tierFactor)} rawMax=${"%.2f".format(scalarAuto)}",
+            )
+        }
 
         val safeAutoMax = minOf(effectiveAutoMax, profile.max_basal.toDouble())
         

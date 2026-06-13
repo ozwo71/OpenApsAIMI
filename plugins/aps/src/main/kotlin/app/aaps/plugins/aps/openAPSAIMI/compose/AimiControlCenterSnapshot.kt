@@ -107,11 +107,15 @@ private fun buildMealCaptureFamily(preferences: Preferences): AimiBehaviorFamily
     val autoDriveActive = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
     val hyperTrajectory = autoDriveActive && preferences.get(BooleanKey.OApsAIMIHyperTrajectoryRelease)
     val aggressiveTrajectory = hyperTrajectory && preferences.get(BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive)
+    val autodriveMaxBasal = preferences.get(DoubleKey.autodriveMaxBasal)
+    val mealModesMaxBasal = preferences.get(DoubleKey.meal_modes_MaxBasal)
 
     val scores = mutableListOf<Float>()
     scores += if (autoDriveActive) 0.58f else 0.18f
     scores += boolScore(hyperTrajectory, whenFalse = 0.28f, whenTrue = 0.68f)
     scores += boolScore(aggressiveTrajectory, whenFalse = 0.46f, whenTrue = 0.88f)
+    scores += mealBasalCapScore(autodriveMaxBasal)
+    scores += mealBasalCapScore(mealModesMaxBasal)
     scores += normalize(preferences.get(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep), DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep)
     scores += normalize(preferences.get(DoubleKey.OApsAIMIautodrivePrebolus), DoubleKey.OApsAIMIautodrivePrebolus)
     scores += normalize(preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus), DoubleKey.OApsAIMIautodrivesmallPrebolus)
@@ -128,12 +132,14 @@ private fun buildMealCaptureFamily(preferences: Preferences): AimiBehaviorFamily
         levelLabelResId = mealLevelLabel(projection.score),
         normalizedScore = projection.score,
         confidence = projection.confidence,
-        rawPreferenceCount = 8,
+        rawPreferenceCount = 10,
         status = projection.status,
         details = listOf(
             boolDetail(R.string.oaps_aimi_enableMlautoDriveActive_title, autoDriveActive),
             boolDetail(BooleanKey.OApsAIMIHyperTrajectoryRelease, hyperTrajectory),
             boolDetail(BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, aggressiveTrajectory),
+            detail(DoubleKey.autodriveMaxBasal, autodriveMaxBasal, "U/h"),
+            detail(DoubleKey.meal_modes_MaxBasal, mealModesMaxBasal, "U/h"),
             detail(R.string.aimi_mpc_u_per_kg_title, preferences.get(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep), "U/kg/5m"),
             detail(R.string.prebolus_autodrive_mode_title, preferences.get(DoubleKey.OApsAIMIautodrivePrebolus), "U"),
             detail(R.string.prebolussmall_autodrive_mode_title, preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus), "U"),
@@ -326,6 +332,9 @@ private fun project(scores: List<Float>): AimiScoreProjection {
 
 private fun normalize(value: Double, key: DoublePreferenceKey): Float =
     normalize(value = value, min = key.min, max = key.max)
+
+private fun mealBasalCapScore(value: Double): Float =
+    normalize(value = value, min = 3.0, max = 10.0)
 
 private fun normalize(value: Double, min: Double, max: Double): Float {
     if (max <= min) return 0.5f
