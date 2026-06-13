@@ -21,6 +21,7 @@ enum class HypoLgsBlockReason {
             hypo: Double,
             delta: Double,
             mealContext: MealSafetyContext = MealSafetyContext(),
+            ignoreMinPredictedCurve: Boolean = false,
         ): HypoLgsBlockReason? {
             if (bgNow <= floor(hypo)) return BG_NOW
 
@@ -40,7 +41,8 @@ enum class HypoLgsBlockReason {
             if (strongFuture && !suppression.suppressed) {
                 return PREDICTED_AND_EVENTUAL
             }
-            if (minPredictedCurve != null && minPredictedCurve.isFinite() &&
+            if (!ignoreMinPredictedCurve &&
+                minPredictedCurve != null && minPredictedCurve.isFinite() &&
                 minPredictedCurve <= hypoFloor && bgNow > hypo + 15.0
             ) {
                 return PREDICTED_MIN_CURVE

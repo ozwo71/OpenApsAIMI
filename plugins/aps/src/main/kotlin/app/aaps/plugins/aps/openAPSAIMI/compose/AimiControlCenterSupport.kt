@@ -140,16 +140,16 @@ private fun buildProtectionPlan(
             doubleChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, 1.00, R.string.openapsaimi_highBG_maxsmb_title, "U"),
             doubleChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, 1.05, R.string.oaps_aimi_priority_max_iob_factor_title, "x"),
             doubleChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, 0.50, R.string.oaps_aimi_priority_max_iob_extra_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.90, R.string.oaps_aimi_pkpd_relief_factor_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, 0.90, R.string.oaps_aimi_redcarpet_restore_title, null),
+            doubleChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.60, R.string.oaps_aimi_pkpd_relief_factor_title, null),
+            doubleChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, 0.60, R.string.oaps_aimi_redcarpet_restore_title, null),
         )
         1 -> listOfNotNull(
             doubleChange(preferences, DoubleKey.OApsAIMIMaxSMB, 1.00, R.string.openapsaimi_maxsmb_title, "U"),
             doubleChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, 1.25, R.string.openapsaimi_highBG_maxsmb_title, "U"),
             doubleChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, 1.10, R.string.oaps_aimi_priority_max_iob_factor_title, "x"),
             doubleChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, 1.00, R.string.oaps_aimi_priority_max_iob_extra_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.82, R.string.oaps_aimi_pkpd_relief_factor_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, 0.82, R.string.oaps_aimi_redcarpet_restore_title, null),
+            doubleChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.68, R.string.oaps_aimi_pkpd_relief_factor_title, null),
+            doubleChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, 0.68, R.string.oaps_aimi_redcarpet_restore_title, null),
         )
         2 -> listOfNotNull(
             doubleChange(preferences, DoubleKey.OApsAIMIMaxSMB, 1.30, R.string.openapsaimi_maxsmb_title, "U"),
@@ -164,16 +164,16 @@ private fun buildProtectionPlan(
             doubleChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, 2.20, R.string.openapsaimi_highBG_maxsmb_title, "U"),
             doubleChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, 1.35, R.string.oaps_aimi_priority_max_iob_factor_title, "x"),
             doubleChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, 3.00, R.string.oaps_aimi_priority_max_iob_extra_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.68, R.string.oaps_aimi_pkpd_relief_factor_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, 0.68, R.string.oaps_aimi_redcarpet_restore_title, null),
+            doubleChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.82, R.string.oaps_aimi_pkpd_relief_factor_title, null),
+            doubleChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, 0.82, R.string.oaps_aimi_redcarpet_restore_title, null),
         )
         else -> listOfNotNull(
             doubleChange(preferences, DoubleKey.OApsAIMIMaxSMB, 2.40, R.string.openapsaimi_maxsmb_title, "U"),
             doubleChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, 3.00, R.string.openapsaimi_highBG_maxsmb_title, "U"),
             doubleChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, 1.50, R.string.oaps_aimi_priority_max_iob_factor_title, "x"),
             doubleChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, 4.00, R.string.oaps_aimi_priority_max_iob_extra_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.60, R.string.oaps_aimi_pkpd_relief_factor_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, 0.60, R.string.oaps_aimi_redcarpet_restore_title, null),
+            doubleChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.90, R.string.oaps_aimi_pkpd_relief_factor_title, null),
+            doubleChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, 0.90, R.string.oaps_aimi_redcarpet_restore_title, null),
         )
     }
     return AimiFamilyWritebackPlan(

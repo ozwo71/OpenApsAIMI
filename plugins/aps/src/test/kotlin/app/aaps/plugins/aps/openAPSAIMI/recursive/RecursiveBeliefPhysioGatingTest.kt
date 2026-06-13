@@ -2,6 +2,9 @@ package app.aaps.plugins.aps.openAPSAIMI.recursive
 
 import app.aaps.plugins.aps.openAPSAIMI.physio.BehavioralRiskPolicy
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
+import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternId
+import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternReading
+import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinStackingStance
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -99,6 +102,60 @@ class RecursiveBeliefPhysioGatingTest {
         assertThat(snapshot.resolutions.mealChannel).isEqualTo(MealChannelHint.SUPPRESS)
         assertThat(snapshot.resolutions.reasonCodes).contains("UAM_ALT_DAWN_ENDOGENOUS")
         assertThat(snapshot.resolutions.reasonCodes).doesNotContain("FIRST_WAVE")
+    }
+
+    @Test
+    fun meal_dominant_pattern_only_hyper_cap_is_softened_in_strong_fast_meal_context() {
+        val scales = listOf(
+            scale(15, belief = 0.84, urgency = 1.9, terminal = 258.0),
+            scale(60, belief = 0.80, urgency = 2.3, terminal = 338.0),
+            scale(180, belief = 0.30, urgency = -0.1, terminal = 122.0),
+        )
+        val ctx = RecursiveBeliefMr7TestHelper.minimalCtx(
+            v3Smb = 1.6,
+            replaceHtrRelease = true,
+            behavioralRisk = null,
+            extended = RbtExtendedSignals(
+                latentMealProb = 0.84,
+                uamMealProb = 0.82,
+                causalMealConfidence = 0.80,
+                causalProtectiveConfidence = 0.22,
+                patientMode = "FAST_MEAL",
+                patientModeMealBias = 0.90,
+                patientModeProtectionBias = 0.18,
+                uamSuppressMealInterpretation = false,
+            ),
+        ).copy(
+            physiologicalPatterns = PhysiologicalPatternSnapshot(
+                active = listOf(
+                    PhysiologicalPatternReading(
+                        id = PhysiologicalPatternId.MEAL_UNDECLARED_FAST,
+                        confidence = 0.82,
+                        reason = "meal rise",
+                    ),
+                    PhysiologicalPatternReading(
+                        id = PhysiologicalPatternId.SLEEP_DEBT,
+                        confidence = 0.40,
+                        reason = "residual recovery",
+                    ),
+                ),
+                dominant = PhysiologicalPatternId.MEAL_UNDECLARED_FAST,
+                dominantConfidence = 0.82,
+                suppressMealInterpretation = false,
+                suppressHyperRelease = true,
+                suppressWaveletBoost = false,
+                smbCapU = 1.2,
+                reasonSummary = "meal dominant with residual recovery",
+            ),
+        )
+
+        val snapshot = RecursiveBeliefResolver.resolve(
+            RecursiveBeliefResolver.Input(ctx = ctx, scales = scales, authorityEnabled = true),
+        )
+
+        assertThat(snapshot.resolutions.releaseAuthority).isEqualTo(ReleaseAuthority.SOFT)
+        assertThat(snapshot.resolutions.reasonCodes).contains("PHYSIO_PATTERN_SOFT_CAP")
+        assertThat(snapshot.resolutions.reasonCodes).doesNotContain("PHYSIO_RISK_CAP")
     }
 
     private fun scale(tau: Int, belief: Double, urgency: Double, terminal: Double) =

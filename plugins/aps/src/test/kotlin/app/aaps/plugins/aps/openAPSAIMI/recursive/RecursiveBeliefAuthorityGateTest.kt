@@ -7,6 +7,8 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStrategyHint
+import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
+import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStateId
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.risk.AimiRiskPhase
 import app.aaps.plugins.aps.openAPSAIMI.safety.SafetyRiskExportSnapshot
@@ -169,5 +171,75 @@ class RecursiveBeliefAuthorityGateTest {
 
         assertThat(decision.effectiveAuthority).isEqualTo(ReleaseAuthority.SOFT)
         assertThat(decision.reasonCodes).contains("MODE_EXERCISE_AFTERBURN")
+    }
+
+    @Test
+    fun evaluate_keeps_soft_authority_when_predictive_hypo_is_suppressed_but_meal_context_is_strong() {
+        val patientState = PatientStateSnapshot(
+            timestampMs = 1_718_000_000_000L,
+            mealProb = 0.84,
+            postHypoReboundProb = 0.18,
+            sensorConfidence = 0.95,
+            causalPosterior = CausalStatePosterior(
+                fastMealProb = 0.86,
+                prolongedMealProb = 0.32,
+                dominant = CausalStateId.FAST_MEAL,
+                dominantConfidence = 0.84,
+                learningQuality = 0.90,
+            ),
+        )
+        val decision = RecursiveBeliefAuthorityGate.evaluate(
+            RecursiveBeliefAuthorityGate.Input(
+                authorityEnabled = true,
+                requestedAuthority = ReleaseAuthority.HARD,
+                predictionAvailable = true,
+                phaseOutput = null,
+                patternSnapshot = PhysiologicalPatternSnapshot.EMPTY,
+                latentState = PhysioLatentState(
+                    mealProb = 0.84,
+                    endogenousGlucoseDrive = 0.10,
+                    transientResistanceProb = 0.18,
+                    sensorConfidence = 0.95,
+                    postHypoReboundProb = 0.18,
+                    source = "test",
+                ),
+                hypothesisState = UamHypothesisState(
+                    mealProb = 0.88,
+                    dawnEndogenousProb = 0.06,
+                    stressProb = 0.04,
+                    postHypoProb = 0.08,
+                    dominant = UamHypothesisId.MEAL,
+                    dominantConfidence = 0.88,
+                    suppressMealInterpretation = false,
+                ),
+                patientState = patientState,
+                patientModeDecision = PatientModeOrchestrator.Decision(
+                    mode = PatientMode.FAST_MEAL,
+                    confidence = 0.86,
+                    strategyHint = PatientStrategyHint.SMB_PRIORITY,
+                    mealBias = 0.92,
+                    protectionBias = 0.16,
+                    userIntentConfidence = 0.20,
+                    reasonCodes = listOf("CAUSAL_FAST_MEAL"),
+                ),
+                safetyRiskExport = SafetyRiskExportSnapshot(
+                    phase = AimiRiskPhase.DECISION,
+                    predictiveHypoSuppressed = true,
+                    safetyGate = "suppressed",
+                    haltRemainingPipeline = false,
+                    mealContextActive = true,
+                    mealRiseConfirmed = true,
+                    compositeMinMgdl = 108.0,
+                    predBgMgdl = 196.0,
+                    eventualBgMgdl = 214.0,
+                    uamTerminalMgdl = 248.0,
+                    hypoThresholdMgdl = 75.0,
+                ),
+            ),
+        )
+
+        assertThat(decision.effectiveAuthority).isEqualTo(ReleaseAuthority.SOFT)
+        assertThat(decision.reasonCodes).contains("PREDICTIVE_HYPO_MEAL_BYPASS")
+        assertThat(decision.reasonCodes).doesNotContain("PREDICTIVE_HYPO")
     }
 }

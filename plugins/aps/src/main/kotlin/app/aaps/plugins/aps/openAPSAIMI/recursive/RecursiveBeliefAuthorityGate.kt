@@ -19,6 +19,11 @@ internal object RecursiveBeliefAuthorityGate {
     private const val POST_HYPO_BLOCK_THRESHOLD = 0.82
     private const val POST_HYPO_SOFT_THRESHOLD = 0.60
     private const val RESISTANCE_SOFT_THRESHOLD = 0.78
+    private const val MEAL_BYPASS_MODE_CONFIDENCE = 0.72
+    private const val MEAL_BYPASS_LATENT_CONFIDENCE = 0.70
+    private const val MEAL_BYPASS_CAUSAL_CONFIDENCE = 0.68
+    private const val MEAL_BYPASS_MEAL_MARGIN = 0.10
+    private const val MEAL_BYPASS_PROTECTION_CONFIDENCE = 0.68
 
     data class Input(
         val authorityEnabled: Boolean,
@@ -83,6 +88,7 @@ internal object RecursiveBeliefAuthorityGate {
         val postHypoProb = latentState?.postHypoReboundProb ?: 0.0
         val transientResistanceProb = latentState?.transientResistanceProb ?: 0.0
         val patientModeDecision = input.patientModeDecision
+        val predictiveHypoMealBypass = shouldBypassPredictiveHypoForMeal(input)
         val hyperReleaseSuppressed =
             input.patternSnapshot?.suppressHyperRelease == true ||
                 input.phaseOutput?.policy?.capsHtrRelease() == true
@@ -92,8 +98,15 @@ internal object RecursiveBeliefAuthorityGate {
             maxAllowedAuthority = ReleaseAuthority.NONE
         }
         if (input.safetyRiskExport?.predictiveHypoSuppressed == true) {
-            reasonCodes += "PREDICTIVE_HYPO"
-            maxAllowedAuthority = ReleaseAuthority.NONE
+            if (predictiveHypoMealBypass) {
+                reasonCodes += "PREDICTIVE_HYPO_MEAL_BYPASS"
+                if (maxAllowedAuthority == ReleaseAuthority.HARD) {
+                    maxAllowedAuthority = ReleaseAuthority.SOFT
+                }
+            } else {
+                reasonCodes += "PREDICTIVE_HYPO"
+                maxAllowedAuthority = ReleaseAuthority.NONE
+            }
         }
         if (hyperReleaseSuppressed) {
             reasonCodes += "PHYSIO_CAP"
@@ -253,6 +266,41 @@ internal object RecursiveBeliefAuthorityGate {
             -> true
             else -> false
         }
+    }
+
+    private fun shouldBypassPredictiveHypoForMeal(input: Input): Boolean {
+        val safety = input.safetyRiskExport ?: return false
+        if (!safety.predictiveHypoSuppressed || !safety.mealContextActive || !safety.mealRiseConfirmed) {
+            return false
+        }
+        if (input.patternSnapshot?.suppressMealInterpretation == true) return false
+        if (input.hypothesisState?.suppressMealInterpretation == true) return false
+
+        val latentState = input.latentState
+        if (latentState?.falseMealSuppression == true) return false
+        if ((latentState?.postHypoReboundProb ?: 0.0) >= POST_HYPO_SOFT_THRESHOLD) return false
+
+        val patientModeDecision = input.patientModeDecision
+        if (patientModeDecision != null &&
+            hasProtectivePatientMode(patientModeDecision.mode) &&
+            patientModeDecision.mode != PatientMode.FAST_MEAL &&
+            patientModeDecision.confidence >= MEAL_BYPASS_PROTECTION_CONFIDENCE
+        ) {
+            return false
+        }
+
+        val modeMeal = patientModeDecision?.mode == PatientMode.FAST_MEAL &&
+            (
+                patientModeDecision.confidence >= MEAL_BYPASS_MODE_CONFIDENCE ||
+                    patientModeDecision.mealBias >= 0.84
+                )
+        val causalMeal = input.patientState?.causalPosterior?.supportsMealInterpretation(
+            minConfidence = MEAL_BYPASS_CAUSAL_CONFIDENCE,
+            mealMargin = MEAL_BYPASS_MEAL_MARGIN,
+        ) == true
+        val latentMeal = (latentState?.mealProb ?: 0.0) >= MEAL_BYPASS_LATENT_CONFIDENCE
+        val hypothesisMeal = (input.hypothesisState?.mealCompatibleProb() ?: 0.0) >= MEAL_BYPASS_LATENT_CONFIDENCE
+        return modeMeal || causalMeal || latentMeal || hypothesisMeal
     }
 
     private fun hasProtectivePatientMode(mode: PatientMode): Boolean =

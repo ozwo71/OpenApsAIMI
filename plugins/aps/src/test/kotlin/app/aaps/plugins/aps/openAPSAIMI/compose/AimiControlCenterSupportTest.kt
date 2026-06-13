@@ -5,6 +5,7 @@ import app.aaps.core.keys.interfaces.BooleanPreferenceKey
 import app.aaps.core.keys.interfaces.DoublePreferenceKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.StringPreferenceKey
+import app.aaps.core.keys.DoubleKey
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
@@ -83,5 +84,23 @@ class AimiControlCenterSupportTest {
         verify { preferences.put(BooleanKey.OApsAIMIRecursiveBeliefShadow, true) }
         verify { preferences.put(BooleanKey.OApsAIMIRecursiveBeliefAuthority, true) }
         verify { preferences.put(BooleanKey.OApsAIMIautoDriveAuthoritative, true) }
+    }
+
+    @Test
+    fun `protective writeback keeps pkpd guard factors on the protective side`() {
+        every { preferences.get(DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor) } returns 0.90
+        every { preferences.get(DoubleKey.OApsAIMIRedCarpetRestoreThreshold) } returns 0.90
+
+        val currentDraft = readAimiControlCenterDraft(preferences)
+        val pending = buildAimiControlCenterPendingChanges(
+            preferences = preferences,
+            currentDraft = currentDraft,
+            targetDraft = currentDraft.copy(protectionLevel = 0),
+        )
+
+        applyAimiControlCenterPendingChanges(preferences, pending)
+
+        verify { preferences.put(DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.60) }
+        verify { preferences.put(DoubleKey.OApsAIMIRedCarpetRestoreThreshold, 0.60) }
     }
 }

@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.recursive
 
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
+import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternId
 import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinLoadGovernor
 import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinStackingStance
 import kotlin.math.abs
@@ -117,6 +118,12 @@ object RecursiveBeliefResolver {
             !suppressMealInterpretation &&
                 mealHypothesisProb >= nonMealHypothesisProb &&
                 mealHypothesisProb >= 0.45
+        val patternSoftCapAllowed = shouldSoftenPatternHyperCap(
+            ctx = ctx,
+            mealHypothesisProb = mealHypothesisProb,
+            mealWaveBoostAllowed = mealWaveBoostAllowed,
+            suppressMealInterpretation = suppressMealInterpretation,
+        )
 
         // P2 — short-scale dominance
         val hyperVsClearance = paradoxes.any { it.id == BeliefParadoxId.HYPER_VS_CLEARANCE && !it.suppressed }
@@ -146,14 +153,28 @@ object RecursiveBeliefResolver {
             reasonCodes += "THYROID_GUARD"
         }
         if (paradoxes.any { it.id == BeliefParadoxId.ENDOG_VS_CORRECTION }) {
-            if (ctx.behavioralRisk?.capsHtrRelease() == true || ctx.physiologicalPatterns?.suppressHyperRelease == true) {
+            if (ctx.behavioralRisk?.capsHtrRelease() == true ||
+                (ctx.physiologicalPatterns?.suppressHyperRelease == true && !patternSoftCapAllowed)
+            ) {
                 releaseAuthority = ReleaseAuthority.NONE
                 reasonCodes += "ENDOG_CAP"
             }
         }
-        if (ctx.behavioralRisk?.capsHtrRelease() == true || ctx.physiologicalPatterns?.suppressHyperRelease == true) {
+        if (ctx.behavioralRisk?.capsHtrRelease() == true) {
             releaseAuthority = ReleaseAuthority.NONE
             reasonCodes += "PHYSIO_RISK_CAP"
+        } else if (ctx.physiologicalPatterns?.suppressHyperRelease == true) {
+            if (patternSoftCapAllowed) {
+                if (releaseAuthority == ReleaseAuthority.HARD) {
+                    releaseAuthority = ReleaseAuthority.SOFT
+                }
+                if (releaseAuthority != ReleaseAuthority.NONE) {
+                    reasonCodes += "PHYSIO_PATTERN_SOFT_CAP"
+                }
+            } else {
+                releaseAuthority = ReleaseAuthority.NONE
+                reasonCodes += "PHYSIO_RISK_CAP"
+            }
         }
         if (suppressMealInterpretation && releaseAuthority != ReleaseAuthority.NONE) {
             releaseAuthority = if (releaseAuthority == ReleaseAuthority.HARD) {
@@ -377,5 +398,45 @@ object RecursiveBeliefResolver {
         val base = max(0.5, ctx.tdd24hU * 0.025)
         val factor = max(u15, u60 * 0.85).coerceIn(0.0, 2.5)
         return base * factor
+    }
+
+    private fun shouldSoftenPatternHyperCap(
+        ctx: RecursiveBeliefTickContext,
+        mealHypothesisProb: Double,
+        mealWaveBoostAllowed: Boolean,
+        suppressMealInterpretation: Boolean,
+    ): Boolean {
+        val patterns = ctx.physiologicalPatterns ?: return false
+        if (!patterns.suppressHyperRelease || ctx.behavioralRisk?.capsHtrRelease() == true) return false
+        if (!mealWaveBoostAllowed || suppressMealInterpretation) return false
+        if (ctx.contextActivityActive || ctx.exerciseLockout || ctx.isNight) return false
+        if ((ctx.extended.uamPostHypoProb ?: 0.0) >= 0.40) return false
+        if ((ctx.extended.patientModeProtectionBias ?: 0.0) >= 0.70 &&
+            (ctx.extended.patientModeMealBias ?: 0.0) <= 0.55
+        ) {
+            return false
+        }
+
+        val dominantMealLike = when (patterns.dominant) {
+            PhysiologicalPatternId.MEAL_UNDECLARED_FAST,
+            PhysiologicalPatternId.MEAL_FIRST_WAVE,
+            PhysiologicalPatternId.MEAL_SECOND_WAVE,
+            PhysiologicalPatternId.HYPER_INSTALLED,
+            -> true
+            else -> false
+        }
+        if (!dominantMealLike || patterns.dominantConfidence < 0.55) return false
+
+        val mealSupport = max(
+            mealHypothesisProb,
+            max(
+                ctx.mealAbsorption?.belief ?: 0.0,
+                max(
+                    ctx.extended.causalMealConfidence ?: 0.0,
+                    ctx.extended.patientModeMealBias ?: 0.0,
+                ),
+            ),
+        )
+        return mealSupport >= 0.72 && ctx.mealAbsorption?.mealDeliveryPriority == true
     }
 }
