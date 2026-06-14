@@ -63,6 +63,12 @@ internal object SmbRefinementFeatureSchema {
         "familyAutonomyLevel",
     )
 
+    val optionalTrainingAuditFeatureNames: List<String> = listOf(
+        "eventMemoryPostHyperExhaustionScore",
+        "eventMemoryCorrectionFragilityScore",
+        "decisionConflictFlags",
+    )
+
     val csvFeatureNames: List<String> = requiredTrainingFeatureNames + latentFeatureNames + modeFeatureNames + causalFeatureNames
 
     fun buildRuntimeFeatures(
@@ -142,6 +148,35 @@ internal object SmbRefinementFeatureSchema {
         val protectiveConfidence = rawFeatures.getOrElse(causalStart + 1) { NEUTRAL_CAUSAL_PROTECTIVE_CONFIDENCE }
         val learningQuality = rawFeatures.getOrElse(causalStart + 2) { NEUTRAL_CAUSAL_LEARNING_QUALITY }
         return learningQuality >= 0.52f && protectiveConfidence < 0.86f
+    }
+
+    fun shouldUseCsvRowForTraining(headers: List<String>, cols: List<String>, rawFeatures: FloatArray): Boolean {
+        if (!shouldUseForTraining(rawFeatures)) return false
+
+        val conflictFlags = headerValue(headers, cols, "decisionConflictFlags").orEmpty().trim()
+        if (conflictFlags.isNotEmpty() && conflictFlags != "[]" && conflictFlags.lowercase() != "none") {
+            return false
+        }
+
+        val fragility = headerValue(headers, cols, "eventMemoryCorrectionFragilityScore")?.toFloatOrNull()
+        if (fragility != null && fragility >= 0.72f) {
+            return false
+        }
+
+        val exhaustion = headerValue(headers, cols, "eventMemoryPostHyperExhaustionScore")?.toFloatOrNull()
+        val causalStart = BASE_FEATURE_COUNT + LATENT_FEATURE_COUNT + MODE_FEATURE_COUNT
+        val protectiveConfidence = rawFeatures.getOrElse(causalStart + 1) { NEUTRAL_CAUSAL_PROTECTIVE_CONFIDENCE }
+        if (exhaustion != null && exhaustion >= 0.82f && protectiveConfidence >= 0.55f) {
+            return false
+        }
+
+        return true
+    }
+
+    private fun headerValue(headers: List<String>, cols: List<String>, name: String): String? {
+        val index = headers.indexOf(name)
+        if (index == -1) return null
+        return cols.getOrNull(index)
     }
 
     private fun neutralValueFor(name: String): Float =

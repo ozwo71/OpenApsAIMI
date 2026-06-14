@@ -178,4 +178,65 @@ class SmbRefinementFeatureSchemaTest {
             .containsExactly(0.71f, 0.12f, 0.82f)
             .inOrder()
     }
+
+    @Test
+    fun should_use_csv_row_for_training_rejects_conflicted_or_fragile_rows() {
+        val headers = listOf(
+            "dateStr",
+            "bg",
+            "iob",
+            "cob",
+            "delta",
+            "shortAvgDelta",
+            "longAvgDelta",
+            "tdd7DaysPerHour",
+            "tdd2DaysPerHour",
+            "tddPerHour",
+            "tdd24HrsPerHour",
+            "mealProb",
+            "endogenousGlucoseDrive",
+            "circadianSiFactor",
+            "transientResistanceProb",
+            "patientModeMealBias",
+            "patientModeProtectionBias",
+            "contextIntentConfidence",
+            "causalMealConfidence",
+            "causalProtectiveConfidence",
+            "causalLearningQuality",
+            "eventMemoryPostHyperExhaustionScore",
+            "eventMemoryCorrectionFragilityScore",
+            "decisionConflictFlags",
+        )
+        val cols = listOf(
+            "06/11/2026 08:00",
+            "182",
+            "1.8",
+            "12.0",
+            "2.5",
+            "2.1",
+            "1.5",
+            "0.8",
+            "0.7",
+            "0.9",
+            "1.0",
+            "0.52",
+            "0.18",
+            "0.93",
+            "0.28",
+            "0.80",
+            "0.20",
+            "0.54",
+            "0.72",
+            "0.22",
+            "0.78",
+            "0.48",
+            "0.75",
+            "dual_delivery|dual_delivery_tbr_up",
+        )
+
+        val parsed = SmbRefinementFeatureSchema.parseTrainingFeatures(headers, cols)
+
+        assertThat(parsed).isNotNull()
+        assertThat(SmbRefinementFeatureSchema.shouldUseCsvRowForTraining(headers, cols, parsed!!)).isFalse()
+    }
 }

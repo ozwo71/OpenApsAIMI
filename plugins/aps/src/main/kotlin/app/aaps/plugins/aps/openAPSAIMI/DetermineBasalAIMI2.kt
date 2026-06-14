@@ -161,6 +161,7 @@ import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiLoopTickRecovery
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientEventMemory
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientRefreshSource
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateEngine
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateLoopCache
@@ -1690,6 +1691,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 physioLatentState = lastPhysioLatentState,
                 estimatedRaMgdlPerMin = continuousStateEstimator.getLastRa().takeIf { it.isFinite() && it > 0.0 },
                 causalStatePosterior = lastPatientState?.causalPosterior,
+                patientEventMemory = lastPatientState?.eventMemory,
             )
         } catch (e: Exception) {
             consoleError.add("❌ Early PKPD Runtime init failed: ${e.message}")
@@ -2807,6 +2809,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             HealthContextSnapshot()
         }
         val enrichedSnap = enrichThermalSnapshot(wearableSnap)
+        val eventMemory = buildPatientEventMemory(
+            currentBgMgdl = bg,
+            latentState = lastPhysioLatentState,
+            thermalBelief = enrichedSnap.thermalBelief,
+        )
         val patientState = PatientStateEngine.build(
             timestampMs = nowMs,
             phaseOutput = lastPhysiologicalPhaseOutput,
@@ -2816,6 +2823,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             hypothesisState = lastUamHypothesisState,
             contextSnapshot = lastContextSnapshot,
             thermalBelief = enrichedSnap.thermalBelief,
+            eventMemory = eventMemory,
         )
         lastPatientState = patientState
         val patientModeDecision = PatientModeOrchestrator.evaluate(patientState)
@@ -2843,6 +2851,61 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             refreshSource = refreshSource,
         )
         return patientState
+    }
+
+    private fun buildPatientEventMemory(
+        currentBgMgdl: Double,
+        latentState: PhysioLatentState?,
+        thermalBelief: app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefDigest?,
+    ): PatientEventMemory {
+        val recentBgs = glucoseStatusCalculatorAimi.getRecentGlucose()
+            .map { it.toDouble() }
+            .filter { it.isFinite() && it > 39.0 }
+        val hyperPeak = max(
+            currentBgMgdl,
+            recentBgs.maxOrNull() ?: currentBgMgdl,
+        )
+        val hypoFloor = min(
+            recentBgs.minOrNull() ?: currentBgMgdl,
+            minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
+        )
+        val hyperLoad = if (recentBgs.isEmpty()) {
+            ((currentBgMgdl - 180.0) / 120.0).coerceIn(0.0, 1.0)
+        } else {
+            recentBgs.map { ((it - 180.0) / 120.0).coerceIn(0.0, 1.0) }.average()
+        }
+        val hypoLoadFromHistory = if (recentBgs.isEmpty()) {
+            ((72.0 - currentBgMgdl) / 25.0).coerceIn(0.0, 1.0)
+        } else {
+            recentBgs.map { ((72.0 - it) / 25.0).coerceIn(0.0, 1.0) }.average()
+        }
+        val hypoLoad = max(
+            hypoLoadFromHistory,
+            ((75.0 - hypoFloor) / 25.0).coerceIn(0.0, 1.0),
+        )
+        val hyperCrashScore = if (hyperPeak >= 180.0 && hypoFloor < 85.0) {
+            ((hyperPeak - 180.0) / 140.0).coerceIn(0.0, 1.0) *
+                ((85.0 - hypoFloor) / 25.0).coerceIn(0.0, 1.0)
+        } else {
+            0.0
+        }
+        val recoveryBurden = thermalBelief?.recoveryBurden ?: 0.0
+        val postHyperExhaustionScore = maxOf(
+            hyperCrashScore,
+            (hyperLoad * 0.58) + (hypoLoad * 0.42),
+            recoveryBurden * 0.65,
+        ).coerceIn(0.0, 1.0)
+        val correctionFragilityScore = maxOf(
+            ((latentState?.postHypoReboundProb ?: 0.0) * 0.58) + (hypoLoad * 0.42),
+            postHyperExhaustionScore * 0.72,
+            recoveryBurden * 0.68,
+        ).coerceIn(0.0, 1.0)
+        return PatientEventMemory(
+            recentHyperLoad = hyperLoad.coerceIn(0.0, 1.0),
+            recentHypoLoad = hypoLoad.coerceIn(0.0, 1.0),
+            postHyperExhaustionScore = postHyperExhaustionScore,
+            correctionFragilityScore = correctionFragilityScore,
+        )
     }
 
     private fun observeCircadianMealProfile(nowMs: Long) {
@@ -3461,15 +3524,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 restingHeartRateBpm = snapshot.rhrResting,
                 basePhysioMultipliers = lastBasePhysioMultipliers,
             )
+            val autodriveMealContext = buildMealSafetyContext(
+                isExplicitAdvisorRun = false,
+                iobData = ctx.iobDataArray.firstOrNull() ?: IobTotal(ctx.currentTime),
+            )
             refreshMealAbsorptionPhase(
                 combinedDelta = combinedDelta,
                 stepsLast15m = snapshot.stepsLast15m,
                 heartRateBpm = snapshot.hrNow,
                 restingHeartRateBpm = snapshot.rhrResting,
-                mealContext = buildMealSafetyContext(
-                    isExplicitAdvisorRun = false,
-                    iobData = ctx.iobDataArray.firstOrNull() ?: IobTotal(ctx.currentTime),
-                ),
+                mealContext = autodriveMealContext,
                 lastBolusTimeMs = ctx.iobDataArray.firstOrNull()?.lastBolusTime?.takeIf { it > 0L },
                 nowMs = dateUtil.now(),
             )
@@ -3580,6 +3644,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         ctx.currentTemp,
                         overrideSafetyLimits = true,
                         adaptiveMultiplier = v3AdaptiveMult,
+                        mealContext = autodriveMealContext,
                     )
                 }
             } else {
@@ -7095,6 +7160,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 physioLatentState = lastPhysioLatentState,
                 estimatedRaMgdlPerMin = continuousStateEstimator.getLastRa().takeIf { it.isFinite() && it > 0.0 },
                 causalStatePosterior = lastPatientState?.causalPosterior,
+                patientEventMemory = lastPatientState?.eventMemory,
             )
         } catch (e: Exception) {
             consoleError.add("❌ PKPD runtime failed: ${e.message}")
@@ -8706,15 +8772,39 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val units = rT.units ?: 0.0
         val duration = rT.duration ?: 0
         val rate = rT.rate ?: 0.0
-        val decisionType = when {
-            units > 0.0 -> "smb"
+        val smbDecisionType = if (units > 0.0) "smb" else "none"
+        val basalDecisionType = when {
             duration > 0 && rate <= 0.0 -> "suspend"
             duration > 0 && currenttemp != null && rate > currenttemp.rate -> "tbr_up"
             duration > 0 && currenttemp != null && rate < currenttemp.rate -> "tbr_down"
             duration > 0 && rate > 0.0 -> "tbr_up"
             else -> "none"
         }
-        physioAdapter.setFinalLoopDecisionType(decisionType)
+        recordSmbActionType(smbDecisionType)
+        recordBasalActionType(basalDecisionType)
+        physioAdapter.setFinalLoopDecisionType(
+            when {
+                smbDecisionType == "smb" -> "smb"
+                basalDecisionType != "none" -> basalDecisionType
+                else -> "none"
+            },
+        )
+    }
+
+    private fun recordBasalActionType(decisionType: String) {
+        physioAdapter.setBasalActionType(decisionType)
+        val currentFinal = physioAdapter.getLastDecisionTrace()?.finalLoopDecisionType
+        if (decisionType != "none" || currentFinal.isNullOrBlank() || currentFinal == "pending") {
+            physioAdapter.setFinalLoopDecisionType(decisionType)
+        }
+    }
+
+    private fun recordSmbActionType(decisionType: String) {
+        physioAdapter.setSmbActionType(decisionType)
+        val currentFinal = physioAdapter.getLastDecisionTrace()?.finalLoopDecisionType
+        if (decisionType != "none" || currentFinal.isNullOrBlank() || currentFinal == "pending") {
+            physioAdapter.setFinalLoopDecisionType(decisionType)
+        }
     }
 
     fun setTempBasal(
@@ -8735,6 +8825,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val effectiveMealContext = mealContext ?: MealSafetyContext(
             mealModeActive = mealTime || lunchTime || dinnerTime || snackTime || highCarbTime || bfastTime,
             manualBolusAgeMin = internalLastSmbMillis.takeIf { it > 0L }?.let { (dateUtil.now() - it) / 60000.0 },
+            inferredMealSignal = inferredMealSafetyIntent(),
         )
 
         if (forceExact) {
@@ -8746,7 +8837,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     rT.reason.append(context.getString(R.string.lgs_triggered, "%.0f".format(bg), "%.0f".format(hypoGuard)))
                     rT.duration = maxOf(duration, 30)
                     rT.rate = 0.0
-                    physioAdapter.setFinalLoopDecisionType("suspend")
+                    recordBasalActionType("suspend")
                     return rT
                 }
                 isMealMode && bg > hypoGuard -> {
@@ -8767,7 +8858,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         rate < currenttemp.rate -> "tbr_down"
                         else -> "none"
                     }
-                    physioAdapter.setFinalLoopDecisionType(decisionType)
+                    recordBasalActionType(decisionType)
                     return rT
                 }
             }
@@ -8813,7 +8904,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 rT.reason.append(lgsLine)
                 rT.duration = maxOf(duration, 30)
                 rT.rate = 0.0
-                physioAdapter.setFinalLoopDecisionType("suspend")
+                recordBasalActionType("suspend")
                 return rT
             }
         }
@@ -8842,7 +8933,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 rate < currenttemp.rate -> "tbr_down"
                 else -> "none"
             }
-            physioAdapter.setFinalLoopDecisionType(decisionType)
+            recordBasalActionType(decisionType)
             return rT
         }
 
@@ -8971,7 +9062,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rate < currenttemp.rate -> "tbr_down"
             else -> "none"
         }
-        physioAdapter.setFinalLoopDecisionType(decisionType)
+        recordBasalActionType(decisionType)
         return rT
     }
 
@@ -9007,10 +9098,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val modeFeatures = SmbRefinementFeatureSchema.modeFeatureValues(lastPatientModeDecision)
         val causalFeatures = SmbRefinementFeatureSchema.causalFeatureValues(lastPatientState?.causalPosterior)
         val behaviorProfile = readAimiBehaviorRuntimeProfile(preferences)
+        val eventMemory = lastPatientState?.eventMemory ?: PatientEventMemory.EMPTY
+        val decisionConflictFlags = physioAdapter.getLastDecisionTrace()?.decisionConflictFlags?.joinToString("|").orEmpty()
 
         val headerRow =
             "dateStr, ${SmbRefinementFeatureSchema.csvFeatureNames.joinToString(", ")}, " +
                 "${SmbRefinementFeatureSchema.familyAuditFeatureNames.joinToString(", ")}, " +
+                "${SmbRefinementFeatureSchema.optionalTrainingAuditFeatureNames.joinToString(", ")}, " +
                 "predictedSMB, smbGiven, dynamicPeak, adjustedDia\n"
         val valuesToRecord = "$dateStr," +
             "$bg,$iob,$cob,$delta,$shortAvgDelta,$longAvgDelta," +
@@ -9020,6 +9114,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             "${causalFeatures[0]},${causalFeatures[1]},${causalFeatures[2]}," +
             "${behaviorProfile.protectionLevel},${behaviorProfile.mealCaptureLevel},${behaviorProfile.stabilityLevel}," +
             "${behaviorProfile.physioLevel},${behaviorProfile.autonomyLevel}," +
+            "${eventMemory.postHyperExhaustionScore},${eventMemory.correctionFragilityScore},$decisionConflictFlags," +
             "$predictedSMB,$smbToGive," +
             "$peakintermediaire,$latestAdjustedDia"
         appendCsvSafely(
@@ -9604,7 +9699,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         rT.units = finalUnits.coerceAtLeast(0.0)
-        physioAdapter.setFinalLoopDecisionType(if (finalUnits > 0.0) "smb" else "none")
+        recordSmbActionType(if (finalUnits > 0.0) "smb" else "none")
         rT.reason.append(reasonHeader)
 
          val audit = SmbGateAudit(
@@ -11997,7 +12092,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun applyLegacyMealModes(profile: OapsProfileAimi, rT: RT, currenttemp: CurrentTemp, modeTbrLimit: Double): RT? {
         fun rbf(key: DoubleKey) = preferences.get(key)
         fun markLegacyMealDecision() {
-            physioAdapter.setFinalLoopDecisionType(if ((rT.units ?: 0.0) > 0.0) "smb" else "none")
+            recordSmbActionType(if ((rT.units ?: 0.0) > 0.0) "smb" else "none")
             val units = rT.units ?: 0.0
             if (units > 0.0) {
                 lastBolusSMBUnit = units.toFloat()
@@ -13623,7 +13718,48 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             manualBolusAgeMin = manualBolusAgeMin,
             mealAdvisorCarbsFresh = advisorFresh,
             explicitMealTrigger = isExplicitAdvisorRun,
+            inferredMealSignal = inferredMealSafetyIntent(),
         )
+    }
+
+    private fun inferredMealSafetyIntent(): Boolean {
+        val patientState = lastPatientState
+        val patientModeDecision = lastPatientModeDecision
+        val falseMealSuppression =
+            lastUamHypothesisState?.suppressMealInterpretation == true ||
+                patientState?.falseMealSuppression == true
+        if (falseMealSuppression) return false
+
+        val phaseEvidence = when (lastMealAbsorptionOutput?.phase) {
+            MealAbsorptionPhase.FIRST_WAVE,
+            MealAbsorptionPhase.SECOND_WAVE,
+            MealAbsorptionPhase.INTER_WAVE,
+            MealAbsorptionPhase.PEAK_CORRECTION,
+            -> true
+
+            else -> false
+        }
+        val patientModeMealEvidence =
+            (patientModeDecision?.mode == PatientMode.FAST_MEAL &&
+                patientModeDecision.confidence >= 0.60 &&
+                patientModeDecision.mealBias >= 0.75) ||
+                (patientModeDecision?.mode == PatientMode.PROLONGED_MEAL &&
+                    patientModeDecision.confidence >= 0.64 &&
+                    patientModeDecision.mealBias >= 0.68)
+        val patientStateMealEvidence =
+            (patientState?.mealProb ?: 0.0) >= 0.72 ||
+                (
+                    patientState?.uamDominant == app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId.MEAL &&
+                        patientState.uamDominantConfidence >= 0.60
+                    ) ||
+                (patientState?.causalPosterior?.supportsMealInterpretation(
+                    minConfidence = 0.55,
+                    mealMargin = 0.04,
+                ) == true)
+        return lastMealAbsorptionOutput?.mealDeliveryPriority == true ||
+            phaseEvidence ||
+            patientModeMealEvidence ||
+            patientStateMealEvidence
     }
 
     private fun trySafetyStart(

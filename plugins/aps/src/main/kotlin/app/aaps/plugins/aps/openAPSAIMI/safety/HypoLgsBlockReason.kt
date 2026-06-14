@@ -43,7 +43,9 @@ enum class HypoLgsBlockReason {
             }
             if (!ignoreMinPredictedCurve &&
                 minPredictedCurve != null && minPredictedCurve.isFinite() &&
-                minPredictedCurve <= hypoFloor && bgNow > hypo + 15.0
+                minPredictedCurve <= hypoFloor &&
+                bgNow > hypo + 15.0 &&
+                !suppression.suppressed
             ) {
                 return PREDICTED_MIN_CURVE
             }

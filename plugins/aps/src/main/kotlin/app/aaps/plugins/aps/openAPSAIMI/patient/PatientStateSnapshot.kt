@@ -64,6 +64,7 @@ data class PatientStateSnapshot(
     val uamDominantConfidence: Double = 0.0,
     val userIntent: UserIntentSummary = UserIntentSummary.EMPTY,
     val causalPosterior: CausalStatePosterior = CausalStatePosterior.EMPTY,
+    val eventMemory: PatientEventMemory = PatientEventMemory.EMPTY,
     val thermalInflammationIndex: Double = 0.0,
     val thermalRecoveryBurden: Double = 0.0,
     val thermalHypothesis: String = "DATA_PENDING",
@@ -89,6 +90,7 @@ data class PatientStateSnapshot(
             put("uam_dominant_confidence", uamDominantConfidence)
             put("user_intent", userIntent.toJsonObject())
             put("causal_posterior", causalPosterior.toJsonObject())
+            put("event_memory", eventMemory.toJsonObject())
             put("thermal_inflammation_index", thermalInflammationIndex)
             put("thermal_recovery_burden", thermalRecoveryBurden)
             put("thermal_hypothesis", thermalHypothesis)
@@ -114,6 +116,7 @@ internal object PatientStateEngine {
         hypothesisState: UamHypothesisState?,
         contextSnapshot: ContextSnapshot?,
         thermalBelief: ThermalBeliefDigest? = null,
+        eventMemory: PatientEventMemory = PatientEventMemory.EMPTY,
     ): PatientStateSnapshot {
         val userIntent = buildUserIntentSummary(contextSnapshot)
         val thermal = thermalBelief ?: ThermalBeliefDigest.EMPTY
@@ -127,6 +130,7 @@ internal object PatientStateEngine {
             userIntent = userIntent,
             thermalBelief = thermal,
             falseMealSuppression = falseMealSuppression,
+            eventMemory = eventMemory,
         )
         return PatientStateSnapshot(
             timestampMs = timestampMs,
@@ -147,10 +151,11 @@ internal object PatientStateEngine {
             uamDominantConfidence = hypothesisState?.dominantConfidence ?: 0.0,
             userIntent = userIntent,
             causalPosterior = causalPosterior,
+            eventMemory = eventMemory,
             thermalInflammationIndex = thermal.inflammationIndex,
             thermalRecoveryBurden = thermal.recoveryBurden,
             thermalHypothesis = thermal.hypothesis.name,
-            source = "patient_state_v3",
+            source = "patient_state_v4",
         )
     }
 

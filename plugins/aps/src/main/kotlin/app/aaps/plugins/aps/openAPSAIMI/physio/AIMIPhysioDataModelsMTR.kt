@@ -504,6 +504,9 @@ data class PhysioDecisionTraceMTR(
     val shadowNotes: List<String> = emptyList(),
     val vetoReason: String? = null,
     val finalLoopDecisionType: String? = null,
+    val smbActionType: String? = null,
+    val basalActionType: String? = null,
+    val decisionConflictFlags: List<String> = emptyList(),
     val source: String = "Deterministic"
 ) {
     fun toJSON(): JSONObject = JSONObject().apply {
@@ -529,6 +532,9 @@ data class PhysioDecisionTraceMTR(
         put("shadow_notes", org.json.JSONArray(shadowNotes))
         put("physio_veto_reason", vetoReason ?: JSONObject.NULL)
         put("final_loop_decision_type", finalLoopDecisionType ?: JSONObject.NULL)
+        put("smb_action_type", smbActionType ?: JSONObject.NULL)
+        put("basal_action_type", basalActionType ?: JSONObject.NULL)
+        put("decision_conflict_flags", org.json.JSONArray(decisionConflictFlags))
         put("source", source)
     }
 }

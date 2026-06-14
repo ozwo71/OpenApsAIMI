@@ -171,7 +171,7 @@ object AimiSmbTrainer {
             if (cols.size <= targetIndex) continue
 
             val raw = SmbRefinementFeatureSchema.parseTrainingFeatures(headers, cols) ?: continue
-            if (!SmbRefinementFeatureSchema.shouldUseForTraining(raw)) continue
+            if (!SmbRefinementFeatureSchema.shouldUseCsvRowForTraining(headers, cols, raw)) continue
 
             // Approximate trendIndicator for offline training
             val trendIndicator = computeTrendIndicator(raw)

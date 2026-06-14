@@ -6,6 +6,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.compose.readAimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStateId
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientEventMemory
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -92,6 +93,7 @@ class PkPdIntegration(private val preferences: Preferences) {
         physioLatentState: PhysioLatentState? = null,
         estimatedRaMgdlPerMin: Double? = null,
         causalStatePosterior: CausalStatePosterior? = null,
+        patientEventMemory: PatientEventMemory? = null,
     ): PkPdRuntime? {
         val structural = readStructuralConfig()
         val previousStructural = cachedStructuralConfig
@@ -177,6 +179,7 @@ class PkPdIntegration(private val preferences: Preferences) {
             causalStatePosterior = causalStatePosterior,
             mealContext = mealContext,
             estimatedRaMgdlPerMin = estimatedRaMgdlPerMin,
+            patientEventMemory = patientEventMemory,
         )
         val physioAbsorptionFactor = blendTowardNeutral(
             value = rawPhysioAbsorptionFactor,
@@ -210,7 +213,11 @@ class PkPdIntegration(private val preferences: Preferences) {
             aggressionMultiplier *= uamBoost.coerceIn(0.8, 1.0)
             consoleLog?.add("🧠 UAM detected (conf=${"%.2f".format(uamConfidence)}) -> Extra ISF Boost")
         }
-        val rawPhysioSiFactor = buildPhysioSiFactor(physioLatentState, causalStatePosterior)
+        val rawPhysioSiFactor = buildPhysioSiFactor(
+            physioLatentState = physioLatentState,
+            causalStatePosterior = causalStatePosterior,
+            patientEventMemory = patientEventMemory,
+        )
         val physioSiFactor = blendTowardNeutral(
             value = rawPhysioSiFactor,
             blendFraction = behaviorProfile.pkpdPhysioBlendFraction(),
@@ -497,6 +504,7 @@ class PkPdIntegration(private val preferences: Preferences) {
         causalStatePosterior: CausalStatePosterior?,
         mealContext: MealAggressionContext?,
         estimatedRaMgdlPerMin: Double?,
+        patientEventMemory: PatientEventMemory?,
     ): Double {
         if (physioLatentState == null && causalStatePosterior == null) return 1.0
         val mealSupportProb = max(
@@ -517,6 +525,8 @@ class PkPdIntegration(private val preferences: Preferences) {
             causalStatePosterior?.postHypoRecoveryProb ?: 0.0,
         ) * 0.09
         val protectiveBrake = (causalStatePosterior?.protectiveConfidence ?: 0.0) * 0.06
+        val fragilityBrake = (patientEventMemory?.correctionFragilityScore ?: 0.0) * 0.08
+        val exhaustionBrake = (patientEventMemory?.postHyperExhaustionScore ?: 0.0) * 0.05
         val raSupport = estimatedRaMgdlPerMin
             ?.takeIf { it.isFinite() && it > 0.0 }
             ?.let { (it / 12.0).coerceIn(0.0, 0.08) }
@@ -526,13 +536,17 @@ class PkPdIntegration(private val preferences: Preferences) {
             CausalStateId.PROLONGED_MEAL -> 0.02
             else -> 0.0
         }
-        return (1.0 + mealSupport + raSupport + dominantMealBoost - endogenousBrake - reboundBrake - protectiveBrake)
+        return (
+            1.0 + mealSupport + raSupport + dominantMealBoost -
+                endogenousBrake - reboundBrake - protectiveBrake - fragilityBrake - exhaustionBrake
+            )
             .coerceIn(0.82, 1.18)
     }
 
     private fun buildPhysioSiFactor(
         physioLatentState: PhysioLatentState?,
         causalStatePosterior: CausalStatePosterior?,
+        patientEventMemory: PatientEventMemory?,
     ): Double {
         if (physioLatentState == null && causalStatePosterior == null) return 1.0
         val latent = physioLatentState ?: PhysioLatentState()
@@ -548,6 +562,8 @@ class PkPdIntegration(private val preferences: Preferences) {
         }
         rawFactor *= 1.0 - (causalStatePosterior?.stressResistanceProb ?: 0.0) * 0.05
         rawFactor *= 1.0 - (causalStatePosterior?.inflammatoryDriftProb ?: 0.0) * 0.04
+        rawFactor *= 1.0 + (patientEventMemory?.correctionFragilityScore ?: 0.0) * 0.06
+        rawFactor *= 1.0 + (patientEventMemory?.postHyperExhaustionScore ?: 0.0) * 0.04
         val confidence = max(latent.sensorConfidence, causalStatePosterior?.learningQuality ?: 0.0).coerceIn(0.0, 1.0)
         return (1.0 + ((rawFactor - 1.0) * confidence)).coerceIn(0.78, 1.08)
     }

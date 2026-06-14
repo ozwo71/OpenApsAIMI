@@ -9,11 +9,13 @@ data class MealSafetyContext(
     val manualBolusAgeMin: Double? = null,
     val mealAdvisorCarbsFresh: Boolean = false,
     val explicitMealTrigger: Boolean = false,
+    val inferredMealSignal: Boolean = false,
 ) {
     val hasMealIntent: Boolean
         get() = mealModeActive ||
             mealAdvisorCarbsFresh ||
             explicitMealTrigger ||
+            inferredMealSignal ||
             (manualBolusAgeMin != null && manualBolusAgeMin <= MANUAL_BOLUS_SUPPRESS_WINDOW_MIN)
 
     companion object {

@@ -94,6 +94,18 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
         val current = lastDecisionTrace ?: return
         lastDecisionTrace = current.copy(finalLoopDecisionType = decisionType)
     }
+
+    fun setSmbActionType(actionType: String) {
+        val current = lastDecisionTrace ?: return
+        val updated = current.copy(smbActionType = actionType)
+        lastDecisionTrace = updated.copy(decisionConflictFlags = buildDecisionConflictFlags(updated))
+    }
+
+    fun setBasalActionType(actionType: String) {
+        val current = lastDecisionTrace ?: return
+        val updated = current.copy(basalActionType = actionType)
+        lastDecisionTrace = updated.copy(decisionConflictFlags = buildDecisionConflictFlags(updated))
+    }
     
     /**
      * Gets insulin multipliers based on physiological context
@@ -313,6 +325,9 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
             shadowNotes = shadowOrchestrator.notes,
             vetoReason = vetoReason,
             finalLoopDecisionType = null,
+            smbActionType = null,
+            basalActionType = null,
+            decisionConflictFlags = emptyList(),
             source = multipliers.source
         )
         aapsLogger.info(
@@ -326,6 +341,17 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
                 "react=${multipliers.reactivityFactor.format(3)} " +
                 "veto=${vetoReason ?: "none"} source=${multipliers.source}"
         )
+    }
+
+    private fun buildDecisionConflictFlags(trace: PhysioDecisionTraceMTR): List<String> {
+        val flags = mutableListOf<String>()
+        val hasSmb = trace.smbActionType == "smb"
+        val basalAction = trace.basalActionType
+        if (hasSmb && basalAction != null && basalAction != "none") {
+            flags += "dual_delivery"
+            flags += "dual_delivery_$basalAction"
+        }
+        return flags
     }
     
     // ═══════════════════════════════════════════════════════════════════════

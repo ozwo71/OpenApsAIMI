@@ -120,6 +120,9 @@ data class HormonitorDecisionEventMTR(
             put("reactivity_factor", physioTrace.reactivityFactor)
             put("physio_veto_reason", physioTrace.vetoReason ?: JSONObject.NULL)
             put("final_loop_decision_type", physioTrace.finalLoopDecisionType ?: JSONObject.NULL)
+            put("smb_action_type", physioTrace.smbActionType ?: JSONObject.NULL)
+            put("basal_action_type", physioTrace.basalActionType ?: JSONObject.NULL)
+            put("decision_conflict_flags", org.json.JSONArray(physioTrace.decisionConflictFlags))
             put("source", physioTrace.source)
             put("safety_phase", safetyPhase ?: JSONObject.NULL)
             put("predictive_hypo_suppressed", predictiveHypoSuppressed ?: JSONObject.NULL)
@@ -160,7 +163,7 @@ class AimiHormonitorStudyExporterMTR(
     private val preferences: Preferences
 ) {
     companion object {
-        private const val SCHEMA_VERSION = "1.3.0"
+        private const val SCHEMA_VERSION = "1.4.0"
         private const val FILE_NAME = "AIMI_HORMONITOR_event_stream_v1.jsonl"
         private const val DAILY_FILE_NAME = "AIMI_HORMONITOR_daily_outcomes_v1.jsonl"
         private const val QA_FILE_NAME = "AIMI_HORMONITOR_dataset_qa_v1.jsonl"
@@ -380,6 +383,9 @@ class AimiHormonitorStudyExporterMTR(
             put("inflammation_timescale", trace.inflammationTimescale)
             put("inflammation_drivers", org.json.JSONArray(trace.inflammationDrivers))
             put("final_loop_decision_type", trace.finalLoopDecisionType ?: JSONObject.NULL)
+            put("smb_action_type", trace.smbActionType ?: JSONObject.NULL)
+            put("basal_action_type", trace.basalActionType ?: JSONObject.NULL)
+            put("decision_conflict_flags", org.json.JSONArray(trace.decisionConflictFlags))
             put("source", trace.source)
         }.toString()
 
@@ -412,12 +418,21 @@ class AimiHormonitorStudyExporterMTR(
             tirAbovePct = tirAbovePct,
             tdd24hTotalU = tdd24hTotalU
         )
-        when (event.physioTrace.finalLoopDecisionType) {
-            "smb" -> counters.smbCount += 1
+        val smbAction = event.physioTrace.smbActionType
+            ?: if (event.physioTrace.finalLoopDecisionType == "smb") "smb" else null
+        val basalAction = event.physioTrace.basalActionType
+            ?: when (event.physioTrace.finalLoopDecisionType) {
+                "suspend", "tbr_up", "tbr_down", "none" -> event.physioTrace.finalLoopDecisionType
+                else -> null
+            }
+        if (smbAction == "smb") {
+            counters.smbCount += 1
+        }
+        when (basalAction) {
             "suspend" -> counters.suspendCount += 1
             "tbr_up" -> counters.tbrUpCount += 1
             "tbr_down" -> counters.tbrDownCount += 1
-            else -> counters.noneCount += 1
+            else -> if (smbAction != "smb") counters.noneCount += 1
         }
         if (!event.physioTrace.vetoReason.isNullOrBlank()) {
             counters.vetoCount += 1
@@ -745,18 +760,26 @@ class AimiHormonitorStudyExporterMTR(
         tirAbovePct: Double?,
         tdd24hTotalU: Double?
     ) {
+        val hasDecisionType =
+            !event.physioTrace.finalLoopDecisionType.isNullOrBlank() ||
+                !event.physioTrace.smbActionType.isNullOrBlank() ||
+                !event.physioTrace.basalActionType.isNullOrBlank()
         if (
             event.eventId.isBlank() ||
             event.trigger.isBlank() ||
             event.eventTimestamp <= 0L ||
-            event.physioTrace.finalLoopDecisionType.isNullOrBlank()
+            !hasDecisionType
         ) {
             qa.criticalFieldMissingCount += 1
         }
         if (event.eventTimestamp <= 0L || event.eventTimestamp > System.currentTimeMillis() + 5 * 60_000L) {
             qa.invalidTimestampCount += 1
         }
-        if (event.physioTrace.finalLoopDecisionType == "pending") {
+        if (
+            event.physioTrace.finalLoopDecisionType == "pending" ||
+            event.physioTrace.smbActionType == "pending" ||
+            event.physioTrace.basalActionType == "pending"
+        ) {
             qa.decisionPendingCount += 1
         }
         val metricsMissing = listOf(tirLowPct, tirInRangePct, tirAbovePct, tdd24hTotalU).count { it == null }

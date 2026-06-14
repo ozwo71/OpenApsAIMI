@@ -101,6 +101,66 @@ internal object PatientModeOrchestrator {
             )
         }
 
+        if (shouldPreemptMealWithProtectiveContext(state, causal)) {
+            reasons += "FALSE_MEAL_SUPPRESS"
+            reasons += "PROTECTIVE_PREEMPT"
+            return when (causal.dominant) {
+                CausalStateId.DAWN_ENDOGENOUS -> {
+                    reasons += "CAUSAL_DAWN_ENDOGENOUS"
+                    decision(
+                        mode = PatientMode.DAWN_ENDOGENOUS,
+                        confidence = maxOf(
+                            causal.dominantConfidence,
+                            causal.protectiveConfidence,
+                            state.endogenousGlucoseDrive,
+                        ),
+                        strategyHint = PatientStrategyHint.BASAL_BRIDGE,
+                        mealBias = 0.14,
+                        protectionBias = 0.84,
+                        state = state,
+                        reasonCodes = reasons,
+                    )
+                }
+
+                CausalStateId.STRESS_RESISTANCE, CausalStateId.INFLAMMATORY_DRIFT -> {
+                    if (causal.dominant == CausalStateId.INFLAMMATORY_DRIFT) reasons += "CAUSAL_INFLAMMATORY_DRIFT"
+                    if (causal.dominant == CausalStateId.STRESS_RESISTANCE) reasons += "CAUSAL_STRESS_RESISTANCE"
+                    decision(
+                        mode = PatientMode.STRESS_RESISTANCE,
+                        confidence = maxOf(
+                            causal.dominantConfidence,
+                            causal.protectiveConfidence,
+                            state.transientResistanceProb,
+                            state.thermalInflammationIndex,
+                        ),
+                        strategyHint = PatientStrategyHint.CONSERVATIVE_OBSERVE,
+                        mealBias = 0.20,
+                        protectionBias = 0.82,
+                        state = state,
+                        reasonCodes = reasons,
+                    )
+                }
+
+                else -> {
+                    reasons += "CAUSAL_ABSORPTION_UNCERTAIN"
+                    decision(
+                        mode = PatientMode.ABSORPTION_UNCERTAIN,
+                        confidence = maxOf(
+                            causal.dominantConfidence,
+                            causal.protectiveConfidence,
+                            state.eventMemory.correctionFragilityScore,
+                            1.0 - state.sensorConfidence,
+                        ),
+                        strategyHint = PatientStrategyHint.PKPD_REASSESS,
+                        mealBias = 0.28,
+                        protectionBias = 0.88,
+                        state = state,
+                        reasonCodes = reasons,
+                    )
+                }
+            }
+        }
+
         if (causal.dominant == CausalStateId.FAST_MEAL && causal.dominantConfidence >= 0.68) {
             reasons += "CAUSAL_FAST_MEAL"
             if (state.userIntent.hasMealRisk) reasons += "CTX_MEAL_RISK"
@@ -423,4 +483,18 @@ internal object PatientModeOrchestrator {
             reasonCodes = reasonCodes.ifEmpty { setOf("BASELINE") }.toList(),
             source = "patient_mode_v2",
         )
+
+    private fun shouldPreemptMealWithProtectiveContext(
+        state: PatientStateSnapshot,
+        causal: CausalStatePosterior,
+    ): Boolean {
+        if (!state.falseMealSuppression) return false
+        if (causal.protectiveConfidence < maxOf(causal.mealConfidence + 0.08, 0.62)) return false
+        return causal.dominant in setOf(
+            CausalStateId.DAWN_ENDOGENOUS,
+            CausalStateId.STRESS_RESISTANCE,
+            CausalStateId.INFLAMMATORY_DRIFT,
+            CausalStateId.ABSORPTION_UNCERTAIN,
+        )
+    }
 }

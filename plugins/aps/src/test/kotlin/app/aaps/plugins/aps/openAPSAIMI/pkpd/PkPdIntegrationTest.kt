@@ -5,6 +5,7 @@ import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStateId
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientEventMemory
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
@@ -214,6 +215,96 @@ class PkPdIntegrationTest {
         assertTrue(strongProfile!!.physioSiFactor < lowProfile!!.physioSiFactor)
         assertTrue(abs(strongProfile.physioAbsorptionFactor - 1.0) > abs(lowProfile.physioAbsorptionFactor - 1.0))
         assertTrue(strongProfile.fusedIsf < lowProfile.fusedIsf)
+    }
+
+    @Test
+    fun `event memory makes pkpd more conservative after exhausted hyper hypo sequence`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        mockPkpdDefaults()
+
+        val baseline = integration.computeRuntime(
+            epochMillis = 1000,
+            bg = 168.0,
+            deltaMgDlPer5 = 2.8,
+            iobU = 2.0,
+            carbsActiveG = 12.0,
+            windowMin = 60,
+            exerciseFlag = false,
+            profileIsf = 50.0,
+            tdd24h = 40.0,
+            mealContext = MealAggressionContext(
+                mealModeActive = true,
+                predictedBgMgdl = 220.0,
+                targetBgMgdl = 110.0,
+            ),
+            physioLatentState = PhysioLatentState(
+                circadianSiFactor = 0.92,
+                transientResistanceProb = 0.26,
+                postHypoReboundProb = 0.34,
+                sensorConfidence = 1.0,
+                mealProb = 0.62,
+            ),
+            causalStatePosterior = CausalStatePosterior(
+                fastMealProb = 0.64,
+                prolongedMealProb = 0.20,
+                dawnEndogenousProb = 0.16,
+                postHypoRecoveryProb = 0.28,
+                stressResistanceProb = 0.10,
+                exerciseAfterburnProb = 0.06,
+                inflammatoryDriftProb = 0.08,
+                absorptionUncertainProb = 0.12,
+                dominant = CausalStateId.FAST_MEAL,
+                dominantConfidence = 0.64,
+                learningQuality = 0.82,
+            ),
+        )
+        val exhausted = integration.computeRuntime(
+            epochMillis = 1000,
+            bg = 168.0,
+            deltaMgDlPer5 = 2.8,
+            iobU = 2.0,
+            carbsActiveG = 12.0,
+            windowMin = 60,
+            exerciseFlag = false,
+            profileIsf = 50.0,
+            tdd24h = 40.0,
+            mealContext = MealAggressionContext(
+                mealModeActive = true,
+                predictedBgMgdl = 220.0,
+                targetBgMgdl = 110.0,
+            ),
+            physioLatentState = PhysioLatentState(
+                circadianSiFactor = 0.92,
+                transientResistanceProb = 0.26,
+                postHypoReboundProb = 0.34,
+                sensorConfidence = 1.0,
+                mealProb = 0.62,
+            ),
+            causalStatePosterior = CausalStatePosterior(
+                fastMealProb = 0.64,
+                prolongedMealProb = 0.20,
+                dawnEndogenousProb = 0.16,
+                postHypoRecoveryProb = 0.28,
+                stressResistanceProb = 0.10,
+                exerciseAfterburnProb = 0.06,
+                inflammatoryDriftProb = 0.08,
+                absorptionUncertainProb = 0.12,
+                dominant = CausalStateId.FAST_MEAL,
+                dominantConfidence = 0.64,
+                learningQuality = 0.82,
+            ),
+            patientEventMemory = PatientEventMemory(
+                recentHyperLoad = 0.78,
+                recentHypoLoad = 0.44,
+                postHyperExhaustionScore = 0.82,
+                correctionFragilityScore = 0.80,
+            ),
+        )
+
+        assertNotNull(baseline)
+        assertNotNull(exhausted)
+        assertTrue(exhausted!!.physioAbsorptionFactor < baseline!!.physioAbsorptionFactor)
+        assertTrue(exhausted.physioSiFactor > baseline.physioSiFactor)
     }
 
     @Test

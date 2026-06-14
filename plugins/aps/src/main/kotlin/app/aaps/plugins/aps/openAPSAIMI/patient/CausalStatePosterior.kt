@@ -94,6 +94,7 @@ internal object CausalStatePosteriorBuilder {
         userIntent: UserIntentSummary,
         thermalBelief: ThermalBeliefDigest?,
         falseMealSuppression: Boolean,
+        eventMemory: PatientEventMemory = PatientEventMemory.EMPTY,
     ): CausalStatePosterior {
         val thermal = thermalBelief ?: ThermalBeliefDigest.EMPTY
         val fastMealProb = buildFastMealProb(
@@ -123,6 +124,7 @@ internal object CausalStatePosteriorBuilder {
             hypothesisState = hypothesisState,
             patternSnapshot = patternSnapshot,
             userIntent = userIntent,
+            eventMemory = eventMemory,
         )
         val stressResistanceProb = buildStressResistanceProb(
             latentState = latentState,
@@ -193,6 +195,7 @@ internal object CausalStatePosteriorBuilder {
             protectiveConfidence = protectiveConfidence,
             absorptionUncertainProb = absorptionUncertainProb,
             ambiguity = ambiguity,
+            eventMemory = eventMemory,
         )
 
         return CausalStatePosterior(
@@ -294,11 +297,14 @@ internal object CausalStatePosteriorBuilder {
         hypothesisState: UamHypothesisState?,
         patternSnapshot: PhysiologicalPatternSnapshot?,
         userIntent: UserIntentSummary,
+        eventMemory: PatientEventMemory,
     ): Double = combineSignals(
         latentState?.postHypoReboundProb ?: 0.0,
         (hypothesisState?.postHypoProb ?: 0.0) * 0.92,
         patternSnapshot.maxConfidence(PhysiologicalPatternId.POST_HYPO_REBOUND),
         if (userIntent.hasAlcohol) max(0.36, userIntent.avgConfidence * 0.58) else 0.0,
+        eventMemory.correctionFragilityScore * 0.42,
+        eventMemory.postHyperExhaustionScore * 0.26,
     )
 
     private fun buildStressResistanceProb(
@@ -380,12 +386,15 @@ internal object CausalStatePosteriorBuilder {
         protectiveConfidence: Double,
         absorptionUncertainProb: Double,
         ambiguity: Double,
+        eventMemory: PatientEventMemory,
     ): Double {
         var quality = latentState?.sensorConfidence ?: 0.0
         quality *= 1.0 - absorptionUncertainProb * 0.55
         quality *= 1.0 - ambiguity * 0.25
         if (falseMealSuppression) quality *= 0.88
         if (protectiveConfidence >= mealConfidence + 0.10) quality *= 0.84
+        quality *= 1.0 - eventMemory.correctionFragilityScore * 0.22
+        quality *= 1.0 - eventMemory.postHyperExhaustionScore * 0.12
         if (dominant in setOf(CausalStateId.POST_HYPO_RECOVERY, CausalStateId.ABSORPTION_UNCERTAIN)) {
             quality *= 1.0 - dominantConfidence * 0.30
         }

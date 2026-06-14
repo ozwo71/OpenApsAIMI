@@ -93,4 +93,39 @@ class PatientModeOrchestratorTest {
         assertThat(decision.strategyHint).isEqualTo(PatientStrategyHint.SMB_PRIORITY)
         assertThat(decision.mealBias).isGreaterThan(0.80)
     }
+
+    @Test
+    fun evaluate_preempts_meal_branch_when_false_meal_suppression_and_protective_context_dominate() {
+        val decision = PatientModeOrchestrator.evaluate(
+            PatientStateSnapshot(
+                timestampMs = 1_718_000_000_000L,
+                phase = PhysiologicalPhase.DAWN_CORTISOL,
+                phaseConfidence = 0.81,
+                mealAbsorptionPhase = MealAbsorptionPhase.FIRST_WAVE,
+                mealAbsorptionBelief = 0.78,
+                mealProb = 0.80,
+                endogenousGlucoseDrive = 0.76,
+                transientResistanceProb = 0.34,
+                falseMealSuppression = true,
+                sensorConfidence = 0.93,
+                causalPosterior = CausalStatePosterior(
+                    fastMealProb = 0.56,
+                    prolongedMealProb = 0.18,
+                    dawnEndogenousProb = 0.84,
+                    postHypoRecoveryProb = 0.10,
+                    stressResistanceProb = 0.14,
+                    exerciseAfterburnProb = 0.06,
+                    inflammatoryDriftProb = 0.08,
+                    absorptionUncertainProb = 0.20,
+                    dominant = CausalStateId.DAWN_ENDOGENOUS,
+                    dominantConfidence = 0.84,
+                    learningQuality = 0.74,
+                ),
+            ),
+        )
+
+        assertThat(decision.mode).isEqualTo(PatientMode.DAWN_ENDOGENOUS)
+        assertThat(decision.reasonCodes).contains("PROTECTIVE_PREEMPT")
+        assertThat(decision.reasonCodes).contains("FALSE_MEAL_SUPPRESS")
+    }
 }
