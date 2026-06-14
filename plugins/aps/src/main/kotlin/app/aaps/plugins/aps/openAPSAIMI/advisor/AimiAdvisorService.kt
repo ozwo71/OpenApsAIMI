@@ -266,6 +266,7 @@ class AimiAdvisorService {
         var timeAbove180 = 0.30
         var timeAbove250 = 0.05
         var meanBg = 160.0
+        var variabilityCv = 0.30
         var tdd = 45.0
         var basalPercent = 0.50
         var todayTir: Double? = null
@@ -374,6 +375,11 @@ class AimiAdvisorService {
                     
                     if (bgValues.isNotEmpty()) {
                         meanBg = bgValues.average()
+                        val variance = bgValues
+                            .map { value -> (value - meanBg) * (value - meanBg) }
+                            .average()
+                        val sd = kotlin.math.sqrt(variance)
+                        variabilityCv = if (meanBg > 0.0) (sd / meanBg).coerceIn(0.0, 1.0) else 0.0
                         android.util.Log.d("AIMI_ADVISOR", "✅ Calculated Mean BG: ${meanBg.toInt()} mg/dL from ${bgValues.size} readings")
                     } else {
                         android.util.Log.w("AIMI_ADVISOR", "⚠️ No valid BG data after filtering. Using fallback $meanBg")
@@ -396,6 +402,7 @@ class AimiAdvisorService {
             timeAbove180 = timeAbove180,
             timeAbove250 = timeAbove250,
             meanBg = meanBg,
+            variabilityCv = variabilityCv,
             gmi = 3.31 + (0.02392 * meanBg), // GMI = 3.31 + 0.02392 * MeanBG (mg/dL)
             tdd = tdd,
             basalPercent = basalPercent,
@@ -437,7 +444,7 @@ class AimiAdvisorService {
 
     private fun getEmptyContext(): AdvisorContext {
         return AdvisorContext(
-            metrics = AdvisorMetrics("N/A",0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0,0,0, null, null),
+            metrics = AdvisorMetrics("N/A",0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0,0,0, null, null),
             profile = AimiProfileSnapshot(0.0,0.0,0.0,0.0, 5.0, 12.0),
             prefs = AimiPrefsSnapshot(0.0, 0.0, 0.0, 0.0, false, 0.065),
             pkpdPrefs = PkpdPrefsSnapshot(false,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0)
@@ -1191,5 +1198,4 @@ class AimiAdvisorService {
         }
     }
 }
-
 

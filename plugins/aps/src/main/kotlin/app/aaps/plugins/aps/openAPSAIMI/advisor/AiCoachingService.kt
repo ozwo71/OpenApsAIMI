@@ -49,7 +49,7 @@ class AiCoachingService @Inject constructor() {
     /**
      * Fetch advice asynchronously.
      */
-    suspend fun fetchAdvice(
+    internal suspend fun fetchAdvice(
         androidContext: Context,
         context: AdvisorContext, 
         report: AdvisorReport, 
@@ -57,11 +57,12 @@ class AiCoachingService @Inject constructor() {
         provider: Provider,
         history: List<app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository.AdvisorActionLog> = emptyList(),
         includeRichOref: Boolean = true,
+        causalInsights: List<AimiBehaviorCausalInsight> = emptyList(),
     ): String = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) return@withContext "Clé API manquante. Veuillez configurer votre clé ${provider.name}."
 
         try {
-            val prompt = buildPrompt(androidContext, context, report, history, includeRichOref)
+            val prompt = buildPrompt(androidContext, context, report, history, includeRichOref, causalInsights)
             
             return@withContext when (provider) {
                 Provider.GEMINI -> callGemini(androidContext, apiKey, prompt)
@@ -235,6 +236,7 @@ class AiCoachingService @Inject constructor() {
         report: AdvisorReport,
         history: List<app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository.AdvisorActionLog>,
         includeRichOref: Boolean,
+        causalInsights: List<AimiBehaviorCausalInsight>,
     ): String {
         val sb = StringBuilder()
         val deviceLang = java.util.Locale.getDefault().displayLanguage
@@ -294,6 +296,25 @@ class AiCoachingService @Inject constructor() {
             sb.append("AutoDrive: off (per preference)\n")
         }
         sb.append("\n")
+
+        if (causalInsights.isNotEmpty()) {
+            sb.append("--- FAMILY-LEVEL CAUSAL MAP ---\n")
+            sb.append(
+                formatAimiBehaviorCausalInsightsForCoach(
+                    insights = causalInsights,
+                    familyTitle = { familyId ->
+                        when (familyId) {
+                            app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorFamilyId.Protection -> "Protection vs correction"
+                            app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorFamilyId.MealCapture -> "Meal capture and fast rises"
+                            app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorFamilyId.Stability -> "Stability and damping"
+                            app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorFamilyId.Physio -> "Physio influence"
+                            app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorFamilyId.Autonomy -> "Autonomy"
+                        }
+                    },
+                ),
+            )
+            sb.append("\n\n")
+        }
 
         // 2. PKPD Context
         if (ctx.pkpdPrefs.pkpdEnabled) {

@@ -43,6 +43,10 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningApplyResult
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningExportStatus
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningPlan
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningStepTier
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorFamilyId
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiControlCenterPendingChanges
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiFamilyWritebackPlan
 import java.util.Locale
 
 
@@ -145,7 +149,20 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                     // 1b. Tuning context (bundled pref adjustments)
                     rootLayout.addView(createTuningContextCard(report, cardColor))
 
-                    // 1c. Recursive belief unfold (JSONL snapshot)
+                    val familyBridgeSuggestions = buildAimiFamilyBridgeSuggestions(preferences, report.metrics)
+                    val causalInsights = buildAimiBehaviorCausalInsights(
+                        preferences = preferences,
+                        metrics = report.metrics,
+                        familyBridgeSuggestions = familyBridgeSuggestions,
+                    )
+
+                    // 1c. Product causal map: observed outcomes -> likely family mismatch
+                    rootLayout.addView(createBehaviorCausalMapCard(causalInsights, familyBridgeSuggestions, cardColor))
+
+                    // 1d. Product bridge: observed outcomes -> AIMI behavior families
+                    rootLayout.addView(createBehaviorFamilyBridgeCard(familyBridgeSuggestions, cardColor))
+
+                    // 1e. Recursive belief unfold (JSONL snapshot)
                     rootLayout.addView(createRecursiveBeliefUnfoldCard(cardColor))
             
                     // 2. Metrics Grid (2x2)
@@ -185,7 +202,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
 
                     // 5. Section: AI Coach (ChatGPT/Gemini)
                     rootLayout.addView(createSectionHeader(rh.gs(R.string.aimi_adv_section_coach)))
-                    rootLayout.addView(createCoachCard(advisorCtx, report, cardColor))
+                    rootLayout.addView(createCoachCard(advisorCtx, report, causalInsights, cardColor))
             
                     // Footer
                     rootLayout.addView(createFooter(report))
@@ -1032,7 +1049,12 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         }
     }
 
-    private fun createCoachCard(context: AdvisorContext, report: AdvisorReport, cardBg: Int): CardView {
+    private fun createCoachCard(
+        context: AdvisorContext,
+        report: AdvisorReport,
+        causalInsights: List<AimiBehaviorCausalInsight>,
+        cardBg: Int,
+    ): CardView {
         val card = CardView(this).apply {
             radius = 16f
             setCardBackgroundColor(cardBg)
@@ -1107,6 +1129,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                         provider,
                         history,
                         includeRichOref = richOref,
+                        causalInsights = causalInsights,
                     )
                     if (!isFinishing) {
                         contentText.text = advice
@@ -1172,6 +1195,377 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         card.addView(column)
         return card
     }
+
+    private fun createBehaviorCausalMapCard(
+        insights: List<AimiBehaviorCausalInsight>,
+        familyBridgeSuggestions: List<AimiFamilyBridgeSuggestion>,
+        cardColor: Int,
+    ): CardView {
+        val card = CardView(this).apply {
+            radius = 16f
+            setCardBackgroundColor(cardColor)
+            cardElevation = 0f
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { setMargins(0, 0, 0, 32) }
+        }
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 24, 24, 24)
+        }
+        column.addView(TextView(this).apply {
+            text = rh.gs(R.string.aimi_behavior_causal_section_title)
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.parseColor("#94A3B8"))
+        })
+        column.addView(TextView(this).apply {
+            text = rh.gs(R.string.aimi_behavior_causal_section_desc)
+            textSize = 13f
+            setTextColor(Color.parseColor("#CBD5E1"))
+            setPadding(0, 8, 0, 16)
+        })
+
+        if (insights.isEmpty()) {
+            column.addView(TextView(this).apply {
+                text = rh.gs(R.string.aimi_behavior_causal_none)
+                textSize = 13f
+                setTextColor(Color.WHITE)
+            })
+        } else {
+            insights.forEach { insight ->
+                val linkedSuggestion = insight.relatedSuggestionId?.let { relatedId ->
+                    familyBridgeSuggestions.firstOrNull { it.id == relatedId }
+                }
+                column.addView(createBehaviorCausalInsightView(insight, linkedSuggestion))
+            }
+        }
+
+        card.addView(column)
+        return card
+    }
+
+    private fun createBehaviorFamilyBridgeCard(
+        suggestions: List<AimiFamilyBridgeSuggestion>,
+        cardColor: Int,
+    ): CardView {
+        val card = CardView(this).apply {
+            radius = 16f
+            setCardBackgroundColor(cardColor)
+            cardElevation = 0f
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { setMargins(0, 0, 0, 32) }
+        }
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 24, 24, 24)
+        }
+        column.addView(TextView(this).apply {
+            text = rh.gs(R.string.aimi_family_bridge_section_title)
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.parseColor("#94A3B8"))
+        })
+        column.addView(TextView(this).apply {
+            text = rh.gs(R.string.aimi_family_bridge_section_desc)
+            textSize = 13f
+            setTextColor(Color.parseColor("#CBD5E1"))
+            setPadding(0, 8, 0, 16)
+        })
+
+        if (suggestions.isEmpty()) {
+            column.addView(TextView(this).apply {
+                text = rh.gs(R.string.aimi_family_bridge_none)
+                textSize = 13f
+                setTextColor(Color.WHITE)
+            })
+        } else {
+            suggestions.forEach { suggestion ->
+                column.addView(createBehaviorFamilySuggestionView(suggestion, cardColor))
+            }
+        }
+
+        card.addView(column)
+        return card
+    }
+
+    private fun createBehaviorCausalInsightView(
+        insight: AimiBehaviorCausalInsight,
+        linkedSuggestion: AimiFamilyBridgeSuggestion?,
+    ): View {
+        val card = CardView(this).apply {
+            radius = 14f
+            setCardBackgroundColor(Color.parseColor("#162033"))
+            cardElevation = 0f
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { setMargins(0, 0, 0, 16) }
+        }
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(20, 20, 20, 20)
+        }
+        column.addView(TextView(this).apply {
+            text = rh.gs(insight.titleResId)
+            textSize = 15f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+        })
+        column.addView(TextView(this).apply {
+            text = if (insight.bodyArgs.isEmpty()) {
+                rh.gs(insight.bodyResId)
+            } else {
+                rh.gs(insight.bodyResId, *insight.bodyArgs.toTypedArray())
+            }
+            textSize = 13f
+            setTextColor(Color.parseColor("#CBD5E1"))
+            setPadding(0, 8, 0, 12)
+        })
+        column.addView(
+            createFamilyChipRow(
+                listOf(insight.primaryFamily) + insight.secondaryFamilies,
+            ),
+        )
+        column.addView(TextView(this).apply {
+            text = rh.gs(
+                R.string.aimi_behavior_causal_confidence,
+                (insight.confidence * 100f).roundToInt(),
+            )
+            textSize = 12f
+            setTextColor(Color.parseColor("#E2E8F0"))
+            setPadding(0, 12, 0, 0)
+        })
+        insight.evidence.forEach { line ->
+            column.addView(TextView(this).apply {
+                text = "• $line"
+                textSize = 12f
+                setTextColor(Color.parseColor("#94A3B8"))
+                setPadding(0, 6, 0, 0)
+            })
+        }
+        linkedSuggestion?.let { suggestion ->
+            val buttonRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.END
+                setPadding(0, 16, 0, 0)
+            }
+            buttonRow.addView(Button(this).apply {
+                text = rh.gs(R.string.aimi_family_bridge_preview_btn)
+                setOnClickListener { showBehaviorFamilyPreviewDialog(suggestion) }
+            })
+            buttonRow.addView(Space(this).apply {
+                layoutParams = LinearLayout.LayoutParams(16, 0)
+            })
+            buttonRow.addView(Button(this).apply {
+                text = rh.gs(R.string.aimi_family_bridge_apply_btn)
+                setOnClickListener { showBehaviorFamilyApplyDialog(suggestion) }
+            })
+            column.addView(buttonRow)
+        }
+        card.addView(column)
+        return card
+    }
+
+    private fun createBehaviorFamilySuggestionView(
+        suggestion: AimiFamilyBridgeSuggestion,
+        cardColor: Int,
+    ): View {
+        val card = CardView(this).apply {
+            radius = 14f
+            setCardBackgroundColor(Color.parseColor("#162033"))
+            cardElevation = 0f
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { setMargins(0, 0, 0, 16) }
+        }
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(20, 20, 20, 20)
+        }
+        column.addView(TextView(this).apply {
+            text = rh.gs(suggestion.titleResId)
+            textSize = 15f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+        })
+        column.addView(TextView(this).apply {
+            text = if (suggestion.bodyArgs.isEmpty()) {
+                rh.gs(suggestion.bodyResId)
+            } else {
+                rh.gs(suggestion.bodyResId, *suggestion.bodyArgs.toTypedArray())
+            }
+            textSize = 13f
+            setTextColor(Color.parseColor("#CBD5E1"))
+            setPadding(0, 8, 0, 12)
+        })
+        column.addView(createFamilyChipRow(suggestion.affectedFamilies))
+        column.addView(TextView(this).apply {
+            text = buildFamilyBridgeDeltaLabel(suggestion)
+            textSize = 12f
+            setTextColor(Color.parseColor("#94A3B8"))
+            setPadding(0, 12, 0, 0)
+        })
+        if (suggestion.driverKeys.isNotEmpty()) {
+            column.addView(TextView(this).apply {
+                text = rh.gs(R.string.aimi_family_bridge_driver_keys, formatDriverKeyLabels(suggestion.driverKeys))
+                textSize = 12f
+                setTextColor(Color.parseColor("#94A3B8"))
+                setPadding(0, 8, 0, 0)
+            })
+        }
+        column.addView(TextView(this).apply {
+            text = rh.gs(
+                R.string.aimi_family_bridge_preview_count,
+                suggestion.pendingChanges.changedFamilyCount,
+                suggestion.pendingChanges.changedSettingsCount,
+            )
+            textSize = 12f
+            setTextColor(Color.parseColor("#E2E8F0"))
+            setPadding(0, 8, 0, 0)
+        })
+        val buttonRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(0, 16, 0, 0)
+        }
+        buttonRow.addView(Button(this).apply {
+            text = rh.gs(R.string.aimi_family_bridge_preview_btn)
+            setOnClickListener { showBehaviorFamilyPreviewDialog(suggestion) }
+        })
+        buttonRow.addView(Space(this).apply {
+            layoutParams = LinearLayout.LayoutParams(16, 0)
+        })
+        buttonRow.addView(Button(this).apply {
+            text = rh.gs(R.string.aimi_family_bridge_apply_btn)
+            setOnClickListener { showBehaviorFamilyApplyDialog(suggestion) }
+        })
+        column.addView(buttonRow)
+        card.addView(column)
+        return card
+    }
+
+    private fun createFamilyChipRow(families: List<AimiBehaviorFamilyId>): LinearLayout {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        families.forEachIndexed { index, familyId ->
+            if (index > 0) {
+                row.addView(Space(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(8, 0)
+                })
+            }
+            row.addView(TextView(this).apply {
+                text = rh.gs(familyTitleResId(familyId))
+                textSize = 11f
+                setTextColor(Color.parseColor("#0F172A"))
+                setPadding(18, 8, 18, 8)
+                setBackgroundColor(Color.parseColor("#C4B5FD"))
+            })
+        }
+        return row
+    }
+
+    private fun showBehaviorFamilyPreviewDialog(suggestion: AimiFamilyBridgeSuggestion) {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(rh.gs(R.string.aimi_family_bridge_preview_title))
+            .setMessage(formatBehaviorFamilyPreview(suggestion.pendingChanges))
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+    }
+
+    private fun showBehaviorFamilyApplyDialog(suggestion: AimiFamilyBridgeSuggestion) {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(rh.gs(R.string.aimi_family_bridge_apply_title))
+            .setMessage(formatBehaviorFamilyPreview(suggestion.pendingChanges))
+            .setPositiveButton(rh.gs(R.string.aimi_family_bridge_apply_btn)) { _, _ ->
+                applyBehaviorFamilySuggestion(suggestion)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun applyBehaviorFamilySuggestion(suggestion: AimiFamilyBridgeSuggestion) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            applyAimiFamilyBridgeSuggestion(preferences, suggestion)
+            suggestion.pendingChanges.familyPlans
+                .flatMap { it.changes }
+                .forEach { change ->
+                    historyRepo.logAction(
+                        AdvisorHistoryRepository.ActionType.PREFERENCE_CHANGE,
+                        change.preferenceKey,
+                        "AIMI family bridge",
+                        change.before.valueText ?: change.before.valueResId ?: "",
+                        change.after.valueText ?: change.after.valueResId ?: "",
+                    )
+                }
+            withContext(Dispatchers.Main) {
+                if (isFinishing) return@withContext
+                android.widget.Toast.makeText(
+                    this@AimiProfileAdvisorActivity,
+                    rh.gs(R.string.aimi_control_center_apply_done),
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
+                recreate()
+            }
+        }
+    }
+
+    private fun formatBehaviorFamilyPreview(pendingChanges: AimiControlCenterPendingChanges): String {
+        if (!pendingChanges.hasChanges) return rh.gs(R.string.aimi_control_center_no_pending_changes)
+        return buildString {
+            append(
+                rh.gs(
+                    R.string.aimi_family_bridge_preview_count,
+                    pendingChanges.changedFamilyCount,
+                    pendingChanges.changedSettingsCount,
+                ),
+            )
+            append("\n\n")
+            pendingChanges.familyPlans.forEachIndexed { index, plan ->
+                if (index > 0) append("\n\n")
+                append(rh.gs(familyTitleResId(plan.familyId)))
+                append(" — ")
+                append(formatPlanLevelDelta(plan))
+                plan.changes.take(8).forEach { change ->
+                    append("\n• ")
+                    append(rh.gs(change.titleResId))
+                    append(": ")
+                    append(change.before.valueText ?: change.before.valueResId?.let(rh::gs).orEmpty())
+                    append(" -> ")
+                    append(change.after.valueText ?: change.after.valueResId?.let(rh::gs).orEmpty())
+                }
+                if (plan.changes.size > 8) {
+                    append("\n• ")
+                    append(rh.gs(R.string.aimi_family_bridge_more_changes, plan.changes.size - 8))
+                }
+            }
+        }
+    }
+
+    private fun buildFamilyBridgeDeltaLabel(suggestion: AimiFamilyBridgeSuggestion): String =
+        suggestion.pendingChanges.familyPlans.joinToString(" • ") { plan ->
+            "${rh.gs(familyTitleResId(plan.familyId))}: ${formatPlanLevelDelta(plan)}"
+        }
+
+    private fun formatPlanLevelDelta(plan: AimiFamilyWritebackPlan): String =
+        rh.gs(plan.currentLabelResId) + " -> " + rh.gs(plan.targetLabelResId)
+
+    private fun formatDriverKeyLabels(keys: List<PreferenceKey>): String =
+        keys.take(4).joinToString(", ") { key -> rh.gs(key.titleResId) }
+
+    private fun familyTitleResId(familyId: AimiBehaviorFamilyId): Int =
+        when (familyId) {
+            AimiBehaviorFamilyId.Protection -> R.string.aimi_control_center_protection_title
+            AimiBehaviorFamilyId.MealCapture -> R.string.aimi_control_center_meal_title
+            AimiBehaviorFamilyId.Stability -> R.string.aimi_control_center_stability_title
+            AimiBehaviorFamilyId.Physio -> R.string.aimi_control_center_physio_title
+            AimiBehaviorFamilyId.Autonomy -> R.string.aimi_control_center_autonomy_title
+        }
 
     private fun createRecursiveBeliefUnfoldCard(cardColor: Int): CardView {
         val shadowEnabled = preferences.get(BooleanKey.OApsAIMIRecursiveBeliefShadow)

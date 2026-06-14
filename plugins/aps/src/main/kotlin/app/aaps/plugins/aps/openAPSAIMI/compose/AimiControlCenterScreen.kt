@@ -184,6 +184,8 @@ fun AimiControlCenterScreen(
                     ControlCenterIntroCard(
                         familyCount = currentSnapshot.families.size,
                         expertFamilyCount = currentSnapshot.families.count { it.status == AimiProjectionStatus.ExpertPersonalized },
+                        managedSettingCount = AimiBehaviorFamilyRegistry.totalManagedCount(),
+                        expertSettingCount = AimiBehaviorFamilyRegistry.totalExpertCount(),
                     )
 
                     AdvisorRecommendationsCard(
@@ -296,6 +298,8 @@ fun AimiControlCenterScreen(
 private fun ControlCenterIntroCard(
     familyCount: Int,
     expertFamilyCount: Int,
+    managedSettingCount: Int,
+    expertSettingCount: Int,
 ) {
     Card(
         colors = CardDefaults.cardColors(
@@ -322,6 +326,8 @@ private fun ControlCenterIntroCard(
                 ControlPill(text = stringResource(R.string.aimi_control_center_preserve_note))
                 ControlPill(text = stringResource(R.string.aimi_control_center_family_count, familyCount))
                 ControlPill(text = stringResource(R.string.aimi_control_center_expert_count, expertFamilyCount))
+                ControlPill(text = stringResource(R.string.aimi_control_center_managed_count, managedSettingCount))
+                ControlPill(text = stringResource(R.string.aimi_control_center_expert_setting_count, expertSettingCount))
             }
         }
     }
@@ -451,7 +457,10 @@ private fun AimiFamilyCard(
             ) {
                 ControlPill(text = stringResource(snapshot.status.labelResId))
                 ControlPill(text = stringResource(R.string.aimi_control_center_confidence, (snapshot.confidence * 100).roundToInt()))
-                ControlPill(text = stringResource(R.string.aimi_control_center_settings_count, snapshot.rawPreferenceCount))
+                ControlPill(text = stringResource(R.string.aimi_control_center_settings_count, snapshot.managedPreferenceCount))
+                if (snapshot.expertPreferenceCount > 0) {
+                    ControlPill(text = stringResource(R.string.aimi_control_center_expert_setting_count, snapshot.expertPreferenceCount))
+                }
             }
             Text(
                 text = stringResource(projectionStatusSummaryResId(snapshot.status)),

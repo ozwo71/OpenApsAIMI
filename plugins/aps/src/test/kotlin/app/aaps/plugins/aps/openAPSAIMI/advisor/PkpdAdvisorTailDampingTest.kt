@@ -32,6 +32,7 @@ class PkpdAdvisorTailDampingTest {
         timeAbove180 = timeAbove180,
         timeAbove250 = 0.05,
         meanBg = 160.0,
+        variabilityCv = 0.30,
         gmi = 7.0,
         tdd = 40.0,
         basalPercent = 0.45,

@@ -65,7 +65,8 @@ class AimiControlCenterSnapshotTest {
 
         assertThat(meal.levelLabelResId).isEqualTo(R.string.aimi_control_center_meal_level_very_assertive)
         assertThat(autonomy.levelLabelResId).isEqualTo(R.string.aimi_control_center_autonomy_controlled)
-        assertThat(meal.rawPreferenceCount).isEqualTo(10)
+        assertThat(meal.managedPreferenceCount).isEqualTo(9)
+        assertThat(meal.expertPreferenceCount).isEqualTo(16)
         assertThat(meal.confidence).isGreaterThan(0.55f)
     }
 }

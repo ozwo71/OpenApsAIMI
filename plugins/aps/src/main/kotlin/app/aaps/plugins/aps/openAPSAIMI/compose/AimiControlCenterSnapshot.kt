@@ -35,7 +35,8 @@ internal data class AimiBehaviorFamilySnapshot(
     @StringRes val levelLabelResId: Int,
     val normalizedScore: Float,
     val confidence: Float,
-    val rawPreferenceCount: Int,
+    val managedPreferenceCount: Int,
+    val expertPreferenceCount: Int,
     val status: AimiProjectionStatus,
     val details: List<AimiControlDetail>,
 )
@@ -90,7 +91,8 @@ private fun buildProtectionFamily(preferences: Preferences): AimiBehaviorFamilyS
         levelLabelResId = protectionLevelLabel(projection.score),
         normalizedScore = projection.score,
         confidence = projection.confidence,
-        rawPreferenceCount = 6,
+        managedPreferenceCount = AimiBehaviorFamilyRegistry.managedCount(AimiBehaviorFamilyId.Protection),
+        expertPreferenceCount = AimiBehaviorFamilyRegistry.expertCount(AimiBehaviorFamilyId.Protection),
         status = projection.status,
         details = listOf(
             detail(R.string.openapsaimi_maxsmb_title, preferences.get(DoubleKey.OApsAIMIMaxSMB), "U"),
@@ -104,14 +106,12 @@ private fun buildProtectionFamily(preferences: Preferences): AimiBehaviorFamilyS
 }
 
 private fun buildMealCaptureFamily(preferences: Preferences): AimiBehaviorFamilySnapshot {
-    val autoDriveActive = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
-    val hyperTrajectory = autoDriveActive && preferences.get(BooleanKey.OApsAIMIHyperTrajectoryRelease)
+    val hyperTrajectory = preferences.get(BooleanKey.OApsAIMIHyperTrajectoryRelease)
     val aggressiveTrajectory = hyperTrajectory && preferences.get(BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive)
     val autodriveMaxBasal = preferences.get(DoubleKey.autodriveMaxBasal)
     val mealModesMaxBasal = preferences.get(DoubleKey.meal_modes_MaxBasal)
 
     val scores = mutableListOf<Float>()
-    scores += if (autoDriveActive) 0.58f else 0.18f
     scores += boolScore(hyperTrajectory, whenFalse = 0.28f, whenTrue = 0.68f)
     scores += boolScore(aggressiveTrajectory, whenFalse = 0.46f, whenTrue = 0.88f)
     scores += mealBasalCapScore(autodriveMaxBasal)
@@ -132,10 +132,10 @@ private fun buildMealCaptureFamily(preferences: Preferences): AimiBehaviorFamily
         levelLabelResId = mealLevelLabel(projection.score),
         normalizedScore = projection.score,
         confidence = projection.confidence,
-        rawPreferenceCount = 10,
+        managedPreferenceCount = AimiBehaviorFamilyRegistry.managedCount(AimiBehaviorFamilyId.MealCapture),
+        expertPreferenceCount = AimiBehaviorFamilyRegistry.expertCount(AimiBehaviorFamilyId.MealCapture),
         status = projection.status,
         details = listOf(
-            boolDetail(R.string.oaps_aimi_enableMlautoDriveActive_title, autoDriveActive),
             boolDetail(BooleanKey.OApsAIMIHyperTrajectoryRelease, hyperTrajectory),
             boolDetail(BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, aggressiveTrajectory),
             detail(DoubleKey.autodriveMaxBasal, autodriveMaxBasal, "U/h"),
@@ -170,7 +170,8 @@ private fun buildStabilityFamily(preferences: Preferences): AimiBehaviorFamilySn
         levelLabelResId = stabilityLevelLabel(projection.score),
         normalizedScore = projection.score,
         confidence = projection.confidence,
-        rawPreferenceCount = 6,
+        managedPreferenceCount = AimiBehaviorFamilyRegistry.managedCount(AimiBehaviorFamilyId.Stability),
+        expertPreferenceCount = AimiBehaviorFamilyRegistry.expertCount(AimiBehaviorFamilyId.Stability),
         status = projection.status,
         details = listOf(
             detail(R.string.oaps_aimi_smb_tail_damping_title, preferences.get(DoubleKey.OApsAIMISmbTailDamping), null),
@@ -203,7 +204,8 @@ private fun buildPhysioFamily(preferences: Preferences): AimiBehaviorFamilySnaps
         levelLabelResId = physioLevelLabel(projection.score),
         normalizedScore = projection.score,
         confidence = projection.confidence,
-        rawPreferenceCount = 3,
+        managedPreferenceCount = AimiBehaviorFamilyRegistry.managedCount(AimiBehaviorFamilyId.Physio),
+        expertPreferenceCount = AimiBehaviorFamilyRegistry.expertCount(AimiBehaviorFamilyId.Physio),
         status = projection.status,
         details = listOf(
             boolDetail(R.string.aimi_physio_enable_title, assistantEnabled),
@@ -242,7 +244,8 @@ private fun buildAutonomyFamily(preferences: Preferences): AimiBehaviorFamilySna
         levelLabelResId = levelLabelResId,
         normalizedScore = score,
         confidence = 1.0f,
-        rawPreferenceCount = 5,
+        managedPreferenceCount = AimiBehaviorFamilyRegistry.managedCount(AimiBehaviorFamilyId.Autonomy),
+        expertPreferenceCount = AimiBehaviorFamilyRegistry.expertCount(AimiBehaviorFamilyId.Autonomy),
         status = AimiProjectionStatus.CoherentProfile,
         details = listOf(
             boolDetail(R.string.oaps_aimi_enableMlautoDrive_title, autoDrive),

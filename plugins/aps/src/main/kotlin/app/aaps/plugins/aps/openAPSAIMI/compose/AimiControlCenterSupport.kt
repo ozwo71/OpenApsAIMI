@@ -45,6 +45,7 @@ internal data class AimiFamilyWritebackPlan(
 )
 
 internal data class AimiPreferenceChange(
+    val preferenceKey: String,
     @StringRes val titleResId: Int,
     val before: AimiValueDescriptor,
     val after: AimiValueDescriptor,
@@ -136,44 +137,44 @@ private fun buildProtectionPlan(
 ): AimiFamilyWritebackPlan {
     val changes = when (targetLevel.coerceIn(0, 4)) {
         0 -> listOfNotNull(
-            doubleChange(preferences, DoubleKey.OApsAIMIMaxSMB, 0.80, R.string.openapsaimi_maxsmb_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, 1.00, R.string.openapsaimi_highBG_maxsmb_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, 1.05, R.string.oaps_aimi_priority_max_iob_factor_title, "x"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, 0.50, R.string.oaps_aimi_priority_max_iob_extra_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.60, R.string.oaps_aimi_pkpd_relief_factor_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, 0.60, R.string.oaps_aimi_redcarpet_restore_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMIMaxSMB, listOf(0.80, 1.00, 1.30, 1.80, 2.40), currentLevel, targetLevel, R.string.openapsaimi_maxsmb_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, listOf(1.00, 1.25, 1.60, 2.20, 3.00), currentLevel, targetLevel, R.string.openapsaimi_highBG_maxsmb_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, listOf(1.05, 1.10, 1.20, 1.35, 1.50), currentLevel, targetLevel, R.string.oaps_aimi_priority_max_iob_factor_title, "x"),
+            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, listOf(0.50, 1.00, 2.00, 3.00, 4.00), currentLevel, targetLevel, R.string.oaps_aimi_priority_max_iob_extra_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_pkpd_relief_factor_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_redcarpet_restore_title, null),
         )
         1 -> listOfNotNull(
-            doubleChange(preferences, DoubleKey.OApsAIMIMaxSMB, 1.00, R.string.openapsaimi_maxsmb_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, 1.25, R.string.openapsaimi_highBG_maxsmb_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, 1.10, R.string.oaps_aimi_priority_max_iob_factor_title, "x"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, 1.00, R.string.oaps_aimi_priority_max_iob_extra_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.68, R.string.oaps_aimi_pkpd_relief_factor_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, 0.68, R.string.oaps_aimi_redcarpet_restore_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMIMaxSMB, listOf(0.80, 1.00, 1.30, 1.80, 2.40), currentLevel, targetLevel, R.string.openapsaimi_maxsmb_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, listOf(1.00, 1.25, 1.60, 2.20, 3.00), currentLevel, targetLevel, R.string.openapsaimi_highBG_maxsmb_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, listOf(1.05, 1.10, 1.20, 1.35, 1.50), currentLevel, targetLevel, R.string.oaps_aimi_priority_max_iob_factor_title, "x"),
+            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, listOf(0.50, 1.00, 2.00, 3.00, 4.00), currentLevel, targetLevel, R.string.oaps_aimi_priority_max_iob_extra_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_pkpd_relief_factor_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_redcarpet_restore_title, null),
         )
         2 -> listOfNotNull(
-            doubleChange(preferences, DoubleKey.OApsAIMIMaxSMB, 1.30, R.string.openapsaimi_maxsmb_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, 1.60, R.string.openapsaimi_highBG_maxsmb_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, 1.20, R.string.oaps_aimi_priority_max_iob_factor_title, "x"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, 2.00, R.string.oaps_aimi_priority_max_iob_extra_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.75, R.string.oaps_aimi_pkpd_relief_factor_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, 0.75, R.string.oaps_aimi_redcarpet_restore_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMIMaxSMB, listOf(0.80, 1.00, 1.30, 1.80, 2.40), currentLevel, targetLevel, R.string.openapsaimi_maxsmb_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, listOf(1.00, 1.25, 1.60, 2.20, 3.00), currentLevel, targetLevel, R.string.openapsaimi_highBG_maxsmb_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, listOf(1.05, 1.10, 1.20, 1.35, 1.50), currentLevel, targetLevel, R.string.oaps_aimi_priority_max_iob_factor_title, "x"),
+            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, listOf(0.50, 1.00, 2.00, 3.00, 4.00), currentLevel, targetLevel, R.string.oaps_aimi_priority_max_iob_extra_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_pkpd_relief_factor_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_redcarpet_restore_title, null),
         )
         3 -> listOfNotNull(
-            doubleChange(preferences, DoubleKey.OApsAIMIMaxSMB, 1.80, R.string.openapsaimi_maxsmb_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, 2.20, R.string.openapsaimi_highBG_maxsmb_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, 1.35, R.string.oaps_aimi_priority_max_iob_factor_title, "x"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, 3.00, R.string.oaps_aimi_priority_max_iob_extra_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.82, R.string.oaps_aimi_pkpd_relief_factor_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, 0.82, R.string.oaps_aimi_redcarpet_restore_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMIMaxSMB, listOf(0.80, 1.00, 1.30, 1.80, 2.40), currentLevel, targetLevel, R.string.openapsaimi_maxsmb_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, listOf(1.00, 1.25, 1.60, 2.20, 3.00), currentLevel, targetLevel, R.string.openapsaimi_highBG_maxsmb_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, listOf(1.05, 1.10, 1.20, 1.35, 1.50), currentLevel, targetLevel, R.string.oaps_aimi_priority_max_iob_factor_title, "x"),
+            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, listOf(0.50, 1.00, 2.00, 3.00, 4.00), currentLevel, targetLevel, R.string.oaps_aimi_priority_max_iob_extra_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_pkpd_relief_factor_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_redcarpet_restore_title, null),
         )
         else -> listOfNotNull(
-            doubleChange(preferences, DoubleKey.OApsAIMIMaxSMB, 2.40, R.string.openapsaimi_maxsmb_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, 3.00, R.string.openapsaimi_highBG_maxsmb_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, 1.50, R.string.oaps_aimi_priority_max_iob_factor_title, "x"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, 4.00, R.string.oaps_aimi_priority_max_iob_extra_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.90, R.string.oaps_aimi_pkpd_relief_factor_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, 0.90, R.string.oaps_aimi_redcarpet_restore_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMIMaxSMB, listOf(0.80, 1.00, 1.30, 1.80, 2.40), currentLevel, targetLevel, R.string.openapsaimi_maxsmb_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, listOf(1.00, 1.25, 1.60, 2.20, 3.00), currentLevel, targetLevel, R.string.openapsaimi_highBG_maxsmb_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, listOf(1.05, 1.10, 1.20, 1.35, 1.50), currentLevel, targetLevel, R.string.oaps_aimi_priority_max_iob_factor_title, "x"),
+            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, listOf(0.50, 1.00, 2.00, 3.00, 4.00), currentLevel, targetLevel, R.string.oaps_aimi_priority_max_iob_extra_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_pkpd_relief_factor_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_redcarpet_restore_title, null),
         )
     }
     return AimiFamilyWritebackPlan(
@@ -189,73 +190,61 @@ private fun buildMealCapturePlan(
     currentLevel: Int,
     targetLevel: Int,
 ): AimiFamilyWritebackPlan {
-    val targetAutodriveMaxBasal = directionalMealCaptureCap(
-        currentValue = preferences.get(DoubleKey.autodriveMaxBasal),
-        currentLevel = currentLevel,
-        targetLevel = targetLevel,
-        recommendedValue = mealCaptureAutodriveMaxBasalForLevel(targetLevel),
-    )
-    val targetMealModeMaxBasal = directionalMealCaptureCap(
-        currentValue = preferences.get(DoubleKey.meal_modes_MaxBasal),
-        currentLevel = currentLevel,
-        targetLevel = targetLevel,
-        recommendedValue = mealCaptureMealModeMaxBasalForLevel(targetLevel),
-    )
     val changes = when (targetLevel.coerceIn(0, 4)) {
         0 -> listOfNotNull(
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, false),
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, false),
-            doubleChange(preferences, DoubleKey.autodriveMaxBasal, targetAutodriveMaxBasal, DoubleKey.autodriveMaxBasal.titleResId, "U/h"),
-            doubleChange(preferences, DoubleKey.meal_modes_MaxBasal, targetMealModeMaxBasal, DoubleKey.meal_modes_MaxBasal.titleResId, "U/h"),
-            doubleChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, 0.045, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
-            doubleChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, 0.50, R.string.prebolus_autodrive_mode_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, 0.05, R.string.prebolussmall_autodrive_mode_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, 22.0, DoubleKey.OApsAIMIHyperEstablishedDevMgdl.titleResId, "mg/dL"),
-            doubleChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, 38.0, DoubleKey.OApsAIMIHyperDeepDevMgdl.titleResId, "mg/dL"),
+            ladderChange(preferences, DoubleKey.autodriveMaxBasal, listOf(3.0, 4.5, 6.0, 7.5, 9.0), currentLevel, targetLevel, DoubleKey.autodriveMaxBasal.titleResId, "U/h"),
+            ladderChange(preferences, DoubleKey.meal_modes_MaxBasal, listOf(4.0, 5.5, 7.0, 8.5, 10.0), currentLevel, targetLevel, DoubleKey.meal_modes_MaxBasal.titleResId, "U/h"),
+            ladderChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, listOf(0.045, 0.060, 0.075, 0.090, 0.105), currentLevel, targetLevel, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
+            ladderChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, listOf(0.50, 0.80, 1.20, 1.80, 2.80), currentLevel, targetLevel, R.string.prebolus_autodrive_mode_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, listOf(0.05, 0.10, 0.20, 0.35, 0.60), currentLevel, targetLevel, R.string.prebolussmall_autodrive_mode_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, DoubleKey.OApsAIMIHyperEstablishedDevMgdl.titleResId, "mg/dL"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, DoubleKey.OApsAIMIHyperDeepDevMgdl.titleResId, "mg/dL"),
         )
         1 -> listOfNotNull(
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, true),
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, false),
-            doubleChange(preferences, DoubleKey.autodriveMaxBasal, targetAutodriveMaxBasal, DoubleKey.autodriveMaxBasal.titleResId, "U/h"),
-            doubleChange(preferences, DoubleKey.meal_modes_MaxBasal, targetMealModeMaxBasal, DoubleKey.meal_modes_MaxBasal.titleResId, "U/h"),
-            doubleChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, 0.060, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
-            doubleChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, 0.80, R.string.prebolus_autodrive_mode_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, 0.10, R.string.prebolussmall_autodrive_mode_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, 18.0, DoubleKey.OApsAIMIHyperEstablishedDevMgdl.titleResId, "mg/dL"),
-            doubleChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, 32.0, DoubleKey.OApsAIMIHyperDeepDevMgdl.titleResId, "mg/dL"),
+            ladderChange(preferences, DoubleKey.autodriveMaxBasal, listOf(3.0, 4.5, 6.0, 7.5, 9.0), currentLevel, targetLevel, DoubleKey.autodriveMaxBasal.titleResId, "U/h"),
+            ladderChange(preferences, DoubleKey.meal_modes_MaxBasal, listOf(4.0, 5.5, 7.0, 8.5, 10.0), currentLevel, targetLevel, DoubleKey.meal_modes_MaxBasal.titleResId, "U/h"),
+            ladderChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, listOf(0.045, 0.060, 0.075, 0.090, 0.105), currentLevel, targetLevel, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
+            ladderChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, listOf(0.50, 0.80, 1.20, 1.80, 2.80), currentLevel, targetLevel, R.string.prebolus_autodrive_mode_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, listOf(0.05, 0.10, 0.20, 0.35, 0.60), currentLevel, targetLevel, R.string.prebolussmall_autodrive_mode_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, DoubleKey.OApsAIMIHyperEstablishedDevMgdl.titleResId, "mg/dL"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, DoubleKey.OApsAIMIHyperDeepDevMgdl.titleResId, "mg/dL"),
         )
         2 -> listOfNotNull(
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, true),
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, false),
-            doubleChange(preferences, DoubleKey.autodriveMaxBasal, targetAutodriveMaxBasal, DoubleKey.autodriveMaxBasal.titleResId, "U/h"),
-            doubleChange(preferences, DoubleKey.meal_modes_MaxBasal, targetMealModeMaxBasal, DoubleKey.meal_modes_MaxBasal.titleResId, "U/h"),
-            doubleChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, 0.075, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
-            doubleChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, 1.20, R.string.prebolus_autodrive_mode_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, 0.20, R.string.prebolussmall_autodrive_mode_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, 15.0, DoubleKey.OApsAIMIHyperEstablishedDevMgdl.titleResId, "mg/dL"),
-            doubleChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, 28.0, DoubleKey.OApsAIMIHyperDeepDevMgdl.titleResId, "mg/dL"),
+            ladderChange(preferences, DoubleKey.autodriveMaxBasal, listOf(3.0, 4.5, 6.0, 7.5, 9.0), currentLevel, targetLevel, DoubleKey.autodriveMaxBasal.titleResId, "U/h"),
+            ladderChange(preferences, DoubleKey.meal_modes_MaxBasal, listOf(4.0, 5.5, 7.0, 8.5, 10.0), currentLevel, targetLevel, DoubleKey.meal_modes_MaxBasal.titleResId, "U/h"),
+            ladderChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, listOf(0.045, 0.060, 0.075, 0.090, 0.105), currentLevel, targetLevel, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
+            ladderChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, listOf(0.50, 0.80, 1.20, 1.80, 2.80), currentLevel, targetLevel, R.string.prebolus_autodrive_mode_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, listOf(0.05, 0.10, 0.20, 0.35, 0.60), currentLevel, targetLevel, R.string.prebolussmall_autodrive_mode_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, DoubleKey.OApsAIMIHyperEstablishedDevMgdl.titleResId, "mg/dL"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, DoubleKey.OApsAIMIHyperDeepDevMgdl.titleResId, "mg/dL"),
         )
         3 -> listOfNotNull(
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, true),
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, true),
-            doubleChange(preferences, DoubleKey.autodriveMaxBasal, targetAutodriveMaxBasal, DoubleKey.autodriveMaxBasal.titleResId, "U/h"),
-            doubleChange(preferences, DoubleKey.meal_modes_MaxBasal, targetMealModeMaxBasal, DoubleKey.meal_modes_MaxBasal.titleResId, "U/h"),
-            doubleChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, 0.090, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
-            doubleChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, 1.80, R.string.prebolus_autodrive_mode_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, 0.35, R.string.prebolussmall_autodrive_mode_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, 12.0, DoubleKey.OApsAIMIHyperEstablishedDevMgdl.titleResId, "mg/dL"),
-            doubleChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, 24.0, DoubleKey.OApsAIMIHyperDeepDevMgdl.titleResId, "mg/dL"),
+            ladderChange(preferences, DoubleKey.autodriveMaxBasal, listOf(3.0, 4.5, 6.0, 7.5, 9.0), currentLevel, targetLevel, DoubleKey.autodriveMaxBasal.titleResId, "U/h"),
+            ladderChange(preferences, DoubleKey.meal_modes_MaxBasal, listOf(4.0, 5.5, 7.0, 8.5, 10.0), currentLevel, targetLevel, DoubleKey.meal_modes_MaxBasal.titleResId, "U/h"),
+            ladderChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, listOf(0.045, 0.060, 0.075, 0.090, 0.105), currentLevel, targetLevel, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
+            ladderChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, listOf(0.50, 0.80, 1.20, 1.80, 2.80), currentLevel, targetLevel, R.string.prebolus_autodrive_mode_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, listOf(0.05, 0.10, 0.20, 0.35, 0.60), currentLevel, targetLevel, R.string.prebolussmall_autodrive_mode_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, DoubleKey.OApsAIMIHyperEstablishedDevMgdl.titleResId, "mg/dL"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, DoubleKey.OApsAIMIHyperDeepDevMgdl.titleResId, "mg/dL"),
         )
         else -> listOfNotNull(
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, true),
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, true),
-            doubleChange(preferences, DoubleKey.autodriveMaxBasal, targetAutodriveMaxBasal, DoubleKey.autodriveMaxBasal.titleResId, "U/h"),
-            doubleChange(preferences, DoubleKey.meal_modes_MaxBasal, targetMealModeMaxBasal, DoubleKey.meal_modes_MaxBasal.titleResId, "U/h"),
-            doubleChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, 0.105, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
-            doubleChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, 2.80, R.string.prebolus_autodrive_mode_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, 0.60, R.string.prebolussmall_autodrive_mode_title, "U"),
-            doubleChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, 10.0, DoubleKey.OApsAIMIHyperEstablishedDevMgdl.titleResId, "mg/dL"),
-            doubleChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, 20.0, DoubleKey.OApsAIMIHyperDeepDevMgdl.titleResId, "mg/dL"),
+            ladderChange(preferences, DoubleKey.autodriveMaxBasal, listOf(3.0, 4.5, 6.0, 7.5, 9.0), currentLevel, targetLevel, DoubleKey.autodriveMaxBasal.titleResId, "U/h"),
+            ladderChange(preferences, DoubleKey.meal_modes_MaxBasal, listOf(4.0, 5.5, 7.0, 8.5, 10.0), currentLevel, targetLevel, DoubleKey.meal_modes_MaxBasal.titleResId, "U/h"),
+            ladderChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, listOf(0.045, 0.060, 0.075, 0.090, 0.105), currentLevel, targetLevel, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
+            ladderChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, listOf(0.50, 0.80, 1.20, 1.80, 2.80), currentLevel, targetLevel, R.string.prebolus_autodrive_mode_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, listOf(0.05, 0.10, 0.20, 0.35, 0.60), currentLevel, targetLevel, R.string.prebolussmall_autodrive_mode_title, "U"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, DoubleKey.OApsAIMIHyperEstablishedDevMgdl.titleResId, "mg/dL"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, DoubleKey.OApsAIMIHyperDeepDevMgdl.titleResId, "mg/dL"),
         )
     }
     return AimiFamilyWritebackPlan(
@@ -274,44 +263,44 @@ private fun buildStabilityPlan(
 ): AimiFamilyWritebackPlan {
     val changes = when (targetLevel.coerceIn(0, 4)) {
         0 -> listOfNotNull(
-            doubleChange(preferences, DoubleKey.OApsAIMISmbTailDamping, 0.20, R.string.oaps_aimi_smb_tail_damping_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, 0.30, R.string.oaps_aimi_smb_exercise_damping_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, 0.40, R.string.oaps_aimi_smb_late_fat_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, listOf(0.20, 0.35, 0.50, 0.65, 0.80), currentLevel, targetLevel, R.string.oaps_aimi_smb_tail_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, listOf(0.30, 0.45, 0.60, 0.72, 0.85), currentLevel, targetLevel, R.string.oaps_aimi_smb_exercise_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, listOf(0.40, 0.55, 0.70, 0.80, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_smb_late_fat_damping_title, null),
             booleanChange(preferences, BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, false, R.string.oaps_aimi_adaptive_basal_title),
             booleanChange(preferences, BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled, false),
-            doubleChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, 0.02, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction.titleResId, null),
+            ladderChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, listOf(0.02, 0.04, 0.06, 0.08, 0.10), currentLevel, targetLevel, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction.titleResId, null),
         )
         1 -> listOfNotNull(
-            doubleChange(preferences, DoubleKey.OApsAIMISmbTailDamping, 0.35, R.string.oaps_aimi_smb_tail_damping_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, 0.45, R.string.oaps_aimi_smb_exercise_damping_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, 0.55, R.string.oaps_aimi_smb_late_fat_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, listOf(0.20, 0.35, 0.50, 0.65, 0.80), currentLevel, targetLevel, R.string.oaps_aimi_smb_tail_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, listOf(0.30, 0.45, 0.60, 0.72, 0.85), currentLevel, targetLevel, R.string.oaps_aimi_smb_exercise_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, listOf(0.40, 0.55, 0.70, 0.80, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_smb_late_fat_damping_title, null),
             booleanChange(preferences, BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, false, R.string.oaps_aimi_adaptive_basal_title),
             booleanChange(preferences, BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled, false),
-            doubleChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, 0.04, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction.titleResId, null),
+            ladderChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, listOf(0.02, 0.04, 0.06, 0.08, 0.10), currentLevel, targetLevel, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction.titleResId, null),
         )
         2 -> listOfNotNull(
-            doubleChange(preferences, DoubleKey.OApsAIMISmbTailDamping, 0.50, R.string.oaps_aimi_smb_tail_damping_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, 0.60, R.string.oaps_aimi_smb_exercise_damping_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, 0.70, R.string.oaps_aimi_smb_late_fat_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, listOf(0.20, 0.35, 0.50, 0.65, 0.80), currentLevel, targetLevel, R.string.oaps_aimi_smb_tail_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, listOf(0.30, 0.45, 0.60, 0.72, 0.85), currentLevel, targetLevel, R.string.oaps_aimi_smb_exercise_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, listOf(0.40, 0.55, 0.70, 0.80, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_smb_late_fat_damping_title, null),
             booleanChange(preferences, BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, false, R.string.oaps_aimi_adaptive_basal_title),
             booleanChange(preferences, BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled, false),
-            doubleChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, 0.06, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction.titleResId, null),
+            ladderChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, listOf(0.02, 0.04, 0.06, 0.08, 0.10), currentLevel, targetLevel, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction.titleResId, null),
         )
         3 -> listOfNotNull(
-            doubleChange(preferences, DoubleKey.OApsAIMISmbTailDamping, 0.65, R.string.oaps_aimi_smb_tail_damping_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, 0.72, R.string.oaps_aimi_smb_exercise_damping_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, 0.80, R.string.oaps_aimi_smb_late_fat_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, listOf(0.20, 0.35, 0.50, 0.65, 0.80), currentLevel, targetLevel, R.string.oaps_aimi_smb_tail_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, listOf(0.30, 0.45, 0.60, 0.72, 0.85), currentLevel, targetLevel, R.string.oaps_aimi_smb_exercise_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, listOf(0.40, 0.55, 0.70, 0.80, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_smb_late_fat_damping_title, null),
             booleanChange(preferences, BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, true, R.string.oaps_aimi_adaptive_basal_title),
             booleanChange(preferences, BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled, true),
-            doubleChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, 0.08, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction.titleResId, null),
+            ladderChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, listOf(0.02, 0.04, 0.06, 0.08, 0.10), currentLevel, targetLevel, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction.titleResId, null),
         )
         else -> listOfNotNull(
-            doubleChange(preferences, DoubleKey.OApsAIMISmbTailDamping, 0.80, R.string.oaps_aimi_smb_tail_damping_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, 0.85, R.string.oaps_aimi_smb_exercise_damping_title, null),
-            doubleChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, 0.90, R.string.oaps_aimi_smb_late_fat_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, listOf(0.20, 0.35, 0.50, 0.65, 0.80), currentLevel, targetLevel, R.string.oaps_aimi_smb_tail_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, listOf(0.30, 0.45, 0.60, 0.72, 0.85), currentLevel, targetLevel, R.string.oaps_aimi_smb_exercise_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, listOf(0.40, 0.55, 0.70, 0.80, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_smb_late_fat_damping_title, null),
             booleanChange(preferences, BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, true, R.string.oaps_aimi_adaptive_basal_title),
             booleanChange(preferences, BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled, true),
-            doubleChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, 0.10, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction.titleResId, null),
+            ladderChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, listOf(0.02, 0.04, 0.06, 0.08, 0.10), currentLevel, targetLevel, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction.titleResId, null),
         )
     }
     return AimiFamilyWritebackPlan(
@@ -352,32 +341,6 @@ private fun buildPhysioPlan(
         changes = changes,
     )
 }
-
-private fun directionalMealCaptureCap(
-    currentValue: Double,
-    currentLevel: Int,
-    targetLevel: Int,
-    recommendedValue: Double,
-): Double =
-    if (targetLevel > currentLevel) maxOf(currentValue, recommendedValue) else recommendedValue
-
-private fun mealCaptureAutodriveMaxBasalForLevel(level: Int): Double =
-    when (level.coerceIn(0, 4)) {
-        0 -> 3.0
-        1 -> 4.5
-        2 -> 6.0
-        3 -> 7.5
-        else -> 9.0
-    }
-
-private fun mealCaptureMealModeMaxBasalForLevel(level: Int): Double =
-    when (level.coerceIn(0, 4)) {
-        0 -> 4.0
-        1 -> 5.5
-        2 -> 7.0
-        3 -> 8.5
-        else -> 10.0
-    }
 
 private fun buildAutonomyPlan(
     preferences: Preferences,
@@ -432,11 +395,29 @@ private fun booleanChange(
     val currentValue = preferences.get(key)
     if (currentValue == targetValue) return null
     return AimiPreferenceChange(
+        preferenceKey = key.key,
         titleResId = titleResId,
         before = AimiValueDescriptor(valueResId = if (currentValue) CoreUiR.string.yes else CoreUiR.string.no),
         after = AimiValueDescriptor(valueResId = if (targetValue) CoreUiR.string.yes else CoreUiR.string.no),
         apply = { prefs -> prefs.put(key, targetValue) },
     )
+}
+
+private fun ladderChange(
+    preferences: Preferences,
+    key: DoublePreferenceKey,
+    ladder: List<Double>,
+    currentLevel: Int,
+    targetLevel: Int,
+    @StringRes titleResId: Int,
+    unit: String?,
+): AimiPreferenceChange? {
+    if (ladder.isEmpty()) return null
+    val currentValue = preferences.get(key)
+    val delta = targetLevel - currentLevel
+    val currentIndex = ladder.indices.minByOrNull { index -> abs(ladder[index] - currentValue) } ?: 0
+    val targetIndex = (currentIndex + delta).coerceIn(0, ladder.lastIndex)
+    return doubleChange(preferences, key, ladder[targetIndex], titleResId, unit)
 }
 
 private fun doubleChange(
@@ -450,6 +431,7 @@ private fun doubleChange(
     val currentValue = preferences.get(key)
     if (abs(currentValue - clampedTarget) < 0.0001) return null
     return AimiPreferenceChange(
+        preferenceKey = key.key,
         titleResId = titleResId,
         before = AimiValueDescriptor(valueText = formatControlCenterDoubleValue(currentValue, unit)),
         after = AimiValueDescriptor(valueText = formatControlCenterDoubleValue(clampedTarget, unit)),

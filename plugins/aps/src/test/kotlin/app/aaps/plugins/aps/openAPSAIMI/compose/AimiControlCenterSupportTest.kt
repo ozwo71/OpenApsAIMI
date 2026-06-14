@@ -87,7 +87,7 @@ class AimiControlCenterSupportTest {
     }
 
     @Test
-    fun `protective writeback keeps pkpd guard factors on the protective side`() {
+    fun `protective writeback moves pkpd guard factors toward protection without forcing the absolute floor`() {
         every { preferences.get(DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor) } returns 0.90
         every { preferences.get(DoubleKey.OApsAIMIRedCarpetRestoreThreshold) } returns 0.90
 
@@ -100,12 +100,12 @@ class AimiControlCenterSupportTest {
 
         applyAimiControlCenterPendingChanges(preferences, pending)
 
-        verify { preferences.put(DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.60) }
-        verify { preferences.put(DoubleKey.OApsAIMIRedCarpetRestoreThreshold, 0.60) }
+        verify { preferences.put(DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.75) }
+        verify { preferences.put(DoubleKey.OApsAIMIRedCarpetRestoreThreshold, 0.75) }
     }
 
     @Test
-    fun `meal capture max writes basal ceilings used by autodrive and meal modes`() {
+    fun `meal capture increase lifts basal ceilings incrementally from the current state`() {
         every { preferences.get(DoubleKey.autodriveMaxBasal) } returns 4.0
         every { preferences.get(DoubleKey.meal_modes_MaxBasal) } returns 5.0
 
@@ -118,7 +118,47 @@ class AimiControlCenterSupportTest {
 
         applyAimiControlCenterPendingChanges(preferences, pending)
 
-        verify { preferences.put(DoubleKey.autodriveMaxBasal, 9.0) }
-        verify { preferences.put(DoubleKey.meal_modes_MaxBasal, 10.0) }
+        verify { preferences.put(DoubleKey.autodriveMaxBasal, 7.5) }
+        verify { preferences.put(DoubleKey.meal_modes_MaxBasal, 8.5) }
+    }
+
+    @Test
+    fun `meal draft reflects owned meal settings even when autonomy is off`() {
+        every { preferences.get(BooleanKey.OApsAIMIautoDriveActive) } returns false
+        every { preferences.get(BooleanKey.OApsAIMIHyperTrajectoryRelease) } returns true
+        every { preferences.get(BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive) } returns true
+        every { preferences.get(DoubleKey.autodriveMaxBasal) } returns 9.0
+        every { preferences.get(DoubleKey.meal_modes_MaxBasal) } returns 10.0
+        every { preferences.get(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep) } returns 0.105
+        every { preferences.get(DoubleKey.OApsAIMIautodrivePrebolus) } returns 2.8
+        every { preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus) } returns 0.6
+        every { preferences.get(DoubleKey.OApsAIMIHyperEstablishedDevMgdl) } returns 10.0
+        every { preferences.get(DoubleKey.OApsAIMIHyperDeepDevMgdl) } returns 20.0
+
+        val draft = readAimiControlCenterDraft(preferences)
+
+        assertThat(draft.mealCaptureLevel).isAtLeast(3)
+    }
+
+    @Test
+    fun `protection move steps from current value instead of forcing absolute preset`() {
+        every { preferences.get(DoubleKey.OApsAIMIMaxSMB) } returns 1.4
+
+        val currentDraft = AimiControlCenterDraft(
+            protectionLevel = 2,
+            mealCaptureLevel = 2,
+            stabilityLevel = 2,
+            physioLevel = 1,
+            autonomyMode = AimiAutonomyMode.Observation,
+        )
+        val pending = buildAimiControlCenterPendingChanges(
+            preferences = preferences,
+            currentDraft = currentDraft,
+            targetDraft = currentDraft.copy(protectionLevel = 3),
+        )
+
+        applyAimiControlCenterPendingChanges(preferences, pending)
+
+        verify { preferences.put(DoubleKey.OApsAIMIMaxSMB, 1.8) }
     }
 }

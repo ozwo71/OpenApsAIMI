@@ -27,6 +27,7 @@ class TuningContextEngineTest {
         timeAbove180 = timeAbove180,
         timeAbove250 = 0.05,
         meanBg = 155.0,
+        variabilityCv = 0.30,
         gmi = 6.8,
         tdd = 42.0,
         basalPercent = 0.45,
