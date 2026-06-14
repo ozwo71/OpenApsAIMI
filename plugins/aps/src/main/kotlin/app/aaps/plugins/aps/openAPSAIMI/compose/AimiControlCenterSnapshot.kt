@@ -5,6 +5,7 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.BooleanPreferenceKey
 import app.aaps.core.keys.interfaces.DoublePreferenceKey
+import app.aaps.core.keys.interfaces.PreferenceKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.R as CoreUiR
 import app.aaps.plugins.aps.R
@@ -295,6 +296,7 @@ private fun buildContextSection(preferences: Preferences): AimiControlSectionSna
 private fun buildSourceSection(preferences: Preferences): AimiControlSectionSnapshot {
     val sourceMode = preferences.get(AimiStringKey.ActivitySourceMode)
     val sourceResId = AimiStringKey.ActivitySourceMode.entries[sourceMode]
+        ?: R.string.pref_aimi_steps_source_disabled
     val ouraConfigured = preferences.get(AimiStringKey.OuraPersonalAccessToken).isNotBlank()
     return AimiControlSectionSnapshot(
         titleResId = R.string.aimi_control_center_sources_title,
@@ -352,7 +354,7 @@ private fun boolScore(enabled: Boolean, whenFalse: Float, whenTrue: Float): Floa
 
 private fun detail(key: DoublePreferenceKey, value: Double, unit: String?): AimiControlDetail =
     AimiControlDetail(
-        titleResId = key.titleResId,
+        titleResId = key.controlCenterTitleResId(),
         valueText = formatControlCenterDoubleValue(value = value, unit = unit),
     )
 
@@ -371,7 +373,7 @@ private fun boolDetail(
     enabled: Boolean,
 ): AimiControlDetail =
     AimiControlDetail(
-        titleResId = key.titleResId,
+        titleResId = key.controlCenterTitleResId(),
         valueResId = if (enabled) CoreUiR.string.yes else CoreUiR.string.no,
     )
 
@@ -383,6 +385,19 @@ private fun boolDetail(
         titleResId = titleResId,
         valueResId = if (enabled) CoreUiR.string.yes else CoreUiR.string.no,
     )
+
+/** Legacy AIMI keys often omit [PreferenceKey.titleResId]; map them for Control Center UI. */
+internal fun DoublePreferenceKey.controlCenterTitleResId(): Int {
+    if (titleResId != 0) return titleResId
+    return when (this) {
+        DoubleKey.autodriveMaxBasal -> R.string.autodrive_max_basal_title
+        DoubleKey.meal_modes_MaxBasal -> R.string.meal_modes_max_basal_title
+        else -> R.string.aimi_control_center_unlabeled_preference
+    }
+}
+
+internal fun BooleanPreferenceKey.controlCenterTitleResId(): Int =
+    titleResId.takeIf { it != 0 } ?: R.string.aimi_control_center_unlabeled_preference
 
 internal fun formatControlCenterDoubleValue(value: Double, unit: String?): String {
     val formatted = when {

@@ -1510,6 +1510,7 @@
     <string name="aimi_control_center_show_current_details">Show current settings</string>
     <string name="aimi_control_center_hide_details">Hide details</string>
     <string name="aimi_control_center_not_configured">Not configured</string>
+    <string name="aimi_control_center_unlabeled_preference">Preference</string>
     <string name="aimi_control_center_configured">Configured</string>
     <string name="aimi_control_center_footer">Raw AIMI settings remain available in the standard preferences and AIMI Lab. This screen is designed to make the current setup understandable before introducing family-level controls.</string>
     <string name="aimi_control_center_footer_v2">Changes prepared here are written back into AIMI legacy preferences only after confirmation. Raw AIMI settings and AIMI Lab remain available for audit and expert tuning.</string>

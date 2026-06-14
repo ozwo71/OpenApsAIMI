@@ -45,6 +45,23 @@ class AimiControlCenterSnapshotTest {
     }
 
     @Test
+    fun `all snapshot detail rows expose a valid title resource`() {
+        val snapshot = buildAimiControlCenterSnapshot(preferences)
+        val details = snapshot.families.flatMap { it.details } +
+            snapshot.contextSection.details +
+            snapshot.sourceSection.details
+
+        assertThat(details).isNotEmpty()
+        assertThat(details.map { it.titleResId }).containsNoDuplicates()
+        assertThat(details.map { it.titleResId }).containsNoneIn(listOf(0))
+        assertThat(
+            details.first { detail ->
+                detail.titleResId == R.string.autodrive_max_basal_title
+            }.valueText,
+        ).isNotNull()
+    }
+
+    @Test
     fun `autodrive v3 stack projects a more assertive meal family and controlled autonomy`() {
         every { preferences.get(BooleanKey.OApsAIMIautoDriveActive) } returns true
         every { preferences.get(BooleanKey.OApsAIMIautoDrive) } returns true

@@ -727,7 +727,7 @@ private fun DetailRow(detail: AimiControlDetail) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = stringResource(detail.titleResId),
+            text = detailTitle(detail),
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
         )
@@ -738,6 +738,11 @@ private fun DetailRow(detail: AimiControlDetail) {
         )
     }
 }
+
+@Composable
+private fun detailTitle(detail: AimiControlDetail): String =
+    if (detail.titleResId != 0) stringResource(detail.titleResId)
+    else stringResource(R.string.aimi_control_center_unlabeled_preference)
 
 @Composable
 private fun detailText(detail: AimiControlDetail): String =
