@@ -4,8 +4,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 @Suppress("ConstPropertyName")
 object Versions {
 
-    // On change edit aaps-ci.yml (fork builds use AIMI suffix)
-    const val appVersion = "4.0.0.0-dev.AIMI.140626"
+    // On change edit aaps-ci.yml (fork builds use AIMI suffix; base tracks upstream dev-a)
+    const val appVersion = "4.0.0.0-dev.AIMI.160626"
     const val versionCode = 1500
 
     const val compileSdk = 36  // Back to original - SDK 34 breaks omnipod and other modules

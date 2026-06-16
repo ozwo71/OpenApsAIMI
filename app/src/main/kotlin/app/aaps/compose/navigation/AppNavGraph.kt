@@ -423,7 +423,7 @@ fun NavGraphBuilder.appNavGraph(
             checkPumpCompatible = { percentage -> profileManagementViewModel.isPumpCompatible(profileIndex, percentage) },
             onActivate = { duration, percentage, timeshift, withTT, notes, timestamp, timeChanged ->
                 coroutineScope.launch {
-                    profileManagementViewModel.activateProfile(
+                    val success = profileManagementViewModel.activateProfile(
                         profileIndex = profileIndex,
                         durationMinutes = duration,
                         percentage = percentage,
@@ -433,7 +433,9 @@ fun NavGraphBuilder.appNavGraph(
                         timestamp = timestamp,
                         timeChanged = timeChanged
                     )
-                    navController.popBackStack(AppRoute.Profile.route, inclusive = false)
+                    if (success) {
+                        navController.popBackStack(AppRoute.Profile.route, inclusive = false)
+                    }
                 }
             }
         )

@@ -22,6 +22,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.AlarmIntent
 import app.aaps.core.interfaces.notifications.AlarmSoundPlayer
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.keys.BooleanKey
@@ -31,9 +32,10 @@ import app.aaps.implementation.androidNotification.AlarmNotificationManager
 import app.aaps.ui.activities.ErrorActivity
 import app.aaps.ui.dialogs.AlertDialogs
 import dagger.Reusable
-import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import javax.inject.Inject
+import javax.inject.Provider
 
 @Reusable
 class UiInteractionImpl @Inject constructor(
@@ -42,6 +44,9 @@ class UiInteractionImpl @Inject constructor(
     private val preferences: Preferences,
     private val alarmNotificationManager: AlarmNotificationManager,
     private val alarmSoundPlayer: AlarmSoundPlayer,
+    // Provider breaks a Dagger cycle: NotificationManagerImpl injects NotificationHolder, which
+    // injects this UiInteraction. notificationManager is only needed lazily in stopAlarm().
+    private val notificationManager: Provider<NotificationManager>,
     private val aapsLogger: AAPSLogger,
     private val persistenceLayer: PersistenceLayer,
     private val config: Config,
@@ -121,7 +126,10 @@ class UiInteractionImpl @Inject constructor(
 
     override fun stopAlarm(reason: String) {
         aapsLogger.debug(LTag.CORE, "stopAlarm: $reason")
-        alarmNotificationManager.cancelAlarm()
+        // Route through the registry owner so all audible alarms are actually silenced: clears the
+        // internal AlarmSoundPlayer (Wear snooze used to only cancel the system notification, leaving
+        // the ramping audio playing), stops the full-screen audio, and cancels the notifications.
+        notificationManager.get().muteAllAlarms()
     }
 
     override fun showOkDialog(context: Context, title: String, message: String, onFinish: (() -> Unit)?) {
