@@ -16,6 +16,38 @@ class InsulinLoadGovernorTest {
     }
 
     @Test
+    fun iob_budget_brake_leaves_non_boost_multipliers_untouched() {
+        // Defensive (<=1.0) multipliers are already conservative — never relaxed.
+        assertEquals(0.88, InsulinLoadGovernor.iobBudgetBrakedMultiplier(0.88, iobU = 8.0, budgetU = 9.8), 0.0001)
+        assertEquals(1.0, InsulinLoadGovernor.iobBudgetBrakedMultiplier(1.0, iobU = 0.0, budgetU = 9.8), 0.0001)
+    }
+
+    @Test
+    fun iob_budget_brake_fades_boost_as_iob_fills_budget() {
+        val mult = 2.32
+        // Zero IOB → full boost preserved (BG genuinely high, no load).
+        assertEquals(2.32, InsulinLoadGovernor.iobBudgetBrakedMultiplier(mult, iobU = 0.0, budgetU = 9.8), 0.0001)
+        // Midday field case: IOB 7.1 / budget 9.8 → headroom 0.2755 → ~1.36x (was 2.32x).
+        assertEquals(1.364, InsulinLoadGovernor.iobBudgetBrakedMultiplier(mult, iobU = 7.1, budgetU = 9.8), 0.005)
+        // At budget → boost fully neutralised to 1.0x.
+        assertEquals(1.0, InsulinLoadGovernor.iobBudgetBrakedMultiplier(mult, iobU = 9.8, budgetU = 9.8), 0.0001)
+        // Above budget → clamped to 1.0x (never below profile basal).
+        assertEquals(1.0, InsulinLoadGovernor.iobBudgetBrakedMultiplier(mult, iobU = 12.0, budgetU = 9.8), 0.0001)
+        // Negative IOB → headroom clamped to 1 → full boost.
+        assertEquals(2.32, InsulinLoadGovernor.iobBudgetBrakedMultiplier(mult, iobU = -1.0, budgetU = 9.8), 0.0001)
+    }
+
+    @Test
+    fun iob_budget_brake_is_monotonic_in_iob() {
+        val mult = 2.0
+        val low = InsulinLoadGovernor.iobBudgetBrakedMultiplier(mult, iobU = 2.0, budgetU = 10.0)
+        val mid = InsulinLoadGovernor.iobBudgetBrakedMultiplier(mult, iobU = 5.0, budgetU = 10.0)
+        val high = InsulinLoadGovernor.iobBudgetBrakedMultiplier(mult, iobU = 8.0, budgetU = 10.0)
+        assertTrue(low > mid && mid > high) { "brake must decrease the boost as IOB rises: $low > $mid > $high" }
+        assertTrue(high in 1.0..mult)
+    }
+
+    @Test
     fun full_tier_on_fast_rise_with_low_iob() {
         val e = InsulinLoadGovernor.evaluate(
             InsulinLoadGovernor.Input(

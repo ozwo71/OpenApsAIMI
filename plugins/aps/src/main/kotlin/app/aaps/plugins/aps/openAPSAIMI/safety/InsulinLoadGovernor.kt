@@ -102,6 +102,19 @@ object InsulinLoadGovernor {
         return max(fromTdd, fromWeight).coerceAtLeast(PHYS_BUDGET_IOB_AT_REFERENCE_U * 0.5)
     }
 
+    /**
+     * Damp the boost ABOVE 1.0x of an adaptive basal multiplier in proportion to remaining IOB headroom
+     * against [budgetU]. Returns [multiplier] unchanged when it is not a boost (<= 1.0). For a boost the
+     * result is in [1.0, multiplier]: full multiplier at zero IOB, neutralised to 1.0 at/above budget.
+     * Strictly conservative — it can only reduce a boost, never raise one and never add insulin.
+     */
+    fun iobBudgetBrakedMultiplier(multiplier: Double, iobU: Double, budgetU: Double): Double {
+        if (multiplier <= 1.0 || !multiplier.isFinite()) return multiplier
+        val safeBudget = budgetU.coerceAtLeast(0.5)
+        val headroomFrac = ((safeBudget - iobU) / safeBudget).coerceIn(0.0, 1.0)
+        return 1.0 + (multiplier - 1.0) * headroomFrac
+    }
+
     fun evaluate(input: Input): Evaluation {
         val reasonCodes = mutableListOf<String>()
         val budget = physiologicalBudgetU(input.tdd24hU, input.patientWeightKg)

@@ -96,6 +96,15 @@ class BasalDecisionEngine @Inject constructor(
         val overrideSafety: Boolean
     )
 
+    companion object {
+        /** Absolute IOB ceiling (U) above which the early-meal forced TBR is suppressed (anti-stacking). */
+        private const val FORCED_TBR_MAX_IOB_U = 3.0
+        /** eventualBg must clear the LGS threshold by this margin (mg/dL) before forcing a high TBR. */
+        private const val FORCED_TBR_HYPO_MARGIN_MGDL = 15.0
+        /** At night, only a genuinely steep rise (delta ≥ this, mg/dL/5m) may force the meal TBR. */
+        private const val FORCED_TBR_NIGHT_MIN_DELTA = 8.0
+    }
+
     fun decide(
         input: Input,
         rT: RT,
@@ -230,17 +239,26 @@ class BasalDecisionEngine @Inject constructor(
             return Decision(input.profileCurrentBasal, 30, false)
         }
 
-        if (helpers.detectMealOnset(
-                input.delta.toFloat(),
-                input.delta.toFloat(), // predictedDelta placeholder
-                input.bgAcceleration.toFloat(),
-                input.predictedBg.toFloat(),
-                input.targetBg.toFloat()
-            ) &&
-            input.modesCondition &&
-            input.bg > 100 &&
-            input.predictedBg > 110 && // Added safety check
-            input.autodrive
+        val mealOnsetDetected = helpers.detectMealOnset(
+            input.delta.toFloat(),
+            input.delta.toFloat(), // predictedDelta placeholder
+            input.bgAcceleration.toFloat(),
+            input.predictedBg.toFloat(),
+            input.targetBg.toFloat()
+        )
+        // Early-meal forced TBR (overrideSafety, 4–5 U/h) fires on a no-carb-announcement user where a
+        // dawn rise, sensor noise or post-hypo rebound trips detectMealOnset just like a real meal.
+        // These guards are strictly conservative — they can only SUPPRESS the forced boost, never raise it.
+        val forcedTbrContextOk = input.modesCondition && input.bg > 100 && input.predictedBg > 110 && input.autodrive
+        val forcedTbrIobHeadroomOk = input.iob < FORCED_TBR_MAX_IOB_U                                  // anti-stacking (absolute cap)
+        val forcedTbrNotDroppingHypo = input.eventualBg > input.lgsThreshold + FORCED_TBR_HYPO_MARGIN_MGDL
+        val forcedTbrNightOk = !input.nightMode || input.delta >= FORCED_TBR_NIGHT_MIN_DELTA           // at night, only a steep rise
+
+        if (mealOnsetDetected &&
+            forcedTbrContextOk &&
+            forcedTbrIobHeadroomOk &&
+            forcedTbrNotDroppingHypo &&
+            forcedTbrNightOk
         ) {
 
             chosenRate = input.forcedBasal
@@ -250,6 +268,16 @@ class BasalDecisionEngine @Inject constructor(
                  rT.reason.append(" [AD_EARLY_TBR_TRIGGER rate=${input.forcedBasal}]")
             }
         } else {
+            if (mealOnsetDetected && forcedTbrContextOk) {
+                // Detector fired but a safety guard suppressed the forced TBR — surface which one for field triage.
+                rT.reason.append(
+                    " [AD_EARLY_TBR_BLOCKED" +
+                        (if (!forcedTbrIobHeadroomOk) " iob=${"%.1f".format(input.iob)}>=${"%.1f".format(FORCED_TBR_MAX_IOB_U)}" else "") +
+                        (if (!forcedTbrNotDroppingHypo) " evBG=${input.eventualBg.toInt()}<=lgs+${FORCED_TBR_HYPO_MARGIN_MGDL.toInt()}" else "") +
+                        (if (!forcedTbrNightOk) " nightDelta=${"%.1f".format(input.delta)}<${"%.1f".format(FORCED_TBR_NIGHT_MIN_DELTA)}" else "") +
+                        "]"
+                )
+            }
             chosenRate = when {
                 input.snackTime && input.snackRuntimeMin in 0..30 && input.delta < 10 -> {
                     helpers.calculateRate(input.basalEstimate, input.profileCurrentBasal, 4.0, "SnackTime")

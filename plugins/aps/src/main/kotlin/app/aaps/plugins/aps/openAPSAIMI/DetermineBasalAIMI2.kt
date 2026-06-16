@@ -136,6 +136,7 @@ import app.aaps.plugins.aps.openAPSAIMI.control.StraightLineTubeAdvisor
 import app.aaps.plugins.aps.openAPSAIMI.compose.readAimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.safety.signalTrajectoryStack
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoThresholdMath
+import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinLoadGovernor
 import app.aaps.plugins.aps.openAPSAIMI.safety.MealSafetyContext
 import app.aaps.plugins.aps.openAPSAIMI.safety.PredictiveHypoEvaluator
 import app.aaps.plugins.aps.openAPSAIMI.safety.PredictiveHypoInput
@@ -9013,8 +9014,29 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Apply final Universal Adaptive Multiplier (only if > hypoGuard and not 0.0)
         if (rate > 0.0 && Math.abs(adaptiveMultiplier - 1.0) > 0.01) {
             val originalBeforeScaling = rate
-            rate = (rate * adaptiveMultiplier).coerceAtMost(if (bypassSafety) profile.max_basal else maxSafe)
-            rT.reason.append(" | 🧬AdaptiveBasal: ${"%.2f".format(adaptiveMultiplier)}x (${"%.2f".format(originalBeforeScaling)}->${"%.2f".format(rate)}U/h)")
+            // Shared IOB-budget brake on the single basal apply-point: the boost ABOVE 1.0x fades linearly
+            // as total IOB fills the physiological budget. Because every basal/TBR path routes through here,
+            // one brake damps every source (manual bolus + forced TBR + adaptive basal) against one budget.
+            // Strictly conservative: only applied to a boost (>1.0x), never raises it, never adds insulin
+            // (already inside rate>0 and downstream of the bgNow<=hypoGuard → 0.0 cut). Linear headroom is
+            // intentionally chosen over a softened pow() for a tighter brake on a stacking-prone profile.
+            val effectiveMultiplier =
+                if (adaptiveMultiplier > 1.0) {
+                    val budgetU = InsulinLoadGovernor.physiologicalBudgetU(
+                        tdd24hU = resolveTdd24hForExport() ?: 0.0,
+                        patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
+                    )
+                    val iobNow = iobNet
+                    val braked = InsulinLoadGovernor.iobBudgetBrakedMultiplier(adaptiveMultiplier, iobNow, budgetU)
+                    rT.reason.append(
+                        " | 🧬AdaptiveBasal IOB-budget ${"%.1f".format(iobNow)}/${"%.1f".format(budgetU)}U: ${"%.2f".format(adaptiveMultiplier)}x→${"%.2f".format(braked)}x"
+                    )
+                    braked
+                } else {
+                    adaptiveMultiplier
+                }
+            rate = (rate * effectiveMultiplier).coerceAtMost(if (bypassSafety) profile.max_basal else maxSafe)
+            rT.reason.append(" | 🧬AdaptiveBasal: ${"%.2f".format(effectiveMultiplier)}x (${"%.2f".format(originalBeforeScaling)}->${"%.2f".format(rate)}U/h)")
         }
 
         // 6) Ajustements cycle féminin (conserve un cap)
