@@ -221,7 +221,7 @@ private fun buildAutonomyFamily(preferences: Preferences): AimiBehaviorFamilySna
     val autoDriveActive = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
     val authoritative = autoDriveActive && preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative)
     val recursiveShadow = autoDriveActive && preferences.get(BooleanKey.OApsAIMIRecursiveBeliefShadow)
-    val recursiveAuthority = recursiveShadow && preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority)
+    val recursiveAuthority = autoDriveActive && preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority)
 
     val levelLabelResId = when {
         !autoDrive && !autoDriveActive -> R.string.aimi_control_center_autonomy_observation

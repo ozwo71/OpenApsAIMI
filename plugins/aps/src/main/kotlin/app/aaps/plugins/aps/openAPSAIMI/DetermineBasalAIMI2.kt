@@ -3379,6 +3379,197 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
     }
 
+    private data class RbtLiveCommitResult(
+        val baselineHtr: HyperTrajectoryReleaseResult,
+        val effectiveHtr: HyperTrajectoryReleaseResult,
+        val rbtAuthority: Boolean,
+    )
+
+    /**
+     * Resolve RBT + physio gate + wiring each loop tick. When [applyV3SmbDelivery] is true (Autodrive V3 engage),
+     * merges resolver SMB demand with HTR and may call [finalizeAndCapSMB].
+     */
+    private fun commitRbtLiveTick(
+        ctx: AimiTickContext,
+        profile: OapsProfileAimi,
+        rT: RT,
+        combinedDelta: Float,
+        tdd24hU: Double,
+        v3SmbU: Double,
+        stepsLast15m: Int = 0,
+        heartRateBpm: Int = 0,
+        autodriveGateOpen: Boolean = false,
+        mpcFeedForwardRa: Double? = null,
+        cbfShieldDeltaU: Double? = null,
+        applyV3SmbDelivery: Boolean = false,
+        hypoThresholdMgdl: Double? = null,
+        v3CommandSafe: Boolean = false,
+        adCommandReason: String? = null,
+    ): RbtLiveCommitResult? {
+        val rbtPrefsEarly = RecursiveBeliefPreferences.from(preferences)
+        if (!RecursiveBeliefPreferences.isActive(rbtPrefsEarly)) return null
+        val htr = evaluateHyperTrajectoryRelease(
+            v3SmbU = v3SmbU,
+            rT = rT,
+            combinedDelta = combinedDelta,
+            tdd24hU = tdd24hU,
+            rbtLeafOnly = rbtPrefsEarly.authorityEnabled,
+        )
+        val rbtSnapshot = runRecursiveBeliefResolve(
+            v3SmbU = v3SmbU,
+            htr = htr,
+            rT = rT,
+            combinedDelta = combinedDelta,
+            tdd24hU = tdd24hU,
+            profile = profile,
+            autosens = ctx.autosensData,
+            glucoseStatus = ctx.glucoseStatus,
+            stepsLast15m = stepsLast15m,
+            heartRateBpm = heartRateBpm,
+            autodriveGateOpen = autodriveGateOpen,
+            mpcFeedForwardRa = mpcFeedForwardRa,
+            cbfShieldDeltaU = cbfShieldDeltaU,
+        )
+        lastRecursiveBeliefSnapshot = rbtSnapshot
+        rbtSnapshot?.let { snap ->
+            snap.loadGovernor?.let { lg ->
+                lastLoadGovernorMultiplierG = lg.multiplierG
+                if (lg.applied || lg.multiplierG < 0.99) {
+                    consoleLog.add("⚖️ ${lg.summary}${if (lg.applied) "" else " [pref-off]"}")
+                }
+            }
+            consoleLog.add(UnfoldExporter.formatLogLine(snap))
+        }
+        val chaosEval = rbtSnapshot?.let { snap ->
+            RbtChaosEvaluator.evaluate(
+                RbtChaosEvaluator.Input(
+                    snapshot = snap,
+                    trajectoryUncertain = trajectoryGuard.getLastAnalysis()?.classification == TrajectoryType.UNCERTAIN,
+                    patternCapFlapping = patternCapHold.holding,
+                ),
+            )
+        }
+        lastRbtChaosEvaluation = chaosEval
+        RbtEpisodeMemory.tick(
+            nowMs = dateUtil.now(),
+            postHypoReboundProb = lastPhysioLatentState?.postHypoReboundProb ?: 0.0,
+            chaosScore = chaosEval?.score ?: 0.0,
+            mealProb = lastPhysioLatentState?.mealProb ?: 0.0,
+        )
+        val activeEpisode = RbtEpisodeMemory.activeEpisode(dateUtil.now())
+        chaosEval?.takeIf { it.active || it.caution }?.let {
+            consoleLog.add("🌪️ RBT_CHAOS: ${it.summary()}")
+        }
+        activeEpisode?.let {
+            consoleLog.add(
+                "📖 RBT_EPISODE: ${it.kind.name} age=${"%.0f".format(it.ageMinutes(dateUtil.now()))}min " +
+                    "peak=${"%.2f".format(it.peakScore)} ticks=${it.tickCount}",
+            )
+        }
+        val rbtPrefs = RecursiveBeliefPreferences.from(preferences)
+        val authorityGate = RecursiveBeliefAuthorityGate.evaluate(
+            RecursiveBeliefAuthorityGate.Input(
+                authorityEnabled = rbtPrefs.authorityEnabled,
+                requestedAuthority = rbtSnapshot?.resolutions?.releaseAuthority ?: ReleaseAuthority.NONE,
+                predictionAvailable = lastPredictionAvailable,
+                phaseOutput = lastPhysiologicalPhaseOutput,
+                patternSnapshot = lastPhysiologicalPatternSnapshot,
+                latentState = lastPhysioLatentState,
+                hypothesisState = lastUamHypothesisState,
+                patientState = lastPatientState,
+                patientModeDecision = lastPatientModeDecision,
+                safetyRiskExport = lastSafetyRiskExport,
+                chaos = chaosEval,
+                episode = activeEpisode,
+            ),
+        )
+        lastRecursiveAuthorityGateDecision = authorityGate
+        lastRbtAppliedHints = RbtResolutionBridge.apply(
+            resolution = rbtSnapshot?.resolutions,
+            effectiveAuthority = authorityGate.effectiveAuthority,
+            chaos = chaosEval,
+            episode = activeEpisode,
+            defaultMealPriority = lastMealAbsorptionOutput?.mealDeliveryPriority == true,
+        )
+        consoleLog.add("🔌 RBT_WIRE: ${lastRbtAppliedHints?.summary ?: "inactive"}")
+        val physioCapU = lastPhysiologicalPhaseOutput?.policy
+            ?.takeIf { it.capsHtrRelease() }
+            ?.smbFloorCapU
+        val stackingCapU = lastInsulinStackingEvaluation?.takeIf {
+            it.kind == InsulinStackingStance.Kind.SURVEILLANCE_IOB
+        }?.smbAbsoluteCapU
+        val patternCapU = patternCapHold.resolve(
+            rawCapU = lastPhysiologicalPatternSnapshot?.smbCapU,
+            rising = delta > 0f,
+        )
+        if (patternCapHold.holding && patternCapU != null) {
+            consoleLog.add("🧷 Pattern cap hold: keeping ${"%.2f".format(patternCapU)}U during rise (pattern flapped)")
+        }
+        consoleLog.add("🪜 RBT_GATE: ${authorityGate.summary()}")
+        val rbtAuthority = authorityGate.effectiveAuthority != ReleaseAuthority.NONE
+        val effectiveHtr = if (rbtSnapshot != null &&
+            (rbtAuthority || physioCapU != null || stackingCapU != null || patternCapU != null)
+        ) {
+            val r = rbtSnapshot.resolutions
+            val rawLifted = if (rbtAuthority) {
+                val rbtLifted =
+                    htr.v3SmbBeforeU +
+                        (r.smbDemandU - htr.v3SmbBeforeU).coerceAtLeast(0.0) * authorityGate.liftBlend
+                max(htr.v3SmbBeforeU, rbtLifted)
+            } else {
+                htr.v3SmbBeforeU
+            }
+            var lifted = rawLifted
+            physioCapU?.let { lifted = min(lifted, it) }
+            stackingCapU?.let { lifted = min(lifted, it) }
+            patternCapU?.let { cap -> lifted = min(lifted, cap) }
+            htr.copy(
+                active = lifted > htr.v3SmbBeforeU + 0.02,
+                smbFloorU = if (rbtAuthority) min(r.smbDemandU, lifted) else min(htr.smbFloorU, lifted),
+                v3SmbAfterU = lifted,
+                suppressTrajBasalShift = r.suppressTrajBasalShift || htr.suppressTrajBasalShift,
+                hypoMinPredIgnored = lastRbtAppliedHints?.ignoreMinPredictedCurve ?: r.hypoMinPredIgnored,
+                reason = htr.reason + " | RBT[${authorityGate.effectiveAuthority}] ${r.reasonCodes.joinToString(",")} gate=${authorityGate.reasonCodes.joinToString("+")}",
+            )
+        } else {
+            htr
+        }
+        lastHyperTrajectoryRelease = effectiveHtr
+        if (applyV3SmbDelivery) {
+            val liftedV3Smb = effectiveHtr.v3SmbAfterU
+            val hypoThreshold = hypoThresholdMgdl ?: profile.lgsThreshold?.toDouble() ?: 70.0
+            if (liftedV3Smb > 0.0) {
+                val v3Reason = if (v3CommandSafe) adCommandReason ?: "Autodrive V3" else "V3 unsafe"
+                val htrReason = if (effectiveHtr.active) {
+                    "Autodrive V3+HTR: $v3Reason | 🚀 ${effectiveHtr.reason}"
+                } else {
+                    "Autodrive V3: $v3Reason"
+                }
+                finalizeAndCapSMB(
+                    rT = rT,
+                    proposedUnits = liftedV3Smb,
+                    reasonHeader = htrReason,
+                    mealData = ctx.mealData,
+                    hypoThreshold = hypoThreshold,
+                    isExplicitUserAction = false,
+                    decisionSource = if (effectiveHtr.active) {
+                        if (rbtAuthority) "AutodriveV3+RBT" else "AutodriveV3+HTR"
+                    } else {
+                        "AutodriveV3"
+                    },
+                    hyperReleaseFloorU = if (effectiveHtr.active) effectiveHtr.smbFloorU else 0.0,
+                )
+            } else if (effectiveHtr.active) {
+                consoleLog.add("🚀 HTR active but lifted SMB=0 (IOB/headroom); floor=${"%.2f".format(effectiveHtr.smbFloorU)}U")
+            }
+        }
+        return RbtLiveCommitResult(
+            baselineHtr = htr,
+            effectiveHtr = effectiveHtr,
+            rbtAuthority = rbtAuthority,
+        )
+    }
+
     private fun evaluateHyperTrajectoryRelease(
         v3SmbU: Double,
         rT: RT,
@@ -3691,172 +3882,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
 
             val v3Smb = if (v3CommandSafe) adCommand!!.scheduledMicroBolus ?: 0.0 else 0.0
-            val rbtPrefsEarly = RecursiveBeliefPreferences.from(preferences)
-            val htr = evaluateHyperTrajectoryRelease(
-                v3SmbU = v3Smb,
-                rT = rT,
-                combinedDelta = combinedDelta,
-                tdd24hU = tdd24hForHtr,
-                rbtLeafOnly = rbtPrefsEarly.authorityEnabled,
-            )
             val cbfShieldDeltaU = adCommand?.scheduledMicroBolus?.takeIf { !v3CommandSafe && it > 0.01 }
-            val rbtSnapshot = runRecursiveBeliefResolve(
-                v3SmbU = v3Smb,
-                htr = htr,
+            val rbtCommit = commitRbtLiveTick(
+                ctx = ctx,
+                profile = profile,
                 rT = rT,
                 combinedDelta = combinedDelta,
                 tdd24hU = tdd24hForHtr,
-                profile = profile,
-                autosens = ctx.autosensData,
-                glucoseStatus = ctx.glucoseStatus,
+                v3SmbU = v3Smb,
                 stepsLast15m = snapshot.stepsLast15m,
                 heartRateBpm = snapshot.hrNow,
                 autodriveGateOpen = v3CommandSafe,
                 mpcFeedForwardRa = estimatedRaForMpc,
                 cbfShieldDeltaU = cbfShieldDeltaU,
+                applyV3SmbDelivery = true,
+                hypoThresholdMgdl = hypoThresholdMgdl,
+                v3CommandSafe = v3CommandSafe,
+                adCommandReason = adCommand?.reason,
             )
-            lastRecursiveBeliefSnapshot = rbtSnapshot
-            rbtSnapshot?.let { snap ->
-                snap.loadGovernor?.let { lg ->
-                    lastLoadGovernorMultiplierG = lg.multiplierG
-                    if (lg.applied || lg.multiplierG < 0.99) {
-                        consoleLog.add("⚖️ ${lg.summary}${if (lg.applied) "" else " [shadow]"}")
-                    }
-                }
-                consoleLog.add(UnfoldExporter.formatLogLine(snap))
-            }
-            val rbtPrefs = RecursiveBeliefPreferences.from(preferences)
-            val chaosEval = rbtSnapshot?.let { snap ->
-                RbtChaosEvaluator.evaluate(
-                    RbtChaosEvaluator.Input(
-                        snapshot = snap,
-                        trajectoryUncertain = trajectoryGuard.getLastAnalysis()?.classification == TrajectoryType.UNCERTAIN,
-                        patternCapFlapping = patternCapHold.holding,
-                    ),
-                )
-            }
-            lastRbtChaosEvaluation = chaosEval
-            RbtEpisodeMemory.tick(
-                nowMs = dateUtil.now(),
-                postHypoReboundProb = lastPhysioLatentState?.postHypoReboundProb ?: 0.0,
-                chaosScore = chaosEval?.score ?: 0.0,
-                mealProb = lastPhysioLatentState?.mealProb ?: 0.0,
-            )
-            val activeEpisode = RbtEpisodeMemory.activeEpisode(dateUtil.now())
-            chaosEval?.takeIf { it.active || it.caution }?.let {
-                consoleLog.add("🌪️ RBT_CHAOS: ${it.summary()}")
-            }
-            activeEpisode?.let {
-                consoleLog.add(
-                    "📖 RBT_EPISODE: ${it.kind.name} age=${"%.0f".format(it.ageMinutes(dateUtil.now()))}min " +
-                        "peak=${"%.2f".format(it.peakScore)} ticks=${it.tickCount}",
-                )
-            }
-            val authorityGate = RecursiveBeliefAuthorityGate.evaluate(
-                RecursiveBeliefAuthorityGate.Input(
-                    authorityEnabled = rbtPrefs.authorityEnabled,
-                    requestedAuthority = rbtSnapshot?.resolutions?.releaseAuthority ?: ReleaseAuthority.NONE,
-                    predictionAvailable = lastPredictionAvailable,
-                    phaseOutput = lastPhysiologicalPhaseOutput,
-                    patternSnapshot = lastPhysiologicalPatternSnapshot,
-                    latentState = lastPhysioLatentState,
-                    hypothesisState = lastUamHypothesisState,
-                    patientState = lastPatientState,
-                    patientModeDecision = lastPatientModeDecision,
-                    safetyRiskExport = lastSafetyRiskExport,
-                    chaos = chaosEval,
-                    episode = activeEpisode,
-                ),
-            )
-            lastRecursiveAuthorityGateDecision = authorityGate
-            lastRbtAppliedHints = RbtResolutionBridge.apply(
-                resolution = rbtSnapshot?.resolutions,
-                effectiveAuthority = authorityGate.effectiveAuthority,
-                chaos = chaosEval,
-                episode = activeEpisode,
-                defaultMealPriority = lastMealAbsorptionOutput?.mealDeliveryPriority == true,
-            )
-            consoleLog.add("🔌 RBT_WIRE: ${lastRbtAppliedHints?.summary ?: "inactive"}")
-            val physioCapU = lastPhysiologicalPhaseOutput?.policy
-                ?.takeIf { it.capsHtrRelease() }
-                ?.smbFloorCapU
-            val stackingCapU = lastInsulinStackingEvaluation?.takeIf {
-                it.kind == InsulinStackingStance.Kind.SURVEILLANCE_IOB
-            }?.smbAbsoluteCapU
-            // Hysteresis: keep the last pattern cap alive a few ticks while BG is still rising so
-            // pattern flapping (e.g. SEDENTARY_DAY) cannot silently drop cap coverage mid rise.
-            val patternCapU = patternCapHold.resolve(
-                rawCapU = lastPhysiologicalPatternSnapshot?.smbCapU,
-                rising = delta > 0f,
-            )
-            if (patternCapHold.holding && patternCapU != null) {
-                consoleLog.add("🧷 Pattern cap hold: keeping ${"%.2f".format(patternCapU)}U during rise (pattern flapped)")
-            }
-            consoleLog.add("🪜 RBT_GATE: ${authorityGate.summary()}")
-            val rbtAuthority = authorityGate.effectiveAuthority != ReleaseAuthority.NONE
-            val effectiveHtr = if (rbtSnapshot != null &&
-                (rbtAuthority || physioCapU != null || stackingCapU != null || patternCapU != null)
-            ) {
-                val r = rbtSnapshot.resolutions
-                val rawLifted = if (rbtAuthority) {
-                    val rbtLifted =
-                        htr.v3SmbBeforeU +
-                            (r.smbDemandU - htr.v3SmbBeforeU).coerceAtLeast(0.0) * authorityGate.liftBlend
-                    max(htr.v3SmbBeforeU, rbtLifted)
-                } else {
-                    htr.v3SmbBeforeU
-                }
-                var lifted = rawLifted
-                physioCapU?.let { lifted = min(lifted, it) }
-                stackingCapU?.let { lifted = min(lifted, it) }
-                patternCapU?.let { cap ->
-                    val applyRestrictiveCap = rbtAuthority ||
-                        cap > PhysiologicalPatternPolicy.RESTRICTIVE_SMB_CAP_SHADOW_THRESHOLD_U
-                    if (applyRestrictiveCap) {
-                        lifted = min(lifted, cap)
-                    } else {
-                        consoleLog.add(
-                            "🪜 Pattern cap ${"%.2f".format(cap)}U shadow (no RBT authority)",
-                        )
-                    }
-                }
-                htr.copy(
-                    active = lifted > htr.v3SmbBeforeU + 0.02,
-                    smbFloorU = if (rbtAuthority) min(r.smbDemandU, lifted) else min(htr.smbFloorU, lifted),
-                    v3SmbAfterU = lifted,
-                    suppressTrajBasalShift = r.suppressTrajBasalShift || htr.suppressTrajBasalShift,
-                    hypoMinPredIgnored = lastRbtAppliedHints?.ignoreMinPredictedCurve ?: r.hypoMinPredIgnored,
-                    reason = htr.reason + " | RBT[${authorityGate.effectiveAuthority}] ${r.reasonCodes.joinToString(",")} gate=${authorityGate.reasonCodes.joinToString("+")}",
-                )
-            } else {
-                htr
-            }
-            lastHyperTrajectoryRelease = effectiveHtr
-            val liftedV3Smb = effectiveHtr.v3SmbAfterU
-            if (liftedV3Smb > 0.0) {
-                val v3Reason = if (v3CommandSafe) adCommand!!.reason else "V3 unsafe"
-                val htrReason = if (effectiveHtr.active) {
-                    "Autodrive V3+HTR: $v3Reason | 🚀 ${effectiveHtr.reason}"
-                } else {
-                    "Autodrive V3: $v3Reason"
-                }
-                finalizeAndCapSMB(
-                    rT = rT,
-                    proposedUnits = liftedV3Smb,
-                    reasonHeader = htrReason,
-                    mealData = ctx.mealData,
-                    hypoThreshold = hypoThresholdMgdl,
-                    isExplicitUserAction = false,
-                    decisionSource = if (effectiveHtr.active) {
-                        if (rbtAuthority) "AutodriveV3+RBT" else "AutodriveV3+HTR"
-                    } else {
-                        "AutodriveV3"
-                    },
-                    hyperReleaseFloorU = if (effectiveHtr.active) effectiveHtr.smbFloorU else 0.0,
-                )
-            } else if (effectiveHtr.active) {
-                consoleLog.add("🚀 HTR active but lifted SMB=0 (IOB/headroom); floor=${"%.2f".format(effectiveHtr.smbFloorU)}U")
-            }
+            val effectiveHtr = rbtCommit?.effectiveHtr
 
             val effectiveBolus = rT.insulinReq ?: 0.0
             val effectiveTbr = rT.rate ?: profile.current_basal
@@ -3866,12 +3910,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val v3TbrRate = adCommand!!.temporaryBasalRate
                 consoleLog.add("🚀 ${gate.reason} intent=$v3Smb actual=$effectiveBolus tbr=$v3TbrRate")
                 logDecisionFinal("AUTODRIVE_V3", rT, bg, delta)
-            } else if (htr.active && effectiveBolus > 0.01) {
+            } else if (effectiveHtr?.active == true && effectiveBolus > 0.01) {
                 v3AppliedAction = true
                 consoleLog.add("🚀 HTR-only SMB after unsafe V3: actual=$effectiveBolus U")
                 logDecisionFinal("AUTODRIVE_V3+HTR", rT, bg, delta)
             }
-            if ((v3AppliedAction || (htr.active && effectiveBolus > 0.01)) &&
+            if ((v3AppliedAction || (effectiveHtr?.active == true && effectiveBolus > 0.01)) &&
                 preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative)
             ) {
                 skipLegacySmbBlender = true
@@ -6134,6 +6178,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val nextBolusSeconds = round((smbInterval - lastBolusAge) * 60, 0) % 60
             if (lastBolusAge > smbInterval) {
                 if (microBolus > 0) {
+                    val htrFloorU = lastHyperTrajectoryRelease
+                        ?.takeIf { it.active }
+                        ?.smbFloorU
+                        ?: 0.0
                     finalizeAndCapSMB(
                         rT = rT,
                         proposedUnits = microBolus,
@@ -6142,7 +6190,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         hypoThreshold = hypoThresholdMgdl,
                         isExplicitUserAction = false,
                         decisionSource = "GlobalAIMI",
-                        isMealActive = isMealActive
+                        isMealActive = isMealActive,
+                        hyperReleaseFloorU = htrFloorU,
                     )
                 }
             } else {
@@ -12932,6 +12981,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             shortAvgDelta = shortAvgDelta,
             combinedDelta = combinedDelta,
             cob = cob.toDouble(),
+        )
+
+        val tdd24hForRbt = resolveTdd24hForExport()
+            ?: tdd24Hrs.takeIf { it > 0f }?.toDouble()
+            ?: (profile.max_daily_basal * 24.0).coerceAtLeast(1.0)
+        commitRbtLiveTick(
+            ctx = ctx,
+            profile = profile,
+            rT = rT,
+            combinedDelta = combinedDelta,
+            tdd24hU = tdd24hForRbt,
+            v3SmbU = 0.0,
+            stepsLast15m = wearableSnapshot.stepsLast15m,
+            heartRateBpm = wearableSnapshot.hrNow,
         )
 
         // Autodrive V3 — see [runAutodriveV3MultiVariableBranch]

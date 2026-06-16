@@ -65,6 +65,8 @@ class AimiControlCenterSupportTest {
 
     @Test
     fun `controlled autonomy apply writes expected legacy booleans`() {
+        every { preferences.get(BooleanKey.OApsAIMIautoDrive) } returns false
+        every { preferences.get(BooleanKey.OApsAIMIautoDriveActive) } returns false
         every { preferences.get(BooleanKey.OApsAIMIRecursiveBeliefShadow) } returns false
         every { preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority) } returns false
         every { preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative) } returns false

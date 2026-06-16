@@ -121,7 +121,7 @@ private fun readAutonomyMode(preferences: Preferences): AimiAutonomyMode {
     val autoDriveActive = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
     val authoritative = autoDriveActive && preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative)
     val recursiveShadow = autoDriveActive && preferences.get(BooleanKey.OApsAIMIRecursiveBeliefShadow)
-    val recursiveAuthority = recursiveShadow && preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority)
+    val recursiveAuthority = autoDriveActive && preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority)
     return when {
         !autoDrive && !autoDriveActive -> AimiAutonomyMode.Observation
         autoDrive && !autoDriveActive -> AimiAutonomyMode.Recommendations

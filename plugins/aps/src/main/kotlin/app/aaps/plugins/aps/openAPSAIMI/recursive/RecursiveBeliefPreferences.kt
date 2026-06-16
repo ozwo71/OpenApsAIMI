@@ -16,8 +16,11 @@ data class RecursiveBeliefPreferences(
                 waveletEnabled = preferences.get(BooleanKey.OApsAIMIRecursiveBeliefWavelet),
             )
 
-        /** Active when shadow or authority is on — build + export at minimum. */
+        /** Active when shadow (JSONL + SHADOW leaves) or live authority is on. */
         fun isActive(prefs: RecursiveBeliefPreferences): Boolean =
             prefs.shadowEnabled || prefs.authorityEnabled
+
+        /** JSONL unfold + SHADOW_* belief leaves (a posteriori analysis). */
+        fun exportEnabled(prefs: RecursiveBeliefPreferences): Boolean = prefs.shadowEnabled
     }
 }

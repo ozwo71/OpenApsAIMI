@@ -352,8 +352,8 @@ internal object ReplayQualityExportBuilder {
     ): String {
         return when {
             authorityApplied -> "AUTHORITY_$authorityEffective"
-            authorityRequested != ReleaseAuthority.NONE.name && rbtPreferences.authorityEnabled -> "SHADOW_GATED"
-            rbtPreferences.shadowEnabled && !rbtPreferences.authorityEnabled -> "SHADOW"
+            authorityRequested != ReleaseAuthority.NONE.name && rbtPreferences.authorityEnabled -> "GATE_BLOCKED"
+            rbtPreferences.shadowEnabled && !rbtPreferences.authorityEnabled -> "EXPORT_ONLY"
             rbtPreferences.authorityEnabled -> "AUTHORITY_PREF_ON"
             RecursiveBeliefPreferences.isActive(rbtPreferences) -> "BUILD_ONLY"
             else -> "OFF"

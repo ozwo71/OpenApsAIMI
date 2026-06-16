@@ -211,10 +211,10 @@ enum class BooleanKey(
     OApsAIMInight("OApsAIMI_Enable_night",false),
     OApsAIMIhoneymoon("key_use_Aimi_honeymoon",false),
     OApsxdriponeminute(key = "key_use_Aimi_xdripOM",defaultValue = false),
-    OApsAIMIautoDrive(key = "key_use_Aimi_autoDrive",defaultValue = false),
+    OApsAIMIautoDrive(key = "key_use_Aimi_autoDrive",defaultValue = true),
     OApsAIMIT3cAdaptiveBasalEnabled("key_use_aimi_t3c_adaptive_basal", false),
     OApsAIMIAutodriveV3EnhancedGater("key_use_aimi_autodrive_v3_enhanced_gater", false),
-    OApsAIMIautoDriveActive(key = "key_use_aimi_autodrive_active", defaultValue = false),
+    OApsAIMIautoDriveActive(key = "key_use_aimi_autodrive_active", defaultValue = true),
     /**
      * When Autodrive V3 applies a safe command, skip the legacy MPC/PI blender so V3 safety
      * (night cap, post-hypo, weight-aware limits) is not overwritten.
@@ -283,21 +283,22 @@ enum class BooleanKey(
         dependency = OApsAIMIautoDriveActive,
     ),
     /**
-     * When on (and shadow or this pref active), RBT [DoseChannelResolution] drives SMB floor / Traj-Bridge suppression.
+     * When on (requires autodrive active), RBT [DoseChannelResolution] drives SMB floor / Traj-Bridge suppression live.
+     * Independent of [OApsAIMIRecursiveBeliefShadow] (JSONL export + SHADOW_* leaves only).
      */
     OApsAIMIRecursiveBeliefAuthority(
         key = "key_aimi_recursive_belief_authority",
         defaultValue = true,
         titleResId = R.string.pref_title_aimi_recursive_belief_authority,
         summaryResId = R.string.pref_summary_aimi_recursive_belief_authority,
-        dependency = OApsAIMIRecursiveBeliefShadow,
+        dependency = OApsAIMIautoDriveActive,
     ),
     OApsAIMIRecursiveBeliefWavelet(
         key = "key_aimi_recursive_belief_wavelet",
         defaultValue = false,
         titleResId = R.string.pref_title_aimi_recursive_belief_wavelet,
         summaryResId = R.string.pref_summary_aimi_recursive_belief_wavelet,
-        dependency = OApsAIMIRecursiveBeliefShadow,
+        dependency = OApsAIMIautoDriveActive,
     ),
     /**
      * Trajectory-informed bounded tweak to DynISF (AutoISF-style CGM geometry). Requires dynamic sensitivity.

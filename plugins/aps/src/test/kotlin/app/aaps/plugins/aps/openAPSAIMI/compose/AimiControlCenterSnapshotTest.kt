@@ -31,13 +31,13 @@ class AimiControlCenterSnapshotTest {
     }
 
     @Test
-    fun `default snapshot keeps autonomy in observation and physio in moderate mode`() {
+    fun `default snapshot keeps autonomy in controlled authority with rbt live defaults`() {
         val snapshot = buildAimiControlCenterSnapshot(preferences)
 
         val autonomy = snapshot.families.first { it.id == AimiBehaviorFamilyId.Autonomy }
         val physio = snapshot.families.first { it.id == AimiBehaviorFamilyId.Physio }
 
-        assertThat(autonomy.levelLabelResId).isEqualTo(R.string.aimi_control_center_autonomy_observation)
+        assertThat(autonomy.levelLabelResId).isEqualTo(R.string.aimi_control_center_autonomy_controlled)
         assertThat(autonomy.status).isEqualTo(AimiProjectionStatus.CoherentProfile)
         assertThat(physio.levelLabelResId).isEqualTo(R.string.aimi_control_center_physio_level_moderate)
         assertThat(snapshot.contextSection.details).hasSize(9)

@@ -353,11 +353,6 @@ object RecursiveBeliefResolver {
             else -> MealChannelHint.NORMAL
         }
 
-        if (!input.authorityEnabled) {
-            releaseAuthority = ReleaseAuthority.NONE
-            reasonCodes += "SHADOW"
-        }
-
         if (ctx.isNight || ctx.exerciseLockout) {
             releaseAuthority = ReleaseAuthority.NONE
             smbDemandU = v3

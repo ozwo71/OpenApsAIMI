@@ -182,7 +182,7 @@ class ReplayQualityExportBuilderTest {
         assertThat(export.causalLearningQuality).isWithin(1e-9).of(0.44)
         assertThat(export.postHypoGuardState).isEqualTo("CORRECTION_REBOUND_GUARD")
         assertThat(export.predictiveHypoSuppressed).isTrue()
-        assertThat(export.rbtMode).isEqualTo("SHADOW_GATED")
+        assertThat(export.rbtMode).isEqualTo("GATE_BLOCKED")
         assertThat(export.authorityRequested).isEqualTo("HARD")
         assertThat(export.authorityEffective).isEqualTo("NONE")
         assertThat(export.qualityTags).contains("meal_interpretation_suppressed")
