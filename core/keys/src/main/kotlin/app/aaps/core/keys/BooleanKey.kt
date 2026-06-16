@@ -354,6 +354,29 @@ enum class BooleanKey(
         R.string.pref_title_aimi_advisor_llm_rich_oref,
         R.string.pref_summary_aimi_advisor_llm_rich_oref,
     ),
+    /** Transient Preference Overlay — temporary protection prefs (2 h). */
+    OApsAIMITpoEnabled(
+        "key_aimi_tpo_enabled",
+        true,
+        R.string.pref_title_aimi_tpo_enabled,
+        R.string.pref_summary_aimi_tpo_enabled,
+    ),
+    /** Require LLM confirmation before TPO apply (when API key available). */
+    OApsAIMITpoLlmConfirmEnabled(
+        "key_aimi_tpo_llm_confirm_enabled",
+        true,
+        R.string.pref_title_aimi_tpo_llm_confirm_enabled,
+        R.string.pref_summary_aimi_tpo_llm_confirm_enabled,
+        dependency = OApsAIMITpoEnabled,
+    ),
+    /** Show notification when a TPO session starts (reserved for notification UX). */
+    OApsAIMITpoNotifyOnApply(
+        "key_aimi_tpo_notify_on_apply",
+        true,
+        R.string.pref_title_aimi_tpo_notify_on_apply,
+        R.string.pref_summary_aimi_tpo_notify_on_apply,
+        dependency = OApsAIMITpoEnabled,
+    ),
 }
 
 

@@ -164,6 +164,7 @@ import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientEventMemory
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientRefreshSource
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateEngine
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateLoopCache
@@ -886,6 +887,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR  // 🏥 Physiological Modulation
     @Inject lateinit var straightLineTubeAdvisor: StraightLineTubeAdvisor  // 📐 MPC-lite hypo tube + SMB-cap smoothing
     @Inject lateinit var continuousStateEstimator: app.aaps.plugins.aps.openAPSAIMI.autodrive.estimator.ContinuousStateEstimator
+    @Inject lateinit var tpoOrchestrator: TpoOrchestrator
     
     // 🌸 Endometriosis Adjuster (Lazy init manually since not in graph yet or use manual passing)
     private val endoAdjuster by lazy { app.aaps.plugins.aps.openAPSAIMI.wcycle.EndometriosisAdjuster(preferences, aapsLogger) }
@@ -1489,6 +1491,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ): AimiRealtimePhysioIobBootstrap {
         val rtActivity = physioAdapter.getRealTimeActivity()
         consoleLog.add("PHYSIO_RT Steps=${rtActivity.stepsToday} HR=${rtActivity.heartRate}bpm")
+        if (::tpoOrchestrator.isInitialized) {
+            tpoOrchestrator.onTickStart(dateUtil.now())
+        }
         this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
         this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB).coerceAtLeast(this.maxSMB)
         val physioSnapshot = physioAdapter.getLatestSnapshot()
@@ -2740,6 +2745,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             healthSnapshot = snapshot,
             sourceSensor = sourceSensor,
         )
+        if (::tpoOrchestrator.isInitialized) {
+            val patientState = lastPatientState
+            val patientModeDecision = lastPatientModeDecision
+            if (patientState != null && patientModeDecision != null) {
+                tpoOrchestrator.onPatientStateReady(
+                    patientState = patientState,
+                    patientModeName = patientModeDecision.mode.name,
+                    patientModeConfidence = patientModeDecision.confidence,
+                    correctionAggressionDecision = correctionAggressionDecision,
+                    bgMgdl = bg,
+                    deltaMgdl5m = delta.toDouble(),
+                    cobGrams = cob.toDouble(),
+                    minBgLookback75m = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
+                    nowMs = dateUtil.now(),
+                )
+                if (tpoOrchestrator.consumePrefsChangedThisTick()) {
+                    maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
+                    maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB).coerceAtLeast(maxSMB)
+                }
+            }
+        }
         return latentState
     }
 

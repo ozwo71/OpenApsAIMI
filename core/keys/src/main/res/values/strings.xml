@@ -530,6 +530,12 @@
     <string name="pref_summary_aimi_advisor_personal_oref_ml">When you open Advisor, trains small models from recent loop+CGM features. Informational only; does not change insulin delivery.</string>
     <string name="pref_title_aimi_advisor_llm_rich_oref">AI Coach: include structured OREF insights</string>
     <string name="pref_summary_aimi_advisor_llm_rich_oref">Adds a plain-language facts block for the coach LLM. Turn off for a shorter cloud prompt.</string>
+    <string name="pref_title_aimi_tpo_enabled">Transient preference overlay (TPO)</string>
+    <string name="pref_summary_aimi_tpo_enabled">Temporarily lowers correction aggression for 2 h after post-hypo, poor sleep, or hyper→hypo exhaustion. Requires Control Center autonomy ≥ Assisted application. Reverts automatically.</string>
+    <string name="pref_title_aimi_tpo_llm_confirm_enabled">TPO: require LLM confirmation</string>
+    <string name="pref_summary_aimi_tpo_llm_confirm_enabled">When on, AIMI applies a TPO session only if the advisor LLM confirms the clinical context (uses the same API keys as AI Coach). When off, algorithm triggers apply directly.</string>
+    <string name="pref_title_aimi_tpo_notify_on_apply">TPO: notify on session start</string>
+    <string name="pref_summary_aimi_tpo_notify_on_apply">Shows a system notification when a 2 h protection session starts or ends. Tap to open OpenAPS AIMI preferences.</string>
     <string name="pref_title_aimi_straight_line_tube">Straight-line tube advisor (SMB caps)</string>
     <string name="pref_summary_aimi_straight_line_tube">Discrete short-horizon control on max SMB: keeps predicted minimum BG above a floor using the PKPD min curve, favors larger caps when eventual BG is high, penalizes zig-zag SMB sizing. Does not replace PKPD or safety nets. Off by default.</string>
     <string name="pref_title_aimi_dyn_isf_trajectory_tuning">DynISF: trajectory tuning (CGM geometry)</string>

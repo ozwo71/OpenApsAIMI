@@ -31,6 +31,9 @@ class AdvisorHistoryRepository(context: Context) {
         PROFILE_CHANGE,
         /** Multi-key tuning context bundle from Advisor. */
         TUNING_BUNDLE,
+        TPO_SESSION_START,
+        TPO_SESSION_REVERT,
+        TPO_LLM_VETO,
     }
 
     /**

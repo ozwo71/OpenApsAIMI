@@ -123,6 +123,7 @@ import kotlin.math.exp
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorService
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiControlCenterScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiPkpdSettingsScreen
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
 import kotlinx.coroutines.withContext
 import app.aaps.plugins.aps.openAPSAIMI.learning.AimiMlTrainingScheduler
@@ -174,6 +175,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val trajectoryHistoryProvider: TrajectoryHistoryProvider,
     private val trajectoryGuard: TrajectoryGuard,
     private val dynIsfTrajectoryTuning: DynIsfTrajectoryTuning,
+    private val tpoOrchestrator: TpoOrchestrator,
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.APS)
@@ -1499,11 +1501,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // Single string pref: inline avoids an extra nested sub-screen + full-screen drill-down
         // (same UX as other lone keys, e.g. pregnancy date).
         add(AimiStringKey.RemoteControlPin)
+        add(aimiComposeTpoSubScreen())
         add(
             ApsIntentKey.AimiControlCenter.withCompose(
                 ComposeScreenContent { onBack ->
                     AimiControlCenterScreen(
                         preferences = preferences,
+                        tpoOrchestrator = tpoOrchestrator,
                         onBack = onBack,
                     )
                 },
@@ -1588,6 +1592,17 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     },
                 )
             }
+        )
+
+    private fun aimiComposeTpoSubScreen(): PreferenceSubScreenDef =
+        PreferenceSubScreenDef(
+            key = "aimi_compose_tpo",
+            titleResId = R.string.aimi_tpo_prefs_subscreen_title,
+            items = listOf(
+                BooleanKey.OApsAIMITpoEnabled,
+                BooleanKey.OApsAIMITpoLlmConfirmEnabled,
+                BooleanKey.OApsAIMITpoNotifyOnApply,
+            ),
         )
 
     private fun aimiComposePkpdGuidedSubScreen(): PreferenceSubScreenDef =

@@ -161,4 +161,52 @@ class AimiControlCenterSupportTest {
 
         verify { preferences.put(DoubleKey.OApsAIMIMaxSMB, 1.8) }
     }
+
+    @Test
+    fun `protection increase never lowers expert high bg max smb above ladder ceiling`() {
+        every { preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB) } returns 4.0
+        every { preferences.get(DoubleKey.OApsAIMIMaxSMB) } returns 2.20
+        every { preferences.get(DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor) } returns 0.93
+
+        val currentDraft = AimiControlCenterDraft(
+            protectionLevel = 3,
+            mealCaptureLevel = 2,
+            stabilityLevel = 2,
+            physioLevel = 1,
+            autonomyMode = AimiAutonomyMode.Observation,
+        )
+        val pending = buildAimiControlCenterPendingChanges(
+            preferences = preferences,
+            currentDraft = currentDraft,
+            targetDraft = currentDraft.copy(protectionLevel = 4),
+        )
+
+        applyAimiControlCenterPendingChanges(preferences, pending)
+
+        verify { preferences.put(DoubleKey.OApsAIMIHighBGMaxSMB, 4.8) }
+        verify { preferences.put(DoubleKey.OApsAIMIMaxSMB, 2.40) }
+        verify { preferences.put(DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 1.0) }
+    }
+
+    @Test
+    fun `protection decrease never raises expert pkpd relief below ladder floor`() {
+        every { preferences.get(DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor) } returns 0.55
+
+        val currentDraft = AimiControlCenterDraft(
+            protectionLevel = 3,
+            mealCaptureLevel = 2,
+            stabilityLevel = 2,
+            physioLevel = 1,
+            autonomyMode = AimiAutonomyMode.Observation,
+        )
+        val pending = buildAimiControlCenterPendingChanges(
+            preferences = preferences,
+            currentDraft = currentDraft,
+            targetDraft = currentDraft.copy(protectionLevel = 2),
+        )
+
+        applyAimiControlCenterPendingChanges(preferences, pending)
+
+        verify { preferences.put(DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.50) }
+    }
 }

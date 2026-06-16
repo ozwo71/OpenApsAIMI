@@ -45,12 +45,17 @@ import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.core.ui.compose.SliderWithButtons
 import app.aaps.core.ui.compose.preference.ProvidePreferenceTheme
 import app.aaps.plugins.aps.R
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoActiveSessionUi
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoOrchestrator
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoSessionStatus
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoUiSupport
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 @Composable
 fun AimiControlCenterScreen(
     preferences: Preferences,
+    tpoOrchestrator: TpoOrchestrator,
     onBack: () -> Unit,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -64,6 +69,8 @@ fun AimiControlCenterScreen(
     var physioLevel by remember(preferenceRevision) { mutableIntStateOf(currentDraft.physioLevel) }
     var autonomyMode by remember(preferenceRevision) { mutableStateOf(currentDraft.autonomyMode) }
     var showApplyConfirm by remember { mutableStateOf(false) }
+    var showTpoRevertConfirm by remember { mutableStateOf(false) }
+    var tpoUiRevision by remember { mutableIntStateOf(0) }
 
     val targetDraft = AimiControlCenterDraft(
         protectionLevel = protectionLevel,
@@ -101,6 +108,13 @@ fun AimiControlCenterScreen(
     }
     val appliedMessage = stringResource(R.string.aimi_control_center_apply_done)
     val recommendationLoadedMessage = stringResource(R.string.aimi_control_center_advisor_loaded)
+    val tpoRevertDoneMessage = stringResource(R.string.aimi_tpo_revert_done)
+    val tpoActiveSessionUi = remember(tpoUiRevision) {
+        TpoUiSupport.buildActiveSessionUi(
+            session = tpoOrchestrator.currentSession(),
+            nowMs = System.currentTimeMillis(),
+        )
+    }
 
     fun resetDraft() {
         protectionLevel = currentDraft.protectionLevel
@@ -155,6 +169,33 @@ fun AimiControlCenterScreen(
         )
     }
 
+    if (showTpoRevertConfirm) {
+        AlertDialog(
+            onDismissRequest = { showTpoRevertConfirm = false },
+            title = { Text(stringResource(R.string.aimi_tpo_revert_confirm_title)) },
+            text = { Text(stringResource(R.string.aimi_tpo_revert_confirm_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showTpoRevertConfirm = false
+                        if (tpoOrchestrator.revertNow()) {
+                            tpoUiRevision++
+                            preferenceRevision++
+                            scope.launch { snackbarHostState.showSnackbar(tpoRevertDoneMessage) }
+                        }
+                    },
+                ) {
+                    Text(stringResource(R.string.aimi_tpo_revert_now))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTpoRevertConfirm = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
+    }
+
     ProvidePreferenceTheme {
         CompositionLocalProvider(LocalPreferences provides preferences) {
             Scaffold(
@@ -187,6 +228,13 @@ fun AimiControlCenterScreen(
                         managedSettingCount = AimiBehaviorFamilyRegistry.totalManagedCount(),
                         expertSettingCount = AimiBehaviorFamilyRegistry.totalExpertCount(),
                     )
+
+                    tpoActiveSessionUi?.let { sessionUi ->
+                        TpoActiveSessionCard(
+                            sessionUi = sessionUi,
+                            onRevertNow = { showTpoRevertConfirm = true },
+                        )
+                    }
 
                     AdvisorRecommendationsCard(
                         recommendations = advisorRecommendations,
@@ -288,6 +336,65 @@ fun AimiControlCenterScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TpoActiveSessionCard(
+    sessionUi: TpoActiveSessionUi,
+    onRevertNow: () -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(AapsSpacing.extraLarge),
+            verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
+        ) {
+            Text(
+                text = stringResource(R.string.aimi_tpo_active_session_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            if (sessionUi.status == TpoSessionStatus.PENDING_LLM) {
+                Text(
+                    text = stringResource(R.string.aimi_tpo_active_session_pending),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Text(
+                text = stringResource(
+                    R.string.aimi_tpo_active_session_summary,
+                    stringResource(sessionUi.packTitleResId),
+                    sessionUi.tierLabel,
+                    sessionUi.remainingMinutes,
+                    sessionUi.changedKeyCount,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            sessionUi.deltaPreviewLines.forEach { line ->
+                Text(
+                    text = line,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (sessionUi.extraChangeCount > 0) {
+                Text(
+                    text = stringResource(R.string.aimi_tpo_extra_changes, sessionUi.extraChangeCount),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (sessionUi.status == TpoSessionStatus.ACTIVE) {
+                Button(
+                    onClick = onRevertNow,
+                    modifier = Modifier.align(Alignment.End),
+                ) {
+                    Text(stringResource(R.string.aimi_tpo_revert_now))
                 }
             }
         }

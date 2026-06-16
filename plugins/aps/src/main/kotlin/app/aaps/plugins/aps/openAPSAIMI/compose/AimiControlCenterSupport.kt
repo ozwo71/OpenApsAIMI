@@ -199,8 +199,8 @@ private fun buildMealCapturePlan(
             ladderChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, listOf(0.045, 0.060, 0.075, 0.090, 0.105), currentLevel, targetLevel, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
             ladderChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, listOf(0.50, 0.80, 1.20, 1.80, 2.80), currentLevel, targetLevel, R.string.prebolus_autodrive_mode_title, "U"),
             ladderChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, listOf(0.05, 0.10, 0.20, 0.35, 0.60), currentLevel, targetLevel, R.string.prebolussmall_autodrive_mode_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, unit = "mg/dL"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, unit = "mg/dL"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
         )
         1 -> listOfNotNull(
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, true),
@@ -210,8 +210,8 @@ private fun buildMealCapturePlan(
             ladderChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, listOf(0.045, 0.060, 0.075, 0.090, 0.105), currentLevel, targetLevel, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
             ladderChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, listOf(0.50, 0.80, 1.20, 1.80, 2.80), currentLevel, targetLevel, R.string.prebolus_autodrive_mode_title, "U"),
             ladderChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, listOf(0.05, 0.10, 0.20, 0.35, 0.60), currentLevel, targetLevel, R.string.prebolussmall_autodrive_mode_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, unit = "mg/dL"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, unit = "mg/dL"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
         )
         2 -> listOfNotNull(
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, true),
@@ -221,8 +221,8 @@ private fun buildMealCapturePlan(
             ladderChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, listOf(0.045, 0.060, 0.075, 0.090, 0.105), currentLevel, targetLevel, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
             ladderChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, listOf(0.50, 0.80, 1.20, 1.80, 2.80), currentLevel, targetLevel, R.string.prebolus_autodrive_mode_title, "U"),
             ladderChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, listOf(0.05, 0.10, 0.20, 0.35, 0.60), currentLevel, targetLevel, R.string.prebolussmall_autodrive_mode_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, unit = "mg/dL"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, unit = "mg/dL"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
         )
         3 -> listOfNotNull(
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, true),
@@ -232,8 +232,8 @@ private fun buildMealCapturePlan(
             ladderChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, listOf(0.045, 0.060, 0.075, 0.090, 0.105), currentLevel, targetLevel, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
             ladderChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, listOf(0.50, 0.80, 1.20, 1.80, 2.80), currentLevel, targetLevel, R.string.prebolus_autodrive_mode_title, "U"),
             ladderChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, listOf(0.05, 0.10, 0.20, 0.35, 0.60), currentLevel, targetLevel, R.string.prebolussmall_autodrive_mode_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, unit = "mg/dL"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, unit = "mg/dL"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
         )
         else -> listOfNotNull(
             booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, true),
@@ -243,8 +243,8 @@ private fun buildMealCapturePlan(
             ladderChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, listOf(0.045, 0.060, 0.075, 0.090, 0.105), currentLevel, targetLevel, R.string.aimi_mpc_u_per_kg_title, "U/kg/5m"),
             ladderChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, listOf(0.50, 0.80, 1.20, 1.80, 2.80), currentLevel, targetLevel, R.string.prebolus_autodrive_mode_title, "U"),
             ladderChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, listOf(0.05, 0.10, 0.20, 0.35, 0.60), currentLevel, targetLevel, R.string.prebolussmall_autodrive_mode_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, unit = "mg/dL"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, unit = "mg/dL"),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
+            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
         )
     }
     return AimiFamilyWritebackPlan(
@@ -411,13 +411,58 @@ private fun ladderChange(
     targetLevel: Int,
     @StringRes titleResId: Int = key.controlCenterTitleResId(),
     unit: String?,
+    increasingSliderLevelRaisesValue: Boolean = true,
 ): AimiPreferenceChange? {
     if (ladder.isEmpty()) return null
-    val currentValue = preferences.get(key)
     val delta = targetLevel - currentLevel
+    if (delta == 0) return null
+    val currentValue = preferences.get(key)
     val currentIndex = ladder.indices.minByOrNull { index -> abs(ladder[index] - currentValue) } ?: 0
     val targetIndex = (currentIndex + delta).coerceIn(0, ladder.lastIndex)
-    return doubleChange(preferences, key, ladder[targetIndex], titleResId, unit)
+    val valueShouldIncrease = if (increasingSliderLevelRaisesValue) delta > 0 else delta < 0
+    val targetValue = resolveLadderTargetValue(
+        ladder = ladder,
+        key = key,
+        currentValue = currentValue,
+        ladderTargetValue = ladder[targetIndex],
+        valueShouldIncrease = valueShouldIncrease,
+    )
+    return doubleChange(preferences, key, targetValue, titleResId, unit)
+}
+
+private fun resolveLadderTargetValue(
+    ladder: List<Double>,
+    key: DoublePreferenceKey,
+    currentValue: Double,
+    ladderTargetValue: Double,
+    valueShouldIncrease: Boolean,
+): Double {
+    val epsilon = 0.0001
+    val wouldMoveWrongWay = if (valueShouldIncrease) {
+        ladderTargetValue <= currentValue + epsilon
+    } else {
+        ladderTargetValue >= currentValue - epsilon
+    }
+    if (!wouldMoveWrongWay) return ladderTargetValue
+    return extrapolateBeyondLadder(ladder, key, currentValue, upward = valueShouldIncrease)
+}
+
+private fun extrapolateBeyondLadder(
+    ladder: List<Double>,
+    key: DoublePreferenceKey,
+    currentValue: Double,
+    upward: Boolean,
+): Double {
+    val step = if (ladder.size >= 2) {
+        abs(ladder[ladder.lastIndex] - ladder[ladder.lastIndex - 1])
+    } else {
+        abs(ladder.last() - ladder.first()).coerceAtLeast(0.01)
+    }
+    return if (upward) {
+        (currentValue + step).coerceIn(key.min, key.max)
+    } else {
+        (currentValue - step).coerceIn(key.min, key.max)
+    }
 }
 
 private fun doubleChange(
