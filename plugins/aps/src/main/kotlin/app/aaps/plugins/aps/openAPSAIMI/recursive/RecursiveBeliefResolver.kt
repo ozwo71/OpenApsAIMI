@@ -211,20 +211,6 @@ object RecursiveBeliefResolver {
             ).minOrNull()?.let { min(v3, it) } ?: v3
             smbDemandU = max(smbDemandU, v3Lift)
         }
-        if (ctx.mealAbsorption?.phase == MealAbsorptionPhase.SECOND_WAVE && ctx.deltaMgdlPer5 > 0 &&
-            mealWaveBoostAllowed &&
-            ctx.behavioralRisk?.capsHtrRelease() != true
-        ) {
-            smbDemandU = max(smbDemandU, 1.5)
-            reasonCodes += "SECOND_WAVE"
-        }
-        if (ctx.mealAbsorption?.phase == MealAbsorptionPhase.FIRST_WAVE && ctx.deltaMgdlPer5 >= 2.5 &&
-            mealWaveBoostAllowed &&
-            ctx.behavioralRisk?.capsHtrRelease() != true
-        ) {
-            smbDemandU = max(smbDemandU, 1.2)
-            reasonCodes += "FIRST_WAVE"
-        }
         if (paradoxes.any { it.id == BeliefParadoxId.AUDITOR_VS_RELEASE }) {
             smbDemandU = min(smbDemandU, 0.5)
             reasonCodes += "SENTINEL_CAP"
@@ -248,6 +234,20 @@ object RecursiveBeliefResolver {
         ctx.physiologicalPatterns?.smbCapU?.let { cap ->
             smbDemandU = min(smbDemandU, cap)
             reasonCodes += "PATTERN_SMB_CAP"
+        }
+        if (ctx.mealAbsorption?.phase == MealAbsorptionPhase.SECOND_WAVE && ctx.deltaMgdlPer5 > 0 &&
+            mealWaveBoostAllowed &&
+            ctx.behavioralRisk?.capsHtrRelease() != true
+        ) {
+            smbDemandU = max(smbDemandU, 1.5)
+            reasonCodes += "SECOND_WAVE"
+        }
+        if (ctx.mealAbsorption?.phase == MealAbsorptionPhase.FIRST_WAVE && ctx.deltaMgdlPer5 >= 2.5 &&
+            mealWaveBoostAllowed &&
+            ctx.behavioralRisk?.capsHtrRelease() != true
+        ) {
+            smbDemandU = max(smbDemandU, 1.2)
+            reasonCodes += "FIRST_WAVE"
         }
 
         val smbBeforeLoadGovernor = smbDemandU

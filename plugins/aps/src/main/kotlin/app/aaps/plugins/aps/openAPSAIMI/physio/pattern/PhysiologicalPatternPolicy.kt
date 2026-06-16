@@ -4,6 +4,15 @@ import kotlin.math.min
 
 object PhysiologicalPatternPolicy {
 
+    /** Meal patterns at or above this confidence override activity caps and hyper suppression. */
+    const val MEAL_ACTIVE_CONFIDENCE = 0.70
+
+    /**
+     * Pattern SMB caps at or below this threshold are not applied to V3 delivery unless RBT
+     * authority is effective — they remain visible in resolver shadow / JSONL only.
+     */
+    const val RESTRICTIVE_SMB_CAP_SHADOW_THRESHOLD_U = 0.55
+
     fun aggregate(readings: List<PhysiologicalPatternReading>): PhysiologicalPatternSnapshot {
         if (readings.isEmpty()) return PhysiologicalPatternSnapshot.EMPTY
 
@@ -16,7 +25,7 @@ object PhysiologicalPatternPolicy {
         var suppressMeal = false
         var suppressHyper = false
         var suppressWavelet = false
-        var smbCap: Double? = null
+        var restrictiveCap: Double? = null
 
         for (reading in active) {
             val def = PhysiologicalPatternCatalog.definitionOf(reading.id)
@@ -24,20 +33,17 @@ object PhysiologicalPatternPolicy {
             if (def.suppressHyperRelease && reading.confidence >= 0.40) suppressHyper = true
             if (def.suppressWaveletBoost && reading.confidence >= 0.40) suppressWavelet = true
             def.smbCapU?.let { cap ->
-                smbCap = smbCap?.let { min(it, cap) } ?: cap
+                restrictiveCap = restrictiveCap?.let { min(it, cap) } ?: cap
             }
         }
 
-        val mealActive = active.any {
-            it.id.category == PhysiologicalPatternCategory.MEAL &&
-                it.confidence >= 0.70 &&
-                it.id != PhysiologicalPatternId.LATE_FAT_PROTEIN
-        }
-        if (mealActive) {
+        val mealActive = active.any { isMealPatternReading(it) && it.confidence >= MEAL_ACTIVE_CONFIDENCE }
+        val smbCap = if (mealActive) {
             suppressMeal = false
-            if (active.none { PhysiologicalPatternCatalog.definitionOf(it.id).suppressHyperRelease }) {
-                suppressHyper = false
-            }
+            suppressHyper = false
+            mealPatternCap(active) ?: restrictiveCap
+        } else {
+            restrictiveCap
         }
 
         val dominant = active.first()
@@ -54,4 +60,14 @@ object PhysiologicalPatternPolicy {
             reasonSummary = summary,
         )
     }
+
+    private fun isMealPatternReading(reading: PhysiologicalPatternReading): Boolean =
+        reading.id.category == PhysiologicalPatternCategory.MEAL &&
+            reading.id != PhysiologicalPatternId.LATE_FAT_PROTEIN
+
+    private fun mealPatternCap(active: List<PhysiologicalPatternReading>): Double? =
+        active
+            .filter { isMealPatternReading(it) }
+            .mapNotNull { PhysiologicalPatternCatalog.definitionOf(it.id).smbCapU }
+            .maxOrNull()
 }

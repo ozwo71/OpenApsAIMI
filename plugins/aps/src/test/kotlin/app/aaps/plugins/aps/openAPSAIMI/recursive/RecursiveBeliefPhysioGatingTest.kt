@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.recursive
 
 import app.aaps.plugins.aps.openAPSAIMI.physio.BehavioralRiskPolicy
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternId
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternReading
@@ -156,6 +157,54 @@ class RecursiveBeliefPhysioGatingTest {
         assertThat(snapshot.resolutions.releaseAuthority).isEqualTo(ReleaseAuthority.SOFT)
         assertThat(snapshot.resolutions.reasonCodes).contains("PHYSIO_PATTERN_SOFT_CAP")
         assertThat(snapshot.resolutions.reasonCodes).doesNotContain("PHYSIO_RISK_CAP")
+    }
+
+    @Test
+    fun first_wave_boost_applies_after_pattern_cap() {
+        val scales = listOf(
+            scale(15, belief = 0.84, urgency = 1.9, terminal = 258.0),
+            scale(60, belief = 0.80, urgency = 2.3, terminal = 338.0),
+            scale(180, belief = 0.30, urgency = -0.1, terminal = 122.0),
+        )
+        val ctx = RecursiveBeliefMr7TestHelper.minimalCtx(
+            v3Smb = 1.6,
+            replaceHtrRelease = true,
+            delta = 18.0,
+            extended = RbtExtendedSignals(
+                latentMealProb = 0.84,
+                uamMealProb = 0.82,
+                causalMealConfidence = 0.80,
+            ),
+        ).copy(
+            mealAbsorption = RecursiveBeliefMr7TestHelper.minimalCtx(delta = 18.0).mealAbsorption?.copy(
+                phase = MealAbsorptionPhase.FIRST_WAVE,
+                mealDeliveryPriority = true,
+                belief = 1.0,
+            ),
+            physiologicalPatterns = PhysiologicalPatternSnapshot(
+                active = listOf(
+                    PhysiologicalPatternReading(
+                        id = PhysiologicalPatternId.MEAL_UNDECLARED_FAST,
+                        confidence = 0.88,
+                        reason = "meal rise",
+                    ),
+                ),
+                dominant = PhysiologicalPatternId.MEAL_UNDECLARED_FAST,
+                dominantConfidence = 0.88,
+                suppressMealInterpretation = false,
+                suppressHyperRelease = false,
+                suppressWaveletBoost = false,
+                smbCapU = 0.40,
+                reasonSummary = "legacy cap before policy",
+            ),
+        )
+
+        val snapshot = RecursiveBeliefResolver.resolve(
+            RecursiveBeliefResolver.Input(ctx = ctx, scales = scales, authorityEnabled = true),
+        )
+
+        assertThat(snapshot.resolutions.reasonCodes).contains("FIRST_WAVE")
+        assertThat(snapshot.resolutions.smbDemandU).isGreaterThan(1.15)
     }
 
     private fun scale(tau: Int, belief: Double, urgency: Double, terminal: Double) =

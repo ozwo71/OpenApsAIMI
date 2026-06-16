@@ -84,6 +84,19 @@ class PhysiologicalPatternDetectorTest {
         assertThat(snap.smbCapU).isEqualTo(0.50)
     }
 
+    @Test
+    fun exercise_acute_suppressed_during_meal_first_wave() {
+        val input = baseInput(
+            mealAbsorptionPhase = MealAbsorptionPhase.FIRST_WAVE,
+            stepsLast15m = 1200,
+            heartRateBpm = 92,
+            restingHeartRateBpm = 58,
+        )
+        val snap = PhysiologicalPatternDetector.detect(input)
+        assertThat(snap.active.map { it.id }).doesNotContain(PhysiologicalPatternId.EXERCISE_ACUTE)
+        assertThat(snap.active.map { it.id }).contains(PhysiologicalPatternId.MEAL_FIRST_WAVE)
+    }
+
     private fun baseInput(
         hourOfDay: Int = 12,
         deltaMgdlPer5: Double = 1.0,
@@ -94,6 +107,9 @@ class PhysiologicalPatternDetectorTest {
         mealAbsorptionPhase: MealAbsorptionPhase = MealAbsorptionPhase.NONE,
         stackingSurveillance: Boolean = false,
         iobU: Double = 2.0,
+        stepsLast15m: Int = 0,
+        heartRateBpm: Int = 70,
+        restingHeartRateBpm: Int = 60,
     ): PhysiologicalPatternInput = PhysiologicalPatternInput(
         bgMgdl = 180.0,
         targetBgMgdl = 100.0,
@@ -103,9 +119,9 @@ class PhysiologicalPatternDetectorTest {
         combinedDeltaMgdlPer5 = deltaMgdlPer5,
         mealCobG = mealCobG,
         hourOfDay = hourOfDay,
-        stepsLast15m = 0,
-        heartRateBpm = 70,
-        restingHeartRateBpm = 60,
+        stepsLast15m = stepsLast15m,
+        heartRateBpm = heartRateBpm,
+        restingHeartRateBpm = restingHeartRateBpm,
         iobU = iobU,
         maxIobU = 12.0,
         bestTerminalMgdl = 220.0,

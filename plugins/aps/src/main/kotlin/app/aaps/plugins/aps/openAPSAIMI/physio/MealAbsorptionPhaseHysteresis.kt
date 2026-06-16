@@ -1,11 +1,12 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
 /**
- * Prevents flip-flop from active meal absorption phases back to NONE within 4 ticks.
+ * Prevents flip-flop from active meal absorption phases back to NONE within [HOLD_TICKS_DEFAULT] ticks.
  */
 object MealAbsorptionPhaseHysteresis {
 
-    const val HOLD_TICKS_DEFAULT = 4
+    /** ~50 min at a 5 min loop — covers silent early absorption before CGM rise. */
+    const val HOLD_TICKS_DEFAULT = 10
 
     @Volatile
     private var holdTicksRemaining: Int = 0
@@ -44,4 +45,4 @@ object MealAbsorptionPhaseHysteresis {
         return raw
     }
 }
-
+

@@ -92,7 +92,14 @@ object PhysiologicalPatternDetector {
     private fun matchActivity(input: PhysiologicalPatternInput): List<PhysiologicalPatternReading> {
         val out = mutableListOf<PhysiologicalPatternReading>()
         val hrDelta = input.heartRateBpm - input.restingHeartRateBpm
-        if (input.sportTime || (input.stepsLast15m >= 120 && hrDelta >= 25)) {
+        val mealRiseContext = input.mealDeliveryPriority ||
+            input.mealAbsorptionPhase == MealAbsorptionPhase.FIRST_WAVE ||
+            input.mealAbsorptionPhase == MealAbsorptionPhase.SECOND_WAVE ||
+            input.mealAbsorptionPhase == MealAbsorptionPhase.INTER_WAVE ||
+            input.mealAbsorptionPhase == MealAbsorptionPhase.PEAK_CORRECTION
+        if (!mealRiseContext &&
+            (input.sportTime || (input.stepsLast15m >= 120 && hrDelta >= 25))
+        ) {
             out += reading(
                 PhysiologicalPatternId.EXERCISE_ACUTE,
                 0.85,

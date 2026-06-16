@@ -123,6 +123,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.CircadianMealProfileStore
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisStateBuilder
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PatternCapHold
+import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternPolicy
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternDetector
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternExport
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternInputBuilder
@@ -3760,7 +3761,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 var lifted = rawLifted
                 physioCapU?.let { lifted = min(lifted, it) }
                 stackingCapU?.let { lifted = min(lifted, it) }
-                patternCapU?.let { lifted = min(lifted, it) }
+                patternCapU?.let { cap ->
+                    val applyRestrictiveCap = rbtAuthority ||
+                        cap > PhysiologicalPatternPolicy.RESTRICTIVE_SMB_CAP_SHADOW_THRESHOLD_U
+                    if (applyRestrictiveCap) {
+                        lifted = min(lifted, cap)
+                    } else {
+                        consoleLog.add(
+                            "🪜 Pattern cap ${"%.2f".format(cap)}U shadow (no RBT authority)",
+                        )
+                    }
+                }
                 htr.copy(
                     active = lifted > htr.v3SmbBeforeU + 0.02,
                     smbFloorU = if (rbtAuthority) min(r.smbDemandU, lifted) else min(htr.smbFloorU, lifted),
