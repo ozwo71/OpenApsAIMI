@@ -70,7 +70,7 @@ class BasalLearner @Inject constructor(
         private const val ALPHA_LONG = 0.10    // Slow EMA
 
         private const val CLAMP_MIN = 0.70
-        private const val CLAMP_MAX = 2.50
+        private const val CLAMP_MAX = 2.0
     }
 
     data class TimestampedBg(val timestamp: Long, val bg: Double, val delta: Double)

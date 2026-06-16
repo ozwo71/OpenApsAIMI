@@ -118,6 +118,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioContextMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentStateBuilder
+import app.aaps.plugins.aps.openAPSAIMI.learning.BasalAdaptiveMultiplier
 import app.aaps.plugins.aps.openAPSAIMI.physio.CircadianMealProfileStore
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisStateBuilder
@@ -1383,10 +1384,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 iob = iobObj.iob
             )
         } else 1.0
-        adaptiveMult = when {
-            hMult < 0.99 || nMult < 0.99 -> min(hMult, nMult)
-            else -> max(hMult, nMult)
-        }
+        adaptiveMult = BasalAdaptiveMultiplier.combine(hMult, nMult)
         if (Math.abs(adaptiveMult - 1.0) > 0.01) {
             consoleLog.add("🛡️ BASAL_UNIFIED_SCALING: H=${"%.2f".format(hMult)}x / N=${"%.2f".format(nMult)}x -> Applied=${"%.2f".format(adaptiveMult)}x")
         }
@@ -5194,6 +5192,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         estimatedCarbs: Double,
     ): AimiMealHyperBasalBoostOutcome {
         val mealModesMaxBasal = preferences.get(DoubleKey.meal_modes_MaxBasal)
+        val aggressionDecision = correctionAggressionDecision
         return when {
             isMealAdvisorOneShot -> {
                 val safeMax = if (mealModesMaxBasal > 0.1) mealModesMaxBasal else profile.max_basal
@@ -5236,15 +5235,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 AimiMealHyperBasalBoostOutcome.ContinueWithOptionalRate(optionalRate)
             }
 
-            correctionAggressionDecision?.tier == CorrectionAggressionGate.Tier.REBOUND_GUARD &&
-                cachedBasalFirstActive &&
-                bg < targetBg + 15.0 &&
+            aggressionDecision?.tier == CorrectionAggressionGate.Tier.REBOUND_GUARD &&
+                aggressionDecision.allowGlobalHyperKicker == false &&
+                bg < targetBg + CorrectionAggressionGate.REBOUND_BG_MARGIN_MGDL &&
                 delta >= 0.0f -> {
                 val bridgeRate = calculateRate(
                     basal,
                     profileCurrentBasal,
                     1.5,
-                    "${CorrectionAggressionGate.LOG_PREFIX}: post-hypo TBR bridge (Basal-First)",
+                    "${CorrectionAggressionGate.LOG_PREFIX}: post-hypo TBR bridge (REBOUND_GUARD)",
                     ctx.currentTemp,
                     rT,
                 )
