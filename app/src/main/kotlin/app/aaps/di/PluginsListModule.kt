@@ -8,7 +8,6 @@ import app.aaps.plugins.aps.openAPSAIMI.OpenAPSAIMIPlugin
 import app.aaps.plugins.aps.openAPSAMA.OpenAPSAMAPlugin
 import app.aaps.plugins.aps.openAPSAutoISF.OpenAPSAutoISFPlugin
 import app.aaps.plugins.aps.openAPSSMB.OpenAPSSMBPlugin
-import app.aaps.plugins.automation.AutomationPlugin
 import app.aaps.plugins.calibration.LinearCalibrationPlugin
 import app.aaps.plugins.calibration.NoCalibrationPlugin
 import app.aaps.plugins.constraints.bgQualityCheck.BgQualityCheckPlugin
@@ -21,7 +20,6 @@ import app.aaps.plugins.constraints.versionChecker.VersionCheckerPlugin
 import app.aaps.plugins.main.general.overview.OverviewPlugin
 import app.aaps.plugins.main.general.persistentNotification.PersistentNotificationPlugin
 import app.aaps.plugins.main.iob.iobCobCalculator.IobCobCalculatorPlugin
-
 import app.aaps.plugins.sensitivity.SensitivityAAPSPlugin
 import app.aaps.plugins.sensitivity.SensitivityOref1Plugin
 import app.aaps.plugins.sensitivity.SensitivityWeightedAveragePlugin
@@ -49,9 +47,8 @@ import app.aaps.plugins.source.TomatoPlugin
 import app.aaps.plugins.source.XdripSourcePlugin
 import app.aaps.plugins.source.instara.InstaraPlugin
 import app.aaps.plugins.sync.garmin.GarminPlugin
-import app.aaps.plugins.sync.nsclient.NSClientPlugin
-import app.aaps.plugins.sync.nsShared.RemoteControlPlugin
 import app.aaps.plugins.sync.nsclientV3.NSClientV3Plugin
+import app.aaps.plugins.sync.nsclientV3.RemoteControlPlugin
 import app.aaps.plugins.sync.openhumans.OpenHumansUploaderPlugin
 import app.aaps.plugins.sync.smsCommunicator.SmsCommunicatorPlugin
 import app.aaps.plugins.sync.tidepool.TidepoolPlugin
@@ -154,12 +151,6 @@ abstract class PluginsListModule {
     @Binds
     @AllConfigs
     @IntoMap
-    @IntKey(250)
-    abstract fun bindAutomationPlugin(plugin: AutomationPlugin): PluginBase
-
-    @Binds
-    @AllConfigs
-    @IntoMap
     @IntKey(255)
     abstract fun bindAutotunePlugin(plugin: AutotunePlugin): PluginBase
 
@@ -198,12 +189,6 @@ abstract class PluginsListModule {
     @IntoMap
     @IntKey(310)
     abstract fun bindObjectivesPlugin(plugin: ObjectivesPlugin): PluginBase
-
-    @Binds
-    @AllConfigs
-    @IntoMap
-    @IntKey(350)
-    abstract fun bindNSClientPlugin(plugin: NSClientPlugin): PluginBase
 
     @Binds
     @AllConfigs

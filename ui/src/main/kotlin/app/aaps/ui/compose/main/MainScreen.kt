@@ -62,6 +62,8 @@ import app.aaps.ui.compose.maintenance.ImportSource
 import app.aaps.ui.compose.maintenance.MaintenanceDialogs
 import app.aaps.ui.compose.maintenance.MaintenanceViewModel
 import app.aaps.core.data.model.ActiveSceneState
+import app.aaps.ui.compose.loopSheet.LoopActionBottomSheet
+import app.aaps.ui.compose.loopSheet.LoopActionViewModel
 import app.aaps.ui.compose.manageSheet.ManageSheetState
 import app.aaps.ui.compose.manageSheet.ManageViewModel
 import app.aaps.ui.compose.notificationsSheet.NotificationBottomSheet
@@ -94,7 +96,7 @@ fun MainScreen(
     statusViewModel: StatusViewModel,
     treatmentViewModel: TreatmentViewModel,
     scenesViewModel: ScenesViewModel,
-    loopActionViewModel: app.aaps.ui.compose.loopSheet.LoopActionViewModel,
+    loopActionViewModel: LoopActionViewModel,
     // Search
     searchUiState: SearchUiState,
     onSearchQueryChange: (String) -> Unit,
@@ -251,6 +253,7 @@ fun MainScreen(
 
                     val activeSceneState by mainViewModel.activeSceneState.collectAsStateWithLifecycle()
                     val sceneExpired by mainViewModel.sceneExpired.collectAsStateWithLifecycle()
+                    val masterReachable by mainViewModel.masterReachable.collectAsStateWithLifecycle()
                     Box(modifier = Modifier.fillMaxSize()) {
                         val fabBottomOffset = if (hasToolbar && showChrome) 56.dp else 0.dp
 
@@ -294,6 +297,7 @@ fun MainScreen(
                                 sceneExpired = sceneExpired,
                                 onEndScene = { mainViewModel.requestSceneDeactivation() },
                                 onDismissScene = { mainViewModel.dismissExpiredScene() },
+                                endSceneEnabled = masterReachable,
                                 formatDuration = mainViewModel::formatDuration,
                                 paddingValues = contentPadding,
                                 fabBottomOffset = fabBottomOffset,
@@ -533,7 +537,7 @@ fun MainScreen(
         // Loop accept action bottom sheet
         if (showLoopActionSheet) {
             val loopState by loopActionViewModel.uiState.collectAsStateWithLifecycle()
-            app.aaps.ui.compose.loopSheet.LoopActionBottomSheet(
+            LoopActionBottomSheet(
                 state = loopState,
                 onPerform = { mainViewModel.performLoopAccept() },
                 onDismiss = { showLoopActionSheet = false }
@@ -551,6 +555,7 @@ fun MainScreen(
                 ThreeButtonDialog(
                     title = confirmation.title,
                     message = confirmation.message,
+                    icon = confirmation.icon,
                     primaryLabel = confirmation.confirmLabel ?: stringResource(R.string.ok),
                     onPrimary = { mainViewModel.executeConfirmableAction(confirmation.onConfirmAction) },
                     secondaryLabel = secondaryLabel,
@@ -561,6 +566,7 @@ fun MainScreen(
                 OkCancelDialog(
                     title = confirmation.title,
                     message = confirmation.message,
+                    icon = confirmation.icon,
                     onConfirm = { mainViewModel.executeConfirmableAction(confirmation.onConfirmAction) },
                     onDismiss = { mainViewModel.dismissActionConfirmation() }
                 )

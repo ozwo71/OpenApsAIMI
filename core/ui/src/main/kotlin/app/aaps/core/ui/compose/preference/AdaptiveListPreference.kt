@@ -4,11 +4,16 @@
 
 package app.aaps.core.ui.compose.preference
 
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.IntPreferenceKey
 import app.aaps.core.keys.interfaces.PreferenceVisibilityContext
@@ -97,7 +102,12 @@ fun AdaptiveStringListPreferenceItem(
     ListPreference(
         state = state,
         values = values,
-        title = { Text(titleText) },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(titleText)
+                SyncBadge(stringKey, Modifier.padding(start = 6.dp))
+            }
+        },
         enabled = visibility.enabled,
         summary = { Text(currentEntry) },
         dialogSummary = dialogSummary,

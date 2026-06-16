@@ -4,13 +4,18 @@
 
 package app.aaps.core.ui.compose.preference
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.BooleanKeyWithChangeGuard
@@ -75,14 +80,24 @@ fun AdaptiveSwitchPreferenceItem(
                     guardMessage = message
                 }
             },
-            title = { Text(titleText) },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(titleText)
+                    SyncBadge(booleanKey, Modifier.padding(start = 6.dp))
+                }
+            },
             summary = summary,
             enabled = visibility.enabled
         )
     } else {
         SwitchPreference(
             state = state,
-            title = { Text(titleText) },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(titleText)
+                    SyncBadge(booleanKey, Modifier.padding(start = 6.dp))
+                }
+            },
             summary = summary,
             enabled = visibility.enabled
         )

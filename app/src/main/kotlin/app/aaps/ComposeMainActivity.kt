@@ -21,6 +21,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -73,6 +74,8 @@ import app.aaps.compose.navigation.AppRoute
 import app.aaps.compose.navigation.appNavGraph
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.bgQualityCheck.BgQualityCheck
+import app.aaps.core.interfaces.clientcontrol.ActionProgress
+import app.aaps.core.interfaces.clientcontrol.ClientControlActionDispatcher
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.configuration.ConfigBuilder
 import app.aaps.core.interfaces.configuration.InitProgress
@@ -99,6 +102,7 @@ import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventRefreshOverview
 import app.aaps.core.interfaces.rx.events.EventUpdateOverviewIobCob
 import app.aaps.core.interfaces.source.DexcomBoyda
+import app.aaps.core.interfaces.sync.NsClient
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
@@ -111,10 +115,14 @@ import app.aaps.core.objects.crypto.CryptoUtil
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalConfig
 import app.aaps.core.ui.compose.LocalDateUtil
+import app.aaps.core.ui.compose.LocalMasterReachable
 import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.core.ui.compose.LocalProfileUtil
+import app.aaps.core.ui.compose.LocalSnackbarHostState
 import app.aaps.core.ui.compose.ProtectionHost
 import app.aaps.core.ui.compose.ScreenMode
+import app.aaps.core.ui.compose.dialogs.GlobalDialogHost
+import app.aaps.core.ui.compose.dialogs.GlobalSnackbarHost
 import app.aaps.core.ui.compose.dialogs.OkDialog
 import app.aaps.core.ui.compose.navigation.ElementType
 import app.aaps.core.ui.compose.navigation.NavigationRequest
@@ -131,6 +139,7 @@ import app.aaps.core.utils.isRunningRealPumpTest
 import app.aaps.compose.dashboard.DashboardOverviewHost
 import app.aaps.implementation.plugin.PluginStore
 import app.aaps.implementation.protection.BiometricCheck
+import app.aaps.plugins.automation.AutomationRuntime
 import app.aaps.plugins.configuration.setupwizard.SWDefinition
 import app.aaps.plugins.main.general.manual.UserManualActivity
 import app.aaps.plugins.main.skins.SkinDashboardPreferenceSync
@@ -138,6 +147,7 @@ import app.aaps.plugins.main.skins.SkinProvider
 import app.aaps.plugins.source.DexcomPlugin
 import app.aaps.plugins.source.activities.RequestDexcomPermissionActivity
 import app.aaps.ui.compose.careDialog.CareportalEventType
+import app.aaps.ui.compose.clientcontrol.ClientControlPendingDialog
 import app.aaps.ui.compose.configuration.ConfigurationViewModel
 import app.aaps.ui.compose.fillDialog.FillPreselect
 import app.aaps.ui.compose.insulinManagement.InsulinManagementViewModel
@@ -193,6 +203,9 @@ class ComposeMainActivity : AppCompatActivity() {
     @Inject lateinit var passwordCheck: PasswordCheck
     @Inject lateinit var cryptoUtil: CryptoUtil
     @Inject lateinit var activePlugin: ActivePlugin
+    @Inject lateinit var nsClient: NsClient
+    @Inject lateinit var clientControlActionDispatcher: ClientControlActionDispatcher
+    @Inject lateinit var automationRuntime: AutomationRuntime
     @Inject lateinit var configBuilder: ConfigBuilder
     @Inject lateinit var swDefinition: SWDefinition
     @Inject lateinit var config: Config
@@ -318,6 +331,21 @@ class ComposeMainActivity : AppCompatActivity() {
     @Composable
     private fun MainContent() {
         val navController = rememberNavController().also { this.navController = it }
+        val masterReachable by nsClient.masterReachable.collectAsStateWithLifecycle()
+
+        // Global self-heal — event-driven, NOT a poll (a timer would keep the CPU awake). Probe once when
+        // we go offline, and again on each navigation while offline, so any screen/dialog the user opens
+        // re-checks. (The WS reconnect and a failed action also probe; all internally rate-limited.)
+        // `masterReachable` is lifecycle-collected and navigation only happens in the foreground, so this
+        // never runs in the background.
+        LaunchedEffect(masterReachable) {
+            if (!masterReachable) nsClient.requestMasterProbe()
+        }
+        LaunchedEffect(navController) {
+            navController.currentBackStackEntryFlow.collect {
+                if (!nsClient.masterReachable.value) nsClient.requestMasterProbe()
+            }
+        }
 
         val composeActivity = LocalContext.current as ComposeMainActivity
         LaunchedEffect(navController) {
@@ -332,32 +360,63 @@ class ComposeMainActivity : AppCompatActivity() {
             LocalPreferences provides preferences,
             LocalDateUtil provides dateUtil,
             LocalConfig provides config,
+            LocalMasterReachable provides masterReachable,
             LocalProfileUtil provides profileUtil,
             LocalCheckPassword provides cryptoUtil::checkPassword,
             LocalHashPassword provides cryptoUtil::hashPassword,
             LocalVisibilityContext provides visibilityContext
         ) {
             AapsTheme {
-                val initProgress by config.initProgressFlow.collectAsStateWithLifecycle()
+                val rootSnackbarHostState = remember { SnackbarHostState() }
+                CompositionLocalProvider(LocalSnackbarHostState provides rootSnackbarHostState) {
+                    val initProgress by config.initProgressFlow.collectAsStateWithLifecycle()
 
-                AnimatedVisibility(
-                    visible = !initProgress.done,
-                    exit = fadeOut()
-                ) {
-                    val splashSnackbarHostState = remember { SnackbarHostState() }
                     LaunchedEffect(Unit) {
                         config.initSnackbarFlow.collect { message ->
-                            splashSnackbarHostState.showSnackbar(message)
+                            rootSnackbarHostState.showSnackbar(message)
                         }
                     }
-                    SplashScreen(initProgress, splashSnackbarHostState)
-                }
 
-                AnimatedVisibility(
-                    visible = initProgress.done,
-                    enter = fadeIn()
-                ) {
-                    AppContent(navController)
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        AnimatedVisibility(
+                            visible = !initProgress.done,
+                            exit = fadeOut()
+                        ) {
+                            SplashScreen(initProgress, rootSnackbarHostState)
+                        }
+
+                        AnimatedVisibility(
+                            visible = initProgress.done,
+                            enter = fadeIn()
+                        ) {
+                            AppContent(navController)
+                        }
+
+                        // Root-level snackbar host — subscribes to EventShowSnackbar
+                        // and is the single visible SnackbarHost across every screen.
+                        GlobalSnackbarHost(
+                            rxBus = rxBus,
+                            hostState = rootSnackbarHostState,
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                        )
+
+                        // Root-level dialog host — subscribes to EventShowDialog and
+                        // renders one modal dialog at a time.
+                        GlobalDialogHost(rxBus = rxBus)
+
+                        // The single app-level pending modal for ANY client-control round-trip
+                        // (insulin / scenes / synced-preference edits). Hosted once here, feature-
+                        // independent; round-trips are single-in-flight so at most one shows. Applied is
+                        // cleared by the dispatcher (silent); Rejected/Unconfirmed stay until dismissed.
+                        val pendingAction by clientControlActionDispatcher.pendingAction.collectAsStateWithLifecycle()
+                        pendingAction?.let { pending ->
+                            if (pending.progress !is ActionProgress.Applied)
+                                ClientControlPendingDialog(
+                                    pending = pending,
+                                    onDismiss = { clientControlActionDispatcher.dismissActionProgress() }
+                                )
+                        }
+                    }
                 }
             }
         }
@@ -749,7 +808,12 @@ class ComposeMainActivity : AppCompatActivity() {
                     queueStatusText = pumpQueueStatus,
                     isPumpCommunicating = pumpStatusBanner != null,
                     onStopBolus = {
-                        commandQueue.cancelAllBoluses(null)
+                        if (config.AAPSCLIENT) {
+                            clientControlActionDispatcher.stopBolus()
+                            bolusProgressData.stopPressed()
+                        } else {
+                            commandQueue.cancelAllBoluses(null)
+                        }
                     },
                     useRingHeroHome = false,
                     dashboardOverview = if (showHybridDashboard) {
@@ -785,6 +849,7 @@ class ComposeMainActivity : AppCompatActivity() {
                 swDefinition = swDefinition,
                 rxBus = rxBus,
                 activePlugin = activePlugin,
+                automationRuntime = automationRuntime,
                 preferences = preferences,
                 rh = rh,
                 builtInSearchables = builtInSearchables,
@@ -832,7 +897,12 @@ class ComposeMainActivity : AppCompatActivity() {
                     queueStatus = queueStatus,
                     isModal = true,
                     onStop = {
-                        commandQueue.cancelAllBoluses(null)
+                        if (config.AAPSCLIENT) {
+                            clientControlActionDispatcher.stopBolus()
+                            bolusProgressData.stopPressed()
+                        } else {
+                            commandQueue.cancelAllBoluses(null)
+                        }
                     },
                     onDismiss = { }
                 )
@@ -1150,6 +1220,9 @@ class ComposeMainActivity : AppCompatActivity() {
             ElementType.FOOD_MANAGEMENT         -> navController.navigate(AppRoute.FoodManagement.route)
             ElementType.RUNNING_MODE            -> navController.navigate(AppRoute.RunningMode.route)
             ElementType.SCENE_MANAGEMENT        -> navController.navigate(AppRoute.SceneList.route)
+            ElementType.AUTOMATION_MANAGEMENT   -> navController.navigate(AppRoute.AutomationList.route)
+            ElementType.AUTHORIZED_CLIENTS      -> navController.navigate(AppRoute.AuthorizedClients.route)
+            ElementType.PAIR_WITH_MASTER        -> navController.navigate(AppRoute.PairWithMaster.route)
             ElementType.QUICK_LAUNCH_CONFIG     -> navController.navigate(AppRoute.QuickLaunchConfig.route)
 
             // Treatment dialogs

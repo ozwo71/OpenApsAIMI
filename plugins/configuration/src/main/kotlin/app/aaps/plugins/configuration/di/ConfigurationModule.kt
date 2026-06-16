@@ -2,6 +2,7 @@ package app.aaps.plugins.configuration.di
 
 import app.aaps.core.interfaces.androidPermissions.AndroidPermission
 import app.aaps.core.interfaces.configuration.ConfigBuilder
+import app.aaps.core.interfaces.configuration.RunningConfigurationKeys
 import app.aaps.core.nssdk.interfaces.RunningConfiguration
 import app.aaps.plugins.configuration.AndroidPermissionImpl
 import app.aaps.plugins.configuration.configBuilder.ConfigBuilderImpl
@@ -26,6 +27,7 @@ abstract class ConfigurationModule {
     interface Bindings {
 
         @Binds fun bindRunningConfiguration(runningConfigurationImpl: RunningConfigurationImpl): RunningConfiguration
+        @Binds fun bindRunningConfigurationKeys(runningConfigurationImpl: RunningConfigurationImpl): RunningConfigurationKeys
         @Binds fun bindConfigBuilderInterface(configBuilderImpl: ConfigBuilderImpl): ConfigBuilder
         @Binds fun bindAndroidPermission(impl: AndroidPermissionImpl): AndroidPermission
     }

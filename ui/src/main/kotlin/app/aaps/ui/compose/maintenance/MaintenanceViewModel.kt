@@ -29,6 +29,7 @@ import app.aaps.core.interfaces.plugin.OwnDatabasePlugin
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.sync.DataSyncSelectorXdrip
+import app.aaps.core.interfaces.sync.NsClient
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -69,7 +70,8 @@ class MaintenanceViewModel @Inject constructor(
     private val pumpSync: PumpSync,
     private val iobCobCalculator: IobCobCalculator,
     private val overviewData: OverviewData,
-    private val overviewDataCache: OverviewDataCache
+    private val overviewDataCache: OverviewDataCache,
+    private val nsClient: NsClient
 ) : ViewModel() {
 
     private val _events = MutableSharedFlow<MaintenanceEvent>()
@@ -207,7 +209,7 @@ class MaintenanceViewModel @Inject constructor(
                     for (plugin in activePlugin.getSpecificPluginsListByInterface(OwnDatabasePlugin::class.java)) {
                         (plugin as OwnDatabasePlugin).clearAllTables()
                     }
-                    activePlugin.activeNsClient?.dataSyncSelector?.resetToNextFullSync()
+                    nsClient.dataSyncSelector.resetToNextFullSync()
                     dataSyncSelectorXdrip.resetToNextFullSync()
                     pumpSync.connectNewPump()
                     overviewDataCache.reset()

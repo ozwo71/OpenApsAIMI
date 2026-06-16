@@ -44,6 +44,7 @@ import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.protection.ProtectionCheck
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.rx.events.EventShowSnackbar
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.IntKey
@@ -61,8 +62,11 @@ import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.core.ui.compose.preference.PluginPreferencesScreen
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.core.ui.compose.siteRotation.SiteLocationPickerScreen
+import app.aaps.plugins.automation.AutomationRuntime
 import app.aaps.plugins.configuration.setupwizard.SWDefinition
 import app.aaps.plugins.configuration.setupwizard.SetupWizardScreen
+import app.aaps.plugins.sync.nsclientV3.clientcontrol.compose.AuthorizedClientsScreen
+import app.aaps.plugins.sync.nsclientV3.clientcontrol.compose.PairWithMasterScreen
 import app.aaps.ui.compose.calibrationDialog.CalibrationDialogScreen
 import app.aaps.ui.compose.carbsDialog.CarbsDialogScreen
 import app.aaps.ui.compose.careDialog.CareDialogScreen
@@ -148,6 +152,7 @@ fun NavGraphBuilder.appNavGraph(
     swDefinition: SWDefinition,
     rxBus: RxBus,
     activePlugin: ActivePlugin,
+    automationRuntime: AutomationRuntime,
     preferences: Preferences,
     rh: ResourceHelper,
     builtInSearchables: BuiltInSearchables,
@@ -246,7 +251,6 @@ fun NavGraphBuilder.appNavGraph(
     composable(AppRoute.RunningMode.route) {
         RunningModeScreen(
             viewModel = runningModeManagementViewModel,
-            showOkCancel = true,
             onNavigateBack = { navController.safePopBackStack() }
         )
     }
@@ -515,16 +519,22 @@ fun NavGraphBuilder.appNavGraph(
         route = AppRoute.PluginContent.route,
         arguments = listOf(navArgument("pluginIndex") { type = NavType.IntType })
     ) { backStackEntry ->
-        val pluginIndex = backStackEntry.arguments?.getInt("pluginIndex") ?: return@composable
-        val plugin = activePlugin.getPluginsList().getOrNull(pluginIndex) ?: return@composable
-        val composeContent = plugin.getComposeContent()
-        if (composeContent is ComposablePluginContent) {
+        val pluginIndex = backStackEntry.arguments?.getInt("pluginIndex") ?: -1
+        val plugin = activePlugin.getPluginsList().getOrNull(pluginIndex)
+        val composeContent = plugin?.getComposeContent()
+        if (plugin != null && composeContent is ComposablePluginContent) {
             PluginContentRoute(
                 navController = navController,
                 plugin = plugin,
                 composeContent = composeContent,
                 onNavigationRequest = onNavigationRequest,
                 withProtection = withProtection,
+            )
+        } else {
+            NavigationErrorFallback(
+                rxBus = rxBus,
+                message = stringResource(app.aaps.core.ui.R.string.navigation_error_screen_not_found),
+                onDismiss = { navController.safePopBackStack() }
             )
         }
     }
@@ -537,6 +547,16 @@ fun NavGraphBuilder.appNavGraph(
         )
     }
 
+    composable(AppRoute.AutomationList.route) {
+        // remember so the content wrapper isn't re-allocated on every recomposition of the route.
+        val automationContent = remember { automationRuntime.composeContent() }
+        AutomationContentRoute(
+            navController = navController,
+            composeContent = automationContent,
+            withProtection = withProtection,
+        )
+    }
+
     composable(AppRoute.SceneList.route) {
         SceneListScreen(
             onNavigateToWizard = {
@@ -545,6 +565,18 @@ fun NavGraphBuilder.appNavGraph(
             onNavigateToEditor = { sceneId ->
                 navController.navigate(AppRoute.SceneWizard.createRoute(sceneId))
             },
+            onNavigateBack = { navController.popBackStack() }
+        )
+    }
+
+    composable(AppRoute.AuthorizedClients.route) {
+        AuthorizedClientsScreen(
+            onNavigateBack = { navController.popBackStack() }
+        )
+    }
+
+    composable(AppRoute.PairWithMaster.route) {
+        PairWithMasterScreen(
             onNavigateBack = { navController.popBackStack() }
         )
     }
@@ -609,6 +641,12 @@ fun NavGraphBuilder.appNavGraph(
                 onBackClick = { navController.safePopBackStack() },
                 onOpenLegacyXmlPreferences = { onOpenLegacyXmlPreferences(plugin.javaClass.simpleName) }
             )
+        } else {
+            NavigationErrorFallback(
+                rxBus = rxBus,
+                message = stringResource(app.aaps.core.ui.R.string.navigation_error_screen_not_found),
+                onDismiss = { navController.safePopBackStack() }
+            )
         }
     }
 
@@ -621,6 +659,12 @@ fun NavGraphBuilder.appNavGraph(
                 screenDef = screenDef,
                 highlightKey = highlightKey,
                 onBackClick = { navController.safePopBackStack() }
+            )
+        } else {
+            NavigationErrorFallback(
+                rxBus = rxBus,
+                message = stringResource(app.aaps.core.ui.R.string.navigation_error_screen_not_found),
+                onDismiss = { navController.safePopBackStack() }
             )
         }
     }
@@ -792,6 +836,89 @@ private fun PluginContentRoute(
                     }
                 )
             }
+        }
+    }
+}
+
+/**
+ * Fallback for routes whose navigation target cannot be resolved (unknown preference key, missing
+ * plugin index, …). Replaces the previous behaviour where such routes rendered nothing, leaving the
+ * user on a blank, stuck screen: posts an error snackbar via [rxBus] and immediately pops back so
+ * the dead route never stays on screen.
+ */
+@Composable
+private fun NavigationErrorFallback(
+    rxBus: RxBus,
+    message: String,
+    onDismiss: () -> Unit
+) {
+    LaunchedEffect(Unit) {
+        rxBus.send(EventShowSnackbar(message, EventShowSnackbar.Type.Error))
+        onDismiss()
+    }
+}
+
+/**
+ * Host for the standalone Automation screen — mirrors [PluginContentRoute] but sources its content
+ * from [AutomationRuntime.composeContent] instead of a plugin, and opens the settings subscreen via
+ * the generic [AppRoute.PreferenceScreen] route. Automation does not use `LocalPluginNavigationRequest`.
+ */
+@Composable
+private fun AutomationContentRoute(
+    navController: NavHostController,
+    composeContent: ComposablePluginContent,
+    withProtection: (ProtectionCheck.Protection, () -> Unit) -> Unit,
+) {
+    val openSettings = {
+        withProtection(ElementType.SETTINGS.protection) {
+            navController.navigate(AppRoute.PreferenceScreen.createRoute("automation_settings"))
+        }
+    }
+    val navigateBack: @Composable () -> Unit = {
+        IconButton(onClick = { navController.safePopBackStack() }) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(app.aaps.core.ui.R.string.back)
+            )
+        }
+    }
+    val settingsAction: @Composable RowScope.() -> Unit = {
+        IconButton(onClick = openSettings) {
+            Icon(
+                Icons.Filled.Settings,
+                contentDescription = stringResource(app.aaps.core.ui.R.string.settings)
+            )
+        }
+    }
+    val title = stringResource(app.aaps.core.ui.R.string.automation)
+    var toolbarConfig by remember {
+        mutableStateOf(
+            ToolbarConfig(
+                title = title,
+                navigationIcon = navigateBack,
+                actions = settingsAction
+            )
+        )
+    }
+    Scaffold(
+        topBar = {
+            AapsTopAppBar(
+                title = { Text(toolbarConfig.title) },
+                navigationIcon = { toolbarConfig.navigationIcon() },
+                actions = { toolbarConfig.actions(this) }
+            )
+        }
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            composeContent.Render(
+                setToolbarConfig = { config -> toolbarConfig = config },
+                onNavigateBack = { navController.safePopBackStack() },
+                onSettings = openSettings
+            )
         }
     }
 }

@@ -27,7 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.launch
 import app.aaps.core.data.plugin.PluginType
-import app.aaps.core.interfaces.automation.Automation
 import app.aaps.core.interfaces.autotune.Autotune
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
@@ -37,6 +36,8 @@ import app.aaps.core.ui.compose.ComposeScreenContent
 import app.aaps.core.ui.compose.LocalConfig
 import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.core.ui.compose.LocalSnackbarHostState
+import app.aaps.core.ui.compose.MasterOfflineBanner
+import app.aaps.core.ui.compose.masterEditingEnabled
 import app.aaps.core.ui.compose.preference.LocalNavigateToCompose
 import app.aaps.core.ui.compose.preference.LocalOpenPreferenceSubScreen
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
@@ -71,7 +72,6 @@ fun AllPreferencesScreen(
     val preferences = LocalPreferences.current
     val config = LocalConfig.current
     // Look up plugins by interface
-    val automationPlugin = activePlugin.getSpecificPluginsListByInterface(Automation::class.java).firstOrNull()
     val autotunePlugin = activePlugin.getSpecificPluginsListByInterface(Autotune::class.java).firstOrNull()
 
     // Built-in preference screens from BuiltInSearchables (single source of truth)
@@ -129,8 +129,9 @@ fun AllPreferencesScreen(
             getPreferenceContentIfEnabled(plugin)?.let { add(it) }
         }
 
-        // 10. Automation plugin (found via interface)
-        getPreferenceContentIfEnabled(automationPlugin)?.let { add(it) }
+        // 10. Automation settings (standalone feature, from BuiltInSearchables; master-only — the
+        // location-provider setting only has effect where automation executes).
+        if (config.APS) add(builtInSearchables.automation)
 
         // 11. Autotune plugin (found via interface)
         getPreferenceContentIfEnabled(autotunePlugin)?.let { add(it) }
@@ -209,6 +210,7 @@ fun AllPreferencesScreen(
                         .verticalScrollIndicators(listState),
                     state = listState
                 ) {
+                    item { MasterOfflineBanner(editingEnabled = masterEditingEnabled()) }
                     // Built-in: General settings (first)
                     addPreferenceContent(generalPreferences, onShowMessage, sectionState)
                     addPreferenceContent(appearancePreferences, onShowMessage, sectionState)

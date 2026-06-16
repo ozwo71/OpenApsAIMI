@@ -70,6 +70,7 @@ fun OverviewScreenStacked(
     sceneExpired: Boolean = false,
     onEndScene: () -> Unit = {},
     onDismissScene: () -> Unit = {},
+    endSceneEnabled: Boolean = true,
     formatDuration: (Long) -> String = { ms -> "${(ms / 60000L).toInt()}m" },
     modifier: Modifier = Modifier
 ) {
@@ -101,6 +102,7 @@ fun OverviewScreenStacked(
             expired = sceneExpired,
             onEndClick = onEndScene,
             onDismiss = onDismissScene,
+            endEnabled = endSceneEnabled,
             formatDuration = formatDuration
         )
         Row(

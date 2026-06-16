@@ -28,6 +28,8 @@ import androidx.compose.ui.res.stringResource
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.ComposeScreenContent
 import app.aaps.core.ui.compose.LocalSnackbarHostState
+import app.aaps.core.ui.compose.MasterOfflineBanner
+import app.aaps.core.ui.compose.masterEditingEnabled
 import app.aaps.core.ui.R
 import kotlinx.coroutines.launch
 
@@ -119,6 +121,7 @@ fun PreferenceSubScreenHost(
                         .verticalScrollIndicators(listState),
                     state = listState
                 ) {
+                    item { MasterOfflineBanner(editingEnabled = masterEditingEnabled()) }
                     addPreferenceContent(
                         content = screenDef,
                         onShowMessage = onShowMessage,

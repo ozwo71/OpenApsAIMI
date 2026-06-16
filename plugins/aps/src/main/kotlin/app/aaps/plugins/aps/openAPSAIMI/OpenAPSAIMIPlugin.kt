@@ -1396,19 +1396,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         return value
     }
 
-    override fun configuration(): JsonObject =
-        JsonObject(emptyMap())
-            .put(BooleanKey.ApsUseDynamicSensitivity, preferences)
-            .put(IntKey.ApsDynIsfAdjustmentFactor, preferences)
-            .put(BooleanKey.ApsUseSmb, preferences)
-
-    override fun applyConfiguration(configuration: JsonObject) {
-        configuration
-            .store(BooleanKey.ApsUseDynamicSensitivity, preferences)
-            .store(IntKey.ApsDynIsfAdjustmentFactor, preferences)
-            .store(BooleanKey.ApsUseSmb, preferences)
-    }
-
     /**
      * Required for [app.aaps.ui.compose.preferences.AllPreferencesScreen]: only plugins that return
      * a [PreferenceSubScreenDef] appear in the Compose settings list. XML-only [addPreferenceScreen]
