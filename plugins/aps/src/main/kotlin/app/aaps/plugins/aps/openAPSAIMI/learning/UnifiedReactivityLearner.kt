@@ -1,28 +1,31 @@
 package app.aaps.plugins.aps.openAPSAIMI.learning
 
 import android.content.Context
+import app.aaps.core.data.model.GV
+import app.aaps.core.data.model.TE
 import app.aaps.core.interfaces.db.PersistenceLayer
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import java.io.File
+import java.io.FileWriter
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlin.math.pow
+import kotlin.math.sqrt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-import java.io.File
-import java.io.FileWriter
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import javax.inject.Inject
-import javax.inject.Singleton
-import kotlin.math.pow
-import kotlin.math.sqrt
 
 /**
  * Unified Reactivity Learner - Remplace le système de buckets temporels
@@ -42,11 +45,15 @@ class UnifiedReactivityLearner @Inject constructor(
     private val log: AAPSLogger,
     private val storageHelper: AimiStorageHelper
 ) {
+    internal data class BgSample(val value: Double, val timestamp: Long)
+
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val bg24hRef = AtomicReference<List<Double>>(emptyList())
-    private val bg2hRef = AtomicReference<List<Double>>(emptyList())
+    private val bg24hRef = AtomicReference<List<BgSample>>(emptyList())
+    private val bg2hRef = AtomicReference<List<BgSample>>(emptyList())
+    private val exerciseEventsRef = AtomicReference<List<Long>>(emptyList())
     private val bg24hRefreshInFlight = AtomicBoolean(false)
     private val bg2hRefreshInFlight = AtomicBoolean(false)
+    private val exerciseRefreshInFlight = AtomicBoolean(false)
     
     companion object {
         private const val ANALYSIS_INTERVAL_MS = 30 * 60 * 1000L  // 30 minutes
@@ -63,6 +70,8 @@ class UnifiedReactivityLearner @Inject constructor(
         val hypo_count: Int,
         val globalFactor: Double,
         val shortTermFactor: Double,
+        val segmentFactor: Double,
+        val segmentDaypart: ReactivityDaypart,
         val previousFactor: Double,
         val adjustmentReason: String,
         val floorLocked: Boolean = false,
@@ -104,6 +113,8 @@ class UnifiedReactivityLearner @Inject constructor(
      */
     var shortTermFactor = 1.0
         private set
+
+    private val segmentFactors = ReactivityDaypart.entries.associateWith { 1.0 }.toMutableMap()
     
     private var lastAnalysisTime = 0L
     private var lastShortAnalysisTime = 0L
@@ -113,10 +124,22 @@ class UnifiedReactivityLearner @Inject constructor(
     }
     
     /**
-     * Retourne le facteur combiné (60% long terme, 40% court terme)
+     * Retourne le facteur combiné (40% global, 30% court terme, 30% segment horaire).
      */
-    fun getCombinedFactor(): Double {
-        return (globalFactor * 0.60 + shortTermFactor * 0.40).coerceIn(0.5, 1.5)
+    fun getCombinedFactor(hourOfDay: Int = currentHourOfDay()): Double {
+        val daypart = ReactivityDaypart.fromHour(hourOfDay)
+        val segment = segmentFactors[daypart] ?: globalFactor
+        return ReactivityDaypart.combineFactors(globalFactor, shortTermFactor, segment)
+    }
+
+    fun segmentFactorFor(hourOfDay: Int): Double {
+        val daypart = ReactivityDaypart.fromHour(hourOfDay)
+        return segmentFactors[daypart] ?: globalFactor
+    }
+
+    private fun currentHourOfDay(): Int {
+        val calendar = Calendar.getInstance()
+        return calendar.get(Calendar.HOUR_OF_DAY)
     }
     
     /**
@@ -145,7 +168,9 @@ class UnifiedReactivityLearner @Inject constructor(
         
         try {
             refreshBg24hAsync(start)
-            val bgReadings = bg24hRef.get()
+            refreshExerciseEventsAsync(start)
+            val bgSamples = bg24hRef.get()
+            val bgReadings = bgSamples.map { it.value }
             
             if (bgReadings.isEmpty() || bgReadings.size < 12) {
                 log.warn(LTag.APS, "UnifiedReactivityLearner: Pas assez de données BG (${bgReadings.size})")
@@ -167,16 +192,7 @@ class UnifiedReactivityLearner @Inject constructor(
             val tir_above_180 = (above180.toDouble() / bgReadings.size.toDouble()) * 100.0
             
             // 2. Détection épisodes hypo (groupements contigus < 70)
-            var hypo_count = 0
-            var inHypo = false
-            for (bg in bgReadings) {
-                if (bg < 70.0 && !inHypo) {
-                    hypo_count++
-                    inHypo = true
-                } else if (bg >= 70.0) {
-                    inHypo = false
-                }
-            }
+            val hypo_count = ReactivityDaypart.countHypoEpisodes(bgReadings)
             
             // 3. Coefficient de Variation (CV%)
             val mean = bgReadings.average()
@@ -363,6 +379,10 @@ class UnifiedReactivityLearner @Inject constructor(
         
         // 📊 Capture snapshot for rT display
         val now = dateUtil.now()
+        val windowStart = now - (24 * 60 * 60 * 1000L)
+        updateSegmentFactors(windowStart, now)
+
+        val currentDaypart = ReactivityDaypart.fromHour(currentHourOfDay())
         lastAnalysis = AnalysisSnapshot(
             timestamp = now,
             tir70_180 = perf.tir70_180,
@@ -370,6 +390,8 @@ class UnifiedReactivityLearner @Inject constructor(
             hypo_count = perf.hypo_count,
             globalFactor = globalFactor,
             shortTermFactor = shortTermFactor,
+            segmentFactor = segmentFactors[currentDaypart] ?: globalFactor,
+            segmentDaypart = currentDaypart,
             previousFactor = previousFactor,
             adjustmentReason = reasonsStr,
             floorLocked = globalFactor <= 0.5501,
@@ -381,6 +403,55 @@ class UnifiedReactivityLearner @Inject constructor(
         exportToCSV(perf, reasonsStr)
         
         return globalFactor
+    }
+
+    private fun updateSegmentFactors(windowStart: Long, windowEnd: Long) {
+        val samples = bg24hRef.get()
+        if (samples.size < 12) return
+
+        val exerciseTimestamps = exerciseEventsRef.get()
+        for (daypart in ReactivityDaypart.entries) {
+            val segmentSamples = samples.filter { sample ->
+                ReactivityDaypart.fromHour(hourFromTimestamp(sample.timestamp)) == daypart
+            }
+            if (segmentSamples.size < 3) continue
+
+            val values = segmentSamples.map { it.value }
+            val hypoCount = ReactivityDaypart.countHypoEpisodes(values)
+            val above180 = values.count { it > 180.0 }
+            val tirAbove180 = (above180.toDouble() / values.size) * 100.0
+            val exerciseInSegment = ReactivityDaypart.hasExerciseInDaypart(
+                exerciseTimestamps = exerciseTimestamps,
+                daypart = daypart,
+                windowStart = windowStart,
+                windowEnd = windowEnd,
+                hourFromTimestamp = ::hourFromTimestamp,
+            )
+
+            val currentSegment = segmentFactors[daypart] ?: globalFactor
+            val rawSegment = ReactivityDaypart.computeRawSegmentFactor(
+                currentSegment = currentSegment,
+                hypoCount = hypoCount,
+                tirAbove180 = tirAbove180,
+                exerciseInSegment = exerciseInSegment,
+            )
+            val shrunk = ReactivityDaypart.shrinkTowardGlobal(
+                rawSegment = rawSegment,
+                global = globalFactor,
+                sampleCount = segmentSamples.size,
+            )
+            segmentFactors[daypart] = ReactivityDaypart.capSegmentAgainstGlobal(
+                segment = shrunk,
+                global = globalFactor,
+                hypoCount = hypoCount,
+            ).coerceIn(ReactivityDaypart.FACTOR_MIN, ReactivityDaypart.FACTOR_MAX)
+        }
+    }
+
+    private fun hourFromTimestamp(timestamp: Long): Int {
+        val calendar = Calendar.getInstance()
+        calendar.timeInMillis = timestamp
+        return calendar.get(Calendar.HOUR_OF_DAY)
     }
     
     /**
@@ -418,7 +489,8 @@ class UnifiedReactivityLearner @Inject constructor(
         
         try {
             refreshBg2hAsync(start)
-            val bgReadings = bg2hRef.get()
+            val bgSamples = bg2hRef.get()
+            val bgReadings = bgSamples.map { it.value }
             
             if (bgReadings.isEmpty() || bgReadings.size < 6) {
                 return null  // Need at least 30 min of data
@@ -437,12 +509,7 @@ class UnifiedReactivityLearner @Inject constructor(
             val tir_above_250 = (above250.toDouble() / bgReadings.size) * 100.0
             val tir_above_180 = (above180.toDouble() / bgReadings.size) * 100.0
             
-            var hypo_count = 0
-            var inHypo = false
-            for (bg in bgReadings) {
-                if (bg < 70.0 && !inHypo) { hypo_count++; inHypo = true }
-                else if (bg >= 70.0) { inHypo = false }
-            }
+            var hypo_count = ReactivityDaypart.countHypoEpisodes(bgReadings)
             
             val mean = bgReadings.average()
             val variance = bgReadings.map { (it - mean).pow(2) }.average()
@@ -469,7 +536,7 @@ class UnifiedReactivityLearner @Inject constructor(
         ioScope.launch {
             try {
                 val values = persistenceLayer.getBgReadingsDataFromTime(start, ascending = false)
-                    .mapNotNull { gv -> gv.value.takeIf { it > 39.0 } }
+                    .mapNotNull { gv -> toBgSample(gv) }
                 bg24hRef.set(values)
             } catch (_: Exception) {
                 bg24hRef.set(emptyList())
@@ -484,7 +551,7 @@ class UnifiedReactivityLearner @Inject constructor(
         ioScope.launch {
             try {
                 val values = persistenceLayer.getBgReadingsDataFromTime(start, ascending = false)
-                    .mapNotNull { gv -> gv.value.takeIf { it > 39.0 } }
+                    .mapNotNull { gv -> toBgSample(gv) }
                 bg2hRef.set(values)
             } catch (_: Exception) {
                 bg2hRef.set(emptyList())
@@ -492,6 +559,28 @@ class UnifiedReactivityLearner @Inject constructor(
                 bg2hRefreshInFlight.set(false)
             }
         }
+    }
+
+    private fun refreshExerciseEventsAsync(start: Long) {
+        if (!exerciseRefreshInFlight.compareAndSet(false, true)) return
+        ioScope.launch {
+            try {
+                val timestamps = persistenceLayer.getTherapyEventDataFromTime(start, ascending = true)
+                    .filter { event -> event.isValid && event.type == TE.Type.EXERCISE }
+                    .map { event -> event.timestamp }
+                exerciseEventsRef.set(timestamps)
+            } catch (_: Exception) {
+                exerciseEventsRef.set(emptyList())
+            } finally {
+                exerciseRefreshInFlight.set(false)
+            }
+        }
+    }
+
+    private fun toBgSample(gv: GV): BgSample? {
+        val value = gv.value
+        if (value <= 39.0) return null
+        return BgSample(value = value, timestamp = gv.timestamp)
     }
     
     /**
@@ -577,6 +666,13 @@ class UnifiedReactivityLearner @Inject constructor(
                 shortTermFactor = json.optDouble("shortTermFactor", 1.0).coerceIn(0.5, 1.5)
                 lastAnalysisTime = json.optLong("lastAnalysisTime", 0L)
                 lastShortAnalysisTime = json.optLong("lastShortAnalysisTime", 0L)
+                val segmentJson = json.optJSONObject("segmentFactors")
+                ReactivityDaypart.entries.forEach { daypart ->
+                    segmentFactors[daypart] = segmentJson
+                        ?.optDouble(daypart.jsonKey(), globalFactor)
+                        ?.coerceIn(ReactivityDaypart.FACTOR_MIN, ReactivityDaypart.FACTOR_MAX)
+                        ?: globalFactor
+                }
                 log.info(LTag.APS, "UnifiedReactivityLearner: ✅ Loaded state")
                 log.info(LTag.APS, "  → globalFactor=$globalFactor, shortTerm=$shortTermFactor")
             },
@@ -586,6 +682,9 @@ class UnifiedReactivityLearner @Inject constructor(
                 shortTermFactor = 1.0
                 lastAnalysisTime = 0L
                 lastShortAnalysisTime = 0L
+                ReactivityDaypart.entries.forEach { daypart ->
+                    segmentFactors[daypart] = 1.0
+                }
             }
         )
     }
@@ -600,6 +699,11 @@ class UnifiedReactivityLearner @Inject constructor(
         json.put("shortTermFactor", shortTermFactor)
         json.put("lastAnalysisTime", lastAnalysisTime)
         json.put("lastShortAnalysisTime", lastShortAnalysisTime)
+        val segmentJson = JSONObject()
+        ReactivityDaypart.entries.forEach { daypart ->
+            segmentJson.put(daypart.jsonKey(), segmentFactors[daypart] ?: globalFactor)
+        }
+        json.put("segmentFactors", segmentJson)
         
         if (storageHelper.saveFileSafe(file, json.toString())) {
             log.debug(LTag.APS, "UnifiedReactivityLearner: ✅ Saved state")
