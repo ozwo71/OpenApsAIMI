@@ -2,7 +2,9 @@ package app.aaps.plugins.aps.openAPSAIMI.risk
 
 import app.aaps.core.interfaces.aps.Predictions
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoThresholdMath
+import app.aaps.plugins.aps.openAPSAIMI.safety.MealSafetyContext
 
 data class AimiRiskEnvelope(
     val phase: AimiRiskPhase,
@@ -82,21 +84,32 @@ object AimiRiskEnvelopeBuilder {
         lgsThreshold: Int?,
         naiveEbgSignGuardApplied: Boolean,
         predictionAuthority: DecisionPredictionAuthority? = null,
+        mealSafetyContext: MealSafetyContext = MealSafetyContext(),
+        mealAbsorptionPhase: MealAbsorptionPhase = MealAbsorptionPhase.NONE,
     ): AimiRiskEnvelope {
         val predForDecision = predictionAuthority?.predTerminalMgdl ?: predTerminal
         val eventualForDecision = predictionAuthority?.eventualTerminalMgdl ?: eventualTerminal
+        val (adjPred, adjEventual) = SafetyPredictionTerminalsResolver.adjustForDecisionEnvelope(
+            bg = bg,
+            delta = delta,
+            predForDecision = predForDecision,
+            eventualForDecision = eventualForDecision,
+            predictionAuthority = predictionAuthority,
+            mealContext = mealSafetyContext,
+            mealAbsorptionPhase = mealAbsorptionPhase,
+        )
         val composite = PredictionPathMath.compositeMinMgdl(
             bg = bg,
-            predTerminal = predForDecision,
-            eventualTerminal = eventualForDecision,
+            predTerminal = adjPred,
+            eventualTerminal = adjEventual,
         )
         val hypoTh = HypoThresholdMath.computeHypoThreshold(composite, lgsThreshold)
         return AimiRiskEnvelope(
             phase = AimiRiskPhase.DECISION,
             bgNowMgdl = bg,
             deltaMgdlPer5 = delta,
-            predTerminalMgdl = predForDecision,
-            eventualTerminalMgdl = eventualForDecision,
+            predTerminalMgdl = adjPred,
+            eventualTerminalMgdl = adjEventual,
             pkpdEventualMgdl = predictionAuthority?.pkpdEventualMgdl ?: eventualTerminal,
             scenarioFloorTerminalMgdl = predictionAuthority?.scenarioFloorTerminalMgdl,
             scenarioBestTerminalMgdl = predictionAuthority?.scenarioBestTerminalMgdl,

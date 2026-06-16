@@ -125,4 +125,31 @@ object SafetyPredictionTerminalsResolver {
         }
         return adjPred to adjEventual
     }
+
+    /**
+     * Meal-aware terminal adjustment for the DECISION risk envelope (SMB hypo-gate composite).
+     * Reuses [adjustTerminals] so the DECISION composite stays consistent with the safety-start path.
+     * Skips uplift when [predictionAuthority] flags false-meal suppression.
+     */
+    fun adjustForDecisionEnvelope(
+        bg: Double,
+        delta: Float,
+        predForDecision: Double,
+        eventualForDecision: Double,
+        predictionAuthority: DecisionPredictionAuthority?,
+        mealContext: MealSafetyContext,
+        mealAbsorptionPhase: MealAbsorptionPhase = MealAbsorptionPhase.NONE,
+    ): Pair<Double, Double> {
+        val mealRiseConfirmed =
+            predictionAuthority?.falseMealSuppression != true &&
+                isMealRiseConfirmed(bg, delta, mealContext, mealAbsorptionPhase)
+        return adjustTerminals(
+            bg = bg,
+            delta = delta,
+            pred = predForDecision,
+            eventual = eventualForDecision,
+            uamTerminal = predictionAuthority?.scenarioBestTerminalMgdl,
+            mealRiseConfirmed = mealRiseConfirmed,
+        )
+    }
 }

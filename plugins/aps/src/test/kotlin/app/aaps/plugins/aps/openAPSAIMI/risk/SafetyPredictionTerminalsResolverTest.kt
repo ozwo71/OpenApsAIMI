@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.risk
 
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.risk.SafetyPredictionTerminalsResolver
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionCurve
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionKind
@@ -78,5 +79,33 @@ class SafetyPredictionTerminalsResolverTest {
         )
         assertEquals(119.0, result.compositeMinMgdl, 0.001)
         assertTrue(result.eventualBg >= 119.0)
+    }
+
+    @Test
+    fun adjustForDecisionEnvelope_lifts_floor_pred_for_meal_rise() {
+        val authority = DecisionPredictionAuthority(
+            predTerminalMgdl = 39.0,
+            eventualTerminalMgdl = 166.0,
+            pkpdEventualMgdl = 166.0,
+            scenarioFloorTerminalMgdl = 39.0,
+            scenarioBestTerminalMgdl = 166.0,
+            source = DecisionPredictionSource.SCENARIO_MEAL_UPLIFT,
+            scenarioUpliftApplied = true,
+            falseMealSuppression = false,
+            reason = "test",
+        )
+        val (adjPred, adjEventual) = SafetyPredictionTerminalsResolver.adjustForDecisionEnvelope(
+            bg = 145.0,
+            delta = 3f,
+            predForDecision = 39.0,
+            eventualForDecision = 166.0,
+            predictionAuthority = authority,
+            mealContext = MealSafetyContext(mealModeActive = true),
+            mealAbsorptionPhase = MealAbsorptionPhase.FIRST_WAVE,
+        )
+        assertTrue(adjPred > 100.0)
+        assertEquals(166.0, adjEventual, 0.001)
+        val composite = PredictionPathMath.compositeMinMgdl(145.0, adjPred, adjEventual)
+        assertEquals(145.0, composite, 0.001)
     }
 }

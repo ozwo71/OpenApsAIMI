@@ -4616,6 +4616,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             lgsThreshold = profile.lgsThreshold,
             naiveEbgSignGuardApplied = naiveEbgResolution.signGuardApplied,
             predictionAuthority = decisionPrediction,
+            mealSafetyContext = buildMealSafetyContext(isExplicitAdvisorRun = false, iobData = iobData),
+            mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
         )
         consoleLog.add(AimiRiskEnvelopeBuilder.formatLogLine(cachedRiskEnvelopeDecision!!))
         reconcileSafetyRiskWithDecisionEnvelope()
