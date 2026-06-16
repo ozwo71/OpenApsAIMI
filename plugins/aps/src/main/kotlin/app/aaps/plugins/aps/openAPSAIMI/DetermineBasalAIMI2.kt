@@ -80,6 +80,9 @@ import app.aaps.plugins.aps.openAPSAIMI.recursive.RecursiveBeliefSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.recursive.RecursiveBeliefTickContext
 import app.aaps.plugins.aps.openAPSAIMI.recursive.RbtExtendedSignals
 import app.aaps.plugins.aps.openAPSAIMI.recursive.ReleaseAuthority
+import app.aaps.plugins.aps.openAPSAIMI.recursive.RbtChaosEvaluator
+import app.aaps.plugins.aps.openAPSAIMI.recursive.RbtEpisodeMemory
+import app.aaps.plugins.aps.openAPSAIMI.recursive.RbtResolutionBridge
 import app.aaps.plugins.aps.openAPSAIMI.recursive.UnfoldExporter
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryHypoCredibility
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryMpcFeedForward
@@ -1406,6 +1409,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastHyperTrajectoryRelease = null
         lastRecursiveBeliefSnapshot = null
         lastRecursiveAuthorityGateDecision = null
+        lastRbtChaosEvaluation = null
+        lastRbtAppliedHints = null
         lastLoadGovernorMultiplierG = 1.0
         lastPhysiologicalPhaseOutput = null
         lastPhysiologicalPatternSnapshot = null
@@ -3137,6 +3142,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
     }
 
+    private fun rbtIgnoreMinPredictedCurve(): Boolean {
+        lastRbtAppliedHints?.let { return it.ignoreMinPredictedCurve }
+        return lastHyperTrajectoryRelease?.hypoMinPredIgnored == true ||
+            lastRecursiveBeliefSnapshot?.resolutions?.hypoMinPredIgnored == true
+    }
+
     private fun runRecursiveBeliefResolve(
         v3SmbU: Double,
         htr: HyperTrajectoryReleaseResult,
@@ -3522,6 +3533,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             hasRecentMealEstimate = hasRecentMealEstimate,
             minBgLookback75m = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
             estimatedRa = continuousStateEstimator.getLastRa(),
+            mealChannelHint = lastRbtAppliedHints?.mealChannel,
         )
 
         if (gate.engage) {
@@ -3714,6 +3726,32 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleLog.add(UnfoldExporter.formatLogLine(snap))
             }
             val rbtPrefs = RecursiveBeliefPreferences.from(preferences)
+            val chaosEval = rbtSnapshot?.let { snap ->
+                RbtChaosEvaluator.evaluate(
+                    RbtChaosEvaluator.Input(
+                        snapshot = snap,
+                        trajectoryUncertain = trajectoryGuard.getLastAnalysis()?.classification == TrajectoryType.UNCERTAIN,
+                        patternCapFlapping = patternCapHold.holding,
+                    ),
+                )
+            }
+            lastRbtChaosEvaluation = chaosEval
+            RbtEpisodeMemory.tick(
+                nowMs = dateUtil.now(),
+                postHypoReboundProb = lastPhysioLatentState?.postHypoReboundProb ?: 0.0,
+                chaosScore = chaosEval?.score ?: 0.0,
+                mealProb = lastPhysioLatentState?.mealProb ?: 0.0,
+            )
+            val activeEpisode = RbtEpisodeMemory.activeEpisode(dateUtil.now())
+            chaosEval?.takeIf { it.active || it.caution }?.let {
+                consoleLog.add("🌪️ RBT_CHAOS: ${it.summary()}")
+            }
+            activeEpisode?.let {
+                consoleLog.add(
+                    "📖 RBT_EPISODE: ${it.kind.name} age=${"%.0f".format(it.ageMinutes(dateUtil.now()))}min " +
+                        "peak=${"%.2f".format(it.peakScore)} ticks=${it.tickCount}",
+                )
+            }
             val authorityGate = RecursiveBeliefAuthorityGate.evaluate(
                 RecursiveBeliefAuthorityGate.Input(
                     authorityEnabled = rbtPrefs.authorityEnabled,
@@ -3726,9 +3764,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     patientState = lastPatientState,
                     patientModeDecision = lastPatientModeDecision,
                     safetyRiskExport = lastSafetyRiskExport,
+                    chaos = chaosEval,
+                    episode = activeEpisode,
                 ),
             )
             lastRecursiveAuthorityGateDecision = authorityGate
+            lastRbtAppliedHints = RbtResolutionBridge.apply(
+                resolution = rbtSnapshot?.resolutions,
+                effectiveAuthority = authorityGate.effectiveAuthority,
+                chaos = chaosEval,
+                episode = activeEpisode,
+                defaultMealPriority = lastMealAbsorptionOutput?.mealDeliveryPriority == true,
+            )
+            consoleLog.add("🔌 RBT_WIRE: ${lastRbtAppliedHints?.summary ?: "inactive"}")
             val physioCapU = lastPhysiologicalPhaseOutput?.policy
                 ?.takeIf { it.capsHtrRelease() }
                 ?.smbFloorCapU
@@ -3777,7 +3825,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     smbFloorU = if (rbtAuthority) min(r.smbDemandU, lifted) else min(htr.smbFloorU, lifted),
                     v3SmbAfterU = lifted,
                     suppressTrajBasalShift = r.suppressTrajBasalShift || htr.suppressTrajBasalShift,
-                    hypoMinPredIgnored = r.hypoMinPredIgnored,
+                    hypoMinPredIgnored = lastRbtAppliedHints?.ignoreMinPredictedCurve ?: r.hypoMinPredIgnored,
                     reason = htr.reason + " | RBT[${authorityGate.effectiveAuthority}] ${r.reasonCodes.joinToString(",")} gate=${authorityGate.reasonCodes.joinToString("+")}",
                 )
             } else {
@@ -7719,6 +7767,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastHyperTrajectoryRelease: HyperTrajectoryReleaseResult? = null
     private var lastRecursiveBeliefSnapshot: RecursiveBeliefSnapshot? = null
     private var lastRecursiveAuthorityGateDecision: RecursiveBeliefAuthorityGate.Decision? = null
+    private var lastRbtChaosEvaluation: RbtChaosEvaluator.Result? = null
+    private var lastRbtAppliedHints: RbtResolutionBridge.AppliedHints? = null
     private var lastLoadGovernorMultiplierG: Double = 1.0
     private var lastPhysiologicalPhaseOutput: PhysiologicalPhaseClassifier.Output? = null
     private var lastPhysiologicalPatternSnapshot: PhysiologicalPatternSnapshot? = null
@@ -8919,9 +8969,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 hypo = hypoGuard,
                 delta = delta.toDouble(),
                 mealContext = effectiveMealContext,
-                ignoreMinPredictedCurve =
-                    lastHyperTrajectoryRelease?.hypoMinPredIgnored == true ||
-                        lastRecursiveBeliefSnapshot?.resolutions?.hypoMinPredIgnored == true,
+                ignoreMinPredictedCurve = rbtIgnoreMinPredictedCurve(),
             )
             if (lgsReason != null) {
                 val lgsLine = when (lgsReason) {
@@ -9340,7 +9388,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🚀 REACTOR MODE: Full Speed (Safety delegated to applySafetyPrecautions)
         // User Directive: "Garde le moteur à plein régime"
         
-        val effectiveProposed = proposedUnits
+        val effectiveProposed = proposedUnits * (lastRbtAppliedHints?.waitBiasMultiplier ?: 1.0)
+        lastRbtAppliedHints?.takeIf { it.waitBiasMultiplier < 0.99 }?.let {
+            consoleLog.add(
+                "⏳ RBT wait_bias: ${"%.2f".format(proposedUnits)}→${"%.2f".format(effectiveProposed)}U " +
+                    "(×${"%.2f".format(it.waitBiasMultiplier)})",
+            )
+        }
 
         // No inline clamping here. 
         // We trust the UnifiedReactivityLearner to provide the correct amplification
@@ -9352,7 +9406,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val uamConfidence = AimiUamHandler.confidenceOrZero()
         val uamHypotheses = lastUamHypothesisState
         val mealAbsorption = lastMealAbsorptionOutput
-        val suppressMealInterpretation = uamHypotheses?.suppressMealInterpretation == true
+        val suppressMealInterpretation = uamHypotheses?.suppressMealInterpretation == true ||
+            lastRbtAppliedHints?.suppressMealInterpretation == true
         val mealDeliveryPriority = !isExplicitUserAction &&
             !suppressMealInterpretation &&
             (mealAbsorption?.mealDeliveryPriority == true)
@@ -9375,7 +9430,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 (this.delta.toDouble() >= 1.8 || this.shortAvgDelta.toDouble() >= 1.5) &&
                 (this.iob.toDouble() < this.maxIob * 0.75)
         val mealPriorityContext =
-            mealDeliveryPriority ||
+            lastRbtAppliedHints?.mealPriorityContext == true ||
+                mealDeliveryPriority ||
                 legacyMealPriority ||
                 (!isExplicitUserAction && mealCorrectionContext.mealPriorityEligible)
         val highBgBandForHtr = HyperTrajectoryHypoCredibility.highBgBandMgdl(
@@ -9410,7 +9466,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             else -> null
         }
         val rawMinPred = minPredictedAcrossCurves(rT.predBGs)
-        val minPredForStacking = if (lastHyperTrajectoryRelease?.hypoMinPredIgnored == true && rawMinPred != null) {
+        val minPredForStacking = if (rbtIgnoreMinPredictedCurve() && rawMinPred != null) {
             val dev = bg - targetBg
             max(rawMinPred, bg - HyperTrajectoryHypoCredibility.hypoCredibilityDropMgdl(dev))
         } else {

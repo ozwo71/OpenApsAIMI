@@ -36,6 +36,8 @@ internal object RecursiveBeliefAuthorityGate {
         val patientState: PatientStateSnapshot?,
         val patientModeDecision: PatientModeOrchestrator.Decision?,
         val safetyRiskExport: SafetyRiskExportSnapshot?,
+        val chaos: RbtChaosEvaluator.Result? = null,
+        val episode: RbtEpisodeMemory.EpisodeState? = null,
     )
 
     data class Decision(
@@ -96,6 +98,22 @@ internal object RecursiveBeliefAuthorityGate {
         if (!input.predictionAvailable) {
             reasonCodes += "PRED_MISSING"
             maxAllowedAuthority = ReleaseAuthority.NONE
+        }
+        if (input.chaos?.active == true) {
+            reasonCodes += "CHAOS_BLOCK"
+            maxAllowedAuthority = ReleaseAuthority.NONE
+        } else if (input.chaos?.caution == true && maxAllowedAuthority == ReleaseAuthority.HARD) {
+            reasonCodes += "CHAOS_CAUTION"
+            maxAllowedAuthority = ReleaseAuthority.SOFT
+        }
+        if (input.episode?.kind == RbtEpisodeMemory.EpisodeKind.CHAOTIC) {
+            reasonCodes += "EPISODE_CHAOTIC"
+            if (maxAllowedAuthority == ReleaseAuthority.HARD) {
+                maxAllowedAuthority = ReleaseAuthority.SOFT
+            }
+        }
+        if (input.episode?.kind == RbtEpisodeMemory.EpisodeKind.POST_HYPO_REBOUND) {
+            reasonCodes += "EPISODE_POST_HYPO"
         }
         if (input.safetyRiskExport?.predictiveHypoSuppressed == true) {
             if (predictiveHypoMealBypass) {

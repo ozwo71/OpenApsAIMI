@@ -16,6 +16,7 @@ class RecursiveBeliefPhysioGatingTest {
     @BeforeEach
     fun resetMemory() {
         RecursiveBeliefMemory.clearForTests()
+        RbtEpisodeMemory.clearForTests()
     }
 
     @Test

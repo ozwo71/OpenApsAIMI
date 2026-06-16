@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.autodrive.safety
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextRepository
+import app.aaps.plugins.aps.openAPSAIMI.recursive.MealChannelHint
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -32,6 +33,7 @@ class AutoDriveGater @Inject constructor(
         hasRecentMealEstimate: Boolean = false,
         minBgLookback75m: Double = 200.0,
         estimatedRa: Double = 0.0,
+        mealChannelHint: MealChannelHint? = null,
     ): GatingResult {
         // 1. Fetch real-time health data
         val health = healthRepo.fetchSnapshotForAutodriveGater()
@@ -54,11 +56,17 @@ class AutoDriveGater @Inject constructor(
         }
 
         // 3. Meal-awareness: explicit mode OR implicit meal-like context
+        val rbtMealPriority = mealChannelHint == MealChannelHint.PRIORITY
+        val rbtMealSuppress = mealChannelHint == MealChannelHint.SUPPRESS
         val implicitMealContext =
-            explicitMealMode ||
-                hasRecentMealEstimate ||
-                cob > 8.0 ||
-                (cob > 3.0 && uamConfidence >= 0.35)
+            !rbtMealSuppress &&
+                (
+                    rbtMealPriority ||
+                        explicitMealMode ||
+                        hasRecentMealEstimate ||
+                        cob > 8.0 ||
+                        (cob > 3.0 && uamConfidence >= 0.35)
+                    )
 
         // 4. Refined glycemic entry thresholds
         val isHighPlateau = bg > 150.0
