@@ -44,6 +44,7 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningExportStatus
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningPlan
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningStepTier
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.JsonlTailReader
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorFamilyId
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiControlCenterPendingChanges
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiFamilyWritebackPlan
@@ -135,6 +136,8 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             try {
                 val history = historyRepo.getRecentActions(10)
                 val report = advisorService.generateReport(periodDays = 10, history = history, assetContext = applicationContext)
+                // Sequential IO: avoid loading AIMI_Decisions.jsonl while APS/TIR data from generateReport is still retained.
+                val lastRbtExport = loadLastRecursiveBeliefJson()
                 val advisorCtx = report.advisorContext
 
                 withContext(Dispatchers.Main) {
@@ -162,8 +165,8 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                     // 1d. Product bridge: observed outcomes -> AIMI behavior families
                     rootLayout.addView(createBehaviorFamilyBridgeCard(familyBridgeSuggestions, cardColor))
 
-                    // 1e. Recursive belief unfold (JSONL snapshot)
-                    rootLayout.addView(createRecursiveBeliefUnfoldCard(cardColor))
+                    // 1e. Recursive belief unfold (JSONL snapshot, preloaded on IO)
+                    rootLayout.addView(createRecursiveBeliefUnfoldCard(cardColor, lastRbtExport))
             
                     // 2. Metrics Grid (2x2)
                     rootLayout.addView(createMetricsGrid(report.metrics, cardColor))
@@ -440,8 +443,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                     }
                     
                     // 2. Add Decision Log (JSONL) - Last 24h ONLY
-                    val externalDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS)
-                    val jsonFile = java.io.File(externalDir, "AAPS/AIMI_Decisions.jsonl")
+                    val jsonFile = aimiDecisionsJsonlFile()
                     
                     if (jsonFile.exists() && jsonFile.canRead()) {
                         val entry = java.util.zip.ZipEntry("AIMI_Decisions_Last24h.jsonl")
@@ -1567,7 +1569,10 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             AimiBehaviorFamilyId.Autonomy -> R.string.aimi_control_center_autonomy_title
         }
 
-    private fun createRecursiveBeliefUnfoldCard(cardColor: Int): CardView {
+    private fun createRecursiveBeliefUnfoldCard(
+        cardColor: Int,
+        lastExport: org.json.JSONObject?,
+    ): CardView {
         val shadowEnabled = preferences.get(BooleanKey.OApsAIMIRecursiveBeliefShadow)
         val authorityEnabled = preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority)
         val waveletEnabled = preferences.get(BooleanKey.OApsAIMIRecursiveBeliefWavelet)
@@ -1625,42 +1630,40 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         column.addView(buttonRow)
         card.addView(column)
 
-        lifecycleScope.launch(Dispatchers.IO) {
-            val lastExport = loadLastRecursiveBeliefJson()
-            withContext(Dispatchers.Main) {
-                if (isFinishing) return@withContext
-                if (lastExport == null) {
-                    summaryText.text = rh.gs(R.string.aimi_rbt_unfold_no_data)
-                    return@withContext
-                }
-                val resolution = lastExport.optJSONObject("resolution")
-                val auth = resolution?.optString("release_authority", "NONE") ?: "NONE"
-                val smb = resolution?.optDouble("smb_demand_u", 0.0) ?: 0.0
-                val paradoxCount = lastExport.optJSONArray("paradoxes")?.length() ?: 0
-                val shadowOnly = lastExport.optBoolean("shadow_only", true)
-                summaryText.text = rh.gs(
-                    R.string.aimi_rbt_unfold_summary,
-                    auth,
-                    smb,
-                    paradoxCount,
-                    shadowOnly.toString(),
-                )
-                viewBtn.isEnabled = true
-                viewBtn.setOnClickListener {
-                    showRecursiveBeliefUnfoldDialog(lastExport.toString(2))
-                }
+        if (lastExport == null) {
+            summaryText.text = rh.gs(R.string.aimi_rbt_unfold_no_data)
+        } else {
+            val resolution = lastExport.optJSONObject("resolution")
+            val auth = resolution?.optString("release_authority", "NONE") ?: "NONE"
+            val smb = resolution?.optDouble("smb_demand_u", 0.0) ?: 0.0
+            val paradoxCount = lastExport.optJSONArray("paradoxes")?.length() ?: 0
+            val shadowOnly = lastExport.optBoolean("shadow_only", true)
+            summaryText.text = rh.gs(
+                R.string.aimi_rbt_unfold_summary,
+                auth,
+                smb,
+                paradoxCount,
+                shadowOnly.toString(),
+            )
+            viewBtn.isEnabled = true
+            viewBtn.setOnClickListener {
+                showRecursiveBeliefUnfoldDialog(lastExport.toString(2))
             }
         }
         return card
     }
 
-    private fun loadLastRecursiveBeliefJson(): org.json.JSONObject? {
+    private fun aimiDecisionsJsonlFile(): java.io.File {
         val externalDir = android.os.Environment.getExternalStoragePublicDirectory(
             android.os.Environment.DIRECTORY_DOCUMENTS,
         )
-        val jsonFile = java.io.File(externalDir, "AAPS/AIMI_Decisions.jsonl")
+        return java.io.File(externalDir, "AAPS/AIMI_Decisions.jsonl")
+    }
+
+    private fun loadLastRecursiveBeliefJson(): org.json.JSONObject? {
+        val jsonFile = aimiDecisionsJsonlFile()
         if (!jsonFile.exists() || !jsonFile.canRead()) return null
-        val tail = jsonFile.readLines().takeLast(80).asReversed()
+        val tail = JsonlTailReader.readTailLines(jsonFile, maxLines = 80)
         for (line in tail) {
             if (!line.contains("recursive_belief")) continue
             try {
