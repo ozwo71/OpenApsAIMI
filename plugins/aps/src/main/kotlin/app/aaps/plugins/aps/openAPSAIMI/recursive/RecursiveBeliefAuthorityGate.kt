@@ -114,6 +114,9 @@ internal object RecursiveBeliefAuthorityGate {
         }
         if (input.episode?.kind == RbtEpisodeMemory.EpisodeKind.POST_HYPO_REBOUND) {
             reasonCodes += "EPISODE_POST_HYPO"
+            if (maxAllowedAuthority == ReleaseAuthority.HARD) {
+                maxAllowedAuthority = ReleaseAuthority.SOFT
+            }
         }
         if (input.safetyRiskExport?.predictiveHypoSuppressed == true) {
             if (predictiveHypoMealBypass) {

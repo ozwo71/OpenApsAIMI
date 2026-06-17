@@ -242,4 +242,33 @@ class RecursiveBeliefAuthorityGateTest {
         assertThat(decision.reasonCodes).contains("PREDICTIVE_HYPO_MEAL_BYPASS")
         assertThat(decision.reasonCodes).doesNotContain("PREDICTIVE_HYPO")
     }
+
+    @Test
+    fun evaluate_soft_limits_post_hypo_rebound_episode() {
+        val episode = RbtEpisodeMemory.EpisodeState(
+            kind = RbtEpisodeMemory.EpisodeKind.POST_HYPO_REBOUND,
+            startedAtMs = 1_718_000_000_000L,
+            lastSeenAtMs = 1_718_000_000_000L,
+            peakScore = 0.72,
+            tickCount = 3,
+        )
+        val decision = RecursiveBeliefAuthorityGate.evaluate(
+            RecursiveBeliefAuthorityGate.Input(
+                authorityEnabled = true,
+                requestedAuthority = ReleaseAuthority.HARD,
+                predictionAvailable = true,
+                phaseOutput = null,
+                patternSnapshot = PhysiologicalPatternSnapshot.EMPTY,
+                latentState = PhysioLatentState(sensorConfidence = 0.92, source = "test"),
+                hypothesisState = null,
+                patientState = null,
+                patientModeDecision = null,
+                safetyRiskExport = null,
+                episode = episode,
+            ),
+        )
+
+        assertThat(decision.effectiveAuthority).isEqualTo(ReleaseAuthority.SOFT)
+        assertThat(decision.reasonCodes).contains("EPISODE_POST_HYPO")
+    }
 }

@@ -1412,6 +1412,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastRecursiveAuthorityGateDecision = null
         lastRbtChaosEvaluation = null
         lastRbtAppliedHints = null
+        rbtResolvedThisTick = false
+        lastRbtLiveCommitResult = null
         lastLoadGovernorMultiplierG = 1.0
         lastPhysiologicalPhaseOutput = null
         lastPhysiologicalPatternSnapshot = null
@@ -3160,10 +3162,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
     }
 
-    private fun rbtIgnoreMinPredictedCurve(): Boolean {
-        lastRbtAppliedHints?.let { return it.ignoreMinPredictedCurve }
-        return lastHyperTrajectoryRelease?.hypoMinPredIgnored == true ||
-            lastRecursiveBeliefSnapshot?.resolutions?.hypoMinPredIgnored == true
+    private fun rbtIgnoreMinPredictedCurve(): Boolean =
+        lastRbtAppliedHints?.ignoreMinPredictedCurve == true
+
+    private fun minPredictedBgForRbtWiring(rawMinPred: Double?): Double? {
+        if (rawMinPred == null) return null
+        val hints = lastRbtAppliedHints ?: return rawMinPred
+        val dev = bg - targetBg
+        val drop = HyperTrajectoryHypoCredibility.hypoCredibilityDropMgdl(dev)
+        return when {
+            hints.ignoreMinPredictedCurve -> max(rawMinPred, bg - drop)
+            hints.partialMinPredCredibility ->
+                max(rawMinPred, bg - drop * RbtResolutionBridge.PARTIAL_CREDIBILITY_BLEND)
+            else -> rawMinPred
+        }
     }
 
     private fun runRecursiveBeliefResolve(
@@ -3405,10 +3417,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     )
 
     /**
-     * Resolve RBT + physio gate + wiring each loop tick. When [applyV3SmbDelivery] is true (Autodrive V3 engage),
-     * merges resolver SMB demand with HTR and may call [finalizeAndCapSMB].
+     * Resolve RBT + physio gate + wiring once per loop tick (dedup-guarded).
      */
-    private fun commitRbtLiveTick(
+    private fun resolveAndWireRbtLiveTick(
         ctx: AimiTickContext,
         profile: OapsProfileAimi,
         rT: RT,
@@ -3420,13 +3431,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         autodriveGateOpen: Boolean = false,
         mpcFeedForwardRa: Double? = null,
         cbfShieldDeltaU: Double? = null,
-        applyV3SmbDelivery: Boolean = false,
-        hypoThresholdMgdl: Double? = null,
-        v3CommandSafe: Boolean = false,
-        adCommandReason: String? = null,
     ): RbtLiveCommitResult? {
+        if (rbtResolvedThisTick) {
+            return lastRbtLiveCommitResult
+        }
         val rbtPrefsEarly = RecursiveBeliefPreferences.from(preferences)
         if (!RecursiveBeliefPreferences.isActive(rbtPrefsEarly)) return null
+        rbtResolvedThisTick = true
         val htr = evaluateHyperTrajectoryRelease(
             v3SmbU = v3SmbU,
             rT = rT,
@@ -3511,6 +3522,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             defaultMealPriority = lastMealAbsorptionOutput?.mealDeliveryPriority == true,
         )
         consoleLog.add("🔌 RBT_WIRE: ${lastRbtAppliedHints?.summary ?: "inactive"}")
+        val result = mergeRbtHyperTrajectoryRelease(
+            htr = htr,
+            rbtSnapshot = rbtSnapshot,
+            authorityGate = authorityGate,
+            rT = rT,
+        )
+        lastRbtLiveCommitResult = result
+        return result
+    }
+
+    private fun mergeRbtHyperTrajectoryRelease(
+        htr: HyperTrajectoryReleaseResult,
+        rbtSnapshot: RecursiveBeliefSnapshot?,
+        authorityGate: RecursiveBeliefAuthorityGate.Decision,
+        rT: RT,
+    ): RbtLiveCommitResult {
         val physioCapU = lastPhysiologicalPhaseOutput?.policy
             ?.takeIf { it.capsHtrRelease() }
             ?.smbFloorCapU
@@ -3547,46 +3574,56 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 smbFloorU = if (rbtAuthority) min(r.smbDemandU, lifted) else min(htr.smbFloorU, lifted),
                 v3SmbAfterU = lifted,
                 suppressTrajBasalShift = r.suppressTrajBasalShift || htr.suppressTrajBasalShift,
-                hypoMinPredIgnored = lastRbtAppliedHints?.ignoreMinPredictedCurve ?: r.hypoMinPredIgnored,
+                hypoMinPredIgnored = lastRbtAppliedHints?.ignoreMinPredictedCurve == true || r.hypoMinPredIgnored,
                 reason = htr.reason + " | RBT[${authorityGate.effectiveAuthority}] ${r.reasonCodes.joinToString(",")} gate=${authorityGate.reasonCodes.joinToString("+")}",
             )
         } else {
             htr
         }
         lastHyperTrajectoryRelease = effectiveHtr
-        if (applyV3SmbDelivery) {
-            val liftedV3Smb = effectiveHtr.v3SmbAfterU
-            val hypoThreshold = hypoThresholdMgdl ?: profile.lgsThreshold?.toDouble() ?: 70.0
-            if (liftedV3Smb > 0.0) {
-                val v3Reason = if (v3CommandSafe) adCommandReason ?: "Autodrive V3" else "V3 unsafe"
-                val htrReason = if (effectiveHtr.active) {
-                    "Autodrive V3+HTR: $v3Reason | 🚀 ${effectiveHtr.reason}"
-                } else {
-                    "Autodrive V3: $v3Reason"
-                }
-                finalizeAndCapSMB(
-                    rT = rT,
-                    proposedUnits = liftedV3Smb,
-                    reasonHeader = htrReason,
-                    mealData = ctx.mealData,
-                    hypoThreshold = hypoThreshold,
-                    isExplicitUserAction = false,
-                    decisionSource = if (effectiveHtr.active) {
-                        if (rbtAuthority) "AutodriveV3+RBT" else "AutodriveV3+HTR"
-                    } else {
-                        "AutodriveV3"
-                    },
-                    hyperReleaseFloorU = if (effectiveHtr.active) effectiveHtr.smbFloorU else 0.0,
-                )
-            } else if (effectiveHtr.active) {
-                consoleLog.add("🚀 HTR active but lifted SMB=0 (IOB/headroom); floor=${"%.2f".format(effectiveHtr.smbFloorU)}U")
-            }
-        }
         return RbtLiveCommitResult(
             baselineHtr = htr,
             effectiveHtr = effectiveHtr,
             rbtAuthority = rbtAuthority,
         )
+    }
+
+    private fun deliverV3SmbFromRbt(
+        ctx: AimiTickContext,
+        profile: OapsProfileAimi,
+        rT: RT,
+        hypoThresholdMgdl: Double,
+        v3CommandSafe: Boolean,
+        adCommandReason: String?,
+        rbtCommit: RbtLiveCommitResult?,
+    ) {
+        val effectiveHtr = rbtCommit?.effectiveHtr ?: lastHyperTrajectoryRelease ?: return
+        val rbtAuthority = rbtCommit?.rbtAuthority == true
+        val liftedV3Smb = effectiveHtr.v3SmbAfterU
+        if (liftedV3Smb > 0.0) {
+            val v3Reason = if (v3CommandSafe) adCommandReason ?: "Autodrive V3" else "V3 unsafe"
+            val htrReason = if (effectiveHtr.active) {
+                "Autodrive V3+HTR: $v3Reason | 🚀 ${effectiveHtr.reason}"
+            } else {
+                "Autodrive V3: $v3Reason"
+            }
+            finalizeAndCapSMB(
+                rT = rT,
+                proposedUnits = liftedV3Smb,
+                reasonHeader = htrReason,
+                mealData = ctx.mealData,
+                hypoThreshold = hypoThresholdMgdl,
+                isExplicitUserAction = false,
+                decisionSource = if (effectiveHtr.active) {
+                    if (rbtAuthority) "AutodriveV3+RBT" else "AutodriveV3+HTR"
+                } else {
+                    "AutodriveV3"
+                },
+                hyperReleaseFloorU = if (effectiveHtr.active) effectiveHtr.smbFloorU else 0.0,
+            )
+        } else if (effectiveHtr.active) {
+            consoleLog.add("🚀 HTR active but lifted SMB=0 (IOB/headroom); floor=${"%.2f".format(effectiveHtr.smbFloorU)}U")
+        }
     }
 
     private fun evaluateHyperTrajectoryRelease(
@@ -3902,7 +3939,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             val v3Smb = if (v3CommandSafe) adCommand!!.scheduledMicroBolus ?: 0.0 else 0.0
             val cbfShieldDeltaU = adCommand?.scheduledMicroBolus?.takeIf { !v3CommandSafe && it > 0.01 }
-            val rbtCommit = commitRbtLiveTick(
+            val rbtCommit = resolveAndWireRbtLiveTick(
                 ctx = ctx,
                 profile = profile,
                 rT = rT,
@@ -3914,10 +3951,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 autodriveGateOpen = v3CommandSafe,
                 mpcFeedForwardRa = estimatedRaForMpc,
                 cbfShieldDeltaU = cbfShieldDeltaU,
-                applyV3SmbDelivery = true,
+            )
+            deliverV3SmbFromRbt(
+                ctx = ctx,
+                profile = profile,
+                rT = rT,
                 hypoThresholdMgdl = hypoThresholdMgdl,
                 v3CommandSafe = v3CommandSafe,
                 adCommandReason = adCommand?.reason,
+                rbtCommit = rbtCommit,
             )
             val effectiveHtr = rbtCommit?.effectiveHtr
 
@@ -7837,6 +7879,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastRecursiveAuthorityGateDecision: RecursiveBeliefAuthorityGate.Decision? = null
     private var lastRbtChaosEvaluation: RbtChaosEvaluator.Result? = null
     private var lastRbtAppliedHints: RbtResolutionBridge.AppliedHints? = null
+    private var rbtResolvedThisTick = false
+    private var lastRbtLiveCommitResult: RbtLiveCommitResult? = null
     private var lastLoadGovernorMultiplierG: Double = 1.0
     private var lastPhysiologicalPhaseOutput: PhysiologicalPhaseClassifier.Output? = null
     private var lastPhysiologicalPatternSnapshot: PhysiologicalPatternSnapshot? = null
@@ -9534,12 +9578,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             else -> null
         }
         val rawMinPred = minPredictedAcrossCurves(rT.predBGs)
-        val minPredForStacking = if (rbtIgnoreMinPredictedCurve() && rawMinPred != null) {
-            val dev = bg - targetBg
-            max(rawMinPred, bg - HyperTrajectoryHypoCredibility.hypoCredibilityDropMgdl(dev))
-        } else {
-            rawMinPred
-        }
+        val minPredForStacking = minPredictedBgForRbtWiring(rawMinPred)
         val endogenousCounterRegulatory =
             lastPhysiologicalPhaseOutput?.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY
         val stackingEval = InsulinStackingStance.evaluate(
@@ -13005,16 +13044,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val tdd24hForRbt = resolveTdd24hForExport()
             ?: tdd24Hrs.takeIf { it > 0f }?.toDouble()
             ?: (profile.max_daily_basal * 24.0).coerceAtLeast(1.0)
-        commitRbtLiveTick(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            combinedDelta = combinedDelta,
-            tdd24hU = tdd24hForRbt,
-            v3SmbU = 0.0,
-            stepsLast15m = wearableSnapshot.stepsLast15m,
-            heartRateBpm = wearableSnapshot.hrNow,
-        )
+        if (!preferences.get(BooleanKey.OApsAIMIautoDriveActive)) {
+            resolveAndWireRbtLiveTick(
+                ctx = ctx,
+                profile = profile,
+                rT = rT,
+                combinedDelta = combinedDelta,
+                tdd24hU = tdd24hForRbt,
+                v3SmbU = 0.0,
+                stepsLast15m = wearableSnapshot.stepsLast15m,
+                heartRateBpm = wearableSnapshot.hrNow,
+            )
+        }
 
         // Autodrive V3 — see [runAutodriveV3MultiVariableBranch]
         val v3Branch = runAutodriveV3MultiVariableBranch(
@@ -13029,6 +13070,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         val v3AppliedAction = v3Branch.appliedAction
         val skipLegacySmbBlender = v3Branch.skipLegacySmbBlender
+        if (preferences.get(BooleanKey.OApsAIMIautoDriveActive) && !rbtResolvedThisTick) {
+            resolveAndWireRbtLiveTick(
+                ctx = ctx,
+                profile = profile,
+                rT = rT,
+                combinedDelta = combinedDelta,
+                tdd24hU = tdd24hForRbt,
+                v3SmbU = 0.0,
+                stepsLast15m = wearableSnapshot.stepsLast15m,
+                heartRateBpm = wearableSnapshot.hrNow,
+            )
+        }
         applyPendingTrajSpiralBasalIfNotSuppressed(rT = rT, bg = bg, delta = delta)
 
         // PRIORITY 4: AUTODRIVE (Strict) [FALLBACK V2] — see [runAutodriveV2FallbackBranch]

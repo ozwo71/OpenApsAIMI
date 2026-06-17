@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test
 class RbtResolutionBridgeTest {
 
     @Test
-    fun partial_hypo_guard_ignores_min_pred_curve() {
+    fun partial_hypo_guard_uses_partial_credibility_not_full_ignore() {
         val hints = RbtResolutionBridge.apply(
             resolution = DoseChannelResolution(
                 smbDemandU = 1.0,
@@ -26,9 +26,39 @@ class RbtResolutionBridgeTest {
             episode = null,
             defaultMealPriority = false,
         )
-        assertThat(hints.ignoreMinPredictedCurve).isTrue()
+        assertThat(hints.ignoreMinPredictedCurve).isFalse()
+        assertThat(hints.partialMinPredCredibility).isTrue()
         assertThat(hints.mealPriorityContext).isTrue()
         assertThat(hints.waitBiasMultiplier).isLessThan(1.0)
+    }
+
+    @Test
+    fun authority_none_blocks_live_dosing_hints() {
+        val hints = RbtResolutionBridge.apply(
+            resolution = DoseChannelResolution(
+                smbDemandU = 1.0,
+                tbrDemandFraction = 1.0,
+                waitBias = 0.65,
+                dominantScaleMinutes = 60,
+                releaseAuthority = ReleaseAuthority.HARD,
+                hypoGuardMode = HypoGuardMode.IGNORE_MINPRED,
+                autodriveModeHint = AutodriveModeHint.V3,
+                mealChannel = MealChannelHint.PRIORITY,
+                suppressTrajBasalShift = false,
+                hypoMinPredIgnored = true,
+                reasonCodes = listOf("P1"),
+            ),
+            effectiveAuthority = ReleaseAuthority.NONE,
+            chaos = null,
+            episode = null,
+            defaultMealPriority = false,
+        )
+        assertThat(hints.ignoreMinPredictedCurve).isFalse()
+        assertThat(hints.partialMinPredCredibility).isFalse()
+        assertThat(hints.mealPriorityContext).isFalse()
+        assertThat(hints.suppressMealInterpretation).isFalse()
+        assertThat(hints.waitBiasMultiplier).isEqualTo(1.0)
+        assertThat(hints.mealChannel).isNull()
     }
 
     @Test
