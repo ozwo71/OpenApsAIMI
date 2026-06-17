@@ -28,9 +28,18 @@ data class SleepDataMTR(
     val remSleepMinutes: Int = 0,
     val lightSleepMinutes: Int = 0,
     val awakeMinutes: Int = 0,
-    val fragmentationScore: Double = 0.0 // Higher = more fragmented
+    val fragmentationScore: Double = 0.0, // Higher = more fragmented
+    /** HC session covering [now] when both bounds set (live asleep). */
+    val ongoingStartMs: Long? = null,
+    val ongoingEndMs: Long? = null,
 ) {
     fun hasValidData(): Boolean = durationHours > 0.0
+
+    fun isOngoingAt(nowMs: Long): Boolean {
+        val start = ongoingStartMs ?: return false
+        val end = ongoingEndMs ?: return false
+        return nowMs in start..end
+    }
     
     companion object {
         val EMPTY = SleepDataMTR(0, 0)

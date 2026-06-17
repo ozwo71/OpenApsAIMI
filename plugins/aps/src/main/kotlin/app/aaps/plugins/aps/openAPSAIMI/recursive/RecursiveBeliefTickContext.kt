@@ -54,6 +54,8 @@ data class RecursiveBeliefTickContext(
     val heartRateBpm: Int,
     val isNight: Boolean,
     val exerciseLockout: Boolean,
+    /** Live asleep confidence 0..1 (therapy > HC > wearable). */
+    val asleepLiveConfidence: Double = 0.0,
     val hypoMinPredIgnored: Boolean,
     val minPredictedBgMgdl: Double?,
     val dwellAboveHighBgMinutes: Int,

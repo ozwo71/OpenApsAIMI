@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.recursive
 
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
+import app.aaps.plugins.aps.openAPSAIMI.physio.SleepLiveDetector
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternId
 import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinLoadGovernor
 import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinStackingStance
@@ -353,10 +354,18 @@ object RecursiveBeliefResolver {
             else -> MealChannelHint.NORMAL
         }
 
-        if (ctx.isNight || ctx.exerciseLockout) {
+        if (ctx.exerciseLockout) {
             releaseAuthority = ReleaseAuthority.NONE
             smbDemandU = v3
-            reasonCodes += "OFF_NIGHT_EXERCISE"
+            reasonCodes += "OFF_EXERCISE"
+        } else if (SleepLiveDetector.sleepGuardActive(ctx.isNight, ctx.asleepLiveConfidence)) {
+            releaseAuthority = ReleaseAuthority.NONE
+            smbDemandU = v3
+            reasonCodes += when {
+                ctx.isNight && !SleepLiveDetector.isAsleep(ctx.asleepLiveConfidence) -> "OFF_NIGHT"
+                ctx.isNight -> "OFF_NIGHT_ASLEEP"
+                else -> "OFF_ASLEEP_LIVE"
+            }
         }
 
         val dominantScale = when {
@@ -404,7 +413,9 @@ object RecursiveBeliefResolver {
         val patterns = ctx.physiologicalPatterns ?: return false
         if (!patterns.suppressHyperRelease || ctx.behavioralRisk?.capsHtrRelease() == true) return false
         if (!mealWaveBoostAllowed || suppressMealInterpretation) return false
-        if (ctx.contextActivityActive || ctx.exerciseLockout || ctx.isNight) return false
+        if (ctx.contextActivityActive || ctx.exerciseLockout ||
+            SleepLiveDetector.sleepGuardActive(ctx.isNight, ctx.asleepLiveConfidence)
+        ) return false
         if ((ctx.extended.uamPostHypoProb ?: 0.0) >= 0.40) return false
         if ((ctx.extended.patientModeProtectionBias ?: 0.0) >= 0.70 &&
             (ctx.extended.patientModeMealBias ?: 0.0) <= 0.55

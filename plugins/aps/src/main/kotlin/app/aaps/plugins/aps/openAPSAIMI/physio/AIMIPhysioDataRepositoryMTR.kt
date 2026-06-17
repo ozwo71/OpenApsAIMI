@@ -260,6 +260,12 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
                         // Un filtre 24h seulement excluait des sessions Garmin valides (décalage fuseau / fin de nuit).
                         val windowCutoff = now.minusSeconds(48 * 60 * 60)
                         val recentSessions = response.records.filter { it.endTime.isAfter(windowCutoff) }
+                        val nowMs = now.toEpochMilli()
+                        val ongoingRecord = response.records.firstOrNull { record ->
+                            val startMs = record.startTime.toEpochMilli()
+                            val endMs = record.endTime.toEpochMilli()
+                            nowMs in startMs..endMs
+                        }
 
                         if (recentSessions.isNotEmpty()) {
                             // Sum durations
@@ -280,7 +286,9 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
                                 remSleepMinutes = 0,
                                 lightSleepMinutes = 0,
                                 awakeMinutes = 0,
-                                fragmentationScore = 0.0
+                                fragmentationScore = 0.0,
+                                ongoingStartMs = ongoingRecord?.startTime?.toEpochMilli(),
+                                ongoingEndMs = ongoingRecord?.endTime?.toEpochMilli(),
                             )
                             
                             cache[cacheKey] = CachedData(sleepData, System.currentTimeMillis())

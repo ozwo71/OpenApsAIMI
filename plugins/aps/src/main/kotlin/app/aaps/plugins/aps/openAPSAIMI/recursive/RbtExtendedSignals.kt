@@ -86,6 +86,8 @@ data class RbtExtendedSignals(
     val physioMtrStateOrdinal: Int? = null,
     val hrvDeviationZ: Double? = null,
     val sleepQualityScore: Double? = null,
+    val sleepLiveConfidence: Double? = null,
+    val sleepLiveSource: String? = null,
 ) {
     companion object {
         val EMPTY = RbtExtendedSignals()

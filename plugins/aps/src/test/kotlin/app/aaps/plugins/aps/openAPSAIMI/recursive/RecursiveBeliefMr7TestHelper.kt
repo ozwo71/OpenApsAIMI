@@ -6,6 +6,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioContextMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioStateMTR
+import app.aaps.plugins.aps.openAPSAIMI.physio.SleepLiveDetector
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternId
@@ -219,6 +220,8 @@ object RecursiveBeliefMr7TestHelper {
             physioMtrStateOrdinal = PhysioStateMTR.RECOVERY_NEEDED.ordinal,
             hrvDeviationZ = -1.3,
             sleepQualityScore = 0.42,
+            sleepLiveConfidence = 0.62,
+            sleepLiveSource = SleepLiveDetector.Source.WEARABLE.name,
         )
         val trajectory = TrajectoryAnalysis(
             classification = TrajectoryType.OPEN_DIVERGING,
@@ -358,6 +361,7 @@ object RecursiveBeliefMr7TestHelper {
             heartRateBpm = 95,
             isNight = false,
             exerciseLockout = true,
+            asleepLiveConfidence = 0.62,
             hypoMinPredIgnored = true,
             minPredictedBgMgdl = 85.0,
             dwellAboveHighBgMinutes = 45,

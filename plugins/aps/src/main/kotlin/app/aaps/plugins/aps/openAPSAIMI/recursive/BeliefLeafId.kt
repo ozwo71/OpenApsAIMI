@@ -105,6 +105,7 @@ enum class BeliefLeafId {
     SLEEP_QUALITY,
     HRV_DEVIATION,
     SLEEP_DEBT,
+    SLEEP_LIVE,
     PHYSIO_MTR_STATE,
     PATTERN_RISK,
 
@@ -147,7 +148,7 @@ enum class BeliefLeafId {
             "PHYSIO_PHASE", "CHRONO_PRIOR", "CTX_INTENTS", "CTX_MANAGER",
             "WCYCLE", "ENDOMETRIOSIS", "THYROID", "THYROID_GUARD", "GESTATION",
             "BASAL_LEARNER", "REACTIVITY", "ONLINE_LEARN", "ATTENTION", "EXERCISE_LOCK",
-            "SLEEP_QUALITY", "HRV_DEVIATION", "SLEEP_DEBT", "PHYSIO_MTR_STATE", "PATTERN_RISK",
+            "SLEEP_QUALITY", "HRV_DEVIATION", "SLEEP_DEBT", "SLEEP_LIVE", "PHYSIO_MTR_STATE", "PATTERN_RISK",
         )
 
         val MICRO: Set<BeliefLeafId> = entries.filter { it.name in MICRO_NAMES }.toSet()

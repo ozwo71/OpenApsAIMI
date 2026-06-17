@@ -121,6 +121,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioContextMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentStateBuilder
+import app.aaps.plugins.aps.openAPSAIMI.physio.SleepLiveDetector
 import app.aaps.plugins.aps.openAPSAIMI.learning.BasalAdaptiveMultiplier
 import app.aaps.plugins.aps.openAPSAIMI.physio.CircadianMealProfileStore
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
@@ -3067,6 +3068,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val hypothesisState = lastUamHypothesisState
         val patientState = lastPatientState
         val patientModeDecision = lastPatientModeDecision
+        val clockIsNight = hourOfDay >= 23 || hourOfDay < 6
+        val sleepLive = SleepLiveDetector.evaluate(
+            SleepLiveDetector.Input(
+                therapySleepTime = sleepTime,
+                stepsLast15m = wearableSnap.stepsLast15m,
+                stepsLast5m = wearableSnap.stepsLast5m,
+                hrNowBpm = wearableSnap.hrNow,
+                rhrRestingBpm = wearableSnap.rhrResting,
+                hcSessionActive = wearableSnap.hcSleepSessionActive,
+                clockIsNight = clockIsNight,
+            ),
+        )
+        if (sleepLive.isAsleep) {
+            consoleLog.add("😴 SLEEP_LIVE: ${sleepLive.summary} conf=${"%.2f".format(sleepLive.confidence)}")
+        }
         return RbtExtendedSignals(
             tubeAdvisorCapScale = lastTubeAdvisorSmbCapScale,
             insulinActivityStageOrdinal = tickInsulinActionState?.activityStage?.ordinal
@@ -3139,6 +3155,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             physioMtrStateOrdinal = physioCtx.state.ordinal,
             hrvDeviationZ = physioCtx.hrvDeviationZ.takeIf { physioCtx.confidence > 0.0 },
             sleepQualityScore = physioCtx.features?.sleepQualityScore,
+            sleepLiveConfidence = sleepLive.confidence,
+            sleepLiveSource = sleepLive.source.name,
         )
     }
 
@@ -3338,6 +3356,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             heartRateBpm = heartRateBpm,
             isNight = hourOfDay >= 23 || hourOfDay < 6,
             exerciseLockout = exerciseInsulinLockoutActive,
+            asleepLiveConfidence = extended.sleepLiveConfidence ?: 0.0,
             hypoMinPredIgnored = hypoIgnored,
             minPredictedBgMgdl = rawMinPred,
             dwellAboveHighBgMinutes = dwellAboveHighBgMinutes(),

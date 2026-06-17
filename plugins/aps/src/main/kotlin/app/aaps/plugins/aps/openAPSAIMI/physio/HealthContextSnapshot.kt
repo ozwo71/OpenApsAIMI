@@ -30,6 +30,11 @@ data class HealthContextSnapshot(
     // 😴 Sleep & Recovery
     val sleepDebtMinutes: Int = 0, // Calculated debt vs Baseline
     val sleepEfficiency: Double = 1.0, // 0.0-1.0
+    /** Health Connect session active at snapshot time. */
+    val hcSleepSessionActive: Boolean = false,
+    /** Live asleep confidence 0..1 (wearable/HC/therapy — therapy merged at RBT tick). */
+    val asleepLiveConfidence: Double = 0.0,
+    val asleepLiveSource: String = SleepLiveDetector.Source.NONE.name,
     
     // 🩸 Cardiovascular
     val bpSys: Int = 0,
@@ -52,6 +57,9 @@ data class HealthContextSnapshot(
         put("hrv", hrvRmssd)
         put("rhr", rhrResting)
         put("sleepDebt", sleepDebtMinutes)
+        put("hcSleepActive", hcSleepSessionActive)
+        put("asleepLive", asleepLiveConfidence)
+        put("asleepLiveSrc", asleepLiveSource)
         put("bp", "$bpSys/$bpDia")
         put("conf", confidence)
         put("ts", timestamp)

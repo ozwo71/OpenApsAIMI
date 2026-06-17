@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.patient
 
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.physio.SleepLiveDetector
 import org.json.JSONObject
 
 /**
@@ -14,6 +15,8 @@ data class PhysioLiveDigest(
     val rhrRestingBpm: Int = 0,
     val activityState: String = "IDLE",
     val sleepDebtMinutes: Int = 0,
+    val asleepLiveConfidence: Double = 0.0,
+    val asleepLiveSource: String = SleepLiveDetector.Source.NONE.name,
     val snapshotAgeMs: Long = 0L,
     val source: String = "Unknown",
     val confidence: Double = 0.0,
@@ -31,6 +34,8 @@ data class PhysioLiveDigest(
             put("rhr_resting_bpm", rhrRestingBpm)
             put("activity_state", activityState)
             put("sleep_debt_minutes", sleepDebtMinutes)
+            put("asleep_live_confidence", asleepLiveConfidence)
+            put("asleep_live_source", asleepLiveSource)
             put("snapshot_age_ms", snapshotAgeMs)
             put("source", source)
             put("confidence", confidence)
@@ -55,6 +60,8 @@ data class PhysioLiveDigest(
                 rhrRestingBpm = snapshot.rhrResting,
                 activityState = snapshot.activityState,
                 sleepDebtMinutes = snapshot.sleepDebtMinutes,
+                asleepLiveConfidence = snapshot.asleepLiveConfidence,
+                asleepLiveSource = snapshot.asleepLiveSource,
                 snapshotAgeMs = ageMs,
                 source = snapshot.source,
                 confidence = snapshot.confidence,

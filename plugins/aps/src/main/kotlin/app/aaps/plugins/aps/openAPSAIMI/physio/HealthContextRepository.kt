@@ -16,6 +16,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.ZoneId
 
 /**
  * 🏥 Health Context Repository
@@ -154,17 +156,38 @@ class HealthContextRepository @Inject constructor(
             confidence = (confidence + 0.15).coerceAtMost(1.0)
         }
 
+        val hcSleepActive = sleepData?.isOngoingAt(System.currentTimeMillis()) == true
+        val clockIsNight = clockIsNightHour(System.currentTimeMillis())
+        val sleepLive = SleepLiveDetector.evaluate(
+            SleepLiveDetector.Input(
+                stepsLast15m = steps15,
+                stepsLast5m = steps5,
+                hrNowBpm = currentHR,
+                rhrRestingBpm = rhr,
+                hcSessionActive = hcSleepActive,
+                clockIsNight = clockIsNight,
+            ),
+        )
+        val activityState = when {
+            sleepLive.isAsleep -> "SLEEPING"
+            steps15 > 1000 -> "ACTIVE"
+            else -> "IDLE"
+        }
+
         val snapshot = HealthContextSnapshot(
             stepsLast5m = steps5,
             stepsLast15m = steps15,
             stepsLast60m = steps60,
-            activityState = if (steps15 > 1000) "ACTIVE" else "IDLE", 
+            activityState = activityState,
             hrNow = currentHR,
             hrAvg15m = currentHR, // Approximation if simple point
             hrvRmssd = hrv,
             rhrResting = rhr,
             sleepDebtMinutes = sleepDebt,
             sleepEfficiency = sleepEfficiency,
+            hcSleepSessionActive = hcSleepActive,
+            asleepLiveConfidence = sleepLive.confidence,
+            asleepLiveSource = sleepLive.source.name,
             thermalBelief = thermalBelief,
             timestamp = System.currentTimeMillis(),
             confidence = confidence.coerceIn(0.0, 1.0),
@@ -178,6 +201,9 @@ class HealthContextRepository @Inject constructor(
                 stepsLast15m = snapshot.stepsLast15m,
                 stepsLast60m = snapshot.stepsLast60m,
                 activityState = snapshot.activityState,
+                hcSleepSessionActive = snapshot.hcSleepSessionActive,
+                asleepLiveConfidence = snapshot.asleepLiveConfidence,
+                asleepLiveSource = snapshot.asleepLiveSource,
                 hrNow = if (snapshot.hrNow > 0) snapshot.hrNow else lastSnapshot.hrNow,
                 hrAvg15m = if (snapshot.hrAvg15m > 0) snapshot.hrAvg15m else lastSnapshot.hrAvg15m,
                 timestamp = snapshot.timestamp,
@@ -222,6 +248,11 @@ class HealthContextRepository @Inject constructor(
     fun forceHeavyRefresh() {
         refreshCoreDataAsync(daysHrv = 7, force = true)
         fetchSnapshot()
+    }
+
+    private fun clockIsNightHour(nowMs: Long): Boolean {
+        val hour = java.time.ZonedDateTime.ofInstant(Instant.ofEpochMilli(nowMs), ZoneId.systemDefault()).hour
+        return hour >= 23 || hour < 6
     }
 
     private fun refreshCoreDataAsync(daysHrv: Int = 1, force: Boolean = false) {

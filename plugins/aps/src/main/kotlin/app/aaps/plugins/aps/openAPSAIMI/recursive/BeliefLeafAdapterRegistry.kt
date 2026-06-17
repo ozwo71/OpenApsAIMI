@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.recursive
 
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
+import app.aaps.plugins.aps.openAPSAIMI.physio.SleepLiveDetector
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperSeverityTier
 import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinStackingStance
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioContributorId
@@ -274,6 +275,17 @@ object BeliefLeafAdapterRegistry {
                 leaf(id, it, 0.85, 0.75, "sleepDebt=${it.toInt()}m")
             } ?: ctx.physioContext?.takeIf { it.poorSleepDetected }?.let {
                 leaf(id, 60.0, 0.8, it.confidence.coerceIn(0.15, 1.0), "poorSleep")
+            }
+            BeliefLeafId.SLEEP_LIVE -> {
+                val conf = when {
+                    ctx.asleepLiveConfidence >= SleepLiveDetector.ASLEEP_THRESHOLD -> ctx.asleepLiveConfidence
+                    ctx.extended.sleepLiveConfidence != null -> ctx.extended.sleepLiveConfidence
+                    else -> null
+                }
+                conf?.takeIf { it >= SleepLiveDetector.ASLEEP_THRESHOLD }?.let { asleepConf ->
+                    val src = ctx.extended.sleepLiveSource ?: "UNKNOWN"
+                    leaf(id, asleepConf, 0.92, 0.85, "asleep conf=${fmt2(asleepConf)} src=$src")
+                }
             }
             BeliefLeafId.PHYSIO_MTR_STATE -> ctx.physioContext?.let { pc ->
                 leaf(id, pc.state.ordinal.toDouble(), 1.0, pc.confidence.coerceIn(0.15, 1.0), pc.state.name)

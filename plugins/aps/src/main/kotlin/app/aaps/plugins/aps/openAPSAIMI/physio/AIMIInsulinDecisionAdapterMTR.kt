@@ -7,6 +7,7 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.data.model.TE
 import app.aaps.plugins.aps.openAPSAIMI.physio.gate.CosineTrajectoryGate
 import app.aaps.plugins.aps.openAPSAIMI.physio.GateInput
+import app.aaps.plugins.aps.openAPSAIMI.physio.SleepLiveDetector
 import app.aaps.plugins.aps.openAPSAIMI.physio.KernelType
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -223,7 +224,8 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
             stepCount15m = snapshot.stepsLast15m,
             hrCurrent = snapshot.hrNow,
             hrvCurrent = snapshot.hrvRmssd,
-            sleepState = snapshot.sleepDebtMinutes > 0, 
+            sleepState = snapshot.asleepLiveConfidence >= SleepLiveDetector.ASLEEP_THRESHOLD ||
+                snapshot.hcSleepSessionActive,
             physioState = physioContext.state,
             dataQuality = snapshot.confidence
         )

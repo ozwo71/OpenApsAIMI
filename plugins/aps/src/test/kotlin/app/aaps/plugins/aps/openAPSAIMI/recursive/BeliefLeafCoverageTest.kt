@@ -46,6 +46,7 @@ class BeliefLeafCoverageTest {
         assertThat(readable.map { it.id }).contains(BeliefLeafId.HTR_RELEASE)
         assertThat(readable.map { it.id }).contains(BeliefLeafId.PATTERN_RISK)
         assertThat(readable.map { it.id }).contains(BeliefLeafId.SLEEP_DEBT)
+        assertThat(readable.map { it.id }).contains(BeliefLeafId.SLEEP_LIVE)
         assertThat(readable.map { it.id }).contains(BeliefLeafId.SHADOW_ML_TRAIN)
         assertThat(collected.map { it.id }).contains(BeliefLeafId.DELTA_NOW)
         assertThat(collected.map { it.id }).contains(BeliefLeafId.SCEN_TRAJ_RISE)
