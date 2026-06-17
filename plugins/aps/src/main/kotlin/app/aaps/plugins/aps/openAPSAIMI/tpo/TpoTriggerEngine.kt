@@ -8,6 +8,8 @@ import kotlin.math.max
 internal object TpoTriggerEngine {
 
     private const val COOLDOWN_MS = 30L * 60L * 1000L
+    private const val RECENT_HYPO_LEDGER_WINDOW_MS = 6L * 60L * 60L * 1000L
+    private const val RECENT_HYPO_MIN_BG_LOOKBACK_MGDL = 85.0
 
     data class Evaluation(
         val proposal: TpoProposal?,
@@ -22,7 +24,7 @@ internal object TpoTriggerEngine {
     ): Evaluation {
         val candidates = buildList {
             evaluateExhausted(input, ledger)?.let { add(it) }
-            evaluatePostHypo(input)?.let { add(it) }
+            evaluatePostHypo(input, ledger)?.let { add(it) }
             evaluatePoorSleep(input)?.let { add(it) }
         }.sortedByDescending { it.packId.priority }
 
@@ -50,7 +52,7 @@ internal object TpoTriggerEngine {
         return Evaluation(proposal = best)
     }
 
-    private fun evaluatePostHypo(input: TpoTickInput): TpoProposal? {
+    private fun evaluatePostHypo(input: TpoTickInput, ledger: TpoEpisodeLedger): TpoProposal? {
         val reasons = mutableListOf<String>()
         var confidence = 0.0
         if (input.patientModeName == PatientMode.POST_HYPO_RECOVERY.name &&
@@ -74,6 +76,7 @@ internal object TpoTriggerEngine {
             confidence = maxOf(confidence, input.postHypoReboundProb)
         }
         if (confidence < 0.65 || reasons.isEmpty()) return null
+        if (!hasActionableHypoContext(input, ledger)) return null
         val tier = when {
             input.reboundGuardActive && input.minBgLookback75m < 75.0 -> TuningStepTier.STRONG
             confidence >= 0.85 -> TuningStepTier.STRONG
@@ -86,6 +89,12 @@ internal object TpoTriggerEngine {
             algoConfidence = confidence,
             reasonCodes = reasons,
         )
+    }
+
+    private fun hasActionableHypoContext(input: TpoTickInput, ledger: TpoEpisodeLedger): Boolean {
+        if (input.reboundGuardActive) return true
+        if (input.minBgLookback75m < RECENT_HYPO_MIN_BG_LOOKBACK_MGDL) return true
+        return ledger.hasHypoEpisodeWithin(RECENT_HYPO_LEDGER_WINDOW_MS, input.nowMs)
     }
 
     private fun evaluatePoorSleep(input: TpoTickInput): TpoProposal? {
@@ -146,13 +155,35 @@ internal object TpoTriggerEngine {
         )
     }
 
-    private fun isMealGuardBlocked(input: TpoTickInput): Boolean =
+    /**
+     * Blocks POST_HYPO overlay during meal absorption / rise even when patient mode is still
+     * POST_HYPO_RECOVERY (orchestrator ranks post-hypo above FAST_MEAL).
+     */
+    private fun isMealGuardBlocked(input: TpoTickInput): Boolean {
+        if (isExplicitMealPatientMode(input)) return true
+        return isActiveMealRise(input)
+    }
+
+    private fun isExplicitMealPatientMode(input: TpoTickInput): Boolean =
         input.cobGrams >= 5.0 &&
             (
                 input.patientModeName == PatientMode.FAST_MEAL.name ||
                     input.patientModeName == PatientMode.PROLONGED_MEAL.name
                 ) &&
             input.patientModeConfidence >= 0.65
+
+    private fun isActiveMealRise(input: TpoTickInput): Boolean {
+        if (input.cobGrams < 3.0 || input.bgMgdl < 100.0) return false
+        val rising = input.deltaMgdl5m >= 1.5 || input.mealProb >= 0.55
+        if (!rising) return false
+        return when {
+            input.cobGrams >= 5.0 -> true
+            input.mealProb >= 0.65 -> true
+            input.patientModeName == PatientMode.FAST_MEAL.name -> true
+            input.patientModeName == PatientMode.PROLONGED_MEAL.name -> true
+            else -> false
+        }
+    }
 
     private fun isDawnGuardBlocked(input: TpoTickInput): Boolean =
         input.causalDominantName == CausalStateId.DAWN_ENDOGENOUS.name &&

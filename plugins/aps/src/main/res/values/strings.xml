@@ -1540,7 +1540,9 @@
     <string name="aimi_tpo_pack_exhausted">Exhausted recovery</string>
     <string name="aimi_tpo_prefs_subscreen_title">Transient protection (TPO)</string>
     <string name="aimi_tpo_notification_channel_name">AIMI temporary protection</string>
-    <string name="aimi_tpo_notification_channel_description">Alerts when AIMI starts or ends a 2-hour temporary protection session.</string>
+    <string name="aimi_tpo_notification_channel_description">Alerts when AIMI starts a 2-hour temporary protection session.</string>
+    <string name="aimi_tpo_notification_channel_ended_name" comment="Android notification channel for TPO session end (prefs restored)">AIMI protection ended</string>
+    <string name="aimi_tpo_notification_channel_ended_description" comment="Shown in system notification settings for the TPO end channel">Notifies when a temporary protection session ends and preferences are restored.</string>
     <string name="aimi_tpo_notification_started_title">AIMI temporary protection active</string>
     <string name="aimi_tpo_notification_started_text">%1$s · %2$d min · %3$d prefs adjusted</string>
     <string name="aimi_tpo_notification_started_tier">Tier: %1$s</string>

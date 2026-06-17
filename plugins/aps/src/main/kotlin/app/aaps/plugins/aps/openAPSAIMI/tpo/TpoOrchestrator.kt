@@ -62,7 +62,7 @@ class TpoOrchestrator @Inject constructor(
     }
 
     fun onTickStart(nowMs: Long): Boolean {
-        if (!isTpoEnabled()) return false
+        // Always expire/revert active sessions even when TPO master switch is off.
         val changed = sessionManager.expireIfNeeded(nowMs, preferences, historyRepo)
         if (changed) {
             prefsChangedThisTick = true

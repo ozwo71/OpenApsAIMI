@@ -28,14 +28,16 @@ class TpoNotificationManager @Inject constructor(
     private val uiInteraction: UiInteraction,
 ) {
     companion object {
-        private const val CHANNEL_ID = "AIMI_TPO_PROTECTION"
-        private const val NOTIFICATION_ID = 8891
+        private const val CHANNEL_ID_STARTED = "AIMI_TPO_PROTECTION"
+        private const val CHANNEL_ID_ENDED = "AIMI_TPO_PROTECTION_ENDED"
+        private const val NOTIFICATION_ID_STARTED = 8891
+        private const val NOTIFICATION_ID_ENDED = 8892
         private const val OPENAPS_AIMI_PLUGIN_ROUTE = "plugin_preferences/OpenAPSAIMIPlugin"
         private const val EXTRA_NAVIGATE_ROUTE = "extra_navigate_route"
     }
 
     init {
-        createNotificationChannel()
+        createNotificationChannels()
     }
 
     fun showSessionStarted(session: TpoSessionDocument) {
@@ -67,38 +69,67 @@ class TpoNotificationManager @Inject constructor(
             }
         }.trim()
 
-        postNotification(title, text, bigText)
+        postNotification(
+            title = title,
+            text = text,
+            bigText = bigText,
+            notificationId = NOTIFICATION_ID_STARTED,
+            channelId = CHANNEL_ID_STARTED,
+            onlyAlertOnce = true,
+            priority = NotificationCompat.PRIORITY_DEFAULT,
+        )
     }
 
     fun showSessionEnded(reason: TpoEndReason) {
         if (!preferences.get(BooleanKey.OApsAIMITpoNotifyOnApply)) return
-        cancelNotification()
+        cancelStartedNotification()
         val title = context.getString(R.string.aimi_tpo_notification_ended_title)
         val text = when (reason) {
             TpoEndReason.EXPIRED -> context.getString(R.string.aimi_tpo_notification_ended_expired)
             TpoEndReason.MANUAL_REVERT -> context.getString(R.string.aimi_tpo_notification_ended_manual)
             TpoEndReason.SUPERSEDED -> context.getString(R.string.aimi_tpo_notification_ended_superseded)
         }
-        postNotification(title, text, text)
+        postNotification(
+            title = title,
+            text = text,
+            bigText = text,
+            notificationId = NOTIFICATION_ID_ENDED,
+            channelId = CHANNEL_ID_ENDED,
+            onlyAlertOnce = false,
+            priority = NotificationCompat.PRIORITY_HIGH,
+        )
     }
 
     fun cancelNotification() {
-        NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
+        cancelStartedNotification()
+        NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID_ENDED)
     }
 
-    private fun postNotification(title: String, text: String, bigText: String) {
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+    private fun cancelStartedNotification() {
+        NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID_STARTED)
+    }
+
+    private fun postNotification(
+        title: String,
+        text: String,
+        bigText: String,
+        notificationId: Int,
+        channelId: String,
+        onlyAlertOnce: Boolean,
+        priority: Int,
+    ) {
+        val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(CoreUiR.drawable.ic_shield)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(priority)
             .setAutoCancel(true)
-            .setOnlyAlertOnce(true)
+            .setOnlyAlertOnce(onlyAlertOnce)
             .setContentIntent(createOpenAimiPrefsIntent())
             .build()
         try {
-            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+            NotificationManagerCompat.from(context).notify(notificationId, notification)
         } catch (_: SecurityException) {
             // POST_NOTIFICATIONS denied on Android 13+
         }
@@ -117,10 +148,11 @@ class TpoNotificationManager @Inject constructor(
         )
     }
 
-    private fun createNotificationChannel() {
+    private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val channel = NotificationChannel(
-            CHANNEL_ID,
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val startedChannel = NotificationChannel(
+            CHANNEL_ID_STARTED,
             context.getString(R.string.aimi_tpo_notification_channel_name),
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
@@ -128,8 +160,15 @@ class TpoNotificationManager @Inject constructor(
             enableVibration(false)
             setSound(null, null)
         }
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.createNotificationChannel(channel)
+        val endedChannel = NotificationChannel(
+            CHANNEL_ID_ENDED,
+            context.getString(R.string.aimi_tpo_notification_channel_ended_name),
+            NotificationManager.IMPORTANCE_HIGH,
+        ).apply {
+            description = context.getString(R.string.aimi_tpo_notification_channel_ended_description)
+        }
+        notificationManager.createNotificationChannel(startedChannel)
+        notificationManager.createNotificationChannel(endedChannel)
     }
 }
 

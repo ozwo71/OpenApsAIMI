@@ -55,6 +55,13 @@ data class TpoEpisodeLedger(
         }
     }
 
+    fun hasHypoEpisodeWithin(windowMs: Long, nowMs: Long): Boolean {
+        val cutoff = nowMs - windowMs
+        return episodes.any { episode ->
+            episode.type == TpoEpisodeType.HYPO && episode.peakAtMs >= cutoff
+        }
+    }
+
     fun recentTimeline(maxItems: Int = 8): List<TpoEpisode> =
         episodes.sortedByDescending { it.peakAtMs }.take(maxItems)
 

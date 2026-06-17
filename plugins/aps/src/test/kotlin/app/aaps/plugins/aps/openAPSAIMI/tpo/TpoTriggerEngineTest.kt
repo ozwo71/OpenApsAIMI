@@ -29,6 +29,92 @@ class TpoTriggerEngineTest {
     }
 
     @Test
+    fun postHypo_blocked_during_meal_rise_when_patient_mode_still_post_hypo() {
+        val input = baseInput().copy(
+            cobGrams = 12.0,
+            deltaMgdl5m = 4.0,
+            bgMgdl = 155.0,
+            mealProb = 0.72,
+            minBgLookback75m = 98.0,
+            postHypoReboundProb = 0.82,
+            patientModeName = PatientMode.POST_HYPO_RECOVERY.name,
+            patientModeConfidence = 0.78,
+            causalDominantName = CausalStateId.POST_HYPO_RECOVERY.name,
+            causalDominantConfidence = 0.70,
+        )
+        val ledger = TpoEpisodeLedger(
+            episodes = listOf(
+                TpoEpisode(
+                    type = TpoEpisodeType.HYPO,
+                    startedAtMs = input.nowMs - 3L * 60L * 60L * 1000L,
+                    peakAtMs = input.nowMs - 3L * 60L * 60L * 1000L,
+                    bgExtremeMgdl = 62.0,
+                    sequenceIndex = 1,
+                ),
+            ),
+        )
+        val evaluation = TpoTriggerEngine.evaluate(input, ledger, null, emptyMap())
+        assertEquals(null, evaluation.proposal)
+        assertEquals("meal_guard", evaluation.blockedReason)
+    }
+
+    @Test
+    fun postHypo_not_triggered_when_hypo_context_is_stale() {
+        val input = baseInput().copy(
+            cobGrams = 0.0,
+            deltaMgdl5m = 0.5,
+            bgMgdl = 118.0,
+            minBgLookback75m = 98.0,
+            postHypoReboundProb = 0.80,
+            patientModeName = PatientMode.POST_HYPO_RECOVERY.name,
+            patientModeConfidence = 0.75,
+            causalDominantName = CausalStateId.POST_HYPO_RECOVERY.name,
+            causalDominantConfidence = 0.68,
+        )
+        val ledger = TpoEpisodeLedger(
+            episodes = listOf(
+                TpoEpisode(
+                    type = TpoEpisodeType.HYPO,
+                    startedAtMs = input.nowMs - 9L * 60L * 60L * 1000L,
+                    peakAtMs = input.nowMs - 9L * 60L * 60L * 1000L,
+                    bgExtremeMgdl = 63.0,
+                    sequenceIndex = 1,
+                ),
+            ),
+        )
+        val evaluation = TpoTriggerEngine.evaluate(input, ledger, null, emptyMap())
+        assertEquals(null, evaluation.proposal)
+        assertEquals("no_trigger", evaluation.blockedReason)
+    }
+
+    @Test
+    fun postHypo_triggered_when_recent_hypo_in_ledger_and_not_meal_rise() {
+        val input = baseInput().copy(
+            cobGrams = 0.0,
+            deltaMgdl5m = 1.0,
+            bgMgdl = 112.0,
+            minBgLookback75m = 98.0,
+            postHypoReboundProb = 0.74,
+            patientModeName = PatientMode.POST_HYPO_RECOVERY.name,
+            patientModeConfidence = 0.72,
+        )
+        val ledger = TpoEpisodeLedger(
+            episodes = listOf(
+                TpoEpisode(
+                    type = TpoEpisodeType.HYPO,
+                    startedAtMs = input.nowMs - 2L * 60L * 60L * 1000L,
+                    peakAtMs = input.nowMs - 2L * 60L * 60L * 1000L,
+                    bgExtremeMgdl = 64.0,
+                    sequenceIndex = 1,
+                ),
+            ),
+        )
+        val evaluation = TpoTriggerEngine.evaluate(input, ledger, null, emptyMap())
+        assertNotNull(evaluation.proposal)
+        assertEquals(TpoPackId.POST_HYPO_RECOVERY, evaluation.proposal?.packId)
+    }
+
+    @Test
     fun exhaustedTrigger_requiresLedgerCrash() {
         val input = baseInput().copy(
             eventMemory = PatientEventMemory(
