@@ -53,7 +53,9 @@ import app.aaps.core.data.model.HR
 import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorJsonlExport
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdict
+import app.aaps.plugins.aps.openAPSAIMI.smb.SmbIntervalPolicy
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefPredictionReasonSuffix
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryType
 import app.aaps.plugins.aps.openAPSAIMI.model.PumpCaps
@@ -268,6 +270,8 @@ internal data class AimiDecisionContext(
         var patient_state: org.json.JSONObject? = null,
         /** High-level patient mode and strategy derived from the shared state. */
         var patient_mode: org.json.JSONObject? = null,
+        /** Loop vs auditor binding for this tick (sync disposition; follow-up may arrive async). */
+        var auditor_tick: org.json.JSONObject? = null,
     )
 
     data class MealAbsorptionPhaseExport(
@@ -564,6 +568,9 @@ internal data class AimiDecisionContext(
             }
             adjustments.patient_mode?.let { patientMode ->
                 adj.put("patient_mode", patientMode)
+            }
+            adjustments.auditor_tick?.let { auditorTick ->
+                adj.put("auditor_tick", auditorTick)
             }
             json.put("adjustments", adj)
 
@@ -1423,10 +1430,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastContextSnapshot = null
         lastPatientState = null
         lastPatientModeDecision = null
+        lastAuditorTickDisposition = null
+        lastAuditorLoopSnapshot = null
+        currentTickDecisionEventId = null
+        lastAuditorAuditStartedAtMs = 0L
         EndogenousPhaseHysteresis.reset()
         pendingTrajSpiralBasal = null
         val decisionCtx = AimiDecisionContext(
-            event_id = "evt_${ctx.currentTime}",
+            event_id = "evt_${ctx.currentTime}".also { currentTickDecisionEventId = it },
             timestamp = ctx.currentTime,
             trigger = run {
                 val iobNow = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0
@@ -6422,7 +6433,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      *
      * **Async / ordre** : [auditDecision] peut compléter plus tard dans un callback (mutation de [RT]).
      * [runAimiSnapshotMedicalJsonAndHormonitorExportStage] s’exécute **après** l’**appel** à [auditDecision],
-     * pas après le callback — JSONL / raison exportée peuvent donc être **sans** modulation auditor (comportement historique).
+     * pas après le callback — la ligne JSONL principale inclut `adjustments.auditor_tick` (disposition sync) ;
+     * un verdict externe tardif est appendé en `record_type=auditor_followup` (advisory, non bloquant).
      */
     private fun runPostBasalEngineLearnersRtInstrumentationAndAuditorStage(
         b: AimiPostBasalEngineFinalizeBundle,
@@ -6723,6 +6735,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val wcycleFactor = wCycleFacade.getIcMultiplier()
                 val reasonTags = finalResult.reason.toString().split(". ").map { it.trim() }
                 val auditorEffectiveProfile: EffectiveProfile? = effectiveProfileCached(dateUtil.now())
+                lastAuditorAuditStartedAtMs = dateUtil.now()
                 auditorOrchestrator.auditDecision(
                     bg = bg,
                     delta = delta.toDouble(),
@@ -6756,6 +6769,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     eventualBg = b.rT.eventualBG,
                     inPrebolusWindow = inPrebolusWindow,
                     effectiveProfile = auditorEffectiveProfile,
+                    onSyncDisposition = { disposition ->
+                        recordAuditorSyncDisposition(
+                            disposition = disposition,
+                            loopSmbU = smbProposed,
+                            loopTbrUph = tbrRate,
+                            loopIntervalMin = intervalMin,
+                        )
+                    },
                 ) { verdict: AuditorVerdict?, result: DecisionResult ->
                     when (result) {
                         is DecisionResult.Applied -> {
@@ -6783,6 +6804,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         }
                         else -> {}
                     }
+                    maybeAppendAuditorFollowupLine(verdict, result)
                 }
             } catch (e: Exception) {
                 consoleLog.add(sanitizeForJson("⚠️ AI Auditor error: ${e.message}"))
@@ -6798,9 +6820,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * [AimiLoopTelemetry.enterPhase] EXPORT ; export Hormonitor (**I/O disque**).
      *
      * **Timing vs auditor** : cette méthode matérialise l’état **au moment de l’appel** (après
-     * [runPostBasalEngineLearnersRtInstrumentationAndAuditorStage]). Si l’auditor applique un verdict
-     * **de façon asynchrone**, la ligne JSONL / l’export Hormonitor peuvent avoir été écrits **avant**
-     * cette mutation — ne pas supposer que le fichier reflète le verdict auditor sans revue produit.
+     * [runPostBasalEngineLearnersRtInstrumentationAndAuditorStage]). `adjustments.auditor_tick` documente
+     * la disposition sync ; un audit externe async peut append `auditor_followup` après cette ligne.
      */
     private fun runAimiSnapshotMedicalJsonAndHormonitorExportStage(
         ctx: AimiTickContext,
@@ -6891,19 +6912,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             ),
         )
 
+        lastAuditorLoopSnapshot?.let { snapshot ->
+            decisionCtx.adjustments.auditor_tick = snapshot.toJsonObject()
+        }
+
         val medicalJson = decisionCtx.toMedicalJson()
         consoleLog.add("AIMI_SNAPSHOT: $medicalJson")
 
-        try {
-            val decisionsFile = File(externalDir, "AIMI_Decisions.jsonl")
-            if (!decisionsFile.exists()) {
-                decisionsFile.parentFile?.mkdirs()
-                decisionsFile.createNewFile()
-            }
-            decisionsFile.appendText("$medicalJson\n")
-        } catch (e: Exception) {
-            consoleError.add("Failed to save AIMI Decision JSON: ${e.message}")
-        }
+        appendAimiDecisionsJsonlLine(medicalJson)
 
         AimiLoopTelemetry.enterPhase(AimiLoopPhase.EXPORT, hormonitorStudyExporter)
         try {
@@ -6989,6 +7005,56 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
         } catch (e: Exception) {
             consoleError.add("Failed to save HORMONITOR event JSON: ${e.message}")
+        }
+    }
+
+    private fun aimiDecisionsJsonlFile(): File = File(externalDir, "AIMI_Decisions.jsonl")
+
+    private fun appendAimiDecisionsJsonlLine(jsonLine: String) {
+        try {
+            AuditorJsonlExport.appendLine(aimiDecisionsJsonlFile(), jsonLine)
+        } catch (e: Exception) {
+            consoleError.add("Failed to save AIMI Decision JSON: ${e.message}")
+        }
+    }
+
+    private fun recordAuditorSyncDisposition(
+        disposition: AuditorJsonlExport.TickDisposition,
+        loopSmbU: Double,
+        loopTbrUph: Double?,
+        loopIntervalMin: Int,
+    ) {
+        lastAuditorTickDisposition = disposition
+        lastAuditorLoopSnapshot = AuditorJsonlExport.TickSnapshot(
+            disposition = disposition,
+            recordedAtMs = dateUtil.now(),
+            loopSmbU = loopSmbU,
+            loopTbrUph = loopTbrUph,
+            loopIntervalMin = loopIntervalMin,
+        )
+    }
+
+    /**
+     * Async external auditor only: append advisory follow-up without blocking the loop tick.
+     */
+    private fun maybeAppendAuditorFollowupLine(
+        verdict: AuditorVerdict?,
+        result: DecisionResult,
+    ) {
+        if (lastAuditorTickDisposition != AuditorJsonlExport.TickDisposition.EXTERNAL_PENDING) return
+        val parentEventId = currentTickDecisionEventId ?: return
+        if (!auditorFollowupAppendInProgress.compareAndSet(false, true)) return
+        try {
+            val followup = AuditorJsonlExport.followupToJsonObject(
+                parentEventId = parentEventId,
+                recordedAtMs = dateUtil.now(),
+                auditStartedAtMs = lastAuditorAuditStartedAtMs,
+                verdict = verdict,
+                result = result,
+            )
+            appendAimiDecisionsJsonlLine(followup.toString())
+        } finally {
+            auditorFollowupAppendInProgress.set(false)
         }
     }
 
@@ -7881,6 +7947,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastRbtAppliedHints: RbtResolutionBridge.AppliedHints? = null
     private var rbtResolvedThisTick = false
     private var lastRbtLiveCommitResult: RbtLiveCommitResult? = null
+    /** Sync auditor disposition for the current tick (JSONL `adjustments.auditor_tick`). */
+    private var lastAuditorTickDisposition: AuditorJsonlExport.TickDisposition? = null
+    private var lastAuditorLoopSnapshot: AuditorJsonlExport.TickSnapshot? = null
+    private var currentTickDecisionEventId: String? = null
+    private var lastAuditorAuditStartedAtMs: Long = 0L
+    private val auditorFollowupAppendInProgress = AtomicBoolean(false)
     private var lastLoadGovernorMultiplierG: Double = 1.0
     private var lastPhysiologicalPhaseOutput: PhysiologicalPhaseClassifier.Output? = null
     private var lastPhysiologicalPatternSnapshot: PhysiologicalPatternSnapshot? = null
@@ -11249,26 +11321,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             interval = (interval * 0.8).toInt().coerceAtLeast(1)
         }
 
-        // 9) Clamp final : mécanique SMB entre 1 et 10 min
-        // Clamp final + Low BG boost
-        var finalInterval = interval.coerceIn(1, 10)
-        
-        // 🛡️ FIX NC4: LOW BG INTERVAL BOOST (Safety-Critical)
-        val lowBgIntervalMin = 5
-        if (bg < 120f && finalInterval < lowBgIntervalMin) {
-            finalInterval = lowBgIntervalMin
+        // 9) Clamp final : mécanique SMB entre 1 et 10 min + plancher hypo vs PKPD
+        val preClampInterval = interval.coerceIn(1, SmbIntervalPolicy.DEFAULT_MAX_INTERVAL_MIN)
+        val pkpdBoost = pkpdThrottleIntervalAdd
+        val finalInterval = SmbIntervalPolicy.applyLowBgFloorAndPkpdBoost(
+            intervalAfterModes = interval,
+            bgMgdl = bg.toFloat(),
+            pkpdThrottleIntervalAdd = pkpdBoost,
+        )
+        if (bg < SmbIntervalPolicy.DEFAULT_LOW_BG_THRESHOLD_MGDL &&
+            preClampInterval < SmbIntervalPolicy.DEFAULT_LOW_BG_INTERVAL_MIN
+        ) {
             consoleLog.add("LOW_BG_INTERVAL_BOOST bg=${bg.roundToInt()} interval=${finalInterval}m")
         }
-        
-        // 🚀 PKPD Throttle: Add interval boost if near peak/onset unconfirmed
-        // Note: pkpdThrottleIntervalAdd est déjà à 0 pour les modes repas (via reset dans finalizeAndCapSMB)
-        val pkpdBoost = pkpdThrottleIntervalAdd
-        if (pkpdBoost > 0) {
-            val baseInterval = finalInterval
-            finalInterval = (finalInterval + pkpdBoost).coerceAtMost(10)
-            consoleLog.add("PKPD_INTERVAL_BOOST base=${baseInterval}m +${pkpdBoost}m → ${finalInterval}m")
+        if (bg >= SmbIntervalPolicy.DEFAULT_LOW_BG_THRESHOLD_MGDL && pkpdBoost > 0) {
+            consoleLog.add("PKPD_INTERVAL_BOOST base=${preClampInterval}m +${pkpdBoost}m → ${finalInterval}m")
         }
-        
+
         return finalInterval
     }
 
