@@ -8,6 +8,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionPair
+import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoDeliveryAuthority
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryAnalysis
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryType
 import kotlin.math.max
@@ -46,6 +47,7 @@ object DecisionPredictionAuthorityResolver {
         trajectoryAnalysis: TrajectoryAnalysis?,
         physioPolicy: BehavioralRiskPolicy?,
         uamConfidence: Double,
+        postHypoDelivery: PostHypoDeliveryAuthority.Decision = PostHypoDeliveryAuthority.INACTIVE,
     ): DecisionPredictionAuthority {
         val pkpd = pkpdEventualMgdl.takeIf { it.isFinite() } ?: bgMgdl
         val rawScenarioFloor = scenarioProjection?.clinicalFloor?.terminalMgdl?.takeIf { it.isFinite() }
@@ -72,7 +74,8 @@ object DecisionPredictionAuthorityResolver {
                 causalProtectiveConfidence >= causalMealConfidence + 0.08 &&
                 (causalStatePosterior?.dominantConfidence ?: 0.0) >= 0.60
         val falseMealSuppression =
-            hypothesisState?.suppressMealInterpretation == true ||
+            postHypoDelivery.forceMealInterpretationSuppressed ||
+                hypothesisState?.suppressMealInterpretation == true ||
                 latentState?.falseMealSuppression == true ||
                 physioPolicy?.suppressMealLikeScenario == true ||
                 posteriorSuppressMeal
@@ -88,6 +91,20 @@ object DecisionPredictionAuthorityResolver {
                 scenarioUpliftApplied = false,
                 falseMealSuppression = falseMealSuppression,
                 reason = "no_scenario_projection",
+            )
+        }
+
+        if (postHypoDelivery.active && postHypoDelivery.forceMealInterpretationSuppressed) {
+            return DecisionPredictionAuthority(
+                predTerminalMgdl = predTerminal,
+                eventualTerminalMgdl = pkpd,
+                pkpdEventualMgdl = pkpd,
+                scenarioFloorTerminalMgdl = rawScenarioFloor,
+                scenarioBestTerminalMgdl = scenarioBest,
+                source = DecisionPredictionSource.SCENARIO_SUPPRESSED_NON_MEAL,
+                scenarioUpliftApplied = false,
+                falseMealSuppression = true,
+                reason = "post_hypo_delivery_guard ${postHypoDelivery.reasonTag}",
             )
         }
 

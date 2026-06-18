@@ -11,6 +11,8 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
+import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
+import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoDeliveryAuthority
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
@@ -183,6 +185,105 @@ class MealCorrectionContextResolverTest {
         assertThat(output.falseMealSuppression).isTrue()
         assertThat(output.mealPriorityEligible).isFalse()
         assertThat(output.redCarpetEligible).isFalse()
+        assertThat(output.reasonCodes).contains("FALSE_MEAL_SUPPRESS")
+    }
+
+    @Test
+    fun `post hypo delivery guard blocks fast meal rebound rise`() {
+        val postHypo = PostHypoDeliveryAuthority.evaluate(
+            PostHypoDeliveryAuthority.Input(
+                gate = CorrectionAggressionGate.evaluate(
+                    CorrectionAggressionGate.Input(
+                        bg = 119.0,
+                        targetBg = 100.0,
+                        deltaMgdl5m = 5.0,
+                        shortAvgDelta = 4.0,
+                        combinedDelta = 2.5,
+                        cob = 0.0,
+                        minBgLookback75m = 54.0,
+                        estimatedCarbs = 0.0,
+                        estimatedCarbsAgeMin = Double.MAX_VALUE,
+                        uamConfidence = 0.7,
+                        estimatedRa = 0.9,
+                        explicitMealMode = false,
+                        hasRecentMealEstimate = false,
+                        isConfirmedHighRise = false,
+                    ),
+                ),
+                patientMode = PatientMode.POST_HYPO_RECOVERY,
+                aggressionInput = CorrectionAggressionGate.Input(
+                    bg = 119.0,
+                    targetBg = 100.0,
+                    deltaMgdl5m = 5.0,
+                    shortAvgDelta = 4.0,
+                    combinedDelta = 2.5,
+                    cob = 0.0,
+                    minBgLookback75m = 54.0,
+                    estimatedCarbs = 0.0,
+                    estimatedCarbsAgeMin = Double.MAX_VALUE,
+                    uamConfidence = 0.7,
+                    estimatedRa = 0.9,
+                    explicitMealMode = false,
+                    hasRecentMealEstimate = false,
+                    isConfirmedHighRise = false,
+                ),
+            ),
+        )
+
+        val output = MealCorrectionContextResolver.resolve(
+            MealCorrectionContextResolver.Input(
+                bgMgdl = 131.0,
+                deltaMgdlPer5 = 5.0,
+                shortAvgDeltaMgdlPer5 = 4.0,
+                explicitMealMode = false,
+                mealCobG = 0.0,
+                mealAbsorptionOutput = mealAbsorptionOutput(
+                    phase = MealAbsorptionPhase.FIRST_WAVE,
+                    belief = 0.74,
+                    mealDeliveryPriority = true,
+                ),
+                hypothesisState = UamHypothesisState(
+                    mealProb = 0.68,
+                    dominant = UamHypothesisId.MEAL,
+                    dominantConfidence = 0.70,
+                ),
+                latentState = PhysioLatentState(
+                    mealProb = 0.79,
+                    falseMealSuppression = false,
+                ),
+                patientModeDecision = PatientModeOrchestrator.Decision(
+                    mode = PatientMode.FAST_MEAL,
+                    confidence = 0.78,
+                    strategyHint = PatientStrategyHint.SMB_PRIORITY,
+                    mealBias = 0.91,
+                    protectionBias = 0.14,
+                    userIntentConfidence = 0.0,
+                    reasonCodes = listOf("FAST_MEAL"),
+                ),
+                patientState = PatientStateSnapshot(
+                    timestampMs = 0L,
+                    mealAbsorptionPhase = MealAbsorptionPhase.FIRST_WAVE,
+                    mealAbsorptionBelief = 0.74,
+                    mealProb = 0.81,
+                    falseMealSuppression = false,
+                    uamDominant = UamHypothesisId.MEAL,
+                    uamDominantConfidence = 0.70,
+                    causalPosterior = CausalStatePosterior(
+                        fastMealProb = 0.79,
+                        dominant = CausalStateId.FAST_MEAL,
+                        dominantConfidence = 0.79,
+                        learningQuality = 0.82,
+                    ),
+                ),
+                postHypoDelivery = postHypo,
+            ),
+        )
+
+        assertThat(postHypo.active).isTrue()
+        assertThat(output.falseMealSuppression).isTrue()
+        assertThat(output.mealPriorityEligible).isFalse()
+        assertThat(output.redCarpetEligible).isFalse()
+        assertThat(output.reasonCodes).contains("POST_HYPO_DELIVERY_GUARD")
         assertThat(output.reasonCodes).contains("FALSE_MEAL_SUPPRESS")
     }
 

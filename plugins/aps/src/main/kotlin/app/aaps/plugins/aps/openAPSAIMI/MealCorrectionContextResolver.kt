@@ -8,6 +8,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
+import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoDeliveryAuthority
 import kotlin.math.max
 
 internal object MealCorrectionContextResolver {
@@ -23,6 +24,7 @@ internal object MealCorrectionContextResolver {
         val latentState: PhysioLatentState?,
         val patientModeDecision: PatientModeOrchestrator.Decision?,
         val patientState: PatientStateSnapshot?,
+        val postHypoDelivery: PostHypoDeliveryAuthority.Decision = PostHypoDeliveryAuthority.INACTIVE,
     )
 
     data class Output(
@@ -45,7 +47,8 @@ internal object MealCorrectionContextResolver {
         )
         val patientMealConfidence = input.patientState?.causalPosterior?.mealConfidence ?: 0.0
         val falseMealSuppression =
-            input.hypothesisState?.suppressMealInterpretation == true ||
+            input.postHypoDelivery.forceMealInterpretationSuppressed ||
+                input.hypothesisState?.suppressMealInterpretation == true ||
                 input.latentState?.falseMealSuppression == true ||
                 input.patientState?.falseMealSuppression == true
 
@@ -131,6 +134,7 @@ internal object MealCorrectionContextResolver {
                     )
 
         val reasons = mutableListOf<String>()
+        if (input.postHypoDelivery.active) reasons += "POST_HYPO_DELIVERY_GUARD"
         if (falseMealSuppression) reasons += "FALSE_MEAL_SUPPRESS"
         if (explicitMealEvidence) reasons += "EXPLICIT_OR_COB"
         if (mealDeliveryPriority) reasons += "MEAL_DELIVERY_PRIORITY"

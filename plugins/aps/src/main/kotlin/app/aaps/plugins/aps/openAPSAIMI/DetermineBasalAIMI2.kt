@@ -134,6 +134,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternDetec
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternExport
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternInputBuilder
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoDeliveryAuthority
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionBasalCap
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoGuard
@@ -1435,6 +1436,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastAuditorLoopSnapshot = null
         currentTickDecisionEventId = null
         lastAuditorAuditStartedAtMs = 0L
+        lastPostHypoDeliveryAuthority = PostHypoDeliveryAuthority.INACTIVE
         EndogenousPhaseHysteresis.reset()
         pendingTrajSpiralBasal = null
         val decisionCtx = AimiDecisionContext(
@@ -3954,7 +3956,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🛑 [AUTODRIVE V3] Unsafe or null command")
             }
 
-            val v3Smb = if (v3CommandSafe) adCommand!!.scheduledMicroBolus ?: 0.0 else 0.0
+            val v3SmbRaw = if (v3CommandSafe) adCommand!!.scheduledMicroBolus ?: 0.0 else 0.0
+            val v3Smb = lastPostHypoDeliveryAuthority.capSmbU(v3SmbRaw)
+            if (v3Smb < v3SmbRaw - 1e-6) {
+                consoleLog.add(
+                    "${PostHypoDeliveryAuthority.LOG_PREFIX}: v3_smb " +
+                        "${"%.2f".format(v3SmbRaw)}→${"%.2f".format(v3Smb)} U",
+                )
+            }
             val cbfShieldDeltaU = adCommand?.scheduledMicroBolus?.takeIf { !v3CommandSafe && it > 0.01 }
             val rbtCommit = resolveAndWireRbtLiveTick(
                 ctx = ctx,
@@ -4812,6 +4821,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             trajectoryAnalysis = trajectoryGuard.getLastAnalysis(),
             physioPolicy = lastPhysiologicalPhaseOutput?.policy,
             uamConfidence = AimiUamHandler.confidenceOrZero(),
+            postHypoDelivery = lastPostHypoDeliveryAuthority,
         )
         consoleLog.add(DecisionPredictionAuthorityResolver.formatLogLine(decisionPrediction))
 
@@ -8091,6 +8101,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var pkpdAbsorptionGuardAppliedThisTick: Boolean = false
     private var isConfirmedHighRiseThisTick: Boolean = false
     private var correctionAggressionDecision: CorrectionAggressionGate.Decision? = null
+    private var lastPostHypoDeliveryAuthority: PostHypoDeliveryAuthority.Decision =
+        PostHypoDeliveryAuthority.INACTIVE
     private var mealAdvisorOneShotThisTick: Boolean = false
     private var lastTubeAdvisorSmbCapScale: Double? = null
     private var lastInflammationResult: app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster.InflammationResult? = null
@@ -8843,7 +8855,36 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val decision = CorrectionAggressionGate.evaluate(input)
         correctionAggressionDecision = decision
         CorrectionAggressionGate.appendLogs(decision, input, consoleLog, aapsLogger)
+        refreshPostHypoDeliveryAuthority(
+            combinedDelta = combinedDelta,
+            postHypoHint = postHypoHint,
+        )
         return decision
+    }
+
+    private fun refreshPostHypoDeliveryAuthority(
+        combinedDelta: Float,
+        postHypoHint: CorrectionAggressionGate.PostHypoHint = CorrectionAggressionGate.PostHypoHint.NONE,
+    ) {
+        val aggressionInput = buildCorrectionAggressionInput(
+            bg = bg,
+            targetBg = targetBg.toDouble(),
+            delta = delta,
+            shortAvgDelta = shortAvgDelta,
+            combinedDelta = combinedDelta,
+            cob = cob.toDouble(),
+            postHypoHint = postHypoHint,
+        )
+        lastPostHypoDeliveryAuthority = PostHypoDeliveryAuthority.evaluate(
+            PostHypoDeliveryAuthority.Input(
+                gate = correctionAggressionDecision,
+                patientMode = lastPatientModeDecision?.mode,
+                aggressionInput = aggressionInput,
+            ),
+        )
+        if (lastPostHypoDeliveryAuthority.active) {
+            consoleLog.add(PostHypoDeliveryAuthority.formatLogLine(lastPostHypoDeliveryAuthority))
+        }
     }
 
     private fun mapPostHypoToAggressionHint(state: PostHypoState): CorrectionAggressionGate.PostHypoHint =
@@ -9639,6 +9680,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         isMealActive: Boolean = false,
         hyperReleaseFloorU: Double = 0.0,
     ) {
+        val postHypo = lastPostHypoDeliveryAuthority
+        if (postHypo.active && postHypo.suppressMealDelivery && !isExplicitUserAction) {
+            consoleLog.add(PostHypoDeliveryAuthority.formatLogLine(postHypo))
+            consoleLog.add("${PostHypoDeliveryAuthority.LOG_PREFIX}: smb_blocked source=$decisionSource")
+            return
+        }
+
         // 🚀 REACTOR MODE: Full Speed (Safety delegated to applySafetyPrecautions)
         // User Directive: "Garde le moteur à plein régime"
         
@@ -10979,6 +11027,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 latentState = lastPhysioLatentState,
                 patientModeDecision = lastPatientModeDecision,
                 patientState = lastPatientState,
+                postHypoDelivery = lastPostHypoDeliveryAuthority,
             ),
         )
 
@@ -13172,6 +13221,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             targetBgMgdl = targetBg,
         )?.let { return it }
 
+        val (
+            postHypoState,
+            estimatedCarbs,
+            estimatedCarbsTime,
+        ) = runPostAutodrivePostHypoClassification(
+            recentBGs = recentBGs,
+            cob = cob,
+            shortAvgDeltaAdj = shortAvgDeltaAdj,
+            delta = delta,
+            slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation,
+            mealTime = mealTime,
+            bfastTime = bfastTime,
+            lunchTime = lunchTime,
+            dinnerTime = dinnerTime,
+            highCarbTime = highCarbTime,
+            snackTime = snackTime,
+            reason = reason,
+        )
+        val postHypoHint = mapPostHypoToAggressionHint(postHypoState)
+
         evaluateAndLogCorrectionAggression(
             bg = bg,
             targetBg = targetBg.toDouble(),
@@ -13179,6 +13248,30 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             shortAvgDelta = shortAvgDelta,
             combinedDelta = combinedDelta,
             cob = cob.toDouble(),
+            postHypoHint = postHypoHint,
+        )
+        val aggressionInputForRefine = buildCorrectionAggressionInput(
+            bg = bg,
+            targetBg = targetBg.toDouble(),
+            delta = delta,
+            shortAvgDelta = shortAvgDelta,
+            combinedDelta = combinedDelta,
+            cob = cob.toDouble(),
+            postHypoHint = postHypoHint,
+        )
+        correctionAggressionDecision = correctionAggressionDecision?.let { prior ->
+            CorrectionAggressionGate.refineForPostHypo(
+                prior,
+                aggressionInputForRefine,
+                postHypoHint,
+            )
+        } ?: CorrectionAggressionGate.evaluate(aggressionInputForRefine)
+        correctionAggressionDecision?.let { refined ->
+            CorrectionAggressionGate.appendLogs(refined, aggressionInputForRefine, consoleLog, aapsLogger)
+        }
+        refreshPostHypoDeliveryAuthority(
+            combinedDelta = combinedDelta,
+            postHypoHint = postHypoHint,
         )
 
         val tdd24hForRbt = resolveTdd24hForExport()
@@ -13244,45 +13337,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             dynamicPbolusLarge = dynamicPbolusLarge,
             dynamicPbolusSmall = dynamicPbolusSmall,
         )
-
-        val (
-            postHypoState,
-            estimatedCarbs,
-            estimatedCarbsTime,
-        ) = runPostAutodrivePostHypoClassification(
-            recentBGs = recentBGs,
-            cob = cob,
-            shortAvgDeltaAdj = shortAvgDeltaAdj,
-            delta = delta,
-            slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation,
-            mealTime = mealTime,
-            bfastTime = bfastTime,
-            lunchTime = lunchTime,
-            dinnerTime = dinnerTime,
-            highCarbTime = highCarbTime,
-            snackTime = snackTime,
-            reason = reason,
-        )
-
-        val aggressionInputForRefine = buildCorrectionAggressionInput(
-            bg = bg,
-            targetBg = targetBg.toDouble(),
-            delta = delta,
-            shortAvgDelta = shortAvgDelta,
-            combinedDelta = combinedDelta,
-            cob = cob.toDouble(),
-            postHypoHint = mapPostHypoToAggressionHint(postHypoState),
-        )
-        correctionAggressionDecision = correctionAggressionDecision?.let { prior ->
-            CorrectionAggressionGate.refineForPostHypo(
-                prior,
-                aggressionInputForRefine,
-                mapPostHypoToAggressionHint(postHypoState),
-            )
-        } ?: CorrectionAggressionGate.evaluate(aggressionInputForRefine)
-        correctionAggressionDecision?.let { refined ->
-            CorrectionAggressionGate.appendLogs(refined, aggressionInputForRefine, consoleLog, aapsLogger)
-        }
 
         runPostHypoCompressionAndDriftTerminatorOrReturn(
             ctx = ctx,
@@ -14115,6 +14169,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     private fun inferredMealSafetyIntent(): Boolean {
+        val postHypo = lastPostHypoDeliveryAuthority
+        if (postHypo.active && postHypo.forceMealInterpretationSuppressed) return false
+
         val patientState = lastPatientState
         val patientModeDecision = lastPatientModeDecision
         val falseMealSuppression =

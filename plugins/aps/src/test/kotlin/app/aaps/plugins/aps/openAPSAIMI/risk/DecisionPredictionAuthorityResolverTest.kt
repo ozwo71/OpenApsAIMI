@@ -7,9 +7,12 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionCurve
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionKind
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionPair
+import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
+import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoDeliveryAuthority
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryAnalysis
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryMetrics
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryModulation
@@ -127,6 +130,61 @@ class DecisionPredictionAuthorityResolverTest {
         assertEquals(DecisionPredictionSource.SCENARIO_MEAL_UPLIFT, authority.source)
         assertTrue(authority.scenarioUpliftApplied)
         assertEquals(163.0, authority.eventualTerminalMgdl, 0.001)
+    }
+
+    @Test
+    fun postHypoDelivery_blocksFastMealScenarioUplift() {
+        val aggressionInput = CorrectionAggressionGate.Input(
+            bg = 131.0,
+            targetBg = 100.0,
+            deltaMgdl5m = 5.0,
+            shortAvgDelta = 4.0,
+            combinedDelta = 2.5,
+            cob = 0.0,
+            minBgLookback75m = 54.0,
+            estimatedCarbs = 0.0,
+            estimatedCarbsAgeMin = Double.MAX_VALUE,
+            uamConfidence = 0.7,
+            estimatedRa = 0.9,
+            explicitMealMode = false,
+            hasRecentMealEstimate = false,
+            isConfirmedHighRise = false,
+        )
+        val postHypo = PostHypoDeliveryAuthority.evaluate(
+            PostHypoDeliveryAuthority.Input(
+                gate = CorrectionAggressionGate.evaluate(aggressionInput),
+                patientMode = PatientMode.POST_HYPO_RECOVERY,
+                aggressionInput = aggressionInput,
+            ),
+        )
+
+        val authority = DecisionPredictionAuthorityResolver.resolve(
+            bgMgdl = 131.0,
+            pkpdEventualMgdl = 118.0,
+            scenarioProjection = scenario(floorTerminal = 112.0, bestTerminal = 163.0),
+            mealAbsorptionOutput = mealOutput(MealAbsorptionPhase.FIRST_WAVE, priority = true),
+            hypothesisState = UamHypothesisState(
+                mealProb = 0.68,
+                dominant = UamHypothesisId.MEAL,
+                dominantConfidence = 0.70,
+            ),
+            latentState = PhysioLatentState(mealProb = 0.79, falseMealSuppression = false),
+            causalStatePosterior = CausalStatePosterior(
+                fastMealProb = 0.79,
+                dominant = CausalStateId.FAST_MEAL,
+                dominantConfidence = 0.79,
+                learningQuality = 0.82,
+            ),
+            trajectoryAnalysis = trajectory(TrajectoryType.OPEN_DIVERGING),
+            physioPolicy = null,
+            uamConfidence = 0.70,
+            postHypoDelivery = postHypo,
+        )
+
+        assertEquals(DecisionPredictionSource.SCENARIO_SUPPRESSED_NON_MEAL, authority.source)
+        assertTrue(authority.falseMealSuppression)
+        assertFalse(authority.scenarioUpliftApplied)
+        assertEquals(118.0, authority.eventualTerminalMgdl, 0.001)
     }
 
     private fun scenario(
