@@ -5,6 +5,7 @@ import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionEngine
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionPair
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.safety.MealSafetyContext
+import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoProjectionCap
 import app.aaps.plugins.aps.openAPSAIMI.safety.PredictiveHypoConstants
 
 /**
@@ -28,6 +29,9 @@ object SafetyPredictionTerminalsResolver {
         sanityEventual: Double,
         uamTerminal: Double?,
         mealContext: MealSafetyContext,
+        targetBgMgdl: Double = 100.0,
+        minBgLookback75m: Double = Double.MAX_VALUE,
+        hasIndependentMealEvidence: Boolean = true,
     ): SafetyPredictionTerminals {
         val mealRiseConfirmed = isMealRiseConfirmed(bg, delta, mealContext)
         val (adjPred, adjEventual) = adjustTerminals(
@@ -37,6 +41,9 @@ object SafetyPredictionTerminalsResolver {
             eventual = sanityEventual,
             uamTerminal = uamTerminal,
             mealRiseConfirmed = mealRiseConfirmed,
+            targetBgMgdl = targetBgMgdl,
+            minBgLookback75m = minBgLookback75m,
+            hasIndependentMealEvidence = hasIndependentMealEvidence,
         )
         val composite = PredictionPathMath.compositeMinMgdl(
             bg = bg,
@@ -61,6 +68,9 @@ object SafetyPredictionTerminalsResolver {
         mealContext: MealSafetyContext,
         projection: ScenarioProjectionPair,
         mealAbsorptionPhase: MealAbsorptionPhase = MealAbsorptionPhase.NONE,
+        targetBgMgdl: Double = 100.0,
+        minBgLookback75m: Double = Double.MAX_VALUE,
+        hasIndependentMealEvidence: Boolean = true,
     ): SafetyPredictionTerminals {
         val floor = projection.clinicalFloor
         val best = projection.scenarioBest
@@ -75,6 +85,9 @@ object SafetyPredictionTerminalsResolver {
             eventual = floor.terminalMgdl,
             uamTerminal = best.terminalMgdl,
             mealRiseConfirmed = mealRiseConfirmed,
+            targetBgMgdl = targetBgMgdl,
+            minBgLookback75m = minBgLookback75m,
+            hasIndependentMealEvidence = hasIndependentMealEvidence,
         )
         val composite = PredictionPathMath.compositeMinMgdl(
             bg = bg,
@@ -107,9 +120,20 @@ object SafetyPredictionTerminalsResolver {
         eventual: Double,
         uamTerminal: Double?,
         mealRiseConfirmed: Boolean,
+        targetBgMgdl: Double = 100.0,
+        minBgLookback75m: Double = Double.MAX_VALUE,
+        hasIndependentMealEvidence: Boolean = true,
     ): Pair<Double, Double> {
         if (!mealRiseConfirmed || uamTerminal == null || !uamTerminal.isFinite()) {
-            return pred to eventual
+            return applyPostHypoProjectionCap(
+                bg = bg,
+                delta = delta,
+                pred = pred,
+                eventual = eventual,
+                targetBgMgdl = targetBgMgdl,
+                minBgLookback75m = minBgLookback75m,
+                hasIndependentMealEvidence = hasIndependentMealEvidence,
+            )
         }
         var adjPred = pred
         var adjEventual = eventual
@@ -123,7 +147,43 @@ object SafetyPredictionTerminalsResolver {
             val upliftCap = bg + delta.toDouble() * 8.0
             adjPred = maxOf(adjPred, minOf(uamTerminal, upliftCap))
         }
-        return adjPred to adjEventual
+        return applyPostHypoProjectionCap(
+            bg = bg,
+            delta = delta,
+            pred = adjPred,
+            eventual = adjEventual,
+            targetBgMgdl = targetBgMgdl,
+            minBgLookback75m = minBgLookback75m,
+            hasIndependentMealEvidence = hasIndependentMealEvidence,
+        )
+    }
+
+    private fun applyPostHypoProjectionCap(
+        bg: Double,
+        delta: Float,
+        pred: Double,
+        eventual: Double,
+        targetBgMgdl: Double,
+        minBgLookback75m: Double,
+        hasIndependentMealEvidence: Boolean,
+    ): Pair<Double, Double> {
+        val eventualCap = PostHypoProjectionCap.capTerminalMgdl(
+            bgMgdl = bg,
+            targetBgMgdl = targetBgMgdl,
+            deltaMgdl5m = delta.toDouble(),
+            terminalMgdl = eventual,
+            minBgLookback75m = minBgLookback75m,
+            hasIndependentMealEvidence = hasIndependentMealEvidence,
+        )
+        val predCap = PostHypoProjectionCap.capTerminalMgdl(
+            bgMgdl = bg,
+            targetBgMgdl = targetBgMgdl,
+            deltaMgdl5m = delta.toDouble(),
+            terminalMgdl = pred,
+            minBgLookback75m = minBgLookback75m,
+            hasIndependentMealEvidence = hasIndependentMealEvidence,
+        )
+        return predCap.cappedTerminalMgdl to eventualCap.cappedTerminalMgdl
     }
 
     /**
@@ -139,6 +199,9 @@ object SafetyPredictionTerminalsResolver {
         predictionAuthority: DecisionPredictionAuthority?,
         mealContext: MealSafetyContext,
         mealAbsorptionPhase: MealAbsorptionPhase = MealAbsorptionPhase.NONE,
+        targetBgMgdl: Double = 100.0,
+        minBgLookback75m: Double = Double.MAX_VALUE,
+        hasIndependentMealEvidence: Boolean = true,
     ): Pair<Double, Double> {
         val mealRiseConfirmed =
             predictionAuthority?.falseMealSuppression != true &&
@@ -150,6 +213,9 @@ object SafetyPredictionTerminalsResolver {
             eventual = eventualForDecision,
             uamTerminal = predictionAuthority?.scenarioBestTerminalMgdl,
             mealRiseConfirmed = mealRiseConfirmed,
+            targetBgMgdl = targetBgMgdl,
+            minBgLookback75m = minBgLookback75m,
+            hasIndependentMealEvidence = hasIndependentMealEvidence,
         )
     }
 }

@@ -134,6 +134,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternDetec
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternExport
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternInputBuilder
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionBasalCap
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoGuard
 import app.aaps.plugins.aps.openAPSAIMI.safety.signalEventualDrop
@@ -3932,8 +3933,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                                 "${"%.2f".format(v3AdaptiveMult)}x at BG=${"%.0f".format(bg)}",
                         )
                     }
+                    val cappedV3Tbr = capBasalRateForCorrectionAggression(
+                        requestedRateUph = v3TbrRate,
+                        profileBasalUph = profile.current_basal,
+                        source = "AUTODRIVE_V3_DIRECT",
+                    )
                     setTempBasal(
-                        v3TbrRate,
+                        cappedV3Tbr,
                         30,
                         profile,
                         rT,
@@ -4064,8 +4070,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                             "${"%.2f".format(v2AdaptiveMult)}x at BG=${"%.0f".format(bg)}",
                     )
                 }
+                val cappedV2Tbr = capBasalRateForCorrectionAggression(
+                    requestedRateUph = autoRes.tbrUph,
+                    profileBasalUph = profile.current_basal,
+                    source = "AUTODRIVE_V2_DIRECT",
+                )
                 setTempBasal(
-                    autoRes.tbrUph,
+                    cappedV2Tbr,
                     autoRes.tbrMin ?: 30,
                     profile,
                     rT,
@@ -4804,6 +4815,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         consoleLog.add(DecisionPredictionAuthorityResolver.formatLogLine(decisionPrediction))
 
+        val projectionInput = correctionAggressionProjectionInput(
+            targetBgValue = targetBg,
+            cobValue = cob.toDouble(),
+            combinedDeltaValue = glucoseStatus.combinedDelta.toFloat(),
+        )
         cachedRiskEnvelopeDecision = AimiRiskEnvelopeBuilder.buildDecision(
             bg = bg,
             delta = delta,
@@ -4817,6 +4833,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             predictionAuthority = decisionPrediction,
             mealSafetyContext = buildMealSafetyContext(isExplicitAdvisorRun = false, iobData = iobData),
             mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
+            targetBgMgdl = projectionInput.targetBg,
+            minBgLookback75m = projectionInput.minBgLookback75m,
+            hasIndependentMealEvidence = CorrectionAggressionGate.hasIndependentMealEvidence(projectionInput),
         )
         consoleLog.add(AimiRiskEnvelopeBuilder.formatLogLine(cachedRiskEnvelopeDecision!!))
         reconcileSafetyRiskWithDecisionEnvelope()
@@ -6605,11 +6624,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val learnersSummary = learnersParts.joinToString(", ")
 
         val engineRate = b.basalDecision.rate
-        val finalProposedRate = if (b.rT.rate != null) {
-            if (engineRate < b.rT.rate!!) engineRate else b.rT.rate!!
-        } else {
-            engineRate
-        }
+        val mergedRate = CorrectionAggressionBasalCap.mergeEngineAndRtRates(
+            engineRateUph = engineRate,
+            rtRateUph = b.rT.rate,
+            gate = correctionAggressionDecision,
+        )
+        val finalProposedRate = capBasalRateForCorrectionAggression(
+            requestedRateUph = mergedRate,
+            profileBasalUph = b.profile.current_basal,
+            source = "FINAL_BASAL_MERGE",
+        )
         val finalDuration = if (b.rT.rate != null) {
             maxOf(b.rT.duration ?: 30, 30)
         } else {
@@ -7724,18 +7748,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT: RT,
         bg: Double,
         delta: Float,
+        combinedDelta: Float,
         iobData: IobTotal,
         glucoseStatus: GlucoseStatusAIMI,
         scenario: ScenarioProjectionPair,
         isExplicitAdvisorRun: Boolean,
     ): AimiPredPipelineSafetyGate {
         val mealContext = buildMealSafetyContext(isExplicitAdvisorRun, iobData)
+        val projectionInput = correctionAggressionProjectionInput(
+            targetBgValue = profile.target_bg.toDouble(),
+            cobValue = cob.toDouble(),
+            combinedDeltaValue = combinedDelta,
+        )
         val safetyTerminals = SafetyPredictionTerminalsResolver.resolveFromScenario(
             bg = bg,
             delta = delta,
             mealContext = mealContext,
             projection = scenario,
             mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
+            targetBgMgdl = projectionInput.targetBg,
+            minBgLookback75m = projectionInput.minBgLookback75m,
+            hasIndependentMealEvidence = CorrectionAggressionGate.hasIndependentMealEvidence(projectionInput),
         )
         lastSafetyTerminalsForRbt = safetyTerminals
         val lgsTh = HypoThresholdMath.computeHypoThreshold(
@@ -8750,6 +8783,43 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             isConfirmedHighRise = isConfirmedHighRiseThisTick,
             postHypoHint = postHypoHint,
         )
+    }
+
+    private fun correctionAggressionProjectionInput(
+        targetBgValue: Double,
+        cobValue: Double,
+        combinedDeltaValue: Float,
+    ): CorrectionAggressionGate.Input =
+        buildCorrectionAggressionInput(
+            bg = bg,
+            targetBg = targetBgValue,
+            delta = delta,
+            shortAvgDelta = shortAvgDelta,
+            combinedDelta = combinedDeltaValue,
+            cob = cobValue,
+        )
+
+    private fun capBasalRateForCorrectionAggression(
+        requestedRateUph: Double,
+        profileBasalUph: Double,
+        source: String,
+    ): Double {
+        val cap = CorrectionAggressionBasalCap.apply(
+            requestedRateUph = requestedRateUph,
+            profileBasalUph = profileBasalUph,
+            gate = correctionAggressionDecision,
+        )
+        if (cap.wasCapped) {
+            consoleLog.add(
+                CorrectionAggressionBasalCap.formatLogLine(
+                    source = source,
+                    requestedUph = requestedRateUph,
+                    result = cap,
+                    tier = correctionAggressionDecision?.tier,
+                ),
+            )
+        }
+        return cap.cappedRateUph
     }
 
     private fun evaluateAndLogCorrectionAggression(
@@ -13064,6 +13134,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 rT = rT,
                 bg = bg,
                 delta = delta,
+                combinedDelta = combinedDelta,
                 iobData = iob_data,
                 glucoseStatus = glucoseStatus,
                 scenario = scenario,

@@ -86,6 +86,9 @@ object AimiRiskEnvelopeBuilder {
         predictionAuthority: DecisionPredictionAuthority? = null,
         mealSafetyContext: MealSafetyContext = MealSafetyContext(),
         mealAbsorptionPhase: MealAbsorptionPhase = MealAbsorptionPhase.NONE,
+        targetBgMgdl: Double = 100.0,
+        minBgLookback75m: Double = Double.MAX_VALUE,
+        hasIndependentMealEvidence: Boolean = true,
     ): AimiRiskEnvelope {
         val predForDecision = predictionAuthority?.predTerminalMgdl ?: predTerminal
         val eventualForDecision = predictionAuthority?.eventualTerminalMgdl ?: eventualTerminal
@@ -97,6 +100,9 @@ object AimiRiskEnvelopeBuilder {
             predictionAuthority = predictionAuthority,
             mealContext = mealSafetyContext,
             mealAbsorptionPhase = mealAbsorptionPhase,
+            targetBgMgdl = targetBgMgdl,
+            minBgLookback75m = minBgLookback75m,
+            hasIndependentMealEvidence = hasIndependentMealEvidence,
         )
         val composite = PredictionPathMath.compositeMinMgdl(
             bg = bg,

@@ -127,6 +127,39 @@ class CorrectionAggressionGateTest {
     }
 
     @Test
+    fun thomasIncident_reboundSteepRise_staysReboundGuard() {
+        val d = CorrectionAggressionGate.evaluate(
+            input(
+                bg = 119.0,
+                targetBg = 100.0,
+                delta = 5.0,
+                combined = 2.5,
+                minBg75 = 54.0,
+                uam = 0.7,
+                ra = 0.9,
+            ),
+        )
+        assertEquals(CorrectionAggressionGate.Tier.REBOUND_GUARD, d.tier)
+        assertFalse(d.allowRocketBasalScale)
+        assertEquals(1.5, d.maxBasalScaleCap, 0.01)
+    }
+
+    @Test
+    fun refinePostHypoRebound_overridesFullWhenOnlyRiseDerived() {
+        val base = CorrectionAggressionGate.evaluate(
+            input(bg = 145.0, targetBg = 100.0, delta = 6.0, combined = 1.5, minBg75 = 95.0, uam = 0.7),
+        )
+        assertEquals(CorrectionAggressionGate.Tier.FULL, base.tier)
+        val refined = CorrectionAggressionGate.refineForPostHypo(
+            base,
+            input(bg = 119.0, targetBg = 100.0, delta = 5.0, combined = 2.5, minBg75 = 54.0, uam = 0.7, ra = 0.9),
+            CorrectionAggressionGate.PostHypoHint.REBOUND_SUSPECTED,
+        )
+        assertEquals(CorrectionAggressionGate.Tier.REBOUND_GUARD, refined.tier)
+        assertFalse(refined.mealTierFull)
+    }
+
+    @Test
     fun postHypoStrictMeal_uamConfidence() {
         assertTrue(
             CorrectionAggressionGate.isMealLikelyPostHypoStrict(

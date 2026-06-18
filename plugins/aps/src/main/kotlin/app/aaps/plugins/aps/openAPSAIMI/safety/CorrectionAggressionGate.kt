@@ -102,12 +102,12 @@ object CorrectionAggressionGate {
      */
     fun refineForPostHypo(decision: Decision, input: Input, postHypoHint: PostHypoHint): Decision {
         if (postHypoHint != PostHypoHint.REBOUND_SUSPECTED) return decision
-        if (decision.mealTierFull && decision.tier == Tier.FULL) return decision
+        if (hasIndependentMealEvidence(input)) return decision
         val reboundInput = input.copy(postHypoHint = postHypoHint)
         return buildDecision(
             reboundInput,
             Tier.REBOUND_GUARD,
-            mealTierFull = decision.mealTierFull,
+            mealTierFull = false,
             reboundPattern = true,
             reasonSuffix = "post_hypo_rebound_refine",
         )
@@ -124,11 +124,15 @@ object CorrectionAggressionGate {
         aapsLogger?.debug(LTag.APS, line)
     }
 
-    internal fun isMealTierFull(input: Input): Boolean {
+    internal fun hasIndependentMealEvidence(input: Input): Boolean {
         if (input.explicitMealMode || input.hasRecentMealEstimate) return true
         if (input.cob >= 3.0) return true
         if (input.estimatedCarbs > 10.0 && input.estimatedCarbsAgeMin in 0.0..120.0) return true
         if (input.isConfirmedHighRise) return true
+        return false
+    }
+
+    internal fun hasRiseDerivedMealSignals(input: Input): Boolean {
         if (input.bg > 145.0 && input.combinedDelta > 0.5) return true
         if (input.uamConfidence >= 0.55 && input.combinedDelta > 1.0) return true
         if (input.estimatedRa >= 0.8 && input.bg > 115.0) return true
@@ -141,6 +145,14 @@ object CorrectionAggressionGate {
             return true
         }
         return false
+    }
+
+    internal fun isMealTierFull(input: Input): Boolean {
+        if (hasIndependentMealEvidence(input)) return true
+        if (input.minBgLookback75m < REBOUND_MIN_BG_LOOKBACK_MGDL) {
+            return false
+        }
+        return hasRiseDerivedMealSignals(input)
     }
 
     /**

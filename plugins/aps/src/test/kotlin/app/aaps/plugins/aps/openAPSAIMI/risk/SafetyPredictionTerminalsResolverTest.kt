@@ -108,4 +108,34 @@ class SafetyPredictionTerminalsResolverTest {
         val composite = PredictionPathMath.compositeMinMgdl(145.0, adjPred, adjEventual)
         assertEquals(145.0, composite, 0.001)
     }
+
+    @Test
+    fun resolveFromScenario_capsBestTerminalDuringPostHypoRebound() {
+        val floor = ScenarioProjectionCurve.fromRawPoints(
+            ScenarioProjectionKind.CLINICAL_FLOOR,
+            listOf(119.0, 39.0),
+        )
+        val best = ScenarioProjectionCurve.fromRawPoints(
+            ScenarioProjectionKind.SCENARIO_BEST,
+            listOf(119.0, 339.0),
+        )
+        val projection = ScenarioProjectionPair(
+            clinicalFloor = floor,
+            scenarioBest = best,
+            contributors = emptyList(),
+            cobPointsMgdl = listOf(119, 130),
+            ztPointsMgdl = listOf(119, 39),
+        )
+        val result = SafetyPredictionTerminalsResolver.resolveFromScenario(
+            bg = 119.0,
+            delta = 5.0f,
+            mealContext = MealSafetyContext(),
+            projection = projection,
+            targetBgMgdl = 100.0,
+            minBgLookback75m = 54.0,
+            hasIndependentMealEvidence = false,
+        )
+        assertTrue(result.eventualBg < 200.0)
+        assertTrue(result.eventualBg > 119.0)
+    }
 }
