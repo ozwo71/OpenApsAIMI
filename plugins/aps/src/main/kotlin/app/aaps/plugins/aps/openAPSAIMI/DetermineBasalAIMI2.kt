@@ -3197,7 +3197,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 hypothesisState?.suppressMealInterpretation == true ||
                     lastPhysiologicalPhaseOutput?.policy?.suppressMealLikeScenario == true
                 )
-        val t3cPostHypoBlock = t3cEnabled && postHypoOrdinal > 0
+        val t3cPostHypoBlock = t3cEnabled && (
+            postHypoOrdinal > 0 ||
+                (
+                    lastPostHypoDeliveryAuthority.active &&
+                        lastPostHypoDeliveryAuthority.forceMealInterpretationSuppressed
+                    )
+            )
         val t3cExerciseBlock = t3cEnabled &&
             exerciseInsulinLockoutActive &&
             !exerciseHyperBasalOverrideActive &&
@@ -3238,6 +3244,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             t3cBlockReason = t3cBlockReason,
             t3cGovernanceBasalFloorUph = t3cGovernance.activeBasalFloor,
             t3cGovernanceAggressivenessFloor = t3cGovernance.activeAggressivenessFloor,
+            postHypoDeliverySuppressSmb =
+                lastPostHypoDeliveryAuthority.active && lastPostHypoDeliveryAuthority.suppressMealDelivery,
             postHypoOrdinal = postHypoOrdinal,
             trajSpiralCapMaxSmb = spiralCap,
             pkpdLearnedDiaH = pkpd?.params?.diaHrs,
@@ -9227,6 +9235,59 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
+    private fun refreshPostHypoDeliveryAuthorityForTick(
+        combinedDelta: Float,
+        recentBGs: List<Float>,
+        shortAvgDeltaAdj: Float,
+        slopeFromMinDeviation: Double,
+        reason: StringBuilder,
+    ) {
+        val postHypoState = classifyPostHypoState(
+            recentBGs = recentBGs,
+            cob = cob.toDouble(),
+            explicitMealMode = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime,
+            shortAvgDelta = shortAvgDeltaAdj,
+            delta = delta,
+            slopeFromMinDeviation = slopeFromMinDeviation,
+            estimatedCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs),
+            estimatedCarbsAgeMs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong(),
+            localHour = hourOfDay,
+            reason = reason,
+        )
+        val postHypoHint = mapPostHypoToAggressionHint(postHypoState)
+        val aggressionInputForRefine = buildCorrectionAggressionInput(
+            bg = bg,
+            targetBg = targetBg.toDouble(),
+            delta = delta,
+            shortAvgDelta = shortAvgDelta,
+            combinedDelta = combinedDelta,
+            cob = cob.toDouble(),
+            postHypoHint = postHypoHint,
+        )
+        correctionAggressionDecision = correctionAggressionDecision?.let { prior ->
+            CorrectionAggressionGate.refineForPostHypo(
+                prior,
+                aggressionInputForRefine,
+                postHypoHint,
+            )
+        } ?: CorrectionAggressionGate.evaluate(aggressionInputForRefine)
+        correctionAggressionDecision?.let { refined ->
+            CorrectionAggressionGate.appendLogs(refined, aggressionInputForRefine, consoleLog, aapsLogger)
+        }
+        refreshPostHypoDeliveryAuthority(
+            combinedDelta = combinedDelta,
+            postHypoHint = postHypoHint,
+        )
+    }
+
+    private fun legacyPrebolusBlockedByPostHypo(logTag: String): Boolean {
+        val postHypo = lastPostHypoDeliveryAuthority
+        if (!postHypo.active || !postHypo.suppressMealDelivery) return false
+        consoleLog.add(PostHypoDeliveryAuthority.formatLogLine(postHypo))
+        consoleLog.add("${PostHypoDeliveryAuthority.LOG_PREFIX}: legacy_prebolus_blocked tag=$logTag")
+        return true
+    }
+
     private fun mapPostHypoToAggressionHint(state: PostHypoState): CorrectionAggressionGate.PostHypoHint =
         when (state) {
             is PostHypoState.ReboundSuspected -> CorrectionAggressionGate.PostHypoHint.REBOUND_SUSPECTED
@@ -12853,6 +12914,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 internalLastSmbMillis = dateUtil.now()
             }
         }
+
+        fun setLegacyPrebolusUnits(
+            units: Double,
+            logTag: String,
+            onAllowed: (Double) -> Unit,
+        ) {
+            if (legacyPrebolusBlockedByPostHypo(logTag)) {
+                rT.units = 0.0
+                return
+            }
+            rT.units = units
+            onAllowed(units)
+        }
         
         // TBR legacy repas : taux = plafond mode manuel ([DoubleKey.meal_modes_MaxBasal] vs profil, voir [runManualMealModesAfterTherapyGate]),
         // durée 30 min, pendant les 30 premières minutes du mode — réaffirmée à chaque tick P1/P2,
@@ -12875,81 +12949,91 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         if (isMealModeCondition()) {
             manualMealModeTbr(mealruntime, "MEAL_P1", overrideSafetyLimits = false)
-            rT.units = rbf(DoubleKey.OApsAIMIMealPrebolus)
-            rT.reason.append(context.getString(R.string.manual_meal_prebolus, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_MEAL P1=${"%.2f".format(rT.units ?: 0.0)}U")
+            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIMealPrebolus), "MEAL_P1") { u ->
+                rT.reason.append(context.getString(R.string.manual_meal_prebolus, u))
+                consoleLog.add("🍱 LEGACY_MODE_MEAL P1=${"%.2f".format(u)}U")
+            }
             markLegacyMealDecision()
             return rT
         }
         if (isbfastModeCondition()) {
             manualMealModeTbr(bfastruntime, "BF_P1", overrideSafetyLimits = false)
-            rT.units = rbf(DoubleKey.OApsAIMIBFPrebolus)
-            rT.reason.append(context.getString(R.string.reason_prebolus_bfast1, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_BFAST P1=${"%.2f".format(rT.units ?: 0.0)}U")
+            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIBFPrebolus), "BF_P1") { u ->
+                rT.reason.append(context.getString(R.string.reason_prebolus_bfast1, u))
+                consoleLog.add("🍱 LEGACY_MODE_BFAST P1=${"%.2f".format(u)}U")
+            }
             markLegacyMealDecision()
             return rT
         }
         if (isbfast2ModeCondition()) {
             manualMealModeTbr(bfastruntime, "BF_P2", overrideSafetyLimits = false)
-            rT.units = rbf(DoubleKey.OApsAIMIBFPrebolus2)
-            rT.reason.append(context.getString(R.string.reason_prebolus_bfast2, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_BFAST P2=${"%.2f".format(rT.units ?: 0.0)}U")
+            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIBFPrebolus2), "BF_P2") { u ->
+                rT.reason.append(context.getString(R.string.reason_prebolus_bfast2, u))
+                consoleLog.add("🍱 LEGACY_MODE_BFAST P2=${"%.2f".format(u)}U")
+            }
             markLegacyMealDecision()
             return rT
         }
         if (isLunchModeCondition()) {
             manualMealModeTbr(lunchruntime, "LUNCH_P1", overrideSafetyLimits = false)
-            rT.units = rbf(DoubleKey.OApsAIMILunchPrebolus)
-            rT.reason.append(context.getString(R.string.reason_prebolus_lunch1, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_LUNCH P1=${"%.2f".format(rT.units ?: 0.0)}U")
+            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMILunchPrebolus), "LUNCH_P1") { u ->
+                rT.reason.append(context.getString(R.string.reason_prebolus_lunch1, u))
+                consoleLog.add("🍱 LEGACY_MODE_LUNCH P1=${"%.2f".format(u)}U")
+            }
             markLegacyMealDecision()
             return rT
         }
         if (isLunch2ModeCondition()) {
             manualMealModeTbr(lunchruntime, "LUNCH_P2", overrideSafetyLimits = false)
-            rT.units = rbf(DoubleKey.OApsAIMILunchPrebolus2)
-            rT.reason.append(context.getString(R.string.reason_prebolus_lunch2, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_LUNCH P2=${"%.2f".format(rT.units ?: 0.0)}U")
+            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMILunchPrebolus2), "LUNCH_P2") { u ->
+                rT.reason.append(context.getString(R.string.reason_prebolus_lunch2, u))
+                consoleLog.add("🍱 LEGACY_MODE_LUNCH P2=${"%.2f".format(u)}U")
+            }
             markLegacyMealDecision()
             return rT
         }
         if (isDinnerModeCondition()) {
             manualMealModeTbr(dinnerruntime, "DINNER_P1", overrideSafetyLimits = false)
-            rT.units = rbf(DoubleKey.OApsAIMIDinnerPrebolus)
-            rT.reason.append(context.getString(R.string.reason_prebolus_dinner1, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_DINNER P1=${"%.2f".format(rT.units ?: 0.0)}U")
+            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIDinnerPrebolus), "DINNER_P1") { u ->
+                rT.reason.append(context.getString(R.string.reason_prebolus_dinner1, u))
+                consoleLog.add("🍱 LEGACY_MODE_DINNER P1=${"%.2f".format(u)}U")
+            }
             markLegacyMealDecision()
             return rT
         }
         if (isDinner2ModeCondition()) {
             manualMealModeTbr(dinnerruntime, "DINNER_P2", overrideSafetyLimits = false)
-            rT.units = rbf(DoubleKey.OApsAIMIDinnerPrebolus2)
-            rT.reason.append(context.getString(R.string.reason_prebolus_dinner2, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_DINNER P2=${"%.2f".format(rT.units ?: 0.0)}U")
+            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIDinnerPrebolus2), "DINNER_P2") { u ->
+                rT.reason.append(context.getString(R.string.reason_prebolus_dinner2, u))
+                consoleLog.add("🍱 LEGACY_MODE_DINNER P2=${"%.2f".format(u)}U")
+            }
             markLegacyMealDecision()
             return rT
         }
         if (isHighCarbModeCondition()) {
             manualMealModeTbr(highCarbrunTime, "HC_P1", overrideSafetyLimits = false)
-            rT.units = rbf(DoubleKey.OApsAIMIHighCarbPrebolus)
-            rT.reason.append(context.getString(R.string.reason_prebolus_highcarb, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P1=${"%.2f".format(rT.units ?: 0.0)}U")
+            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIHighCarbPrebolus), "HC_P1") { u ->
+                rT.reason.append(context.getString(R.string.reason_prebolus_highcarb, u))
+                consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P1=${"%.2f".format(u)}U")
+            }
             markLegacyMealDecision()
             return rT
         }
         if (isHighCarb2ModeCondition()) {
             manualMealModeTbr(highCarbrunTime, "HC_P2", overrideSafetyLimits = false)
-            rT.units = rbf(DoubleKey.OApsAIMIHighCarbPrebolus2)
-            rT.reason.append(context.getString(R.string.reason_prebolus_highcarb, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P2=${"%.2f".format(rT.units ?: 0.0)}U")
+            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIHighCarbPrebolus2), "HC_P2") { u ->
+                rT.reason.append(context.getString(R.string.reason_prebolus_highcarb, u))
+                consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P2=${"%.2f".format(u)}U")
+            }
             markLegacyMealDecision()
             return rT
         }
         if (issnackModeCondition()) {
             manualMealModeTbr(snackrunTime, "SNACK_P1", overrideSafetyLimits = false)
-            rT.units = rbf(DoubleKey.OApsAIMISnackPrebolus)
-            rT.reason.append(context.getString(R.string.reason_prebolus_snack, rT.units))
-            consoleLog.add("🍱 LEGACY_MODE_SNACK P1=${"%.2f".format(rT.units ?: 0.0)}U")
+            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMISnackPrebolus), "SNACK_P1") { u ->
+                rT.reason.append(context.getString(R.string.reason_prebolus_snack, u))
+                consoleLog.add("🍱 LEGACY_MODE_SNACK P1=${"%.2f".format(u)}U")
+            }
             markLegacyMealDecision()
             return rT
         }
@@ -13416,6 +13500,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             is AimiTherapyExerciseGate.Continue -> therapyGate.nightbis
         }
 
+        refreshPostHypoDeliveryAuthorityForTick(
+            combinedDelta = combinedDelta,
+            recentBGs = glucoseStatusCalculatorAimi.getRecentGlucose(),
+            shortAvgDeltaAdj = shortAvgDeltaAdj,
+            slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation,
+            reason = StringBuilder(),
+        )
+
         val activeModeName = when (val mealModesGate = runManualMealModesAfterTherapyGate(ctx, profile, rT)) {
             is AimiManualMealModesGate.ReturnEarly -> return mealModesGate.rT
             is AimiManualMealModesGate.Continue -> mealModesGate.activeModeName
@@ -13579,39 +13671,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             snackTime = snackTime,
             reason = reason,
         )
-        val postHypoHint = mapPostHypoToAggressionHint(postHypoState)
-
-        evaluateAndLogCorrectionAggression(
-            bg = bg,
-            targetBg = targetBg.toDouble(),
-            delta = delta,
-            shortAvgDelta = shortAvgDelta,
+        refreshPostHypoDeliveryAuthorityForTick(
             combinedDelta = combinedDelta,
-            cob = cob.toDouble(),
-            postHypoHint = postHypoHint,
-        )
-        val aggressionInputForRefine = buildCorrectionAggressionInput(
-            bg = bg,
-            targetBg = targetBg.toDouble(),
-            delta = delta,
-            shortAvgDelta = shortAvgDelta,
-            combinedDelta = combinedDelta,
-            cob = cob.toDouble(),
-            postHypoHint = postHypoHint,
-        )
-        correctionAggressionDecision = correctionAggressionDecision?.let { prior ->
-            CorrectionAggressionGate.refineForPostHypo(
-                prior,
-                aggressionInputForRefine,
-                postHypoHint,
-            )
-        } ?: CorrectionAggressionGate.evaluate(aggressionInputForRefine)
-        correctionAggressionDecision?.let { refined ->
-            CorrectionAggressionGate.appendLogs(refined, aggressionInputForRefine, consoleLog, aapsLogger)
-        }
-        refreshPostHypoDeliveryAuthority(
-            combinedDelta = combinedDelta,
-            postHypoHint = postHypoHint,
+            recentBGs = recentBGs,
+            shortAvgDeltaAdj = shortAvgDeltaAdj,
+            slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation,
+            reason = reason,
         )
 
         val tdd24hForRbt = resolveTdd24hForExport()

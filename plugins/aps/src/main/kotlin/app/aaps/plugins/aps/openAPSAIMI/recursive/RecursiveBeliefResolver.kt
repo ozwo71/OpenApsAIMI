@@ -259,6 +259,11 @@ object RecursiveBeliefResolver {
             reasonCodes += "FIRST_WAVE"
         }
 
+        if (shouldSuppressRbtSmbDemand(ctx.extended, t3cBasalFirst, basalFirstChannel)) {
+            smbDemandU = 0.0
+            reasonCodes += "POST_HYPO_SMB_ARBITER"
+        }
+
         val smbBeforeLoadGovernor = smbDemandU
         val loadGovernorEval = InsulinLoadGovernor.evaluate(
             InsulinLoadGovernor.Input(
@@ -511,5 +516,20 @@ object RecursiveBeliefResolver {
             ),
         )
         return mealSupport >= 0.72 && ctx.mealAbsorption?.mealDeliveryPriority == true
+    }
+
+    /**
+     * Symmetric mutex with [BasalFirstChannel.T3C_BASAL_FIRST]: when post-hypo rebound guard is active,
+     * RBT must not keep a parallel SMB demand (HTR floor / meal-wave boosts).
+     */
+    internal fun shouldSuppressRbtSmbDemand(
+        ext: RbtExtendedSignals,
+        t3cBasalFirst: T3cBasalFirstResolution?,
+        basalFirstChannel: BasalFirstChannel,
+    ): Boolean {
+        if (ext.postHypoDeliverySuppressSmb) return true
+        if (!ext.t3cActive || !ext.t3cPostHypoBlock) return false
+        return basalFirstChannel == BasalFirstChannel.T3C_BASAL_FIRST ||
+            t3cBasalFirst?.active == true
     }
 }

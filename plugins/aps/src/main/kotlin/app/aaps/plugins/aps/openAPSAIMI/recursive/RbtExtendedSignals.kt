@@ -26,6 +26,8 @@ data class RbtExtendedSignals(
     val t3cBlockReason: String? = null,
     val t3cGovernanceBasalFloorUph: Double? = null,
     val t3cGovernanceAggressivenessFloor: Double? = null,
+    /** [PostHypoDeliveryAuthority] requests zero SMB on the RBT channel. */
+    val postHypoDeliverySuppressSmb: Boolean = false,
     val postHypoOrdinal: Int? = null,
     val trajSpiralCapMaxSmb: Double? = null,
     val pkpdLearnedDiaH: Double? = null,
