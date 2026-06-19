@@ -274,8 +274,17 @@ internal data class AimiDecisionContext(
         var patient_state: org.json.JSONObject? = null,
         /** High-level patient mode and strategy derived from the shared state. */
         var patient_mode: org.json.JSONObject? = null,
+        /** Runtime ownership of T3C for this tick: native RBT, legacy fallback, or safety terminal. */
+        var t3c_runtime_ownership: T3cRuntimeOwnershipExport? = null,
         /** Loop vs auditor binding for this tick (sync disposition; follow-up may arrive async). */
         var auditor_tick: org.json.JSONObject? = null,
+    )
+
+    data class T3cRuntimeOwnershipExport(
+        val mode: String,
+        val native_owner_active: Boolean,
+        val legacy_fallback_allowed: Boolean,
+        val reason: String,
     )
 
     data class MealAbsorptionPhaseExport(
@@ -572,6 +581,14 @@ internal data class AimiDecisionContext(
             }
             adjustments.patient_mode?.let { patientMode ->
                 adj.put("patient_mode", patientMode)
+            }
+            adjustments.t3c_runtime_ownership?.let { ownership ->
+                val ownershipJson = org.json.JSONObject()
+                ownershipJson.put("mode", ownership.mode)
+                ownershipJson.put("native_owner_active", ownership.native_owner_active)
+                ownershipJson.put("legacy_fallback_allowed", ownership.legacy_fallback_allowed)
+                ownershipJson.put("reason", ownership.reason)
+                adj.put("t3c_runtime_ownership", ownershipJson)
             }
             adjustments.auditor_tick?.let { auditorTick ->
                 adj.put("auditor_tick", auditorTick)
@@ -1424,6 +1441,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastRbtChaosEvaluation = null
         lastRbtAppliedHints = null
         lastT3cHistoricalBypassNeutralizedThisTick = false
+        lastT3cRuntimeOwnership = null
         rbtResolvedThisTick = false
         lastRbtLiveCommitResult = null
         lastLoadGovernorMultiplierG = 1.0
@@ -2138,6 +2156,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (t3cBrittle && exerciseInsulinLockoutActive && !exerciseHyperBasalOverrideActive &&
             bg <= EXERCISE_BASAL_RESUME_BG_MGDL
         ) {
+            markT3cRuntimeOwnership("SAFETY_TERMINAL", "exercise_lockout")
             rT.reason.append(
                 "🏃 T3c + sport/contexte activité : basale & SMB arrêtés (BG≤${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()}).\n"
             )
@@ -2207,11 +2226,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         insulinActionState: InsulinActionState,
     ): RT? {
         if (!preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)) return null
-        if (RecursiveBeliefPreferences.from(preferences).authorityEnabled) {
+        if (!legacyT3cBypassAllowed()) {
             lastT3cHistoricalBypassNeutralizedThisTick = true
-            consoleLog.add("🌳 T3C_NATIVE: historical bypass neutralized (RBT authority enabled)")
+            markT3cRuntimeOwnership("LEGACY_SKIPPED", "native_rbt_owner")
+            consoleLog.add("🌳 T3C_NATIVE: legacy bypass skipped (native RBT owns T3C)")
             return null
         }
+        markT3cRuntimeOwnership("LEGACY_FALLBACK", "rbt_authority_off")
+        lastDecisionSource = "T3C_LEGACY_BYPASS"
         consoleLog.add("⚡ T3c Brittle Mode Active: Bypassing standard AIMI algorithm.")
 
         // 🛡️ T3c Pre-bolus Safety Guard
@@ -6559,6 +6581,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val intervalsmb: Int,
     )
 
+    private fun isNativeT3cRuntimeOwnerConfigured(): Boolean =
+        preferences.get(BooleanKey.OApsAIMIT3cBrittleMode) &&
+            RecursiveBeliefPreferences.from(preferences).authorityEnabled
+
+    private fun legacyT3cBypassAllowed(): Boolean =
+        preferences.get(BooleanKey.OApsAIMIT3cBrittleMode) &&
+            !isNativeT3cRuntimeOwnerConfigured()
+
+    private fun markT3cRuntimeOwnership(
+        mode: String,
+        reason: String,
+    ) {
+        lastT3cRuntimeOwnership = AimiDecisionContext.T3cRuntimeOwnershipExport(
+            mode = mode,
+            native_owner_active = isNativeT3cRuntimeOwnerConfigured(),
+            legacy_fallback_allowed = legacyT3cBypassAllowed(),
+            reason = reason,
+        )
+    }
+
     private data class T3cBasalFirstApplyPlan(
         val rateUph: Double,
         val durationMin: Int,
@@ -6590,22 +6632,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         t3cState: T3cBasalFirstResolution?,
         runtimeBlocker: String,
     ): T3cBasalFirstApplyPlan? {
+        markT3cRuntimeOwnership("NATIVE_BLOCKED", runtimeBlocker)
         if (t3cState != null) {
             updateT3cBasalFirstRuntimeState(
                 selectedForProduction = false,
                 runtimeBlocker = runtimeBlocker,
             )
-            consoleLog.add("🌳 T3C_NATIVE: not applied blocker=$runtimeBlocker")
         }
+        consoleLog.add("🌳 T3C_NATIVE: not applied blocker=$runtimeBlocker")
         return null
     }
 
     private fun planT3cBasalFirstProduction(
         b: AimiPostBasalEngineFinalizeBundle,
     ): T3cBasalFirstApplyPlan? {
-        if (!RecursiveBeliefPreferences.from(preferences).authorityEnabled) return null
-        val snapshot = lastRecursiveBeliefSnapshot ?: return null
-        if (snapshot.resolutions.basalFirstChannel != BasalFirstChannel.T3C_BASAL_FIRST) return null
+        if (!isNativeT3cRuntimeOwnerConfigured()) return null
+        val snapshot = lastRecursiveBeliefSnapshot
+            ?: return blockT3cBasalFirstProduction(null, "native_unavailable_no_snapshot")
+        if (snapshot.resolutions.basalFirstChannel != BasalFirstChannel.T3C_BASAL_FIRST) {
+            val reason = snapshot.resolutions.t3cBasalFirst?.dominantBlocker?.lowercase(Locale.US)
+                ?: "native_no_basal_first_channel"
+            return blockT3cBasalFirstProduction(snapshot.resolutions.t3cBasalFirst, reason)
+        }
         val t3cState = snapshot.resolutions.t3cBasalFirst
             ?: return blockT3cBasalFirstProduction(null, "missing_t3c_state")
 
@@ -6696,6 +6744,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             "🌳 T3C_NATIVE: ready rate=${"%.2f".format(Locale.US, finalRate)}U/h " +
                 "demand=${"%.2f".format(Locale.US, t3cState.boundedRateUph)}U/h",
         )
+        markT3cRuntimeOwnership("NATIVE_READY", "native_rbt_owner")
         return T3cBasalFirstApplyPlan(
             rateUph = finalRate,
             durationMin = 30,
@@ -6926,6 +6975,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             } else {
                 null
             }
+            markT3cRuntimeOwnership(
+                mode = if (runtimeBlocker == null) "NATIVE_APPLIED" else "NATIVE_BLOCKED",
+                reason = runtimeBlocker ?: "t3c_basal_first_applied",
+            )
             updateT3cBasalFirstRuntimeState(
                 selectedForProduction = runtimeBlocker == null,
                 appliedRateUph = appliedRate,
@@ -7207,6 +7260,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.uam_hypotheses = lastUamHypothesisState?.toJsonObject()
         decisionCtx.adjustments.patient_state = lastPatientState?.toJsonObject()
         decisionCtx.adjustments.patient_mode = lastPatientModeDecision?.toJsonObject()
+        decisionCtx.adjustments.t3c_runtime_ownership = lastT3cRuntimeOwnership
         decisionCtx.adjustments.replay_quality = ReplayQualityExportBuilder.toJsonObject(
             ReplayQualityExportBuilder.build(
                 phaseOutput = lastPhysiologicalPhaseOutput,
@@ -8271,6 +8325,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastRecursiveBeliefSnapshot: RecursiveBeliefSnapshot? = null
     private var lastRecursiveAuthorityGateDecision: RecursiveBeliefAuthorityGate.Decision? = null
     private var lastT3cHistoricalBypassNeutralizedThisTick: Boolean = false
+    private var lastT3cRuntimeOwnership: AimiDecisionContext.T3cRuntimeOwnershipExport? = null
     private var lastRbtChaosEvaluation: RbtChaosEvaluator.Result? = null
     private var lastRbtAppliedHints: RbtResolutionBridge.AppliedHints? = null
     private var rbtResolvedThisTick = false
