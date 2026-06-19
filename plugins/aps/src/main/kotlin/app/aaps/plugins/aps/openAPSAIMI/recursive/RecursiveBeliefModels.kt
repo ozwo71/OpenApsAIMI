@@ -89,6 +89,11 @@ data class T3cBasalFirstResolution(
     val governanceBasalFloorUph: Double? = null,
     val governanceAggressivenessFloor: Double? = null,
     val reasonCodes: List<String> = emptyList(),
+    val selectedForProduction: Boolean = false,
+    val historicalBypassNeutralized: Boolean = false,
+    val appliedRateUph: Double? = null,
+    val appliedDurationMin: Int? = null,
+    val runtimeBlocker: String? = null,
 )
 
 data class DoseChannelResolution(
@@ -208,4 +213,9 @@ data class T3cBasalFirstExport(
     val governanceBasalFloorUph: Double? = null,
     val governanceAggressivenessFloor: Double? = null,
     val reasonCodes: List<String> = emptyList(),
+    val selectedForProduction: Boolean = false,
+    val historicalBypassNeutralized: Boolean = false,
+    val appliedRateUph: Double? = null,
+    val appliedDurationMin: Int? = null,
+    val runtimeBlocker: String? = null,
 )

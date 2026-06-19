@@ -72,6 +72,7 @@ import app.aaps.plugins.aps.openAPSAIMI.prediction.NaiveEventualBgSignGuard
 import app.aaps.plugins.aps.openAPSAIMI.prediction.PredictionSanityResult
 import app.aaps.plugins.aps.openAPSAIMI.prediction.minPredictedAcrossCurves
 import app.aaps.plugins.aps.openAPSAIMI.quality.ReplayQualityExportBuilder
+import app.aaps.plugins.aps.openAPSAIMI.recursive.BasalFirstChannel
 import app.aaps.plugins.aps.openAPSAIMI.recursive.RecursiveBeliefAuthorityGate
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperSeverityClassifier
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperSeverityTier
@@ -85,6 +86,7 @@ import app.aaps.plugins.aps.openAPSAIMI.recursive.ReleaseAuthority
 import app.aaps.plugins.aps.openAPSAIMI.recursive.RbtChaosEvaluator
 import app.aaps.plugins.aps.openAPSAIMI.recursive.RbtEpisodeMemory
 import app.aaps.plugins.aps.openAPSAIMI.recursive.RbtResolutionBridge
+import app.aaps.plugins.aps.openAPSAIMI.recursive.T3cBasalFirstResolution
 import app.aaps.plugins.aps.openAPSAIMI.recursive.UnfoldExporter
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryHypoCredibility
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryMpcFeedForward
@@ -1421,6 +1423,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastRecursiveAuthorityGateDecision = null
         lastRbtChaosEvaluation = null
         lastRbtAppliedHints = null
+        lastT3cHistoricalBypassNeutralizedThisTick = false
         rbtResolvedThisTick = false
         lastRbtLiveCommitResult = null
         lastLoadGovernorMultiplierG = 1.0
@@ -2204,6 +2207,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         insulinActionState: InsulinActionState,
     ): RT? {
         if (!preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)) return null
+        if (RecursiveBeliefPreferences.from(preferences).authorityEnabled) {
+            lastT3cHistoricalBypassNeutralizedThisTick = true
+            consoleLog.add("🌳 T3C_NATIVE: historical bypass neutralized (RBT authority enabled)")
+            return null
+        }
         consoleLog.add("⚡ T3c Brittle Mode Active: Bypassing standard AIMI algorithm.")
 
         // 🛡️ T3c Pre-bolus Safety Guard
@@ -6551,6 +6559,149 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val intervalsmb: Int,
     )
 
+    private data class T3cBasalFirstApplyPlan(
+        val rateUph: Double,
+        val durationMin: Int,
+        val decisionSource: String = "RBT_T3C_BASAL_FIRST",
+    )
+
+    private fun updateT3cBasalFirstRuntimeState(
+        selectedForProduction: Boolean,
+        appliedRateUph: Double? = null,
+        appliedDurationMin: Int? = null,
+        runtimeBlocker: String? = null,
+    ) {
+        val snapshot = lastRecursiveBeliefSnapshot ?: return
+        val t3cState = snapshot.resolutions.t3cBasalFirst ?: return
+        lastRecursiveBeliefSnapshot = snapshot.copy(
+            resolutions = snapshot.resolutions.copy(
+                t3cBasalFirst = t3cState.copy(
+                    selectedForProduction = selectedForProduction,
+                    historicalBypassNeutralized = lastT3cHistoricalBypassNeutralizedThisTick,
+                    appliedRateUph = appliedRateUph,
+                    appliedDurationMin = appliedDurationMin,
+                    runtimeBlocker = runtimeBlocker,
+                ),
+            ),
+        )
+    }
+
+    private fun blockT3cBasalFirstProduction(
+        t3cState: T3cBasalFirstResolution?,
+        runtimeBlocker: String,
+    ): T3cBasalFirstApplyPlan? {
+        if (t3cState != null) {
+            updateT3cBasalFirstRuntimeState(
+                selectedForProduction = false,
+                runtimeBlocker = runtimeBlocker,
+            )
+            consoleLog.add("🌳 T3C_NATIVE: not applied blocker=$runtimeBlocker")
+        }
+        return null
+    }
+
+    private fun planT3cBasalFirstProduction(
+        b: AimiPostBasalEngineFinalizeBundle,
+    ): T3cBasalFirstApplyPlan? {
+        if (!RecursiveBeliefPreferences.from(preferences).authorityEnabled) return null
+        val snapshot = lastRecursiveBeliefSnapshot ?: return null
+        if (snapshot.resolutions.basalFirstChannel != BasalFirstChannel.T3C_BASAL_FIRST) return null
+        val t3cState = snapshot.resolutions.t3cBasalFirst
+            ?: return blockT3cBasalFirstProduction(null, "missing_t3c_state")
+
+        if (!t3cState.active) {
+            return blockT3cBasalFirstProduction(t3cState, "inactive")
+        }
+        if (!t3cState.eligible) {
+            val blocker = t3cState.dominantBlocker?.lowercase(Locale.US) ?: "resolver_ineligible"
+            return blockT3cBasalFirstProduction(t3cState, blocker)
+        }
+        if (!lastT3cHistoricalBypassNeutralizedThisTick) {
+            return blockT3cBasalFirstProduction(t3cState, "historical_bypass_not_neutralized")
+        }
+        if (lastRecursiveAuthorityGateDecision?.effectiveAuthority != ReleaseAuthority.NONE) {
+            return blockT3cBasalFirstProduction(t3cState, "smb_authority_active")
+        }
+        if ((b.rT.units ?: 0.0) > 0.0 || (b.rT.insulinReq ?: 0.0) > 0.0) {
+            return blockT3cBasalFirstProduction(t3cState, "smb_already_requested")
+        }
+        if (exerciseInsulinLockoutActive || t3cState.exerciseBlock) {
+            return blockT3cBasalFirstProduction(t3cState, "exercise_lockout")
+        }
+        if (lastPostHypoDeliveryAuthority.active || t3cState.postHypoBlock) {
+            return blockT3cBasalFirstProduction(t3cState, "post_hypo_guard")
+        }
+        if (t3cState.mealConflict) {
+            return blockT3cBasalFirstProduction(t3cState, "meal_conflict")
+        }
+        if (t3cState.hardSafetyBlock) {
+            return blockT3cBasalFirstProduction(t3cState, "hard_safety_block")
+        }
+        if (iob > maxIob) {
+            return blockT3cBasalFirstProduction(t3cState, "max_iob")
+        }
+        if (lastInsulinStackingEvaluation?.kind == InsulinStackingStance.Kind.SURVEILLANCE_IOB) {
+            return blockT3cBasalFirstProduction(t3cState, "stacking_cap")
+        }
+
+        val hypoGuard = HypoThresholdMath.computeHypoThreshold(
+            minBg = b.profile.min_bg,
+            lgsThreshold = b.profile.lgsThreshold,
+        )
+        val mealContext = MealSafetyContext(
+            mealModeActive = mealTime || lunchTime || dinnerTime || snackTime || highCarbTime || bfastTime,
+            manualBolusAgeMin = internalLastSmbMillis.takeIf { it > 0L }?.let { (dateUtil.now() - it) / 60000.0 },
+            inferredMealSignal = inferredMealSafetyIntent(),
+        )
+        val (hypoPredForLgs, hypoEventualForLgs) = sanitizedHypoGuardPredictedEventual(
+            rT = b.rT,
+            predictedBg = predictedBg.toDouble(),
+            eventualBg = eventualBG,
+        )
+        val minPredCurve = minPredictedAcrossCurves(b.rT.predBGs)
+        val lgsReason = HypoLgsBlockReason.detect(
+            bgNow = bg,
+            predicted = hypoPredForLgs,
+            eventual = hypoEventualForLgs,
+            minPredictedCurve = minPredCurve,
+            hypo = hypoGuard,
+            delta = delta.toDouble(),
+            mealContext = mealContext,
+            ignoreMinPredictedCurve = rbtIgnoreMinPredictedCurve(),
+        )
+        if (lgsReason != null) {
+            return blockT3cBasalFirstProduction(
+                t3cState,
+                "final_hypo_${lgsReason.name.lowercase(Locale.US)}",
+            )
+        }
+
+        val previousRate = if (b.ctx.currentTemp.duration > 0) b.ctx.currentTemp.rate else b.profile.current_basal
+        val maxStepUp = max(0.30, previousRate * 0.20)
+        val rampedRate = if (t3cState.boundedRateUph > previousRate) {
+            min(t3cState.boundedRateUph, previousRate + maxStepUp)
+        } else {
+            t3cState.boundedRateUph
+        }
+        val finalRate = capBasalRateForCorrectionAggression(
+            requestedRateUph = rampedRate,
+            profileBasalUph = b.profile.current_basal,
+            source = "RBT_T3C_BASAL_FIRST",
+        ).coerceIn(0.0, t3cState.maxBasalCapUph.coerceAtLeast(rampedRate))
+        if (finalRate <= 0.0) {
+            return blockT3cBasalFirstProduction(t3cState, "no_basal_demand")
+        }
+
+        consoleLog.add(
+            "🌳 T3C_NATIVE: ready rate=${"%.2f".format(Locale.US, finalRate)}U/h " +
+                "demand=${"%.2f".format(Locale.US, t3cState.boundedRateUph)}U/h",
+        )
+        return T3cBasalFirstApplyPlan(
+            rateUph = finalRate,
+            durationMin = 30,
+        )
+    }
+
     /**
      * Après [runBasalDecisionEngineDecideStage] : learners (dont [basalLearner.process] **après** le moteur),
      * visualisation trajectoire, fusion TBR prioritaire, [setTempBasal], [comparator], instrumentation RT,
@@ -6735,15 +6886,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rtRateUph = b.rT.rate,
             gate = correctionAggressionDecision,
         )
-        val finalProposedRate = capBasalRateForCorrectionAggression(
+        var finalProposedRate = capBasalRateForCorrectionAggression(
             requestedRateUph = mergedRate,
             profileBasalUph = b.profile.current_basal,
             source = "FINAL_BASAL_MERGE",
         )
-        val finalDuration = if (b.rT.rate != null) {
+        var finalDuration = if (b.rT.rate != null) {
             maxOf(b.rT.duration ?: 30, 30)
         } else {
             maxOf(b.basalDecision.duration, 30)
+        }
+        var finalOverrideSafetyLimits = b.basalDecision.overrideSafety
+        var finalAdaptiveMultiplier = adaptiveMult
+
+        val t3cNativePlan = planT3cBasalFirstProduction(b)
+        if (t3cNativePlan != null) {
+            finalProposedRate = t3cNativePlan.rateUph
+            finalDuration = t3cNativePlan.durationMin
+            finalOverrideSafetyLimits = false
+            finalAdaptiveMultiplier = 1.0
+            lastDecisionSource = t3cNativePlan.decisionSource
+            b.rT.reason.append("; 🌳T3C_NATIVE_BASAL_FIRST")
         }
 
         val finalResult = setTempBasal(
@@ -6752,9 +6915,31 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             profile = b.profile,
             rT = b.rT,
             currenttemp = b.ctx.currentTemp,
-            overrideSafetyLimits = b.basalDecision.overrideSafety,
-            adaptiveMultiplier = adaptiveMult
+            overrideSafetyLimits = finalOverrideSafetyLimits,
+            adaptiveMultiplier = finalAdaptiveMultiplier
         )
+        if (t3cNativePlan != null) {
+            val appliedRate = finalResult.rate?.coerceAtLeast(0.0) ?: 0.0
+            val appliedDuration = maxOf(finalResult.duration ?: finalDuration, 30)
+            val runtimeBlocker = if (appliedRate <= 0.0 && t3cNativePlan.rateUph > 0.0) {
+                "final_settemp_block"
+            } else {
+                null
+            }
+            updateT3cBasalFirstRuntimeState(
+                selectedForProduction = runtimeBlocker == null,
+                appliedRateUph = appliedRate,
+                appliedDurationMin = appliedDuration,
+                runtimeBlocker = runtimeBlocker,
+            )
+            consoleLog.add(
+                if (runtimeBlocker == null) {
+                    "🌳 T3C_NATIVE: applied ${"%.2f".format(Locale.US, appliedRate)}U/h for ${appliedDuration}m"
+                } else {
+                    "🌳 T3C_NATIVE: blocked after setTempBasal ($runtimeBlocker)"
+                },
+            )
+        }
         comparator.compare(
             aimiResult = finalResult,
             glucoseStatus = b.ctx.glucoseStatus,
@@ -7003,12 +7188,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.pred_divergence = lastPredDivergenceExport
         val rbtPrefs = RecursiveBeliefPreferences.from(preferences)
         lastRecursiveBeliefSnapshot?.let { snap ->
+            val t3cApplied = snap.resolutions.t3cBasalFirst?.selectedForProduction == true
             val export = UnfoldExporter.toExport(
                 snapshot = snap,
-                shadowOnly = lastRecursiveAuthorityGateDecision?.shadowOnly == true,
-                authorityApplied = lastRecursiveAuthorityGateDecision?.effectiveAuthority?.let {
-                    it != ReleaseAuthority.NONE
-                } ?: false,
+                shadowOnly = if (t3cApplied) false else lastRecursiveAuthorityGateDecision?.shadowOnly == true,
+                authorityApplied = t3cApplied || (
+                    lastRecursiveAuthorityGateDecision?.effectiveAuthority?.let {
+                        it != ReleaseAuthority.NONE
+                    } ?: false
+                    ),
                 waveletBands = snap.waveletBands,
                 authorityGate = lastRecursiveAuthorityGateDecision,
             )
@@ -8082,6 +8270,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastHyperTrajectoryRelease: HyperTrajectoryReleaseResult? = null
     private var lastRecursiveBeliefSnapshot: RecursiveBeliefSnapshot? = null
     private var lastRecursiveAuthorityGateDecision: RecursiveBeliefAuthorityGate.Decision? = null
+    private var lastT3cHistoricalBypassNeutralizedThisTick: Boolean = false
     private var lastRbtChaosEvaluation: RbtChaosEvaluator.Result? = null
     private var lastRbtAppliedHints: RbtResolutionBridge.AppliedHints? = null
     private var rbtResolvedThisTick = false

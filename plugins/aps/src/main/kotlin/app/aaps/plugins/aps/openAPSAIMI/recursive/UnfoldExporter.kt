@@ -88,6 +88,11 @@ internal object UnfoldExporter {
                         governanceBasalFloorUph = it.governanceBasalFloorUph,
                         governanceAggressivenessFloor = it.governanceAggressivenessFloor,
                         reasonCodes = it.reasonCodes,
+                        selectedForProduction = it.selectedForProduction,
+                        historicalBypassNeutralized = it.historicalBypassNeutralized,
+                        appliedRateUph = it.appliedRateUph,
+                        appliedDurationMin = it.appliedDurationMin,
+                        runtimeBlocker = it.runtimeBlocker,
                     )
                 },
             ),
@@ -178,6 +183,11 @@ internal object UnfoldExporter {
                     put("governance_basal_floor_uph", t3c.governanceBasalFloorUph ?: JSONObject.NULL)
                     put("governance_aggressiveness_floor", t3c.governanceAggressivenessFloor ?: JSONObject.NULL)
                     put("reason_codes", JSONArray(t3c.reasonCodes))
+                    put("selected_for_production", t3c.selectedForProduction)
+                    put("historical_bypass_neutralized", t3c.historicalBypassNeutralized)
+                    put("applied_rate_uph", t3c.appliedRateUph ?: JSONObject.NULL)
+                    put("applied_duration_min", t3c.appliedDurationMin ?: JSONObject.NULL)
+                    put("runtime_blocker", t3c.runtimeBlocker ?: JSONObject.NULL)
                 })
             }
         })
@@ -212,8 +222,9 @@ internal object UnfoldExporter {
         } ?: ""
         val t3cNote = r.t3cBasalFirst?.let { t3c ->
             when {
-                t3c.eligible -> " bf=T3C@${"%.2f".format(t3c.boundedRateUph)}U/h"
-                t3c.active -> " bf=T3C(${t3c.dominantBlocker ?: "blocked"})"
+                t3c.selectedForProduction -> " bf=T3C_APPLIED@${"%.2f".format(t3c.appliedRateUph ?: t3c.boundedRateUph)}U/h"
+                t3c.eligible -> " bf=T3C_READY@${"%.2f".format(t3c.boundedRateUph)}U/h"
+                t3c.active -> " bf=T3C_BLOCK(${t3c.runtimeBlocker ?: t3c.dominantBlocker ?: "blocked"})"
                 else -> ""
             }
         } ?: ""
