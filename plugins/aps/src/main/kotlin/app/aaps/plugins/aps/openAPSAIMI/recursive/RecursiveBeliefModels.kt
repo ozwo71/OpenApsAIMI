@@ -24,6 +24,11 @@ enum class MealChannelHint {
     SUPPRESS,
 }
 
+enum class BasalFirstChannel {
+    NONE,
+    T3C_BASAL_FIRST,
+}
+
 data class BeliefLeafReading(
     val id: BeliefLeafId,
     val signal: Double,
@@ -69,6 +74,23 @@ data class LoadGovernorExport(
     val summary: String,
 )
 
+data class T3cBasalFirstResolution(
+    val active: Boolean,
+    val eligible: Boolean,
+    val basalDemandRateUph: Double,
+    val boundedRateUph: Double,
+    val maxBasalCapUph: Double,
+    val anticipationStrength: Double,
+    val mealConflict: Boolean,
+    val postHypoBlock: Boolean,
+    val exerciseBlock: Boolean,
+    val hardSafetyBlock: Boolean,
+    val dominantBlocker: String?,
+    val governanceBasalFloorUph: Double? = null,
+    val governanceAggressivenessFloor: Double? = null,
+    val reasonCodes: List<String> = emptyList(),
+)
+
 data class DoseChannelResolution(
     val smbDemandU: Double,
     val smbDemandBeforeLoadGovernorU: Double = smbDemandU,
@@ -82,6 +104,8 @@ data class DoseChannelResolution(
     val suppressTrajBasalShift: Boolean,
     val hypoMinPredIgnored: Boolean,
     val reasonCodes: List<String>,
+    val basalFirstChannel: BasalFirstChannel = BasalFirstChannel.NONE,
+    val t3cBasalFirst: T3cBasalFirstResolution? = null,
     val loadGovernorExport: LoadGovernorExport? = null,
 )
 
@@ -159,10 +183,29 @@ data class ResolutionExport(
     val suppressTrajBasalShift: Boolean,
     val hypoMinPredIgnored: Boolean,
     val reasonCodes: List<String>,
+    val basalFirstChannel: String,
+    val t3cBasalFirst: T3cBasalFirstExport? = null,
 )
 
 data class WaveletExport(
     val high: Double,
     val mid: Double,
     val low: Double,
+)
+
+data class T3cBasalFirstExport(
+    val active: Boolean,
+    val eligible: Boolean,
+    val basalDemandRateUph: Double,
+    val boundedRateUph: Double,
+    val maxBasalCapUph: Double,
+    val anticipationStrength: Double,
+    val mealConflict: Boolean,
+    val postHypoBlock: Boolean,
+    val exerciseBlock: Boolean,
+    val hardSafetyBlock: Boolean,
+    val dominantBlocker: String?,
+    val governanceBasalFloorUph: Double? = null,
+    val governanceAggressivenessFloor: Double? = null,
+    val reasonCodes: List<String> = emptyList(),
 )

@@ -72,6 +72,12 @@ object RecursiveBeliefResolver {
         val u15 = byTau[15]?.urgency ?: 0.0
         val u60 = byTau[60]?.urgency ?: 0.0
         val belief15 = byTau[15]?.belief ?: 0.0
+        val t3cBasalFirst = resolveT3cBasalFirst(ctx)
+        val basalFirstChannel = if (t3cBasalFirst?.eligible == true) {
+            BasalFirstChannel.T3C_BASAL_FIRST
+        } else {
+            BasalFirstChannel.NONE
+        }
 
         // P0 — Tier-1 hypo (non-negotiable)
         if (ctx.tier1Hypo) {
@@ -87,6 +93,8 @@ object RecursiveBeliefResolver {
                 suppressTrajBasalShift = true,
                 hypoMinPredIgnored = ctx.hypoMinPredIgnored,
                 reasonCodes = listOf("P0"),
+                basalFirstChannel = basalFirstChannel,
+                t3cBasalFirst = t3cBasalFirst,
             )
         }
 
@@ -394,7 +402,66 @@ object RecursiveBeliefResolver {
             suppressTrajBasalShift = suppressTraj,
             hypoMinPredIgnored = ctx.hypoMinPredIgnored,
             reasonCodes = reasonCodes,
+            basalFirstChannel = basalFirstChannel,
+            t3cBasalFirst = t3cBasalFirst,
             loadGovernorExport = loadGovernorExport,
+        )
+    }
+
+    private fun resolveT3cBasalFirst(ctx: RecursiveBeliefTickContext): T3cBasalFirstResolution? {
+        val ext = ctx.extended
+        val active = ext.t3cActive
+        val demand = ext.t3cBasalDemandRateUph ?: 0.0
+        val cap = (ext.t3cBasalMaxRateUph ?: demand).coerceAtLeast(0.0)
+        val bounded = demand.coerceIn(0.0, cap.coerceAtLeast(demand))
+        val mealConflict = ext.t3cMealConflict
+        val postHypoBlock = ext.t3cPostHypoBlock
+        val exerciseBlock = ext.t3cExerciseBlock
+        val hardSafetyBlock = ext.t3cHardSafetyBlock || ctx.tier1Hypo
+        if (!active && demand <= 0.0 && !mealConflict && !postHypoBlock && !exerciseBlock && !hardSafetyBlock) {
+            return null
+        }
+
+        val dominantBlocker = when {
+            hardSafetyBlock -> ext.t3cBlockReason ?: "HARD_SAFETY"
+            postHypoBlock -> ext.t3cBlockReason ?: "POST_HYPO"
+            mealConflict -> ext.t3cBlockReason ?: "MEAL_CONFLICT"
+            exerciseBlock -> ext.t3cBlockReason ?: "EXERCISE_LOCKOUT"
+            active && bounded <= 0.0 -> ext.t3cBlockReason ?: "NO_BASAL_DEMAND"
+            !active -> "INACTIVE"
+            else -> null
+        }
+        val eligible = active &&
+            !hardSafetyBlock &&
+            !postHypoBlock &&
+            !mealConflict &&
+            !exerciseBlock &&
+            bounded > 0.0
+        val reasonCodes = buildList {
+            add(if (active) "T3C_ACTIVE" else "T3C_INACTIVE")
+            if (hardSafetyBlock) add("T3C_HARD_SAFETY_BLOCK")
+            if (postHypoBlock) add("T3C_POST_HYPO_BLOCK")
+            if (mealConflict) add("T3C_MEAL_CONFLICT")
+            if (exerciseBlock) add("T3C_EXERCISE_BLOCK")
+            if (ext.t3cGovernanceBasalFloorUph != null) add("T3C_GOVERNANCE_FLOOR")
+            if (active && bounded <= 0.0) add("T3C_NO_BASAL_DEMAND")
+            if (eligible) add("T3C_BASAL_FIRST_READY")
+        }
+        return T3cBasalFirstResolution(
+            active = active,
+            eligible = eligible,
+            basalDemandRateUph = demand,
+            boundedRateUph = bounded,
+            maxBasalCapUph = cap,
+            anticipationStrength = ext.t3cAnticipationStrength ?: 0.0,
+            mealConflict = mealConflict,
+            postHypoBlock = postHypoBlock,
+            exerciseBlock = exerciseBlock,
+            hardSafetyBlock = hardSafetyBlock,
+            dominantBlocker = dominantBlocker,
+            governanceBasalFloorUph = ext.t3cGovernanceBasalFloorUph,
+            governanceAggressivenessFloor = ext.t3cGovernanceAggressivenessFloor,
+            reasonCodes = reasonCodes,
         )
     }
 

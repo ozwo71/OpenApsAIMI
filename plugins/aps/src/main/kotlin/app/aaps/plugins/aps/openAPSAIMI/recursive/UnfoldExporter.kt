@@ -71,6 +71,25 @@ internal object UnfoldExporter {
                 suppressTrajBasalShift = snapshot.resolutions.suppressTrajBasalShift,
                 hypoMinPredIgnored = snapshot.resolutions.hypoMinPredIgnored,
                 reasonCodes = snapshot.resolutions.reasonCodes,
+                basalFirstChannel = snapshot.resolutions.basalFirstChannel.name,
+                t3cBasalFirst = snapshot.resolutions.t3cBasalFirst?.let {
+                    T3cBasalFirstExport(
+                        active = it.active,
+                        eligible = it.eligible,
+                        basalDemandRateUph = it.basalDemandRateUph,
+                        boundedRateUph = it.boundedRateUph,
+                        maxBasalCapUph = it.maxBasalCapUph,
+                        anticipationStrength = it.anticipationStrength,
+                        mealConflict = it.mealConflict,
+                        postHypoBlock = it.postHypoBlock,
+                        exerciseBlock = it.exerciseBlock,
+                        hardSafetyBlock = it.hardSafetyBlock,
+                        dominantBlocker = it.dominantBlocker,
+                        governanceBasalFloorUph = it.governanceBasalFloorUph,
+                        governanceAggressivenessFloor = it.governanceAggressivenessFloor,
+                        reasonCodes = it.reasonCodes,
+                    )
+                },
             ),
             loadGovernor = snapshot.loadGovernor,
             mr7Trace = snapshot.mr7Trace,
@@ -142,6 +161,25 @@ internal object UnfoldExporter {
             put("suppress_traj_basal_shift", export.resolution.suppressTrajBasalShift)
             put("hypo_min_pred_ignored", export.resolution.hypoMinPredIgnored)
             put("reason_codes", JSONArray(export.resolution.reasonCodes))
+            put("basal_first_channel", export.resolution.basalFirstChannel)
+            export.resolution.t3cBasalFirst?.let { t3c ->
+                put("t3c_basal_first", JSONObject().apply {
+                    put("active", t3c.active)
+                    put("eligible", t3c.eligible)
+                    put("basal_demand_rate_uph", t3c.basalDemandRateUph)
+                    put("bounded_rate_uph", t3c.boundedRateUph)
+                    put("max_basal_cap_uph", t3c.maxBasalCapUph)
+                    put("anticipation_strength", t3c.anticipationStrength)
+                    put("meal_conflict", t3c.mealConflict)
+                    put("post_hypo_block", t3c.postHypoBlock)
+                    put("exercise_block", t3c.exerciseBlock)
+                    put("hard_safety_block", t3c.hardSafetyBlock)
+                    put("dominant_blocker", t3c.dominantBlocker ?: JSONObject.NULL)
+                    put("governance_basal_floor_uph", t3c.governanceBasalFloorUph ?: JSONObject.NULL)
+                    put("governance_aggressiveness_floor", t3c.governanceAggressivenessFloor ?: JSONObject.NULL)
+                    put("reason_codes", JSONArray(t3c.reasonCodes))
+                })
+            }
         })
         export.loadGovernor?.let { lg ->
             root.put("load_governor", JSONObject().apply {
@@ -172,8 +210,15 @@ internal object UnfoldExporter {
             " LG=${it.tier} g=${"%.2f".format(it.multiplierG)}" +
                 if (it.applied) "✓" else "shadow"
         } ?: ""
+        val t3cNote = r.t3cBasalFirst?.let { t3c ->
+            when {
+                t3c.eligible -> " bf=T3C@${"%.2f".format(t3c.boundedRateUph)}U/h"
+                t3c.active -> " bf=T3C(${t3c.dominantBlocker ?: "blocked"})"
+                else -> ""
+            }
+        } ?: ""
         return "🌳 RBT: auth=${r.releaseAuthority} smb=${"%.2f".format(r.smbDemandU)}U " +
             "tbr×${"%.2f".format(r.tbrDemandFraction)} paradoxes=${snapshot.paradoxes.size} " +
-            "τ*=${r.dominantScaleMinutes}$lgNote"
+            "τ*=${r.dominantScaleMinutes}$lgNote$t3cNote"
     }
 }

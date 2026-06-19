@@ -3028,6 +3028,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             eventualBg = eventualBG.takeIf { it.isFinite() },
             strengthRaw = preferences.get(DoubleKey.OApsAIMIT3cAnticipationStrength),
         )
+        val t3cEnabled = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
+        val t3cGovernance = basalNeuralLearner.getGovernanceSnapshot()
         val recentBgs = glucoseStatusCalculatorAimi.getRecentGlucose()
         val postHypo = classifyPostHypoState(
             recentBGs = recentBgs,
@@ -3099,6 +3101,90 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (sleepLive.isAsleep) {
             consoleLog.add("😴 SLEEP_LIVE: ${sleepLive.summary} conf=${"%.2f".format(sleepLive.confidence)}")
         }
+        val t3cTrajectory = if (t3cEnabled) {
+            val lgsT3c = min(90.0, (profile.lgsThreshold?.toDouble() ?: 70.0).coerceAtLeast(70.0))
+            val minPredT3c = rT.predBGs?.IOB?.minOrNull()?.toDouble() ?: bg
+            val eventualT3c = rT.eventualBG?.takeIf { it.isFinite() } ?: eventualBG.coerceAtLeast(40.0)
+            T3cTrajectoryContext.build(
+                minPredBg = minPredT3c,
+                eventualPredBg = eventualT3c,
+                bg = bg,
+                lgsThresholdMgdl = lgsT3c,
+                trajectoryEnabled = rT.trajectoryEnabled == true,
+                lastAnalysis = traj,
+            )
+        } else {
+            null
+        }
+        val t3cDemandRate = if (t3cEnabled) {
+            val baseBasal = profile.current_basal
+            val maxBasalCap = profile.max_basal.coerceAtLeast(baseBasal)
+            val rawAggressiveness = basalNeuralLearner.getT3cAdaptiveFactor(
+                bg = bg,
+                basal = baseBasal,
+                accel = bgacc,
+                duraMin = duraISFminutes,
+                duraAvg = duraISFaverage,
+                iob = iob.toDouble(),
+            )
+            val adaptiveBoost = if (adaptiveMult > 1.0) {
+                (adaptiveMult - 1.0).coerceAtMost(0.40)
+            } else {
+                adaptiveMult - 1.0
+            }
+            val aggressiveness = (rawAggressiveness + rawAggressiveness * adaptiveBoost).coerceIn(0.3, 2.0)
+            val computedRate = DynamicBasalController.computeT3c(
+                bg = bg,
+                targetBg = targetBg.toDouble(),
+                delta = delta,
+                shortAvgDelta = shortAvgDelta.toDouble(),
+                longAvgDelta = longAvgDelta.toDouble(),
+                accel = bgacc,
+                iob = iob.toDouble(),
+                maxIob = maxIob,
+                profileBasal = baseBasal,
+                isf = variableSensitivity.toDouble().coerceAtLeast(10.0),
+                duraISFminutes = duraISFminutes,
+                duraISFaverage = duraISFaverage,
+                eventualBg = eventualBG.takeIf { it.isFinite() },
+                activationThreshold = preferences.get(DoubleKey.OApsAIMIT3cActivationThreshold),
+                aggressiveness = aggressiveness,
+                maxBasalCap = maxBasalCap,
+                trajectory = t3cTrajectory,
+                anticipationHints = t3cHints,
+            )
+            if (computedRate > 0.0 && Math.abs(adaptiveMult - 1.0) > 0.01) {
+                (computedRate * adaptiveMult).coerceIn(0.0, maxBasalCap)
+            } else {
+                computedRate
+            }
+        } else {
+            0.0
+        }
+        val t3cMealConflict = t3cEnabled &&
+            lastMealAbsorptionOutput?.mealDeliveryPriority == true &&
+            (
+                hypothesisState?.suppressMealInterpretation == true ||
+                    lastPhysiologicalPhaseOutput?.policy?.suppressMealLikeScenario == true
+                )
+        val t3cPostHypoBlock = t3cEnabled && postHypoOrdinal > 0
+        val t3cExerciseBlock = t3cEnabled &&
+            exerciseInsulinLockoutActive &&
+            !exerciseHyperBasalOverrideActive &&
+            bg <= EXERCISE_BASAL_RESUME_BG_MGDL
+        val t3cHardSafetyBlock = t3cEnabled && (
+            bg < (profile.lgsThreshold?.toDouble() ?: 70.0) ||
+                t3cExerciseBlock
+            )
+        val t3cBlockReason = when {
+            !t3cEnabled -> null
+            bg < (profile.lgsThreshold?.toDouble() ?: 70.0) -> "HYPO_TERMINAL"
+            t3cExerciseBlock -> "EXERCISE_LOCKOUT"
+            t3cPostHypoBlock -> "POST_HYPO"
+            t3cMealConflict -> "MEAL_CONFLICT"
+            t3cDemandRate <= 0.0 -> "NO_BASAL_DEMAND"
+            else -> null
+        }
         return RbtExtendedSignals(
             tubeAdvisorCapScale = lastTubeAdvisorSmbCapScale,
             insulinActivityStageOrdinal = tickInsulinActionState?.activityStage?.ordinal
@@ -3112,6 +3198,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             mpcFeedForwardRa = mpcFeedForwardRa,
             cbfShieldDeltaU = cbfShieldDeltaU,
             t3cAnticipationStrength = t3cHints.strength,
+            t3cActive = t3cEnabled,
+            t3cBasalDemandRateUph = t3cDemandRate.takeIf { t3cEnabled },
+            t3cBasalMaxRateUph = profile.max_basal.coerceAtLeast(profile.current_basal).takeIf { t3cEnabled },
+            t3cMealConflict = t3cMealConflict,
+            t3cPostHypoBlock = t3cPostHypoBlock,
+            t3cExerciseBlock = t3cExerciseBlock,
+            t3cHardSafetyBlock = t3cHardSafetyBlock,
+            t3cBlockReason = t3cBlockReason,
+            t3cGovernanceBasalFloorUph = t3cGovernance.activeBasalFloor,
+            t3cGovernanceAggressivenessFloor = t3cGovernance.activeAggressivenessFloor,
             postHypoOrdinal = postHypoOrdinal,
             trajSpiralCapMaxSmb = spiralCap,
             pkpdLearnedDiaH = pkpd?.params?.diaHrs,

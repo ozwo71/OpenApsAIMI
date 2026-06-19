@@ -193,6 +193,13 @@ object BeliefLeafAdapterRegistry {
             BeliefLeafId.CBF_SHIELD -> ext.cbfShieldDeltaU?.let {
                 leaf(id, it, 0.85, 0.75, "cbfΔ=${fmt2(it)}U")
             }
+            BeliefLeafId.T3C_ACTIVE -> if (ext.t3cActive) {
+                leaf(id, 1.0, 0.35, 0.14, "t3c active")
+            } else null
+            BeliefLeafId.T3C_BASAL_DEMAND -> ext.t3cBasalDemandRateUph?.let { demand ->
+                val cap = (ext.t3cBasalMaxRateUph ?: demand.coerceAtLeast(0.1)).coerceAtLeast(0.1)
+                leaf(id, (demand / cap).coerceIn(0.0, 1.0), 0.40, 0.14, "rate=${fmt2(demand)} cap=${fmt2(cap)}")
+            }
             BeliefLeafId.MEAL_MEMORY -> ctx.mealAbsorption?.let { m ->
                 leaf(id, m.waveCount.toDouble(), 0.8, if (m.memoryActive) 0.9 else 0.3, "waves=${m.waveCount}")
             }
@@ -201,6 +208,16 @@ object BeliefLeafAdapterRegistry {
             } else null
             BeliefLeafId.T3C_ANTICIP -> ext.t3cAnticipationStrength?.let {
                 leaf(id, it, 0.8, 0.7, "t3c=${fmt2(it)}")
+            }
+            BeliefLeafId.T3C_POST_HYPO_BLOCK -> if (ext.t3cPostHypoBlock) {
+                leaf(id, 1.0, 0.35, 0.14, "postHypo=${ext.postHypoOrdinal ?: 1}")
+            } else null
+            BeliefLeafId.T3C_MEAL_CONFLICT -> if (ext.t3cMealConflict) {
+                leaf(id, 1.0, 0.35, 0.14, "meal conflict")
+            } else null
+            BeliefLeafId.T3C_GOVERNANCE_FLOOR -> ext.t3cGovernanceBasalFloorUph?.let { floor ->
+                val cap = (ext.t3cBasalMaxRateUph ?: floor.coerceAtLeast(0.1)).coerceAtLeast(0.1)
+                leaf(id, (floor / cap).coerceIn(0.0, 1.0), 0.35, 0.14, "govFloor=${fmt2(floor)}")
             }
             BeliefLeafId.POST_HYPO -> ext.postHypoOrdinal?.let {
                 leaf(id, it.toDouble(), 0.85, 0.75, "postHypo=$it")
