@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.compose
 
+import android.os.Environment
 import androidx.annotation.StringRes
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
@@ -9,9 +10,12 @@ import app.aaps.core.keys.interfaces.PreferenceKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.R as CoreUiR
 import app.aaps.plugins.aps.R
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.JsonlTailReader
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
+import java.io.File
 import java.util.Locale
 import kotlin.math.abs
+import org.json.JSONObject
 
 internal enum class AimiBehaviorFamilyId {
     Protection,
@@ -40,6 +44,7 @@ internal data class AimiBehaviorFamilySnapshot(
     val expertPreferenceCount: Int,
     val status: AimiProjectionStatus,
     val details: List<AimiControlDetail>,
+    val t3cRuntime: AimiT3cRuntimeSnapshot? = null,
 )
 
 internal data class AimiControlSectionSnapshot(
@@ -60,12 +65,40 @@ internal enum class AimiProjectionStatus(@StringRes val labelResId: Int) {
     ExpertPersonalized(R.string.aimi_control_center_expert_personalized),
 }
 
-internal fun buildAimiControlCenterSnapshot(preferences: Preferences): AimiControlCenterSnapshot =
+internal enum class AimiT3cRuntimeStatus(@StringRes val labelResId: Int) {
+    NativeApplied(R.string.aimi_control_center_t3c_status_native_applied),
+    NativeReady(R.string.aimi_control_center_t3c_status_native_ready),
+    NativeBlocked(R.string.aimi_control_center_t3c_status_native_blocked),
+    LegacyFallback(R.string.aimi_control_center_t3c_status_legacy_fallback),
+    SafetyTerminal(R.string.aimi_control_center_t3c_status_safety_terminal),
+    Unavailable(R.string.aimi_control_center_t3c_status_unavailable),
+}
+
+internal enum class AimiT3cRuntimeOwner(@StringRes val labelResId: Int) {
+    NativeRbt(R.string.aimi_control_center_t3c_owner_native),
+    LegacyBypass(R.string.aimi_control_center_t3c_owner_legacy),
+    SafetyGate(R.string.aimi_control_center_t3c_owner_safety),
+    Unavailable(R.string.aimi_control_center_t3c_owner_unavailable),
+}
+
+internal data class AimiT3cRuntimeSnapshot(
+    val status: AimiT3cRuntimeStatus,
+    val owner: AimiT3cRuntimeOwner,
+    val modeText: String,
+    val authorityApplied: Boolean,
+    val shadowOnly: Boolean,
+    val details: List<AimiControlDetail>,
+)
+
+internal fun buildAimiControlCenterSnapshot(
+    preferences: Preferences,
+    t3cRuntime: AimiT3cRuntimeSnapshot? = null,
+): AimiControlCenterSnapshot =
     AimiControlCenterSnapshot(
         families = listOf(
             buildProtectionFamily(preferences),
             buildMealCaptureFamily(preferences),
-            buildStabilityFamily(preferences),
+            buildStabilityFamily(preferences, t3cRuntime),
             buildPhysioFamily(preferences),
             buildAutonomyFamily(preferences),
         ),
@@ -150,7 +183,10 @@ private fun buildMealCaptureFamily(preferences: Preferences): AimiBehaviorFamily
     )
 }
 
-private fun buildStabilityFamily(preferences: Preferences): AimiBehaviorFamilySnapshot {
+private fun buildStabilityFamily(
+    preferences: Preferences,
+    t3cRuntime: AimiT3cRuntimeSnapshot?,
+): AimiBehaviorFamilySnapshot {
     val dynIsfEnabled = preferences.get(BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled)
     val adaptiveBasalEnabled = preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)
     val scores = listOf(
@@ -182,6 +218,7 @@ private fun buildStabilityFamily(preferences: Preferences): AimiBehaviorFamilySn
             boolDetail(BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled, dynIsfEnabled),
             detail(DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, preferences.get(DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction), null),
         ),
+        t3cRuntime = t3cRuntime,
     )
 }
 
@@ -314,6 +351,189 @@ private fun buildSourceSection(preferences: Preferences): AimiControlSectionSnap
         ),
     )
 }
+
+internal fun loadLatestT3cRuntimeSnapshot(): AimiT3cRuntimeSnapshot {
+    val jsonFile = aimiDecisionsJsonlFile()
+    if (!jsonFile.exists() || !jsonFile.canRead()) {
+        return unavailableT3cRuntimeSnapshot()
+    }
+    val tail = JsonlTailReader.readTailLines(jsonFile, maxLines = 80)
+    for (line in tail) {
+        if (!line.contains("recursive_belief") && !line.contains("t3c_runtime_ownership")) continue
+        try {
+            val root = JSONObject(line)
+            val adjustments = root.optJSONObject("adjustments") ?: continue
+            val recursiveBelief = adjustments.optJSONObject("recursive_belief")
+            val ownership = adjustments.optJSONObject("t3c_runtime_ownership")
+            buildT3cRuntimeSnapshot(recursiveBelief, ownership)?.let { return it }
+        } catch (_: Exception) {
+            continue
+        }
+    }
+    return unavailableT3cRuntimeSnapshot()
+}
+
+private fun buildT3cRuntimeSnapshot(
+    recursiveBelief: JSONObject?,
+    ownership: JSONObject?,
+): AimiT3cRuntimeSnapshot? {
+    if (recursiveBelief == null && ownership == null) return null
+
+    val resolution = recursiveBelief?.optJSONObject("resolution")
+    val t3c = resolution?.optJSONObject("t3c_basal_first")
+    val mode = ownership.optStringOrDefault("mode", "UNAVAILABLE")
+    val authorityApplied = recursiveBelief?.optBoolean("authority_applied", false) ?: false
+    val shadowOnly = recursiveBelief?.optBoolean("shadow_only", true) ?: true
+    val status = deriveT3cRuntimeStatus(mode = mode, t3c = t3c, authorityApplied = authorityApplied)
+    val owner = deriveT3cRuntimeOwner(
+        mode = mode,
+        nativeOwnerActive = ownership?.optBoolean("native_owner_active", false) ?: false,
+        legacyFallbackAllowed = ownership?.optBoolean("legacy_fallback_allowed", false) ?: false,
+    )
+
+    val details = buildList {
+        add(AimiControlDetail(R.string.aimi_control_center_t3c_mode, valueText = mode))
+        t3c?.let { t3cState ->
+            add(
+                AimiControlDetail(
+                    titleResId = R.string.aimi_control_center_t3c_basal_demand,
+                    valueText = formatT3cBasalDemand(t3cState),
+                ),
+            )
+            add(
+                AimiControlDetail(
+                    titleResId = R.string.aimi_control_center_t3c_applied_rate,
+                    valueText = formatT3cAppliedRate(t3cState),
+                ),
+            )
+            blockerLabelText(t3cState)?.let { blocker ->
+                add(
+                    AimiControlDetail(
+                        titleResId = R.string.aimi_control_center_t3c_blocker,
+                        valueText = blocker,
+                    ),
+                )
+            }
+            add(
+                AimiControlDetail(
+                    titleResId = R.string.aimi_control_center_t3c_selected_for_production,
+                    valueResId = if (t3cState.optBoolean("selected_for_production", false)) CoreUiR.string.yes else CoreUiR.string.no,
+                ),
+            )
+            add(
+                AimiControlDetail(
+                    titleResId = R.string.aimi_control_center_t3c_bypass_neutralized,
+                    valueResId = if (t3cState.optBoolean("historical_bypass_neutralized", false)) CoreUiR.string.yes else CoreUiR.string.no,
+                ),
+            )
+        }
+        add(
+            AimiControlDetail(
+                titleResId = R.string.aimi_control_center_t3c_authority_applied,
+                valueResId = if (authorityApplied) CoreUiR.string.yes else CoreUiR.string.no,
+            ),
+        )
+        add(
+            AimiControlDetail(
+                titleResId = R.string.aimi_control_center_t3c_shadow_only,
+                valueResId = if (shadowOnly) CoreUiR.string.yes else CoreUiR.string.no,
+            ),
+        )
+    }
+
+    return AimiT3cRuntimeSnapshot(
+        status = status,
+        owner = owner,
+        modeText = mode,
+        authorityApplied = authorityApplied,
+        shadowOnly = shadowOnly,
+        details = details,
+    )
+}
+
+private fun deriveT3cRuntimeStatus(
+    mode: String,
+    t3c: JSONObject?,
+    authorityApplied: Boolean,
+): AimiT3cRuntimeStatus =
+    when (mode) {
+        "NATIVE_APPLIED" -> AimiT3cRuntimeStatus.NativeApplied
+        "NATIVE_READY" -> AimiT3cRuntimeStatus.NativeReady
+        "NATIVE_BLOCKED" -> AimiT3cRuntimeStatus.NativeBlocked
+        "LEGACY_FALLBACK" -> AimiT3cRuntimeStatus.LegacyFallback
+        "SAFETY_TERMINAL" -> AimiT3cRuntimeStatus.SafetyTerminal
+        "LEGACY_SKIPPED" -> when {
+            authorityApplied -> AimiT3cRuntimeStatus.NativeApplied
+            t3c?.optBoolean("eligible", false) == true || t3c?.optBoolean("active", false) == true -> AimiT3cRuntimeStatus.NativeReady
+            else -> AimiT3cRuntimeStatus.Unavailable
+        }
+        else -> when {
+            authorityApplied -> AimiT3cRuntimeStatus.NativeApplied
+            t3c?.optBoolean("eligible", false) == true -> AimiT3cRuntimeStatus.NativeReady
+            t3c?.optBoolean("active", false) == true -> AimiT3cRuntimeStatus.NativeBlocked
+            else -> AimiT3cRuntimeStatus.Unavailable
+        }
+    }
+
+private fun deriveT3cRuntimeOwner(
+    mode: String,
+    nativeOwnerActive: Boolean,
+    legacyFallbackAllowed: Boolean,
+): AimiT3cRuntimeOwner =
+    when {
+        mode == "SAFETY_TERMINAL" -> AimiT3cRuntimeOwner.SafetyGate
+        nativeOwnerActive -> AimiT3cRuntimeOwner.NativeRbt
+        legacyFallbackAllowed -> AimiT3cRuntimeOwner.LegacyBypass
+        else -> AimiT3cRuntimeOwner.Unavailable
+    }
+
+private fun formatT3cBasalDemand(t3c: JSONObject): String {
+    val demand = formatControlCenterDoubleValue(t3c.optDouble("basal_demand_rate_uph", 0.0), "U/h")
+    val bounded = formatControlCenterDoubleValue(t3c.optDouble("bounded_rate_uph", 0.0), "U/h")
+    return "$demand -> $bounded"
+}
+
+private fun formatT3cAppliedRate(t3c: JSONObject): String {
+    val appliedRate = t3c.optDoubleOrNull("applied_rate_uph")
+    val appliedDuration = t3c.optIntOrNull("applied_duration_min")
+    if (appliedRate == null) return ""
+    val rateText = formatControlCenterDoubleValue(appliedRate, "U/h")
+    return if (appliedDuration != null) "$rateText / ${appliedDuration}m" else rateText
+}
+
+private fun blockerLabelText(t3c: JSONObject): String? =
+    t3c.optStringOrNull("runtime_blocker")
+        ?: t3c.optStringOrNull("dominant_blocker")
+
+private fun unavailableT3cRuntimeSnapshot(): AimiT3cRuntimeSnapshot =
+    AimiT3cRuntimeSnapshot(
+        status = AimiT3cRuntimeStatus.Unavailable,
+        owner = AimiT3cRuntimeOwner.Unavailable,
+        modeText = "UNAVAILABLE",
+        authorityApplied = false,
+        shadowOnly = true,
+        details = emptyList(),
+    )
+
+private fun aimiDecisionsJsonlFile(): File {
+    val externalDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+    return File(externalDir, "AAPS/AIMI_Decisions.jsonl")
+}
+
+private fun JSONObject?.optStringOrDefault(
+    key: String,
+    defaultValue: String,
+): String =
+    this?.optString(key)?.takeIf { it.isNotBlank() } ?: defaultValue
+
+private fun JSONObject.optStringOrNull(key: String): String? =
+    if (isNull(key)) null else optString(key).takeIf { it.isNotBlank() }
+
+private fun JSONObject.optDoubleOrNull(key: String): Double? =
+    if (isNull(key)) null else optDouble(key)
+
+private fun JSONObject.optIntOrNull(key: String): Int? =
+    if (isNull(key)) null else optInt(key)
 
 private data class AimiScoreProjection(
     val score: Float,

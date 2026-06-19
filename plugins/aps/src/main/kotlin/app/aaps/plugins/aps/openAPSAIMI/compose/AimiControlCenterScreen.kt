@@ -61,7 +61,13 @@ fun AimiControlCenterScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var preferenceRevision by remember { mutableIntStateOf(0) }
-    val currentSnapshot = remember(preferenceRevision) { buildAimiControlCenterSnapshot(preferences) }
+    val currentT3cRuntime = remember(preferenceRevision) { loadLatestT3cRuntimeSnapshot() }
+    val currentSnapshot = remember(preferenceRevision, currentT3cRuntime) {
+        buildAimiControlCenterSnapshot(
+            preferences = preferences,
+            t3cRuntime = currentT3cRuntime,
+        )
+    }
     val currentDraft = remember(preferenceRevision) { readAimiControlCenterDraft(preferences) }
     var protectionLevel by remember(preferenceRevision) { mutableIntStateOf(currentDraft.protectionLevel) }
     var mealCaptureLevel by remember(preferenceRevision) { mutableIntStateOf(currentDraft.mealCaptureLevel) }
@@ -575,6 +581,10 @@ private fun AimiFamilyCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            snapshot.t3cRuntime?.let { runtime ->
+                T3cRuntimeCard(runtime = runtime)
+            }
+
             if (pendingPlan != null) {
                 Text(
                     text = stringResource(R.string.aimi_control_center_target_after_apply),
@@ -613,6 +623,56 @@ private fun AimiFamilyCard(
                     snapshot.details.forEach { detail ->
                         DetailRow(detail = detail)
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun T3cRuntimeCard(runtime: AimiT3cRuntimeSnapshot) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AapsSpacing.medium),
+            verticalArrangement = Arrangement.spacedBy(AapsSpacing.small),
+        ) {
+            Text(
+                text = stringResource(R.string.aimi_control_center_t3c_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = stringResource(R.string.aimi_control_center_t3c_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(AapsSpacing.small),
+            ) {
+                ControlPill(text = stringResource(runtime.status.labelResId))
+                ControlPill(text = stringResource(runtime.owner.labelResId))
+                if (runtime.authorityApplied) {
+                    ControlPill(text = stringResource(R.string.aimi_control_center_t3c_chip_authority_applied))
+                }
+                if (runtime.shadowOnly) {
+                    ControlPill(text = stringResource(R.string.aimi_control_center_t3c_chip_shadow_only))
+                }
+            }
+            if (runtime.status == AimiT3cRuntimeStatus.Unavailable && runtime.details.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.aimi_control_center_t3c_unavailable_body),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                runtime.details.forEach { detail ->
+                    DetailRow(detail = detail)
                 }
             }
         }
