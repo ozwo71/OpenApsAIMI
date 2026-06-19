@@ -45,6 +45,16 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningPlan
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningStepTier
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.JsonlTailReader
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cAdvisorObservation
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cAdvisorObservationFamily
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cAdvisorObservationLevel
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cAdvisorObservationSignal
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cOwnershipTransition
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeHistoryReader
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeHistorySummary
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeNumericStats
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeOwnershipCategory
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeTickStatus
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorFamilyId
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiControlCenterPendingChanges
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiFamilyWritebackPlan
@@ -138,6 +148,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                 val report = advisorService.generateReport(periodDays = 10, history = history, assetContext = applicationContext)
                 // Sequential IO: avoid loading AIMI_Decisions.jsonl while APS/TIR data from generateReport is still retained.
                 val lastRbtExport = loadLastRecursiveBeliefJson()
+                val t3cHistorySummary = T3cRuntimeHistoryReader.summarizeLast24Hours()
                 val advisorCtx = report.advisorContext
 
                 withContext(Dispatchers.Main) {
@@ -167,6 +178,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
 
                     // 1e. Recursive belief unfold (JSONL snapshot, preloaded on IO)
                     rootLayout.addView(createRecursiveBeliefUnfoldCard(cardColor, lastRbtExport))
+                    rootLayout.addView(createT3cRuntimeHistoryCard(cardColor, t3cHistorySummary))
             
                     // 2. Metrics Grid (2x2)
                     rootLayout.addView(createMetricsGrid(report.metrics, cardColor))
@@ -443,7 +455,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                     }
                     
                     // 2. Add Decision Log (JSONL) - Last 24h ONLY
-                    val jsonFile = aimiDecisionsJsonlFile()
+                    val jsonFile = T3cRuntimeHistoryReader.aimiDecisionsJsonlFile()
                     
                     if (jsonFile.exists() && jsonFile.canRead()) {
                         val entry = java.util.zip.ZipEntry("AIMI_Decisions_Last24h.jsonl")
@@ -1653,15 +1665,97 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         return card
     }
 
-    private fun aimiDecisionsJsonlFile(): java.io.File {
-        val externalDir = android.os.Environment.getExternalStoragePublicDirectory(
-            android.os.Environment.DIRECTORY_DOCUMENTS,
-        )
-        return java.io.File(externalDir, "AAPS/AIMI_Decisions.jsonl")
+    private fun createT3cRuntimeHistoryCard(
+        cardColor: Int,
+        summary: T3cRuntimeHistorySummary?,
+    ): CardView {
+        val card = CardView(this).apply {
+            radius = 16f
+            setCardBackgroundColor(cardColor)
+            cardElevation = 0f
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { setMargins(0, 0, 0, 32) }
+        }
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 24, 24, 24)
+        }
+        column.addView(TextView(this).apply {
+            text = rh.gs(R.string.aimi_t3c_history_section_title)
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.parseColor("#94A3B8"))
+        })
+        column.addView(TextView(this).apply {
+            text = rh.gs(R.string.aimi_t3c_history_section_desc)
+            textSize = 13f
+            setTextColor(Color.parseColor("#CBD5E1"))
+            setPadding(0, 8, 0, 12)
+        })
+
+        if (summary == null) {
+            column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_t3c_history_unavailable)))
+            card.addView(column)
+            return card
+        }
+
+        val pillRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.START
+        }
+        pillRow.addView(createT3cHistoryPill(rh.gs(R.string.aimi_t3c_history_period)))
+        pillRow.addView(createT3cHistoryPill(rh.gs(R.string.aimi_t3c_history_ticks, summary.tickCount)).apply {
+            (layoutParams as? LinearLayout.LayoutParams)?.setMargins(12, 0, 0, 0)
+        })
+        summary.dominantStatus?.let { status ->
+            pillRow.addView(createT3cHistoryPill(rh.gs(R.string.aimi_t3c_history_dominant, t3cStatusLabel(status))).apply {
+                (layoutParams as? LinearLayout.LayoutParams)?.setMargins(12, 0, 0, 0)
+            })
+        }
+        column.addView(pillRow)
+
+        if (summary.notEnoughData) {
+            column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_t3c_history_not_enough_data, summary.tickCount)).apply {
+                setPadding(0, 16, 0, 0)
+            })
+            column.addView(createT3cFamilySignalsSection(summary))
+            card.addView(column)
+            return card
+        }
+
+        column.addView(createT3cHistoryBodyText(buildT3cHistoryObservation(summary)).apply {
+            setPadding(0, 16, 0, 0)
+        })
+        column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_t3c_history_native_applied, summary.nativeAppliedCount, percentOf(summary.nativeAppliedCount, summary.tickCount))))
+        column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_t3c_history_native_blocked, summary.nativeBlockedCount, percentOf(summary.nativeBlockedCount, summary.tickCount))))
+        column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_t3c_history_legacy_fallback, summary.legacyFallbackCount, percentOf(summary.legacyFallbackCount, summary.tickCount))))
+        column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_t3c_history_safety_terminal, summary.safetyTerminalCount, percentOf(summary.safetyTerminalCount, summary.tickCount))))
+        summary.dominantBlocker?.let { blocker ->
+            column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_t3c_history_blocker, blocker)))
+        }
+        summary.demandStats?.let { stats ->
+            column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_t3c_history_demand, formatT3cRateStats(stats))))
+        }
+        summary.appliedRateStats?.let { stats ->
+            column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_t3c_history_applied_rate, formatT3cRateStats(stats))))
+        }
+        if (summary.transitionCount > 0) {
+            column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_t3c_history_transitions, summary.transitionCount)))
+            summary.dominantTransition?.let { transition ->
+                column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_t3c_history_transition_detail, formatT3cTransition(transition))))
+            }
+        }
+
+        column.addView(createT3cFamilySignalsSection(summary))
+
+        card.addView(column)
+        return card
     }
 
     private fun loadLastRecursiveBeliefJson(): org.json.JSONObject? {
-        val jsonFile = aimiDecisionsJsonlFile()
+        val jsonFile = T3cRuntimeHistoryReader.aimiDecisionsJsonlFile()
         if (!jsonFile.exists() || !jsonFile.canRead()) return null
         val tail = JsonlTailReader.readTailLines(jsonFile, maxLines = 80)
         for (line in tail) {
@@ -1677,6 +1771,157 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         }
         return null
     }
+
+    private fun createT3cHistoryPill(text: String): CardView =
+        CardView(this).apply {
+            radius = 50f
+            setCardBackgroundColor(Color.parseColor("#2A3345"))
+            cardElevation = 0f
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
+            addView(TextView(this@AimiProfileAdvisorActivity).apply {
+                this.text = text
+                textSize = 11f
+                setTypeface(null, Typeface.BOLD)
+                setTextColor(Color.parseColor("#E2E8F0"))
+                setPadding(24, 10, 24, 10)
+            })
+        }
+
+    private fun createT3cHistoryBodyText(text: String): TextView =
+        TextView(this).apply {
+            this.text = text
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            setPadding(0, 8, 0, 0)
+        }
+
+    private fun createT3cFamilySignalsSection(
+        summary: T3cRuntimeHistorySummary,
+    ): LinearLayout =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 20, 0, 0)
+            addView(TextView(this@AimiProfileAdvisorActivity).apply {
+                text = rh.gs(R.string.aimi_t3c_family_signals_title)
+                textSize = 13f
+                setTypeface(null, Typeface.BOLD)
+                setTextColor(Color.parseColor("#E2E8F0"))
+            })
+            addView(TextView(this@AimiProfileAdvisorActivity).apply {
+                text = rh.gs(R.string.aimi_t3c_family_signals_desc)
+                textSize = 12f
+                setTextColor(Color.parseColor("#94A3B8"))
+                setPadding(0, 6, 0, 4)
+            })
+            if (summary.notEnoughData || summary.familyObservations.isEmpty()) {
+                addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_t3c_family_signals_not_enough)))
+            } else {
+                summary.familyObservations.forEach { observation ->
+                    addView(createT3cHistoryBodyText(formatT3cFamilyObservation(observation)))
+                }
+            }
+        }
+
+    private fun buildT3cHistoryObservation(summary: T3cRuntimeHistorySummary): String =
+        when (summary.dominantStatus) {
+            T3cRuntimeTickStatus.NATIVE_APPLIED -> rh.gs(
+                R.string.aimi_t3c_history_observation_applied,
+                percentOf(summary.nativeAppliedCount, summary.tickCount),
+            )
+            T3cRuntimeTickStatus.NATIVE_BLOCKED -> rh.gs(
+                R.string.aimi_t3c_history_observation_blocked,
+                summary.dominantBlocker ?: "unknown runtime blocker",
+            )
+            T3cRuntimeTickStatus.LEGACY_FALLBACK -> rh.gs(
+                R.string.aimi_t3c_history_observation_legacy,
+                percentOf(summary.legacyFallbackCount, summary.tickCount),
+            )
+            T3cRuntimeTickStatus.SAFETY_TERMINAL -> rh.gs(R.string.aimi_t3c_history_observation_safety)
+            else -> rh.gs(R.string.aimi_t3c_history_observation_mixed)
+        }
+
+    private fun formatT3cRateStats(stats: T3cRuntimeNumericStats): String {
+        val average = String.format(Locale.US, "%.2f", stats.average)
+        val min = String.format(Locale.US, "%.2f", stats.min)
+        val max = String.format(Locale.US, "%.2f", stats.max)
+        return "$average U/h ($min-$max)"
+    }
+
+    private fun formatT3cTransition(transition: T3cOwnershipTransition): String =
+        "${t3cOwnershipLabel(transition.from)} -> ${t3cOwnershipLabel(transition.to)}"
+
+    private fun formatT3cFamilyObservation(
+        observation: T3cAdvisorObservation,
+    ): String =
+        rh.gs(
+            R.string.aimi_t3c_family_signal_row,
+            t3cObservationFamilyLabel(observation.family),
+            t3cObservationLevelLabel(observation.level),
+            t3cObservationSignalLabel(observation.signal),
+        )
+
+    private fun t3cObservationFamilyLabel(
+        family: T3cAdvisorObservationFamily,
+    ): String =
+        when (family) {
+            T3cAdvisorObservationFamily.STABILITY -> rh.gs(R.string.aimi_t3c_family_stability)
+            T3cAdvisorObservationFamily.MEAL_CAPTURE -> rh.gs(R.string.aimi_t3c_family_meal_capture)
+            T3cAdvisorObservationFamily.PHYSIO_AMBIGUITY -> rh.gs(R.string.aimi_t3c_family_physio_ambiguity)
+            T3cAdvisorObservationFamily.POST_HYPO_RECOVERY -> rh.gs(R.string.aimi_t3c_family_post_hypo)
+            T3cAdvisorObservationFamily.ACTIVITY -> rh.gs(R.string.aimi_t3c_family_activity)
+            T3cAdvisorObservationFamily.AUTONOMY -> rh.gs(R.string.aimi_t3c_family_autonomy)
+            T3cAdvisorObservationFamily.NATIVE_RBT -> rh.gs(R.string.aimi_t3c_family_native_rbt)
+        }
+
+    private fun t3cObservationLevelLabel(
+        level: T3cAdvisorObservationLevel,
+    ): String =
+        when (level) {
+            T3cAdvisorObservationLevel.HIGH -> rh.gs(R.string.aimi_t3c_level_high)
+            T3cAdvisorObservationLevel.MEDIUM -> rh.gs(R.string.aimi_t3c_level_medium)
+            T3cAdvisorObservationLevel.LOW -> rh.gs(R.string.aimi_t3c_level_low)
+            T3cAdvisorObservationLevel.STABLE -> rh.gs(R.string.aimi_t3c_level_stable)
+        }
+
+    private fun t3cObservationSignalLabel(
+        signal: T3cAdvisorObservationSignal,
+    ): String =
+        when (signal) {
+            T3cAdvisorObservationSignal.SAFETY_GATES_OFTEN_BLOCK -> rh.gs(R.string.aimi_t3c_signal_safety_gates_block)
+            T3cAdvisorObservationSignal.MEAL_CONFLICTS_APPEAR -> rh.gs(R.string.aimi_t3c_signal_meal_conflicts)
+            T3cAdvisorObservationSignal.POST_HYPO_GUARD_DOMINATES -> rh.gs(R.string.aimi_t3c_signal_post_hypo)
+            T3cAdvisorObservationSignal.ACTIVITY_LOCKOUT_VISIBLE -> rh.gs(R.string.aimi_t3c_signal_activity_lockout)
+            T3cAdvisorObservationSignal.LEGACY_FALLBACK_VISIBLE -> rh.gs(R.string.aimi_t3c_signal_legacy_fallback)
+            T3cAdvisorObservationSignal.NATIVE_APPLIES_WHEN_CLEAR -> rh.gs(R.string.aimi_t3c_signal_native_clear)
+            T3cAdvisorObservationSignal.BLOCKERS_STAY_MIXED -> rh.gs(R.string.aimi_t3c_signal_blockers_mixed)
+        }
+
+    private fun t3cStatusLabel(status: T3cRuntimeTickStatus): String =
+        when (status) {
+            T3cRuntimeTickStatus.NATIVE_APPLIED -> rh.gs(R.string.aimi_control_center_t3c_status_native_applied)
+            T3cRuntimeTickStatus.NATIVE_READY -> rh.gs(R.string.aimi_control_center_t3c_status_native_ready)
+            T3cRuntimeTickStatus.NATIVE_BLOCKED -> rh.gs(R.string.aimi_control_center_t3c_status_native_blocked)
+            T3cRuntimeTickStatus.LEGACY_FALLBACK -> rh.gs(R.string.aimi_control_center_t3c_status_legacy_fallback)
+            T3cRuntimeTickStatus.SAFETY_TERMINAL -> rh.gs(R.string.aimi_control_center_t3c_status_safety_terminal)
+            T3cRuntimeTickStatus.UNAVAILABLE -> rh.gs(R.string.aimi_control_center_t3c_status_unavailable)
+        }
+
+    private fun t3cOwnershipLabel(category: T3cRuntimeOwnershipCategory): String =
+        when (category) {
+            T3cRuntimeOwnershipCategory.NATIVE -> rh.gs(R.string.aimi_control_center_t3c_owner_native)
+            T3cRuntimeOwnershipCategory.LEGACY -> rh.gs(R.string.aimi_control_center_t3c_owner_legacy)
+            T3cRuntimeOwnershipCategory.SAFETY -> rh.gs(R.string.aimi_control_center_t3c_owner_safety)
+            T3cRuntimeOwnershipCategory.UNAVAILABLE -> rh.gs(R.string.aimi_control_center_t3c_owner_unavailable)
+        }
+
+    private fun percentOf(
+        count: Int,
+        total: Int,
+    ): Int =
+        if (count <= 0 || total <= 0) 0 else ((count * 100.0) / total).roundToInt()
 
     private fun showRecursiveBeliefUnfoldDialog(prettyJson: String) {
         val scroll = ScrollView(this).apply {

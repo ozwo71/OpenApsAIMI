@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.compose
 
-import android.os.Environment
 import androidx.annotation.StringRes
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
@@ -10,12 +9,12 @@ import app.aaps.core.keys.interfaces.PreferenceKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.R as CoreUiR
 import app.aaps.plugins.aps.R
-import app.aaps.plugins.aps.openAPSAIMI.advisor.data.JsonlTailReader
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeHistoryReader
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeTickRecord
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeTickStatus
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
-import java.io.File
 import java.util.Locale
 import kotlin.math.abs
-import org.json.JSONObject
 
 internal enum class AimiBehaviorFamilyId {
     Protection,
@@ -353,90 +352,70 @@ private fun buildSourceSection(preferences: Preferences): AimiControlSectionSnap
 }
 
 internal fun loadLatestT3cRuntimeSnapshot(): AimiT3cRuntimeSnapshot {
-    val jsonFile = aimiDecisionsJsonlFile()
-    if (!jsonFile.exists() || !jsonFile.canRead()) {
-        return unavailableT3cRuntimeSnapshot()
+    val tick = T3cRuntimeHistoryReader.readLatestTick() ?: return unavailableT3cRuntimeSnapshot()
+    val status = when (tick.status) {
+        T3cRuntimeTickStatus.NATIVE_APPLIED -> AimiT3cRuntimeStatus.NativeApplied
+        T3cRuntimeTickStatus.NATIVE_READY -> AimiT3cRuntimeStatus.NativeReady
+        T3cRuntimeTickStatus.NATIVE_BLOCKED -> AimiT3cRuntimeStatus.NativeBlocked
+        T3cRuntimeTickStatus.LEGACY_FALLBACK -> AimiT3cRuntimeStatus.LegacyFallback
+        T3cRuntimeTickStatus.SAFETY_TERMINAL -> AimiT3cRuntimeStatus.SafetyTerminal
+        T3cRuntimeTickStatus.UNAVAILABLE -> AimiT3cRuntimeStatus.Unavailable
     }
-    val tail = JsonlTailReader.readTailLines(jsonFile, maxLines = 80)
-    for (line in tail) {
-        if (!line.contains("recursive_belief") && !line.contains("t3c_runtime_ownership")) continue
-        try {
-            val root = JSONObject(line)
-            val adjustments = root.optJSONObject("adjustments") ?: continue
-            val recursiveBelief = adjustments.optJSONObject("recursive_belief")
-            val ownership = adjustments.optJSONObject("t3c_runtime_ownership")
-            buildT3cRuntimeSnapshot(recursiveBelief, ownership)?.let { return it }
-        } catch (_: Exception) {
-            continue
-        }
+    val owner = when (tick.ownershipCategory) {
+        app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeOwnershipCategory.NATIVE -> AimiT3cRuntimeOwner.NativeRbt
+        app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeOwnershipCategory.LEGACY -> AimiT3cRuntimeOwner.LegacyBypass
+        app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeOwnershipCategory.SAFETY -> AimiT3cRuntimeOwner.SafetyGate
+        app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeOwnershipCategory.UNAVAILABLE -> AimiT3cRuntimeOwner.Unavailable
     }
-    return unavailableT3cRuntimeSnapshot()
-}
-
-private fun buildT3cRuntimeSnapshot(
-    recursiveBelief: JSONObject?,
-    ownership: JSONObject?,
-): AimiT3cRuntimeSnapshot? {
-    if (recursiveBelief == null && ownership == null) return null
-
-    val resolution = recursiveBelief?.optJSONObject("resolution")
-    val t3c = resolution?.optJSONObject("t3c_basal_first")
-    val mode = ownership.optStringOrDefault("mode", "UNAVAILABLE")
-    val authorityApplied = recursiveBelief?.optBoolean("authority_applied", false) ?: false
-    val shadowOnly = recursiveBelief?.optBoolean("shadow_only", true) ?: true
-    val status = deriveT3cRuntimeStatus(mode = mode, t3c = t3c, authorityApplied = authorityApplied)
-    val owner = deriveT3cRuntimeOwner(
-        mode = mode,
-        nativeOwnerActive = ownership?.optBoolean("native_owner_active", false) ?: false,
-        legacyFallbackAllowed = ownership?.optBoolean("legacy_fallback_allowed", false) ?: false,
-    )
 
     val details = buildList {
-        add(AimiControlDetail(R.string.aimi_control_center_t3c_mode, valueText = mode))
-        t3c?.let { t3cState ->
+        add(AimiControlDetail(R.string.aimi_control_center_t3c_mode, valueText = tick.mode))
+        tick.basalDemandRateUph?.let {
             add(
                 AimiControlDetail(
                     titleResId = R.string.aimi_control_center_t3c_basal_demand,
-                    valueText = formatT3cBasalDemand(t3cState),
+                    valueText = formatT3cBasalDemand(tick),
                 ),
             )
+        }
+        tick.appliedRateUph?.let {
             add(
                 AimiControlDetail(
                     titleResId = R.string.aimi_control_center_t3c_applied_rate,
-                    valueText = formatT3cAppliedRate(t3cState),
+                    valueText = formatT3cAppliedRate(tick),
                 ),
             )
-            blockerLabelText(t3cState)?.let { blocker ->
-                add(
-                    AimiControlDetail(
-                        titleResId = R.string.aimi_control_center_t3c_blocker,
-                        valueText = blocker,
-                    ),
-                )
-            }
+        }
+        tick.blocker?.let { blocker ->
             add(
                 AimiControlDetail(
-                    titleResId = R.string.aimi_control_center_t3c_selected_for_production,
-                    valueResId = if (t3cState.optBoolean("selected_for_production", false)) CoreUiR.string.yes else CoreUiR.string.no,
-                ),
-            )
-            add(
-                AimiControlDetail(
-                    titleResId = R.string.aimi_control_center_t3c_bypass_neutralized,
-                    valueResId = if (t3cState.optBoolean("historical_bypass_neutralized", false)) CoreUiR.string.yes else CoreUiR.string.no,
+                    titleResId = R.string.aimi_control_center_t3c_blocker,
+                    valueText = blocker,
                 ),
             )
         }
         add(
             AimiControlDetail(
                 titleResId = R.string.aimi_control_center_t3c_authority_applied,
-                valueResId = if (authorityApplied) CoreUiR.string.yes else CoreUiR.string.no,
+                valueResId = if (tick.authorityApplied) CoreUiR.string.yes else CoreUiR.string.no,
             ),
         )
         add(
             AimiControlDetail(
                 titleResId = R.string.aimi_control_center_t3c_shadow_only,
-                valueResId = if (shadowOnly) CoreUiR.string.yes else CoreUiR.string.no,
+                valueResId = if (tick.shadowOnly) CoreUiR.string.yes else CoreUiR.string.no,
+            ),
+        )
+        add(
+            AimiControlDetail(
+                titleResId = R.string.aimi_control_center_t3c_selected_for_production,
+                valueResId = if (tick.selectedForProduction) CoreUiR.string.yes else CoreUiR.string.no,
+            ),
+        )
+        add(
+            AimiControlDetail(
+                titleResId = R.string.aimi_control_center_t3c_bypass_neutralized,
+                valueResId = if (tick.historicalBypassNeutralized) CoreUiR.string.yes else CoreUiR.string.no,
             ),
         )
     }
@@ -444,66 +423,25 @@ private fun buildT3cRuntimeSnapshot(
     return AimiT3cRuntimeSnapshot(
         status = status,
         owner = owner,
-        modeText = mode,
-        authorityApplied = authorityApplied,
-        shadowOnly = shadowOnly,
+        modeText = tick.mode,
+        authorityApplied = tick.authorityApplied,
+        shadowOnly = tick.shadowOnly,
         details = details,
     )
 }
 
-private fun deriveT3cRuntimeStatus(
-    mode: String,
-    t3c: JSONObject?,
-    authorityApplied: Boolean,
-): AimiT3cRuntimeStatus =
-    when (mode) {
-        "NATIVE_APPLIED" -> AimiT3cRuntimeStatus.NativeApplied
-        "NATIVE_READY" -> AimiT3cRuntimeStatus.NativeReady
-        "NATIVE_BLOCKED" -> AimiT3cRuntimeStatus.NativeBlocked
-        "LEGACY_FALLBACK" -> AimiT3cRuntimeStatus.LegacyFallback
-        "SAFETY_TERMINAL" -> AimiT3cRuntimeStatus.SafetyTerminal
-        "LEGACY_SKIPPED" -> when {
-            authorityApplied -> AimiT3cRuntimeStatus.NativeApplied
-            t3c?.optBoolean("eligible", false) == true || t3c?.optBoolean("active", false) == true -> AimiT3cRuntimeStatus.NativeReady
-            else -> AimiT3cRuntimeStatus.Unavailable
-        }
-        else -> when {
-            authorityApplied -> AimiT3cRuntimeStatus.NativeApplied
-            t3c?.optBoolean("eligible", false) == true -> AimiT3cRuntimeStatus.NativeReady
-            t3c?.optBoolean("active", false) == true -> AimiT3cRuntimeStatus.NativeBlocked
-            else -> AimiT3cRuntimeStatus.Unavailable
-        }
-    }
-
-private fun deriveT3cRuntimeOwner(
-    mode: String,
-    nativeOwnerActive: Boolean,
-    legacyFallbackAllowed: Boolean,
-): AimiT3cRuntimeOwner =
-    when {
-        mode == "SAFETY_TERMINAL" -> AimiT3cRuntimeOwner.SafetyGate
-        nativeOwnerActive -> AimiT3cRuntimeOwner.NativeRbt
-        legacyFallbackAllowed -> AimiT3cRuntimeOwner.LegacyBypass
-        else -> AimiT3cRuntimeOwner.Unavailable
-    }
-
-private fun formatT3cBasalDemand(t3c: JSONObject): String {
-    val demand = formatControlCenterDoubleValue(t3c.optDouble("basal_demand_rate_uph", 0.0), "U/h")
-    val bounded = formatControlCenterDoubleValue(t3c.optDouble("bounded_rate_uph", 0.0), "U/h")
+private fun formatT3cBasalDemand(tick: T3cRuntimeTickRecord): String {
+    val demand = formatControlCenterDoubleValue(tick.basalDemandRateUph ?: 0.0, "U/h")
+    val bounded = formatControlCenterDoubleValue(tick.boundedRateUph ?: tick.basalDemandRateUph ?: 0.0, "U/h")
     return "$demand -> $bounded"
 }
 
-private fun formatT3cAppliedRate(t3c: JSONObject): String {
-    val appliedRate = t3c.optDoubleOrNull("applied_rate_uph")
-    val appliedDuration = t3c.optIntOrNull("applied_duration_min")
-    if (appliedRate == null) return ""
+private fun formatT3cAppliedRate(tick: T3cRuntimeTickRecord): String {
+    val appliedRate = tick.appliedRateUph ?: return ""
     val rateText = formatControlCenterDoubleValue(appliedRate, "U/h")
+    val appliedDuration = tick.appliedDurationMin
     return if (appliedDuration != null) "$rateText / ${appliedDuration}m" else rateText
 }
-
-private fun blockerLabelText(t3c: JSONObject): String? =
-    t3c.optStringOrNull("runtime_blocker")
-        ?: t3c.optStringOrNull("dominant_blocker")
 
 private fun unavailableT3cRuntimeSnapshot(): AimiT3cRuntimeSnapshot =
     AimiT3cRuntimeSnapshot(
@@ -514,26 +452,6 @@ private fun unavailableT3cRuntimeSnapshot(): AimiT3cRuntimeSnapshot =
         shadowOnly = true,
         details = emptyList(),
     )
-
-private fun aimiDecisionsJsonlFile(): File {
-    val externalDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-    return File(externalDir, "AAPS/AIMI_Decisions.jsonl")
-}
-
-private fun JSONObject?.optStringOrDefault(
-    key: String,
-    defaultValue: String,
-): String =
-    this?.optString(key)?.takeIf { it.isNotBlank() } ?: defaultValue
-
-private fun JSONObject.optStringOrNull(key: String): String? =
-    if (isNull(key)) null else optString(key).takeIf { it.isNotBlank() }
-
-private fun JSONObject.optDoubleOrNull(key: String): Double? =
-    if (isNull(key)) null else optDouble(key)
-
-private fun JSONObject.optIntOrNull(key: String): Int? =
-    if (isNull(key)) null else optInt(key)
 
 private data class AimiScoreProjection(
     val score: Float,
