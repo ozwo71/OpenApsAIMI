@@ -8805,7 +8805,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * @param targetBG Objectif de glycémie (mg/dL).
      * @param zeroBasalDurationMinutes Durée cumulée en minutes pendant laquelle la basale est déjà à zéro.
      */
-    @SuppressLint("StringFormatInvalid") fun safetyAdjustment(
+    fun safetyAdjustment(
         currentBG: Float,
         predictedBG: Float,
         bgHistory: List<Float>,
@@ -8842,12 +8842,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 stopBasal = true
                 isHypoRisk = true
                 factors.add(0.0f)
-                reasonBuilder.append(String.format(context.getString(R.string.bg_drop_high_critical), dropPerHour))
+                reasonBuilder.append(context.getString(R.string.bg_drop_high_critical, dropPerHour))
             } else if (currentBG < 110f) {
                 // CAS AVERTISSEMENT : On réduit de 50% mais on garde le flux
                 stopBasal = false
                 factors.add(0.5f)
-                reasonBuilder.append(String.format(context.getString(R.string.bg_drop_high_warning), dropPerHour))
+                reasonBuilder.append(context.getString(R.string.bg_drop_high_warning, dropPerHour))
             }
         }
 
