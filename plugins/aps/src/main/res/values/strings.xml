@@ -1340,6 +1340,7 @@
     <!-- AIMI ADVISOR STRINGS -->
     <string name="aimi_advisor_title">AIMI Advisor</string>
     <string name="aimi_adv_loading">Analyse en cours...</string>
+    <string name="aimi_adv_loading_details" comment="Shown under the main Advisor report while RBT/T3c history sections load">Loading detailed history…</string>
     <string name="aimi_adv_error_prefix">Erreur: </string>
     <string name="aimi_adv_error_oom">Not enough memory to finish. Close other apps and try again.</string>
     <string name="aimi_adv_report_weekly">Rapport Hebdo</string>

@@ -91,6 +91,11 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     private var lastReport: AdvisorReport? = null
     private var selectedTuningContext: AimiTuningContext =
         AimiTuningContext.AUTO_BALANCE
+
+    private val bgColor = Color.parseColor("#10141C")
+    private val cardColor = Color.parseColor("#1E293B")
+    private lateinit var rootLayout: LinearLayout
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -110,28 +115,20 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             preferences.get(StringKey.AimiTuningContextSelection),
         )
         title = rh.gs(R.string.aimi_advisor_title)
-        
 
-
-        
-        // Dark Navy Background
-        val bgColor = Color.parseColor("#10141C") 
-        val cardColor = Color.parseColor("#1E293B")
-
-        val rootLayout = LinearLayout(this).apply {
+        rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(32, 32, 32, 32)
             setBackgroundColor(bgColor)
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
-        
+
         val scrollView = ScrollView(this).apply {
             addView(rootLayout)
             setBackgroundColor(bgColor)
         }
         setContentView(scrollView)
 
-        // Loading Indicator
         val loadingText = TextView(this).apply {
             text = rh.gs(R.string.aimi_adv_loading)
             textSize = 16f
@@ -140,87 +137,40 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             setPadding(0, 64, 0, 0)
         }
         rootLayout.addView(loadingText)
-        
-        // Bound to activity lifecycle: avoids UI updates after destroy (crash) and cancels when user leaves
+
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val history = historyRepo.getRecentActions(10)
-                val report = advisorService.generateReport(periodDays = 10, history = history, assetContext = applicationContext)
-                // Sequential IO: avoid loading AIMI_Decisions.jsonl while APS/TIR data from generateReport is still retained.
-                val lastRbtExport = loadLastRecursiveBeliefJson()
-                val t3cHistorySummary = T3cRuntimeHistoryReader.summarizeLast24Hours()
-                val advisorCtx = report.advisorContext
-
+                val report = advisorService.generateReport(
+                    periodDays = 10,
+                    history = history,
+                    assetContext = applicationContext,
+                )
+                var deferredInsertIndex = 0
+                var historyLoadingText: TextView? = null
                 withContext(Dispatchers.Main) {
                     if (isFinishing) return@withContext
                     rootLayout.removeView(loadingText)
                     recommendationRowViews.clear()
                     lastReport = report
-
-                    // 1. Header (Title + Score Pill)
-                    rootLayout.addView(createDashboardHeader(report))
-
-                    // 1b. Tuning context (bundled pref adjustments)
-                    rootLayout.addView(createTuningContextCard(report, cardColor))
-
-                    val familyBridgeSuggestions = buildAimiFamilyBridgeSuggestions(preferences, report.metrics)
-                    val causalInsights = buildAimiBehaviorCausalInsights(
-                        preferences = preferences,
-                        metrics = report.metrics,
-                        familyBridgeSuggestions = familyBridgeSuggestions,
-                    )
-
-                    // 1c. Product causal map: observed outcomes -> likely family mismatch
-                    rootLayout.addView(createBehaviorCausalMapCard(causalInsights, familyBridgeSuggestions, cardColor))
-
-                    // 1d. Product bridge: observed outcomes -> AIMI behavior families
-                    rootLayout.addView(createBehaviorFamilyBridgeCard(familyBridgeSuggestions, cardColor))
-
-                    // 1e. Recursive belief unfold (JSONL snapshot, preloaded on IO)
-                    rootLayout.addView(createRecursiveBeliefUnfoldCard(cardColor, lastRbtExport))
-                    rootLayout.addView(createT3cRuntimeHistoryCard(cardColor, t3cHistorySummary))
-            
-                    // 2. Metrics Grid (2x2)
-                    rootLayout.addView(createMetricsGrid(report.metrics, cardColor))
-                    
-                    // 3. Section: Observations & Recommendations
-                    val standardRecs = report.recommendations.filter { it.domain != AimiDomain.Pkpd }
-                    val pkpdRecs = report.recommendations.filter { it.domain == AimiDomain.Pkpd }
-
-                    if (standardRecs.isNotEmpty()) {
-                        rootLayout.addView(createSectionHeader(rh.gs(R.string.aimi_adv_section_obs)))
-                        standardRecs.forEach { rec ->
-                            val card = createObservationCard(rec, report.metrics, cardColor)
-                            rootLayout.addView(card)
-                            recommendationRowViews.add(card to rec)
-                        }
+                    deferredInsertIndex = populateCoreReportUi(report)
+                    historyLoadingText = TextView(this@AimiProfileAdvisorActivity).apply {
+                        text = rh.gs(R.string.aimi_adv_loading_details)
+                        textSize = 13f
+                        setTextColor(Color.parseColor("#94A3B8"))
+                        gravity = Gravity.CENTER
+                        setPadding(0, 24, 0, 24)
                     }
+                    rootLayout.addView(historyLoadingText, deferredInsertIndex)
+                }
 
-                    // 3b. PKPD TUNING (Unified)
-                    if (pkpdRecs.isNotEmpty()) {
-                        rootLayout.addView(createSectionHeader(rh.gs(R.string.aimi_adv_section_pkpd)))
-                        pkpdRecs.forEach { rec ->
-                            val card = createObservationCard(rec, report.metrics, cardColor)
-                            rootLayout.addView(card)
-                            recommendationRowViews.add(card to rec)
-                        }
-                    }
+                val lastRbtExport = loadLastRecursiveBeliefJson()
+                val t3cHistorySummary = T3cRuntimeHistoryReader.summarizeLast24Hours()
 
-                    // 4. Section: COGNITIVE BRIDGE (BRAIN)
-                    rootLayout.addView(createSectionHeader(rh.gs(R.string.aimi_adv_section_brain)))
-                    rootLayout.addView(createCognitiveCard(advisorCtx.prefs.unifiedReactivityFactor, cardColor))
-
-                    report.orefAnalysis?.let { oref ->
-                        rootLayout.addView(createSectionHeader(rh.gs(R.string.aimi_adv_section_oref)))
-                        rootLayout.addView(createOrefAnalysisCard(oref, cardColor))
-                    }
-
-                    // 5. Section: AI Coach (ChatGPT/Gemini)
-                    rootLayout.addView(createSectionHeader(rh.gs(R.string.aimi_adv_section_coach)))
-                    rootLayout.addView(createCoachCard(advisorCtx, report, causalInsights, cardColor))
-            
-                    // Footer
-                    rootLayout.addView(createFooter(report))
+                withContext(Dispatchers.Main) {
+                    if (isFinishing) return@withContext
+                    historyLoadingText?.let { rootLayout.removeView(it) }
+                    populateDeferredHistorySections(deferredInsertIndex, lastRbtExport, t3cHistorySummary)
                 }
             } catch (t: Throwable) {
                 withContext(Dispatchers.Main) {
@@ -230,12 +180,81 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                             else -> "${rh.gs(R.string.aimi_adv_error_prefix)}${t.localizedMessage ?: t.javaClass.simpleName}"
                         }
                         loadingText.text = msg
-                        loadingText.setTextColor(Color.parseColor("#F87171")) // Red
+                        loadingText.setTextColor(Color.parseColor("#F87171"))
                     }
                 }
                 t.printStackTrace()
             }
         }
+    }
+
+    /**
+     * Main Advisor content (metrics, recommendations, coach). RBT/T3c JSONL sections load afterward.
+     * @return child index where deferred history cards should be inserted.
+     */
+    private fun populateCoreReportUi(report: AdvisorReport): Int {
+        val advisorCtx = report.advisorContext
+
+        rootLayout.addView(createDashboardHeader(report))
+        rootLayout.addView(createTuningContextCard(report, cardColor))
+
+        val familyBridgeSuggestions = buildAimiFamilyBridgeSuggestions(preferences, report.metrics)
+        val causalInsights = buildAimiBehaviorCausalInsights(
+            preferences = preferences,
+            metrics = report.metrics,
+            familyBridgeSuggestions = familyBridgeSuggestions,
+        )
+
+        rootLayout.addView(createBehaviorCausalMapCard(causalInsights, familyBridgeSuggestions, cardColor))
+        rootLayout.addView(createBehaviorFamilyBridgeCard(familyBridgeSuggestions, cardColor))
+
+        val deferredInsertIndex = rootLayout.childCount
+
+        rootLayout.addView(createMetricsGrid(report.metrics, cardColor))
+
+        val standardRecs = report.recommendations.filter { it.domain != AimiDomain.Pkpd }
+        val pkpdRecs = report.recommendations.filter { it.domain == AimiDomain.Pkpd }
+
+        if (standardRecs.isNotEmpty()) {
+            rootLayout.addView(createSectionHeader(rh.gs(R.string.aimi_adv_section_obs)))
+            standardRecs.forEach { rec ->
+                val card = createObservationCard(rec, report.metrics, cardColor)
+                rootLayout.addView(card)
+                recommendationRowViews.add(card to rec)
+            }
+        }
+
+        if (pkpdRecs.isNotEmpty()) {
+            rootLayout.addView(createSectionHeader(rh.gs(R.string.aimi_adv_section_pkpd)))
+            pkpdRecs.forEach { rec ->
+                val card = createObservationCard(rec, report.metrics, cardColor)
+                rootLayout.addView(card)
+                recommendationRowViews.add(card to rec)
+            }
+        }
+
+        rootLayout.addView(createSectionHeader(rh.gs(R.string.aimi_adv_section_brain)))
+        rootLayout.addView(createCognitiveCard(advisorCtx.prefs.unifiedReactivityFactor, cardColor))
+
+        report.orefAnalysis?.let { oref ->
+            rootLayout.addView(createSectionHeader(rh.gs(R.string.aimi_adv_section_oref)))
+            rootLayout.addView(createOrefAnalysisCard(oref, cardColor))
+        }
+
+        rootLayout.addView(createSectionHeader(rh.gs(R.string.aimi_adv_section_coach)))
+        rootLayout.addView(createCoachCard(advisorCtx, report, causalInsights, cardColor))
+        rootLayout.addView(createFooter(report))
+
+        return deferredInsertIndex
+    }
+
+    private fun populateDeferredHistorySections(
+        insertIndex: Int,
+        lastRbtExport: org.json.JSONObject?,
+        t3cHistorySummary: T3cRuntimeHistorySummary?,
+    ) {
+        rootLayout.addView(createRecursiveBeliefUnfoldCard(cardColor, lastRbtExport), insertIndex)
+        rootLayout.addView(createT3cRuntimeHistoryCard(cardColor, t3cHistorySummary), insertIndex + 1)
     }
 
     private fun createDashboardHeader(report: AdvisorReport): LinearLayout {

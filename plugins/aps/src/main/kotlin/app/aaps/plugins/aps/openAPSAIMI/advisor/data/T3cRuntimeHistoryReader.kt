@@ -113,7 +113,8 @@ internal data class T3cRuntimeHistorySummary(
 internal object T3cRuntimeHistoryReader {
 
     private const val WINDOW_24H_MS = 24L * 60L * 60L * 1000L
-    private const val MAX_HISTORY_LINES = 1200
+  /** Capped for Advisor launch on 256MB heaps; 24h of ticks fits well below this. */
+    private const val MAX_HISTORY_LINES = 400
     private const val MAX_LATEST_LINES = 120
     private const val MIN_HISTORY_TICKS = 6
 

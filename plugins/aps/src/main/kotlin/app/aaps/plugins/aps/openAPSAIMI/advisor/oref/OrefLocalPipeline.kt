@@ -31,9 +31,7 @@ class OrefLocalPipeline(
         val gvList = persistenceLayer.getBgReadingsDataFromTimeToTime(start, end, ascending = true)
             .filter { it.value > 20 && it.isValid }
 
-        val apsList = persistenceLayer.getApsResults(start, end).sortedBy { it.date }
-
-        if (gvList.size < 50 || apsList.size < 5) {
+        if (gvList.size < 50) {
             return@withContext OrefAnalysisReport(
                 windowDays = effectiveWindowDays.toInt(),
                 mergedRowCount = 0,
@@ -56,20 +54,25 @@ class OrefLocalPipeline(
         val ts = LongArray(sortedGv.size) { sortedGv[it].timestamp }
         val mgdl = DoubleArray(sortedGv.size) { sortedGv[it].value }
 
-        var lastAps: APSResult? = null
-        var apsPtr = 0
-        val slices = ArrayList<Triple<Int, DoubleArray, Long>>(sortedGv.size / 2)
+        val (slices, totalApsCount) = buildMergedSlices(profileSnapshot, sortedGv, start, end)
 
-        for (i in sortedGv.indices) {
-            val gv = sortedGv[i]
-            while (apsPtr < apsList.size && apsList[apsPtr].date <= gv.timestamp) {
-                lastAps = apsList[apsPtr]
-                apsPtr++
-            }
-            val aps = lastAps ?: continue
-            if (gv.timestamp - aps.date > MERGE_TOLERANCE_MS) continue
-            val feats = OrefFeatureBuilder.buildRow(gv, aps, profileSnapshot) ?: continue
-            slices += Triple(i, feats, gv.timestamp)
+        if (totalApsCount < 5) {
+            return@withContext OrefAnalysisReport(
+                windowDays = effectiveWindowDays.toInt(),
+                mergedRowCount = 0,
+                validOutcomeRows = 0,
+                timeBelow70Pct = null,
+                timeAbove180Pct = null,
+                timeInRange70180Pct = null,
+                actualHypo4hPct = null,
+                actualHyper4hPct = null,
+                priority = OrefGlycemicPriority.BALANCED,
+                mlStatus = OrefMlStatus.NOT_BUNDLED,
+                featureMissingPct = emptyMap(),
+                hints = listOf("Insufficient local data (need more CGM and APS history)."),
+                dataSufficiency = OrefDataSufficiency.INSUFFICIENT,
+                personalMlStatus = OrefPersonalMlStatus.OFF,
+            )
         }
 
         if (slices.size < 50) {
@@ -170,6 +173,53 @@ class OrefLocalPipeline(
             personalMeanHyperSignalPct = personalHyperPct,
             personalMlDetail = personalDetail,
         )
+    }
+
+    /**
+     * Merges CGM rows with APS decisions one day at a time so we never hold the full APS JSON window in RAM.
+     */
+    private suspend fun buildMergedSlices(
+        profileSnapshot: AimiProfileSnapshot,
+        sortedGv: List<app.aaps.core.data.model.GV>,
+        start: Long,
+        end: Long,
+    ): Pair<List<Triple<Int, DoubleArray, Long>>, Int> {
+        val slices = ArrayList<Triple<Int, DoubleArray, Long>>(sortedGv.size / 2)
+        var lastAps: APSResult? = null
+        var totalApsCount = 0
+        var chunkStart = start
+        val oneDayMs = T.days(1).msecs()
+        var gvScanIndex = 0
+
+        while (chunkStart <= end) {
+            val chunkEnd = min(chunkStart + oneDayMs - 1L, end)
+            val apsChunk = persistenceLayer.getApsResults(chunkStart, chunkEnd).sortedBy { it.date }
+            totalApsCount += apsChunk.size
+            var apsPtr = 0
+
+            while (gvScanIndex < sortedGv.size && sortedGv[gvScanIndex].timestamp < chunkStart) {
+                gvScanIndex++
+            }
+            var gvIndex = gvScanIndex
+            while (gvIndex < sortedGv.size) {
+                val gv = sortedGv[gvIndex]
+                if (gv.timestamp > chunkEnd) break
+                while (apsPtr < apsChunk.size && apsChunk[apsPtr].date <= gv.timestamp) {
+                    lastAps = apsChunk[apsPtr]
+                    apsPtr++
+                }
+                val aps = lastAps
+                if (aps != null && gv.timestamp - aps.date <= MERGE_TOLERANCE_MS) {
+                    OrefFeatureBuilder.buildRow(gv, aps, profileSnapshot)?.let { feats ->
+                        slices += Triple(gvIndex, feats, gv.timestamp)
+                    }
+                }
+                gvIndex++
+            }
+            gvScanIndex = gvIndex
+            chunkStart = chunkEnd + 1L
+        }
+        return slices to totalApsCount
     }
 
     private fun computeDataSufficiency(mergedRows: Int, labelled: Int): OrefDataSufficiency = when {
