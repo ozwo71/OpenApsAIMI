@@ -5,6 +5,7 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.*
+import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
 import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
@@ -64,6 +65,8 @@ Your ONLY job is to extract structured context information regarding specific in
 3. Output MUST be valid JSON following the exact schema below
 4. If uncertain, set confidence < 0.7
 5. Duration and intensity should be realistic
+
+${LlmWorldConservativePreamble.FOR_JSON_CONTRACT}
 
 **OUTPUT SCHEMA** (JSON array of intents):
 ```json
@@ -336,6 +339,8 @@ Output:
                 appendLine("3. Infer activity timing (e.g., 'just finished' + dropping BG)")
                 appendLine("4. Detect patterns (e.g., luteal phase + rising BG → increased resistance)")
                 appendLine("5. Adjust intensity/duration based on current state")
+                appendLine("6. Reconstruct user intent vs medical context before extracting intents")
+                appendLine("7. If the message is unintelligible or unrelated, return an empty JSON array []")
                 appendLine()
             }
         } else {

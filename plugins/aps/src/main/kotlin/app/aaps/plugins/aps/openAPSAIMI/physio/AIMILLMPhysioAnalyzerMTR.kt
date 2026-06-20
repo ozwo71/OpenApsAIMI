@@ -4,6 +4,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.keys.StringKey
+import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
@@ -52,6 +53,14 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     companion object {
         private const val TAG = "LLMPhysioAnalyzer"
         private const val TIMEOUT_MS = 10_000L
+
+        private val SYSTEM_ROLE_NARRATIVE: String = buildString {
+            append(
+                "You are an expert diabetes physiologist analyzing sleep, HRV, and activity data. ",
+            )
+            append("Provide brief, clinically astute insights in 2-3 sentences maximum.\n\n")
+            append(LlmWorldConservativePreamble.FOR_NARRATIVE)
+        }
         
         // API endpoints
         private const val OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
@@ -194,7 +203,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
             put("messages", org.json.JSONArray().apply {
                 put(JSONObject().apply {
                     put("role", "system")
-                    put("content", "You are an expert diabetes physiologist analyzing sleep, HRV, and activity data. Provide brief, actionable insights in 2-3 sentences.")
+                    put("content", SYSTEM_ROLE_NARRATIVE)
                 })
                 put(JSONObject().apply {
                     put("role", "user")
@@ -313,7 +322,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
             put("messages", org.json.JSONArray().apply {
                 put(JSONObject().apply {
                     put("role", "system")
-                    put("content", "You are an expert diabetes physiologist. Provide brief insights.")
+                    put("content", SYSTEM_ROLE_NARRATIVE)
                 })
                 put(JSONObject().apply {
                     put("role", "user")
@@ -345,6 +354,8 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         # SYSTEM ROLE:
         You are **Diaby**, AIMI's Physiological Analyst.
         Your role is to interpret complex physiological data (Sleep, HRV, Activity) for a T1D patient.
+
+        ${LlmWorldConservativePreamble.FOR_NARRATIVE}
         
         # TASK:
         Analyze the following metrics provided below.

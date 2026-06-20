@@ -7,6 +7,7 @@ import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.StringKey
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
+import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningContextApplySupport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -109,6 +110,8 @@ internal class TpoLlmValidator(
 You are AIMI TPO Validator. NEVER suggest insulin doses.
 Decide if a temporary 2h preference protection overlay should apply.
 
+${LlmWorldConservativePreamble.FOR_JSON_CONTRACT}
+
 INPUT:
 $payload
 
@@ -124,6 +127,7 @@ Rules:
 - VETO POST_HYPO if meal_rise likely (high COB/meal_prob).
 - VETO POOR_SLEEP if dawn_endogenous_drive dominates.
 - VETO EXHAUSTED if no hyper->hypo sequence in episode_timeline.
+- If competing hypotheses remain tied after context reconstruction, return UNCERTAIN.
 - Timeout budget ~${TIMEOUT_HINT_MS}ms — be concise.
 """.trimIndent()
     }

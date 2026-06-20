@@ -1,8 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.meal
 
 import android.graphics.Bitmap
-import org.json.JSONObject
+import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
 import org.json.JSONArray
+import org.json.JSONObject
 import kotlin.math.round
 
 /**
@@ -42,9 +43,11 @@ data class EstimationResult(
 )
 
 object FoodAnalysisPrompt {
-    const val SYSTEM_PROMPT = """
+    val SYSTEM_PROMPT = """
 You are a Clinical Nutritionist and Diabetic Carb-Counting expert.
 Analyze the meal image and return STRICT JSON ONLY.
+
+${LlmWorldConservativePreamble.FOR_JSON_CONTRACT}
 
 ## NUTRITION PROTOCOL
 1. Identify visible items and volume cues.
@@ -52,6 +55,8 @@ Analyze the meal image and return STRICT JSON ONLY.
 3. Assess Glycemic Impact and confidence levels.
 4. If uncertain about volume or ingredients, lean conservative on 'estimate'.
 5. Protein/Fat: Do NOT hallucinate hidden oils; be realistic/conservative.
+6. Separate clearly visible items from uncertain_items; never move uncertain food into visible_items.
+7. If the image is unusable, still return valid JSON with needs_manual_confirmation=true and conservative estimates.
 
 ## JSON SCHEMA
 {

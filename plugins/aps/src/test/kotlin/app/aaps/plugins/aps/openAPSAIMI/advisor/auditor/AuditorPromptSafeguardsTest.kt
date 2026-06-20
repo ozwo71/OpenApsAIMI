@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
 
 class AuditorPromptSafeguardsTest {
 
@@ -34,6 +35,17 @@ class AuditorPromptSafeguardsTest {
             
         // 4. Instructions
         assertTrue(prompt.contains("degradedMode"), "Prompt must contain instructions on degraded mode")
+    }
+
+    @Test
+    fun `prompt contains LLM World conservative preamble`() {
+        val prompt = AuditorPromptBuilder.buildPrompt(createDummyInput())
+        assertTrue(
+            prompt.contains(LlmWorldConservativePreamble.FOR_JSON_CONTRACT.substring(0, 40)),
+            "Prompt must contain LLM World JSON preamble",
+        )
+        assertTrue(prompt.contains("do not change output schema"), "Preamble must preserve output contract")
+        assertTrue(prompt.contains("Do not recommend free insulin doses"), "Preamble must forbid dose recommendations")
     }
 
     private fun createDummyInput(): AuditorInput {

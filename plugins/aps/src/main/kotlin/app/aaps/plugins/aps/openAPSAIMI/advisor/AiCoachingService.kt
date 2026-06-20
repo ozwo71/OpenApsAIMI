@@ -13,6 +13,7 @@ import javax.inject.Singleton
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
 import java.util.Locale
 
@@ -245,6 +246,8 @@ class AiCoachingService @Inject constructor() {
         sb.append("You are AIMI, an expert 'Certified Diabetes Educator' specializing in Automated Insulin Delivery (AID).\n")
         sb.append("Your Goal: Analyze the patient's recent glucose & insulin data to identify patterns and suggest specific algorithm tuning.\n")
         sb.append("Tone: Professional, encouraging, precise, and safety-first.\n\n")
+        sb.append(LlmWorldConservativePreamble.FOR_NARRATIVE)
+        sb.append("\n\n")
 
         // 0.5 STABILITY CONTEXT (History)
         sb.append("--- HISTORY & STABILITY CONTEXT ---\n")
@@ -345,6 +348,7 @@ class AiCoachingService @Inject constructor() {
         sb.append("3. 🛠️ **Action Plan**: 2–4 prudent, clinician-supervised steps. When OREF priority is HYPO, prioritize reducing aggressiveness (ISF/basal/MPC) before chasing hyper fixes. When HYPER dominates and hypos are rare, mention IC verification and PKPD DIA/peak before large basal moves.\n")
         sb.append("4. **Tuning direction (no doses)**: For each relevant domain (ISF, IC, basal, PKPD DIA, peak, damping, MPC), state at most ONE cautious direction. Directions must match context (e.g. higher vs lower ISF, increase vs decrease damping/MPC headroom)—never assume everything should only go \"up\".\n")
         sb.append("\nConstraints: Under ~220 words; safety-first; emojis optional; end with a short reminder to confirm with a clinician.\n")
+        sb.append("Do not output numeric dose targets, unit amounts, or specific profile values to apply — directions and reasoning only.\n")
 
         return sb.toString()
     }

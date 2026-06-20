@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
+import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
+
 /**
  * ============================================================================
  * AIMI AI Decision Auditor - Prompt Builder
@@ -16,6 +18,8 @@ object AuditorPromptBuilder {
     fun buildPrompt(input: AuditorInput): String {
         return """
 ${getSystemPrompt()}
+
+${LlmWorldConservativePreamble.FOR_JSON_CONTRACT}
 
 ${getSafetyAssertionsSection()}
 
