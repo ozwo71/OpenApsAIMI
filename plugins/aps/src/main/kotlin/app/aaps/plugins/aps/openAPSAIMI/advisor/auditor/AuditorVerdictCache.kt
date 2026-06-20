@@ -11,11 +11,14 @@ object AuditorVerdictCache {
     
     private const val DEFAULT_KEY = "LATEST"
     private val cache = ConcurrentHashMap<String, CachedVerdict>()
+    @Volatile
+    private var currentBgTimestampMs: Long? = null
     
     data class CachedVerdict(
         val verdict: AuditorVerdict,
         val result: DecisionResult,
-        val timestamp: Long
+        val timestamp: Long,
+        val bgTimestampMs: Long? = null,
     )
     
     @JvmStatic
@@ -25,7 +28,30 @@ object AuditorVerdictCache {
 
     @JvmStatic
     fun update(key: String, verdict: AuditorVerdict, result: DecisionResult) {
-        cache[key] = CachedVerdict(verdict, result, System.currentTimeMillis())
+        cache[key] = CachedVerdict(
+            verdict = verdict,
+            result = result,
+            timestamp = System.currentTimeMillis(),
+            bgTimestampMs = currentBgTimestampMs,
+        )
+    }
+
+    @JvmStatic
+    fun update(verdict: AuditorVerdict, result: DecisionResult, bgTimestampMs: Long?) {
+        update(DEFAULT_KEY, verdict, result, bgTimestampMs)
+    }
+
+    @JvmStatic
+    fun update(key: String, verdict: AuditorVerdict, result: DecisionResult, bgTimestampMs: Long?) {
+        if (bgTimestampMs != null && bgTimestampMs > 0L) {
+            currentBgTimestampMs = bgTimestampMs
+        }
+        cache[key] = CachedVerdict(
+            verdict = verdict,
+            result = result,
+            timestamp = System.currentTimeMillis(),
+            bgTimestampMs = bgTimestampMs,
+        )
     }
     
     @JvmStatic
@@ -44,6 +70,31 @@ object AuditorVerdictCache {
         }
         return cached
     }
+
+    @JvmStatic
+    @JvmOverloads
+    fun getDisplayable(maxAgeMs: Long = 300_000): CachedVerdict? {
+        val cached = get(DEFAULT_KEY, maxAgeMs) ?: return null
+        val lastBgTimestamp = currentBgTimestampMs
+        val cachedBgTimestamp = cached.bgTimestampMs
+        if (
+            lastBgTimestamp != null &&
+            lastBgTimestamp > 0L &&
+            cachedBgTimestamp != null &&
+            cachedBgTimestamp > 0L &&
+            cachedBgTimestamp != lastBgTimestamp
+        ) {
+            return null
+        }
+        return cached
+    }
+
+    @JvmStatic
+    fun noteCurrentBg(bgTimestampMs: Long?) {
+        if (bgTimestampMs != null && bgTimestampMs > 0L) {
+            currentBgTimestampMs = bgTimestampMs
+        }
+    }
     
     @JvmStatic
     fun getAgeMs(): Long? {
@@ -59,5 +110,6 @@ object AuditorVerdictCache {
     @JvmStatic
     fun clear() {
         cache.clear()
+        currentBgTimestampMs = null
     }
 }

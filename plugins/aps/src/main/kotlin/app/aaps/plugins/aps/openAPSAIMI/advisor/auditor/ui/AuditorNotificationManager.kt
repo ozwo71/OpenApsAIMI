@@ -49,7 +49,7 @@ class AuditorNotificationManager @Inject constructor(
   fun showInsightAvailable(uiState: AuditorUIState): Boolean {
     if (!uiState.shouldNotify || !uiState.isActive()) return false
 
-    val cached = AuditorVerdictCache.get() ?: return false
+    val cached = AuditorVerdictCache.getDisplayable() ?: return false
     if (cached.timestamp == lastNotifiedVerdictTimestampMs) return false
 
     val posted = postInAppNotification() || postSystemNotification(uiState)
@@ -92,7 +92,7 @@ class AuditorNotificationManager @Inject constructor(
         },
       ),
       validityCheck = {
-        AuditorVerdictCache.get() != null
+        AuditorVerdictCache.getDisplayable() != null
       },
     )
     return true

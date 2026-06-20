@@ -16,13 +16,13 @@ object AuditorReportFormatter {
   private const val DEFAULT_CACHE_MAX_AGE_MS = 300_000L
 
   fun insightCount(maxAgeMs: Long = DEFAULT_CACHE_MAX_AGE_MS): Int {
-    val cached = AuditorVerdictCache.get(maxAgeMs) ?: return 0
+    val cached = AuditorVerdictCache.getDisplayable(maxAgeMs) ?: return 0
     val evidenceCount = cached.verdict.evidence.size
     return if (evidenceCount > 0) evidenceCount else 1
   }
 
   fun hasUnreadVerdict(lastReadTimestampMs: Long, maxAgeMs: Long = DEFAULT_CACHE_MAX_AGE_MS): Boolean {
-    val cached = AuditorVerdictCache.get(maxAgeMs) ?: return false
+    val cached = AuditorVerdictCache.getDisplayable(maxAgeMs) ?: return false
     return cached.timestamp > lastReadTimestampMs
   }
 
@@ -62,12 +62,12 @@ object AuditorReportFormatter {
   }
 
   private fun buildShortVerdictSummary(context: Context): String? {
-    val cached = AuditorVerdictCache.get() ?: return null
+    val cached = AuditorVerdictCache.getDisplayable() ?: return null
     return cached.verdict.verdict.name
   }
 
   private fun buildReportBody(context: Context, includeStatusLine: Boolean): String? {
-    val cached = AuditorVerdictCache.get() ?: return null
+    val cached = AuditorVerdictCache.getDisplayable() ?: return null
     return formatVerdict(context, cached.verdict, trackerStatusMessageIfNeeded(includeStatusLine))
   }
 

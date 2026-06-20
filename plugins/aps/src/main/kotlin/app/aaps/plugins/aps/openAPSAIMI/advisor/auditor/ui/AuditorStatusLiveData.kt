@@ -4,6 +4,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorStatusTracker
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache
+import app.aaps.plugins.aps.openAPSAIMI.model.VerdictType
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.model.AuditorUIState
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,6 +31,15 @@ class AuditorStatusLiveData @Inject constructor() {
     status: AuditorStatusTracker.Status,
     ageMs: Long?,
   ): AuditorUIState {
+    if (status.name.contains("PROCESSING")) {
+      return AuditorUIState.processing()
+    }
+
+    val displayableVerdict = AuditorVerdictCache.getDisplayable()
+    if (displayableVerdict != null) {
+      return uiStateFromDisplayableVerdict(displayableVerdict.verdict.verdict)
+    }
+
     if (ageMs != null && ageMs > 300_000) {
       return AuditorUIState.idle()
     }
@@ -37,36 +47,36 @@ class AuditorStatusLiveData @Inject constructor() {
     return when {
       status == AuditorStatusTracker.Status.OFF -> AuditorUIState.idle()
 
-      status.name.contains("PROCESSING") -> AuditorUIState.processing()
-
       status.isSkipped() -> AuditorUIState.idle()
 
       status.isOffline() -> AuditorUIState.error(getOfflineMessage(status))
 
       status.isError() -> AuditorUIState.error(getErrorMessage(status))
 
-      status.isActive() -> {
-        val insightCount = AuditorReportFormatter.insightCount()
-        val shouldNotify = AuditorReportFormatter.hasUnreadVerdict(lastReadTimestampMs)
-        when (status) {
-          AuditorStatusTracker.Status.OK_REDUCE,
-          AuditorStatusTracker.Status.OK_SOFTEN,
-          -> AuditorUIState.warning(
-            message = "Important: ${status.message}",
-            shouldNotify = shouldNotify,
-          )
-          else -> AuditorUIState.ready(insightCount, shouldNotify)
-        }
-      }
+      status.isActive() -> AuditorUIState.idle()
 
       else -> AuditorUIState.idle()
     }
   }
 
   fun markAsRead() {
-    val verdictTimestamp = AuditorVerdictCache.get()?.timestamp
+    val verdictTimestamp = AuditorVerdictCache.getDisplayable()?.timestamp
     lastReadTimestampMs = verdictTimestamp ?: System.currentTimeMillis()
     notifyUpdate()
+  }
+
+  private fun uiStateFromDisplayableVerdict(verdictType: VerdictType): AuditorUIState {
+    val insightCount = AuditorReportFormatter.insightCount()
+    val shouldNotify = AuditorReportFormatter.hasUnreadVerdict(lastReadTimestampMs)
+    return when (verdictType) {
+      VerdictType.Confirm -> AuditorUIState.ready(insightCount, shouldNotify)
+      VerdictType.Soften,
+      VerdictType.ShiftToTbr,
+      -> AuditorUIState.warning(
+        message = "Important: ${verdictType.name}",
+        shouldNotify = shouldNotify,
+      )
+    }
   }
 
   private fun getOfflineMessage(status: AuditorStatusTracker.Status): String {

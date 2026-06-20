@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 import android.content.Context
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.model.VerdictType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -408,6 +409,15 @@ class AuditorAIService @Inject constructor(
         
         // Parse verdict JSON
         val verdictJson = JSONObject(jsonStr)
-        return AuditorVerdict.fromJSON(verdictJson)
+        val verdict = AuditorVerdict.fromJSON(verdictJson)
+        AuditorStatusTracker.updateStatus(verdict.toTrackerStatus())
+        return verdict
     }
+
+    private fun AuditorVerdict.toTrackerStatus(): AuditorStatusTracker.Status =
+        when (verdict) {
+            VerdictType.Confirm -> AuditorStatusTracker.Status.OK_CONFIRM
+            VerdictType.Soften -> AuditorStatusTracker.Status.OK_SOFTEN
+            VerdictType.ShiftToTbr -> AuditorStatusTracker.Status.OK_PREFER_TBR
+        }
 }
