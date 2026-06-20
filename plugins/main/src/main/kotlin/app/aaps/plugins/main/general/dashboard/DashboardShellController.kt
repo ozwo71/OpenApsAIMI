@@ -48,6 +48,7 @@ import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiProfileAdvisorActivity
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.model.AuditorUIState
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorNotificationManager
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusIndicator
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData
@@ -701,6 +702,37 @@ internal class DashboardShellController(
         }
     }
 
+    private fun handleAuditorClick() {
+        val state = auditorIndicator?.getCurrentState() ?: return
+        when (state.type) {
+            AuditorUIState.StateType.READY,
+            AuditorUIState.StateType.WARNING -> {
+                auditorNotificationManager.openReport(host.context)
+            }
+            AuditorUIState.StateType.PROCESSING -> {
+                uiInteraction.showOkDialog(
+                    host.context,
+                    host.context.getString(app.aaps.plugins.aps.R.string.aimi_auditor_report_dialog_title),
+                    host.context.getString(app.aaps.plugins.aps.R.string.aimi_auditor_indicator_processing),
+                )
+            }
+            AuditorUIState.StateType.ERROR -> {
+                uiInteraction.showOkDialog(
+                    host.context,
+                    host.context.getString(app.aaps.core.ui.R.string.error),
+                    state.statusMessage,
+                )
+            }
+            else -> {
+                uiInteraction.showOkDialog(
+                    host.context,
+                    host.context.getString(app.aaps.plugins.aps.R.string.aimi_auditor_report_dialog_title),
+                    host.context.getString(app.aaps.plugins.aps.R.string.aimi_auditor_indicator_idle),
+                )
+            }
+        }
+    }
+
     private fun setupAuditorIndicator() {
         val binding = shellBinding ?: return
         try {
@@ -711,7 +743,7 @@ internal class DashboardShellController(
             container.removeAllViews()
             container.addView(auditorIndicator)
             auditorIndicator?.setOnClickListener {
-                aapsLogger.debug(LTag.CORE, "Auditor badge clicked")
+                handleAuditorClick()
             }
             auditorStatusLiveData.uiState.observe(host.liveDataOwner) { uiState ->
                 auditorIndicator?.setState(uiState)

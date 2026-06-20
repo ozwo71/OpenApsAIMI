@@ -1457,8 +1457,31 @@
     <string name="aimi_auditor_timeout_summary">Maximum wait time for AI provider response (default: 10s)</string>
     <string name="aimi_auditor_min_confidence_title">Minimum Confidence (%)</string>
     <string name="aimi_auditor_min_confidence_summary">Only apply modulations if AI confidence is above this threshold (default: 70%)</string>
+    <string name="aimi_auditor_notification_channel_name">AIMI Auditor insights</string>
+    <string name="aimi_auditor_notification_channel_description">Alerts when the AI Decision Auditor has a new recommendation.</string>
+    <string name="aimi_auditor_notification_title_ready">New Auditor report</string>
+    <string name="aimi_auditor_notification_title_warning">Important Auditor recommendation</string>
+    <string name="aimi_auditor_notification_summary_single">New recommendation available</string>
+    <string name="aimi_auditor_notification_summary_multiple" comment="%1$d=number of recommendations. Example: 3 recommendations available">%1$d recommendations available</string>
+    <string name="aimi_auditor_notification_tap_to_view" comment="Shown in expanded Android notification body">Tap to view the full report.</string>
+    <string name="aimi_auditor_notification_action_view">View report</string>
+    <string name="aimi_auditor_report_dialog_title">Auditor report</string>
+    <string name="aimi_auditor_report_no_cache">No recent auditor report is available. The last verdict may have expired.</string>
+    <string name="aimi_auditor_report_verdict_line" comment="%1$s=verdict label (e.g. SOFTEN), %2$d=confidence percent. Example: Verdict: SOFTEN (82% confidence)">Verdict: %1$s (%2$d%% confidence)</string>
+    <string name="aimi_auditor_report_status_line" comment="%1$s=tracker status message. Example: Status: OK_SOFTEN">Status: %1$s</string>
+    <string name="aimi_auditor_report_degraded_mode">Degraded mode: adjustments were capped for safety.</string>
+    <string name="aimi_auditor_report_evidence_header">Evidence:</string>
+    <string name="aimi_auditor_report_risk_flags_header">Risk flags:</string>
+    <string name="aimi_auditor_report_adjustments_header">Bounded adjustments:</string>
+    <string name="aimi_auditor_report_smb_factor" comment="%1$s=SMB factor multiplier. Example: SMB factor: 0.75">SMB factor: %1$s</string>
+    <string name="aimi_auditor_report_interval_add" comment="%1$d=minutes added to SMB interval. Example: Interval add: +3 min">Interval add: +%1$d min</string>
+    <string name="aimi_auditor_report_prefer_tbr_yes">Prefer TBR: yes</string>
+    <string name="aimi_auditor_report_prefer_tbr_no">Prefer TBR: no</string>
+    <string name="aimi_auditor_report_tbr_factor" comment="%1$s=TBR factor multiplier. Example: TBR factor: 1.05">TBR factor: %1$s</string>
+    <string name="aimi_auditor_in_app_notification_summary" comment="%1$s=short verdict or status summary. Example: SOFTEN — see full report">Auditor: %1$s</string>
+    <string name="aimi_auditor_indicator_processing">Analysis in progress, please wait…</string>
+    <string name="aimi_auditor_indicator_idle">Auditor will activate at the next trigger</string>
 
-    <!-- Context Module -->
     <string name="context_title">AIMI Context</string>
     <string name="context_description">Describe your current situation to help AIMI adapt insulin delivery</string>
     <string name="context_patient_state_title">Current AIMI Understanding</string>

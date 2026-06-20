@@ -545,41 +545,36 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, View.OnLongClic
         when (state.type) {
             AuditorUIState.StateType.READY,
             AuditorUIState.StateType.WARNING -> {
-                // Mark as read
-                auditorStatusLiveData.markAsRead()
-                auditorNotificationManager.cancelNotification()
-
-                // TODO: Open AuditorVerdictActivity when implemented
-                // For now, show dialog with status
-                activity?.let { activity ->
-                    OKDialog.show(activity,
-                        "Auditor Insight",
-                        state.statusMessage)
-                }
+                auditorNotificationManager.openReport(requireContext())
             }
 
             AuditorUIState.StateType.PROCESSING -> {
                 activity?.let { activity ->
-                    OKDialog.show(activity,
-                        "Auditor",
-                        "Analysis in progress, please wait...")
+                    uiInteraction.showOkDialog(
+                        activity,
+                        getString(app.aaps.plugins.aps.R.string.aimi_auditor_report_dialog_title),
+                        getString(app.aaps.plugins.aps.R.string.aimi_auditor_indicator_processing),
+                    )
                 }
             }
 
             AuditorUIState.StateType.ERROR -> {
                 activity?.let { activity ->
-                    OKDialog.show(activity,
+                    uiInteraction.showOkDialog(
+                        activity,
                         rh.gs(app.aaps.core.ui.R.string.error),
-                        state.statusMessage)
+                        state.statusMessage,
+                    )
                 }
             }
 
             else -> {
-                // IDLE - show info
                 activity?.let { activity ->
-                    OKDialog.show(activity,
-                        "Auditor",
-                        "Auditor will activate at next trigger")
+                    uiInteraction.showOkDialog(
+                        activity,
+                        getString(app.aaps.plugins.aps.R.string.aimi_auditor_report_dialog_title),
+                        getString(app.aaps.plugins.aps.R.string.aimi_auditor_indicator_idle),
+                    )
                 }
             }
         }

@@ -187,7 +187,10 @@ enum class NotificationId(
     SCENE_ENDED(INFO, AUTOMATION, allowMultiple = true),
     SCENE_CHAINED(INFO, AUTOMATION, allowMultiple = true),
     SCENE_CHAIN_SKIPPED(NORMAL, AUTOMATION, allowMultiple = true),
-    SCENE_CHAIN_ERROR(IMPORTANT, AUTOMATION, allowMultiple = true);
+    SCENE_CHAIN_ERROR(IMPORTANT, AUTOMATION, allowMultiple = true),
+
+    /** AIMI AI Decision Auditor — new insight available (in-app + optional system notification). */
+    AIMI_AUDITOR_INSIGHT(INFO, LOOP);
 
     companion object {
 
