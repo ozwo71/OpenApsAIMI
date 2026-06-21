@@ -12,6 +12,8 @@ import app.aaps.core.interfaces.stats.TddCalculator
 import app.aaps.core.interfaces.stats.TirCalculator
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.plugins.aps.openAPSAIMI.activity.ActivityManager
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalTreeSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -75,6 +77,8 @@ class AuditorDataCollector @Inject constructor(
         tbrMaxAutoDrive: Double?,
         physio: PhysioSnapshot? = null,
         effectiveProfile: EffectiveProfile? = null,
+        physiologicalTree: PhysiologicalTreeSnapshot? = null,
+        harmoniaSimulation: HarmoniaSimulationDecision? = null,
     ): AuditorInput {
         
         val now = dateUtil.now()
@@ -154,7 +158,9 @@ class AuditorDataCollector @Inject constructor(
             snapshot = snapshot,
             history = history,
             stats = stats,
-            trajectory = trajectory
+            trajectory = trajectory,
+            physiologicalTree = physiologicalTree,
+            harmoniaSimulation = harmoniaSimulation,
         )
     }
 

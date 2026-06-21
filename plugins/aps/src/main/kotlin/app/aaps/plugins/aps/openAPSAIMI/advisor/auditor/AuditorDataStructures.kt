@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalTreeSnapshot
 import org.json.JSONArray
 import org.json.JSONObject
 import app.aaps.plugins.aps.openAPSAIMI.model.VerdictType
@@ -69,13 +71,17 @@ data class AuditorInput(
     val snapshot: Snapshot,
     val history: History,
     val stats: Stats7d,
-    val trajectory: TrajectorySnapshot?
+    val trajectory: TrajectorySnapshot?,
+    val physiologicalTree: PhysiologicalTreeSnapshot? = null,
+    val harmoniaSimulation: HarmoniaSimulationDecision? = null,
 ) {
     fun toJSON(): JSONObject = JSONObject().apply {
         put("snapshot", snapshot.toJSON())
         put("history", history.toJSON())
         put("stats", stats.toJSON())
         if (trajectory != null) put("trajectory", trajectory.toJSON())
+        if (physiologicalTree != null) put("physiological_tree", physiologicalTree.toJsonObject())
+        if (harmoniaSimulation != null) put("harmonia_simulation", harmoniaSimulation.toJsonObject())
     }
 }
 

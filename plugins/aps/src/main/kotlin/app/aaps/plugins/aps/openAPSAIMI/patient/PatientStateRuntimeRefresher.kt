@@ -105,6 +105,8 @@ internal object PatientStateRuntimeRefresher {
             patientModeDecision = patientModeDecision,
             updatedAtMs = nowMs,
             physioLive = PhysioLiveDigest(),
+            physiologicalTree = null,
+            harmoniaSimulation = null,
             refreshSource = PatientRefreshSource.CONTEXT_INTENT,
         )
         PatientStateRuntimeRepository.publishRuntime(runtimeSnapshot, loopCache = null)
@@ -130,12 +132,28 @@ internal object PatientStateRuntimeRefresher {
             thermalBelief = healthSnapshot.thermalBelief,
         )
         val patientModeDecision = PatientModeOrchestrator.evaluate(patientState)
+        val physioLive = PhysioLiveDigest.from(healthSnapshot, nowMs)
+        val physiologicalTree = PhysiologicalTreeBuilder.build(
+            enabled = PatientStateRuntimeRepository.getLatest()?.physiologicalTree != null,
+            patientState = patientState,
+            patientModeDecision = patientModeDecision,
+            physioLive = physioLive,
+            thermalBelief = healthSnapshot.thermalBelief,
+            timestampMs = nowMs,
+        )
+        val harmoniaSimulation = HarmoniaSimulationEngine.evaluate(
+            tree = physiologicalTree,
+            environment = PatientStateRuntimeRepository.getLatest()?.harmoniaSimulation?.environment,
+            timestampMs = nowMs,
+        )
         val runtimeSnapshot = PatientRuntimeSnapshot(
             patientState = patientState,
             patientModeDecision = patientModeDecision,
             updatedAtMs = nowMs,
-            physioLive = PhysioLiveDigest.from(healthSnapshot, nowMs),
+            physioLive = physioLive,
             thermalBelief = healthSnapshot.thermalBelief,
+            physiologicalTree = physiologicalTree,
+            harmoniaSimulation = harmoniaSimulation,
             refreshSource = PatientRefreshSource.PHYSIO_SIGNAL,
         )
         PatientStateRuntimeRepository.publishRuntime(runtimeSnapshot, loopCache = cache)

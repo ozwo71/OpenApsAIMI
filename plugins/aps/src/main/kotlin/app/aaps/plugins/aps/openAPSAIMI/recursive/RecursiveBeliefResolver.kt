@@ -73,14 +73,15 @@ object RecursiveBeliefResolver {
         val u60 = byTau[60]?.urgency ?: 0.0
         val belief15 = byTau[15]?.belief ?: 0.0
         val t3cBasalFirst = resolveT3cBasalFirst(ctx)
-        val basalFirstChannel = if (t3cBasalFirst?.eligible == true) {
-            BasalFirstChannel.T3C_BASAL_FIRST
-        } else {
-            BasalFirstChannel.NONE
-        }
+        val harmoniaBasalFirst = resolveHarmoniaBasalFirst(ctx)
 
         // P0 — Tier-1 hypo (non-negotiable)
         if (ctx.tier1Hypo) {
+            val p0BasalFirstChannel = selectBasalFirstChannel(
+                t3cBasalFirst = t3cBasalFirst,
+                harmoniaBasalFirst = harmoniaBasalFirst,
+                releaseAuthority = ReleaseAuthority.NONE,
+            )
             return DoseChannelResolution(
                 smbDemandU = 0.0,
                 tbrDemandFraction = 0.0,
@@ -93,8 +94,15 @@ object RecursiveBeliefResolver {
                 suppressTrajBasalShift = true,
                 hypoMinPredIgnored = ctx.hypoMinPredIgnored,
                 reasonCodes = listOf("P0"),
-                basalFirstChannel = basalFirstChannel,
+                basalFirstChannel = p0BasalFirstChannel,
                 t3cBasalFirst = t3cBasalFirst,
+                harmoniaBasalFirst = harmoniaBasalFirst,
+                harmoniaSmb = resolveHarmoniaSmb(
+                    ctx = ctx,
+                    releaseAuthority = ReleaseAuthority.NONE,
+                    currentDemandU = 0.0,
+                    basalFirstChannel = p0BasalFirstChannel,
+                ),
             )
         }
 
@@ -259,6 +267,31 @@ object RecursiveBeliefResolver {
             reasonCodes += "FIRST_WAVE"
         }
 
+        var basalFirstChannel = selectBasalFirstChannel(
+            t3cBasalFirst = t3cBasalFirst,
+            harmoniaBasalFirst = harmoniaBasalFirst,
+            releaseAuthority = releaseAuthority,
+        )
+        var harmoniaSmb = resolveHarmoniaSmb(
+            ctx = ctx,
+            releaseAuthority = releaseAuthority,
+            currentDemandU = smbDemandU,
+            basalFirstChannel = basalFirstChannel,
+        )
+        harmoniaSmb?.takeIf { it.eligible }?.let { resolved ->
+            smbDemandU = resolved.demandAfterU
+            basalFirstChannel = selectBasalFirstChannel(
+                t3cBasalFirst = t3cBasalFirst,
+                harmoniaBasalFirst = harmoniaBasalFirst,
+                releaseAuthority = releaseAuthority,
+            )
+            reasonCodes += if (resolved.reducesRbtDemand) {
+                "HARMONIA_SMB_REDUCE"
+            } else {
+                "HARMONIA_SMB_SUPPORT"
+            }
+        }
+
         if (shouldSuppressRbtSmbDemand(ctx.extended, t3cBasalFirst, basalFirstChannel)) {
             smbDemandU = 0.0
             reasonCodes += "POST_HYPO_SMB_ARBITER"
@@ -371,13 +404,32 @@ object RecursiveBeliefResolver {
             releaseAuthority = ReleaseAuthority.NONE
             smbDemandU = v3
             reasonCodes += "OFF_EXERCISE"
+            harmoniaSmb = harmoniaSmb?.let {
+                it.copy(
+                    eligible = false,
+                    dominantBlocker = "OFF_EXERCISE",
+                    demandAfterU = smbDemandU,
+                    appliedToRbtDemand = false,
+                    reasonCodes = it.reasonCodes + "HARMONIA_SMB_BLOCK_OFF_EXERCISE",
+                )
+            }
         } else if (SleepLiveDetector.sleepGuardActive(ctx.isNight, ctx.asleepLiveConfidence)) {
             releaseAuthority = ReleaseAuthority.NONE
             smbDemandU = v3
-            reasonCodes += when {
+            val sleepBlocker = when {
                 ctx.isNight && !SleepLiveDetector.isAsleep(ctx.asleepLiveConfidence) -> "OFF_NIGHT"
                 ctx.isNight -> "OFF_NIGHT_ASLEEP"
                 else -> "OFF_ASLEEP_LIVE"
+            }
+            reasonCodes += sleepBlocker
+            harmoniaSmb = harmoniaSmb?.let {
+                it.copy(
+                    eligible = false,
+                    dominantBlocker = sleepBlocker,
+                    demandAfterU = smbDemandU,
+                    appliedToRbtDemand = false,
+                    reasonCodes = it.reasonCodes + "HARMONIA_SMB_BLOCK_$sleepBlocker",
+                )
             }
         }
 
@@ -409,6 +461,8 @@ object RecursiveBeliefResolver {
             reasonCodes = reasonCodes,
             basalFirstChannel = basalFirstChannel,
             t3cBasalFirst = t3cBasalFirst,
+            harmoniaBasalFirst = harmoniaBasalFirst,
+            harmoniaSmb = harmoniaSmb,
             loadGovernorExport = loadGovernorExport,
         )
     }
@@ -467,6 +521,180 @@ object RecursiveBeliefResolver {
             governanceBasalFloorUph = ext.t3cGovernanceBasalFloorUph,
             governanceAggressivenessFloor = ext.t3cGovernanceAggressivenessFloor,
             reasonCodes = reasonCodes,
+        )
+    }
+
+    private fun resolveHarmoniaBasalFirst(ctx: RecursiveBeliefTickContext): HarmoniaBasalFirstResolution? {
+        val ext = ctx.extended
+        val active = ext.harmoniaActive
+        val demand = ext.harmoniaBasalDemandRateUph ?: 0.0
+        val cap = (ext.harmoniaBasalMaxRateUph ?: demand).coerceAtLeast(0.0)
+        val bounded = demand.coerceIn(0.0, cap.coerceAtLeast(demand))
+        val postHypoBlock = ext.harmoniaPostHypoBlock
+        val exerciseBlock = ext.harmoniaExerciseBlock
+        val mealConflict = ext.harmoniaMealConflict
+        val hardSafetyBlock = ext.harmoniaHardSafetyBlock || ctx.tier1Hypo
+        val productionAction = ext.harmoniaAction in setOf(
+            "BASAL_FIRST",
+            "MEAL_SUPPORT",
+            "PROTECTIVE_REDUCTION",
+        )
+        if (!active && demand <= 0.0 && !postHypoBlock && !exerciseBlock && !mealConflict && !hardSafetyBlock) {
+            return null
+        }
+
+        val dominantBlocker = when {
+            hardSafetyBlock -> ext.harmoniaBlockReason ?: "HARD_SAFETY"
+            postHypoBlock -> ext.harmoniaBlockReason ?: "POST_HYPO"
+            exerciseBlock -> ext.harmoniaBlockReason ?: "EXERCISE_LOCKOUT"
+            mealConflict -> ext.harmoniaBlockReason ?: "MEAL_CONFLICT"
+            active && !ext.harmoniaSimulationEligible -> ext.harmoniaBlockReason ?: "SIMULATION_INELIGIBLE"
+            active && !productionAction -> ext.harmoniaBlockReason ?: "NO_PRODUCTION_ACTION"
+            active && bounded <= 0.0 -> ext.harmoniaBlockReason ?: "NO_BASAL_DEMAND"
+            !active -> "INACTIVE"
+            else -> null
+        }
+        val eligible = active &&
+            ext.harmoniaSimulationEligible &&
+            productionAction &&
+            !hardSafetyBlock &&
+            !postHypoBlock &&
+            !exerciseBlock &&
+            !mealConflict &&
+            bounded > 0.0
+        val reasonCodes = buildList {
+            add(if (active) "HARMONIA_ACTIVE" else "HARMONIA_INACTIVE")
+            ext.harmoniaAction?.let { add("HARMONIA_ACTION_$it") }
+            if (hardSafetyBlock) add("HARMONIA_HARD_SAFETY_BLOCK")
+            if (postHypoBlock) add("HARMONIA_POST_HYPO_BLOCK")
+            if (exerciseBlock) add("HARMONIA_EXERCISE_BLOCK")
+            if (mealConflict) add("HARMONIA_MEAL_CONFLICT")
+            if (active && !ext.harmoniaSimulationEligible) add("HARMONIA_SIMULATION_INELIGIBLE")
+            if (active && !productionAction) add("HARMONIA_NO_PRODUCTION_ACTION")
+            if (active && bounded <= 0.0) add("HARMONIA_NO_BASAL_DEMAND")
+            if (eligible) add("HARMONIA_BASAL_FIRST_READY")
+        }
+        return HarmoniaBasalFirstResolution(
+            active = active,
+            eligible = eligible,
+            sourceAction = ext.harmoniaAction,
+            branch = ext.harmoniaBranch,
+            basalDemandRateUph = demand,
+            boundedRateUph = bounded,
+            maxBasalCapUph = cap,
+            mealConflict = mealConflict,
+            postHypoBlock = postHypoBlock,
+            exerciseBlock = exerciseBlock,
+            hardSafetyBlock = hardSafetyBlock,
+            dominantBlocker = dominantBlocker,
+            reasonCodes = reasonCodes,
+        )
+    }
+
+    private fun selectBasalFirstChannel(
+        t3cBasalFirst: T3cBasalFirstResolution?,
+        harmoniaBasalFirst: HarmoniaBasalFirstResolution?,
+        releaseAuthority: ReleaseAuthority,
+    ): BasalFirstChannel =
+        when {
+            t3cBasalFirst?.eligible == true -> BasalFirstChannel.T3C_BASAL_FIRST
+            harmoniaBasalFirst?.eligible == true && releaseAuthority == ReleaseAuthority.NONE ->
+                BasalFirstChannel.HARMONIA_PRODUCTION_BASAL_FIRST
+            else -> BasalFirstChannel.NONE
+        }
+
+    private fun resolveHarmoniaSmb(
+        ctx: RecursiveBeliefTickContext,
+        releaseAuthority: ReleaseAuthority,
+        currentDemandU: Double,
+        basalFirstChannel: BasalFirstChannel,
+    ): HarmoniaSmbResolution? {
+        val ext = ctx.extended
+        val active = ext.harmoniaActive
+        val action = ext.harmoniaAction
+        val simulated = ext.harmoniaSmbDemandU ?: 0.0
+        val iobHeadroom = (ctx.maxIobU - ctx.iobU).coerceAtLeast(0.0)
+        val cap = minOf(
+            ext.harmoniaSmbMaxU ?: ctx.maxSmbEffectiveU,
+            ctx.maxSmbEffectiveU,
+            iobHeadroom,
+        ).coerceAtLeast(0.0)
+        val bounded = simulated.coerceIn(0.0, cap)
+        val postHypoBlock = ext.harmoniaPostHypoBlock
+        val exerciseBlock = ext.harmoniaExerciseBlock
+        val mealConflict = ext.harmoniaMealConflict
+        val hardSafetyBlock = ext.harmoniaHardSafetyBlock || ctx.tier1Hypo
+        val mealSupportAction = action == "MEAL_SUPPORT"
+        val protectiveReductionAction = action == "PROTECTIVE_REDUCTION"
+        val smbAction = mealSupportAction || protectiveReductionAction
+        if (!active && simulated <= 0.0 && !postHypoBlock && !exerciseBlock && !mealConflict && !hardSafetyBlock) {
+            return null
+        }
+
+        val dominantBlocker = when {
+            hardSafetyBlock -> ext.harmoniaBlockReason ?: "HARD_SAFETY"
+            postHypoBlock -> ext.harmoniaBlockReason ?: "POST_HYPO"
+            exerciseBlock -> ext.harmoniaBlockReason ?: "EXERCISE_LOCKOUT"
+            mealConflict -> ext.harmoniaBlockReason ?: "MEAL_CONFLICT"
+            basalFirstChannel != BasalFirstChannel.NONE -> "BASAL_FIRST_OWNER_${basalFirstChannel.name}"
+            releaseAuthority == ReleaseAuthority.NONE -> "NO_RBT_SMB_AUTHORITY"
+            active && !ext.harmoniaSimulationEligible -> ext.harmoniaBlockReason ?: "SIMULATION_INELIGIBLE"
+            active && !smbAction -> "NO_SMB_ACTION"
+            mealSupportAction && bounded <= 0.0 -> "NO_SMB_DEMAND"
+            mealSupportAction && cap <= 0.0 -> "SMB_CAP_ZERO"
+            !active -> "INACTIVE"
+            else -> null
+        }
+        val eligible = active &&
+            ext.harmoniaSimulationEligible &&
+            smbAction &&
+            releaseAuthority != ReleaseAuthority.NONE &&
+            basalFirstChannel == BasalFirstChannel.NONE &&
+            !hardSafetyBlock &&
+            !postHypoBlock &&
+            !exerciseBlock &&
+            !mealConflict &&
+            (!mealSupportAction || bounded > 0.0)
+        val targetDemand = when {
+            !eligible -> currentDemandU
+            protectiveReductionAction -> min(currentDemandU, bounded)
+            else -> max(currentDemandU, bounded)
+        }
+        val applied = eligible && abs(targetDemand - currentDemandU) > 1e-6
+        val reasonCodes = buildList {
+            add(if (active) "HARMONIA_ACTIVE" else "HARMONIA_INACTIVE")
+            action?.let { add("HARMONIA_ACTION_$it") }
+            if (hardSafetyBlock) add("HARMONIA_SMB_HARD_SAFETY_BLOCK")
+            if (postHypoBlock) add("HARMONIA_SMB_POST_HYPO_BLOCK")
+            if (exerciseBlock) add("HARMONIA_SMB_EXERCISE_BLOCK")
+            if (mealConflict) add("HARMONIA_SMB_MEAL_CONFLICT")
+            if (basalFirstChannel != BasalFirstChannel.NONE) add("HARMONIA_SMB_BASAL_FIRST_OWNER")
+            if (releaseAuthority == ReleaseAuthority.NONE) add("HARMONIA_SMB_NO_RBT_AUTHORITY")
+            if (active && !ext.harmoniaSimulationEligible) add("HARMONIA_SMB_SIMULATION_INELIGIBLE")
+            if (active && !smbAction) add("HARMONIA_SMB_NO_ACTION")
+            if (mealSupportAction && bounded <= 0.0) add("HARMONIA_SMB_NO_DEMAND")
+            if (eligible && mealSupportAction) add("HARMONIA_SMB_SUPPORT_READY")
+            if (eligible && protectiveReductionAction) add("HARMONIA_SMB_REDUCTION_READY")
+            if (applied) add("HARMONIA_SMB_APPLIED_TO_RBT")
+        }
+        return HarmoniaSmbResolution(
+            active = active,
+            eligible = eligible,
+            sourceAction = action,
+            branch = ext.harmoniaBranch,
+            simulatedSmbU = simulated,
+            boundedSmbU = bounded,
+            maxSmbCapU = cap,
+            demandBeforeU = currentDemandU,
+            demandAfterU = targetDemand,
+            mealConflict = mealConflict,
+            postHypoBlock = postHypoBlock,
+            exerciseBlock = exerciseBlock,
+            hardSafetyBlock = hardSafetyBlock,
+            dominantBlocker = dominantBlocker,
+            reasonCodes = reasonCodes,
+            appliedToRbtDemand = applied,
+            reducesRbtDemand = eligible && targetDemand < currentDemandU,
         )
     }
 

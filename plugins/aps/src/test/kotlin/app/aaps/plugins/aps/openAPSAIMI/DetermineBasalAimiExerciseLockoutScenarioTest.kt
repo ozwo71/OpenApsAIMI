@@ -120,7 +120,13 @@ class DetermineBasalAimiExerciseLockoutScenarioTest {
             basalDecisionEngine = mockk(relaxed = true)
             autodriveGater = mockk(relaxed = true)
             activityManager = mockk(relaxed = true)
-            glucoseStatusCalculatorAimi = mockk(relaxed = true)
+            glucoseStatusCalculatorAimi = mockk(relaxed = true) {
+                every { compute(true) } returns GlucoseStatusCalculatorAimi.Result(
+                    gs = GlucoseStatusAIMI(glucose = 100.0, delta = 0.0, shortAvgDelta = 0.0, longAvgDelta = 0.0, date = now),
+                    features = null,
+                )
+                every { getRecentGlucose() } returns listOf(100f, 100f, 100f)
+            }
             comparator = mockk(relaxed = true)
             basalLearner = mockk(relaxed = true)
             unifiedReactivityLearner = mockk(relaxed = true)
@@ -189,8 +195,9 @@ class DetermineBasalAimiExerciseLockoutScenarioTest {
             extraDebug = "exercise lockout scenario"
         )
         assertThat(rt).isNotNull()
+        assertThat(rt.reason.toString()).contains("Sport / contexte AIMI activité")
         verify(exactly = 1) {
-            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any<Double?>(), any(), any<Double?>())
         }
     }
 }

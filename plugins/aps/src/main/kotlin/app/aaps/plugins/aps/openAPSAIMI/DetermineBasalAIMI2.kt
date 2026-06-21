@@ -184,6 +184,15 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStatePresentationBuilder
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysioLiveDigest
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaProductionDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaProductionMode
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationEngine
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationEnvironment
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationAction
+import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalRiskLevel
+import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalTreeBuilder
+import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalTreeSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefEngine
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleInfo
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
@@ -274,6 +283,12 @@ internal data class AimiDecisionContext(
         var patient_state: org.json.JSONObject? = null,
         /** High-level patient mode and strategy derived from the shared state. */
         var patient_mode: org.json.JSONObject? = null,
+        /** AIMI Harmonia physiological tree, context-only in Lot 1 with no insulin authority. */
+        var physiological_tree: org.json.JSONObject? = null,
+        /** AIMI Harmonia simulated production branch; virtual only, never applied to the real pump. */
+        var harmonia_simulation: org.json.JSONObject? = null,
+        /** AIMI Harmonia production owner state; basal-first only and safety-gated. */
+        var harmonia_production: org.json.JSONObject? = null,
         /** Runtime ownership of T3C for this tick: native RBT, legacy fallback, or safety terminal. */
         var t3c_runtime_ownership: T3cRuntimeOwnershipExport? = null,
         /** Loop vs auditor binding for this tick (sync disposition; follow-up may arrive async). */
@@ -581,6 +596,15 @@ internal data class AimiDecisionContext(
             }
             adjustments.patient_mode?.let { patientMode ->
                 adj.put("patient_mode", patientMode)
+            }
+            adjustments.physiological_tree?.let { tree ->
+                adj.put("physiological_tree", tree)
+            }
+            adjustments.harmonia_simulation?.let { simulation ->
+                adj.put("harmonia_simulation", simulation)
+            }
+            adjustments.harmonia_production?.let { production ->
+                adj.put("harmonia_production", production)
             }
             adjustments.t3c_runtime_ownership?.let { ownership ->
                 val ownershipJson = org.json.JSONObject()
@@ -1453,6 +1477,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastContextSnapshot = null
         lastPatientState = null
         lastPatientModeDecision = null
+        lastPhysiologicalTreeSnapshot = null
+        lastHarmoniaSimulationDecision = null
+        lastHarmoniaProductionDecision = null
         lastAuditorTickDisposition = null
         lastAuditorLoopSnapshot = null
         currentTickDecisionEventId = null
@@ -2101,7 +2128,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT: RT,
     ): AimiTherapyExerciseGate {
         val therapy = Therapy(persistenceLayer).also {
-            it.updateStatesBasedOnTherapyEvents()
+            it.updateStatesBasedOnTherapyEvents(forceRefresh = true)
         }
         val deleteEventDate = therapy.deleteEventDate
         val deleteTime = therapy.deleteTime
@@ -2830,6 +2857,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             patientState = patientState,
             patientModeDecision = patientModeDecision,
             updatedAtMs = timestampMs,
+            physiologicalTree = lastPhysiologicalTreeSnapshot,
+            harmoniaSimulation = lastHarmoniaSimulationDecision,
         )
     }
 
@@ -2906,6 +2935,43 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastPatientState = patientState
         val patientModeDecision = PatientModeOrchestrator.evaluate(patientState)
         lastPatientModeDecision = patientModeDecision
+        val physioLive = PhysioLiveDigest.from(enrichedSnap, nowMs)
+        val physiologicalTree = PhysiologicalTreeBuilder.build(
+            enabled = preferences.get(BooleanKey.AimiPhysioAssistantEnable),
+            patientState = patientState,
+            patientModeDecision = patientModeDecision,
+            physioLive = physioLive,
+            thermalBelief = enrichedSnap.thermalBelief,
+            timestampMs = nowMs,
+        )
+        lastPhysiologicalTreeSnapshot = physiologicalTree
+        val harmoniaSimulation = HarmoniaSimulationEngine.evaluate(
+            tree = physiologicalTree,
+            environment = physiologicalTree?.let {
+                val currentBasalForSimulation = basalaimi.toDouble().takeIf { basal -> basal.isFinite() && basal > 0.0 } ?: 1.0
+                val maxBasalForSimulation = preferences.get(DoubleKey.autodriveMaxBasal)
+                    .takeIf { maxBasal -> maxBasal.isFinite() && maxBasal > 0.1 }
+                    ?: maxOf(currentBasalForSimulation * 3.0, currentBasalForSimulation + 2.0, 3.0)
+                HarmoniaSimulationEnvironment(
+                    currentBgMgdl = bg,
+                    deltaMgdl5m = delta.toDouble(),
+                    iobU = iob.toDouble(),
+                    cobG = cob.toDouble(),
+                    currentBasalUph = currentBasalForSimulation,
+                    maxBasalUph = maxBasalForSimulation,
+                    maxSmbU = maxOf(maxSMB, maxSMBHB),
+                    maxIobU = maxIob,
+                    sensorAgeMin = 0,
+                    sensorNoise = 0.0,
+                )
+            },
+            timestampMs = nowMs,
+        )
+        lastHarmoniaSimulationDecision = harmoniaSimulation
+        if (refreshSource == PatientRefreshSource.LOOP_TICK) {
+            physiologicalTree?.compactSummary?.let { consoleLog.add(it) }
+            harmoniaSimulation?.compactSummary?.let { consoleLog.add(it) }
+        }
         val loopCache = PatientStateLoopCache(
             phaseOutput = lastPhysiologicalPhaseOutput,
             mealAbsorptionOutput = lastMealAbsorptionOutput,
@@ -2923,8 +2989,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             patientState = patientState,
             patientModeDecision = patientModeDecision,
             updatedAtMs = nowMs,
-            physioLive = PhysioLiveDigest.from(enrichedSnap, nowMs),
+            physioLive = physioLive,
             thermalBelief = enrichedSnap.thermalBelief,
+            physiologicalTree = physiologicalTree,
+            harmoniaSimulation = harmoniaSimulation,
             loopCache = loopCache,
             refreshSource = refreshSource,
         )
@@ -3221,6 +3289,42 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             t3cDemandRate <= 0.0 -> "NO_BASAL_DEMAND"
             else -> null
         }
+        val harmoniaSimulation = lastHarmoniaSimulationDecision
+        val harmoniaActive = harmoniaSimulation != null
+        val harmoniaMealConflict = harmoniaActive &&
+            lastMealAbsorptionOutput?.mealDeliveryPriority == true &&
+            (
+                hypothesisState?.suppressMealInterpretation == true ||
+                    lastPhysiologicalPhaseOutput?.policy?.suppressMealLikeScenario == true
+                )
+        val harmoniaPostHypoBlock = harmoniaActive && (
+            postHypoOrdinal > 0 ||
+                lastPostHypoDeliveryAuthority.active
+            )
+        val harmoniaExerciseBlock = harmoniaActive && exerciseInsulinLockoutActive
+        val harmoniaHardSafetyBlock = harmoniaActive && (
+            bg < (profile.lgsThreshold?.toDouble() ?: 70.0) ||
+                harmoniaExerciseBlock ||
+                lastPhysiologicalTreeSnapshot?.trunk?.riskLevel == PhysiologicalRiskLevel.CRITICAL
+            )
+        val harmoniaProductionAction = harmoniaSimulation?.action in setOf(
+            HarmoniaSimulationAction.BASAL_FIRST,
+            HarmoniaSimulationAction.MEAL_SUPPORT,
+            HarmoniaSimulationAction.PROTECTIVE_REDUCTION,
+        )
+        val harmoniaBlockReason = when {
+            !harmoniaActive -> null
+            bg < (profile.lgsThreshold?.toDouble() ?: 70.0) -> "HYPO_TERMINAL"
+            harmoniaExerciseBlock -> "EXERCISE_LOCKOUT"
+            harmoniaPostHypoBlock -> "POST_HYPO"
+            harmoniaMealConflict -> "MEAL_CONFLICT"
+            harmoniaHardSafetyBlock -> "HARD_SAFETY"
+            harmoniaSimulation?.eligible != true -> harmoniaSimulation?.blockers?.firstOrNull()?.uppercase(Locale.US)
+                ?: "SIMULATION_INELIGIBLE"
+            !harmoniaProductionAction -> "NO_PRODUCTION_ACTION"
+            (harmoniaSimulation?.simulatedBasalUph ?: 0.0) <= 0.0 -> "NO_BASAL_DEMAND"
+            else -> null
+        }
         return RbtExtendedSignals(
             tubeAdvisorCapScale = lastTubeAdvisorSmbCapScale,
             insulinActivityStageOrdinal = tickInsulinActionState?.activityStage?.ordinal
@@ -3244,6 +3348,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             t3cBlockReason = t3cBlockReason,
             t3cGovernanceBasalFloorUph = t3cGovernance.activeBasalFloor,
             t3cGovernanceAggressivenessFloor = t3cGovernance.activeAggressivenessFloor,
+            harmoniaActive = harmoniaActive,
+            harmoniaSimulationEligible = harmoniaSimulation?.eligible == true,
+            harmoniaAction = harmoniaSimulation?.action?.name,
+            harmoniaBranch = harmoniaSimulation?.branch,
+            harmoniaBasalDemandRateUph = harmoniaSimulation?.simulatedBasalUph,
+            harmoniaBasalMaxRateUph = harmoniaSimulation?.environment?.maxBasalUph
+                ?.coerceAtMost(profile.max_basal.coerceAtLeast(profile.current_basal)),
+            harmoniaSmbDemandU = harmoniaSimulation?.simulatedSmbU,
+            harmoniaSmbMaxU = harmoniaSimulation?.environment?.maxSmbU
+                ?.coerceAtMost(maxSMBHB.coerceAtLeast(maxSMB)),
+            harmoniaMealConflict = harmoniaMealConflict,
+            harmoniaPostHypoBlock = harmoniaPostHypoBlock,
+            harmoniaExerciseBlock = harmoniaExerciseBlock,
+            harmoniaHardSafetyBlock = harmoniaHardSafetyBlock,
+            harmoniaBlockReason = harmoniaBlockReason,
             postHypoDeliverySuppressSmb =
                 lastPostHypoDeliveryAuthority.active && lastPostHypoDeliveryAuthority.suppressMealDelivery,
             postHypoOrdinal = postHypoOrdinal,
@@ -6615,6 +6734,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val decisionSource: String = "RBT_T3C_BASAL_FIRST",
     )
 
+    private data class HarmoniaProductionApplyPlan(
+        val rateUph: Double,
+        val requestedRateUph: Double,
+        val sourceAction: HarmoniaSimulationAction,
+        val branch: String,
+        val durationMin: Int = 30,
+        val decisionSource: String = "HARMONIA_PRODUCTION_BASAL_FIRST",
+    )
+
     private fun updateT3cBasalFirstRuntimeState(
         selectedForProduction: Boolean,
         appliedRateUph: Double? = null,
@@ -6628,6 +6756,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 t3cBasalFirst = t3cState.copy(
                     selectedForProduction = selectedForProduction,
                     historicalBypassNeutralized = lastT3cHistoricalBypassNeutralizedThisTick,
+                    appliedRateUph = appliedRateUph,
+                    appliedDurationMin = appliedDurationMin,
+                    runtimeBlocker = runtimeBlocker,
+                ),
+            ),
+        )
+    }
+
+    private fun updateHarmoniaBasalFirstRuntimeState(
+        selectedForProduction: Boolean,
+        appliedRateUph: Double? = null,
+        appliedDurationMin: Int? = null,
+        runtimeBlocker: String? = null,
+    ) {
+        val snapshot = lastRecursiveBeliefSnapshot ?: return
+        val harmoniaState = snapshot.resolutions.harmoniaBasalFirst ?: return
+        lastRecursiveBeliefSnapshot = snapshot.copy(
+            resolutions = snapshot.resolutions.copy(
+                harmoniaBasalFirst = harmoniaState.copy(
+                    selectedForProduction = selectedForProduction,
                     appliedRateUph = appliedRateUph,
                     appliedDurationMin = appliedDurationMin,
                     runtimeBlocker = runtimeBlocker,
@@ -6756,6 +6904,246 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return T3cBasalFirstApplyPlan(
             rateUph = finalRate,
             durationMin = 30,
+        )
+    }
+
+    private fun recordHarmoniaProductionDecision(
+        mode: HarmoniaProductionMode,
+        selectedForProduction: Boolean,
+        requestedRateUph: Double?,
+        boundedRateUph: Double?,
+        appliedRateUph: Double?,
+        appliedDurationMin: Int?,
+        runtimeBlocker: String?,
+        safetyBlockers: List<String>,
+        sourceAction: HarmoniaSimulationAction?,
+        branch: String?,
+        reason: String,
+    ) {
+        lastHarmoniaProductionDecision = HarmoniaProductionDecision(
+            timestampMs = dateUtil.now(),
+            mode = mode,
+            selectedForProduction = selectedForProduction,
+            requestedRateUph = requestedRateUph,
+            boundedRateUph = boundedRateUph,
+            appliedRateUph = appliedRateUph,
+            appliedDurationMin = appliedDurationMin,
+            runtimeBlocker = runtimeBlocker,
+            safetyBlockers = safetyBlockers.distinct(),
+            sourceAction = sourceAction,
+            branch = branch,
+            reason = reason,
+        )
+    }
+
+    private fun blockHarmoniaProduction(
+        simulation: HarmoniaSimulationDecision?,
+        runtimeBlocker: String,
+    ): HarmoniaProductionApplyPlan? {
+        recordHarmoniaProductionDecision(
+            mode = HarmoniaProductionMode.BLOCKED,
+            selectedForProduction = false,
+            requestedRateUph = simulation?.simulatedBasalUph,
+            boundedRateUph = null,
+            appliedRateUph = null,
+            appliedDurationMin = null,
+            runtimeBlocker = runtimeBlocker,
+            safetyBlockers = listOf(runtimeBlocker),
+            sourceAction = simulation?.action,
+            branch = simulation?.branch,
+            reason = runtimeBlocker,
+        )
+        updateHarmoniaBasalFirstRuntimeState(
+            selectedForProduction = false,
+            runtimeBlocker = runtimeBlocker,
+        )
+        consoleLog.add("🌿 HARMONIA_PROD: not applied blocker=$runtimeBlocker")
+        return null
+    }
+
+    private fun harmoniaCriticalMealConflict(): Boolean =
+        lastMealAbsorptionOutput?.mealDeliveryPriority == true &&
+            (
+                lastUamHypothesisState?.suppressMealInterpretation == true ||
+                    lastPhysiologicalPhaseOutput?.policy?.suppressMealLikeScenario == true
+                )
+
+    private fun planHarmoniaProductionBranch(
+        b: AimiPostBasalEngineFinalizeBundle,
+    ): HarmoniaProductionApplyPlan? {
+        val simulation = lastHarmoniaSimulationDecision ?: return null
+        val rbtSnapshot = lastRecursiveBeliefSnapshot
+        val rbtHarmonia = rbtSnapshot?.resolutions?.harmoniaBasalFirst
+        if (rbtSnapshot != null) {
+            if (rbtSnapshot.resolutions.basalFirstChannel != BasalFirstChannel.HARMONIA_PRODUCTION_BASAL_FIRST) {
+                val blocker = rbtHarmonia?.dominantBlocker?.lowercase(Locale.US)
+                    ?: "rbt_no_harmonia_channel"
+                return blockHarmoniaProduction(simulation, blocker)
+            }
+            if (rbtHarmonia == null) {
+                return blockHarmoniaProduction(simulation, "rbt_missing_harmonia_state")
+            }
+            if (!rbtHarmonia.eligible) {
+                val blocker = rbtHarmonia.dominantBlocker?.lowercase(Locale.US)
+                    ?: "rbt_harmonia_ineligible"
+                return blockHarmoniaProduction(simulation, blocker)
+            }
+        }
+
+        val sourceAction = simulation.action
+        if (!simulation.eligible) {
+            val blocker = simulation.blockers.firstOrNull()?.lowercase(Locale.US) ?: "simulation_ineligible"
+            return blockHarmoniaProduction(simulation, blocker)
+        }
+        if (
+            sourceAction != HarmoniaSimulationAction.BASAL_FIRST &&
+            sourceAction != HarmoniaSimulationAction.MEAL_SUPPORT &&
+            sourceAction != HarmoniaSimulationAction.PROTECTIVE_REDUCTION
+        ) {
+            return blockHarmoniaProduction(simulation, "no_production_action")
+        }
+        if (!simulation.simulatedBasalUph.isFinite()) {
+            return blockHarmoniaProduction(simulation, "invalid_basal_demand")
+        }
+        if (lastRecursiveAuthorityGateDecision?.effectiveAuthority != ReleaseAuthority.NONE) {
+            return blockHarmoniaProduction(simulation, "smb_authority_active")
+        }
+        if ((b.rT.units ?: 0.0) > 0.0 || (b.rT.insulinReq ?: 0.0) > 0.0) {
+            return blockHarmoniaProduction(simulation, "smb_already_requested")
+        }
+        if (exerciseInsulinLockoutActive) {
+            return blockHarmoniaProduction(simulation, "exercise_lockout")
+        }
+        if (lastPostHypoDeliveryAuthority.active) {
+            return blockHarmoniaProduction(simulation, "post_hypo_guard")
+        }
+        if (harmoniaCriticalMealConflict()) {
+            return blockHarmoniaProduction(simulation, "meal_conflict")
+        }
+        if (lastPhysiologicalTreeSnapshot?.trunk?.riskLevel == PhysiologicalRiskLevel.CRITICAL) {
+            return blockHarmoniaProduction(simulation, "critical_physio_risk")
+        }
+        if (iob > maxIob) {
+            return blockHarmoniaProduction(simulation, "max_iob")
+        }
+        if (lastInsulinStackingEvaluation?.kind == InsulinStackingStance.Kind.SURVEILLANCE_IOB) {
+            return blockHarmoniaProduction(simulation, "stacking_cap")
+        }
+
+        val hypoGuard = HypoThresholdMath.computeHypoThreshold(
+            minBg = b.profile.min_bg,
+            lgsThreshold = b.profile.lgsThreshold,
+        )
+        val mealContext = MealSafetyContext(
+            mealModeActive = mealTime || lunchTime || dinnerTime || snackTime || highCarbTime || bfastTime,
+            manualBolusAgeMin = internalLastSmbMillis.takeIf { it > 0L }?.let { (dateUtil.now() - it) / 60000.0 },
+            inferredMealSignal = inferredMealSafetyIntent(),
+        )
+        val (hypoPredForLgs, hypoEventualForLgs) = sanitizedHypoGuardPredictedEventual(
+            rT = b.rT,
+            predictedBg = predictedBg.toDouble(),
+            eventualBg = eventualBG,
+        )
+        val minPredCurve = minPredictedAcrossCurves(b.rT.predBGs)
+        val lgsReason = HypoLgsBlockReason.detect(
+            bgNow = bg,
+            predicted = hypoPredForLgs,
+            eventual = hypoEventualForLgs,
+            minPredictedCurve = minPredCurve,
+            hypo = hypoGuard,
+            delta = delta.toDouble(),
+            mealContext = mealContext,
+            ignoreMinPredictedCurve = rbtIgnoreMinPredictedCurve(),
+        )
+        if (lgsReason != null) {
+            return blockHarmoniaProduction(
+                simulation,
+                "final_hypo_${lgsReason.name.lowercase(Locale.US)}",
+            )
+        }
+
+        val profileMaxBasal = b.profile.max_basal.coerceAtLeast(b.profile.current_basal)
+        val envMaxBasal = simulation.environment.maxBasalUph.takeIf { it.isFinite() && it > 0.0 }
+            ?: profileMaxBasal
+        val hardCap = minOf(envMaxBasal, profileMaxBasal).coerceAtLeast(0.0)
+        val requestedRate = simulation.simulatedBasalUph.coerceIn(0.0, hardCap)
+        val previousRate = if (b.ctx.currentTemp.duration > 0) b.ctx.currentTemp.rate else b.profile.current_basal
+        val maxStepUp = max(0.30, previousRate * 0.20)
+        val rampedRate = if (requestedRate > previousRate) {
+            min(requestedRate, previousRate + maxStepUp)
+        } else {
+            requestedRate
+        }
+        val finalRate = capBasalRateForCorrectionAggression(
+            requestedRateUph = rampedRate,
+            profileBasalUph = b.profile.current_basal,
+            source = "HARMONIA_PRODUCTION_BASAL_FIRST",
+        ).coerceIn(0.0, hardCap)
+        if (finalRate <= 0.0) {
+            return blockHarmoniaProduction(simulation, "no_basal_demand")
+        }
+
+        recordHarmoniaProductionDecision(
+            mode = HarmoniaProductionMode.READY,
+            selectedForProduction = true,
+            requestedRateUph = simulation.simulatedBasalUph,
+            boundedRateUph = finalRate,
+            appliedRateUph = null,
+            appliedDurationMin = null,
+            runtimeBlocker = null,
+            safetyBlockers = emptyList(),
+            sourceAction = sourceAction,
+            branch = simulation.branch,
+            reason = "production_basal_first_ready",
+        )
+        consoleLog.add(
+            "🌿 HARMONIA_PROD: ready action=${sourceAction.name} rate=${"%.2f".format(Locale.US, finalRate)}U/h " +
+                "requested=${"%.2f".format(Locale.US, simulation.simulatedBasalUph)}U/h",
+        )
+        return HarmoniaProductionApplyPlan(
+            rateUph = finalRate,
+            requestedRateUph = simulation.simulatedBasalUph,
+            sourceAction = sourceAction,
+            branch = simulation.branch,
+        )
+    }
+
+    private fun updateHarmoniaProductionAfterFinal(
+        plan: HarmoniaProductionApplyPlan,
+        finalResult: RT,
+    ) {
+        val appliedRate = finalResult.rate?.coerceAtLeast(0.0) ?: 0.0
+        val appliedDuration = maxOf(finalResult.duration ?: plan.durationMin, 30)
+        val runtimeBlocker = if (appliedRate <= 0.0 && plan.rateUph > 0.0) {
+            "final_settemp_block"
+        } else {
+            null
+        }
+        recordHarmoniaProductionDecision(
+            mode = if (runtimeBlocker == null) HarmoniaProductionMode.APPLIED else HarmoniaProductionMode.BLOCKED,
+            selectedForProduction = runtimeBlocker == null,
+            requestedRateUph = plan.requestedRateUph,
+            boundedRateUph = plan.rateUph,
+            appliedRateUph = appliedRate,
+            appliedDurationMin = appliedDuration,
+            runtimeBlocker = runtimeBlocker,
+            safetyBlockers = if (runtimeBlocker != null) listOf(runtimeBlocker) else emptyList(),
+            sourceAction = plan.sourceAction,
+            branch = plan.branch,
+            reason = runtimeBlocker ?: "harmonia_basal_first_applied",
+        )
+        updateHarmoniaBasalFirstRuntimeState(
+            selectedForProduction = runtimeBlocker == null,
+            appliedRateUph = appliedRate,
+            appliedDurationMin = appliedDuration,
+            runtimeBlocker = runtimeBlocker,
+        )
+        consoleLog.add(
+            if (runtimeBlocker == null) {
+                "🌿 HARMONIA_PROD: applied ${"%.2f".format(Locale.US, appliedRate)}U/h for ${appliedDuration}m"
+            } else {
+                "🌿 HARMONIA_PROD: blocked after setTempBasal ($runtimeBlocker)"
+            },
         )
     }
 
@@ -6957,6 +7345,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         var finalAdaptiveMultiplier = adaptiveMult
 
         val t3cNativePlan = planT3cBasalFirstProduction(b)
+        val harmoniaProductionPlan = if (t3cNativePlan == null) {
+            planHarmoniaProductionBranch(b)
+        } else {
+            recordHarmoniaProductionDecision(
+                mode = HarmoniaProductionMode.SKIPPED,
+                selectedForProduction = false,
+                requestedRateUph = lastHarmoniaSimulationDecision?.simulatedBasalUph,
+                boundedRateUph = null,
+                appliedRateUph = null,
+                appliedDurationMin = null,
+                runtimeBlocker = "t3c_native_owner",
+                safetyBlockers = emptyList(),
+                sourceAction = lastHarmoniaSimulationDecision?.action,
+                branch = lastHarmoniaSimulationDecision?.branch,
+                reason = "t3c_native_owner",
+            )
+            null
+        }
         if (t3cNativePlan != null) {
             finalProposedRate = t3cNativePlan.rateUph
             finalDuration = t3cNativePlan.durationMin
@@ -6964,6 +7370,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             finalAdaptiveMultiplier = 1.0
             lastDecisionSource = t3cNativePlan.decisionSource
             b.rT.reason.append("; 🌳T3C_NATIVE_BASAL_FIRST")
+        } else if (harmoniaProductionPlan != null) {
+            finalProposedRate = harmoniaProductionPlan.rateUph
+            finalDuration = harmoniaProductionPlan.durationMin
+            finalOverrideSafetyLimits = false
+            finalAdaptiveMultiplier = 1.0
+            lastDecisionSource = harmoniaProductionPlan.decisionSource
+            b.rT.reason.append("; 🌿HARMONIA_PRODUCTION_BASAL_FIRST")
         }
 
         val finalResult = setTempBasal(
@@ -7000,6 +7413,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     "🌳 T3C_NATIVE: blocked after setTempBasal ($runtimeBlocker)"
                 },
             )
+        } else if (harmoniaProductionPlan != null) {
+            updateHarmoniaProductionAfterFinal(harmoniaProductionPlan, finalResult)
         }
         comparator.compare(
             aimiResult = finalResult,
@@ -7250,10 +7665,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val rbtPrefs = RecursiveBeliefPreferences.from(preferences)
         lastRecursiveBeliefSnapshot?.let { snap ->
             val t3cApplied = snap.resolutions.t3cBasalFirst?.selectedForProduction == true
+            val harmoniaApplied = snap.resolutions.harmoniaBasalFirst?.selectedForProduction == true
             val export = UnfoldExporter.toExport(
                 snapshot = snap,
-                shadowOnly = if (t3cApplied) false else lastRecursiveAuthorityGateDecision?.shadowOnly == true,
-                authorityApplied = t3cApplied || (
+                shadowOnly = if (t3cApplied || harmoniaApplied) false else lastRecursiveAuthorityGateDecision?.shadowOnly == true,
+                authorityApplied = t3cApplied || harmoniaApplied || (
                     lastRecursiveAuthorityGateDecision?.effectiveAuthority?.let {
                         it != ReleaseAuthority.NONE
                     } ?: false
@@ -7268,6 +7684,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.uam_hypotheses = lastUamHypothesisState?.toJsonObject()
         decisionCtx.adjustments.patient_state = lastPatientState?.toJsonObject()
         decisionCtx.adjustments.patient_mode = lastPatientModeDecision?.toJsonObject()
+        decisionCtx.adjustments.physiological_tree = lastPhysiologicalTreeSnapshot?.toJsonObject()
+        decisionCtx.adjustments.harmonia_simulation = lastHarmoniaSimulationDecision?.toJsonObject()
+        decisionCtx.adjustments.harmonia_production = lastHarmoniaProductionDecision?.toJsonObject()
         decisionCtx.adjustments.t3c_runtime_ownership = lastT3cRuntimeOwnership
         decisionCtx.adjustments.replay_quality = ReplayQualityExportBuilder.toJsonObject(
             ReplayQualityExportBuilder.build(
@@ -8296,7 +8715,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     //private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
     private val csvfile by lazy { storageHelper.getAimiFile("oapsaimiML2_records.csv") }
     private val csvfile2 by lazy { storageHelper.getAimiFile("oapsaimi2_records.csv") }
-    private val appExternalFallbackDir = File(context.getExternalFilesDir(null), "AAPS")
+    private val appExternalFallbackDir by lazy {
+        File(context.getExternalFilesDir(null) ?: storageHelper.getAimiDirectory(), "AAPS")
+    }
     private val hormonitorStudyExporter by lazy { AimiHormonitorStudyExporterMTR(context, aapsLogger, preferences) }
     private var csvPrimaryStorageDeniedLogged = false
     private val pkpdIntegration = PkPdIntegration(preferences)
@@ -8466,6 +8887,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastContextSnapshot: ContextSnapshot? = null
     private var lastPatientState: PatientStateSnapshot? = null
     private var lastPatientModeDecision: PatientModeOrchestrator.Decision? = null
+    private var lastPhysiologicalTreeSnapshot: PhysiologicalTreeSnapshot? = null
+    private var lastHarmoniaSimulationDecision: HarmoniaSimulationDecision? = null
+    private var lastHarmoniaProductionDecision: HarmoniaProductionDecision? = null
     private var lastPatientSourceSensor: SourceSensor? = null
     /** Latest IOB surveillance snapshot for JSONL (updated each [finalizeAndCapSMB]). */
     private var lastIobSurveillanceExport: AimiDecisionContext.IobSurveillanceExport? = null

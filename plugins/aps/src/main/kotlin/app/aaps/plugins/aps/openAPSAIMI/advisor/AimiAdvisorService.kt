@@ -21,6 +21,7 @@ import app.aaps.core.keys.interfaces.DoublePreferenceKey
 import app.aaps.core.keys.interfaces.IntPreferenceKey
 import app.aaps.core.keys.interfaces.StringPreferenceKey
 import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
 import org.json.JSONObject
 
 /**
@@ -156,6 +157,7 @@ class AimiAdvisorService {
             summary = formatSummary(context.metrics),
             advisorContext = context,
             orefAnalysis = orefInsight,
+            harmoniaSimulation = context.harmoniaSimulation,
         )
     }
 
@@ -219,7 +221,13 @@ class AimiAdvisorService {
             smbLateFatDamping = preferences.get(DoubleKey.OApsAIMISmbLateFatDamping)
         )
 
-        return AdvisorContext(metrics, profileSnapshot, prefsSnapshot, pkpdSnapshot)
+        return AdvisorContext(
+            metrics = metrics,
+            profile = profileSnapshot,
+            prefs = prefsSnapshot,
+            pkpdPrefs = pkpdSnapshot,
+            harmoniaSimulation = PatientStateRuntimeRepository.getLatest()?.harmoniaSimulation,
+        )
     }
 
     /**
@@ -447,7 +455,8 @@ class AimiAdvisorService {
             metrics = AdvisorMetrics("N/A",0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0,0,0, null, null),
             profile = AimiProfileSnapshot(0.0,0.0,0.0,0.0, 5.0, 12.0),
             prefs = AimiPrefsSnapshot(0.0, 0.0, 0.0, 0.0, false, 0.065),
-            pkpdPrefs = PkpdPrefsSnapshot(false,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0)
+            pkpdPrefs = PkpdPrefsSnapshot(false,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0),
+            harmoniaSimulation = PatientStateRuntimeRepository.getLatest()?.harmoniaSimulation,
         )
     }
 
@@ -1198,4 +1207,3 @@ class AimiAdvisorService {
         }
     }
 }
-

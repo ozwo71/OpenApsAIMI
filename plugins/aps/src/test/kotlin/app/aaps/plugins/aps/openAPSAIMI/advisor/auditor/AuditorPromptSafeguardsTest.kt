@@ -1,5 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationAction
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationEnvironment
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
@@ -48,6 +51,18 @@ class AuditorPromptSafeguardsTest {
         assertTrue(prompt.contains("Do not recommend free insulin doses"), "Preamble must forbid dose recommendations")
     }
 
+    @Test
+    fun `prompt carries Harmonia simulation as sandbox branch`() {
+        val prompt = AuditorPromptBuilder.buildPrompt(
+            createDummyInput().copy(harmoniaSimulation = createSimulation())
+        )
+
+        assertTrue(prompt.contains("Harmonia Simulation Branch"), "Prompt must explain Harmonia sandbox semantics")
+        assertTrue(prompt.contains("harmonia_simulation"), "Prompt input must include Harmonia simulation JSON")
+        assertTrue(prompt.contains("applies_to_pump"), "Prompt input must expose pump isolation")
+        assertTrue(prompt.contains("false"), "Harmonia simulation must be marked as not applied to pump")
+    }
+
     private fun createDummyInput(): AuditorInput {
         return AuditorInput(
             snapshot = Snapshot(
@@ -84,4 +99,30 @@ class AuditorPromptSafeguardsTest {
             trajectory = null
         )
     }
+
+    private fun createSimulation(): HarmoniaSimulationDecision =
+        HarmoniaSimulationDecision(
+            timestampMs = 1_718_000_000_000L,
+            branch = "RESISTANCE_PROBABLE",
+            action = HarmoniaSimulationAction.BASAL_FIRST,
+            eligible = true,
+            simulatedBasalUph = 1.2,
+            simulatedSmbU = 0.0,
+            basalFactor = 1.2,
+            smbFactor = 0.0,
+            environment = HarmoniaSimulationEnvironment(
+                currentBgMgdl = 180.0,
+                deltaMgdl5m = 2.0,
+                iobU = 1.0,
+                cobG = 0.0,
+                currentBasalUph = 1.0,
+                maxBasalUph = 5.0,
+                maxSmbU = 1.0,
+                maxIobU = 5.0,
+            ),
+            capsApplied = emptyList(),
+            blockers = emptyList(),
+            rationale = listOf("test"),
+            compactSummary = "Harmonia sim: basal_first RESISTANCE_PROBABLE | basal 1.20U/h | smb 0.00U",
+        )
 }

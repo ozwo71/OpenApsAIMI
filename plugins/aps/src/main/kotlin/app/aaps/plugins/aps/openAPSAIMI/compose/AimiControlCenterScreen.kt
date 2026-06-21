@@ -62,10 +62,12 @@ fun AimiControlCenterScreen(
     val scope = rememberCoroutineScope()
     var preferenceRevision by remember { mutableIntStateOf(0) }
     val currentT3cRuntime = remember(preferenceRevision) { loadLatestT3cRuntimeSnapshot() }
-    val currentSnapshot = remember(preferenceRevision, currentT3cRuntime) {
+    val currentHarmoniaRuntime = remember(preferenceRevision) { loadLatestHarmoniaRuntimeSnapshot() }
+    val currentSnapshot = remember(preferenceRevision, currentT3cRuntime, currentHarmoniaRuntime) {
         buildAimiControlCenterSnapshot(
             preferences = preferences,
             t3cRuntime = currentT3cRuntime,
+            harmoniaRuntime = currentHarmoniaRuntime,
         )
     }
     val currentDraft = remember(preferenceRevision) { readAimiControlCenterDraft(preferences) }
@@ -584,6 +586,9 @@ private fun AimiFamilyCard(
             snapshot.t3cRuntime?.let { runtime ->
                 T3cRuntimeCard(runtime = runtime)
             }
+            snapshot.harmoniaRuntime?.let { runtime ->
+                HarmoniaRuntimeCard(runtime = runtime)
+            }
 
             if (pendingPlan != null) {
                 Text(
@@ -623,6 +628,55 @@ private fun AimiFamilyCard(
                     snapshot.details.forEach { detail ->
                         DetailRow(detail = detail)
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HarmoniaRuntimeCard(runtime: AimiHarmoniaRuntimeSnapshot) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AapsSpacing.medium),
+            verticalArrangement = Arrangement.spacedBy(AapsSpacing.small),
+        ) {
+            Text(
+                text = stringResource(R.string.aimi_control_center_harmonia_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = stringResource(R.string.aimi_control_center_harmonia_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(AapsSpacing.small),
+            ) {
+                ControlPill(text = stringResource(runtime.status.labelResId))
+                if (runtime.selectedForProduction) {
+                    ControlPill(text = stringResource(R.string.aimi_control_center_harmonia_chip_selected))
+                }
+                if (!runtime.addsSmbAuthority) {
+                    ControlPill(text = stringResource(R.string.aimi_control_center_harmonia_chip_no_smb_authority))
+                }
+            }
+            if (runtime.status == AimiHarmoniaRuntimeStatus.Unavailable && runtime.details.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.aimi_control_center_harmonia_unavailable_body),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                runtime.details.forEach { detail ->
+                    DetailRow(detail = detail)
                 }
             }
         }

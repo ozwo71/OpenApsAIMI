@@ -95,6 +95,48 @@ internal object UnfoldExporter {
                         runtimeBlocker = it.runtimeBlocker,
                     )
                 },
+                harmoniaBasalFirst = snapshot.resolutions.harmoniaBasalFirst?.let {
+                    HarmoniaBasalFirstExport(
+                        active = it.active,
+                        eligible = it.eligible,
+                        sourceAction = it.sourceAction,
+                        branch = it.branch,
+                        basalDemandRateUph = it.basalDemandRateUph,
+                        boundedRateUph = it.boundedRateUph,
+                        maxBasalCapUph = it.maxBasalCapUph,
+                        mealConflict = it.mealConflict,
+                        postHypoBlock = it.postHypoBlock,
+                        exerciseBlock = it.exerciseBlock,
+                        hardSafetyBlock = it.hardSafetyBlock,
+                        dominantBlocker = it.dominantBlocker,
+                        reasonCodes = it.reasonCodes,
+                        selectedForProduction = it.selectedForProduction,
+                        appliedRateUph = it.appliedRateUph,
+                        appliedDurationMin = it.appliedDurationMin,
+                        runtimeBlocker = it.runtimeBlocker,
+                    )
+                },
+                harmoniaSmb = snapshot.resolutions.harmoniaSmb?.let {
+                    HarmoniaSmbExport(
+                        active = it.active,
+                        eligible = it.eligible,
+                        sourceAction = it.sourceAction,
+                        branch = it.branch,
+                        simulatedSmbU = it.simulatedSmbU,
+                        boundedSmbU = it.boundedSmbU,
+                        maxSmbCapU = it.maxSmbCapU,
+                        demandBeforeU = it.demandBeforeU,
+                        demandAfterU = it.demandAfterU,
+                        mealConflict = it.mealConflict,
+                        postHypoBlock = it.postHypoBlock,
+                        exerciseBlock = it.exerciseBlock,
+                        hardSafetyBlock = it.hardSafetyBlock,
+                        dominantBlocker = it.dominantBlocker,
+                        reasonCodes = it.reasonCodes,
+                        appliedToRbtDemand = it.appliedToRbtDemand,
+                        reducesRbtDemand = it.reducesRbtDemand,
+                    )
+                },
             ),
             loadGovernor = snapshot.loadGovernor,
             mr7Trace = snapshot.mr7Trace,
@@ -190,6 +232,48 @@ internal object UnfoldExporter {
                     put("runtime_blocker", t3c.runtimeBlocker ?: JSONObject.NULL)
                 })
             }
+            export.resolution.harmoniaBasalFirst?.let { harmonia ->
+                put("harmonia_basal_first", JSONObject().apply {
+                    put("active", harmonia.active)
+                    put("eligible", harmonia.eligible)
+                    put("source_action", harmonia.sourceAction ?: JSONObject.NULL)
+                    put("branch", harmonia.branch ?: JSONObject.NULL)
+                    put("basal_demand_rate_uph", harmonia.basalDemandRateUph)
+                    put("bounded_rate_uph", harmonia.boundedRateUph)
+                    put("max_basal_cap_uph", harmonia.maxBasalCapUph)
+                    put("meal_conflict", harmonia.mealConflict)
+                    put("post_hypo_block", harmonia.postHypoBlock)
+                    put("exercise_block", harmonia.exerciseBlock)
+                    put("hard_safety_block", harmonia.hardSafetyBlock)
+                    put("dominant_blocker", harmonia.dominantBlocker ?: JSONObject.NULL)
+                    put("reason_codes", JSONArray(harmonia.reasonCodes))
+                    put("selected_for_production", harmonia.selectedForProduction)
+                    put("applied_rate_uph", harmonia.appliedRateUph ?: JSONObject.NULL)
+                    put("applied_duration_min", harmonia.appliedDurationMin ?: JSONObject.NULL)
+                    put("runtime_blocker", harmonia.runtimeBlocker ?: JSONObject.NULL)
+                })
+            }
+            export.resolution.harmoniaSmb?.let { harmonia ->
+                put("harmonia_smb", JSONObject().apply {
+                    put("active", harmonia.active)
+                    put("eligible", harmonia.eligible)
+                    put("source_action", harmonia.sourceAction ?: JSONObject.NULL)
+                    put("branch", harmonia.branch ?: JSONObject.NULL)
+                    put("simulated_smb_u", harmonia.simulatedSmbU)
+                    put("bounded_smb_u", harmonia.boundedSmbU)
+                    put("max_smb_cap_u", harmonia.maxSmbCapU)
+                    put("demand_before_u", harmonia.demandBeforeU)
+                    put("demand_after_u", harmonia.demandAfterU)
+                    put("meal_conflict", harmonia.mealConflict)
+                    put("post_hypo_block", harmonia.postHypoBlock)
+                    put("exercise_block", harmonia.exerciseBlock)
+                    put("hard_safety_block", harmonia.hardSafetyBlock)
+                    put("dominant_blocker", harmonia.dominantBlocker ?: JSONObject.NULL)
+                    put("reason_codes", JSONArray(harmonia.reasonCodes))
+                    put("applied_to_rbt_demand", harmonia.appliedToRbtDemand)
+                    put("reduces_rbt_demand", harmonia.reducesRbtDemand)
+                })
+            }
         })
         export.loadGovernor?.let { lg ->
             root.put("load_governor", JSONObject().apply {
@@ -228,8 +312,24 @@ internal object UnfoldExporter {
                 else -> ""
             }
         } ?: ""
+        val harmoniaNote = r.harmoniaBasalFirst?.let { harmonia ->
+            when {
+                harmonia.selectedForProduction -> " bf=HARMONIA_APPLIED@${"%.2f".format(harmonia.appliedRateUph ?: harmonia.boundedRateUph)}U/h"
+                harmonia.eligible -> " bf=HARMONIA_READY@${"%.2f".format(harmonia.boundedRateUph)}U/h"
+                harmonia.active -> " bf=HARMONIA_BLOCK(${harmonia.runtimeBlocker ?: harmonia.dominantBlocker ?: "blocked"})"
+                else -> ""
+            }
+        } ?: ""
+        val harmoniaSmbNote = r.harmoniaSmb?.let { harmonia ->
+            when {
+                harmonia.appliedToRbtDemand -> " hsmb=${"%.2f".format(harmonia.demandBeforeU)}→${"%.2f".format(harmonia.demandAfterU)}U"
+                harmonia.eligible -> " hsmb=READY@${"%.2f".format(harmonia.boundedSmbU)}U"
+                harmonia.active -> " hsmb=BLOCK(${harmonia.dominantBlocker ?: "blocked"})"
+                else -> ""
+            }
+        } ?: ""
         return "🌳 RBT: auth=${r.releaseAuthority} smb=${"%.2f".format(r.smbDemandU)}U " +
             "tbr×${"%.2f".format(r.tbrDemandFraction)} paradoxes=${snapshot.paradoxes.size} " +
-            "τ*=${r.dominantScaleMinutes}$lgNote$t3cNote"
+            "τ*=${r.dominantScaleMinutes}$lgNote$t3cNote$harmoniaNote$harmoniaSmbNote"
     }
 }

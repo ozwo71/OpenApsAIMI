@@ -86,4 +86,37 @@ class AimiControlCenterSnapshotTest {
         assertThat(meal.expertPreferenceCount).isEqualTo(16)
         assertThat(meal.confidence).isGreaterThan(0.55f)
     }
+
+    @Test
+    fun `physio family can expose read only harmonia runtime without preference projection`() {
+        val harmoniaRuntime = AimiHarmoniaRuntimeSnapshot(
+            status = AimiHarmoniaRuntimeStatus.NativeApplied,
+            productionModeText = "APPLIED",
+            active = true,
+            eligible = true,
+            selectedForProduction = true,
+            addsSmbAuthority = false,
+            details = listOf(
+                AimiControlDetail(
+                    titleResId = R.string.aimi_control_center_harmonia_basal_demand,
+                    valueText = "1.80 U/h -> 1.60 U/h",
+                ),
+            ),
+        )
+
+        val snapshot = buildAimiControlCenterSnapshot(
+            preferences = preferences,
+            harmoniaRuntime = harmoniaRuntime,
+        )
+        val physio = snapshot.families.first { it.id == AimiBehaviorFamilyId.Physio }
+
+        assertThat(physio.harmoniaRuntime?.status).isEqualTo(AimiHarmoniaRuntimeStatus.NativeApplied)
+        assertThat(physio.managedPreferenceCount).isEqualTo(AimiBehaviorFamilyRegistry.managedCount(AimiBehaviorFamilyId.Physio))
+        assertThat(physio.details.map { it.titleResId })
+            .containsExactly(
+                R.string.aimi_physio_enable_title,
+                R.string.aimi_physio_sleep_enable_title,
+                R.string.aimi_physio_hrv_enable_title,
+            )
+    }
 }

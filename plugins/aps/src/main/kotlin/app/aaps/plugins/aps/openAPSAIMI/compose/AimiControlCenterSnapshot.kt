@@ -9,6 +9,9 @@ import app.aaps.core.keys.interfaces.PreferenceKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.R as CoreUiR
 import app.aaps.plugins.aps.R
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.HarmoniaRuntimeHistoryReader
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.HarmoniaRuntimeTickRecord
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.HarmoniaRuntimeTickStatus
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeHistoryReader
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeTickRecord
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeTickStatus
@@ -44,6 +47,7 @@ internal data class AimiBehaviorFamilySnapshot(
     val status: AimiProjectionStatus,
     val details: List<AimiControlDetail>,
     val t3cRuntime: AimiT3cRuntimeSnapshot? = null,
+    val harmoniaRuntime: AimiHarmoniaRuntimeSnapshot? = null,
 )
 
 internal data class AimiControlSectionSnapshot(
@@ -89,16 +93,35 @@ internal data class AimiT3cRuntimeSnapshot(
     val details: List<AimiControlDetail>,
 )
 
+internal enum class AimiHarmoniaRuntimeStatus(@StringRes val labelResId: Int) {
+    NativeApplied(R.string.aimi_control_center_harmonia_status_native_applied),
+    NativeReady(R.string.aimi_control_center_harmonia_status_native_ready),
+    NativeBlocked(R.string.aimi_control_center_harmonia_status_native_blocked),
+    T3cPriority(R.string.aimi_control_center_harmonia_status_t3c_priority),
+    Unavailable(R.string.aimi_control_center_harmonia_status_unavailable),
+}
+
+internal data class AimiHarmoniaRuntimeSnapshot(
+    val status: AimiHarmoniaRuntimeStatus,
+    val productionModeText: String,
+    val active: Boolean,
+    val eligible: Boolean,
+    val selectedForProduction: Boolean,
+    val addsSmbAuthority: Boolean,
+    val details: List<AimiControlDetail>,
+)
+
 internal fun buildAimiControlCenterSnapshot(
     preferences: Preferences,
     t3cRuntime: AimiT3cRuntimeSnapshot? = null,
+    harmoniaRuntime: AimiHarmoniaRuntimeSnapshot? = null,
 ): AimiControlCenterSnapshot =
     AimiControlCenterSnapshot(
         families = listOf(
             buildProtectionFamily(preferences),
             buildMealCaptureFamily(preferences),
             buildStabilityFamily(preferences, t3cRuntime),
-            buildPhysioFamily(preferences),
+            buildPhysioFamily(preferences, harmoniaRuntime),
             buildAutonomyFamily(preferences),
         ),
         contextSection = buildContextSection(preferences),
@@ -221,7 +244,10 @@ private fun buildStabilityFamily(
     )
 }
 
-private fun buildPhysioFamily(preferences: Preferences): AimiBehaviorFamilySnapshot {
+private fun buildPhysioFamily(
+    preferences: Preferences,
+    harmoniaRuntime: AimiHarmoniaRuntimeSnapshot?,
+): AimiBehaviorFamilySnapshot {
     val assistantEnabled = preferences.get(BooleanKey.AimiPhysioAssistantEnable)
     val sleepEnabled = preferences.get(BooleanKey.AimiPhysioSleepDataEnable)
     val hrvEnabled = preferences.get(BooleanKey.AimiPhysioHRVDataEnable)
@@ -249,6 +275,7 @@ private fun buildPhysioFamily(preferences: Preferences): AimiBehaviorFamilySnaps
             boolDetail(R.string.aimi_physio_sleep_enable_title, sleepEnabled),
             boolDetail(R.string.aimi_physio_hrv_enable_title, hrvEnabled),
         ),
+        harmoniaRuntime = harmoniaRuntime,
     )
 }
 
@@ -430,6 +457,95 @@ internal fun loadLatestT3cRuntimeSnapshot(): AimiT3cRuntimeSnapshot {
     )
 }
 
+internal fun loadLatestHarmoniaRuntimeSnapshot(): AimiHarmoniaRuntimeSnapshot {
+    val tick = HarmoniaRuntimeHistoryReader.readLatestTick() ?: return unavailableHarmoniaRuntimeSnapshot()
+    val status = when (tick.status) {
+        HarmoniaRuntimeTickStatus.NATIVE_APPLIED -> AimiHarmoniaRuntimeStatus.NativeApplied
+        HarmoniaRuntimeTickStatus.NATIVE_READY -> AimiHarmoniaRuntimeStatus.NativeReady
+        HarmoniaRuntimeTickStatus.NATIVE_BLOCKED -> AimiHarmoniaRuntimeStatus.NativeBlocked
+        HarmoniaRuntimeTickStatus.T3C_PRIORITY -> AimiHarmoniaRuntimeStatus.T3cPriority
+        HarmoniaRuntimeTickStatus.UNAVAILABLE -> AimiHarmoniaRuntimeStatus.Unavailable
+    }
+    val details = buildList {
+        add(AimiControlDetail(R.string.aimi_control_center_harmonia_mode, valueText = tick.productionMode ?: "RBT"))
+        tick.sourceAction?.let { action ->
+            add(AimiControlDetail(R.string.aimi_control_center_harmonia_action, valueText = action))
+        }
+        tick.branch?.let { branch ->
+            add(AimiControlDetail(R.string.aimi_control_center_harmonia_branch, valueText = branch))
+        }
+        tick.basalDemandRateUph?.let {
+            add(
+                AimiControlDetail(
+                    titleResId = R.string.aimi_control_center_harmonia_basal_demand,
+                    valueText = formatHarmoniaBasalDemand(tick),
+                ),
+            )
+        }
+        tick.appliedRateUph?.let {
+            add(
+                AimiControlDetail(
+                    titleResId = R.string.aimi_control_center_harmonia_applied_rate,
+                    valueText = formatHarmoniaAppliedRate(tick),
+                ),
+            )
+        }
+        if (tick.smbEligible || tick.smbAppliedToRbtDemand || tick.simulatedSmbU != null || tick.smbBlocker != null) {
+            add(
+                AimiControlDetail(
+                    titleResId = R.string.aimi_control_center_harmonia_smb_channel,
+                    valueText = when {
+                        tick.smbAppliedToRbtDemand && tick.smbReducesRbtDemand -> "REDUCED_RBT_DEMAND"
+                        tick.smbAppliedToRbtDemand -> "APPLIED_TO_RBT_DEMAND"
+                        tick.smbEligible -> "READY"
+                        tick.smbBlocker != null -> "BLOCKED"
+                        else -> "OBSERVED"
+                    },
+                ),
+            )
+            tick.simulatedSmbU?.let {
+                add(
+                    AimiControlDetail(
+                        titleResId = R.string.aimi_control_center_harmonia_smb_demand,
+                        valueText = formatHarmoniaSmbDemand(tick),
+                    ),
+                )
+            }
+            tick.smbBlocker?.let { blocker ->
+                add(AimiControlDetail(R.string.aimi_control_center_harmonia_smb_blocker, valueText = blocker))
+            }
+        }
+        tick.blocker?.let { blocker ->
+            add(AimiControlDetail(R.string.aimi_control_center_harmonia_blocker, valueText = blocker))
+        }
+        tick.basalFirstChannel?.let { channel ->
+            add(AimiControlDetail(R.string.aimi_control_center_harmonia_basal_first_channel, valueText = channel))
+        }
+        add(
+            AimiControlDetail(
+                titleResId = R.string.aimi_control_center_harmonia_selected_for_production,
+                valueResId = if (tick.selectedForProduction) CoreUiR.string.yes else CoreUiR.string.no,
+            ),
+        )
+        add(
+            AimiControlDetail(
+                titleResId = R.string.aimi_control_center_harmonia_adds_smb_authority,
+                valueResId = if (tick.addsSmbAuthority) CoreUiR.string.yes else CoreUiR.string.no,
+            ),
+        )
+    }
+
+    return AimiHarmoniaRuntimeSnapshot(
+        status = status,
+        productionModeText = tick.productionMode ?: "RBT",
+        active = tick.active,
+        eligible = tick.eligible,
+        selectedForProduction = tick.selectedForProduction,
+        addsSmbAuthority = tick.addsSmbAuthority,
+        details = details,
+    )
+}
+
 private fun formatT3cBasalDemand(tick: T3cRuntimeTickRecord): String {
     val demand = formatControlCenterDoubleValue(tick.basalDemandRateUph ?: 0.0, "U/h")
     val bounded = formatControlCenterDoubleValue(tick.boundedRateUph ?: tick.basalDemandRateUph ?: 0.0, "U/h")
@@ -443,6 +559,28 @@ private fun formatT3cAppliedRate(tick: T3cRuntimeTickRecord): String {
     return if (appliedDuration != null) "$rateText / ${appliedDuration}m" else rateText
 }
 
+private fun formatHarmoniaBasalDemand(tick: HarmoniaRuntimeTickRecord): String {
+    val demand = formatControlCenterDoubleValue(tick.basalDemandRateUph ?: 0.0, "U/h")
+    val bounded = formatControlCenterDoubleValue(tick.boundedRateUph ?: tick.basalDemandRateUph ?: 0.0, "U/h")
+    val cap = tick.maxBasalCapUph?.let { " cap ${formatControlCenterDoubleValue(it, "U/h")}" }.orEmpty()
+    return "$demand -> $bounded$cap"
+}
+
+private fun formatHarmoniaAppliedRate(tick: HarmoniaRuntimeTickRecord): String {
+    val appliedRate = tick.appliedRateUph ?: return ""
+    val rateText = formatControlCenterDoubleValue(appliedRate, "U/h")
+    val appliedDuration = tick.appliedDurationMin
+    return if (appliedDuration != null) "$rateText / ${appliedDuration}m" else rateText
+}
+
+private fun formatHarmoniaSmbDemand(tick: HarmoniaRuntimeTickRecord): String {
+    val simulated = formatControlCenterDoubleValue(tick.simulatedSmbU ?: 0.0, "U")
+    val bounded = formatControlCenterDoubleValue(tick.boundedSmbU ?: tick.simulatedSmbU ?: 0.0, "U")
+    val after = tick.smbDemandAfterU?.let { " RBT ${formatControlCenterDoubleValue(tick.smbDemandBeforeU ?: 0.0, "U")} -> ${formatControlCenterDoubleValue(it, "U")}" }.orEmpty()
+    val cap = tick.maxSmbCapU?.let { " cap ${formatControlCenterDoubleValue(it, "U")}" }.orEmpty()
+    return "$simulated -> $bounded$after$cap"
+}
+
 private fun unavailableT3cRuntimeSnapshot(): AimiT3cRuntimeSnapshot =
     AimiT3cRuntimeSnapshot(
         status = AimiT3cRuntimeStatus.Unavailable,
@@ -450,6 +588,17 @@ private fun unavailableT3cRuntimeSnapshot(): AimiT3cRuntimeSnapshot =
         modeText = "UNAVAILABLE",
         authorityApplied = false,
         shadowOnly = true,
+        details = emptyList(),
+    )
+
+private fun unavailableHarmoniaRuntimeSnapshot(): AimiHarmoniaRuntimeSnapshot =
+    AimiHarmoniaRuntimeSnapshot(
+        status = AimiHarmoniaRuntimeStatus.Unavailable,
+        productionModeText = "UNAVAILABLE",
+        active = false,
+        eligible = false,
+        selectedForProduction = false,
+        addsSmbAuthority = false,
         details = emptyList(),
     )
 

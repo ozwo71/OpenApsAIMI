@@ -13,6 +13,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData
 import app.aaps.plugins.aps.openAPSAIMI.model.*
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -297,6 +298,7 @@ class AuditorOrchestrator @Inject constructor(
 
         // Get physio snapshot (safe call)
         val physioCtx = try { physioAdapter.getLatestSnapshot().toStartSnapshot() } catch (e: Exception) { null }
+        val harmoniaRuntime = PatientStateRuntimeRepository.getLatest()
 
         onSyncDisposition(AuditorJsonlExport.TickDisposition.EXTERNAL_PENDING)
 
@@ -333,6 +335,8 @@ class AuditorOrchestrator @Inject constructor(
                     tbrMaxAutoDrive = tbrMaxAutoDrive,
                     physio = physioCtx,
                     effectiveProfile = effectiveProfile,
+                    physiologicalTree = harmoniaRuntime?.physiologicalTree,
+                    harmoniaSimulation = harmoniaRuntime?.harmoniaSimulation,
                 )
                 
                 // Get provider

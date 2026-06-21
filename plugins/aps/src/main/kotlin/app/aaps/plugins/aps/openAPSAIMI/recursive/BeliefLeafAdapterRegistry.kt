@@ -219,6 +219,27 @@ object BeliefLeafAdapterRegistry {
                 val cap = (ext.t3cBasalMaxRateUph ?: floor.coerceAtLeast(0.1)).coerceAtLeast(0.1)
                 leaf(id, (floor / cap).coerceIn(0.0, 1.0), 0.35, 0.14, "govFloor=${fmt2(floor)}")
             }
+            BeliefLeafId.HARMONIA_ACTIVE -> if (ext.harmoniaActive) {
+                leaf(id, 1.0, 0.45, 0.18, "harmonia active")
+            } else null
+            BeliefLeafId.HARMONIA_BASAL_DEMAND -> ext.harmoniaBasalDemandRateUph?.let { demand ->
+                val cap = (ext.harmoniaBasalMaxRateUph ?: demand.coerceAtLeast(0.1)).coerceAtLeast(0.1)
+                leaf(id, (demand / cap).coerceIn(0.0, 1.0), 0.45, 0.18, "rate=${fmt2(demand)} cap=${fmt2(cap)}")
+            }
+            BeliefLeafId.HARMONIA_MEAL_SUPPORT -> if (ext.harmoniaAction == "MEAL_SUPPORT") {
+                leaf(id, 1.0, 0.40, 0.18, "meal support basal-only")
+            } else null
+            BeliefLeafId.HARMONIA_PROTECTIVE_REDUCTION -> if (ext.harmoniaAction == "PROTECTIVE_REDUCTION") {
+                leaf(id, 1.0, 0.40, 0.18, "protective reduction")
+            } else null
+            BeliefLeafId.HARMONIA_SAFETY_BLOCK -> if (
+                ext.harmoniaPostHypoBlock ||
+                ext.harmoniaExerciseBlock ||
+                ext.harmoniaMealConflict ||
+                ext.harmoniaHardSafetyBlock
+            ) {
+                leaf(id, 1.0, 0.45, 0.18, ext.harmoniaBlockReason ?: "harmonia blocked")
+            } else null
             BeliefLeafId.POST_HYPO -> ext.postHypoOrdinal?.let {
                 leaf(id, it.toDouble(), 0.85, 0.75, "postHypo=$it")
             }

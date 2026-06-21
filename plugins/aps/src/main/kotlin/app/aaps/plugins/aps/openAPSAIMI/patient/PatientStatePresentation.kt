@@ -35,7 +35,7 @@ internal object PatientStatePresentationBuilder {
             updatedSummary = buildUpdatedSummary(snapshot.updatedAtMs, nowMs, snapshot.refreshSource),
             modeHeadline = "$modeLabel (${percent(patientMode.confidence)})",
             narrative = buildNarrative(patientMode),
-            physiologySummary = buildPhysiologySummary(patientState),
+            physiologySummary = buildPhysiologySummary(patientState, snapshot.physiologicalTree, snapshot.harmoniaSimulation),
             physioLiveSummary = buildPhysioLiveSummary(snapshot.physioLive),
             thermalSummary = buildThermalSummary(snapshot.thermalBelief),
             intentSummary = buildIntentSummary(patientState),
@@ -88,9 +88,19 @@ internal object PatientStatePresentationBuilder {
                 "AIMI has low absorption confidence and reassesses PKPD before escalating."
         }
 
-    private fun buildPhysiologySummary(state: PatientStateSnapshot): String =
-        "Phase ${humanize(state.phase.name)} · Absorption ${humanize(state.mealAbsorptionPhase.name)} · " +
+    private fun buildPhysiologySummary(
+        state: PatientStateSnapshot,
+        physiologicalTree: PhysiologicalTreeSnapshot?,
+        harmoniaSimulation: HarmoniaSimulationDecision?,
+    ): String {
+        val base = "Phase ${humanize(state.phase.name)} · Absorption ${humanize(state.mealAbsorptionPhase.name)} · " +
             "UAM ${humanize(state.uamDominant.name)} · Cause ${humanize(state.causalPosterior.dominant.name)}"
+        return listOfNotNull(
+            base,
+            physiologicalTree?.compactSummary,
+            harmoniaSimulation?.compactSummary,
+        ).joinToString("\n")
+    }
 
     private fun buildPhysioLiveSummary(digest: PhysioLiveDigest): String {
         if (digest.stepsLast15m == 0 && digest.hrNowBpm == 0 && digest.hrAvg15mBpm == 0) {

@@ -44,6 +44,10 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningExportStatus
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningPlan
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningStepTier
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.HarmoniaRuntimeHistoryReader
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.HarmoniaRuntimeHistorySummary
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.HarmoniaRuntimeNumericStats
+import app.aaps.plugins.aps.openAPSAIMI.advisor.data.HarmoniaRuntimeTickStatus
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.JsonlTailReader
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cAdvisorObservation
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cAdvisorObservationFamily
@@ -166,11 +170,17 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
 
                 val lastRbtExport = loadLastRecursiveBeliefJson()
                 val t3cHistorySummary = T3cRuntimeHistoryReader.summarizeLast24Hours()
+                val harmoniaHistorySummary = HarmoniaRuntimeHistoryReader.summarizeLast24Hours()
 
                 withContext(Dispatchers.Main) {
                     if (isFinishing) return@withContext
                     historyLoadingText?.let { rootLayout.removeView(it) }
-                    populateDeferredHistorySections(deferredInsertIndex, lastRbtExport, t3cHistorySummary)
+                    populateDeferredHistorySections(
+                        insertIndex = deferredInsertIndex,
+                        lastRbtExport = lastRbtExport,
+                        t3cHistorySummary = t3cHistorySummary,
+                        harmoniaHistorySummary = harmoniaHistorySummary,
+                    )
                 }
             } catch (t: Throwable) {
                 withContext(Dispatchers.Main) {
@@ -252,9 +262,11 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         insertIndex: Int,
         lastRbtExport: org.json.JSONObject?,
         t3cHistorySummary: T3cRuntimeHistorySummary?,
+        harmoniaHistorySummary: HarmoniaRuntimeHistorySummary?,
     ) {
         rootLayout.addView(createRecursiveBeliefUnfoldCard(cardColor, lastRbtExport), insertIndex)
         rootLayout.addView(createT3cRuntimeHistoryCard(cardColor, t3cHistorySummary), insertIndex + 1)
+        rootLayout.addView(createHarmoniaRuntimeHistoryCard(cardColor, harmoniaHistorySummary), insertIndex + 2)
     }
 
     private fun createDashboardHeader(report: AdvisorReport): LinearLayout {
@@ -1791,6 +1803,91 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         return null
     }
 
+    private fun createHarmoniaRuntimeHistoryCard(
+        cardColor: Int,
+        summary: HarmoniaRuntimeHistorySummary?,
+    ): CardView {
+        val card = CardView(this).apply {
+            radius = 16f
+            setCardBackgroundColor(cardColor)
+            cardElevation = 0f
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { setMargins(0, 0, 0, 32) }
+        }
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 24, 24, 24)
+        }
+        column.addView(TextView(this).apply {
+            text = rh.gs(R.string.aimi_harmonia_history_section_title)
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.parseColor("#94A3B8"))
+        })
+        column.addView(TextView(this).apply {
+            text = rh.gs(R.string.aimi_harmonia_history_section_desc)
+            textSize = 13f
+            setTextColor(Color.parseColor("#CBD5E1"))
+            setPadding(0, 8, 0, 12)
+        })
+
+        if (summary == null) {
+            column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_harmonia_history_unavailable)))
+            card.addView(column)
+            return card
+        }
+
+        val pillRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.START
+        }
+        pillRow.addView(createT3cHistoryPill(rh.gs(R.string.aimi_t3c_history_period)))
+        pillRow.addView(createT3cHistoryPill(rh.gs(R.string.aimi_t3c_history_ticks, summary.tickCount)).apply {
+            (layoutParams as? LinearLayout.LayoutParams)?.setMargins(12, 0, 0, 0)
+        })
+        summary.dominantStatus?.let { status ->
+            pillRow.addView(createT3cHistoryPill(rh.gs(R.string.aimi_t3c_history_dominant, harmoniaStatusLabel(status))).apply {
+                (layoutParams as? LinearLayout.LayoutParams)?.setMargins(12, 0, 0, 0)
+            })
+        }
+        column.addView(pillRow)
+
+        if (summary.notEnoughData) {
+            column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_harmonia_history_not_enough_data, summary.tickCount)).apply {
+                setPadding(0, 16, 0, 0)
+            })
+            card.addView(column)
+            return card
+        }
+
+        column.addView(createT3cHistoryBodyText(buildHarmoniaHistoryObservation(summary)).apply {
+            setPadding(0, 16, 0, 0)
+        })
+        column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_harmonia_history_native_applied, summary.nativeAppliedCount, percentOf(summary.nativeAppliedCount, summary.tickCount))))
+        column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_harmonia_history_native_ready, summary.nativeReadyCount, percentOf(summary.nativeReadyCount, summary.tickCount))))
+        column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_harmonia_history_native_blocked, summary.nativeBlockedCount, percentOf(summary.nativeBlockedCount, summary.tickCount))))
+        column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_harmonia_history_t3c_priority, summary.t3cPriorityCount, percentOf(summary.t3cPriorityCount, summary.tickCount))))
+        column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_harmonia_history_smb_applied, summary.smbAppliedCount, percentOf(summary.smbAppliedCount, summary.tickCount))))
+        column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_harmonia_history_smb_ready, summary.smbReadyCount, percentOf(summary.smbReadyCount, summary.tickCount))))
+        column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_harmonia_history_smb_blocked, summary.smbBlockedCount, percentOf(summary.smbBlockedCount, summary.tickCount))))
+        summary.dominantBlocker?.let { blocker ->
+            column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_t3c_history_blocker, blocker)))
+        }
+        summary.demandStats?.let { stats ->
+            column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_t3c_history_demand, formatHarmoniaRateStats(stats))))
+        }
+        summary.appliedRateStats?.let { stats ->
+            column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_t3c_history_applied_rate, formatHarmoniaRateStats(stats))))
+        }
+        summary.smbDemandStats?.let { stats ->
+            column.addView(createT3cHistoryBodyText(rh.gs(R.string.aimi_harmonia_history_smb_demand, formatHarmoniaSmbStats(stats))))
+        }
+        card.addView(column)
+        return card
+    }
+
     private fun createT3cHistoryPill(text: String): CardView =
         CardView(this).apply {
             radius = 50f
@@ -1862,11 +1959,43 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             else -> rh.gs(R.string.aimi_t3c_history_observation_mixed)
         }
 
+    private fun buildHarmoniaHistoryObservation(summary: HarmoniaRuntimeHistorySummary): String =
+        when (summary.dominantStatus) {
+            HarmoniaRuntimeTickStatus.NATIVE_APPLIED -> rh.gs(
+                R.string.aimi_harmonia_history_observation_applied,
+                percentOf(summary.nativeAppliedCount, summary.tickCount),
+            )
+            HarmoniaRuntimeTickStatus.NATIVE_READY -> rh.gs(R.string.aimi_harmonia_history_observation_ready)
+            HarmoniaRuntimeTickStatus.NATIVE_BLOCKED -> rh.gs(
+                R.string.aimi_harmonia_history_observation_blocked,
+                summary.dominantBlocker ?: "unknown runtime blocker",
+            )
+            HarmoniaRuntimeTickStatus.T3C_PRIORITY -> rh.gs(
+                R.string.aimi_harmonia_history_observation_t3c_priority,
+                percentOf(summary.t3cPriorityCount, summary.tickCount),
+            )
+            else -> rh.gs(R.string.aimi_harmonia_history_observation_mixed)
+        }
+
     private fun formatT3cRateStats(stats: T3cRuntimeNumericStats): String {
         val average = String.format(Locale.US, "%.2f", stats.average)
         val min = String.format(Locale.US, "%.2f", stats.min)
         val max = String.format(Locale.US, "%.2f", stats.max)
         return "$average U/h ($min-$max)"
+    }
+
+    private fun formatHarmoniaRateStats(stats: HarmoniaRuntimeNumericStats): String {
+        val average = String.format(Locale.US, "%.2f", stats.average)
+        val min = String.format(Locale.US, "%.2f", stats.min)
+        val max = String.format(Locale.US, "%.2f", stats.max)
+        return "$average U/h ($min-$max)"
+    }
+
+    private fun formatHarmoniaSmbStats(stats: HarmoniaRuntimeNumericStats): String {
+        val average = String.format(Locale.US, "%.2f", stats.average)
+        val min = String.format(Locale.US, "%.2f", stats.min)
+        val max = String.format(Locale.US, "%.2f", stats.max)
+        return "$average U ($min-$max)"
     }
 
     private fun formatT3cTransition(transition: T3cOwnershipTransition): String =
@@ -1926,6 +2055,15 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             T3cRuntimeTickStatus.LEGACY_FALLBACK -> rh.gs(R.string.aimi_control_center_t3c_status_legacy_fallback)
             T3cRuntimeTickStatus.SAFETY_TERMINAL -> rh.gs(R.string.aimi_control_center_t3c_status_safety_terminal)
             T3cRuntimeTickStatus.UNAVAILABLE -> rh.gs(R.string.aimi_control_center_t3c_status_unavailable)
+        }
+
+    private fun harmoniaStatusLabel(status: HarmoniaRuntimeTickStatus): String =
+        when (status) {
+            HarmoniaRuntimeTickStatus.NATIVE_APPLIED -> rh.gs(R.string.aimi_control_center_harmonia_status_native_applied)
+            HarmoniaRuntimeTickStatus.NATIVE_READY -> rh.gs(R.string.aimi_control_center_harmonia_status_native_ready)
+            HarmoniaRuntimeTickStatus.NATIVE_BLOCKED -> rh.gs(R.string.aimi_control_center_harmonia_status_native_blocked)
+            HarmoniaRuntimeTickStatus.T3C_PRIORITY -> rh.gs(R.string.aimi_control_center_harmonia_status_t3c_priority)
+            HarmoniaRuntimeTickStatus.UNAVAILABLE -> rh.gs(R.string.aimi_control_center_harmonia_status_unavailable)
         }
 
     private fun t3cOwnershipLabel(category: T3cRuntimeOwnershipCategory): String =

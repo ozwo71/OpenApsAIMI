@@ -1,5 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.meal
 
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationAction
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationEnvironment
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -30,5 +33,41 @@ class MealVisionJsonParserTest {
         val p = MealVisionUserPrompt.buildAnalysisUserPrompt("""He said "large" portion""")
         assertTrue(!p.contains("\"large\""))
         assertTrue(p.contains("'large'"))
+    }
+
+    @Test
+    fun `appendHarmoniaContext keeps meal estimate boundary explicit`() {
+        val enriched = MealVisionUserPrompt.appendHarmoniaContext(
+            userDescription = "Large plate",
+            harmoniaSimulation = HarmoniaSimulationDecision(
+                timestampMs = 1_718_000_000_000L,
+                branch = "RESISTANCE_PROBABLE",
+                action = HarmoniaSimulationAction.BASAL_FIRST,
+                eligible = true,
+                simulatedBasalUph = 1.2,
+                simulatedSmbU = 0.0,
+                basalFactor = 1.2,
+                smbFactor = 0.0,
+                environment = HarmoniaSimulationEnvironment(
+                    currentBgMgdl = 180.0,
+                    deltaMgdl5m = 2.0,
+                    iobU = 1.0,
+                    cobG = 0.0,
+                    currentBasalUph = 1.0,
+                    maxBasalUph = 5.0,
+                    maxSmbU = 1.0,
+                    maxIobU = 5.0,
+                ),
+                capsApplied = emptyList(),
+                blockers = emptyList(),
+                rationale = listOf("test"),
+                compactSummary = "Harmonia sim: basal_first RESISTANCE_PROBABLE | basal 1.20U/h | smb 0.00U",
+            ),
+        )
+
+        assertTrue(enriched.contains("AIMI Harmonia context"))
+        assertTrue(enriched.contains("insulin_relevant_notes only"))
+        assertTrue(enriched.contains("not visual carb estimation"))
+        assertTrue(enriched.contains("applies_to_pump=false"))
     }
 }

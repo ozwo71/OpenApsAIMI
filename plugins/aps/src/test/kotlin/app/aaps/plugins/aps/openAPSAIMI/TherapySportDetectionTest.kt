@@ -28,7 +28,7 @@ class TherapySportDetectionTest {
             )
         )
         val therapy = Therapy(persistenceLayer)
-        therapy.updateStatesBasedOnTherapyEvents()
+        therapy.updateStatesBasedOnTherapyEvents(forceRefresh = true)
         assertThat(therapy.sportTime).isTrue()
     }
 
@@ -46,7 +46,7 @@ class TherapySportDetectionTest {
             )
         )
         val therapy = Therapy(persistenceLayer)
-        therapy.updateStatesBasedOnTherapyEvents()
+        therapy.updateStatesBasedOnTherapyEvents(forceRefresh = true)
         assertThat(therapy.sportTime).isFalse()
     }
 }

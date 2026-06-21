@@ -27,6 +27,7 @@ enum class MealChannelHint {
 enum class BasalFirstChannel {
     NONE,
     T3C_BASAL_FIRST,
+    HARMONIA_PRODUCTION_BASAL_FIRST,
 }
 
 data class BeliefLeafReading(
@@ -96,6 +97,46 @@ data class T3cBasalFirstResolution(
     val runtimeBlocker: String? = null,
 )
 
+data class HarmoniaBasalFirstResolution(
+    val active: Boolean,
+    val eligible: Boolean,
+    val sourceAction: String?,
+    val branch: String?,
+    val basalDemandRateUph: Double,
+    val boundedRateUph: Double,
+    val maxBasalCapUph: Double,
+    val mealConflict: Boolean,
+    val postHypoBlock: Boolean,
+    val exerciseBlock: Boolean,
+    val hardSafetyBlock: Boolean,
+    val dominantBlocker: String?,
+    val reasonCodes: List<String> = emptyList(),
+    val selectedForProduction: Boolean = false,
+    val appliedRateUph: Double? = null,
+    val appliedDurationMin: Int? = null,
+    val runtimeBlocker: String? = null,
+)
+
+data class HarmoniaSmbResolution(
+    val active: Boolean,
+    val eligible: Boolean,
+    val sourceAction: String?,
+    val branch: String?,
+    val simulatedSmbU: Double,
+    val boundedSmbU: Double,
+    val maxSmbCapU: Double,
+    val demandBeforeU: Double,
+    val demandAfterU: Double,
+    val mealConflict: Boolean,
+    val postHypoBlock: Boolean,
+    val exerciseBlock: Boolean,
+    val hardSafetyBlock: Boolean,
+    val dominantBlocker: String?,
+    val reasonCodes: List<String> = emptyList(),
+    val appliedToRbtDemand: Boolean = false,
+    val reducesRbtDemand: Boolean = false,
+)
+
 data class DoseChannelResolution(
     val smbDemandU: Double,
     val smbDemandBeforeLoadGovernorU: Double = smbDemandU,
@@ -111,6 +152,8 @@ data class DoseChannelResolution(
     val reasonCodes: List<String>,
     val basalFirstChannel: BasalFirstChannel = BasalFirstChannel.NONE,
     val t3cBasalFirst: T3cBasalFirstResolution? = null,
+    val harmoniaBasalFirst: HarmoniaBasalFirstResolution? = null,
+    val harmoniaSmb: HarmoniaSmbResolution? = null,
     val loadGovernorExport: LoadGovernorExport? = null,
 )
 
@@ -190,6 +233,8 @@ data class ResolutionExport(
     val reasonCodes: List<String>,
     val basalFirstChannel: String,
     val t3cBasalFirst: T3cBasalFirstExport? = null,
+    val harmoniaBasalFirst: HarmoniaBasalFirstExport? = null,
+    val harmoniaSmb: HarmoniaSmbExport? = null,
 )
 
 data class WaveletExport(
@@ -218,4 +263,44 @@ data class T3cBasalFirstExport(
     val appliedRateUph: Double? = null,
     val appliedDurationMin: Int? = null,
     val runtimeBlocker: String? = null,
+)
+
+data class HarmoniaBasalFirstExport(
+    val active: Boolean,
+    val eligible: Boolean,
+    val sourceAction: String?,
+    val branch: String?,
+    val basalDemandRateUph: Double,
+    val boundedRateUph: Double,
+    val maxBasalCapUph: Double,
+    val mealConflict: Boolean,
+    val postHypoBlock: Boolean,
+    val exerciseBlock: Boolean,
+    val hardSafetyBlock: Boolean,
+    val dominantBlocker: String?,
+    val reasonCodes: List<String> = emptyList(),
+    val selectedForProduction: Boolean = false,
+    val appliedRateUph: Double? = null,
+    val appliedDurationMin: Int? = null,
+    val runtimeBlocker: String? = null,
+)
+
+data class HarmoniaSmbExport(
+    val active: Boolean,
+    val eligible: Boolean,
+    val sourceAction: String?,
+    val branch: String?,
+    val simulatedSmbU: Double,
+    val boundedSmbU: Double,
+    val maxSmbCapU: Double,
+    val demandBeforeU: Double,
+    val demandAfterU: Double,
+    val mealConflict: Boolean,
+    val postHypoBlock: Boolean,
+    val exerciseBlock: Boolean,
+    val hardSafetyBlock: Boolean,
+    val dominantBlocker: String?,
+    val reasonCodes: List<String> = emptyList(),
+    val appliedToRbtDemand: Boolean = false,
+    val reducesRbtDemand: Boolean = false,
 )

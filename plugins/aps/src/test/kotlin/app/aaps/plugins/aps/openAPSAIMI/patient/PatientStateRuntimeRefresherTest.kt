@@ -69,10 +69,30 @@ class PatientStateRuntimeRefresherTest {
             hypothesisState = null,
             contextSnapshot = null,
         )
+        val initialMode = PatientModeOrchestrator.evaluate(initialState)
+        val initialTree = PhysiologicalTreeBuilder.build(
+            enabled = true,
+            patientState = initialState,
+            patientModeDecision = initialMode,
+        )
         PatientStateRuntimeRepository.publish(
             patientState = initialState,
-            patientModeDecision = PatientModeOrchestrator.evaluate(initialState),
+            patientModeDecision = initialMode,
             updatedAtMs = nowMs,
+            physiologicalTree = initialTree,
+            harmoniaSimulation = HarmoniaSimulationEngine.evaluate(
+                tree = initialTree,
+                environment = HarmoniaSimulationEnvironment(
+                    currentBgMgdl = 145.0,
+                    deltaMgdl5m = 1.0,
+                    iobU = 1.0,
+                    cobG = 5.0,
+                    currentBasalUph = 1.0,
+                    maxBasalUph = 5.0,
+                    maxSmbU = 1.0,
+                    maxIobU = 5.0,
+                ),
+            ),
             loopCache = cache,
         )
 
@@ -94,6 +114,8 @@ class PatientStateRuntimeRefresherTest {
         assertThat(refreshed?.refreshSource).isEqualTo(PatientRefreshSource.PHYSIO_SIGNAL)
         assertThat(refreshed?.physioLive?.stepsLast15m).isEqualTo(420)
         assertThat(refreshed?.physioLive?.hrNowBpm).isEqualTo(112)
+        assertThat(refreshed?.physiologicalTree?.compactSummary).contains("Tree:")
+        assertThat(refreshed?.harmoniaSimulation?.compactSummary).contains("Harmonia sim:")
     }
 
     @Test

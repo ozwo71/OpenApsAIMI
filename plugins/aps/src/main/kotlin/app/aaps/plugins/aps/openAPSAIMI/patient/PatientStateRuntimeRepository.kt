@@ -12,6 +12,8 @@ internal data class PatientRuntimeSnapshot(
     val updatedAtMs: Long = patientState.timestampMs,
     val physioLive: PhysioLiveDigest = PhysioLiveDigest(),
     val thermalBelief: ThermalBeliefDigest = ThermalBeliefDigest.EMPTY,
+    val physiologicalTree: PhysiologicalTreeSnapshot? = null,
+    val harmoniaSimulation: HarmoniaSimulationDecision? = null,
     val refreshSource: PatientRefreshSource = PatientRefreshSource.LOOP_TICK,
 )
 
@@ -32,6 +34,8 @@ internal object PatientStateRuntimeRepository {
         updatedAtMs: Long = patientState.timestampMs,
         physioLive: PhysioLiveDigest = PhysioLiveDigest(),
         thermalBelief: ThermalBeliefDigest = ThermalBeliefDigest.EMPTY,
+        physiologicalTree: PhysiologicalTreeSnapshot? = null,
+        harmoniaSimulation: HarmoniaSimulationDecision? = null,
         loopCache: PatientStateLoopCache? = null,
         refreshSource: PatientRefreshSource = PatientRefreshSource.LOOP_TICK,
     ) {
@@ -42,6 +46,8 @@ internal object PatientStateRuntimeRepository {
                 updatedAtMs = updatedAtMs,
                 physioLive = physioLive,
                 thermalBelief = thermalBelief,
+                physiologicalTree = physiologicalTree,
+                harmoniaSimulation = harmoniaSimulation,
                 refreshSource = refreshSource,
             ),
             loopCache = loopCache,
