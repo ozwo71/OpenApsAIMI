@@ -2601,7 +2601,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     private data class AutodriveV3BranchResult(
+        /** V3 or HTR delivered any pump command (TBR and/or SMB) this tick. */
         val appliedAction: Boolean,
+        /** When true, classic autodrive prebolus is skipped (V3/HTR already delivered SMB). TBR-only V3 does not lock out. */
+        val classicSmbLockout: Boolean,
         val skipLegacySmbBlender: Boolean,
     )
 
@@ -4077,9 +4080,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         pkpdRuntime: PkPdRuntime?,
     ): AutodriveV3BranchResult {
         if (!preferences.get(BooleanKey.OApsAIMIautoDriveActive)) {
-            return AutodriveV3BranchResult(appliedAction = false, skipLegacySmbBlender = false)
+            return AutodriveV3BranchResult(
+                appliedAction = false,
+                classicSmbLockout = false,
+                skipLegacySmbBlender = false,
+            )
         }
         var v3AppliedAction = false
+        var classicSmbLockout = false
         var skipLegacySmbBlender = false
         val recentEstimateCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
         val recentEstimateTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
@@ -4294,35 +4302,40 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
             val effectiveHtr = rbtCommit?.effectiveHtr
 
-            val effectiveBolus = rT.insulinReq ?: 0.0
+            val effectiveSmbUnits = rT.units ?: 0.0
             val effectiveTbr = rT.rate ?: profile.current_basal
             val effectiveDuration = rT.duration ?: 0
+            val v3SmbDelivered = effectiveSmbUnits > 0.01
+            val v3TbrDelivered =
+                effectiveDuration > 0 && kotlin.math.abs(effectiveTbr - profile.current_basal) > 0.01
             if (v3CommandSafe) {
-                v3AppliedAction = effectiveBolus > 0.01 || (effectiveDuration > 0 && kotlin.math.abs(effectiveTbr - profile.current_basal) > 0.01)
+                v3AppliedAction = v3SmbDelivered || v3TbrDelivered
+                classicSmbLockout = v3SmbDelivered
                 val v3TbrRate = adCommand!!.temporaryBasalRate
-                consoleLog.add("🚀 ${gate.reason} intent=$v3Smb actual=$effectiveBolus tbr=$v3TbrRate")
+                consoleLog.add("🚀 ${gate.reason} intent=$v3Smb actual=$effectiveSmbUnits tbr=$v3TbrRate")
                 logDecisionFinal("AUTODRIVE_V3", rT, bg, delta)
-            } else if (effectiveHtr?.active == true && effectiveBolus > 0.01) {
+            } else if (effectiveHtr?.active == true && v3SmbDelivered) {
                 v3AppliedAction = true
-                consoleLog.add("🚀 HTR-only SMB after unsafe V3: actual=$effectiveBolus U")
+                classicSmbLockout = true
+                consoleLog.add("🚀 HTR-only SMB after unsafe V3: actual=$effectiveSmbUnits U")
                 logDecisionFinal("AUTODRIVE_V3+HTR", rT, bg, delta)
             }
-            if ((v3AppliedAction || (effectiveHtr?.active == true && effectiveBolus > 0.01)) &&
-                preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative)
-            ) {
+            if (v3SmbDelivered && preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative)) {
                 skipLegacySmbBlender = true
                 consoleLog.add("AUTODRIVE_V3_AUTHORITATIVE: Legacy MPC/PI blender will be skipped this tick")
             }
         }
         return AutodriveV3BranchResult(
             appliedAction = v3AppliedAction,
+            classicSmbLockout = classicSmbLockout,
             skipLegacySmbBlender = skipLegacySmbBlender,
         )
     }
 
     /**
      * Autodrive **V2** fallback after V3: meal context, AIMI Context modulation, [lastAutodriveState] WATCHING reset,
-     * [tryAutodrive] when V3 did not apply a meaningful action, then TBR / SMB + cooldown on [DecisionResult.Applied].
+     * [tryAutodrive] when V3 did not deliver SMB this tick (TBR-only V3 still allows classic prebolus),
+     * then TBR / SMB + cooldown on [DecisionResult.Applied].
      *
      * **Data-source note:** [mealRising] uses class [cob] and meal flags; [contextPrefersBasal] reads [maxSMB] + [rT] context fields.
      */
@@ -4335,7 +4348,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         predictedBg: Float,
         targetBgMgdl: Float,
         threshold: Double,
-        v3AppliedAction: Boolean,
+        v3ClassicSmbLockout: Boolean,
         combinedDelta: Float,
         shortAvgDeltaAdj: Float,
         lastBolusTimeMs: Long?,
@@ -4349,15 +4362,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val contextFactor = if (rT.contextEnabled && rT.contextIntentCount > 0) rT.contextModulation.toFloat() else 1.0f
         val contextPrefersBasal = (maxSMB == 0.0 && rT.contextEnabled && rT.contextIntentCount > 0)
 
-        if (v3AppliedAction) {
-            consoleLog.add("AUTODRIVE_V3_LOCKOUT: Skipping V2 fallback this tick (action already applied).")
+        if (v3ClassicSmbLockout) {
+            consoleLog.add("AUTODRIVE_V3_SMB_LOCKOUT: Skipping classic prebolus (V3/HTR SMB already delivered).")
         }
 
         if (lastAutodriveState != AutodriveState.ENGAGED) {
             lastAutodriveState = AutodriveState.WATCHING
         }
 
-        val autoRes = if (!v3AppliedAction) tryAutodrive(
+        val autoRes = if (!v3ClassicSmbLockout) tryAutodrive(
             bg, delta, shortAvgDeltaAdj.toFloat(), profile, lastBolusTimeMs ?: 0L, predictedBg, ctx.mealData.slopeFromMinDeviation, targetBgMgdl, reason,
             preferences.get(BooleanKey.OApsAIMIautoDrive),
             dynamicPbolusLarge, dynamicPbolusSmall,
@@ -4367,7 +4380,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             combinedDeltaG6 = combinedDelta,
             contextFactor = contextFactor,
             contextPrefersBasal = contextPrefersBasal
-        ) else DecisionResult.Fallthrough("V2 skipped: V3 already applied this tick")
+        ) else DecisionResult.Fallthrough("Classic autodrive skipped: V3/HTR SMB already delivered this tick")
 
         if (autoRes is DecisionResult.Applied) {
             if (autoRes.tbrUph != null) {
@@ -4402,19 +4415,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             val intentBolus = autoRes.bolusU ?: 0.0
             if (intentBolus > 0) {
-                finalizeAndCapSMB(rT, intentBolus, autoRes.reason, ctx.mealData, threshold, false, autoRes.source)
+                finalizeAndCapSMB(
+                    rT = rT,
+                    proposedUnits = intentBolus,
+                    reasonHeader = autoRes.reason,
+                    mealData = ctx.mealData,
+                    hypoThreshold = threshold,
+                    isExplicitUserAction = false,
+                    decisionSource = autoRes.source,
+                    bypassSmbRefractory = true,
+                )
             }
 
-            val effectiveBolus = rT.insulinReq ?: 0.0
+            val effectiveSmbUnits = rT.units ?: 0.0
             val effectiveDuration = rT.duration ?: 0
 
-            if (effectiveBolus > 0.01 || effectiveDuration > 0) {
+            if (effectiveSmbUnits > 0.01 || effectiveDuration > 0) {
                 lastAutodriveActionTime = System.currentTimeMillis()
-                consoleLog.add("AUTODRIVE_APPLIED intent=${intentBolus} actual=$effectiveBolus")
+                consoleLog.add("AUTODRIVE_APPLIED intent=${intentBolus} actual=$effectiveSmbUnits")
                 logDecisionFinal("AUTODRIVE", rT, bg, delta)
-            } else {
-                consoleLog.add("AUTODRIVE_NOOP_FALLBACK reason=CappedToZero")
-                rT.insulinReq = 0.0
+            } else if (intentBolus > 0.01) {
+                consoleLog.add("AUTODRIVE_NOOP_FALLBACK reason=CappedToZero intent=${intentBolus}")
+                rT.units = null
             }
         }
     }
@@ -10595,6 +10617,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionSource: String = "AIMI",
         isMealActive: Boolean = false,
         hyperReleaseFloorU: Double = 0.0,
+        bypassSmbRefractory: Boolean = false,
     ) {
         val postHypo = lastPostHypoDeliveryAuthority
         if (postHypo.active && postHypo.suppressMealDelivery && !isExplicitUserAction) {
@@ -10772,7 +10795,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
          }
          
          val sinceBolus = if (lastBolusAgeMinutes.isNaN()) 999.0 else lastBolusAgeMinutes
-         val refractoryBlocked = sinceBolus < refractoryWindow && !isExplicitUserAction
+         val refractoryBlocked = sinceBolus < refractoryWindow && !isExplicitUserAction && !bypassSmbRefractory
          var gatedUnits = safetyCappedUnits
          var absorptionFactor = 1.0
 
@@ -10818,9 +10841,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 gatedUnits = 0f
                 consoleLog.add("⏸️ REFRACTORY_BLOCK sinceBolus=${"%.1f".format(sinceBolus)}m window=${"%.1f".format(refractoryWindow)}m (SMB blocked)")
             }
-         } else if (sinceBolus < refractoryWindow && isExplicitUserAction) {
-             // Modes repas bypassent explicitement le refractory
-             consoleLog.add("✅ REFRACTORY_BYPASS sinceBolus=${"%.1f".format(sinceBolus)}m window=${"%.1f".format(refractoryWindow)}m (Meal mode override)")
+         } else if (sinceBolus < refractoryWindow && (isExplicitUserAction || bypassSmbRefractory)) {
+             val bypassLabel = if (bypassSmbRefractory) "Classic autodrive prebolus" else "Meal mode override"
+             consoleLog.add(
+                 "✅ REFRACTORY_BYPASS sinceBolus=${"%.1f".format(sinceBolus)}m " +
+                     "window=${"%.1f".format(refractoryWindow)}m ($bypassLabel)",
+             )
          }
         chainAfterRefractory = gatedUnits
 
@@ -14223,7 +14249,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             hypoThresholdMgdl = threshold,
             pkpdRuntime = pkpdRuntime,
         )
-        val v3AppliedAction = v3Branch.appliedAction
         val skipLegacySmbBlender = v3Branch.skipLegacySmbBlender
         if (preferences.get(BooleanKey.OApsAIMIautoDriveActive) && !rbtResolvedThisTick) {
             resolveAndWireRbtLiveTick(
@@ -14249,7 +14274,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             predictedBg = predictedBg,
             targetBgMgdl = targetBg,
             threshold = threshold,
-            v3AppliedAction = v3AppliedAction,
+            v3ClassicSmbLockout = v3Branch.classicSmbLockout,
             combinedDelta = combinedDelta,
             shortAvgDeltaAdj = shortAvgDeltaAdj,
             lastBolusTimeMs = lastBolusTimeMs,
@@ -15334,11 +15359,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         
         if (!validCondition) return DecisionResult.Fallthrough("Conditions not met")
 
-        // 📡 GAP2: G6-aware intensity gates
-        // In G6 BYODA mode, `delta` (raw) is attenuated by sensor lag.
-        // Apply the same +30% lead compensation as the main loop to get the effective physiological delta.
-        // `shortAvgDelta` is already G6-compensated (+20%) from determine_basal.
+        // Rise signal for dose tier: prefer G6-compensated combinedDelta (same family as isAutodriveModeCondition).
         val effectiveDelta: Float = if (isG6Byoda) delta * 1.30f else delta
+        val riseSignal: Float = if (combinedDeltaG6 > 0f) combinedDeltaG6 else effectiveDelta
+        if (combinedDeltaG6 > 0f && kotlin.math.abs(combinedDeltaG6 - effectiveDelta) > 0.15f) {
+            consoleLog.add(
+                "📡 AUTODRIVE_RISE_SIGNAL: combined=${"%.2f".format(combinedDeltaG6)} " +
+                    "effDelta=${"%.1f".format(effectiveDelta)}",
+            )
+        }
 
         // Apply context modulation to amounts (e.g. Activity reduces SMB by 50%)
         val modulatedAmountLarge = dynamicPbolusLarge * contextFactor
@@ -15349,15 +15378,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         var stateReason = ""
         val contextLog = if (contextFactor < 1.0f) " [Ctx ×${"%.2f".format(contextFactor)}]" else ""
         
-        // Confirmed: strong rise — use G6-adjusted delta for correct tier selection
-        if (bg >= 120.0 && effectiveDelta >= 5.0 && shortAvgDelta >= 3.0) {
+        if (bg >= 120.0 && riseSignal >= 5.0f && shortAvgDelta >= 3.0f) {
              amount = modulatedAmountLarge
-             stateReason = "Confirmed: Bg≥120 & EffDelta≥5 & Avg≥3${if (isG6Byoda) " [G6adj×1.30]" else ""}$contextLog"
-        } else if (bg >= 120.0 && effectiveDelta >= 2.0) {
+             stateReason = "Confirmed: Bg≥120 & Rise≥5 & Avg≥3$contextLog"
+        } else if (bg >= 120.0 && riseSignal >= 2.0f) {
              amount = modulatedAmountSmall
-             stateReason = "Early: Bg≥120 & EffDelta≥2${if (isG6Byoda) " [G6adj×1.30]" else ""}$contextLog"
+             stateReason = "Early: Bg≥120 & Rise≥2$contextLog"
         } else {
-             return DecisionResult.Fallthrough("BG or Delta insufficient (need BG≥120, effDelta≥2, was ${"%.1f".format(effectiveDelta)})") 
+             return DecisionResult.Fallthrough(
+                 "BG or Delta insufficient (need BG≥120, rise≥2, was ${"%.1f".format(riseSignal)})",
+             )
         }
 
         // TBR Calculation
