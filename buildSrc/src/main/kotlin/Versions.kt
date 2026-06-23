@@ -8,7 +8,7 @@ object Versions {
     const val appVersion = "4.0.0.0-dev.AIMI.230626"
     const val versionCode = 1500
 
-    const val compileSdk = 36  // Back to original - SDK 34 breaks omnipod and other modules
+    const val compileSdk = 37
     const val minSdk = 31
     const val targetSdk = 34 // Health Connect / Android 14 compatibility
     const val wearMinSdk = 30

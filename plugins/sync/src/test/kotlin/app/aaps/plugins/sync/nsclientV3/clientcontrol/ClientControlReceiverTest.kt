@@ -43,12 +43,14 @@ import app.aaps.plugins.sync.nsclientV3.services.RunningConfigurationPublisher
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.json.JSONObject
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
@@ -105,6 +107,21 @@ internal class ClientControlReceiverTest {
     // Controllable bolus-progress flow the master observer mirrors from.
     private val bolusState = MutableStateFlow<BolusProgressState?>(null)
 
+    // Stand-in for BolusProgressData.currentGeneration (bumped by start() in production). The mirror only
+    // forwards a bolus whose generation is newer than the one captured at arm, so tests advance this to
+    // simulate the client's bolus actually starting.
+    private var progressGeneration = 0L
+
+    // Scope injected into the SUT — cancelled in tearDown(). The master progress-mirror collector (and its
+    // periodic heartbeat) is a long-lived coroutine; without cancellation it would outlive the test and fire
+    // after Mockito cleared the inline mocks, surfacing as a flaky "uncaught exception before the next test".
+    private lateinit var appScope: CoroutineScope
+
+    @AfterEach
+    fun tearDown() {
+        if (::appScope.isInitialized) appScope.cancel()
+    }
+
     @BeforeEach
     fun setUp() {
         MockitoAnnotations.openMocks(this)
@@ -129,6 +146,8 @@ internal class ClientControlReceiverTest {
         whenever(nsClientV3Plugin.nsAndroidClient).thenReturn(nsAndroidClient)
         whenever(dateUtil.now()).thenReturn(now)
         whenever(bolusProgressData.state).thenReturn(bolusState)
+        whenever(bolusProgressData.currentGeneration).thenAnswer { progressGeneration }
+        appScope = CoroutineScope(Dispatchers.Unconfined)
         sut = ClientControlReceiver(
             authorizedRepository,
             Provider { nsClientV3Plugin },
@@ -146,7 +165,7 @@ internal class ClientControlReceiverTest {
             bolusProgressData,
             commandQueue,
             aapsLogger,
-            CoroutineScope(Dispatchers.Unconfined)
+            appScope
         )
     }
 
@@ -534,7 +553,8 @@ internal class ClientControlReceiverTest {
         // Arm: the client commits a (mocked-Delivered) bolus → progress is now targeted at this client.
         sut.onSettingsDocChanged(cmdId, wrap(envelope(clientId, secret, message = ClientControlMessage.BolusCommit(bolusId = 42L), counter = 5L)))
 
-        // In-flight frame → mirrored to the client's progress doc.
+        // The client's bolus actually starts → a new generation. In-flight frame → mirrored to its progress doc.
+        progressGeneration = 1L
         bolusState.value = progressState(percent = 50)
         verify(nsAndroidClient).updateSettings(eq(progressId), any())
 
@@ -543,6 +563,51 @@ internal class ClientControlReceiverTest {
         bolusState.value = null
         bolusState.value = progressState(percent = 10)
         verify(nsAndroidClient, times(2)).updateSettings(eq(progressId), any())
+    }
+
+    @Test
+    fun masterDoesNotMirrorAnAlreadyRunningBolusToTheCommittingClient() = runTest {
+        val (clientId, secret) = pair()
+        authorizedRepository.markActive(clientId, counterReceived = 1L, now = now - 5_000L)
+        whenever(wizardBolusExecutor.confirm(any(), any(), any(), any())).thenReturn(WizardBolusExecutor.ConfirmResult.Delivered)
+        val progressId = "${ClientControlPublisher.IDENTIFIER_PROGRESS_PREFIX}$clientId"
+        val cmdId = "${ClientControlPublisher.IDENTIFIER_CMD_PREFIX}bolus_commit_$clientId"
+
+        // A bolus is already delivering on the master (e.g. a manual master bolus) when the client commits.
+        // Its generation predates the arm, so its frames must NOT be mis-attributed to the client's dialog.
+        progressGeneration = 7L
+        bolusState.value = progressState(percent = 30)
+
+        sut.onSettingsDocChanged(cmdId, wrap(envelope(clientId, secret, message = ClientControlMessage.BolusCommit(bolusId = 42L), counter = 5L)))
+
+        // The already-running bolus keeps emitting; the client's own bolus never starts (queue-rejected).
+        bolusState.value = progressState(percent = 40)
+        bolusState.value = progressState(percent = 50)
+        verify(nsAndroidClient, never()).updateSettings(eq(progressId), any())
+    }
+
+    @Test
+    fun masterDisarmsMirrorWhenCommitFailsBeforeAnyFrameSoALaterBolusIsNotMirrored() = runTest {
+        val (clientId, secret) = pair()
+        authorizedRepository.markActive(clientId, counterReceived = 1L, now = now - 5_000L)
+        // confirm() consumed the parked dose (Delivered) but delivery fails via onError before any frame streams
+        // (e.g. the master was already bolusing → queue-rejected this one). The arm must be cleared right away.
+        whenever(wizardBolusExecutor.confirm(any(), any(), any(), any())).thenAnswer { inv ->
+            @Suppress("UNCHECKED_CAST") val onError = inv.arguments[2] as (String) -> Unit
+            onError("executing right now")
+            WizardBolusExecutor.ConfirmResult.Delivered
+        }
+        val progressId = "${ClientControlPublisher.IDENTIFIER_PROGRESS_PREFIX}$clientId"
+        val cmdId = "${ClientControlPublisher.IDENTIFIER_CMD_PREFIX}bolus_commit_$clientId"
+
+        progressGeneration = 5L // generation at commit time
+        sut.onSettingsDocChanged(cmdId, wrap(envelope(clientId, secret, message = ClientControlMessage.BolusCommit(bolusId = 42L), counter = 5L)))
+
+        // A LATER, unrelated master-local bolus starts (NEWER generation) within the arm-TTL window. Only the
+        // disarm-on-failure stops it being mirrored — the generation-gate alone (6 > 5) would have let it through.
+        progressGeneration = 6L
+        bolusState.value = progressState(percent = 20)
+        verify(nsAndroidClient, never()).updateSettings(eq(progressId), any())
     }
 
     private fun progressState(percent: Int) = BolusProgressState(

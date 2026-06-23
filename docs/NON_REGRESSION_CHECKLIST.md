@@ -4,7 +4,7 @@ Purpose: enforce repeatable quality gates to prevent freezes and functional regr
 
 Use this file for every merge from `dev` and every release candidate.
 
-**Latest merge log:** [MERGE_DEV_2026-06-16_NS_SETTINGS.md](MERGE_DEV_2026-06-16_NS_SETTINGS.md) (dev @ `4030e4827f` → `dev_OAPSAIMI`, in progress — commit pending).
+**Latest merge log:** [MERGE_DEV_2026-06-23_HARMONIA.md](MERGE_DEV_2026-06-23_HARMONIA.md) (dev @ `6436a9556f` → `codex-aimi-harmonia-simulation-branch`).
 
 ---
 

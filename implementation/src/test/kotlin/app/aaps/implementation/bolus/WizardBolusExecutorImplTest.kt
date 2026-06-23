@@ -7,6 +7,7 @@ import app.aaps.core.data.model.ICfg
 import app.aaps.core.data.model.RM
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.model.TT
+import app.aaps.core.data.iob.CobInfo
 import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.data.time.T
 import app.aaps.core.data.ue.Action
@@ -71,7 +72,7 @@ class WizardBolusExecutorImplTest : TestBaseWithProfile() {
     @Mock lateinit var automation: Automation
 
     private fun create() = WizardBolusExecutorImpl(
-        aapsLogger, rh, quickWizard, bolusWizardProvider, profileFunction, profileRepository, insulin, iobCobCalculator, constraintsChecker, activePlugin,
+        aapsLogger, rh, config, quickWizard, bolusWizardProvider, profileFunction, profileRepository, insulin, iobCobCalculator, constraintsChecker, activePlugin,
         runningModeGuard, commandQueue, persistenceLayer, uel, loop, dateUtil, decimalFormatter, profileUtil, automation, notificationManager,
         CoroutineScope(Dispatchers.Unconfined)
     )
@@ -329,6 +330,65 @@ class WizardBolusExecutorImplTest : TestBaseWithProfile() {
 
         assertThat(result).isInstanceOf(WizardBolusExecutor.PrepareResult.Error::class.java)
         verify(profileFunction, never()).createProfileSwitch(any(), any(), any(), any(), any(), anyOrNull(), any())
+    }
+
+    // ---- prepareBatch(): negative carbs = COB removal (issue: was mislabeled "Bolus reported an error") ----
+
+    @Test
+    fun prepareBatch_negativeCarbsWithinCob_atNow_parksTheRemoval() = runTest {
+        stubPassthroughConstraints()
+        whenever(iobCobCalculator.getCobInfo(any())).thenReturn(CobInfo(0L, displayCob = 30.0, futureCarbs = 0.0))
+        val executor = create()
+
+        val prepared = executor.prepareBatch(
+            listOf(BatchAction.Bolus(insulin = 0.0, carbs = -10, carbsTimeOffsetMinutes = 0, carbsDurationHours = 0, recordOnly = false, notes = "", timestamp = 0L, iCfg = null))
+        )
+
+        // A removal within COB is a real action — NOT a no-op — and is parked verbatim.
+        assertThat(prepared).isInstanceOf(WizardBolusExecutor.PrepareResult.Preview::class.java)
+        assertThat((prepared as WizardBolusExecutor.PrepareResult.Preview).carbs).isEqualTo(-10)
+    }
+
+    @Test
+    fun prepareBatch_negativeCarbsExceedingCob_clampsMagnitudeToCob() = runTest {
+        stubPassthroughConstraints()
+        whenever(iobCobCalculator.getCobInfo(any())).thenReturn(CobInfo(0L, displayCob = 5.0, futureCarbs = 0.0))
+        val executor = create()
+
+        val prepared = executor.prepareBatch(
+            listOf(BatchAction.Bolus(insulin = 0.0, carbs = -10, carbsTimeOffsetMinutes = 0, carbsDurationHours = 0, recordOnly = false, notes = "", timestamp = 0L, iCfg = null))
+        )
+
+        // Can't remove more than the 5 g on board → clamped to -5, still a real action.
+        assertThat((prepared as WizardBolusExecutor.PrepareResult.Preview).carbs).isEqualTo(-5)
+    }
+
+    @Test
+    fun prepareBatch_negativeCarbsWithNoCob_isNoAction() = runTest {
+        stubPassthroughConstraints()
+        whenever(iobCobCalculator.getCobInfo(any())).thenReturn(CobInfo(0L, displayCob = 0.0, futureCarbs = 0.0))
+        val executor = create()
+
+        val prepared = executor.prepareBatch(
+            listOf(BatchAction.Bolus(insulin = 0.0, carbs = -10, carbsTimeOffsetMinutes = 0, carbsDurationHours = 0, recordOnly = false, notes = "", timestamp = 0L, iCfg = null))
+        )
+
+        // Nothing on board to remove → a genuine no-op, surfaced as NoAction (neutral), never the bolus-error path.
+        assertThat(prepared).isEqualTo(WizardBolusExecutor.PrepareResult.NoAction)
+    }
+
+    @Test
+    fun prepareBatch_negativeCarbsInFuture_isNoAction() = runTest {
+        stubPassthroughConstraints()
+        whenever(iobCobCalculator.getCobInfo(any())).thenReturn(CobInfo(0L, displayCob = 30.0, futureCarbs = 0.0))
+        val executor = create()
+
+        val prepared = executor.prepareBatch(
+            listOf(BatchAction.Bolus(insulin = 0.0, carbs = -10, carbsTimeOffsetMinutes = 60, carbsDurationHours = 0, recordOnly = false, notes = "", timestamp = 0L, iCfg = null))
+        )
+
+        // A future-dated removal is dropped (you can't pre-remove carbs not yet on board) → NoAction.
+        assertThat(prepared).isEqualTo(WizardBolusExecutor.PrepareResult.NoAction)
     }
 
     @Test
@@ -627,6 +687,7 @@ class WizardBolusExecutorImplTest : TestBaseWithProfile() {
     @Test
     fun prepareQuickWizard_netZeroInsulinAndZeroCarbs_returnsNoInsulinRequiredAndParksNothing() = runTest {
         // A correction-only QuickWizard (0 carbs) that nets to <= 0 insulin must error, not park an empty confirm.
+        whenever(config.appInitialized).thenReturn(true)
         whenever(runningModeGuard.rejectionMessage(any())).thenReturn(null)
         val ads = mock<AutosensDataStore>()
         whenever(iobCobCalculator.ads).thenReturn(ads)
@@ -656,6 +717,23 @@ class WizardBolusExecutorImplTest : TestBaseWithProfile() {
         assertThat((result as WizardBolusExecutor.PrepareResult.Error).message).isEqualTo("No insulin required")
         // Nothing parked → a confirm of the wizard timestamp finds no pending dose (no phantom delivery).
         verify(commandQueue, never()).bolus(anyOrNull())
+    }
+
+    @Test
+    fun prepareQuickWizard_beforeAppInitialized_returnsErrorWithoutTouchingPlugins() = runTest {
+        // Regression: a remote QuickWizard prepare landing during the master's startup window (before
+        // verifySelectionInCategories() populated activeAPS) must be rejected here — NOT crash later in
+        // BolusWizard.doCalc with "APS not defined". The guard bails before any plugin / profile access.
+        whenever(config.appInitialized).thenReturn(false)
+        whenever(rh.gs(any<Int>())).thenReturn("Initializing…")
+        val executor = create()
+
+        val result = executor.prepareQuickWizard("g")
+
+        assertThat(result).isInstanceOf(WizardBolusExecutor.PrepareResult.Error::class.java)
+        assertThat((result as WizardBolusExecutor.PrepareResult.Error).message).isEqualTo("Initializing…")
+        verify(runningModeGuard, never()).rejectionMessage(any())
+        verify(quickWizard, never()).get(any<String>())
     }
 
     @Test

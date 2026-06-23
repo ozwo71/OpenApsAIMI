@@ -41,10 +41,12 @@
     <string name="loop_disabled_by_user">Loop disabled by user</string>
     <string name="event_type">Event type</string>
     <string name="reload">Reload</string>
-    <string name="mgdl">mg/dl</string>
-    <string name="mmol">mmol/l</string>
-    <string name="bg_mgdl">%1$d mg/dl</string>
-    <string name="bg_mmol">%1$.1f mmol/l</string>
+    <string name="mgdl">mg/dL</string>
+    <string name="mmol">mmol/L</string>
+    <string name="profile_isf_units_mgdl">mg/dL/U</string>
+    <string name="profile_isf_units_mmol">mmol/L/U</string>
+    <string name="bg_mgdl">%1$d mg/dL</string>
+    <string name="bg_mmol">%1$.1f mmol/L</string>
     <string name="save">Save</string>
     <string name="skip">Skip</string>
     <string name="switch_to_edit">Edit</string>
@@ -117,8 +119,9 @@
     <string name="androidaps_start">AAPS started</string>
     <string name="formatsignedinsulinunits">%1$+.2f U</string>
     <string name="format_carbs">%1$d g</string>
+    <string name="format_carbs_split" comment="Compact carbs summary when a food type splits the entry into immediate + extended carbs. %1$d=immediate carbs (g), %2$d=extended (eCarbs) carbs (g). Example: 9+2 g">%1$d+%2$d g</string>
     <string name="format_hours">%1$.2f h</string>
-    <string name="format_mins">%1$d mins</string>
+    <string name="format_mins">%1$d min</string>
     <string name="confirmation_line" comment="Confirmation-summary line, joins a label and an already-formatted value. %1$s = label, %2$s = value with its unit. Example: Bolus: 1.50 U">%1$s: %2$s</string>
     <string name="value_with_unit" comment="A numeric value followed by its unit, when no dedicated value template exists. %1$s = value, %2$s = unit. Example: 120 mg/dl">%1$s %2$s</string>
     <string name="objectives">Objectives</string>
@@ -392,6 +395,7 @@
     <string name="scene_deactivate">End Scene</string>
     <string name="scene_active">Active</string>
     <string name="scene_ended">Scene ended</string>
+    <string name="scene_end_active">End active scene</string>
     <string name="scene_confirm_activate">Activate scene \"%1$s\"?</string>
     <string name="scene_confirm_deactivate">End scene \"%1$s\" and revert changes?</string>
     <string name="scene_conflict_active_tt">Active temporary target will be replaced</string>
@@ -399,7 +403,8 @@
     <string name="scene_conflict_active_running_mode">Active running mode will be replaced</string>
     <string name="scene_conflict_active_scene">Active scene \"%1$s\" will be ended first</string>
     <string name="scene_action_tt">Temp target: %1$s</string>
-    <string name="scene_action_profile">Profile: %1$s %2$d%%</string>
+    <string name="scene_action_profile" comment="%1$s=profile name, %2$d=percentage. Example: Profile: Default 150%">Profile: %1$s %2$d%%</string>
+    <string name="scene_action_profile_pct_only" comment="%1$d=percentage, used when no specific named profile. Example: Profile: 150%">Profile: %1$d%%</string>
     <string name="scene_action_smb_on">Enable SMB</string>
     <string name="scene_action_smb_off">Disable SMB</string>
     <string name="scene_action_running_mode">Running mode: %1$s</string>
@@ -463,6 +468,8 @@
     <string name="clientcontrol_fail_internal">Something went wrong.</string>
     <string name="clientcontrol_fail_unknown">The command failed.</string>
     <string name="clientcontrol_unconfirmed_wear">State unknown — check phone/Nightscout before re-bolusing.</string>
+    <string name="clientcontrol_bolus_progress_stalled_title">Connection lost — delivery status unknown</string>
+    <string name="clientcontrol_bolus_progress_stalled_body">This phone stopped receiving updates from the master. The bolus may still be delivering or may have finished. Closing this only hides it here — it does not stop the pump. Check the master phone for the amount actually delivered.</string>
     <string name="scene_revert_tt">Cancel temporary target</string>
     <string name="scene_revert_profile">Revert profile change</string>
     <string name="scene_revert_smb_on">Re-enable SMB</string>
@@ -827,6 +834,7 @@
     <string name="wizard_advanced">Advanced</string>
     <string name="wizard_calculation">Calculation</string>
     <string name="no_action_selected">No action selected, nothing will happen</string>
+    <string name="carbs_removal_cob_limit" comment="Shown under the carbs field when removing carbs (a negative value). %1$d = grams of carbs currently on board, the maximum removable. Example: Max removal: 30 g (carbs on board)">Max removal: %1$d g (carbs on board)</string>
     <string name="carb_equal_zero_no_action">Carbs = 0. No action taken!</string>
     <string name="bolus_equal_zero_no_action">Bolus = 0. No action taken!</string>
     <string name="wizard_no_insulin_required">No insulin required!</string>
@@ -999,7 +1007,8 @@
     <string name="cloud_auth_success">Cloud storage authentication successful</string>
     <string name="authorization_status">Authorization Status</string>
 
-    <string name="format_hour_minute">%1$dh %2$dm</string>
+    <string name="format_hour_minute" comment="%1$d=hours, %2$d=minutes. Example: 1 h 23 min">%1$d h %2$d min</string>
+    <string name="format_hours_only" comment="%1$d=hours, when minutes are zero. Example: 4 h">%1$d h</string>
 
     <!-- datetime layout -->
     <string name="event_time_label">Event time</string>
