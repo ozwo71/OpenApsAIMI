@@ -38,6 +38,13 @@ Full port of [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS
 
 **Fork kept:** Calibration activity readiness UI (CAPTCG strips it; we keep user-facing readiness text).
 
+### Merge `dev` → `dev_OAPSAIMI` (2026-06-24)
+
+- Upstream Nightscout `dev` at `42ea25d792` (3 commits since `6436a9556f`: rounding fix, Equil command-drop fix #4910, dev3 merge).
+- **Clean merge** — no conflicts. `EquilBLE.kt` auto-merged (fork `cancelPendingConnect` + upstream `writeCmd` ready path).
+- **Fork preserved:** AIMI, hormonitor, adaptive smoothing, dashboard skin, physio HC, ML storage, Eversense module, `KeepAliveWorker runVacuum=false`.
+- Log: [MERGE_DEV_2026-06-24.md](MERGE_DEV_2026-06-24.md).
+
 ### Merge `dev` → `dev_OAPSAIMI_mergeDEV` (2026-06-05)
 
 - Upstream Nightscout `dev` at `496d3275f4` (alarm unification, Vico 3.2.2, empty-graph fix, Google Drive export).
