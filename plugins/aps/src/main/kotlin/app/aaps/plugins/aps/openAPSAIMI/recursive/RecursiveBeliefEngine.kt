@@ -101,7 +101,18 @@ object RecursiveBeliefEngine {
             15    -> ctx.bgMgdl + ctx.deltaMgdlPer5 * 3.0
             60    -> BeliefLeafAdapterRegistry.pointAt(ctx.curves.hybrid, tauMin, ctx.bgMgdl)
                 .let { max(it, ctx.scenario.scenarioBest.terminalMgdl * belief) }
-            180   -> blend(ctx.curves.iob.lastOrNull() ?: ctx.bgMgdl, ctx.scenario.scenarioBest.terminalMgdl, belief)
+            180   -> {
+                // Use the IOB-only curve terminal as the "insulin-driven anchor" for the blend.
+                // When the curve is unavailable (no active IOB) fall back to the full scenario
+                // terminal rather than silently anchoring to current BG, which would over-inflate
+                // urgency at this scale and risk a spurious correction.
+                val iobTerminal = ctx.curves.iob.lastOrNull()
+                if (iobTerminal != null) {
+                    blend(iobTerminal, ctx.scenario.scenarioBest.terminalMgdl, belief)
+                } else {
+                    ctx.scenario.scenarioBest.terminalMgdl
+                }
+            }
             480   -> target + (ctx.physioPhase?.confidence ?: 0.5) * 20.0
             else  -> ctx.bgMgdl
         }

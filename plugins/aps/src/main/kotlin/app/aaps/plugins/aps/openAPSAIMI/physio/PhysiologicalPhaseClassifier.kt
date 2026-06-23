@@ -32,6 +32,8 @@ object PhysiologicalPhaseClassifier {
         val wCyclePhase: CyclePhase?,
         val htrTier: HyperSeverityTier = HyperSeverityTier.OFF,
         val plateauSustain: Boolean = false,
+        /** Pre-computed once per tick by the caller; avoids a global-singleton read inside the classifier. */
+        val mealAbsorptionMemoryActive: Boolean = false,
     )
 
     data class Output(
@@ -84,7 +86,7 @@ object PhysiologicalPhaseClassifier {
             return out(PhysiologicalPhase.MEAL_UNDECLARED, 0.84, "mealDominant Δ/proj")
         }
 
-        if (isStressCortisol(input) && !MealAbsorptionMemory.isActive(System.currentTimeMillis())) {
+        if (isStressCortisol(input) && !input.mealAbsorptionMemoryActive) {
             return out(PhysiologicalPhase.STRESS_CORTISOL, 0.82, "stress Δ+HR COB=0")
         }
 
@@ -236,7 +238,7 @@ object PhysiologicalPhaseClassifier {
     internal fun isStressCortisol(input: Input): Boolean {
         if (input.mealCobG >= 1.0) return false
         val morningCortisolWindow = input.hourOfDay in 5..11
-        if (!morningCortisolWindow && MealAbsorptionMemory.isActive(System.currentTimeMillis())) {
+        if (!morningCortisolWindow && input.mealAbsorptionMemoryActive) {
             return false
         }
         val hrElevated = input.heartRateBpm > input.restingHeartRateBpm + 12

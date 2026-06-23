@@ -111,6 +111,7 @@ object PhysioPhaseFusion {
         wCyclePhase: app.aaps.plugins.aps.openAPSAIMI.wcycle.CyclePhase?,
         htrTier: app.aaps.plugins.aps.openAPSAIMI.release.HyperSeverityTier = app.aaps.plugins.aps.openAPSAIMI.release.HyperSeverityTier.OFF,
         plateauSustain: Boolean = false,
+        mealAbsorptionMemoryActive: Boolean = false,
     ): PhysiologicalPhaseClassifier.Input =
         PhysiologicalPhaseClassifier.Input(
             bgMgdl = bgMgdl,
@@ -132,5 +133,6 @@ object PhysioPhaseFusion {
             wCyclePhase = wCyclePhase,
             htrTier = htrTier,
             plateauSustain = plateauSustain,
+            mealAbsorptionMemoryActive = mealAbsorptionMemoryActive,
         )
 }
