@@ -142,13 +142,17 @@ class EquilBLE @Inject constructor(
         }
     }
 
+    /** Clears in-flight connect state so a later command (e.g. SMB after queue timeout) can reconnect. */
+    private fun cancelPendingConnect() {
+        connectInitiated = false
+        connectRunnable?.let { handler.removeCallbacks(it) }
+        connectRunnable = null
+    }
+
     fun disconnect() {
         isConnected = false
         connecting = false
-        connectInitiated = false
-        // Cancel any pending delayed connect so a stale runnable can't re-open a GATT after teardown.
-        connectRunnable?.let { handler.removeCallbacks(it) }
-        connectRunnable = null
+        cancelPendingConnect()
         startTrue = false
         autoScan = false
         equilManager?.equilState?.bluetoothConnectionState = BluetoothConnectionState.DISCONNECTED
@@ -176,7 +180,8 @@ class EquilBLE @Inject constructor(
 
     private fun connectEquil(address: String) {
         // Guard against the scan emitting the same device multiple times (and other re-entrant
-        // calls): only one connect attempt per session, reset on disconnect(). Prevents stacking
+        // calls): only one connect attempt per session, reset on disconnect()/stopConnecting().
+        // Prevents stacking
         // overlapping GATT clients. See also the close-before-connect guard in EquilBleTransportImpl.
         if (connectInitiated) return
         connectInitiated = true
@@ -333,6 +338,7 @@ class EquilBLE @Inject constructor(
     /** Abort an in-flight scan/connect attempt (queue connection timeout). */
     fun stopConnecting() {
         handler.removeMessages(TIME_OUT_CONNECT_WHAT)
+        cancelPendingConnect()
         stopScan()
         connecting = false
         if (!isConnected) {

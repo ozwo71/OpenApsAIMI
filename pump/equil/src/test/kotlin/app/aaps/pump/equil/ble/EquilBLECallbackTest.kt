@@ -8,6 +8,7 @@ import app.aaps.pump.equil.manager.EquilManager
 import app.aaps.shared.tests.TestBase
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -242,6 +243,33 @@ class EquilBLECallbackTest : TestBase() {
         verify(scanner).stopScan()
         assertFalse(equilBLE.connecting)
         assertEquals(BluetoothConnectionState.DISCONNECTED, equilState.bluetoothConnectionState)
+    }
+
+    @Test
+    fun `stopConnecting should reset connect session so a new connect can be scheduled`() {
+        initWithManager()
+        val connectEquil = EquilBLE::class.java.getDeclaredMethod("connectEquil", String::class.java).apply {
+            isAccessible = true
+        }
+        val connectInitiatedField = EquilBLE::class.java.getDeclaredField("connectInitiated").apply {
+            isAccessible = true
+        }
+        val connectRunnableField = EquilBLE::class.java.getDeclaredField("connectRunnable").apply {
+            isAccessible = true
+        }
+
+        connectEquil.invoke(equilBLE, "AA:BB:CC:DD:EE:FF")
+        assertTrue(connectInitiatedField.getBoolean(equilBLE))
+        assertNotNull(connectRunnableField.get(equilBLE))
+
+        equilBLE.stopConnecting()
+
+        assertFalse(connectInitiatedField.getBoolean(equilBLE))
+        assertNull(connectRunnableField.get(equilBLE))
+
+        connectEquil.invoke(equilBLE, "AA:BB:CC:DD:EE:FF")
+        assertTrue(connectInitiatedField.getBoolean(equilBLE))
+        assertNotNull(connectRunnableField.get(equilBLE))
     }
 
     // --- unBond ---
