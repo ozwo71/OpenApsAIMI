@@ -47,4 +47,18 @@ class PostHypoProjectionCapTest {
         assertThat(result.wasCapped).isFalse()
         assertThat(result.cappedTerminalMgdl).isWithin(0.001).of(220.0)
     }
+
+    @Test
+    fun reboundAlreadyAboveCeiling_skipsCapWithoutCrash() {
+        val result = PostHypoProjectionCap.capTerminalMgdl(
+            bgMgdl = 208.0,
+            targetBgMgdl = 100.0,
+            deltaMgdl5m = 5.0,
+            terminalMgdl = 401.0,
+            minBgLookback75m = 54.0,
+            hasIndependentMealEvidence = false,
+        )
+        assertThat(result.wasCapped).isFalse()
+        assertThat(result.cappedTerminalMgdl).isWithin(0.001).of(401.0)
+    }
 }

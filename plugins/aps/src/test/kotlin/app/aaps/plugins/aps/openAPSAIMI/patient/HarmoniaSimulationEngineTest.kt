@@ -120,6 +120,28 @@ class HarmoniaSimulationEngineTest {
         assertThat(decision.getDouble("bounded_rate_uph")).isEqualTo(1.3)
     }
 
+    @Test
+    fun evaluate_fragilityTriggersStabilize() {
+        val state = stableState().copy(
+            postHypoReboundProb = 0.35,
+            causalPosterior = CausalStatePosterior(
+                postHypoRecoveryProb = 0.20,
+                dominant = CausalStateId.UNKNOWN,
+                dominantConfidence = 0.0,
+            ),
+        )
+        val decision = HarmoniaSimulationEngine.evaluate(
+            tree = buildTree(state),
+            environment = safeEnvironment().copy(
+                correctionFragilityScore = 0.62,
+                postHyperExhaustionScore = 0.30,
+            ),
+        )
+
+        assertThat(decision?.action).isEqualTo(HarmoniaSimulationAction.STABILIZE)
+        assertThat(decision?.simulatedBasalUph).isLessThan(safeEnvironment().currentBasalUph)
+    }
+
     private fun buildTree(state: PatientStateSnapshot): PhysiologicalTreeSnapshot? =
         PhysiologicalTreeBuilder.build(
             enabled = true,

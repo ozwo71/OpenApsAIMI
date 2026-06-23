@@ -74,20 +74,32 @@ object AuditorVerdictCache {
     @JvmStatic
     @JvmOverloads
     fun getDisplayable(maxAgeMs: Long = 300_000): CachedVerdict? {
+        return resolveForDisplay(maxAgeMs)?.takeIf { it.alignedWithCurrentBg }?.cached
+    }
+
+    /**
+     * Latest verdict within TTL, with flag when CGM timestamp advanced since audit.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun resolveForDisplay(maxAgeMs: Long = 300_000): ResolvedVerdict? {
         val cached = get(DEFAULT_KEY, maxAgeMs) ?: return null
         val lastBgTimestamp = currentBgTimestampMs
         val cachedBgTimestamp = cached.bgTimestampMs
-        if (
+        val aligned = !(
             lastBgTimestamp != null &&
-            lastBgTimestamp > 0L &&
-            cachedBgTimestamp != null &&
-            cachedBgTimestamp > 0L &&
-            cachedBgTimestamp != lastBgTimestamp
-        ) {
-            return null
-        }
-        return cached
+                lastBgTimestamp > 0L &&
+                cachedBgTimestamp != null &&
+                cachedBgTimestamp > 0L &&
+                cachedBgTimestamp != lastBgTimestamp
+            )
+        return ResolvedVerdict(cached = cached, alignedWithCurrentBg = aligned)
     }
+
+    data class ResolvedVerdict(
+        val cached: CachedVerdict,
+        val alignedWithCurrentBg: Boolean,
+    )
 
     @JvmStatic
     fun noteCurrentBg(bgTimestampMs: Long?) {

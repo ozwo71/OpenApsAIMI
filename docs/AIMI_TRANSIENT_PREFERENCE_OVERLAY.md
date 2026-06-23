@@ -12,7 +12,7 @@
 | 4 | **Whitelist clés v1** : réutiliser les clés déjà gouvernées par `TuningContextEngine` + familles **Protection** / **Stability** du Control Center |
 | 5 | **Double confirmation** : trigger algo **+** validation LLM structurée (stack Advisor / `AiCoachingService` existante) |
 
-**Documents liés :** [AIMI_TUNING_AND_ADVISOR.md](AIMI_TUNING_AND_ADVISOR.md), [AIMI_CONTROL_CENTER_ADVISOR_BRIDGE_2026-06-14.md](AIMI_CONTROL_CENTER_ADVISOR_BRIDGE_2026-06-14.md), [AIMI_RECURSIVE_BELIEF.md](AIMI_RECURSIVE_BELIEF.md), [AIMI_PRODUCT_HARMONY_CAUSAL_TREE_2026-06-14.md](AIMI_PRODUCT_HARMONY_CAUSAL_TREE_2026-06-14.md)
+**Documents liés :** [AIMI_TUNING_AND_ADVISOR.md](AIMI_TUNING_AND_ADVISOR.md), [AIMI_CONTROL_CENTER_ADVISOR_BRIDGE_2026-06-14.md](AIMI_CONTROL_CENTER_ADVISOR_BRIDGE_2026-06-14.md), [AIMI_RECURSIVE_BELIEF.md](AIMI_RECURSIVE_BELIEF.md), [AIMI_PRODUCT_HARMONY_CAUSAL_TREE_2026-06-14.md](AIMI_PRODUCT_HARMONY_CAUSAL_TREE_2026-06-14.md), [aimi-harmonia-implementation.md](aimi-harmonia-implementation.md), [aimi-harmonia-simulation-branch.md](aimi-harmonia-simulation-branch.md)
 
 ---
 
@@ -28,6 +28,8 @@ Après un hypo, une nuit courte ou un cycle hyper→hypo épuisant, les **mêmes
 - Laisse l’utilisateur **annuler manuellement** ou **conserver** une clé qu’il a retouchée pendant la session.
 
 TPO est **orthogonal à RTB** : RTB arbitre l’insuline au tick ; TPO élargit ou resserre les **rails de prefs** pendant une fenêtre clinique connue.
+
+TPO est aussi **orthogonal à Harmonia** (§14) : Harmonia harmonise contexte + simulation/production basal-first ; TPO modifie des **préférences** whitelistées. Les deux consomment `PatientEventMemory` / fragilité post-hypo mais n'ont pas la même autorité.
 
 ---
 
@@ -651,6 +653,34 @@ Pas de slider pour activer un pack manuellement v1 — triggers automatiques uni
 | **P0** | `TpoSessionManager` + `TpoDeltaBuilder` + POST_HYPO only + revert |
 | **P1** | Trio packs + LLM validator + Control Center bandeau |
 | **P2** | RTB leaves + Hormonitor + notifications |
+
+---
+
+## 14. Relation Harmonia / PhysiologicalTree (vérification 2026-06)
+
+### Rôles distincts
+
+| Couche | Autorité | Horizon | Stabilisation |
+|--------|----------|---------|---------------|
+| **Harmonia** (arbre + sim + production RBT) | Contexte ; TBR basal-first **conditionnel** (si T3C/SMB idle) | Tick courant | `PROTECTIVE_REDUCTION`, blockers hypo ; pas d'action yoyo dédiée |
+| **TPO** (cet overlay) | Deltas **prefs** 2 h | Session post-épisode | Rails Max SMB, damping, tube… après hypo/sommeil/épuisement |
+| **RBT / chaos** | SMB demand, canaux basal-first | Tick + mémoire épisodes | Dampen post-hypo, meal suppress |
+| **Safety terminals** | `meal_rise_confirmed`, terminals | Tick | Bypass Harmonia — uplift ou cap projections |
+
+### Signaux partagés (sans fusion dose)
+
+- `PatientEventMemory` : `correctionFragilityScore`, `recentHypoLoad`, `postHyperExhaustion` → branche arbre `hypoRisk` / `insulinEffectiveness` **et** triggers TPO.
+- Post-hypo : `PostHypoDeliveryAuthority` bloque Harmonia production **et** module SMB ; TPO peut en parallèle resserrer les prefs.
+
+### Alignement vision produit
+
+**Intention :** Harmonia harmonise et sert de 2e vérification ; l'arbre attrape le repas non déclaré ; ensemble ils stabilisent la glycémie.
+
+**État code :** l'arbre **détecte** repas latent et fragilité ; Harmonia **simule** la posture (`MEAL_SUPPORT`, `PROTECTIVE_REDUCTION`) ; mais `meal_rise_confirmed`, `MealCorrectionContextResolver` et Autodrive peuvent **court-circuiter** Harmonia sur le tick réel. La stabilisation anti-yoyo est **surtout TPO + RBT**, pas encore une action Harmonia explicite.
+
+**Lots planifiés** (détail : `aimi-harmonia-implementation.md` §14) : **H4** pont repas non déclaré ; **H5** stabilisation yoyo ; **H6** feuilles → Auditor ; **H0** bug `PostHypoProjectionCap`.
+
+TPO ne duplique pas la logique repas de Harmonia : TPO agit sur les **rails** quand un épisode est reconnu ; Harmonia harmonise la **posture insulinique** du tick. Si TPO `POST_HYPO_RECOVERY` actif, Harmonia production reste bloquée (déjà partiel via `postHypoBlock`).
 
 ---
 

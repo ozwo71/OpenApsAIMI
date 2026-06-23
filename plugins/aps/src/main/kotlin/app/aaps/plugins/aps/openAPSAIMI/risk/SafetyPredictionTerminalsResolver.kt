@@ -32,8 +32,9 @@ object SafetyPredictionTerminalsResolver {
         targetBgMgdl: Double = 100.0,
         minBgLookback75m: Double = Double.MAX_VALUE,
         hasIndependentMealEvidence: Boolean = true,
+        cobG: Double = 0.0,
     ): SafetyPredictionTerminals {
-        val mealRiseConfirmed = isMealRiseConfirmed(bg, delta, mealContext)
+        val mealRiseConfirmed = isMealRiseConfirmed(bg, delta, mealContext, cobG = cobG)
         val (adjPred, adjEventual) = adjustTerminals(
             bg = bg,
             delta = delta,
@@ -71,11 +72,12 @@ object SafetyPredictionTerminalsResolver {
         targetBgMgdl: Double = 100.0,
         minBgLookback75m: Double = Double.MAX_VALUE,
         hasIndependentMealEvidence: Boolean = true,
+        cobG: Double = 0.0,
     ): SafetyPredictionTerminals {
         val floor = projection.clinicalFloor
         val best = projection.scenarioBest
         val scenarioCtx = ScenarioProjectionContext(mealContext = mealContext)
-        val mealRiseConfirmed = isMealRiseConfirmed(bg, delta, mealContext, mealAbsorptionPhase) ||
+        val mealRiseConfirmed = isMealRiseConfirmed(bg, delta, mealContext, mealAbsorptionPhase, cobG) ||
             ScenarioProjectionEngine.isMealRiseConfirmed(bg = bg, delta = delta, ctx = scenarioCtx)
         val floorPred = minOf(floor.pathMinMgdl, floor.terminalMgdl)
         val (adjPred, adjEventual) = adjustTerminals(
@@ -108,10 +110,15 @@ object SafetyPredictionTerminalsResolver {
         delta: Float,
         mealContext: MealSafetyContext,
         mealAbsorptionPhase: MealAbsorptionPhase = MealAbsorptionPhase.NONE,
-    ): Boolean =
-        mealAbsorptionPhase.isActive ||
-            mealContext.hasMealIntent ||
-            (delta >= PredictiveHypoConstants.RISING_MODERATE_DELTA.toFloat() && bg >= 90.0)
+        cobG: Double = 0.0,
+    ): Boolean {
+        if (mealAbsorptionPhase.isActive) return true
+        if (mealContext.hasMealIntent) return true
+        val rising = delta >= PredictiveHypoConstants.RISING_MODERATE_DELTA.toFloat() && bg >= 90.0
+        if (!rising) return false
+        if (cobG <= 0.0 && bg in 95.0..140.0 && delta < 4.0f) return false
+        return true
+    }
 
     internal fun adjustTerminals(
         bg: Double,
@@ -202,10 +209,11 @@ object SafetyPredictionTerminalsResolver {
         targetBgMgdl: Double = 100.0,
         minBgLookback75m: Double = Double.MAX_VALUE,
         hasIndependentMealEvidence: Boolean = true,
+        cobG: Double = 0.0,
     ): Pair<Double, Double> {
         val mealRiseConfirmed =
             predictionAuthority?.falseMealSuppression != true &&
-                isMealRiseConfirmed(bg, delta, mealContext, mealAbsorptionPhase)
+                isMealRiseConfirmed(bg, delta, mealContext, mealAbsorptionPhase, cobG)
         return adjustTerminals(
             bg = bg,
             delta = delta,

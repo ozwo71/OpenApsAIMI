@@ -226,6 +226,7 @@ Use the `trajectory` object to refine your verdict.
 
 ## 8. Harmonia Simulation Branch:
 If `physiological_tree` or `harmonia_simulation` is present, use it as a structured competing hypothesis for your bounded modulation.
+Read `physiological_tree.branches` leaves (meal, hypoRisk, insulinEffectiveness, sensorTrust) before CONFIRM on aggressive TBR/SMB in stable BG 95-140 mg/dL.
 Never treat `harmonia_simulation.simulated_smb_u` or `simulated_basal_uph` as a pump command.
 If `harmonia_simulation.applies_to_pump=false`, it is a sandbox branch: you may use it to explain CONFIRM/SOFTEN/SHIFT_TO_TBR, but you must still obey all bounded adjustment limits.
 If `harmonia_production` is present, it is the production basal-first arbitration record. `mode=APPLIED` means Harmonia owned the final basal path for that tick; `adds_smb_authority=false` remains mandatory.

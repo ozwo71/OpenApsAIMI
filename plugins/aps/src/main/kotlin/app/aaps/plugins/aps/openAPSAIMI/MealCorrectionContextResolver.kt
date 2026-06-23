@@ -8,6 +8,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationAction
 import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoDeliveryAuthority
 import kotlin.math.max
 
@@ -25,6 +26,8 @@ internal object MealCorrectionContextResolver {
         val patientModeDecision: PatientModeOrchestrator.Decision?,
         val patientState: PatientStateSnapshot?,
         val postHypoDelivery: PostHypoDeliveryAuthority.Decision = PostHypoDeliveryAuthority.INACTIVE,
+        val harmoniaAction: HarmoniaSimulationAction? = null,
+        val harmoniaEligible: Boolean = false,
     )
 
     data class Output(
@@ -105,11 +108,30 @@ internal object MealCorrectionContextResolver {
                 phaseMealEvidence ||
                 patientModeMealEvidence ||
                 hypothesisMealEvidence ||
-                patientStateMealEvidence
+                patientStateMealEvidence ||
+                (
+                    input.harmoniaEligible &&
+                        input.harmoniaAction == HarmoniaSimulationAction.MEAL_SUPPORT &&
+                        input.deltaMgdlPer5 >= 1.0
+                    )
+
+        val harmoniaOpposesMealPriority =
+            input.mealCobG <= 0.0 &&
+                (
+                    input.harmoniaAction == HarmoniaSimulationAction.STABILIZE ||
+                        input.harmoniaAction == HarmoniaSimulationAction.PROTECTIVE_REDUCTION ||
+                        input.harmoniaAction == HarmoniaSimulationAction.BLOCKED ||
+                        (
+                            input.harmoniaEligible &&
+                                input.harmoniaAction == HarmoniaSimulationAction.OBSERVE &&
+                                input.deltaMgdlPer5 < 2.5
+                            )
+                    )
 
         val mealPriorityEligible =
             !falseMealSuppression &&
                 !nonMealBlocks &&
+                !harmoniaOpposesMealPriority &&
                 input.bgMgdl >= 145.0 &&
                 riseForPriority &&
                 mealEvidence
@@ -145,6 +167,10 @@ internal object MealCorrectionContextResolver {
         if (hypothesisMealEvidence) reasons += "UAM_MEAL_EVIDENCE"
         if (patientStateMealEvidence) reasons += "PATIENT_STATE_MEAL"
         if (nonMealBlocks) reasons += "NON_MEAL_BLOCK"
+        if (harmoniaOpposesMealPriority) reasons += "HARMONIA_MEAL_VETO"
+        if (input.harmoniaEligible && input.harmoniaAction == HarmoniaSimulationAction.MEAL_SUPPORT) {
+            reasons += "HARMONIA_MEAL_SUPPORT"
+        }
         if (mealPriorityEligible) reasons += "MEAL_PRIORITY_ELIGIBLE"
         if (redCarpetEligible) reasons += "RED_CARPET_ELIGIBLE"
 

@@ -35,9 +35,11 @@ class AuditorStatusLiveData @Inject constructor() {
       return AuditorUIState.processing()
     }
 
-    val displayableVerdict = AuditorVerdictCache.getDisplayable()
-    if (displayableVerdict != null) {
-      return uiStateFromDisplayableVerdict(displayableVerdict.verdict.verdict)
+    val resolved = AuditorVerdictCache.resolveForDisplay()
+    if (resolved != null) {
+      val verdictType = resolved.cached.verdict.verdict
+      val ui = uiStateFromVerdict(verdictType, alignedWithCurrentBg = resolved.alignedWithCurrentBg)
+      return ui
     }
 
     if (ageMs != null && ageMs > 300_000) {
@@ -60,16 +62,25 @@ class AuditorStatusLiveData @Inject constructor() {
   }
 
   fun markAsRead() {
-    val verdictTimestamp = AuditorVerdictCache.getDisplayable()?.timestamp
+    val verdictTimestamp = AuditorVerdictCache.resolveForDisplay()?.cached?.timestamp
     lastReadTimestampMs = verdictTimestamp ?: System.currentTimeMillis()
     notifyUpdate()
   }
 
-  private fun uiStateFromDisplayableVerdict(verdictType: VerdictType): AuditorUIState {
+  private fun uiStateFromVerdict(verdictType: VerdictType, alignedWithCurrentBg: Boolean): AuditorUIState {
     val insightCount = AuditorReportFormatter.insightCount()
     val shouldNotify = AuditorReportFormatter.hasUnreadVerdict(lastReadTimestampMs)
     return when (verdictType) {
-      VerdictType.Confirm -> AuditorUIState.ready(insightCount, shouldNotify)
+      VerdictType.Confirm -> {
+        if (alignedWithCurrentBg) {
+          AuditorUIState.ready(insightCount, shouldNotify)
+        } else {
+          AuditorUIState.warning(
+            message = "Prior tick verdict (new CGM reading)",
+            shouldNotify = shouldNotify,
+          )
+        }
+      }
       VerdictType.Soften,
       VerdictType.ShiftToTbr,
       -> AuditorUIState.warning(

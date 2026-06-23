@@ -151,6 +151,7 @@ class AuditorOrchestrator @Inject constructor(
     ) {
         val now = System.currentTimeMillis()
         AuditorVerdictCache.noteCurrentBg(glucoseStatus?.date)
+        auditorStatusLiveData.notifyUpdate()
         
         // Check if auditor is enabled
         if (!isAuditorEnabled()) {
@@ -353,13 +354,20 @@ class AuditorOrchestrator @Inject constructor(
                 updateRateLimit(now, triggerType)
                 
                 if (verdict != null) {
+                    val guardedVerdict = AuditorStableContextGuard.adjustIfNeeded(
+                        verdict = verdict,
+                        bgMgdl = bg,
+                        deltaMgdl5m = delta,
+                        tbrRateUph = tbrRate,
+                        profileBasalUph = profile.current_basal,
+                    )
                     // Security: Validate Confidence Interval (0.0..1.0)
-                    val safeConfidence = verdict.confidence.coerceIn(0.0, 1.0)
+                    val safeConfidence = guardedVerdict.confidence.coerceIn(0.0, 1.0)
                     
-                    aapsLogger.info(LTag.APS, "AI Auditor: Verdict=${verdict.verdict}, Confidence=${String.format("%.2f", safeConfidence)}")
+                    aapsLogger.info(LTag.APS, "AI Auditor: Verdict=${guardedVerdict.verdict}, Confidence=${String.format("%.2f", safeConfidence)}")
                     
                     // Transition to Ready
-                    stateManager.transitionTo(AuditorUIState.Ready(verdict.verdict.name), "Verdict received")
+                    stateManager.transitionTo(AuditorUIState.Ready(guardedVerdict.verdict.name), "Verdict received")
                     
                     // Apply modulation
                     val modulated = DecisionModulator.applyModulation(
@@ -367,7 +375,7 @@ class AuditorOrchestrator @Inject constructor(
                         originalTbrRate = tbrRate,
                         originalTbrMin = tbrDuration,
                         originalIntervalMin = intervalMin,
-                        verdict = verdict,
+                        verdict = guardedVerdict,
                         confidence = preferences.get(IntKey.AimiAuditorMinConfidence) / 100.0,
                         mode = getModulationMode()
                     )
@@ -378,14 +386,14 @@ class AuditorOrchestrator @Inject constructor(
                     aapsLogger.info(LTag.APS, "AI Auditor: Modulation=${modulated.reason}")
                     
                     // Cache verdict (internal)
-                    lastVerdict = verdict
+                    lastVerdict = guardedVerdict
                     lastVerdictTime = now
                     
                     // Update global cache for RT instrumentation
-                    AuditorVerdictCache.update(verdict, modulated, glucoseStatus?.date)
+                    AuditorVerdictCache.update(guardedVerdict, modulated, glucoseStatus?.date)
                     auditorStatusLiveData.notifyUpdate()
                     
-                    callback?.invoke(verdict, modulated)
+                    callback?.invoke(guardedVerdict, modulated)
                 } else {
                     aapsLogger.warn(LTag.APS, "AI Auditor: No verdict received (timeout or error)")
                     stateManager.transitionTo(AuditorUIState.Error("Timeout: No verdict received"), "External timeout")

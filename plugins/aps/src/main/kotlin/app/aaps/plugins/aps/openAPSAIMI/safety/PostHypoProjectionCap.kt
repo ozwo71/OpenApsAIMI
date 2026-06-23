@@ -37,7 +37,12 @@ object PostHypoProjectionCap {
         val reboundBudgetMgdl = max(25.0, deltaMgdl5m * 12.0).coerceAtMost(60.0)
         val tierCeiling = targetBgMgdl + CorrectionAggressionGate.REBOUND_BG_MARGIN_MGDL + 15.0
         val ceiling = min(bgMgdl + reboundBudgetMgdl, tierCeiling)
-        val capped = terminalMgdl.coerceIn(bgMgdl + 5.0, ceiling)
+        val floorMgdl = bgMgdl + 5.0
+        if (ceiling < floorMgdl) {
+            // Rebound already above post-hypo tier — skip cap (empty coerceIn range would abort tick).
+            return Result(terminalMgdl, wasCapped = false, ceilingMgdl = ceiling)
+        }
+        val capped = terminalMgdl.coerceIn(floorMgdl, ceiling)
         return Result(
             cappedTerminalMgdl = capped,
             wasCapped = capped < terminalMgdl - 1e-6,

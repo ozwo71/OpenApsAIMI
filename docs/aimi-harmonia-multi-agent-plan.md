@@ -1,7 +1,7 @@
 # AIMI Harmonia / Physiological Tree - Multi-Agent Plan
 
-Status: Lot 1 implemented, tested, and documented
-Scope: build and expose a real physiological tree context without changing insulin behavior
+Status: Lots 1–3 implemented (tree + simulation + production RBT) ; Lots H4–H7 planned (meal-rise bridge, yoyo, harmonizer) — see `aimi-harmonia-implementation.md` §14
+Scope: harmonize physiological context, catch undeclared meal rise via tree, stabilize BG (with TPO/RBT); production basal-first is conditional, not universal second pass
 
 ## Agent 1 - Repository Cartographer
 

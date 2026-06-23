@@ -205,7 +205,45 @@ La partie simulation ne modifie pas:
 
 La partie production modifie uniquement la basale finale, au meme point final que T3C, et uniquement comme proprietaire basal-first unique. La partie RBT-native rend cette propriete explicable et exportable. Elle ne modifie pas l'autorite SMB, les preferences utilisateur, Advisor, Control Center ou les schemas Hormonitor.
 
+## Matrice repas non declare / meal_rise (verification 2026-06)
+
+Objectif produit : l'arbre attrape le repas non declare ; Harmonia harmonise la posture avant sur-correction.
+
+| Signal / etape | Detecte repas latent ? | Autorite dose ? | Passe par Harmonia ? |
+|----------------|------------------------|-----------------|----------------------|
+| `PhysioLatentState.mealProb` + causal | Oui → branche `meal` | Non | Oui (arbre) |
+| `PhysiologicalTree` feuille undeclared hint | Oui (texte) | Non | Oui |
+| `HarmoniaSimulation` `MEAL_SUPPORT` | Si meal≥0.60 et delta≥1 | Virtuel seulement | Oui |
+| `HarmoniaProduction` depuis `MEAL_SUPPORT` | Reprise basale bornee | TBR si gates OK | Oui, **sans SMB** |
+| `meal_rise_confirmed` (safety) | Delta/phase, souvent COB=0 | Uplift terminals | **Non — bypass** |
+| `MealCorrectionContextResolver` | Phase, UAM, latent | SMB/TBR amont | **Non — bypass** |
+| Autodrive early TBR 7.5–9 U/h | Montee « non expliquee » | TBR fort | **Non — aval dominant** |
+
+**Consequence :** Harmonia **voit** le repas non declare dans l'arbre et peut simuler `MEAL_SUPPORT`, mais les chemins SMB/TBR agressifs en amont peuvent **deja avoir decide** avant que la production Harmonia ne s'applique (et seulement en basal-first residuel).
+
+## Stabilisation glycemique / anti-yoyo (verification 2026-06)
+
+| Mecanisme | Stabilise BG ? | Lien Harmonia |
+|-----------|----------------|---------------|
+| `PROTECTIVE_REDUCTION` (activite/post-activite) | Reduit basale virtuelle | Harmonia sim ; production si eligible |
+| Blockers hypo / `postHypoBlock` | Bloque production Harmonia | Oui |
+| `PatientEventMemory.correctionFragilityScore` | Arbre + TPO | Arbre lit ; **TPO applique prefs** |
+| RBT `CHAOTIC` / post-hypo episodes | Dampen SMB | Parallele RBT |
+| `PostHypoProjectionCap` | Cap rebound | Parallele safety ; **bug** si BG>plafond |
+| TPO 2 h packs | Rails prefs temporaires | **Orthogonal** — voir overlay doc |
+
+Harmonia n'a pas encore d'action dediee **yoyo** ; la stabilisation reelle est **partagee** avec TPO et RBT. Lot **H5** (plan §14 `aimi-harmonia-implementation.md`) vise a renforcer cette branche.
+
 ## Prochain lot recommande
+
+### Priorite produit (alignement vision)
+
+1. **H0** — `PostHypoProjectionCap` robuste (tick ne doit pas avorter).
+2. **H4** — Meal-rise bridge : arbre → Harmonia → harmoniser avec `MealCorrectionContextResolver` (eviter double posture contradictoire).
+3. **H5** — Stabilisation : `correctionFragilityScore` → `PROTECTIVE_REDUCTION` / plafond hausse basale.
+4. **H6** — Feuilles arbre → prompts Auditor (lecture seule) comme vraie 2e confirmation LLM.
+
+### Technique (replay)
 
 Ajouter un runner de replay Harmonia dedie:
 

@@ -184,8 +184,10 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStatePresentationBuilder
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysioLiveDigest
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaHarmonizer
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaProductionDecision
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaProductionMode
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSensorTelemetry
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationDecision
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationEngine
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationEnvironment
@@ -965,6 +967,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val carbContextRefreshInFlight = AtomicBoolean(false)
     private val tdd2DaysRef = AtomicReference<Float?>(null)
     private val tdd2DaysRefreshInFlight = AtomicBoolean(false)
+    private val tdd30DaysRef = AtomicReference<Double?>(null)
+    private val tdd30DaysRefreshInFlight = AtomicBoolean(false)
+    private val sensorInsertionMsRef = AtomicReference<Long?>(null)
+    private val sensorInsertionRefreshInFlight = AtomicBoolean(false)
+    @Volatile private var lastBasalLearnerHypoNotifyMs: Long = 0L
     private val stepsSnapshotRef = AtomicReference<List<SC>>(emptyList())
     private val stepsRefreshInFlight = AtomicBoolean(false)
     private val heartRatesSnapshotRef = AtomicReference<List<HR>>(emptyList())
@@ -1189,6 +1196,55 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 tdd2DaysRefreshInFlight.set(false)
             }
         }
+    }
+
+    private fun resolveTdd30DaysForLearner(fallback7Day: Double): Double {
+        refreshTdd30DaysAsync()
+        return tdd30DaysRef.get()?.takeIf { it > 0.0 } ?: 0.0
+    }
+
+    private fun refreshTdd30DaysAsync() {
+        if (!tdd30DaysRefreshInFlight.compareAndSet(false, true)) return
+        determineIoScope.launch {
+            try {
+                val avg = tddCalculator.averageTDD(tddCalculator.calculate(30, allowMissingDays = true))
+                    ?.data?.totalAmount
+                tdd30DaysRef.set(avg?.takeIf { it > 0.0 })
+            } catch (_: Exception) {
+                tdd30DaysRef.set(null)
+            } finally {
+                tdd30DaysRefreshInFlight.set(false)
+            }
+        }
+    }
+
+    private fun resolveSensorInsertionMsCached(nowMs: Long): Long? {
+        refreshSensorInsertionAsync(nowMs)
+        return sensorInsertionMsRef.get()
+    }
+
+    private fun refreshSensorInsertionAsync(nowMs: Long) {
+        if (!sensorInsertionRefreshInFlight.compareAndSet(false, true)) return
+        determineIoScope.launch {
+            try {
+                val fromTime = nowMs - 45L * 24L * 60L * 60L * 1000L
+                val events = persistenceLayer.getTherapyEventDataFromTime(fromTime, TE.Type.SENSOR_CHANGE, true)
+                val latest = events.maxByOrNull { it.timestamp }?.timestamp
+                sensorInsertionMsRef.set(latest?.takeIf { it > 0L })
+            } catch (_: Exception) {
+                sensorInsertionMsRef.set(null)
+            } finally {
+                sensorInsertionRefreshInFlight.set(false)
+            }
+        }
+    }
+
+    private fun notifyBasalLearnerHypoIfNeeded(nowMs: Long) {
+        val hypoFloor = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES)
+        if (hypoFloor >= 70.0 && bg >= 70.0) return
+        if (nowMs - lastBasalLearnerHypoNotifyMs < 30 * 60_000L) return
+        lastBasalLearnerHypoNotifyMs = nowMs
+        basalLearner.onHypoDetected()
     }
 
     private fun stepsCountsCached(now: Long): List<SC> {
@@ -1432,8 +1488,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.iob = iobObj.iob.toFloat() // 🛡️ Early Initialization for Safety Guards
         val accel = ctx.glucoseStatus.bgAcceleration ?: 0.0
         this.bgacc = accel
-        val hMult = if (tdd7Days.toFloat() != 0.0f) basalLearner.getMultiplier() else 1.0
-        val nMult = if (preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)) {
+        val adaptiveBasalEnabled = preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)
+        val hMultRaw = if (adaptiveBasalEnabled && tdd7Days.toFloat() != 0.0f) {
+            basalLearner.getMultiplier()
+        } else {
+            1.0
+        }
+        val maxBasalMult = preferences.get(DoubleKey.OApsAIMIMaxMultiplier).coerceIn(1.0, 2.5)
+        val hMult = hMultRaw.coerceIn(0.70, maxBasalMult)
+        val nMult = if (adaptiveBasalEnabled) {
             basalNeuralLearner.getUniversalBasalMultiplier(
                 bg = ctx.glucoseStatus.glucose,
                 basal = ctx.profile.current_basal,
@@ -2945,6 +3008,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             timestampMs = nowMs,
         )
         lastPhysiologicalTreeSnapshot = physiologicalTree
+        val sensorTelemetry = HarmoniaSensorTelemetry.resolve(
+            cgmNoiseRaw = lastLoopCgmNoise,
+            sensorInsertionMs = resolveSensorInsertionMsCached(nowMs),
+            nowMs = nowMs,
+        )
+        val harmoniaMealContext = MealSafetyContext(
+            mealModeActive = mealTime || lunchTime || dinnerTime || snackTime || highCarbTime || bfastTime,
+            inferredMealSignal = inferredMealSafetyIntent(),
+        )
+        val harmoniaMealRiseConfirmed = SafetyPredictionTerminalsResolver.isMealRiseConfirmed(
+            bg = bg,
+            delta = delta,
+            mealContext = harmoniaMealContext,
+            mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
+            cobG = cob.toDouble(),
+        )
         val harmoniaSimulation = HarmoniaSimulationEngine.evaluate(
             tree = physiologicalTree,
             environment = physiologicalTree?.let {
@@ -2961,8 +3040,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     maxBasalUph = maxBasalForSimulation,
                     maxSmbU = maxOf(maxSMB, maxSMBHB),
                     maxIobU = maxIob,
-                    sensorAgeMin = 0,
-                    sensorNoise = 0.0,
+                    sensorAgeMin = sensorTelemetry.sensorAgeMin,
+                    sensorNoise = sensorTelemetry.sensorNoise,
+                    mealRiseConfirmed = harmoniaMealRiseConfirmed,
+                    correctionFragilityScore = eventMemory.correctionFragilityScore,
+                    postHyperExhaustionScore = eventMemory.postHyperExhaustionScore,
+                    chaoticEpisodeLoad = lastRbtChaosEvaluation?.score ?: 0.0,
                 )
             },
             timestampMs = nowMs,
@@ -3311,6 +3394,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             HarmoniaSimulationAction.BASAL_FIRST,
             HarmoniaSimulationAction.MEAL_SUPPORT,
             HarmoniaSimulationAction.PROTECTIVE_REDUCTION,
+            HarmoniaSimulationAction.STABILIZE,
         )
         val harmoniaBlockReason = when {
             !harmoniaActive -> null
@@ -6998,7 +7082,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (
             sourceAction != HarmoniaSimulationAction.BASAL_FIRST &&
             sourceAction != HarmoniaSimulationAction.MEAL_SUPPORT &&
-            sourceAction != HarmoniaSimulationAction.PROTECTIVE_REDUCTION
+            sourceAction != HarmoniaSimulationAction.PROTECTIVE_REDUCTION &&
+            sourceAction != HarmoniaSimulationAction.STABILIZE
         ) {
             return blockHarmoniaProduction(simulation, "no_production_action")
         }
@@ -7068,7 +7153,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val hardCap = minOf(envMaxBasal, profileMaxBasal).coerceAtLeast(0.0)
         val requestedRate = simulation.simulatedBasalUph.coerceIn(0.0, hardCap)
         val previousRate = if (b.ctx.currentTemp.duration > 0) b.ctx.currentTemp.rate else b.profile.current_basal
-        val maxStepUp = max(0.30, previousRate * 0.20)
+        val fragility = lastPatientState?.eventMemory?.correctionFragilityScore ?: 0.0
+        val maxStepUp = when {
+            fragility >= 0.68 -> max(0.15, previousRate * 0.10)
+            fragility >= 0.55 -> max(0.20, previousRate * 0.15)
+            else -> max(0.30, previousRate * 0.20)
+        }
         val rampedRate = if (requestedRate > previousRate) {
             min(requestedRate, previousRate + maxStepUp)
         } else {
@@ -7171,9 +7261,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             currentBg = bg,
             currentDelta = delta.toDouble(),
             tdd7Days = b.tdd7Days,
-            tdd30Days = b.tdd7Days,
+            tdd30Days = resolveTdd30DaysForLearner(b.tdd7Days),
             isFastingTime = isNight && !anyMealActive
         )
+        notifyBasalLearnerHypoIfNeeded(b.ctx.currentTime)
 
         // 📊 Expose BasalLearner state in rT for visibility
         consoleLog.add("📊 BASAL_LEARNER:")
@@ -7377,6 +7468,36 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             finalAdaptiveMultiplier = 1.0
             lastDecisionSource = harmoniaProductionPlan.decisionSource
             b.rT.reason.append("; 🌿HARMONIA_PRODUCTION_BASAL_FIRST")
+        }
+
+        val harmonizerOutcome = HarmoniaHarmonizer.evaluate(
+            tree = lastPhysiologicalTreeSnapshot,
+            simulation = lastHarmoniaSimulationDecision,
+            bgMgdl = bg,
+            deltaMgdl5m = delta.toDouble(),
+            profileBasalUph = b.profile.current_basal,
+            proposedTbrUph = finalProposedRate,
+            eventualBgMgdl = eventualBG.takeIf { it.isFinite() && it > 1.0 },
+            targetBgMgdl = b.profile.target_bg.toDouble(),
+            correctionFragilityScore = lastPatientState?.eventMemory?.correctionFragilityScore ?: 0.0,
+            postHyperExhaustionScore = lastPatientState?.eventMemory?.postHyperExhaustionScore ?: 0.0,
+        )
+        when (harmonizerOutcome?.posture) {
+            HarmoniaHarmonizer.Posture.BLOCK -> {
+                finalProposedRate = b.profile.current_basal.coerceAtLeast(0.0)
+                b.rT.reason.append("; 🌿HARMONIA_HARMONIZER_BLOCK")
+            }
+            HarmoniaHarmonizer.Posture.SOFTEN -> {
+                finalProposedRate = (finalProposedRate * harmonizerOutcome.tbrFactor)
+                    .coerceAtLeast(0.0)
+                b.rT.reason.append("; 🌿HARMONIA_HARMONIZER_SOFTEN")
+            }
+            HarmoniaHarmonizer.Posture.CONFIRM,
+            null,
+            -> Unit
+        }
+        harmonizerOutcome?.let { outcome ->
+            consoleLog.add("🌿 HARMONIA_HARMONIZER: ${outcome.toJsonSummary()} ${outcome.reasons.joinToString(",")}")
         }
 
         val finalResult = setTempBasal(
@@ -8544,6 +8665,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             targetBgMgdl = projectionInput.targetBg,
             minBgLookback75m = projectionInput.minBgLookback75m,
             hasIndependentMealEvidence = CorrectionAggressionGate.hasIndependentMealEvidence(projectionInput),
+            cobG = cob.toDouble(),
         )
         lastSafetyTerminalsForRbt = safetyTerminals
         val lgsTh = HypoThresholdMath.computeHypoThreshold(
@@ -11853,6 +11975,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 patientModeDecision = lastPatientModeDecision,
                 patientState = lastPatientState,
                 postHypoDelivery = lastPostHypoDeliveryAuthority,
+                harmoniaAction = lastHarmoniaSimulationDecision?.action,
+                harmoniaEligible = lastHarmoniaSimulationDecision?.eligible == true,
             ),
         )
 

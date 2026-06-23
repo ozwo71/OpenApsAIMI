@@ -44,6 +44,18 @@ class SafetyPredictionTerminalsResolverTest {
     }
 
     @Test
+    fun risingDeltaWithoutMealContext_doesNotConfirmInStableBandWithZeroCob() {
+        assertFalse(
+            SafetyPredictionTerminalsResolver.isMealRiseConfirmed(
+                bg = 118.0,
+                delta = 2.5f,
+                mealContext = MealSafetyContext(),
+                cobG = 0.0,
+            ),
+        )
+    }
+
+    @Test
     fun risingDeltaWithoutMealContext_confirmsMealRise() {
         assertTrue(
             SafetyPredictionTerminalsResolver.isMealRiseConfirmed(

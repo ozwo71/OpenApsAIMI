@@ -19,6 +19,10 @@ data class HarmoniaSimulationEnvironment(
     val pumpSmbStepU: Double = 0.05,
     val sensorAgeMin: Int = 0,
     val sensorNoise: Double = 0.0,
+    val mealRiseConfirmed: Boolean = false,
+    val correctionFragilityScore: Double = 0.0,
+    val postHyperExhaustionScore: Double = 0.0,
+    val chaoticEpisodeLoad: Double = 0.0,
     val seed: Long? = null,
 ) {
     fun toJsonObject(): JSONObject =
@@ -35,6 +39,10 @@ data class HarmoniaSimulationEnvironment(
             put("pump_smb_step_u", pumpSmbStepU)
             put("sensor_age_min", sensorAgeMin)
             put("sensor_noise", sensorNoise)
+            put("meal_rise_confirmed", mealRiseConfirmed)
+            put("correction_fragility_score", correctionFragilityScore)
+            put("post_hyper_exhaustion_score", postHyperExhaustionScore)
+            put("chaotic_episode_load", chaoticEpisodeLoad)
             put("seed", seed ?: JSONObject.NULL)
         }
 }
@@ -126,6 +134,7 @@ enum class HarmoniaSimulationAction {
     BASAL_FIRST,
     MEAL_SUPPORT,
     PROTECTIVE_REDUCTION,
+    STABILIZE,
     BLOCKED,
 }
 
@@ -147,6 +156,7 @@ internal object HarmoniaSimulationEngine {
             HarmoniaSimulationAction.BASAL_FIRST -> 1.18
             HarmoniaSimulationAction.MEAL_SUPPORT -> 1.10
             HarmoniaSimulationAction.PROTECTIVE_REDUCTION -> 0.70
+            HarmoniaSimulationAction.STABILIZE -> 0.85
             HarmoniaSimulationAction.OBSERVE,
             HarmoniaSimulationAction.BLOCKED,
             -> 1.0
@@ -243,12 +253,31 @@ internal object HarmoniaSimulationEngine {
         blockers: List<String>,
     ): HarmoniaSimulationAction {
         if (blockers.isNotEmpty()) return HarmoniaSimulationAction.BLOCKED
+
+        val fragility = env.correctionFragilityScore.coerceIn(0.0, 1.0)
+        val exhaustion = env.postHyperExhaustionScore.coerceIn(0.0, 1.0)
+        val chaotic = env.chaoticEpisodeLoad.coerceIn(0.0, 1.0)
+        if (fragility >= 0.55 || exhaustion >= 0.65 || chaotic >= 0.50) {
+            return HarmoniaSimulationAction.STABILIZE
+        }
+
         if (tree.branches.activity.confidence >= 0.55 || tree.branches.postActivity.confidence >= 0.45) {
             return HarmoniaSimulationAction.PROTECTIVE_REDUCTION
         }
-        if (tree.branches.meal.confidence >= 0.60 && env.deltaMgdl5m >= 1.0) {
+
+        val mealConfidence = tree.branches.meal.confidence
+        val undeclaredMealRise =
+            mealConfidence >= 0.55 &&
+                env.cobG < 1.0 &&
+                (env.deltaMgdl5m >= 1.0 || env.mealRiseConfirmed)
+        val declaredMealRise =
+            env.cobG >= 3.0 &&
+                mealConfidence >= 0.50 &&
+                env.deltaMgdl5m >= 0.8
+        if (undeclaredMealRise || declaredMealRise) {
             return HarmoniaSimulationAction.MEAL_SUPPORT
         }
+
         if (
             tree.branches.hormonalResistance.confidence >= 0.55 ||
             tree.branches.stress.confidence >= 0.55 ||

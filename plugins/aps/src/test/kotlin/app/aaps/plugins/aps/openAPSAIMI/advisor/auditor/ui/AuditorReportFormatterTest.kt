@@ -100,6 +100,7 @@ class AuditorReportFormatterTest {
 
     assertNull(AuditorVerdictCache.getDisplayable(Long.MAX_VALUE))
     assertNotNull(AuditorVerdictCache.get(Long.MAX_VALUE))
-    assertEquals(0, AuditorReportFormatter.insightCount(Long.MAX_VALUE))
+    assertEquals(1, AuditorReportFormatter.insightCount(Long.MAX_VALUE))
+    assertNotNull(AuditorVerdictCache.resolveForDisplay(Long.MAX_VALUE)?.cached)
   }
 }

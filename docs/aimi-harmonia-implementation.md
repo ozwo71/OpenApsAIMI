@@ -116,9 +116,11 @@ Tree: digestion + meal probable | conf 78% | risk low | sensor ok
 
 Les refreshs de contexte ou de signaux physio ne polluent pas le log console: le resume court est ajoute uniquement depuis `PatientRefreshSource.LOOP_TICK`.
 
-## 9. Garde-fous
+## 9. Garde-fous (Lot 1 uniquement)
 
-Lot 1 ne modifie pas:
+> **Note 2026-06 :** les lots 13+ (simulation + production basal-first + RBT-native) ont ajouté une autorité TBR **conditionnelle** via `HARMONIA_PRODUCTION_BASAL_FIRST`. La liste ci-dessous décrit le périmètre **strict du Lot 1 arbre seul** ; voir §13–§14 pour l'état actuel.
+
+Lot 1 (arbre seul) ne modifiait pas:
 
 - SMB;
 - TBR/basale;
@@ -215,3 +217,50 @@ Un second lot branche Harmonia comme chemin production basal-first:
 Cette branche n'ajoute aucune autorite SMB et n'ecrit aucune preference utilisateur.
 
 Voir `docs/aimi-harmonia-simulation-branch.md`.
+
+## 14. Vision produit vs etat code (double verification 2026-06)
+
+### Intention produit (ce que Harmonia doit faire)
+
+Harmonia est le moteur qui **harmonise** les signaux disperses (physio, repas latent, UAM, memoire hyper/hypo, wearables) en un **arbre physiologique** deploye a chaque tick, puis en une **decision virtuelle** qui sert de **seconde verification** avant d'appliquer une posture insulinique. Trois objectifs clinques :
+
+1. **Repas non declare** : attraper une montee glycemique sans COB declare et la traiter avec la bonne posture (support repas vs basal-first vs observation), sans sur-reagir.
+2. **Stabilisation** : eviter yoyo et hypo par sur-correction en freinant l'agressivite quand le tronc/branches signalent fragilite, post-hypo, activite ou epuisement.
+3. **Harmonisation** : donner a Auditor, Advisor, RBT et TBR final un langage commun (`physiological_tree`, `harmonia_simulation`, `harmonia_production`).
+
+### Ce qui est aligne aujourd'hui
+
+| Objectif | Mecanisme code | Alignement |
+|----------|----------------|------------|
+| Arbre deploye au tick | `PhysiologicalTreeBuilder` lit `mealProb`, causal, phase, event memory → branches `meal`, `hypoRisk`, `digestion` | **Oui** |
+| Repas latent dans l'arbre | `meal` branch : `max(mealProb, causal.mealConfidence)` ; feuille « declared vs undeclared » | **Partiel** — detection contextuelle |
+| Simulation repas non declare | `MEAL_SUPPORT` si `meal.confidence >= 0.60` **et** `delta >= 1.0` (`HarmoniaSimulation.kt`) | **Partiel** — COB non utilise dans `chooseAction` |
+| Frein post-hypo / hypo | Blockers `hypo_or_recovery`, `low_or_falling_bg` ; production bloquee si `postHypoBlock` | **Partiel** — simulation + blocage, pas action yoyo dediee |
+| Seconde verification | RBT canal `HARMONIA_PRODUCTION_BASAL_FIRST` ; production TBR si T3C/SMB inactifs | **Partiel** — basal-first residuel, pas confirmateur global |
+| Stabilisation prefs 2 h | **TPO** (`AIMI_TRANSIENT_PREFERENCE_OVERLAY.md`) — orthogonal, partage `correctionFragilityScore` | **Oui** via TPO, pas via Harmonia seule |
+
+### Ecarts critiques (correction trop / pas assez)
+
+Les chemins **paralleles** a Harmonia restent souvent dominants sur le tick reel :
+
+| Chemin | Role | Rapport a Harmonia |
+|--------|------|-------------------|
+| `SafetyPredictionTerminalsResolver.meal_rise_confirmed` | Uplift terminal / suppression hypo predictive ; souvent `true` avec COB=0 | **Bypass** Harmonia |
+| `MealCorrectionContextResolver` | Priorite SMB/TBR repas non declare | **Bypass** — autorite SMB en amont |
+| `BasalLearner` + `AdaptiveBasal` + Autodrive V3 | TBR elevee en BG « stable » 100–130 | **Aval** — Harmonia ne veto pas |
+| `PostHypoProjectionCap` | Plafond rebound ; crash si BG > plafond | **Bug** — tick avorte au lieu de stabiliser |
+| RBT chaos / `PostHypoDeliveryAuthority` | Dampen SMB, meal suppress | **Parallele** — stabilisation reelle |
+
+**Verdict :** l'arbre **comprend** bien le repas non declare et la fragilite ; Harmonia **simule** `MEAL_SUPPORT` / `PROTECTIVE_REDUCTION` ; mais la **correction clinique** du repas non declare et du yoyo passe encore surtout par safety terminals, meal correction, RBT chaos et TPO — pas par une harmonisation unique au sommet.
+
+### Lots recommandes (plan mis a jour)
+
+| Lot | Objectif | Changement attendu |
+|-----|----------|-------------------|
+| **H4 — Meal-rise bridge** | Fermer la boucle repas non declare | `chooseAction` consomme COB=0 + `meal_rise_confirmed` + phase ; veto production si `mealDeliveryPriority` incoherent ; feuilles → `MealCorrectionContextResolver` |
+| **H5 — Stabilisation yoyo** | Action `STABILIZE` / renforcer `PROTECTIVE_REDUCTION` | Brancher `correctionFragilityScore`, `postHyperExhaustion`, episodes RBT CHAOTIC ; rampe max hausse basale si fragilite |
+| **H6 — Harmoniseur** | Vraie 2e verification | Harmonia `CONFIRM` / `SOFTEN` sur `eventualBG` et TBR propose avant `setTempBasal` ; Auditor lit feuilles arbre (golden prompts) |
+| **H7 — Capteur tick** | Blockers sensor reels | Passer `sensorAgeMin` / `sensorNoise` reels dans l'environnement tick (aujourd'hui souvent 0 en loop) |
+| **H0 — Bug P0** | Robustesse post-hypo | `PostHypoProjectionCap` : si `ceiling < bg+5`, skip cap (eviter crash tick) |
+
+Documents a maintenir synchronises : `aimi-harmonia-simulation-branch.md` (matrice bypass), `AIMI_TRANSIENT_PREFERENCE_OVERLAY.md` (§12 TPO ↔ Harmonia).

@@ -16,14 +16,14 @@ object AuditorReportFormatter {
   private const val DEFAULT_CACHE_MAX_AGE_MS = 300_000L
 
   fun insightCount(maxAgeMs: Long = DEFAULT_CACHE_MAX_AGE_MS): Int {
-    val cached = AuditorVerdictCache.getDisplayable(maxAgeMs) ?: return 0
-    val evidenceCount = cached.verdict.evidence.size
+    val resolved = AuditorVerdictCache.resolveForDisplay(maxAgeMs) ?: return 0
+    val evidenceCount = resolved.cached.verdict.evidence.size
     return if (evidenceCount > 0) evidenceCount else 1
   }
 
   fun hasUnreadVerdict(lastReadTimestampMs: Long, maxAgeMs: Long = DEFAULT_CACHE_MAX_AGE_MS): Boolean {
-    val cached = AuditorVerdictCache.getDisplayable(maxAgeMs) ?: return false
-    return cached.timestamp > lastReadTimestampMs
+    val resolved = AuditorVerdictCache.resolveForDisplay(maxAgeMs) ?: return false
+    return resolved.cached.timestamp > lastReadTimestampMs
   }
 
   fun buildNotificationSummary(context: Context, uiState: AuditorUIState): String {
@@ -61,14 +61,45 @@ object AuditorReportFormatter {
       ?: context.getString(R.string.aimi_auditor_report_no_cache)
   }
 
+  fun buildFullReportMessageWithFallback(context: Context): Pair<String, Boolean> {
+    val body = buildReportBody(context, includeStatusLine = true)
+    if (body != null) {
+      val aligned = AuditorVerdictCache.resolveForDisplay()?.alignedWithCurrentBg != false
+      return body to aligned
+    }
+    val staleBody = buildReportBodyFromRecent(context, includeStatusLine = true)
+    return if (staleBody != null) {
+      staleBody to false
+    } else {
+      context.getString(R.string.aimi_auditor_report_no_cache) to false
+    }
+  }
+
   private fun buildShortVerdictSummary(context: Context): String? {
-    val cached = AuditorVerdictCache.getDisplayable() ?: return null
-    return cached.verdict.verdict.name
+    val resolved = AuditorVerdictCache.resolveForDisplay() ?: return null
+    return resolved.cached.verdict.verdict.name
   }
 
   private fun buildReportBody(context: Context, includeStatusLine: Boolean): String? {
-    val cached = AuditorVerdictCache.getDisplayable() ?: return null
-    return formatVerdict(context, cached.verdict, trackerStatusMessageIfNeeded(includeStatusLine))
+    val resolved = AuditorVerdictCache.resolveForDisplay() ?: return null
+    if (!resolved.alignedWithCurrentBg) return null
+    return formatVerdict(
+      context,
+      resolved.cached.verdict,
+      trackerStatusMessageIfNeeded(includeStatusLine),
+      staleBgNote = null,
+    )
+  }
+
+  private fun buildReportBodyFromRecent(context: Context, includeStatusLine: Boolean): String? {
+    val cached = AuditorVerdictCache.get() ?: return null
+    val staleNote = context.getString(R.string.aimi_auditor_report_stale_bg_note)
+    return formatVerdict(
+      context,
+      cached.verdict,
+      trackerStatusMessageIfNeeded(includeStatusLine),
+      staleBgNote = staleNote,
+    )
   }
 
   private fun trackerStatusMessageIfNeeded(includeStatusLine: Boolean): String? {
@@ -81,6 +112,7 @@ object AuditorReportFormatter {
     context: Context,
     verdict: AuditorVerdict,
     statusMessage: String?,
+    staleBgNote: String? = null,
   ): String {
     val confidencePercent = (verdict.confidence * 100.0).toInt().coerceIn(0, 100)
     return buildString {
@@ -91,6 +123,10 @@ object AuditorReportFormatter {
           confidencePercent,
         )
       )
+      staleBgNote?.let { note ->
+        append('\n')
+        append(note)
+      }
       statusMessage?.let { status ->
         append('\n')
         append(context.getString(R.string.aimi_auditor_report_status_line, status))

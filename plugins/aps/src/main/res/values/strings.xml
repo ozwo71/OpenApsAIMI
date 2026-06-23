@@ -1485,6 +1485,7 @@
     <string name="aimi_auditor_notification_action_view">View report</string>
     <string name="aimi_auditor_report_dialog_title">Auditor report</string>
     <string name="aimi_auditor_report_no_cache">No recent auditor report is available. The last verdict may have expired.</string>
+    <string name="aimi_auditor_report_stale_bg_note" comment="Shown when the cached auditor verdict is from the prior CGM reading because a newer glucose value arrived.">Note: this verdict applies to the previous CGM reading; a newer glucose value is available.</string>
     <string name="aimi_auditor_report_verdict_line" comment="%1$s=verdict label (e.g. SOFTEN), %2$d=confidence percent. Example: Verdict: SOFTEN (82% confidence)">Verdict: %1$s (%2$d%% confidence)</string>
     <string name="aimi_auditor_report_status_line" comment="%1$s=tracker status message. Example: Status: OK_SOFTEN">Status: %1$s</string>
     <string name="aimi_auditor_report_degraded_mode">Degraded mode: adjustments were capped for safety.</string>
