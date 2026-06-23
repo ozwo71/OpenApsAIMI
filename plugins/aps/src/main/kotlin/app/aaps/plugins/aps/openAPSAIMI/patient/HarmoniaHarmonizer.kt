@@ -23,6 +23,10 @@ object HarmoniaHarmonizer {
             "${posture.name.lowercase()} tbr×${"%.2f".format(tbrFactor)} smb×${"%.2f".format(smbFactor)}"
     }
 
+    private const val GENUINE_HYPO_BG_MAX_MGDL = 140.0
+    private const val GENUINE_HYPO_LOOKBACK_MAX_MGDL = 85.0
+    private const val HYPER_CORRECTION_BG_MIN_MGDL = 180.0
+
     fun evaluate(
         tree: PhysiologicalTreeSnapshot?,
         simulation: HarmoniaSimulationDecision?,
@@ -34,17 +38,27 @@ object HarmoniaHarmonizer {
         targetBgMgdl: Double,
         correctionFragilityScore: Double,
         postHyperExhaustionScore: Double,
+        minBgLookback75m: Double? = null,
     ): Outcome? {
-        if (tree == null && simulation == null) return null
+        val hasFragilityPressure =
+            correctionFragilityScore >= 0.68 || postHyperExhaustionScore >= 0.72
+        if (tree == null && simulation == null && !hasFragilityPressure) return null
         val reasons = mutableListOf<String>()
 
         if (tree?.trunk?.riskLevel == PhysiologicalRiskLevel.CRITICAL) {
-            return Outcome(Posture.BLOCK, tbrFactor = 0.0, smbFactor = 0.0, reasons = listOf("critical_physio_risk"))
+            val hyperCorrectionDominant =
+                bgMgdl >= HYPER_CORRECTION_BG_MIN_MGDL &&
+                deltaMgdl5m > 0.0 &&
+                tree.branches.hyperRisk.confidence >= 0.55
+            if (!hyperCorrectionDominant) {
+                return Outcome(Posture.BLOCK, tbrFactor = 0.0, smbFactor = 0.0, reasons = listOf("critical_physio_risk"))
+            }
         }
 
         if (simulation != null && !simulation.eligible) {
             val hypoBlock = simulation.blockers.any { it.contains("hypo") || it.contains("low_or_falling") }
-            if (hypoBlock) {
+            val genuineHypoContext = isGenuineHypoContext(bgMgdl, minBgLookback75m)
+            if (hypoBlock && genuineHypoContext) {
                 return Outcome(Posture.SOFTEN, tbrFactor = 0.85, smbFactor = 0.5, reasons = listOf("harmonia_hypo_block"))
             }
         }
@@ -89,4 +103,8 @@ object HarmoniaHarmonizer {
 
         return Outcome(Posture.CONFIRM, reasons = listOf("harmonia_no_objection"))
     }
+
+    internal fun isGenuineHypoContext(bgMgdl: Double, minBgLookback75m: Double?): Boolean =
+        bgMgdl < GENUINE_HYPO_BG_MAX_MGDL ||
+        (minBgLookback75m?.let { it < GENUINE_HYPO_LOOKBACK_MAX_MGDL } == true)
 }

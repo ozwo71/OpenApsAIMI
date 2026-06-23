@@ -112,6 +112,36 @@ class PhysiologicalTreeBuilderTest {
     }
 
     @Test
+    fun build_prefersHyperTrunkWhenStaleMemoryHypoDuringActiveHyperCorrection() {
+        val state = stableState().copy(
+            postHypoReboundProb = 0.0,
+            mealProb = 0.90,
+            causalPosterior = CausalStatePosterior(
+                fastMealProb = 0.90,
+                dominant = CausalStateId.FAST_MEAL,
+                dominantConfidence = 0.90,
+                learningQuality = 0.70,
+            ),
+            eventMemory = PatientEventMemory(
+                recentHypoLoad = 1.0,
+                recentHyperLoad = 0.70,
+                correctionFragilityScore = 0.60,
+                postHyperExhaustionScore = 0.80,
+            ),
+        )
+        val tree = PhysiologicalTreeBuilder.build(
+            enabled = true,
+            patientState = state,
+            patientModeDecision = PatientModeOrchestrator.evaluate(state),
+            currentBgMgdl = 294.0,
+            deltaMgdl5m = 8.0,
+        )
+
+        assertThat(tree?.trunk?.globalState).isNotEqualTo(GlobalPhysiologicalState.HYPO_RISK)
+        assertThat(tree?.trunk?.riskLevel).isNotEqualTo(PhysiologicalRiskLevel.CRITICAL)
+    }
+
+    @Test
     fun build_handlesMissingWearableAndMlWithoutCrash() {
         val state = stableState().copy(
             sleepDebtScore = 0.40,

@@ -216,11 +216,13 @@ internal object PhysiologicalTreeBuilder {
         physioLive: PhysioLiveDigest = PhysioLiveDigest(),
         thermalBelief: ThermalBeliefDigest = ThermalBeliefDigest.EMPTY,
         timestampMs: Long = patientState.timestampMs,
+        currentBgMgdl: Double? = null,
+        deltaMgdl5m: Double? = null,
     ): PhysiologicalTreeSnapshot? {
         if (!enabled) return null
 
         val branches = buildBranches(patientState, patientModeDecision, physioLive, thermalBelief)
-        val trunk = buildTrunk(patientState, patientModeDecision, branches)
+        val trunk = buildTrunk(patientState, patientModeDecision, branches, currentBgMgdl, deltaMgdl5m)
         val roots = buildRoots(patientState)
         val leaves = buildLeaves(patientState, patientModeDecision, branches, trunk, physioLive)
         val fruits = buildFruits(patientState, trunk)
@@ -415,7 +417,15 @@ internal object PhysiologicalTreeBuilder {
         state: PatientStateSnapshot,
         mode: PatientModeOrchestrator.Decision,
         branches: PhysiologicalBranches,
+        currentBgMgdl: Double?,
+        deltaMgdl5m: Double?,
     ): PhysiologicalTrunk {
+        val effectiveHypoConfidence = effectiveHypoConfidenceForTrunk(
+            state = state,
+            branches = branches,
+            currentBgMgdl = currentBgMgdl,
+            deltaMgdl5m = deltaMgdl5m,
+        )
         val dominantSignals = listOf(
             branches.digestion,
             branches.meal,
@@ -432,7 +442,7 @@ internal object PhysiologicalTreeBuilder {
         val coherence = dataCoherence(state)
         val global = when {
             branches.sensorTrust.confidence < 0.40 -> GlobalPhysiologicalState.SENSOR_UNCERTAIN
-            branches.hypoRisk.confidence >= 0.55 -> GlobalPhysiologicalState.HYPO_RISK
+            effectiveHypoConfidence >= 0.55 -> GlobalPhysiologicalState.HYPO_RISK
             isConflicting(branches) -> GlobalPhysiologicalState.MIXED
             branches.digestion.detected && branches.meal.confidence >= 0.55 -> GlobalPhysiologicalState.DIGESTION_ACTIVE
             branches.meal.confidence >= 0.55 -> GlobalPhysiologicalState.MEAL_PROBABLE
@@ -456,10 +466,42 @@ internal object PhysiologicalTreeBuilder {
         return PhysiologicalTrunk(
             globalState = global,
             confidence = confidence,
-            riskLevel = riskLevel(branches, coherence),
+            riskLevel = riskLevel(
+                hypoConfidence = effectiveHypoConfidence,
+                branches = branches,
+                coherence = coherence,
+            ),
             dataCoherence = coherence,
             mainReason = mainReason(global, branches, mode),
         )
+    }
+
+    /**
+     * During active hyper correction, stale event-memory hypo load must not dominate the trunk.
+     */
+    private fun effectiveHypoConfidenceForTrunk(
+        state: PatientStateSnapshot,
+        branches: PhysiologicalBranches,
+        currentBgMgdl: Double?,
+        deltaMgdl5m: Double?,
+    ): Double {
+        val branchHypo = branches.hypoRisk.confidence
+        if (currentBgMgdl == null || deltaMgdl5m == null) return branchHypo
+        val liveHypo = maxOf(
+            state.postHypoReboundProb,
+            state.causalPosterior.postHypoRecoveryProb,
+        )
+        val memoryHypo = maxOf(
+            state.eventMemory.recentHypoLoad,
+            state.eventMemory.correctionFragilityScore,
+        )
+        val suppressStaleMemoryHypo =
+            currentBgMgdl > 180.0 &&
+            deltaMgdl5m > 0.0 &&
+            liveHypo < 0.55 &&
+            branchHypo >= 0.55 &&
+            memoryHypo >= 0.55
+        return if (suppressStaleMemoryHypo) liveHypo.coerceIn(0.0, 1.0) else branchHypo
     }
 
     private fun buildLeaves(
@@ -595,17 +637,18 @@ internal object PhysiologicalTreeBuilder {
     }
 
     private fun riskLevel(
+        hypoConfidence: Double,
         branches: PhysiologicalBranches,
         coherence: DataCoherenceLevel,
     ): PhysiologicalRiskLevel {
         val risk = maxOf(
-            branches.hypoRisk.confidence,
+            hypoConfidence,
             branches.hyperRisk.confidence * 0.82,
             (1.0 - branches.sensorTrust.confidence).coerceIn(0.0, 1.0) * 0.90,
             branches.insulinEffectiveness.confidence * 0.60,
         )
         return when {
-            branches.hypoRisk.confidence >= 0.75 || coherence == DataCoherenceLevel.LOW && branches.sensorTrust.confidence < 0.25 ->
+            hypoConfidence >= 0.75 || coherence == DataCoherenceLevel.LOW && branches.sensorTrust.confidence < 0.25 ->
                 PhysiologicalRiskLevel.CRITICAL
             risk >= 0.62 -> PhysiologicalRiskLevel.HIGH
             risk >= 0.34 || coherence == DataCoherenceLevel.CONFLICTING -> PhysiologicalRiskLevel.MODERATE

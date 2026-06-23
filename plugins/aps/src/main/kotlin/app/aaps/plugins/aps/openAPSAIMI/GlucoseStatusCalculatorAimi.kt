@@ -72,6 +72,23 @@ class GlucoseStatusCalculatorAimi @Inject constructor(
         return data?.map { it.recalculated.toFloat() } ?: emptyList()
     }
 
+    /** Bucketed glucose within [lookbackMinutes] of the newest sample (newest-first table). */
+    fun getBucketedGlucoseSinceMinutes(lookbackMinutes: Int): List<TimestampedBgSample> {
+        val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
+        if (data.isEmpty()) return emptyList()
+        val nowTimestamp = data.first().timestamp
+        val cutoff = nowTimestamp - lookbackMinutes * 60_000L
+        return buildList {
+            for (row in data) {
+                if (row.timestamp < cutoff) continue
+                if (row.value <= 39 || row.filledGap) continue
+                val bg = row.recalculated
+                if (!bg.isFinite() || bg <= 39.0) continue
+                add(TimestampedBgSample(timestampMs = row.timestamp, bgMgdl = bg))
+            }
+        }
+    }
+
     /** Recalcule et renvoie (GS AIMI + features). */
     fun compute(allowOldData: Boolean): Result {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy()

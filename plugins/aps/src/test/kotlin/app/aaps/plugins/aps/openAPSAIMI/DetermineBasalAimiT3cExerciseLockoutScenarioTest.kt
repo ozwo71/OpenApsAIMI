@@ -197,7 +197,7 @@ class DetermineBasalAimiT3cExerciseLockoutScenarioTest {
         assertThat(rt).isNotNull()
         assertThat(rt.reason.toString()).contains("T3c + sport/contexte activité")
         verify(exactly = 1) {
-            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any<Double?>(), any(), any<Double?>())
+            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 }

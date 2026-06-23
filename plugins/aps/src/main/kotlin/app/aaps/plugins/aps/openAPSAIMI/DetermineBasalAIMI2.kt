@@ -175,6 +175,7 @@ import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientEventMemory
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientEventMemoryCalculator
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientRefreshSource
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateEngine
@@ -2983,6 +2984,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             currentBgMgdl = bg,
             latentState = lastPhysioLatentState,
             thermalBelief = enrichedSnap.thermalBelief,
+            nowMs = nowMs,
         )
         val patientState = PatientStateEngine.build(
             timestampMs = nowMs,
@@ -3006,6 +3008,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             physioLive = physioLive,
             thermalBelief = enrichedSnap.thermalBelief,
             timestampMs = nowMs,
+            currentBgMgdl = bg,
+            deltaMgdl5m = delta.toDouble(),
         )
         lastPhysiologicalTreeSnapshot = physiologicalTree
         val sensorTelemetry = HarmoniaSensorTelemetry.resolve(
@@ -3086,54 +3090,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         currentBgMgdl: Double,
         latentState: PhysioLatentState?,
         thermalBelief: app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefDigest?,
+        nowMs: Long,
     ): PatientEventMemory {
-        val recentBgs = glucoseStatusCalculatorAimi.getRecentGlucose()
-            .map { it.toDouble() }
-            .filter { it.isFinite() && it > 39.0 }
-        val hyperPeak = max(
-            currentBgMgdl,
-            recentBgs.maxOrNull() ?: currentBgMgdl,
+        val windowedSamples = glucoseStatusCalculatorAimi.getBucketedGlucoseSinceMinutes(
+            PatientEventMemoryCalculator.LOAD_LOOKBACK_MINUTES,
         )
-        val hypoFloor = min(
-            recentBgs.minOrNull() ?: currentBgMgdl,
-            minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
-        )
-        val hyperLoad = if (recentBgs.isEmpty()) {
-            ((currentBgMgdl - 180.0) / 120.0).coerceIn(0.0, 1.0)
-        } else {
-            recentBgs.map { ((it - 180.0) / 120.0).coerceIn(0.0, 1.0) }.average()
-        }
-        val hypoLoadFromHistory = if (recentBgs.isEmpty()) {
-            ((72.0 - currentBgMgdl) / 25.0).coerceIn(0.0, 1.0)
-        } else {
-            recentBgs.map { ((72.0 - it) / 25.0).coerceIn(0.0, 1.0) }.average()
-        }
-        val hypoLoad = max(
-            hypoLoadFromHistory,
-            ((75.0 - hypoFloor) / 25.0).coerceIn(0.0, 1.0),
-        )
-        val hyperCrashScore = if (hyperPeak >= 180.0 && hypoFloor < 85.0) {
-            ((hyperPeak - 180.0) / 140.0).coerceIn(0.0, 1.0) *
-                ((85.0 - hypoFloor) / 25.0).coerceIn(0.0, 1.0)
-        } else {
-            0.0
-        }
-        val recoveryBurden = thermalBelief?.recoveryBurden ?: 0.0
-        val postHyperExhaustionScore = maxOf(
-            hyperCrashScore,
-            (hyperLoad * 0.58) + (hypoLoad * 0.42),
-            recoveryBurden * 0.65,
-        ).coerceIn(0.0, 1.0)
-        val correctionFragilityScore = maxOf(
-            ((latentState?.postHypoReboundProb ?: 0.0) * 0.58) + (hypoLoad * 0.42),
-            postHyperExhaustionScore * 0.72,
-            recoveryBurden * 0.68,
-        ).coerceIn(0.0, 1.0)
-        return PatientEventMemory(
-            recentHyperLoad = hyperLoad.coerceIn(0.0, 1.0),
-            recentHypoLoad = hypoLoad.coerceIn(0.0, 1.0),
-            postHyperExhaustionScore = postHyperExhaustionScore,
-            correctionFragilityScore = correctionFragilityScore,
+        return PatientEventMemoryCalculator.compute(
+            currentBgMgdl = currentBgMgdl,
+            windowedSamples = windowedSamples,
+            hypoFloor75m = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
+            latentState = latentState,
+            recoveryBurden = thermalBelief?.recoveryBurden ?: 0.0,
+            nowMs = nowMs,
         )
     }
 
@@ -7481,6 +7449,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             targetBgMgdl = b.profile.target_bg.toDouble(),
             correctionFragilityScore = lastPatientState?.eventMemory?.correctionFragilityScore ?: 0.0,
             postHyperExhaustionScore = lastPatientState?.eventMemory?.postHyperExhaustionScore ?: 0.0,
+            minBgLookback75m = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
         )
         when (harmonizerOutcome?.posture) {
             HarmoniaHarmonizer.Posture.BLOCK -> {

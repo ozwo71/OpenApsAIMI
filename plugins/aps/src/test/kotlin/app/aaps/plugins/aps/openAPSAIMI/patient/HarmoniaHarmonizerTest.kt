@@ -22,4 +22,157 @@ class HarmoniaHarmonizerTest {
         assertThat(outcome?.posture).isEqualTo(HarmoniaHarmonizer.Posture.SOFTEN)
         assertThat(outcome?.tbrFactor).isLessThan(1.0)
     }
+
+    @Test
+    fun hypoBlock_ignoredDuringHyperWithoutRecentLow() {
+        val tree = hyperTree()
+        val simulation = HarmoniaSimulationDecision(
+            timestampMs = 1L,
+            branch = "HYPO_RISK",
+            action = HarmoniaSimulationAction.BLOCKED,
+            eligible = false,
+            simulatedBasalUph = 1.0,
+            simulatedSmbU = 0.0,
+            basalFactor = 1.0,
+            smbFactor = 0.0,
+            environment = HarmoniaSimulationEnvironment(
+                currentBgMgdl = 294.0,
+                deltaMgdl5m = 8.0,
+                iobU = 10.0,
+                cobG = 0.0,
+                currentBasalUph = 1.0,
+                maxBasalUph = 5.0,
+                maxSmbU = 1.0,
+                maxIobU = 20.0,
+            ),
+            capsApplied = emptyList(),
+            blockers = listOf("hypo_or_recovery", "critical_risk"),
+            rationale = emptyList(),
+            compactSummary = "blocked",
+        )
+
+        val outcome = HarmoniaHarmonizer.evaluate(
+            tree = tree,
+            simulation = simulation,
+            bgMgdl = 294.0,
+            deltaMgdl5m = 8.0,
+            profileBasalUph = 0.7,
+            proposedTbrUph = 5.0,
+            eventualBgMgdl = 240.0,
+            targetBgMgdl = 95.0,
+            correctionFragilityScore = 0.58,
+            postHyperExhaustionScore = 0.81,
+            minBgLookback75m = 240.0,
+        )
+
+        assertThat(outcome?.reasons).doesNotContain("harmonia_hypo_block")
+        assertThat(outcome?.reasons).contains("post_hyper_fragility")
+    }
+
+    @Test
+    fun hypoBlock_softensWhenGenuineHypoContext() {
+        val simulation = HarmoniaSimulationDecision(
+            timestampMs = 1L,
+            branch = "HYPO_RISK",
+            action = HarmoniaSimulationAction.BLOCKED,
+            eligible = false,
+            simulatedBasalUph = 1.0,
+            simulatedSmbU = 0.0,
+            basalFactor = 1.0,
+            smbFactor = 0.0,
+            environment = HarmoniaSimulationEnvironment(
+                currentBgMgdl = 118.0,
+                deltaMgdl5m = -0.5,
+                iobU = 1.0,
+                cobG = 0.0,
+                currentBasalUph = 1.0,
+                maxBasalUph = 5.0,
+                maxSmbU = 1.0,
+                maxIobU = 20.0,
+            ),
+            capsApplied = emptyList(),
+            blockers = listOf("hypo_or_recovery"),
+            rationale = emptyList(),
+            compactSummary = "blocked",
+        )
+
+        val outcome = HarmoniaHarmonizer.evaluate(
+            tree = null,
+            simulation = simulation,
+            bgMgdl = 118.0,
+            deltaMgdl5m = -0.5,
+            profileBasalUph = 0.7,
+            proposedTbrUph = 4.0,
+            eventualBgMgdl = 130.0,
+            targetBgMgdl = 95.0,
+            correctionFragilityScore = 0.40,
+            postHyperExhaustionScore = 0.30,
+            minBgLookback75m = 72.0,
+        )
+
+        assertThat(outcome?.posture).isEqualTo(HarmoniaHarmonizer.Posture.SOFTEN)
+        assertThat(outcome?.reasons).contains("harmonia_hypo_block")
+    }
+
+    @Test
+    fun isGenuineHypoContext_requiresLowBgOrLookback() {
+        assertThat(HarmoniaHarmonizer.isGenuineHypoContext(bgMgdl = 118.0, minBgLookback75m = 200.0)).isTrue()
+        assertThat(HarmoniaHarmonizer.isGenuineHypoContext(bgMgdl = 294.0, minBgLookback75m = 240.0)).isFalse()
+        assertThat(HarmoniaHarmonizer.isGenuineHypoContext(bgMgdl = 294.0, minBgLookback75m = 72.0)).isTrue()
+    }
+
+    private fun hyperTree(): PhysiologicalTreeSnapshot {
+        val state = PhysiologicalSignalState(
+            detected = true,
+            confidence = 0.72,
+            intensity = 0.72,
+            label = "Hyper load",
+            reasons = listOf("recent_hyper=0.70"),
+        )
+        return PhysiologicalTreeSnapshot(
+            timestamp = 1L,
+            roots = PhysiologicalRoots(
+                profileState = state,
+                tddState = state,
+                basalState = state,
+                isfState = state,
+                preferenceState = state,
+                historicalPatternState = state,
+                mlAsyncState = state,
+            ),
+            trunk = PhysiologicalTrunk(
+                globalState = GlobalPhysiologicalState.HYPER_RISK,
+                confidence = 0.72,
+                riskLevel = PhysiologicalRiskLevel.HIGH,
+                dataCoherence = DataCoherenceLevel.PARTIAL,
+                mainReason = "hyper",
+            ),
+            branches = PhysiologicalBranches(
+                digestion = state,
+                meal = state,
+                activity = state,
+                postActivity = state,
+                sleepRecovery = state,
+                stress = state,
+                hormonalResistance = state,
+                insulinEffectiveness = state,
+                sensorTrust = state,
+                hypoRisk = state.copy(confidence = 1.0),
+                hyperRisk = state,
+            ),
+            leaves = PhysiologicalLeaves(
+                userSummary = "",
+                auditorNotes = emptyList(),
+                advisorHints = emptyList(),
+                mealAdvisorHints = emptyList(),
+                aimiContextNotes = emptyList(),
+                safetyNotes = emptyList(),
+                decisionExplanation = emptyList(),
+                noActionReasons = emptyList(),
+            ),
+            fruits = PhysiologicalFruits(null, emptyList(), emptyList()),
+            seasons = PhysiologicalSeasons(null, null, null, null, null),
+            compactSummary = "hyper",
+        )
+    }
 }
