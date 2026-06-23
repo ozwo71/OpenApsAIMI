@@ -37,13 +37,17 @@ object T3cAnticipation {
         activationThreshold: Double,
         eventualBg: Double?,
         strengthRaw: Double,
-        softHypoMarginMgdl: Double = DEFAULT_SOFT_HYPO_MARGIN_MGDL
+        softHypoMarginMgdl: Double = DEFAULT_SOFT_HYPO_MARGIN_MGDL,
+        /** CFRD: minimum LGS floor — impaired glucagon counter-regulation requires a higher safety threshold. */
+        lgsFloorMgdl: Double = 70.0,
+        /** CFRD: number of 5-min steps to shift the COB curve forward (malabsorption delay). */
+        cobDelaySteps: Int = 0,
     ): Hints {
         val strength = strengthRaw.coerceIn(0.0, 1.0)
         if (strength <= 0.0) return Hints.DISABLED
 
         val defensive = defensiveEnvelope(predictions, bgNow)
-        val aggressive = aggressiveEnvelope(predictions, bgNow)
+        val aggressive = aggressiveEnvelope(predictions, bgNow, cobDelaySteps)
 
         val softLine = (lgsThresholdMgdl + softHypoMarginMgdl).coerceAtMost(120.0)
         val minutesSoft = if (defensive.isNotEmpty()) {
@@ -62,7 +66,7 @@ object T3cAnticipation {
 
         return Hints(
             strength = strength,
-            lgsThresholdMgdl = lgsThresholdMgdl.coerceIn(65.0, 100.0),
+            lgsThresholdMgdl = lgsThresholdMgdl.coerceIn(lgsFloorMgdl.coerceIn(65.0, 100.0), 100.0),
             minutesToSoftHypo = minutesSoft,
             defensiveNadirBg = nadir,
             minutesToHyperExcursion = minutesHyper
@@ -86,11 +90,26 @@ object T3cAnticipation {
 
     /**
      * Step-wise maximum across non-empty series — optimistic for **hyper** excursion timing.
+     *
+     * @param cobDelaySteps CFRD malabsorption: shifts the COB curve forward by N steps (each = 5 min),
+     *   delaying when carb-driven glucose arrives in the aggressive envelope. This prevents the
+     *   algorithm from believing the post-prandial rise is already over when absorption is still pending.
      */
-    fun aggressiveEnvelope(predictions: Predictions?, @Suppress("UNUSED_PARAMETER") bgNow: Double): List<Double> {
+    fun aggressiveEnvelope(
+        predictions: Predictions?,
+        @Suppress("UNUSED_PARAMETER") bgNow: Double,
+        cobDelaySteps: Int = 0,
+    ): List<Double> {
+        val rawCob = predictions?.COB
+        val delayedCob = if (cobDelaySteps > 0 && rawCob != null && rawCob.size > 1) {
+            // Prepend `cobDelaySteps` copies of the first entry (absorption hasn't started yet)
+            // and drop the corresponding tail so the curve length is unchanged.
+            val delay = cobDelaySteps.coerceAtMost(rawCob.size - 1)
+            List(delay) { rawCob.first() } + rawCob.dropLast(delay)
+        } else rawCob
         val lists = listOfNotNull(
             predictions?.IOB,
-            predictions?.COB,
+            delayedCob,
             predictions?.UAM,
             predictions?.ZT
         ).filter { it.isNotEmpty() }

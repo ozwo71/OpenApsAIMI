@@ -510,6 +510,12 @@ enum class DoubleKey(
     /** 0 = parabolic PI only (legacy). >0 blends eventual BG + prediction curve timing into T3C basal. */
     OApsAIMIT3cAnticipationStrength("key_aimi_t3c_anticipation_strength", 0.0, 0.0, 1.0),
     OApsAIMIT3cAggressiveness("key_aimi_t3c_aggressiveness", 1.0, 0.5, 3.0),
+    /** CFRD mode: minimum LGS threshold (mg/dL) for T3C anticipation.
+     *  Impaired glucagon counter-regulation in CFRD requires a higher safety floor than standard DT1. */
+    OApsAIMIT3cCfrdLgsFloorMgdl("key_aimi_t3c_cfrd_lgs_floor", 80.0, 70.0, 95.0),
+    /** CFRD mode: exocrine malabsorption COB delay (minutes).
+     *  Shifts the COB absorption curve forward to account for delayed / irregular carbohydrate digestion. */
+    OApsAIMIT3cCfrdCobDelayMin("key_aimi_t3c_cfrd_cob_delay_min", 0.0, 0.0, 90.0),
     OApsAIMIAdaptiveBasalMaxScaling("key_aimi_adaptive_basal_max_scaling", 1.0, 0.5, 2.0),
 
     // --- AIMI adaptive basal governance (on-device; depends on Universal Adaptive Basal) ---

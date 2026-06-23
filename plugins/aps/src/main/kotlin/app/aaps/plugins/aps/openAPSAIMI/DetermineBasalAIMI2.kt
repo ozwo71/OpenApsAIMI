@@ -2462,7 +2462,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             uiInteraction = ctx.uiInteraction,
             relevanceScore = physioMultipliers.trajectoryRelevanceScore
         )
-        val lgsT3c = kotlin.math.min(90.0, (profile.lgsThreshold?.toDouble() ?: 70.0).coerceAtLeast(70.0))
+        // CFRD: enforce the higher LGS floor on the trajectory context as well
+        val cfrdLgsFloorForTraj = if (preferences.get(BooleanKey.OApsAIMIT3cCfrdMode))
+            preferences.get(DoubleKey.OApsAIMIT3cCfrdLgsFloorMgdl) else 70.0
+        val lgsT3c = kotlin.math.min(
+            90.0,
+            (profile.lgsThreshold?.toDouble() ?: 70.0).coerceAtLeast(cfrdLgsFloorForTraj)
+        )
         val minPredT3c = rT.predBGs?.IOB?.minOrNull()?.toDouble() ?: bg
         val eventualT3c = rT.eventualBG?.takeIf { it.isFinite() } ?: this.eventualBG.coerceAtLeast(40.0)
         val t3cTrajCtx = T3cTrajectoryContext.build(
@@ -15484,6 +15490,40 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Fetch T3C Preferences
         val activationThreshold = preferences.get(DoubleKey.OApsAIMIT3cActivationThreshold)
 
+        // ── CFRD (Cystic Fibrosis-Related Diabetes) adaptations ─────────────────
+        val cfrdMode       = preferences.get(BooleanKey.OApsAIMIT3cCfrdMode)
+        val cfrdExac       = cfrdMode && preferences.get(BooleanKey.OApsAIMIT3cCfrdExacerbationMode)
+        val cfrdLgsFloor   = if (cfrdMode) preferences.get(DoubleKey.OApsAIMIT3cCfrdLgsFloorMgdl) else 70.0
+        val cfrdCobDelaySteps = if (cfrdMode) {
+            (preferences.get(DoubleKey.OApsAIMIT3cCfrdCobDelayMin) / T3cAnticipation.PREDICTION_STEP_MINUTES)
+                .toInt().coerceIn(0, 18)
+        } else 0
+        // HR-based inflammation signal: elevated resting-corrected HR indicates
+        // active pulmonary exacerbation / systemic inflammation → insulin resistance.
+        val cfrdHrInflammationBoost: Double = if (cfrdMode) {
+            runCatching {
+                val snap = physioAdapter.getLatestSnapshot()
+                val hrNow = snap.hrNow
+                val rhr   = snap.rhrResting
+                if (hrNow > 0 && rhr > 0) {
+                    when ((hrNow - rhr).coerceAtLeast(0)) {
+                        in 25..Int.MAX_VALUE -> 0.35   // strong inflammation
+                        in 15..24            -> 0.20   // moderate
+                        in 8..14             -> 0.10   // mild
+                        else                 -> 0.0
+                    }
+                } else 0.0
+            }.getOrDefault(0.0)
+        } else 0.0
+
+        if (cfrdMode) {
+            consoleLog.add(
+                "🫁 T3c CFRD: lgsFloor=${cfrdLgsFloor.toInt()} " +
+                    "cobDelay=${cfrdCobDelaySteps * T3cAnticipation.PREDICTION_STEP_MINUTES}m " +
+                    "exac=$cfrdExac hrBoost=${"%.2f".format(cfrdHrInflammationBoost)}"
+            )
+        }
+
         // ── [ML ALIGNMENT] Option 2: Fuse adaptiveMult into aggressiveness ──────
         // adaptiveMult encodes the Universal Adaptive Basal scaling learned from
         // hyper/hypo episodes (hMult × nMult). By blending it here we give the
@@ -15505,18 +15545,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } else {
             adaptiveMult - 1.0 // full reduction
         }
-        val aggressiveness = (rawAggressiveness + rawAggressiveness * adaptiveBoost)
-            .coerceIn(0.3, 2.0) // hard bounds
+        // CFRD: exacerbation (manual) and HR-based inflammation both signal acute
+        // insulin resistance — raise the aggressiveness ceiling accordingly.
+        val cfrdResistanceBoost = (cfrdHrInflammationBoost + if (cfrdExac) 0.45 else 0.0).coerceAtMost(0.65)
+        val aggressivenessCap   = if (cfrdMode && (cfrdExac || cfrdHrInflammationBoost >= 0.20)) 3.0 else 2.0
+        val aggressiveness = (rawAggressiveness * (1.0 + adaptiveBoost + cfrdResistanceBoost))
+            .coerceIn(0.3, aggressivenessCap)
 
+        // CFRD: enforce higher LGS floor before feeding the anticipation engine
         val lgsForAnticipation = kotlin.math.min(
             90.0,
-            (profile.lgsThreshold?.toDouble() ?: 70.0).coerceAtLeast(70.0)
+            (profile.lgsThreshold?.toDouble() ?: 70.0).coerceAtLeast(cfrdLgsFloor)
         )
         val anticipationStrength = preferences.get(DoubleKey.OApsAIMIT3cAnticipationStrength)
         val t3cAnticipationHints = T3cAnticipation.buildHints(
             predictions = rT.predBGs,
             bgNow = bg,
             lgsThresholdMgdl = lgsForAnticipation,
+            lgsFloorMgdl = cfrdLgsFloor,
+            cobDelaySteps = cfrdCobDelaySteps,
             activationThreshold = activationThreshold,
             eventualBg = if (eventualBg > 0) eventualBg else null,
             strengthRaw = anticipationStrength

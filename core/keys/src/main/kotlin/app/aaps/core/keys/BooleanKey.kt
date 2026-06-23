@@ -341,6 +341,12 @@ enum class BooleanKey(
     OApsAIMIContextEnabled("key_aimi_context_enabled", false),  // 🎯 Context Module
     OApsAIMIContextLLMEnabled("key_aimi_context_llm_enabled", false),  // 🤖 LLM-powered context parsing
     OApsAIMIT3cBrittleMode("key_aimi_t3c_brittle_mode", false),
+    /** Cystic fibrosis-related diabetes (CFRD) adaptations in T3C mode:
+     *  higher LGS safety floor, COB absorption delay, exacerbation support. */
+    OApsAIMIT3cCfrdMode("key_aimi_t3c_cfrd_mode", false),
+    /** CFRD manual exacerbation flag: raises the T3C aggressiveness ceiling during
+     *  active pulmonary exacerbations or corticosteroid (steroid) treatment. */
+    OApsAIMIT3cCfrdExacerbationMode("key_aimi_t3c_cfrd_exacerbation", false),
 
 
     // 🦋 Thyroid / Basedow Module (MTR)
