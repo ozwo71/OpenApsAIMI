@@ -879,7 +879,8 @@ class DataHandlerMobile @Inject constructor(
                     title, message = "",
                     returnCommand = returnCommand(progress.id),
                     lines = progress.lines.map { EventData.ConfirmActionLine(it.role.name, it.text) },
-                    deferConfirm = config.AAPSCLIENT
+                    deferConfirm = config.AAPSCLIENT,
+                    wizardDetail = progress.wizardDetail,
                 )
             )
 

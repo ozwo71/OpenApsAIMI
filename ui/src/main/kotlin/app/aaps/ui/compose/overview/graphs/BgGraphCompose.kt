@@ -84,7 +84,7 @@ private val PREDICTION_SERIES = listOf(SERIES_PRED_IOB, SERIES_PRED_COB, SERIES_
  * display units from General → Units (mg/dL or mmol/L). Cache [BgDataPoint.value] stays mg/dL; conversion
  * happens when building Vico series so ticks and data share one coordinate space.
  *
- * Basal Y-axis is scaled so maxBasal = 25% of chart height (maxY = maxBasal * 4).
+ * Basal Y-axis is scaled so maxBasal occupies [BASAL_HEIGHT_FRACTION] of the chart height (maxY = maxBasal / BASAL_HEIGHT_FRACTION).
  *
  * Scroll/Zoom:
  * - Accepts external scroll/zoom states for synchronization with secondary graphs
@@ -697,10 +697,10 @@ fun BgGraphCompose(
         listOf(activityHistLine, activityPredLine)
     }
 
-    // Basal Y-axis range: maxBasal * 4 so basal occupies ~25% of chart height
+    // Basal Y-axis range: maxBasal / BASAL_HEIGHT_FRACTION so basal occupies that fraction of chart height
     // EPS layer shares End axis with basal, so both must use the same Y-range (basalMaxY)
     val basalMaxY = remember(basalData.maxBasal) {
-        if (basalData.maxBasal > 0.0) basalData.maxBasal * 4.0 else 1.0
+        if (basalData.maxBasal > 0.0) basalData.maxBasal / BASAL_HEIGHT_FRACTION else 1.0
     }
 
     // =========================================================================

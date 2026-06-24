@@ -276,7 +276,7 @@ fun SecondaryGraphCompose(
         pts.map { (x, y) -> x to -y }
     }
     val basalMaxY = remember(basalData) {
-        if (basalData != null && basalData.maxBasal > 0.0) basalData.maxBasal * 4.0 else 1.0
+        if (basalData != null && basalData.maxBasal > 0.0) basalData.maxBasal / BASAL_HEIGHT_FRACTION else 1.0
     }
 
     val hasBasalLayer = hasIob && basalData != null && !isDualAxis
@@ -485,7 +485,7 @@ fun SecondaryGraphCompose(
     val nowLineColor = MaterialTheme.colorScheme.onSurface
     val nowLine = rememberNowLine(minTimestamp, nowTimestamp, nowLineColor)
     val decorations = remember(nowLine) { listOf(nowLine) }
-    // When basal overlay is active, reserve top 25% for basal by extending primary Y range
+    // When basal overlay is active, reserve the top BASAL_HEIGHT_FRACTION of the height for basal by extending primary Y range
     val primaryYMax = remember(hasBasalLayer, processedIob, processedSimpleSeries, processedCob) {
         if (!hasBasalLayer) return@remember null // auto-range when no basal
         val allY = buildList {
@@ -497,7 +497,7 @@ fun SecondaryGraphCompose(
         else {
             val dataMax = allY.max().coerceAtLeast(0.1)
             val dataMin = allY.min().coerceAtMost(0.0)
-            dataMin to (dataMax / 0.75) // extend so data fills 75%, top 25% reserved for basal
+            dataMin to (dataMax / (1 - BASAL_HEIGHT_FRACTION)) // data fills (1 - fraction); top fraction reserved for basal
         }
     }
     // Dual-axis zero alignment.
@@ -541,7 +541,7 @@ fun SecondaryGraphCompose(
     }
     val primaryRangeProvider = remember(maxX, primaryYMax, dualAxisRanges, hasPrimaryData, primaryConstantRange) {
         when {
-            // Basal overlay case takes precedence (reserves top 25% of axis for basal)
+            // Basal overlay case takes precedence (reserves the top BASAL_HEIGHT_FRACTION of axis for basal)
             primaryYMax != null          -> CartesianLayerRangeProvider.fixed(minX = 0.0, maxX = maxX, minY = primaryYMax.first, maxY = primaryYMax.second)
             // Dual-axis: use zero-aligned primary range so zeros line up with secondary axis
             dualAxisRanges != null       -> CartesianLayerRangeProvider.fixed(minX = 0.0, maxX = maxX, minY = dualAxisRanges.aMin, maxY = dualAxisRanges.aMax)
@@ -552,7 +552,7 @@ fun SecondaryGraphCompose(
             else                         -> CartesianLayerRangeProvider.fixed(minX = 0.0, maxX = maxX)
         }
     }
-    // Basal range: 0 at top, -maxBasal*4 at bottom → basal occupies top 25%
+    // Basal range: 0 at top, -basalMaxY at bottom → basal occupies the top BASAL_HEIGHT_FRACTION of the height
     val basalRangeProvider = remember(maxX, basalMaxY) {
         CartesianLayerRangeProvider.fixed(minX = 0.0, maxX = maxX, minY = -basalMaxY, maxY = 0.0)
     }
