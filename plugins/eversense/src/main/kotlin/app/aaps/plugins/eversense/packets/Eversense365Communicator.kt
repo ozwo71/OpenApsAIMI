@@ -14,6 +14,7 @@ import app.aaps.plugins.eversense.packets.e365.GetActiveAlarmsPacket
 import app.aaps.plugins.eversense.packets.e365.Ping365Packet
 import app.aaps.plugins.eversense.packets.e365.SetAppVersion365Packet
 import app.aaps.plugins.eversense.packets.e365.SetBleDisconnect365Packet
+import app.aaps.plugins.eversense.packets.e365.GetCalibrationLogValuesPacket
 import app.aaps.plugins.eversense.packets.e365.GetGlucoseLogValuesPacket
 import app.aaps.plugins.eversense.packets.e365.GetLogRangePacket365
 import app.aaps.plugins.eversense.packets.e365.SetHighGlucoseAlarm365Packet
@@ -41,6 +42,7 @@ import app.aaps.plugins.eversense.packets.e365.SetCurrentDateTimePacket
 import app.aaps.plugins.eversense.util.EversenseLogger
 import app.aaps.plugins.eversense.util.StorageKeys
 import kotlinx.serialization.json.Json
+import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
 class Eversense365Communicator {
@@ -86,6 +88,23 @@ class Eversense365Communicator {
                 rawResponseHex = glucoseData.rawResponseHex
             )
 
+            // Read last calibration entry for DMS upload (must run while GATT is connected)
+            try {
+                val calibLogRange = gatt.writePacket<GetLogRangePacket365.Response>(
+                    GetLogRangePacket365(LogType.CALIBRATIONS)
+                )
+                if (calibLogRange.rangeTo > calibLogRange.rangeFrom) {
+                    val calibFrom = maxOf(calibLogRange.rangeTo - 1, calibLogRange.rangeFrom)
+                    val calibHistory = gatt.writePacket<GetCalibrationLogValuesPacket.Response>(
+                        GetCalibrationLogValuesPacket(from = calibFrom, to = calibLogRange.rangeTo)
+                    )
+                    state.calibrationHistory = calibHistory.calibrationHistory
+                    EversenseLogger.info(TAG, "Calibration: ${calibHistory.count} entries read (range $calibFrom..${calibLogRange.rangeTo})")
+                }
+            } catch (e: Exception) {
+                EversenseLogger.warning(TAG, "Could not read calibration history: $e")
+            }
+
             // Read glucose history for backfill — use previousGlucoseDatetime so gap readings are included
             try {
                 val logRange = gatt.writePacket<GetLogRangePacket365.Response>(GetLogRangePacket365(LogType.GLUCOSE))
@@ -116,7 +135,14 @@ class Eversense365Communicator {
             }
         }
 
-        fun fullSync(gatt: EversenseGattCallback, preferences: SharedPreferences, watchers: List<EversenseWatcher>) {
+        fun fullSync(gatt: EversenseGattCallback, preferences: SharedPreferences, watchers: List<EversenseWatcher>, force: Boolean = false) {
+            val stateJsonCheck = preferences.getString(StorageKeys.STATE, null) ?: "{}"
+            val stateCheck = JSON.decodeFromString<EversenseState>(stateJsonCheck)
+            val fourMinAgo = System.currentTimeMillis() - TimeUnit.SECONDS.toMillis(240)
+            if (!force && stateCheck.lastSync > fourMinAgo) {
+                EversenseLogger.debug(TAG, "365 fullSync skipped — last sync was recent (${(System.currentTimeMillis() - stateCheck.lastSync) / 1000}s ago)")
+                return
+            }
             try {
                 val stateJson = preferences.getString(StorageKeys.STATE, null) ?: "{}"
                 val state = JSON.decodeFromString<EversenseState>(stateJson)
@@ -168,7 +194,7 @@ class Eversense365Communicator {
                 // Send app version — iOS sends "8.0.4" in every fullSync
                 try { gatt.writePacket<SetAppVersion365Packet.Response>(SetAppVersion365Packet()) } catch (e: Exception) { EversenseLogger.warning(TAG, "SetAppVersion failed: $e") }
 
-                // Set BLE disconnect timeout to 5 minutes matching iOS default
+                // Set BLE disconnect timeout to 0 = never disconnect
                 try { gatt.writePacket<SetBleDisconnect365Packet.Response>(SetBleDisconnect365Packet(0)) } catch (e: Exception) { EversenseLogger.warning(TAG, "SetBleDisconnect failed: $e") }
 
                 // Read active alarms
@@ -192,6 +218,10 @@ class Eversense365Communicator {
             } catch (exception: Exception) {
                 EversenseLogger.error(TAG, "Failed to do full sync: $exception")
                 exception.printStackTrace()
+                // Disconnect on fullSync failure so BLE session resets cleanly
+                // rather than looping with broken GATT state
+                EversenseLogger.warning(TAG, "Disconnecting after fullSync failure to reset BLE session")
+                gatt.disconnect()
             }
         }
 

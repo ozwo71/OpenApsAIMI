@@ -1,5 +1,8 @@
 package app.aaps.plugins.eversense.enums
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 enum class CalibrationFlag(val code: Int) {
     NOT_ENTERED_FOR_CALIBRATION(0),
     ACTUALLY_USED_FOR_CALIBRATION(1),

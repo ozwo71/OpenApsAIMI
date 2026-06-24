@@ -173,8 +173,21 @@ class EversenseCGMPlugin {
         EversenseLogger.info(TAG, "Disconnected from transmitter")
     }
 
-    // writeSettings delegates to EversenseE3Communicator. Transmitter type (E3 vs 365) is
-    // determined at GATT connection time via EversenseSecurityType, not stored in EversenseState.
+    // Flag to track positioning mode state for safe diagnostic mode toggling across BLE reconnects
+    var isPositioningMode: Boolean = false
+
+    fun enterPositioningMode() {
+        isPositioningMode = true
+        setDiagnosticMode(true)
+        EversenseLogger.info(TAG, "Diagnostic Mode ENABLED: Positioning active")
+    }
+
+    fun exitPositioningMode() {
+        isPositioningMode = false
+        setDiagnosticMode(false)
+        EversenseLogger.info(TAG, "Diagnostic Mode DISABLED: Power saving active")
+    }
+
     /**
      * Enable or disable diagnostic mode on the transmitter.
      * Ported from iOS PlacementGuideViewModel which calls setDiagnosticMode(true)
@@ -250,7 +263,7 @@ class EversenseCGMPlugin {
                     gattCallback.writePacket<SetBloodGlucosePointPacket365.Response>(packet)
                     EversenseLogger.info(TAG, "365 calibration sent: $glucoseMgDl mg/dL")
                 } else {
-                    EversenseE3Communicator.sendCalibration(gattCallback, glucoseMgDl, timestampMs)
+                    EversenseE3Communicator.sendCalibration(gattCallback, glucoseMgDl)
                 }
             }
             future.get(20_000, java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -310,6 +323,10 @@ class EversenseCGMPlugin {
             return
         }
         gattCallback.submitToExecutor {
+            if (isPositioningMode) {
+                setDiagnosticMode(true)
+                EversenseLogger.info(TAG, "Re-enabled Diagnostic Mode after reconnect")
+            }
             EversenseLogger.info(TAG, "Running E3 fullSync on bleExecutor after connect")
             EversenseE3Communicator.fullSync(gattCallback, preferences, watchers.toList(), force)
         }

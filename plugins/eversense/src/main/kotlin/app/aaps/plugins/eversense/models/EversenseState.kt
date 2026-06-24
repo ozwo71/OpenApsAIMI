@@ -3,6 +3,7 @@ package app.aaps.plugins.eversense.models
 import app.aaps.plugins.eversense.enums.CalibrationMode
 import app.aaps.plugins.eversense.enums.CalibrationPhase
 import app.aaps.plugins.eversense.enums.CalibrationReadiness
+import app.aaps.plugins.eversense.packets.e365.CalibrationHistoryItem
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -14,6 +15,7 @@ class EversenseState {
     var calibrationMode: CalibrationMode = CalibrationMode.DEFAULT
     var nextCalibrationDate: Long = 0
     var lastCalibrationDate: Long = 0
+    var calibrationHistory: List<CalibrationHistoryItem> = emptyList()
     var batteryPercentage: Int = 0
     var recentGlucoseDatetime: Long = 0
     var recentGlucoseValue: Int = 0

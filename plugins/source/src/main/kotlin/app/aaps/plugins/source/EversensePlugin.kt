@@ -269,9 +269,11 @@ class EversensePlugin @Inject constructor(
         // Update sensor battery level for Overview status lights
         sensorBatteryLevel = if (state.batteryPercentage >= 0) state.batteryPercentage else -1
 
-        // Keep SENSOR_CHANGE therapy event in sync with transmitter insertion date so
-        // the home screen sensor age matches the Eversense Status page insertion date.
-        if (state.insertionDate > 0) {
+        // Keep SENSOR_CHANGE therapy event in sync with transmitter insertion date.
+        // Disabled for E3: forced overwrite every BT cycle injected raw transmitter uptime
+        // (subject to deep-sleep pauses), causing the home screen timer to drift.
+        // E365 retains the original sync behavior.
+        if (state.insertionDate > 0 && eversense.is365()) {
             ioScope.launch {
                 persistenceLayer.insertCgmSourceData(Sources.Eversense, emptyList(), emptyList(), state.insertionDate)
                 aapsLogger.debug(LTag.BGSOURCE, "Updated SENSOR_CHANGE event to insertionDate: ${state.insertionDate}")

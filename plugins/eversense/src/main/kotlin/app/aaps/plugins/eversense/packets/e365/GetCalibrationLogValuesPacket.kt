@@ -6,7 +6,9 @@ import app.aaps.plugins.eversense.packets.EversenseBasePacket
 import app.aaps.plugins.eversense.packets.EversensePacket
 import app.aaps.plugins.eversense.packets.e365.utils.toUnix
 import app.aaps.plugins.eversense.util.EversenseLogger
+import kotlinx.serialization.Serializable
 
+@Serializable
 data class CalibrationHistoryItem(
     val datetime: Long,
     val glucoseInMgDl: Int,
