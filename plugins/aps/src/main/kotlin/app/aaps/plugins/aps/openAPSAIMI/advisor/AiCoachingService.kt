@@ -324,7 +324,8 @@ class AiCoachingService @Inject constructor() {
              sb.append("--- PKPD (adaptive) ---\n")
              sb.append("DIA: ${ctx.pkpdPrefs.initialDiaH} h (bounds ${ctx.pkpdPrefs.boundsDiaMinH}–${ctx.pkpdPrefs.boundsDiaMaxH} h)\n")
              sb.append("Peak time: ${ctx.pkpdPrefs.initialPeakMin} min (bounds ${ctx.pkpdPrefs.boundsPeakMinMin}–${ctx.pkpdPrefs.boundsPeakMinMax} min)\n")
-             sb.append("ISF fusion max: x${ctx.pkpdPrefs.isfFusionMaxFactor} | SMB tail damping: ${ctx.pkpdPrefs.smbTailDamping}\n\n")
+             // smbTailDamping is the effective runtime value (raw ≤ 0.55 is rewritten to 0.85 neutral at runtime).
+             sb.append("ISF fusion max: x${ctx.pkpdPrefs.isfFusionMaxFactor} | SMB tail damping (effective runtime): ${ctx.pkpdPrefs.smbTailDamping}\n\n")
         }
 
         // 3. System Observations (Recommendations + PKPD)

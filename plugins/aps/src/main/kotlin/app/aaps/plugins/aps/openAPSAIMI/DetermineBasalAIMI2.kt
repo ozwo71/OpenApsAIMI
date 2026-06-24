@@ -5135,13 +5135,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             sensMgDlPerU = sens,
             pkpdRelativeActivity = cachedPkpdRuntime?.activity?.relativeActivity,
             pkpdStage = cachedPkpdRuntime?.activity?.stage,
+            minBgLookback75mMgdl = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
         )
         if (naiveEbgResolution.signGuardApplied) {
             consoleLog.add(
-                "🛡️ NAIVE_EBG_SIGN_GUARD: iob=${"%.2f".format(iobData.iob)} (negative) + " +
-                    "pkpdActivity=${"%.2f".format(cachedPkpdRuntime?.activity?.relativeActivity ?: 0.0)} " +
-                    "stage=${cachedPkpdRuntime?.activity?.stage} → collapse naive ebg to current bg " +
-                    "(rawNaive=${"%.0f".format(naiveEbgResolution.rawNaiveRoundedMgdl)})"
+                "🛡️ NAIVE_EBG_SIGN_GUARD: ${naiveEbgResolution.collapseReason} " +
+                    "→ collapse naive ebg ${naiveEbgResolution.rawNaiveRoundedMgdl.toInt()} → ${bg.toInt()}"
             )
         }
         val naiveEventualBg = naiveEbgResolution.naiveEventualBgMgdl
@@ -5762,17 +5761,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return when {
             isMealAdvisorOneShot -> {
                 val safeMax = if (mealModesMaxBasal > 0.1) mealModesMaxBasal else profile.max_basal
-                val boostedRate = calculateRate(basal, safeMax, 1.3, "Meal Advisor Trigger (One-Shot)", ctx.currentTemp, rT, overrideSafety = true)
+                val rawRate = calculateRate(basal, safeMax, 1.3, "Meal Advisor Trigger (One-Shot)", ctx.currentTemp, rT, overrideSafety = true)
+                // REBOUND_GUARD cap: a recognized post-hypo context must never receive meal_modes_MaxBasal
+                // even when a meal/advisor flag is active simultaneously — same principle as V3/V2/Harmonia paths.
+                val boostedRate = capBasalRateForCorrectionAggression(rawRate, profileCurrentBasal, "MealAdvisorOneShot")
                 AimiMealHyperBasalBoostOutcome.CompleteWithTempBasal(setTempBasal(boostedRate, 30, profile, rT, ctx.currentTemp, overrideSafetyLimits = true, adaptiveMultiplier = 1.0))
             }
             snackTime && snackrunTime in 0..30 && delta < 15 -> {
-                val boostedRate = calculateRate(basal, profileCurrentBasal, 4.0, "AI Force basal because Snack Time $snackrunTime.", ctx.currentTemp, rT, overrideSafety = true)
+                val rawRate = calculateRate(basal, profileCurrentBasal, 4.0, "AI Force basal because Snack Time $snackrunTime.", ctx.currentTemp, rT, overrideSafety = true)
+                val boostedRate = capBasalRateForCorrectionAggression(rawRate, profileCurrentBasal, "SnackTimeBoost")
                 AimiMealHyperBasalBoostOutcome.CompleteWithTempBasal(setTempBasal(boostedRate, 30, profile, rT, ctx.currentTemp, overrideSafetyLimits = true, adaptiveMultiplier = 1.0))
             }
 
             (mealTime || lunchTime || dinnerTime || highCarbTime || bfastTime) && (listOf(mealruntime, lunchruntime, dinnerruntime, highCarbrunTime, bfastruntime).maxOrNull() ?: 0) in 0..30 -> {
                 val safeMax = if (mealModesMaxBasal > 0.1) mealModesMaxBasal else profileCurrentBasal * 5.0
-                val boostedRate = calculateRate(basal, safeMax, 1.0, "Meal Boost 30min (Force MaxBasal)", ctx.currentTemp, rT, overrideSafety = true)
+                val rawRate = calculateRate(basal, safeMax, 1.0, "Meal Boost 30min (Force MaxBasal)", ctx.currentTemp, rT, overrideSafety = true)
+                val boostedRate = capBasalRateForCorrectionAggression(rawRate, profileCurrentBasal, "MealBoost30m")
                 AimiMealHyperBasalBoostOutcome.CompleteWithTempBasal(setTempBasal(boostedRate, 30, profile, rT, ctx.currentTemp, overrideSafetyLimits = true, adaptiveMultiplier = 1.0))
             }
 

@@ -22,6 +22,7 @@ import app.aaps.core.keys.interfaces.IntPreferenceKey
 import app.aaps.core.keys.interfaces.StringPreferenceKey
 import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
 import org.json.JSONObject
 
 /**
@@ -216,7 +217,10 @@ class AimiAdvisorService {
             isfFusionMaxFactor = preferences.get(DoubleKey.OApsAIMIIsfFusionMaxFactor),
             isfFusionMaxChangePerTick = preferences.get(DoubleKey.OApsAIMIIsfFusionMaxChangePerTick),
             smbTailThreshold = preferences.get(DoubleKey.OApsAIMISmbTailThreshold),
-            smbTailDamping = preferences.get(DoubleKey.OApsAIMISmbTailDamping),
+            // effectiveStoredValue() is mandatory: stored ≤ 0.55 is silently rewritten to 0.85 (neutral)
+            // at runtime. Feeding the raw value here would make the advisor reason about a setting
+            // that has no effect, perpetuating the misconfiguration.
+            smbTailDamping = PkpdSmbTailDamping.effectiveStoredValue(preferences.get(DoubleKey.OApsAIMISmbTailDamping)),
             smbExerciseDamping = preferences.get(DoubleKey.OApsAIMISmbExerciseDamping),
             smbLateFatDamping = preferences.get(DoubleKey.OApsAIMISmbLateFatDamping)
         )
