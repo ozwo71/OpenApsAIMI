@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.aaps.core.ui.compose.dialogs.OkCancelDialog
@@ -43,30 +44,56 @@ import app.aaps.core.ui.R as CoreUiR
 fun AfrezzaDialogScreen(
     viewModel: AfrezzaDialogViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
+    onOpenWizard: () -> Unit = {},
     onShowMessage: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    // Observe side effects
     LaunchedEffect(Unit) {
         viewModel.sideEffect.collect { effect ->
             when (effect) {
                 is AfrezzaDialogViewModel.SideEffect.ShowMessage -> onShowMessage(effect.message)
                 is AfrezzaDialogViewModel.SideEffect.DoseLogged -> onNavigateBack()
+                is AfrezzaDialogViewModel.SideEffect.OpenWizard -> onOpenWizard()
             }
         }
     }
 
-    // Confirmation dialog
     if (uiState.showConfirmation && uiState.selectedCartridge != null) {
         OkCancelDialog(
-            title = stringResource(R.string.log_afrezza_dose),
+            title = stringResource(R.string.afrezza_confirm_title),
             message = stringResource(R.string.afrezza_confirm_log, uiState.selectedCartridge!!),
-            icon = ElementType.INSULIN.icon(),
-            iconTint = ElementType.INSULIN.color(),
+            icon = ElementType.AFREZZA.icon(),
+            iconTint = ElementType.AFREZZA.color(),
             onConfirm = { viewModel.confirmAndLog() },
             onDismiss = { viewModel.dismissConfirmation() }
+        )
+    }
+
+    if (uiState.showMaxBasalPrompt) {
+        OkCancelDialog(
+            title = stringResource(R.string.afrezza_max_basal_title),
+            message = stringResource(R.string.afrezza_max_basal_message, uiState.maxBasalRate),
+            onConfirm = { viewModel.acceptMaxBasalPrompt() },
+            onDismiss = { viewModel.dismissMaxBasalPrompt() }
+        )
+    }
+
+    if (uiState.showDurationSelector) {
+        DurationSelectorDialog(
+            rate = uiState.maxBasalRate,
+            onDurationSelected = { minutes -> viewModel.applyMaxBasal(minutes) },
+            onDismiss = { viewModel.dismissDurationSelector() }
+        )
+    }
+
+    if (uiState.showCarbPrompt) {
+        OkCancelDialog(
+            title = stringResource(R.string.afrezza_carb_prompt_title),
+            message = stringResource(R.string.afrezza_carb_prompt_message),
+            onConfirm = { viewModel.openWizard() },
+            onDismiss = { viewModel.dismissCarbPrompt() }
         )
     }
 
@@ -76,9 +103,15 @@ fun AfrezzaDialogScreen(
         containerColor = MaterialTheme.colorScheme.surface
     ) {
         if (!uiState.isConfigured) {
-            // Afrezza not yet added in Insulin Management
             AfrezzaNotConfiguredContent()
         } else {
+            if (uiState.maxBasalActive) {
+                ActiveMaxBasalCard(
+                    rate = uiState.maxBasalRate,
+                    remainingMinutes = uiState.maxBasalRemainingMinutes,
+                    onCancel = { viewModel.cancelMaxBasal() }
+                )
+            }
             AfrezzaCartridgeSelector(
                 onCartridgeSelected = { units -> viewModel.selectCartridge(units) },
                 isLogging = uiState.isLogging,
@@ -101,18 +134,19 @@ private fun AfrezzaCartridgeSelector(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = stringResource(R.string.log_afrezza_dose),
+            text = stringResource(R.string.afrezza_select_dose),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Text(
-            text = insulinLabel,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        if (insulinLabel.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = insulinLabel,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -138,7 +172,7 @@ private fun CartridgeButton(
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.size(100.dp),
+        modifier = Modifier.size(width = 100.dp, height = 80.dp),
         shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -152,9 +186,56 @@ private fun CartridgeButton(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "units",
+                text = stringResource(CoreUiR.string.insulin_unit_shortname),
                 fontSize = 12.sp
             )
+        }
+    }
+}
+
+@Composable
+private fun ActiveMaxBasalCard(
+    rate: Double,
+    remainingMinutes: Int,
+    onCancel: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 24.dp, end = 24.dp, top = 8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = stringResource(R.string.afrezza_max_basal_active, rate),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+                Text(
+                    text = stringResource(R.string.afrezza_max_basal_remaining, remainingMinutes),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+            }
+            Button(
+                onClick = onCancel,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError
+                )
+            ) {
+                Text(stringResource(CoreUiR.string.cancel))
+            }
         }
     }
 }
@@ -176,6 +257,63 @@ private fun AfrezzaNotConfiguredContent() {
             color = MaterialTheme.colorScheme.onErrorContainer,
             textAlign = TextAlign.Center
         )
+    }
+}
+
+@Composable
+private fun DurationSelectorDialog(
+    rate: Double,
+    onDurationSelected: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = stringResource(R.string.afrezza_max_basal_duration),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = stringResource(R.string.afrezza_max_basal_rate, rate),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(60, 120, 180).forEach { minutes ->
+                        Button(
+                            onClick = { onDurationSelected(minutes) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = stringResource(CoreUiR.string.format_mins, minutes),
+                                textAlign = TextAlign.Center,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

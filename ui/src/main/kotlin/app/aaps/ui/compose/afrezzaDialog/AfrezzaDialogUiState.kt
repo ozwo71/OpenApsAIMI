@@ -5,9 +5,15 @@ import app.aaps.core.data.model.ICfg
 
 @Immutable
 data class AfrezzaDialogUiState(
-    val selectedCartridge: Int? = null,       // 4, 8, or 12
-    val afrezzaIcfg: ICfg? = null,           // Resolved Afrezza ICfg from InsulinManager
-    val isConfigured: Boolean = false,        // Whether Afrezza insulin exists in InsulinManager
+    val selectedCartridge: Int? = null,
+    val afrezzaIcfg: ICfg? = null,
+    val isConfigured: Boolean = false,
     val showConfirmation: Boolean = false,
-    val isLogging: Boolean = false
+    val isLogging: Boolean = false,
+    val showMaxBasalPrompt: Boolean = false,
+    val showDurationSelector: Boolean = false,
+    val showCarbPrompt: Boolean = false,
+    val maxBasalRate: Double = 2.0,
+    val maxBasalActive: Boolean = false,
+    val maxBasalRemainingMinutes: Int = 0
 )

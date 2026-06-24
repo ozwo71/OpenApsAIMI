@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSSMB
 
 import androidx.collection.LongSparseArray
 import androidx.collection.forEach
+import app.aaps.plugins.aps.afrezza.AfrezzaMaxBasalConstraints
 import app.aaps.core.data.aps.SMBDefaults
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.advancedFilteringSupported
@@ -545,6 +546,14 @@ open class OpenAPSSMBPlugin @Inject constructor(
             val maxBasalFromDaily = preferences.get(DoubleKey.ApsMaxDailyMultiplier)
             val maxFromDaily = floor(profile.getMaxDailyBasal() * maxBasalFromDaily * 100) / 100
             absoluteRate.setIfSmaller(maxFromDaily, rh.gs(app.aaps.core.ui.R.string.limitingbasalratio, maxFromDaily, rh.gs(R.string.max_daily_basal_multiplier)), this)
+
+            AfrezzaMaxBasalConstraints.apply(
+                absoluteRate = absoluteRate,
+                from = this,
+                iobCobCalculator = iobCobCalculator,
+                persistenceLayer = persistenceLayer,
+                aapsLogger = aapsLogger,
+            )
         }
         return absoluteRate
     }
@@ -579,6 +588,7 @@ open class OpenAPSSMBPlugin @Inject constructor(
         titleResId = R.string.openapssmb,
         items = listOf(
             DoubleKey.ApsMaxBasal,
+            DoubleKey.AfrezzaMaxBasalRate,
             DoubleKey.ApsSmbMaxIob,
             BooleanKey.ApsUseDynamicSensitivity,
             BooleanKey.ApsUseAutosens,

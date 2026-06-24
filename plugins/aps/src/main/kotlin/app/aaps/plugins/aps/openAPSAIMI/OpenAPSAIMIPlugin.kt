@@ -8,6 +8,7 @@ import android.util.LongSparseArray
 import androidx.annotation.ArrayRes
 import androidx.core.util.forEach
 import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
+import app.aaps.plugins.aps.afrezza.AfrezzaMaxBasalConstraints
 import app.aaps.core.data.aps.SMBDefaults
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.TE
@@ -1366,6 +1367,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 ),
                 this
             )
+
+            AfrezzaMaxBasalConstraints.apply(
+                absoluteRate = absoluteRate,
+                from = this,
+                iobCobCalculator = iobCobCalculator,
+                persistenceLayer = persistenceLayer,
+                aapsLogger = aapsLogger,
+            )
         }
 
         return absoluteRate
@@ -1415,6 +1424,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
      */
     private fun buildAimiComposePreferenceItems(): List<PreferenceItem> = buildList {
         add(DoubleKey.ApsMaxBasal)
+        add(DoubleKey.AfrezzaMaxBasalRate)
         add(DoubleKey.ApsSmbMaxIob)
         add(BooleanKey.ApsUseDynamicSensitivity)
         add(BooleanKey.ApsUseAutosens)

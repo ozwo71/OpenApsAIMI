@@ -114,8 +114,14 @@ data class ICfg(
 
     companion object {
         // Math-validity floors for iobCalcForTreatment. They only engage for corrupt/degenerate iCfg
-        // and are no-ops for real configs; they are NOT the medical HardLimits.
-        private const val MIN_DIA_MINUTES = 300.0 // 5 h (mirrors HardLimits.MIN_DIA); floors corrupt/sentinel DIA <= 0
-        private const val MIN_PEAK_MINUTES = 1.0  // just keeps tp > 0; real peaks (incl. sub-MIN_PEAK like 30 min) pass through
+        // (e.g. the v33 migration sentinel -1 before its repair) and are no-ops for all legitimate
+        // configs; they are NOT the medical HardLimits.
+        //
+        // MIN_DIA_MINUTES mirrors HardLimits.MIN_DIA_INHALED (1.5 h) rather than MIN_DIA (5 h) so
+        // that inhaled insulins like Afrezza — whose published DIA is 1.5-3 h — are modelled
+        // correctly.  The sentinel value is -1 (well below 90 min), so the corruption guard remains
+        // effective.
+        private const val MIN_DIA_MINUTES = 90.0  // 1.5 h = HardLimits.MIN_DIA_INHALED × 60
+        private const val MIN_PEAK_MINUTES = 1.0  // just keeps tp > 0; real peaks (incl. 30 min) pass through
     }
 }

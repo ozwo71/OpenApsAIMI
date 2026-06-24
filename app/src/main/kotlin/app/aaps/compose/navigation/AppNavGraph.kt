@@ -322,6 +322,10 @@ fun NavGraphBuilder.appNavGraph(
     composable(route = AppRoute.AfrezzaDialog.route) {
         AfrezzaDialogScreen(
             onNavigateBack = { navController.safePopBackStack() },
+            onOpenWizard = {
+                navController.safePopBackStack()
+                navController.navigate(AppRoute.WizardDialog.route)
+            },
             onShowMessage = { message ->
                 // Toast or Snackbar handled by caller
             }
