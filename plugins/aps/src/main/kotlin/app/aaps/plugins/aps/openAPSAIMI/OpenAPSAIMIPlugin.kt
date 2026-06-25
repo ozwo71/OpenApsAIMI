@@ -902,7 +902,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
             // 🧠 AIMI BRAIN INTEGRATION (UnifiedReactivityLearner)
             // "The Cognitive Bridge": Adjusts BOTH Sensitivity (ISF) and Resistance (Autosens Ratio)
-            try {
+            //
+            // ⛔ Skipped in T3C brittle mode: T3C has its own aggressiveness pipeline
+            // (rawAggressiveness / adaptiveMult / CFRD boost). Applying Brain Boost on top would
+            // create a redundant, conflicting autosens manipulation — and could amplify the
+            // pre-bolus preserved from applyLegacyMealModes, violating T3C's TBR-only design intent.
+            val t3cBrittleActive = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
+            if (t3cBrittleActive) {
+                aapsLogger.debug(LTag.APS, "🧠 Brain Boost: skipped (T3C brittle mode active — TBR-only path)")
+            }
+            if (!t3cBrittleActive) try {
                 // 🚀 TRIPLE-SIGNAL CONFIRMATION for Confirmed Rise
                 val gsAimi = gsData as? GlucoseStatusAIMI
                 val accel = gsAimi?.bgAcceleration ?: 0.0
