@@ -49,7 +49,7 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.StringKey
-import app.aaps.core.keys.interfaces.PreferenceVisibilityContext
+import app.aaps.core.keys.interfaces.VisibilityContext
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.ComposablePluginContent
@@ -158,7 +158,7 @@ fun NavGraphBuilder.appNavGraph(
     builtInSearchables: BuiltInSearchables,
     prefFileList: FileListProvider,
     persistenceLayer: PersistenceLayer,
-    visibilityContext: PreferenceVisibilityContext,
+    visibilityContext: VisibilityContext,
     // Callbacks
     onNavigationRequest: (NavigationRequest, NavHostController) -> Unit,
     onShowDeliveryError: (comment: String, titleResId: Int) -> Unit,

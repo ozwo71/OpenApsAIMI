@@ -16,8 +16,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.IntPreferenceKey
-import app.aaps.core.keys.interfaces.PreferenceVisibilityContext
 import app.aaps.core.keys.interfaces.StringPreferenceKey
+import app.aaps.core.keys.interfaces.VisibilityContext
+import app.aaps.core.ui.compose.ExcludeFromJacocoGeneratedReport
 
 /**
  * Composable list int preference for use inside card sections.
@@ -31,7 +32,7 @@ fun AdaptiveListIntPreferenceItem(
     titleResId: Int = 0,
     entries: List<String>,
     entryValues: List<Int>,
-    visibilityContext: PreferenceVisibilityContext? = null
+    visibilityContext: VisibilityContext? = null
 ) {
     val effectiveTitleResId = if (titleResId != 0) titleResId else intKey.titleResId
     val titleText = preferenceDisplayTitle(effectiveTitleResId, intKey.key)
@@ -78,7 +79,7 @@ fun AdaptiveStringListPreferenceItem(
     stringKey: StringPreferenceKey,
     titleResId: Int = 0,
     entries: Map<String, String>,
-    visibilityContext: PreferenceVisibilityContext? = null
+    visibilityContext: VisibilityContext? = null
 ) {
     val effectiveTitleResId = if (titleResId != 0) titleResId else stringKey.titleResId
     val titleText = preferenceDisplayTitle(effectiveTitleResId, stringKey.key)
@@ -117,6 +118,7 @@ fun AdaptiveStringListPreferenceItem(
     )
 }
 
+@ExcludeFromJacocoGeneratedReport
 @Preview(showBackground = true)
 @Composable
 private fun AdaptiveListIntPreferencePreview() {

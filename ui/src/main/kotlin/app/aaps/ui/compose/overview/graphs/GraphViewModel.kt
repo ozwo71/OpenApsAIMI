@@ -215,7 +215,7 @@ class GraphViewModel @AssistedInject constructor(
 
     /** ~48 mg/dL grid spacing on the dashboard BG axis, in current display units. */
     fun chartBgSoftAxisStep(): Double =
-        if (profileUtil.units == GlucoseUnit.MGDL) 48.0 else 48.0 * GlucoseUnit.MGDL_TO_MMOLL
+        if (profileUtil.units == GlucoseUnit.MGDL) 48.0 else 48.0 * Constants.MGDL_TO_MMOLL
 
     /**
      * Formats a vertical label when the value is still in **mg/dL** (e.g. Canvas dashboard stub axis from raw points).

@@ -17,11 +17,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.IntPreferenceKey
-import app.aaps.core.keys.interfaces.PreferenceVisibilityContext
+import app.aaps.core.keys.interfaces.VisibilityContext
 import app.aaps.core.keys.rangeResId
 import app.aaps.core.keys.unitLabelResId
 import app.aaps.core.keys.valueResId
 import app.aaps.core.ui.R
+import app.aaps.core.ui.compose.ExcludeFromJacocoGeneratedReport
 import java.text.DecimalFormat
 
 /**
@@ -35,7 +36,7 @@ fun AdaptiveIntPreferenceItem(
     intKey: IntPreferenceKey,
     titleResId: Int = 0,
     unit: String = "",
-    visibilityContext: PreferenceVisibilityContext? = null
+    visibilityContext: VisibilityContext? = null
 ) {
     val effectiveTitleResId = if (titleResId != 0) titleResId else intKey.titleResId
     val titleText = preferenceDisplayTitle(effectiveTitleResId, intKey.key)
@@ -77,7 +78,9 @@ fun AdaptiveIntPreferenceItem(
                 Text(
                     text = titleText,
                     style = theme.titleTextStyle,
-                    color = theme.titleColor
+                    // Mirror Preference's disabled styling (the switch row greys the same way) since this
+                    // slider branch builds its own row instead of going through Preference.
+                    color = theme.titleColor.let { if (visibility.enabled) it else it.copy(alpha = theme.disabledOpacity) }
                 )
                 SyncBadge(intKey, Modifier.padding(start = 6.dp))
             }
@@ -85,7 +88,7 @@ fun AdaptiveIntPreferenceItem(
                 Text(
                     text = summary,
                     style = theme.summaryTextStyle,
-                    color = theme.summaryColor
+                    color = theme.summaryColor.let { if (visibility.enabled) it else it.copy(alpha = theme.disabledOpacity) }
                 )
             }
             PreferenceSliderWithButtons(
@@ -103,7 +106,8 @@ fun AdaptiveIntPreferenceItem(
                 valueFormat = DecimalFormat("0"),
                 unitLabel = unitLabel,
                 dialogLabel = titleText,
-                dialogSummary = summary
+                dialogSummary = summary,
+                enabled = visibility.enabled
             )
         }
     } else {
@@ -131,6 +135,7 @@ fun AdaptiveIntPreferenceItem(
     }
 }
 
+@ExcludeFromJacocoGeneratedReport
 @Preview(showBackground = true)
 @Composable
 private fun AdaptiveIntPreferencePreview() {

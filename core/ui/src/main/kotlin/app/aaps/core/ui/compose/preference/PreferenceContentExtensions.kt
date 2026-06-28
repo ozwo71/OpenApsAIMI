@@ -36,7 +36,7 @@ import app.aaps.core.keys.interfaces.IntentPreferenceKey
 import app.aaps.core.keys.interfaces.LongPreferenceKey
 import app.aaps.core.keys.interfaces.PreferenceItem
 import app.aaps.core.keys.interfaces.PreferenceKey
-import app.aaps.core.keys.interfaces.PreferenceVisibilityContext
+import app.aaps.core.keys.interfaces.VisibilityContext
 import kotlinx.coroutines.delay
 
 /**
@@ -147,7 +147,7 @@ private fun RenderPreferenceItems(
     treeDepth: Int,
     onShowMessage: (String) -> Unit,
     sectionState: PreferenceSectionState?,
-    visibilityContext: PreferenceVisibilityContext?
+    visibilityContext: VisibilityContext?
 ) {
     val opener = LocalOpenPreferenceSubScreen.current
     val theme = LocalPreferenceTheme.current
@@ -224,7 +224,7 @@ private fun RenderPreferenceItems(
 @Composable
 private fun shouldShowSubScreenInline(
     subScreen: PreferenceSubScreenDef,
-    visibilityContext: PreferenceVisibilityContext?
+    visibilityContext: VisibilityContext?
 ): Boolean {
     for (checkItem in subScreen.items) {
         if (checkItem is PreferenceKey && checkItem.hideParentScreenIfHidden) {

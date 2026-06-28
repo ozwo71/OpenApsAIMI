@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.dp
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.UnitType
 import app.aaps.core.keys.interfaces.DoublePreferenceKey
-import app.aaps.core.keys.interfaces.PreferenceVisibilityContext
+import app.aaps.core.keys.interfaces.VisibilityContext
 import app.aaps.core.keys.decimalPlaces
 import app.aaps.core.keys.rangeResId
 import app.aaps.core.keys.step
@@ -27,6 +27,7 @@ import app.aaps.core.keys.unitLabelResId
 import app.aaps.core.keys.valueResId
 import kotlin.math.abs
 import app.aaps.core.ui.R
+import app.aaps.core.ui.compose.ExcludeFromJacocoGeneratedReport
 import app.aaps.core.ui.compose.LocalPreferences
 import java.text.DecimalFormat
 
@@ -41,7 +42,7 @@ fun AdaptiveDoublePreferenceItem(
     doubleKey: DoublePreferenceKey,
     titleResId: Int = 0,
     unit: String = "",
-    visibilityContext: PreferenceVisibilityContext? = null
+    visibilityContext: VisibilityContext? = null
 ) {
     val preferences = LocalPreferences.current
     val effectiveTitleResId = if (titleResId != 0) titleResId else doubleKey.titleResId
@@ -108,7 +109,9 @@ fun AdaptiveDoublePreferenceItem(
                 Text(
                     text = titleText,
                     style = theme.titleTextStyle,
-                    color = theme.titleColor
+                    // Mirror Preference's disabled styling (the switch row greys the same way) since this
+                    // slider branch builds its own row instead of going through Preference.
+                    color = theme.titleColor.let { if (visibility.enabled) it else it.copy(alpha = theme.disabledOpacity) }
                 )
                 SyncBadge(doubleKey, Modifier.padding(start = 6.dp))
             }
@@ -116,7 +119,7 @@ fun AdaptiveDoublePreferenceItem(
                 Text(
                     text = summary,
                     style = theme.summaryTextStyle,
-                    color = theme.summaryColor
+                    color = theme.summaryColor.let { if (visibility.enabled) it else it.copy(alpha = theme.disabledOpacity) }
                 )
             }
             PreferenceSliderWithButtons(
@@ -133,7 +136,8 @@ fun AdaptiveDoublePreferenceItem(
                 valueFormat = valueFormat,
                 unitLabel = unitLabel,
                 dialogLabel = titleText,
-                dialogSummary = summary
+                dialogSummary = summary,
+                enabled = visibility.enabled
             )
         }
     } else {
@@ -161,6 +165,7 @@ fun AdaptiveDoublePreferenceItem(
     }
 }
 
+@ExcludeFromJacocoGeneratedReport
 @Preview(showBackground = true)
 @Composable
 private fun AdaptiveDoublePreferencePreview() {

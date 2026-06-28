@@ -29,6 +29,7 @@ import app.aaps.core.ui.compose.AppBrandIcon
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import app.aaps.core.ui.compose.ExcludeFromJacocoGeneratedReport
 
 /**
  * Modal-style screen rendered over a scrim by [ErrorActivity] when an urgent alarm fires.
@@ -158,6 +159,7 @@ fun ErrorScreen(
     }
 }
 
+@ExcludeFromJacocoGeneratedReport
 @Preview(showBackground = true, widthDp = 360, heightDp = 720)
 @Composable
 private fun ErrorScreenPreview() {
@@ -174,6 +176,7 @@ private fun ErrorScreenPreview() {
     }
 }
 
+@ExcludeFromJacocoGeneratedReport
 @Preview(showBackground = true, widthDp = 360, heightDp = 720)
 @Composable
 private fun ErrorScreenShortPreview() {

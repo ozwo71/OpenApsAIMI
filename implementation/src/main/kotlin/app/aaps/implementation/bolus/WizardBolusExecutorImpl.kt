@@ -124,6 +124,8 @@ class WizardBolusExecutorImpl @Inject constructor(
         val cancelTempBasal: Boolean = false,
         val cancelExtendedBolus: Boolean = false,
         val insulinActivate: BatchAction.InsulinActivate? = null,
+        // Careportal events — a LIST (defensive; clients currently send one per batch), unlike the ≤1 single-slot types.
+        val therapyEvents: List<BatchAction.TherapyEvent> = emptyList(),
         val recordOnly: Boolean = false,
         val iCfg: ICfg? = null,
         val bolusTimestamp: Long? = null
@@ -297,6 +299,7 @@ class WizardBolusExecutorImpl @Inject constructor(
         val ctb = actions.filterIsInstance<BatchAction.CancelTempBasal>().firstOrNull() // ≤1 by construction
         val ceb = actions.filterIsInstance<BatchAction.CancelExtendedBolus>().firstOrNull() // ≤1 by construction
         val ia = actions.filterIsInstance<BatchAction.InsulinActivate>().firstOrNull() // ≤1 by construction
+        val tes = actions.filterIsInstance<BatchAction.TherapyEvent>() // ≥0; handled as a list (defensive — clients currently send one per batch)
         val recordOnly = bolus?.recordOnly == true
         // Gate + pump-init only for an actual INSULIN delivery — carbs-only, a record-only log, and a TT-only batch
         // are always allowed (mirrors executeBolus, which gates only when insulin > 0).
@@ -386,7 +389,7 @@ class WizardBolusExecutorImpl @Inject constructor(
         // client gets an error instead of a silent no-op at confirm (the batch confirm path has no per-action failure channel).
         if (ia != null && profileFunction.getProfile() !is ProfileSealed.EPS)
             return WizardBolusExecutor.PrepareResult.Error(rh.gs(R.string.no_profile_set))
-        if (insulin <= 0.0 && carbs == 0 && tt == null && ps == null && rm == null && tb == null && eb == null && ctb == null && ceb == null && ia == null)
+        if (insulin <= 0.0 && carbs == 0 && tt == null && ps == null && rm == null && tb == null && eb == null && ctb == null && ceb == null && ia == null && tes.isEmpty())
             // Nothing to do after caps/clamps (e.g. negative carbs with no COB to remove): a no-op, NOT a delivery
             // error — the caller renders the neutral "no action selected" message, never the bolus-error title.
             return WizardBolusExecutor.PrepareResult.NoAction
@@ -396,13 +399,14 @@ class WizardBolusExecutorImpl @Inject constructor(
             insulin = insulin, carbs = carbs, bcr = null, bolusId = bolusId, entry = null,
             carbTimeMinutes = bolus?.carbsTimeOffsetMinutes ?: 0, notes = bolus?.notes, mode = BolusMode.FIXED,
             eventType = eventType, carbsDurationHours = bolus?.carbsDurationHours ?: 0,
+            eCarbsGrams = bolus?.eCarbsGrams ?: 0, eCarbsDelayMinutes = bolus?.eCarbsDelayMinutes ?: 0, eCarbsDurationHours = bolus?.eCarbsDurationHours ?: 0,
             tempTarget = tt, profileSwitch = ps, runningMode = rm, recordOnly = recordOnly, iCfg = bolus?.iCfg, bolusTimestamp = bolus?.timestamp?.takeIf { it > 0L },
             tempBasal = cappedTb, extendedBolus = cappedEb, cancelTempBasal = ctb != null, cancelExtendedBolus = ceb != null,
-            insulinActivate = ia
+            insulinActivate = ia, therapyEvents = tes
         )
         // The master is the SOLE author of the confirmation: build the MERGED lines for the whole batch here, so the
         // client renders the master's exact string and a master-local dialog renders the identical one (decision 1).
-        val isTtOnly = bolus == null && ps == null && rm == null && cappedTb == null && cappedEb == null && ctb == null && ceb == null && ia == null
+        val isTtOnly = bolus == null && ps == null && rm == null && cappedTb == null && cappedEb == null && ctb == null && ceb == null && ia == null && tes.isEmpty()
         val lines = buildFixedLines(bolus, insulin, carbs, recordOnly) +
             (tt?.let { buildTtLine(it, isTtOnly) } ?: emptyList()) +
             (ps?.let { buildPsLine(it) } ?: emptyList()) +
@@ -411,7 +415,8 @@ class WizardBolusExecutorImpl @Inject constructor(
             (cappedEb?.let { buildExtendedBolusLine(it, eb) } ?: emptyList()) +
             (ctb?.let { buildCancelLine(R.string.tempbasal_label) } ?: emptyList()) +
             (ceb?.let { buildCancelLine(R.string.extended_bolus) } ?: emptyList()) +
-            (ia?.let { buildInsulinActivateLine(it) } ?: emptyList())
+            (ia?.let { buildInsulinActivateLine(it) } ?: emptyList()) +
+            tes.flatMap { buildTherapyEventLine(it) }
         return WizardBolusExecutor.PrepareResult.Preview(insulin, carbs, bolusId, lines = lines, advisorApplies = false, advisorLines = emptyList())
     }
 
@@ -473,10 +478,18 @@ class WizardBolusExecutorImpl @Inject constructor(
                     deliver(p.insulin, p.carbs, carbsTime = carbsTime, carbsDuration = p.carbsDurationHours, bolusCalculatorResult = p.bcr, notes = notes, source = source, onError = wrapped, eventType = p.eventType)
                 }
             }
+            // eCarbs split (e.g. a CARBS-mode QuickWizard entry with eCarbs configured): the immediate carbs are
+            // delivered above; the extended portion is scheduled here, mirroring the wizard path's carbs2 delivery.
+            if (p.eCarbsGrams > 0) {
+                val eCarbsTime = dateUtil.now() + T.mins(p.eCarbsDelayMinutes.toLong()).msecs()
+                deliverECarbs(p.eCarbsGrams, eCarbsTime, p.eCarbsDurationHours, p.eCarbsDelayMinutes, notes, source, wrapped)
+            }
             if (tt != null && !raising && accepted) applyTempTarget(tt, source)
             // Insulin activation re-applies the active profile with the new insulin — run BEFORE any explicit PS
             // (insulin set first), independent of any dose (an InsulinActivate-only batch no-ops the deliver(0,0)).
             p.insulinActivate?.let { applyInsulinActivate(it, source) }
+            // Careportal therapy events (≥0) — dose-independent metadata; the master persists them (sole writer).
+            p.therapyEvents.forEach { applyTherapyEvent(it, source) }
             // A profile switch isn't gated on a dose (a PS-only batch funnels through here with a no-op deliver(0,0)).
             p.profileSwitch?.let { applyProfileSwitch(it, source) }
             // A running-mode change is likewise independent of any dose (an RM-only batch no-ops the deliver(0,0)).
@@ -626,6 +639,8 @@ class WizardBolusExecutorImpl @Inject constructor(
             if (bolus.carbsDurationHours > 0)
                 out += ConfirmationLine(ConfirmationRole.NORMAL, rh.gs(R.string.confirmation_line, rh.gs(R.string.duration), rh.gs(R.string.value_with_unit, bolus.carbsDurationHours.toString(), rh.gs(app.aaps.core.interfaces.R.string.shorthour))))
         }
+        if (bolus.eCarbsGrams > 0)
+            out += ConfirmationLine(ConfirmationRole.CARBS, rh.gs(R.string.wizard_ecarbs, bolus.eCarbsGrams, bolus.eCarbsDurationHours, bolus.eCarbsDelayMinutes))
         if (bolus.notes.isNotEmpty())
             out += ConfirmationLine(ConfirmationRole.NORMAL, rh.gs(R.string.confirmation_line, rh.gs(R.string.notes_label), bolus.notes))
         return out
@@ -862,6 +877,48 @@ class WizardBolusExecutorImpl @Inject constructor(
     /** Apply an insulin activation: re-apply the master's CURRENT active profile with this insulin (active-EPS precondition checked at prepare). */
     private suspend fun applyInsulinActivate(ia: BatchAction.InsulinActivate, source: Sources) {
         profileFunction.createProfileSwitchWithNewInsulin(ia.iCfg, source)
+    }
+
+    /** The careportal-event confirmation line (rarely surfaced — careportal auto-commits without showing the batch preview). */
+    private fun buildTherapyEventLine(@Suppress("UNUSED_PARAMETER") te: BatchAction.TherapyEvent): List<ConfirmationLine> =
+        listOf(ConfirmationLine(ConfirmationRole.NORMAL, rh.gs(R.string.careportal)))
+
+    /**
+     * Persist a careportal therapy event — the SOLE authoritative write (it then syncs to clients via NS). Glucose
+     * is sanity-CLAMPED to a plausible window (an untrusted paired client's value otherwise feeds the UI/NS unchecked);
+     * the window covers all real readings, so a legitimate value is never altered. The user entry is logged with the
+     * executor-provided [source] (a relayed client event is logged as Sources.NSClient — the wire `te.source` is not read here).
+     */
+    private suspend fun applyTherapyEvent(te: BatchAction.TherapyEvent, source: Sources) {
+        val event = TE(
+            timestamp = te.timestamp,
+            type = te.teType,
+            glucoseUnit = GlucoseUnit.MGDL,
+            location = te.location,
+            arrow = te.arrow
+        ).apply {
+            te.glucoseMgdl?.let { glucose = it.coerceIn(10.0, 1000.0) } // sanity-clamp to a plausible mg/dL window (untrusted client value); covers all real readings
+            glucoseType = te.glucoseType
+            if (te.durationMinutes > 0) duration = T.mins(te.durationMinutes.toLong()).msecs()
+            te.note?.let { note = it }
+            enteredBy = "AAPS"
+        }
+        val values = buildList {
+            add(ValueWithUnit.Timestamp(te.timestamp))
+            add(ValueWithUnit.TEType(event.type))
+            event.glucose?.let { g -> add(ValueWithUnit.fromGlucoseUnit(g, GlucoseUnit.MGDL)); te.glucoseType?.let { add(ValueWithUnit.TEMeterType(it)) } }
+            if (te.durationMinutes > 0) add(ValueWithUnit.Minute(te.durationMinutes))
+            te.location?.let { add(ValueWithUnit.TELocation(it)) }
+            te.arrow?.let { add(ValueWithUnit.TEArrow(it)) }
+        }
+        // UEL action category mirrors the originating dialogs: fill site/cartridge keep their specific category
+        // (CANNULA_CHANGE / INSULIN_CHANGE only ever originate from the fill dialog), all else is generic careportal.
+        val uelAction = when (te.teType) {
+            TE.Type.CANNULA_CHANGE -> Action.SITE_CHANGE
+            TE.Type.INSULIN_CHANGE -> Action.RESERVOIR_CHANGE
+            else                   -> Action.CAREPORTAL
+        }
+        persistenceLayer.insertPumpTherapyEventIfNewByTimestamp(therapyEvent = event, action = uelAction, source = source, note = te.note, listValues = values)
     }
 
     override suspend fun deliverWizardBolus(

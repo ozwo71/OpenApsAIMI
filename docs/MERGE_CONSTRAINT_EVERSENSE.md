@@ -38,6 +38,15 @@ Full port of [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS
 
 **Fork kept:** Calibration activity readiness UI (CAPTCG strips it; we keep user-facing readiness text).
 
+### Merge `dev` → `dev_OAPSAIMI` (2026-06-28)
+
+- Upstream Nightscout `dev` at `989065e9b4` (30 commits: Crowdin, QuickWizard/QuickLaunch TT presets, AAPSClient HTTP 410 / remote-error dialogs / unpaired visibility, Medtrum bolus tracking, dagger 2.60, mmol constant move to `Constants`).
+- **No Eversense file in upstream diff** — `settings.gradle`, `SourceSensor`, `PluginsListModule`, DI untouched; constraint satisfied without re-application.
+- **Conflicts (10, none Eversense):** `MainScreen.kt` (kept `dashboardOverview` skin + ported `masterOrPairedClient`), `ElementType.kt` (theirs visibility migration + fork `AFREZZA`), 4× core/ui preference (ours + `PreferenceVisibilityContext`→`VisibilityContext` API migration), 3× strings.xml (ours), `AboutDialog.kt` (both imports).
+- **Transitive fix:** `GraphViewModel.kt` `GlucoseUnit.MGDL_TO_MMOLL` → `Constants.MGDL_TO_MMOLL` (upstream removed the `GlucoseUnit` constants).
+- **Fork preserved:** AIMI, hormonitor, adaptive smoothing `calibratedOrValue`, dashboard skin, physio HC manifest, ML storage, Eversense module, `KeepAliveWorker runVacuum=false`. Build `:app:assembleFullDebug` **PASS**.
+- Log: [MERGE_DEV_2026-06-28.md](MERGE_DEV_2026-06-28.md).
+
 ### Merge `dev` → `dev_OAPSAIMI` (2026-06-24)
 
 - Upstream Nightscout `dev` at `42ea25d792` (3 commits since `6436a9556f`: rounding fix, Equil command-drop fix #4910, dev3 merge).

@@ -28,10 +28,13 @@ import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventCustomActionsChanged
 import app.aaps.core.interfaces.rx.events.EventInitializationChanged
+import app.aaps.core.interfaces.rx.events.EventShowDialog
+import app.aaps.core.interfaces.sync.NsClient
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.interfaces.VisibilityContext
 import app.aaps.core.objects.extensions.toStringMedium
 import app.aaps.core.objects.extensions.toStringShort
 import app.aaps.core.ui.R
@@ -70,6 +73,8 @@ class ManageViewModel @Inject constructor(
     private val nsSettingStatus: NSSettingsStatus,
     private val preferences: Preferences,
     private val batchExecutor: BatchExecutor,
+    private val nsClient: NsClient,
+    private val visibilityContext: VisibilityContext,
     @ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
 
@@ -101,6 +106,9 @@ class ManageViewModel @Inject constructor(
         persistenceLayer.observeChanges(TB::class.java)
             .onEach { refreshState() }.launchIn(viewModelScope)
         rxBus.toFlow(EventCustomActionsChanged::class.java)
+            .onEach { refreshState() }.launchIn(viewModelScope)
+        // Re-evaluate showMutatingActions when the client pairs/unpairs (stable signal, flips rarely).
+        nsClient.masterOrPairedClientFlow
             .onEach { refreshState() }.launchIn(viewModelScope)
     }
 
@@ -182,6 +190,9 @@ class ManageViewModel @Inject constructor(
                     showFill = pumpDescription.isRefillingCapable && isInitialized,
                     showAuthorizedClients = preferences.get(BooleanKey.NsClient3UseWs) && !config.AAPSCLIENT,
                     showPairWithMaster = config.AAPSCLIENT && preferences.get(BooleanKey.NsClient3UseWs),
+                    showMutatingActions = !config.AAPSCLIENT || nsClient.masterOrPairedClientFlow.value,
+                    // General gate: PUMP declares its own visibility (!isClient → full + pumpcontrol, not aapsclient).
+                    showPump = ElementType.PUMP.visibility.isVisible(visibilityContext),
                     cancelTempBasalText = cancelTempBasalText,
                     cancelExtendedBolusText = cancelExtendedBolusText,
                     isPatchPump = pumpDescription.isPatchPump,
@@ -209,8 +220,11 @@ class ManageViewModel @Inject constructor(
                 is ActionProgress.Prepared -> _sideEffect.tryEmit(SideEffect.ShowConfirmation(elementType, prepared.id, prepared.lines, label))
                 // Offline block (and a master-local failure) surface here; a client round-trip failure already showed on the modal.
                 is ActionProgress.Rejected ->
-                    if (prepared.reason == FailureReason.NotReachable) _sideEffect.tryEmit(SideEffect.ShowError(elementType, rh.gs(R.string.clientcontrol_fail_not_reachable)))
-                    else prepared.detail?.let { _sideEffect.tryEmit(SideEffect.ShowError(elementType, it)) }
+                    if (prepared.reason == FailureReason.NotReachable) rxBus.send(EventShowDialog.Ok(title = label, message = rh.gs(R.string.clientcontrol_fail_not_reachable)))
+                    else prepared.detail?.let { detail ->
+                        if (config.AAPSCLIENT) rxBus.send(EventShowDialog.Ok(title = label, message = detail))
+                        else _sideEffect.tryEmit(SideEffect.ShowError(elementType, detail))
+                    }
 
                 else                       -> Unit // Unconfirmed → app-level modal
             }
@@ -223,8 +237,11 @@ class ManageViewModel @Inject constructor(
             // NoPendingBolus (a double-tapped dialog already consumed it) stays silent — the cancel ran once.
             val result = batchExecutor.commit(bolusId, Sources.Actions, label, pumpDirect = true)
             if (result is ActionProgress.Rejected)
-                if (result.reason == FailureReason.NotReachable) _sideEffect.tryEmit(SideEffect.ShowError(elementType, rh.gs(R.string.clientcontrol_fail_not_reachable)))
-                else result.detail?.let { _sideEffect.tryEmit(SideEffect.ShowError(elementType, it)) }
+                if (result.reason == FailureReason.NotReachable) rxBus.send(EventShowDialog.Ok(title = label, message = rh.gs(R.string.clientcontrol_fail_not_reachable)))
+                else result.detail?.let { detail ->
+                    if (config.AAPSCLIENT) rxBus.send(EventShowDialog.Ok(title = label, message = detail))
+                    else _sideEffect.tryEmit(SideEffect.ShowError(elementType, detail))
+                }
         }
     }
 

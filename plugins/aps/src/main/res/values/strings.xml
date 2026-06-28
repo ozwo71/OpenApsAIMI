@@ -60,7 +60,7 @@
     <string name="hardlimit">hard limit</string>
 
     <!--    Autotune   -->
-    <string name="insulin_peak">Peak</string>
+    <string name="autotune_peak">Peak</string>
 
     <!--    Loop -->
     <string name="key_smb_enable_carbs_suggestions_threshold" translatable="false">smb_enable_carbs_suggestions_threshold</string>

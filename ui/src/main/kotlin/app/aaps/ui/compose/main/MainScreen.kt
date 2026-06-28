@@ -254,6 +254,8 @@ fun MainScreen(
                     val activeSceneState by mainViewModel.activeSceneState.collectAsStateWithLifecycle()
                     val sceneExpired by mainViewModel.sceneExpired.collectAsStateWithLifecycle()
                     val masterReachable by mainViewModel.masterReachable.collectAsStateWithLifecycle()
+                    // Stable pairing signal — hides the mutating nav buttons / commands on an unpaired client (upstream parity).
+                    val masterOrPairedClient by mainViewModel.masterOrPairedClient.collectAsStateWithLifecycle()
                     Box(modifier = Modifier.fillMaxSize()) {
                         val fabBottomOffset = if (hasToolbar && showChrome) 56.dp else 0.dp
 
@@ -298,6 +300,7 @@ fun MainScreen(
                                 onEndScene = { mainViewModel.requestSceneDeactivation() },
                                 onDismissScene = { mainViewModel.dismissExpiredScene() },
                                 endSceneEnabled = masterReachable,
+                                commandsAllowed = masterOrPairedClient,
                                 formatDuration = mainViewModel::formatDuration,
                                 paddingValues = contentPadding,
                                 fabBottomOffset = fabBottomOffset,
@@ -399,6 +402,7 @@ fun MainScreen(
                                     treatmentViewModel.refreshState()
                                     showTreatmentSheet = true
                                 },
+                                masterOrPairedClient = masterOrPairedClient,
                                 quickWizardCount = uiState.quickWizardItems.size,
                                 onAutomationClick = {
                                     scenesViewModel.refreshState()
