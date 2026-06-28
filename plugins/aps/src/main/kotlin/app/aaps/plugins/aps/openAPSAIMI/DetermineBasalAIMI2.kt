@@ -2243,9 +2243,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
         }
 
+        // 🍱 Exception repas : un repas explicitement déclaré (mode legacy ou Meal Advisor validé) prime sur le
+        // lockout exercice/activité — sauf hypo sévère. On NE coupe PAS le tick ici pour laisser passer le prebolus.
+        val mealPriorityBypass = mealDeliveryOverridesLockouts()
+        if (mealPriorityBypass && exerciseInsulinLockoutActive) {
+            consoleLog.add(
+                "🍱 MEAL_PRIORITY: lockout exercice/activité contourné pour repas déclaré " +
+                    "(bg=${bg.toInt()} > ${SEVERE_HYPO_MEAL_OVERRIDE_MGDL.toInt()}) — prebolus autorisé"
+            )
+        }
+
         val t3cBrittle = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
         if (t3cBrittle && exerciseInsulinLockoutActive && !exerciseHyperBasalOverrideActive &&
-            bg <= EXERCISE_BASAL_RESUME_BG_MGDL
+            bg <= EXERCISE_BASAL_RESUME_BG_MGDL && !mealPriorityBypass
         ) {
             markT3cRuntimeOwnership("SAFETY_TERMINAL", "exercise_lockout")
             rT.reason.append(
@@ -2259,7 +2269,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
         }
         if (!t3cBrittle && exerciseInsulinLockoutActive && !exerciseHyperBasalOverrideActive &&
-            bg <= EXERCISE_BASAL_RESUME_BG_MGDL
+            bg <= EXERCISE_BASAL_RESUME_BG_MGDL && !mealPriorityBypass
         ) {
             rT.reason.append(
                 "🏃 Sport / contexte AIMI activité : basale & SMB arrêtés (BG≤${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()}).\n"
@@ -5391,18 +5401,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         val isMealAdvisorOneShot = preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
         mealAdvisorOneShotThisTick = isMealAdvisorOneShot
-        if (isMealAdvisorOneShot && !exerciseInsulinLockoutActive) {
+        // 🍱 Exception repas : l'insuline validée par le Meal Advisor prime sur le lockout exercice/activité,
+        // sauf hypo sévère (BG ≤ [SEVERE_HYPO_MEAL_OVERRIDE_MGDL]).
+        val advisorMealPriority = bg > SEVERE_HYPO_MEAL_OVERRIDE_MGDL
+        if (isMealAdvisorOneShot && (!exerciseInsulinLockoutActive || advisorMealPriority)) {
             preferences.put(BooleanKey.OApsAIMIMealAdvisorTrigger, false)
 
             this.maxSMB = Math.max(this.maxSMB, 30.0)
             this.maxSMBHB = Math.max(this.maxSMBHB, 30.0)
 
-            consoleLog.add("🚀 MEAL ADVISOR ONE-SHOT: Forcing Aggression. MaxSMB raised to 30U.")
+            if (exerciseInsulinLockoutActive) {
+                consoleLog.add("🚀 MEAL ADVISOR ONE-SHOT: priorité repas — lockout exercice/activité contourné. MaxSMB raised to 30U.")
+            } else {
+                consoleLog.add("🚀 MEAL ADVISOR ONE-SHOT: Forcing Aggression. MaxSMB raised to 30U.")
+            }
             rT.reason.append("🚀 Advisor Trigger: MaxSMB Bypass Active. ")
         } else if (isMealAdvisorOneShot && exerciseInsulinLockoutActive) {
             preferences.put(BooleanKey.OApsAIMIMealAdvisorTrigger, false)
-            consoleLog.add("🚀 MEAL ADVISOR ONE-SHOT ignoré (sport / contexte activité).")
-            rT.reason.append("🚀 Advisor Trigger ignoré (exercice). ")
+            consoleLog.add("🚀 MEAL ADVISOR ONE-SHOT ignoré (hypo sévère sous sport / contexte activité).")
+            rT.reason.append("🚀 Advisor Trigger ignoré (hypo sévère / exercice). ")
         }
 
         consoleLog.add(
@@ -9036,6 +9053,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         /** Glycémie (mg/dL) au-dessus de laquelle la basale peut corriger malgré sport / contexte activité (SMB toujours off). */
         const val EXERCISE_BASAL_RESUME_BG_MGDL: Double = 220.0
 
+        /**
+         * Plancher hypo sévère (mg/dL, ≈ 3.0 mmol/L) : seul cas où un repas explicitement déclaré
+         * (mode legacy actif ou insuline validée Meal Advisor) ne reçoit PAS son prebolus malgré la priorité repas.
+         */
+        const val SEVERE_HYPO_MEAL_OVERRIDE_MGDL: Double = 54.0
+
         /** Fenêtre pour [minBgInLastMinutes] : min BG &lt; 70 dans cette durée → amortissement Ra post-hypo (AutoDrive V3). */
         private const val AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES = 75
 
@@ -11885,6 +11908,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return false
     }
 
+    /**
+     * Repas explicitement déclaré par l'utilisateur : un mode legacy actif
+     * (meal/bfast/lunch/dinner/highcarb/snack) **ou** insuline validée via AIMI Meal Advisor.
+     */
+    private fun explicitMealDeliveryRequested(): Boolean =
+        mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime ||
+            preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
+
+    /**
+     * Le repas déclaré doit primer sur les verrous (lockout exercice/activité, blocage post-hypo),
+     * sauf en hypo sévère (BG ≤ [SEVERE_HYPO_MEAL_OVERRIDE_MGDL]).
+     */
+    private fun mealDeliveryOverridesLockouts(): Boolean =
+        explicitMealDeliveryRequested() && bg > SEVERE_HYPO_MEAL_OVERRIDE_MGDL
+
     private fun isMealModeCondition(): Boolean {
         val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
         return mealruntime in 0..7 && lastBolusSMBUnit != pbolusM.toFloat() && mealTime
@@ -13477,7 +13515,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             logTag: String,
             onAllowed: (Double) -> Unit,
         ) {
-            if (legacyPrebolusBlockedByPostHypo(logTag)) {
+            // 🍱 Exception repas : à l'intérieur d'un mode legacy explicite, le blocage post-hypo ne s'applique
+            // plus que sous hypo sévère (BG ≤ [SEVERE_HYPO_MEAL_OVERRIDE_MGDL]). Au-dessus, le prebolus prime.
+            if (bg <= SEVERE_HYPO_MEAL_OVERRIDE_MGDL && legacyPrebolusBlockedByPostHypo(logTag)) {
                 rT.units = 0.0
                 return
             }
