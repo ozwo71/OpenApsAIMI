@@ -117,16 +117,16 @@ internal fun AimiControlCenterSnapshot.family(id: AimiBehaviorFamilyId): AimiBeh
     families.first { it.id == id }
 
 private fun readAutonomyMode(preferences: Preferences): AimiAutonomyMode {
-    val autoDrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
+    // Classic (V1/V2) autodrive removed — autonomy is a gradation of V3 production authority (no shadow tier).
     val autoDriveActive = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
+    val hyperTrajectory = autoDriveActive && preferences.get(BooleanKey.OApsAIMIHyperTrajectoryRelease)
     val authoritative = autoDriveActive && preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative)
-    val recursiveShadow = autoDriveActive && preferences.get(BooleanKey.OApsAIMIRecursiveBeliefShadow)
     val recursiveAuthority = autoDriveActive && preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority)
     return when {
-        !autoDrive && !autoDriveActive -> AimiAutonomyMode.Observation
-        autoDrive && !autoDriveActive -> AimiAutonomyMode.Recommendations
-        authoritative || recursiveAuthority -> AimiAutonomyMode.ControlledAuthority
-        else -> AimiAutonomyMode.AssistedApplication
+        !autoDriveActive -> AimiAutonomyMode.Observation
+        recursiveAuthority || authoritative -> AimiAutonomyMode.ControlledAuthority
+        hyperTrajectory -> AimiAutonomyMode.AssistedApplication
+        else -> AimiAutonomyMode.Recommendations
     }
 }
 
@@ -349,30 +349,26 @@ private fun buildAutonomyPlan(
 ): AimiFamilyWritebackPlan {
     val changes = when (targetLevel) {
         AimiAutonomyMode.Observation -> listOfNotNull(
-            booleanChange(preferences, BooleanKey.OApsAIMIautoDrive, false, R.string.oaps_aimi_enableMlautoDrive_title),
             booleanChange(preferences, BooleanKey.OApsAIMIautoDriveActive, false, R.string.oaps_aimi_enableMlautoDriveActive_title),
-            booleanChange(preferences, BooleanKey.OApsAIMIRecursiveBeliefShadow, false),
+            booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, false),
             booleanChange(preferences, BooleanKey.OApsAIMIRecursiveBeliefAuthority, false),
             booleanChange(preferences, BooleanKey.OApsAIMIautoDriveAuthoritative, false),
         )
         AimiAutonomyMode.Recommendations -> listOfNotNull(
-            booleanChange(preferences, BooleanKey.OApsAIMIautoDrive, true, R.string.oaps_aimi_enableMlautoDrive_title),
-            booleanChange(preferences, BooleanKey.OApsAIMIautoDriveActive, false, R.string.oaps_aimi_enableMlautoDriveActive_title),
-            booleanChange(preferences, BooleanKey.OApsAIMIRecursiveBeliefShadow, false),
+            booleanChange(preferences, BooleanKey.OApsAIMIautoDriveActive, true, R.string.oaps_aimi_enableMlautoDriveActive_title),
+            booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, false),
             booleanChange(preferences, BooleanKey.OApsAIMIRecursiveBeliefAuthority, false),
             booleanChange(preferences, BooleanKey.OApsAIMIautoDriveAuthoritative, false),
         )
         AimiAutonomyMode.AssistedApplication -> listOfNotNull(
-            booleanChange(preferences, BooleanKey.OApsAIMIautoDrive, true, R.string.oaps_aimi_enableMlautoDrive_title),
             booleanChange(preferences, BooleanKey.OApsAIMIautoDriveActive, true, R.string.oaps_aimi_enableMlautoDriveActive_title),
-            booleanChange(preferences, BooleanKey.OApsAIMIRecursiveBeliefShadow, true),
+            booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, true),
             booleanChange(preferences, BooleanKey.OApsAIMIRecursiveBeliefAuthority, false),
             booleanChange(preferences, BooleanKey.OApsAIMIautoDriveAuthoritative, false),
         )
         AimiAutonomyMode.ControlledAuthority -> listOfNotNull(
-            booleanChange(preferences, BooleanKey.OApsAIMIautoDrive, true, R.string.oaps_aimi_enableMlautoDrive_title),
             booleanChange(preferences, BooleanKey.OApsAIMIautoDriveActive, true, R.string.oaps_aimi_enableMlautoDriveActive_title),
-            booleanChange(preferences, BooleanKey.OApsAIMIRecursiveBeliefShadow, true),
+            booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, true),
             booleanChange(preferences, BooleanKey.OApsAIMIRecursiveBeliefAuthority, true),
             booleanChange(preferences, BooleanKey.OApsAIMIautoDriveAuthoritative, true),
         )

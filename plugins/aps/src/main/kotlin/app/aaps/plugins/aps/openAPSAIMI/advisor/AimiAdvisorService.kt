@@ -198,7 +198,7 @@ class AimiAdvisorService {
             lunchFactor = preferences.get(DoubleKey.OApsAIMILunchFactor),
             unifiedReactivityFactor = unifiedReactivityLearner?.globalFactor ?: 1.0,
             autodriveMaxBasal = preferences.get(DoubleKey.autodriveMaxBasal),
-            autodriveEnabled = preferences.get(BooleanKey.OApsAIMIautoDrive),
+            autodriveEnabled = preferences.get(BooleanKey.OApsAIMIautoDriveActive),
             mpcInsulinUPerKgPerStep = preferences.get(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep),
         )
         
@@ -840,7 +840,7 @@ class AimiAdvisorService {
             )
         }
 
-        if (prefs.get(BooleanKey.OApsAIMIautoDrive)) {
+        if (prefs.get(BooleanKey.OApsAIMIautoDriveActive)) {
             if (hypoFocus && ctx.metrics.timeBelow70 >= 0.055) {
                 recs.add(
                     AimiRecommendation(

@@ -64,7 +64,6 @@ class AimiBehaviorCausalAnalyzerTest {
 
     @Test
     fun `meal latency pattern points to meal capture`() {
-        every { preferences.get(BooleanKey.OApsAIMIautoDrive) } returns false
         every { preferences.get(BooleanKey.OApsAIMIautoDriveActive) } returns false
         every { preferences.get(DoubleKey.OApsAIMIMaxSMB) } returns 1.0
         every { preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB) } returns 1.0

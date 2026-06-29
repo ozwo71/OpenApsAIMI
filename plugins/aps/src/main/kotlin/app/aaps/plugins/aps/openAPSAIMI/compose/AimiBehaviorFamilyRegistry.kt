@@ -115,8 +115,8 @@ internal object AimiBehaviorFamilyRegistry {
         ),
         AimiBehaviorFamilyId.Autonomy to AimiBehaviorFamilyCoverage(
             managedKeys = setOf(
-                BooleanKey.OApsAIMIautoDrive.key,
                 BooleanKey.OApsAIMIautoDriveActive.key,
+                BooleanKey.OApsAIMIautodriveAggressiveSmbFloor.key,
                 BooleanKey.OApsAIMIRecursiveBeliefShadow.key,
                 BooleanKey.OApsAIMIRecursiveBeliefAuthority.key,
                 BooleanKey.OApsAIMIautoDriveAuthoritative.key,

@@ -194,7 +194,42 @@ PhysiologicalTree ──▶ HarmoniaDecisionEngine.evaluate ──▶ HarmoniaDe
    `applies_to_pump`, `harmonia_simulation_branch_v1`) and console `"Harmonia sim:"` for the analysis
    pipeline / history readers.
 
-## 9. Open items / next steps
+## 9. Autodrive — unified V3 product (classic V1/V2 removed)
+
+**Context.** Two engines used to coexist: *classic* (`tryAutodrive`, key `OApsAIMIautoDrive`) and *V3*
+(`AutodriveEngine`, key `OApsAIMIautoDriveActive`). Structurally V3 ran first and, whenever it delivered
+SMB, locked out the classic SMB (`classicSmbLockout`); a threshold proof showed that whenever classic
+qualified (BG≥120, rise≥2) V3 also engaged (BG≥120, Δ>1.2), so classic was preempted in the nominal
+case and its only unique capability — a **user-defined prebolus on aggressive rise** — almost never
+fired. When V3 was TBR-only, classic could still overwrite V3's TBR (conflict).
+
+**Decision (implemented).** Single product = V3.
+1. **Absorption.** `aggressiveRiseSmbFloorU` + opt-in key `OApsAIMIautodriveAggressiveSmbFloor`
+   (default off). On a confirmed aggressive rise within a *safe* V3 tick, the delivered SMB is
+   `max(modelSmb, prefFloor)` where the floor is the user prebolus (`OApsAIMIautodrivePrebolus` Large
+   tier rise≥5 & avg≥3, `OApsAIMIautodrivesmallPrebolus` Small tier rise≥2), pre-bounded by maxSMB +
+   IOB headroom and re-bounded by post-hypo cap + downstream V3 safety. Never reduces the model SMB.
+2. **Removal.** Deleted `tryAutodrive`, `runAutodriveV2FallbackBranch`, `isAutodriveModeCondition`,
+   `adjustAutodriveCondition`, the cooldown `lastAutodriveActionTime`, the `classicSmbLockout`
+   plumbing, and the `OApsAIMIautoDrive` key everywhere. `LoopPlugin` periodic loop now gates on V3.
+   - **User migration** (`OpenAPSAIMIPlugin.migrateClassicAutodriveToV3`, runs once at `onStart`): if the
+     legacy key `key_use_Aimi_autoDrive` was stored and ON while V3 was OFF, V3 is enabled to preserve the
+     "autodrive enabled" intent (a classic-only user would otherwise silently lose all autodrive), then
+     the legacy key is dropped so it never re-runs and a later manual V3-off is respected. Reads the
+     legacy value via `SP` (raw string key) since the enum entry no longer exists.
+3. **Autonomy ladder (no shadow, production).** Re-expressed via V3 + sub-flags:
+
+   | Level | V3 | HTR | RBT authority | authoritative |
+   |---|---|---|---|---|
+   | Observation | OFF | — | — | — |
+   | Recommendations | ON | OFF | OFF | OFF |
+   | AssistedApplication | ON | ON | OFF | OFF |
+   | ControlledAuthority | ON | ON | ON | ON |
+
+   Read side (`AimiControlCenterSnapshot.buildAutonomyFamily`, `AimiControlCenterSupport.readAutonomyMode`)
+   and write side (`buildAutonomyPlan`) are kept inverse-consistent. No tier "computes without acting."
+
+## 10. Open items / next steps
 
 - **Phase 3 (validation):** after the `sensor_warmup` fix, replay the 24 h runtime export and confirm
   `sensor_warmup` rate ≈ 0, identify the new dominant blocker, the real `chooseAction` distribution,

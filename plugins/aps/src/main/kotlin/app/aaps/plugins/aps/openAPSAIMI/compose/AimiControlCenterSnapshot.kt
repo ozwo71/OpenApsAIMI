@@ -280,17 +280,18 @@ private fun buildPhysioFamily(
 }
 
 private fun buildAutonomyFamily(preferences: Preferences): AimiBehaviorFamilySnapshot {
-    val autoDrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
+    // Classic (V1/V2) autodrive removed — the autonomy ladder is expressed via V3 + its sub-flags only.
     val autoDriveActive = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
+    val hyperTrajectory = autoDriveActive && preferences.get(BooleanKey.OApsAIMIHyperTrajectoryRelease)
     val authoritative = autoDriveActive && preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative)
-    val recursiveShadow = autoDriveActive && preferences.get(BooleanKey.OApsAIMIRecursiveBeliefShadow)
     val recursiveAuthority = autoDriveActive && preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority)
+    val aggressiveSmbFloor = autoDriveActive && preferences.get(BooleanKey.OApsAIMIautodriveAggressiveSmbFloor)
 
     val levelLabelResId = when {
-        !autoDrive && !autoDriveActive -> R.string.aimi_control_center_autonomy_observation
-        autoDrive && !autoDriveActive -> R.string.aimi_control_center_autonomy_recommendations
-        authoritative || recursiveAuthority -> R.string.aimi_control_center_autonomy_controlled
-        else -> R.string.aimi_control_center_autonomy_assisted
+        !autoDriveActive -> R.string.aimi_control_center_autonomy_observation
+        recursiveAuthority || authoritative -> R.string.aimi_control_center_autonomy_controlled
+        hyperTrajectory -> R.string.aimi_control_center_autonomy_assisted
+        else -> R.string.aimi_control_center_autonomy_recommendations
     }
     val score = when (levelLabelResId) {
         R.string.aimi_control_center_autonomy_observation -> 0.12f
@@ -311,12 +312,12 @@ private fun buildAutonomyFamily(preferences: Preferences): AimiBehaviorFamilySna
         managedPreferenceCount = AimiBehaviorFamilyRegistry.managedCount(AimiBehaviorFamilyId.Autonomy),
         expertPreferenceCount = AimiBehaviorFamilyRegistry.expertCount(AimiBehaviorFamilyId.Autonomy),
         status = AimiProjectionStatus.CoherentProfile,
+        // HTR is surfaced in the Meal-capture family; avoid a duplicate detail-row title here.
         details = listOf(
-            boolDetail(R.string.oaps_aimi_enableMlautoDrive_title, autoDrive),
             boolDetail(R.string.oaps_aimi_enableMlautoDriveActive_title, autoDriveActive),
-            boolDetail(BooleanKey.OApsAIMIRecursiveBeliefShadow, recursiveShadow),
             boolDetail(BooleanKey.OApsAIMIRecursiveBeliefAuthority, recursiveAuthority),
             boolDetail(BooleanKey.OApsAIMIautoDriveAuthoritative, authoritative),
+            boolDetail(BooleanKey.OApsAIMIautodriveAggressiveSmbFloor, aggressiveSmbFloor),
         ),
     )
 }

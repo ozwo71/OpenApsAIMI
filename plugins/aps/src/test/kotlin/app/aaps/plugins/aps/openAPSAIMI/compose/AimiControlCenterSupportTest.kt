@@ -64,10 +64,9 @@ class AimiControlCenterSupportTest {
     }
 
     @Test
-    fun `controlled autonomy apply writes expected legacy booleans`() {
-        every { preferences.get(BooleanKey.OApsAIMIautoDrive) } returns false
+    fun `controlled autonomy apply writes expected autonomy booleans`() {
         every { preferences.get(BooleanKey.OApsAIMIautoDriveActive) } returns false
-        every { preferences.get(BooleanKey.OApsAIMIRecursiveBeliefShadow) } returns false
+        every { preferences.get(BooleanKey.OApsAIMIHyperTrajectoryRelease) } returns false
         every { preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority) } returns false
         every { preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative) } returns false
 
@@ -81,9 +80,8 @@ class AimiControlCenterSupportTest {
 
         applyAimiControlCenterPendingChanges(preferences, pending)
 
-        verify { preferences.put(BooleanKey.OApsAIMIautoDrive, true) }
         verify { preferences.put(BooleanKey.OApsAIMIautoDriveActive, true) }
-        verify { preferences.put(BooleanKey.OApsAIMIRecursiveBeliefShadow, true) }
+        verify { preferences.put(BooleanKey.OApsAIMIHyperTrajectoryRelease, true) }
         verify { preferences.put(BooleanKey.OApsAIMIRecursiveBeliefAuthority, true) }
         verify { preferences.put(BooleanKey.OApsAIMIautoDriveAuthoritative, true) }
     }

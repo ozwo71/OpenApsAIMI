@@ -49,6 +49,7 @@ import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventAPSCalculationFinished
 import app.aaps.core.interfaces.rx.events.EventPreferenceChange
+import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.interfaces.stats.TddCalculator
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
@@ -149,6 +150,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val iobCobCalculator: IobCobCalculator,
     private val hardLimits: HardLimits,
     private val preferences: Preferences,
+    private val sp: SP,
     protected val dateUtil: DateUtil,
     private val processedTbrEbData: ProcessedTbrEbData,
     private val persistenceLayer: PersistenceLayer,
@@ -201,8 +203,25 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     /** Background work for plugin startup (avoids blocking the thread that calls [onStart]). */
     private val aimiPluginIoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /**
+     * One-time migration after the classic (V1/V2) Autodrive engine was removed in favour of V3.
+     * A user who had classic enabled but V3 disabled would otherwise silently lose all autodrive.
+     * If the legacy key was stored and was on while V3 is off, enable V3 to preserve that intent,
+     * then drop the legacy key so this never re-runs (and a later manual V3-off is respected).
+     */
+    private fun migrateClassicAutodriveToV3() {
+        val legacyClassicKey = "key_use_Aimi_autoDrive"
+        if (!sp.contains(legacyClassicKey)) return
+        if (sp.getBoolean(legacyClassicKey, true) && !preferences.get(BooleanKey.OApsAIMIautoDriveActive)) {
+            preferences.put(BooleanKey.OApsAIMIautoDriveActive, true)
+            aapsLogger.info(LTag.APS, "Autodrive V1→V3 migration: enabled V3 (classic was on, V3 was off)")
+        }
+        sp.remove(legacyClassicKey)
+    }
+
     override suspend fun onStart() {
         super.onStart()
+        migrateClassicAutodriveToV3()
         preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey::class.java)
         preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey::class.java)
         // Prewarm Therapy snapshot cache at plugin start to avoid first-loop default flags.
@@ -1308,7 +1327,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
         val night = hour <= 7
-        val isAutodriveEnabled = preferences.get(BooleanKey.OApsAIMIautoDrive) || preferences.get(BooleanKey.OApsAIMIautoDriveActive)
+        val isAutodriveEnabled = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
         val smb = glucoseStatusCalculatorAimi.getGlucoseStatusData(false) ?: return absoluteRate
 
         val isEarlyAutodrive = !night && !isMealMode && !isSportMode && isAutodriveEnabled &&
@@ -1901,7 +1920,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             key = "aimi_compose_autodrive",
             titleResId = R.string.autodrive_preferences,
             items = buildList {
-                add(BooleanKey.OApsAIMIautoDrive)
                 add(BooleanKey.OApsAIMIautoDriveActive)
                 add(BooleanKey.OApsAIMIautoDriveAuthoritative)
                 add(BooleanKey.OApsAIMIHyperTrajectoryRelease)
@@ -1913,6 +1931,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 add(DoubleKey.OApsAIMIHyperDeepDevMgdl)
                 add(DoubleKey.autodriveMaxBasal)
                 add(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep)
+                add(BooleanKey.OApsAIMIautodriveAggressiveSmbFloor)
                 add(DoubleKey.OApsAIMIautodrivesmallPrebolus)
                 add(DoubleKey.OApsAIMIautodrivePrebolus)
                 add(

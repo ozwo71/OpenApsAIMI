@@ -224,10 +224,22 @@ enum class BooleanKey(
     OApsAIMInight("OApsAIMI_Enable_night",false),
     OApsAIMIhoneymoon("key_use_Aimi_honeymoon",false),
     OApsxdriponeminute(key = "key_use_Aimi_xdripOM",defaultValue = false),
-    OApsAIMIautoDrive(key = "key_use_Aimi_autoDrive",defaultValue = true),
     OApsAIMIT3cAdaptiveBasalEnabled("key_use_aimi_t3c_adaptive_basal", false),
     OApsAIMIAutodriveV3EnhancedGater("key_use_aimi_autodrive_v3_enhanced_gater", false),
     OApsAIMIautoDriveActive(key = "key_use_aimi_autodrive_active", defaultValue = true),
+    /**
+     * Opt-in: on an aggressive rise, let Autodrive V3 deliver at least the user-defined prebolus
+     * amount ([DoubleKey.OApsAIMIautodrivePrebolus] / [DoubleKey.OApsAIMIautodrivesmallPrebolus]),
+     * as a floor on top of the model SMB. Always re-bounded by V3 safety (post-hypo, maxSMB, IOB,
+     * correction aggression). Absorbs the former classic-autodrive aggressive-rise SMB.
+     */
+    OApsAIMIautodriveAggressiveSmbFloor(
+        key = "key_aimi_autodrive_aggressive_smb_floor",
+        defaultValue = false,
+        titleResId = R.string.pref_title_aimi_autodrive_aggressive_smb_floor,
+        summaryResId = R.string.pref_summary_aimi_autodrive_aggressive_smb_floor,
+        dependency = OApsAIMIautoDriveActive,
+    ),
     /**
      * When Autodrive V3 applies a safe command, skip the legacy MPC/PI blender so V3 safety
      * (night cap, post-hypo, weight-aware limits) is not overwritten.

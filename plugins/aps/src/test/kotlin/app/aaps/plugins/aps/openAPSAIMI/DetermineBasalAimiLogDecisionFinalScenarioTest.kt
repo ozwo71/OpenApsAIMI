@@ -421,7 +421,6 @@ class DetermineBasalAimiLogDecisionFinalScenarioTest {
         assumeOutsideNightBisWindow()
         val now = System.currentTimeMillis()
         val prefs = preferencesBase()
-        every { prefs.get(BooleanKey.OApsAIMIautoDrive) } returns true
         every { prefs.get(BooleanKey.OApsAIMIautoDriveActive) } returns false
         val basalNeuralLearner = mockk<BasalNeuralLearner>(relaxed = true)
         val harness = DetermineBasalAimiScenarioTestHarness(

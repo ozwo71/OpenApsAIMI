@@ -64,7 +64,6 @@ class AimiControlCenterSnapshotTest {
     @Test
     fun `autodrive v3 stack projects a more assertive meal family and controlled autonomy`() {
         every { preferences.get(BooleanKey.OApsAIMIautoDriveActive) } returns true
-        every { preferences.get(BooleanKey.OApsAIMIautoDrive) } returns true
         every { preferences.get(BooleanKey.OApsAIMIHyperTrajectoryRelease) } returns true
         every { preferences.get(BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive) } returns true
         every { preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative) } returns true

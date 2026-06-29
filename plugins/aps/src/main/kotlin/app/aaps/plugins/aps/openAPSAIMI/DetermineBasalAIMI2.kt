@@ -1998,13 +1998,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     /** G6 BYODA flag + Autodrive prefs; [autodriveDisplay] feeds advisor / reason lines downstream. */
     private fun buildPreTherapyAutodriveByodaBootstrap(ctx: AimiTickContext): AimiPreTherapyAutodriveByodaBootstrap {
         val isG6Byoda = ctx.glucoseStatus.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G6_NATIVE
-        val autodriveEnabled = preferences.get(BooleanKey.OApsAIMIautoDrive)
         val isAutodriveV3 = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
-        val autodriveDisplay = when {
-            isAutodriveV3 -> "✔V3"
-            autodriveEnabled -> "✔V2"
-            else -> "✘"
-        }
+        // Classic (V1/V2) autodrive removed — "autodrive enabled" now means V3 active.
+        val autodriveEnabled = isAutodriveV3
+        val autodriveDisplay = if (isAutodriveV3) "✔V3" else "✘"
         return AimiPreTherapyAutodriveByodaBootstrap(
             isG6Byoda = isG6Byoda,
             autodriveEnabled = autodriveEnabled,
@@ -2619,8 +2616,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private data class AutodriveV3BranchResult(
         /** V3 or HTR delivered any pump command (TBR and/or SMB) this tick. */
         val appliedAction: Boolean,
-        /** When true, classic autodrive prebolus is skipped (V3/HTR already delivered SMB). TBR-only V3 does not lock out. */
-        val classicSmbLockout: Boolean,
         val skipLegacySmbBlender: Boolean,
     )
 
@@ -4088,6 +4083,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      *
      * @param hypoThresholdMgdl same as `threshold` after [HypoThresholdMath.computeHypoThreshold] in [determine_basal] (LGS guard for MPC `lgsThreshold` cap).
      */
+    /**
+     * Opt-in absorption of the former classic-autodrive aggressive-rise SMB. Returns the user-defined
+     * Autodrive prebolus floor for the current rise (Large tier ≥5 rise & ≥3 avg, else Small tier ≥2
+     * rise), or 0.0 when the floor is disabled, BG is below 120, or the rise is too weak. The caller
+     * applies it as `max(modelSmb, floor)` and re-bounds it with all Autodrive V3 safety caps.
+     */
+    private fun aggressiveRiseSmbFloorU(bgMgdl: Double, riseSignal: Float, shortAvgDelta: Float): Double {
+        if (!preferences.get(BooleanKey.OApsAIMIautodriveAggressiveSmbFloor)) return 0.0
+        if (bgMgdl < 120.0) return 0.0
+        val largePrebolus = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
+        val smallPrebolus = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
+        return when {
+            riseSignal >= 5.0f && shortAvgDelta >= 3.0f -> largePrebolus
+            riseSignal >= 2.0f -> smallPrebolus
+            else -> 0.0
+        }.coerceAtLeast(0.0)
+    }
+
     private fun runAutodriveV3MultiVariableBranch(
         ctx: AimiTickContext,
         profile: OapsProfileAimi,
@@ -4101,12 +4114,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (!preferences.get(BooleanKey.OApsAIMIautoDriveActive)) {
             return AutodriveV3BranchResult(
                 appliedAction = false,
-                classicSmbLockout = false,
                 skipLegacySmbBlender = false,
             )
         }
         var v3AppliedAction = false
-        var classicSmbLockout = false
         var skipLegacySmbBlender = false
         val recentEstimateCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
         val recentEstimateTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
@@ -4288,7 +4299,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🛑 [AUTODRIVE V3] Unsafe or null command")
             }
 
-            val v3SmbRaw = if (v3CommandSafe) adCommand!!.scheduledMicroBolus ?: 0.0 else 0.0
+            val v3SmbModel = if (v3CommandSafe) adCommand!!.scheduledMicroBolus ?: 0.0 else 0.0
+            val iobHeadroomForFloor = (maxIob - iob).coerceAtLeast(0.0)
+            val smbCeilingForFloor = maxOf(maxSMB, maxSMBHB).coerceAtLeast(0.0)
+            val v3SmbFloor = if (v3CommandSafe) {
+                aggressiveRiseSmbFloorU(bg, combinedDelta, shortAvgDeltaAdj)
+                    .coerceAtMost(minOf(smbCeilingForFloor, iobHeadroomForFloor))
+            } else {
+                0.0
+            }
+            val v3SmbRaw = maxOf(v3SmbModel, v3SmbFloor)
+            if (v3SmbFloor > v3SmbModel + 1e-6) {
+                consoleLog.add(
+                    "🚀 AUTODRIVE_AGGR_SMB_FLOOR: model=${"%.2f".format(v3SmbModel)} → " +
+                        "floor=${"%.2f".format(v3SmbFloor)} U",
+                )
+            }
             val v3Smb = lastPostHypoDeliveryAuthority.capSmbU(v3SmbRaw)
             if (v3Smb < v3SmbRaw - 1e-6) {
                 consoleLog.add(
@@ -4329,13 +4355,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 effectiveDuration > 0 && kotlin.math.abs(effectiveTbr - profile.current_basal) > 0.01
             if (v3CommandSafe) {
                 v3AppliedAction = v3SmbDelivered || v3TbrDelivered
-                classicSmbLockout = v3SmbDelivered
                 val v3TbrRate = adCommand!!.temporaryBasalRate
                 consoleLog.add("🚀 ${gate.reason} intent=$v3Smb actual=$effectiveSmbUnits tbr=$v3TbrRate")
                 logDecisionFinal("AUTODRIVE_V3", rT, bg, delta)
             } else if (effectiveHtr?.active == true && v3SmbDelivered) {
                 v3AppliedAction = true
-                classicSmbLockout = true
                 consoleLog.add("🚀 HTR-only SMB after unsafe V3: actual=$effectiveSmbUnits U")
                 logDecisionFinal("AUTODRIVE_V3+HTR", rT, bg, delta)
             }
@@ -4346,118 +4370,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         return AutodriveV3BranchResult(
             appliedAction = v3AppliedAction,
-            classicSmbLockout = classicSmbLockout,
             skipLegacySmbBlender = skipLegacySmbBlender,
         )
-    }
-
-    /**
-     * Autodrive **V2** fallback after V3: meal context, AIMI Context modulation, [lastAutodriveState] WATCHING reset,
-     * [tryAutodrive] when V3 did not deliver SMB this tick (TBR-only V3 still allows classic prebolus),
-     * then TBR / SMB + cooldown on [DecisionResult.Applied].
-     *
-     * **Data-source note:** [mealRising] uses class [cob] and meal flags; [contextPrefersBasal] reads [maxSMB] + [rT] context fields.
-     */
-    private fun runAutodriveV2FallbackBranch(
-        ctx: AimiTickContext,
-        profile: OapsProfileAimi,
-        rT: RT,
-        bg: Double,
-        delta: Float,
-        predictedBg: Float,
-        targetBgMgdl: Float,
-        threshold: Double,
-        v3ClassicSmbLockout: Boolean,
-        combinedDelta: Float,
-        shortAvgDeltaAdj: Float,
-        lastBolusTimeMs: Long?,
-        reason: StringBuilder,
-        flatBGsDetected: Boolean,
-        isG6Byoda: Boolean,
-        dynamicPbolusLarge: Double,
-        dynamicPbolusSmall: Double,
-    ) {
-        val mealRising = cob > 0.5 || mealTime || lunchTime || dinnerTime || bfastTime || snackTime
-        val contextFactor = if (rT.contextEnabled && rT.contextIntentCount > 0) rT.contextModulation.toFloat() else 1.0f
-        val contextPrefersBasal = (maxSMB == 0.0 && rT.contextEnabled && rT.contextIntentCount > 0)
-
-        if (v3ClassicSmbLockout) {
-            consoleLog.add("AUTODRIVE_V3_SMB_LOCKOUT: Skipping classic prebolus (V3/HTR SMB already delivered).")
-        }
-
-        if (lastAutodriveState != AutodriveState.ENGAGED) {
-            lastAutodriveState = AutodriveState.WATCHING
-        }
-
-        val autoRes = if (!v3ClassicSmbLockout) tryAutodrive(
-            bg, delta, shortAvgDeltaAdj.toFloat(), profile, lastBolusTimeMs ?: 0L, predictedBg, ctx.mealData.slopeFromMinDeviation, targetBgMgdl, reason,
-            preferences.get(BooleanKey.OApsAIMIautoDrive),
-            dynamicPbolusLarge, dynamicPbolusSmall,
-            flatBGsDetected,
-            isG6Byoda = isG6Byoda,
-            mealRising = mealRising,
-            combinedDeltaG6 = combinedDelta,
-            contextFactor = contextFactor,
-            contextPrefersBasal = contextPrefersBasal
-        ) else DecisionResult.Fallthrough("Classic autodrive skipped: V3/HTR SMB already delivered this tick")
-
-        if (autoRes is DecisionResult.Applied) {
-            if (autoRes.tbrUph != null) {
-                val v2AdaptiveMult = AutodriveBasalPolicy.adaptiveMultiplierForDirectTbr(
-                    requestedRateUph = autoRes.tbrUph,
-                    bgMgdl = bg,
-                    targetBgMgdl = targetBgMgdl.toDouble(),
-                    profileMaxBasalUph = profile.max_basal.toDouble(),
-                    learnedAdaptiveMultiplier = adaptiveMult,
-                )
-                if (v2AdaptiveMult > adaptiveMult + 0.001) {
-                    consoleLog.add(
-                        "🚀 AUTODRIVE_V2_CAP_KEEP: adaptive ${"%.2f".format(adaptiveMult)}x -> " +
-                            "${"%.2f".format(v2AdaptiveMult)}x at BG=${"%.0f".format(bg)}",
-                    )
-                }
-                val cappedV2Tbr = capBasalRateForCorrectionAggression(
-                    requestedRateUph = autoRes.tbrUph,
-                    profileBasalUph = profile.current_basal,
-                    source = "AUTODRIVE_V2_DIRECT",
-                )
-                setTempBasal(
-                    cappedV2Tbr,
-                    autoRes.tbrMin ?: 30,
-                    profile,
-                    rT,
-                    ctx.currentTemp,
-                    overrideSafetyLimits = false,
-                    adaptiveMultiplier = v2AdaptiveMult,
-                )
-            }
-
-            val intentBolus = autoRes.bolusU ?: 0.0
-            if (intentBolus > 0) {
-                finalizeAndCapSMB(
-                    rT = rT,
-                    proposedUnits = intentBolus,
-                    reasonHeader = autoRes.reason,
-                    mealData = ctx.mealData,
-                    hypoThreshold = threshold,
-                    isExplicitUserAction = false,
-                    decisionSource = autoRes.source,
-                    bypassSmbRefractory = true,
-                )
-            }
-
-            val effectiveSmbUnits = rT.units ?: 0.0
-            val effectiveDuration = rT.duration ?: 0
-
-            if (effectiveSmbUnits > 0.01 || effectiveDuration > 0) {
-                lastAutodriveActionTime = System.currentTimeMillis()
-                consoleLog.add("AUTODRIVE_APPLIED intent=${intentBolus} actual=$effectiveSmbUnits")
-                logDecisionFinal("AUTODRIVE", rT, bg, delta)
-            } else if (intentBolus > 0.01) {
-                consoleLog.add("AUTODRIVE_NOOP_FALLBACK reason=CappedToZero intent=${intentBolus}")
-                rT.units = null
-            }
-        }
     }
 
     /**
@@ -8853,7 +8767,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var mealModeSmbReason: String? = null
     private var consoleError = mutableListOf<String>()
     private var consoleLog = mutableListOf<String>()
-    private var lastAutodriveActionTime: Long = 0L  // FCL 14.1 Cooldown State
     private val externalDir by lazy { storageHelper.getAimiDirectory() }
     //private val modelFile = File(externalDir, "ml/model.tflite")
     //private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
@@ -10304,9 +10217,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
         val night = hour <= 7 // (OK tel quel, utilisé pour l’autodrive)
         val predDelta = predictedDelta(getRecentDeltas()).toFloat()
-        val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
         val isAutodriveV3Local = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
-        val isEarlyAutodrive = !night && !isMealMode && (autodrive || isAutodriveV3Local) &&
+        val isEarlyAutodrive = !night && !isMealMode && isAutodriveV3Local &&
             bgNow > hypoGuard && bgNow > 110 && detectMealOnset(delta, predDelta, bgacc.toFloat(), predictedBg, profile.target_bg.toFloat())
 
         // 3) Tendance & ajustement dynamique
@@ -11697,7 +11609,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     /**
-     * Après [runAutodriveV2FallbackBranch] : lecture prefs advisor (carbs / horodatage), âge pour [classifyPostHypoState],
+     * Après la branche Autodrive V3 : lecture prefs advisor (carbs / horodatage), âge pour [classifyPostHypoState],
      * agrégat mode repas explicite, puis classification (**effets** sur fenêtre hypo & logs [reason]).
      *
      * Retourne aussi **`estimatedCarbs` / `estimatedCarbsTimeMs`** pour le même tick (overlay repas / hyper plus bas).
@@ -11743,169 +11655,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             estimatedCarbs = estimatedCarbs,
             estimatedCarbsTimeMs = estimatedCarbsTime,
         )
-    }
-
-
-    @SuppressLint("DefaultLocale")
-    private fun isAutodriveModeCondition(
-        delta: Float,
-        autodrive: Boolean,
-        slopeFromMinDeviation: Double,
-        bg: Float,
-        predictedBg: Float,
-        reason: StringBuilder,
-        targetBg: Float,
-        isG6Byoda: Boolean = false,           // 📡 G6 BYODA: enables acceleration-based early trigger
-        externalCombinedDelta: Float = 0f     // 📡 GAP1: G6-compensated combinedDelta from determine_basal
-    ): Boolean {
-        // ⚙️ Prefs
-        val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
-        val autodriveDeltaBase: Float = preferences.get(DoubleKey.OApsAIMIcombinedDelta).toFloat()
-        val autodriveMinDeviation: Double = preferences.get(DoubleKey.OApsAIMIAutodriveDeviation)
-    val autodriveBG: Int = preferences.get(IntKey.OApsAIMIAutodriveBG) // User Decision: Static Threshold
-
-        // 🛡️ Noise Filter (Anti-Jump) -> [User Request]: Disabled. information for Autodrive.
-    // if (delta > 15f && shortAvgDelta < 5f) {
-    //      reason.append("🚫 Noise detected (Delta > 15 & Avg < 5) -> Autodrive OFF")
-    //      return false
-    // }
-
-        // 📈 Deltas récents & delta combiné
-        val recentDeltas = getRecentDeltas()
-        val predicted = predictedDelta(recentDeltas).toFloat()
-
-        // 📡 G6 BYODA — Second-Derivative Early Trigger
-        // G6 native smoothing already attenuates delta by 5-8 min.
-        // If delta is *accelerating* (rising over 2 consecutive cycles), this signals a real meal rise
-        // in progress. We lower the autodriveDelta threshold by 20% to trigger earlier.
-        val g6Accelerating = isG6Byoda &&
-            recentDeltas.size >= 2 &&
-            recentDeltas[0] > recentDeltas[1] + 1.5  // delta increasing ≥1.5 vs previous cycle
-        val autodriveDelta: Float = if (g6Accelerating) {
-            val adjusted = autodriveDeltaBase * 0.80f
-            consoleLog.add("📡 G6_ACCEL: delta[0]=${"%.1f".format(recentDeltas[0])} > delta[1]=${"%.1f".format(recentDeltas[1])} → threshold ${"%.2f".format(autodriveDeltaBase)} → ${"%.2f".format(adjusted)} (-20%)")
-            adjusted
-        } else {
-            autodriveDeltaBase
-        }
-
-        // 📡 GAP1: Use G6-compensated combinedDelta from determine_basal if available.
-        // Otherwise, compute locally from raw G6 deltas (un-compensated fallback).
-        val useExternalCombined = externalCombinedDelta > 0f
-        val combinedDelta: Float = if (useExternalCombined) {
-            consoleLog.add("📡 G6_COMBINED_EXT: using pre-compensated combinedDelta=${"%.2f".format(externalCombinedDelta)} (skipping raw recompute)")
-            externalCombinedDelta
-        } else {
-            // FIX: Extended delta history (3 periods: 0, -5, -10 min) for better noise filtering
-            val avgRecentDelta = if (recentDeltas.size >= 2) {
-                recentDeltas.take(2).average().toFloat()
-            } else {
-                delta
-            }
-            // Combine: current + predicted + recent average
-            // Weighted: 40% current, 30% predicted, 30% recent average
-            val computed = (delta * 0.4f + predicted * 0.3f + avgRecentDelta * 0.3f)
-            consoleLog.add("DELTA_CALC current=${String.format("%.1f", delta)} predicted=${String.format("%.1f", predicted)} avgRecent=${String.format("%.1f", avgRecentDelta)} → combined=${String.format("%.1f", computed)}")
-            computed
-        }
-        
-        // 🎯 Dynamic Thresholds
-    // Respect User Static Threshold AND Safety Margin (Target + 10)
-    val dynamicBgThreshold = maxOf(targetBg + 10f, autodriveBG.toFloat())
-    val dynamicPredictedThreshold = targetBg + 30f
-
-        // 🔍 Tendance BG
-        val recentBGs = getRecentBGs()
-        var autodriveCondition = true
-        var currentState = AutodriveState.IDLE
-
-        if (recentBGs.isNotEmpty()) {
-            val bgTrend = calculateBgTrend(recentBGs, reason)
-            reason.appendLine(
-                "📈 BGTrend=${"%.2f".format(bgTrend)} | Δcomb=${"%.2f".format(combinedDelta)} | predBG=${"%.0f".format(predictedBg)}"
-            )
-            autodriveCondition = adjustAutodriveCondition(bgTrend, predictedBg, combinedDelta, reason, dynamicPredictedThreshold)
-        } else {
-            //reason.appendLine("⚠️ Aucune BG récente — conditions par défaut conservées")
-            reason.appendLine(context.getString(R.string.no_recent_bg))
-        }
-
-        // ⛔ Ne pas relancer si pbolus récent
-        // [FIX] Removed 1-hr lockout for Autodrive.
-        // User reported "conditions met but nothing happens".
-        // Continuous Autodrive should not be blocked by a previous action.
-        // if (hasReceivedPbolusMInLastHour(pbolusA)) { ... }
-
-        // Determine State (Watching vs Engaged vs Idle)
-        if (autodriveCondition && combinedDelta >= 1.0f && slopeFromMinDeviation >= 1.0) {
-            currentState = AutodriveState.WATCHING
-        }
-
-        // FCL 13.0: Rocket Start Bypass (CombinedDelta > 10 or > 2xPref)
-        
-        // Final Decision
-        val ok =
-            autodriveCondition &&
-                combinedDelta >= autodriveDelta &&
-                autodrive &&
-                predictedBg > dynamicPredictedThreshold &&
-                // FCL Safety: Prevent Autodrive on falling BG (Delta must be near stable or rising)
-                delta >= -2.0f &&
-                (slopeFromMinDeviation >= autodriveMinDeviation || combinedDelta > 10.0f || combinedDelta > autodriveDelta * 2.0f) &&
-                bg >= dynamicBgThreshold
-
-        if (ok) currentState = AutodriveState.ENGAGED
-
-        lastAutodriveState = currentState
-
-        reason.appendLine(
-            "Autodrive: ${if (ok) "ON" else "OFF"} [$currentState] | " +
-                "cond=$autodriveCondition, dC=${"%.2f".format(combinedDelta)}, " +
-                "predBG>${dynamicPredictedThreshold.toInt()}, slope>=${"%.2f".format(autodriveMinDeviation)}, bg>=${dynamicBgThreshold.toInt()} (UserMin=${autodriveBG})"
-    )
-
-        return ok
-    }
-
-
-    private fun adjustAutodriveCondition(
-        bgTrend: Float,
-        predictedBg: Float,
-        combinedDelta: Float,
-        reason: StringBuilder,
-        predictedThreshold: Float
-    ): Boolean {
-        val autodriveDelta: Double = preferences.get(DoubleKey.OApsAIMIcombinedDelta)
-
-        //reason.append("→ Autodrive Debug\n")
-        reason.append(context.getString(R.string.autodrive_debug_header))
-        //reason.append("  • BG Trend: $bgTrend\n")
-        reason.append(context.getString(R.string.autodrive_bg_trend, bgTrend))
-        //reason.append("  • Predicted BG: $predictedBg\n")
-        reason.append(context.getString(R.string.autodrive_predicted_bg, predictedBg))
-        //reason.append("  • Combined Delta: $combinedDelta\n")
-        reason.append(context.getString(R.string.autodrive_combined_delta, combinedDelta))
-        //reason.append("  • Required Combined Delta: $autodriveDelta\n")
-        reason.append(context.getString(R.string.autodrive_required_delta, autodriveDelta))
-
-        // Cas 1 : glycémie baisse => désactivation
-        if (bgTrend < -0.15f) {
-            //reason.append("  ✘ Autodrive désactivé : tendance glycémie en baisse\n")
-            reason.append(context.getString(R.string.autodrive_disabled_trend))
-            return false
-        }
-
-        // Cas 2 : glycémie monte ou conditions fortes
-        if ((bgTrend >= 0f && combinedDelta >= autodriveDelta) || (predictedBg > predictedThreshold && combinedDelta >= autodriveDelta)) {
-            //reason.append("  ✔ Autodrive activé : conditions favorables\n")
-            reason.append(context.getString(R.string.autodrive_enabled_conditions))
-            return true
-        }
-
-        // Cas 3 : conditions non remplies
-        //reason.append("  ✘ Autodrive désactivé : conditions insuffisantes\n")
-        reason.append(context.getString(R.string.autodrive_disabled_conditions))
-        return false
     }
 
     /**
@@ -14161,7 +13910,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             sensInit,
             baseSensitivity,
             contextTargetOverride,
-            dynamicPbolusLarge,
+            _, // dynamicPbolusLarge — classic autodrive removed; Large-tier prebolus no longer consumed here
             dynamicPbolusSmall,
         ) = runTrajectoryContextModuleTddIsfAndDynamicPbolusPrep(
             ctx = ctx,
@@ -14317,27 +14066,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
         }
         applyPendingTrajSpiralBasalIfNotSuppressed(rT = rT, bg = bg, delta = delta)
-
-        // PRIORITY 4: AUTODRIVE (Strict) [FALLBACK V2] — see [runAutodriveV2FallbackBranch]
-        runAutodriveV2FallbackBranch(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            bg = bg,
-            delta = delta,
-            predictedBg = predictedBg,
-            targetBgMgdl = targetBg,
-            threshold = threshold,
-            v3ClassicSmbLockout = v3Branch.classicSmbLockout,
-            combinedDelta = combinedDelta,
-            shortAvgDeltaAdj = shortAvgDeltaAdj,
-            lastBolusTimeMs = lastBolusTimeMs,
-            reason = reason,
-            flatBGsDetected = flatBGsDetected,
-            isG6Byoda = isG6Byoda,
-            dynamicPbolusLarge = dynamicPbolusLarge,
-            dynamicPbolusSmall = dynamicPbolusSmall,
-        )
 
         runPostHypoCompressionAndDriftTerminatorOrReturn(
             ctx = ctx,
@@ -15352,130 +15080,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             "MEAL_ADVISOR_TRACE fallthrough no_active_request carbs=${"%.1f".format(estimatedCarbs)} timeSinceMin=${"%.1f".format(timeSinceEstimateMin)} bg=${"%.1f".format(bg)}"
         )
         return DecisionResult.Fallthrough("No active Meal Advisor request")
-    }
-
-    private fun tryAutodrive(
-        bg: Double, 
-        delta: Float, 
-        shortAvgDelta: Float,  // ← shortAvgDeltaAdj (G6-compensé +20%) depuis determine_basal
-        profile: OapsProfileAimi,
-        lastBolusTime: Long,
-        predictedBg: Float,
-        slopeFromMinDeviation: Double,
-        targetBg: Float,
-        reasonBuf: StringBuilder,
-        autodrive: Boolean,
-        dynamicPbolusLarge: Double,
-        dynamicPbolusSmall: Double,
-        flatBGsDetected: Boolean,
-        isG6Byoda: Boolean = false,       // 📡 G6 BYODA sensor context
-        mealRising: Boolean = false,       // 🍽️ Active meal context (COB or meal mode)
-        combinedDeltaG6: Float = 0f,       // 📡 GAP1: G6-compensated combinedDelta from determine_basal
-        contextFactor: Float = 1.0f,       // 🎯 Modulateur AIMI Context (ex: 0.5 pour -50%)
-        contextPrefersBasal: Boolean = false // 🎯 AIMI Context interdit les SMB
-    ): DecisionResult {
-        // 🛡️ GATE R0: CGM Quality Check (Priority #1 Safety)
-        if (flatBGsDetected) {
-            return DecisionResult.Fallthrough("CGM data unreliable (FLAT detected)")
-        }
-        
-        // 🛡️ GATE R0b: AIMI Context Constraint Check
-        if (contextPrefersBasal) {
-            return DecisionResult.Fallthrough("AIMI Context: SMB constraint active (Basal Pref)")
-        }
-        
-        val autodriveBG = preferences.get(IntKey.OApsAIMIAutodriveBG)
-        
-        // 🛡️ GATE R1: Strict BG Threshold (Raised from 100 to 120 for safety)
-        // Never trigger Autodrive below 120 mg/dL to prevent hypos
-        val safeMinimumBG = maxOf(autodriveBG.toDouble(), 120.0)
-        if (bg < safeMinimumBG) {
-            return DecisionResult.Fallthrough("BG $bg < Safe minimum ${safeMinimumBG.toInt()}")
-        }
-
-        // 🍽️ GATE R2: Contextual Cooldown
-        // G6 BYODA + active meal → 20 min cooldown (G6 lag means we need faster re-trigger)
-        // All other cases → 45 min cooldown (standard safety)
-        val now = System.currentTimeMillis()
-        val cooldownMs = if (isG6Byoda && mealRising) 20 * 60 * 1000L else 45 * 60 * 1000L
-        val remaining = (lastAutodriveActionTime + cooldownMs) - now
-        if (remaining > 0) {
-            val cooldownLabel = if (isG6Byoda && mealRising) "G6+Meal 20min" else "Standard 45min"
-            return DecisionResult.Fallthrough("Cooldown [$cooldownLabel] active (${remaining/1000/60}m)")
-        }
-
-        // Logic Re-Use — pass isG6Byoda + compensated combinedDelta (GAP1 fix)
-        val validCondition = isAutodriveModeCondition(
-            delta, autodrive, slopeFromMinDeviation, bg.toFloat(), predictedBg,
-            reasonBuf, targetBg, isG6Byoda,
-            externalCombinedDelta = combinedDeltaG6  // feeds G6-compensated signal directly
-        )
-        
-        if (!validCondition) return DecisionResult.Fallthrough("Conditions not met")
-
-        // Rise signal for dose tier: prefer G6-compensated combinedDelta (same family as isAutodriveModeCondition).
-        val effectiveDelta: Float = if (isG6Byoda) delta * 1.30f else delta
-        val riseSignal: Float = if (combinedDeltaG6 > 0f) combinedDeltaG6 else effectiveDelta
-        if (combinedDeltaG6 > 0f && kotlin.math.abs(combinedDeltaG6 - effectiveDelta) > 0.15f) {
-            consoleLog.add(
-                "📡 AUTODRIVE_RISE_SIGNAL: combined=${"%.2f".format(combinedDeltaG6)} " +
-                    "effDelta=${"%.1f".format(effectiveDelta)}",
-            )
-        }
-
-        // Apply context modulation to amounts (e.g. Activity reduces SMB by 50%)
-        val modulatedAmountLarge = dynamicPbolusLarge * contextFactor
-        val modulatedAmountSmall = dynamicPbolusSmall * contextFactor
-
-        // Determine Intensity
-        var amount = 0.0
-        var stateReason = ""
-        val contextLog = if (contextFactor < 1.0f) " [Ctx ×${"%.2f".format(contextFactor)}]" else ""
-        
-        if (bg >= 120.0 && riseSignal >= 5.0f && shortAvgDelta >= 3.0f) {
-             amount = modulatedAmountLarge
-             stateReason = "Confirmed: Bg≥120 & Rise≥5 & Avg≥3$contextLog"
-        } else if (bg >= 120.0 && riseSignal >= 2.0f) {
-             amount = modulatedAmountSmall
-             stateReason = "Early: Bg≥120 & Rise≥2$contextLog"
-        } else {
-             return DecisionResult.Fallthrough(
-                 "BG or Delta insufficient (need BG≥120, rise≥2, was ${"%.1f".format(riseSignal)})",
-             )
-        }
-
-        // TBR Calculation
-        val rawAutoMax = preferences.get(DoubleKey.autodriveMaxBasal) ?: 0.0
-        val scalarAuto: Double = if (rawAutoMax > 0.1) rawAutoMax.toDouble() else profile.max_basal.toDouble()
-        
-        // 🛡️ TIERED AUTODRIVE BASAL (Lyra Optimization + severe hyper harmonization)
-        // Early rises stay progressive, but deep hyper must be allowed to reach the configured correction cap.
-        val tierFactor = AutodriveBasalPolicy.tierFactor(
-            stateReason = stateReason,
-            bgMgdl = bg,
-            targetBgMgdl = targetBg.toDouble(),
-        )
-        val effectiveAutoMax = scalarAuto * tierFactor
-        if (stateReason.startsWith("Early") && tierFactor > 0.5) {
-            consoleLog.add(
-                "🚀 AUTODRIVE_EARLY_PROMOTION BG=${"%.0f".format(bg)} target=${"%.0f".format(targetBg)} " +
-                    "tier=${"%.2f".format(tierFactor)} rawMax=${"%.2f".format(scalarAuto)}",
-            )
-        }
-
-        val safeAutoMax = minOf(effectiveAutoMax, profile.max_basal.toDouble())
-        
-        // 🛡️ Sanitize stateReason to prevent JSON crashes
-        val safeStateReason = sanitizeForJson(stateReason)
-        consoleLog.add(sanitizeForJson("AD_INTENT amount=$amount tbr=$safeAutoMax reason=$safeStateReason"))
-        
-        return DecisionResult.Applied(
-            source = "Autodrive",
-            bolusU = amount,
-            tbrUph = safeAutoMax,
-            tbrMin = 30,
-            reason = "🚀 Autodrive [$safeStateReason] -> Force ${amount}U"
-        )
     }
 
     /** Hydrate [MealData.mealCOB] from prefs when advisor triggered and DB COB still zero (latency bypass). */

@@ -232,7 +232,7 @@ class LoopPlugin @Inject constructor(
         val periodicRunnable = object : Runnable {
             override fun run() {
                 val freqMs = T.mins(preferences.get(IntKey.ApsMaxSmbFrequency).toLong()).msecs()
-                val autodrive = preferences.get(BooleanKey.OApsAIMIautoDrive)
+                val autodrive = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
                 if (autodrive) {
                     val now = dateUtil.now()
                     val sinceGlucoseMs =

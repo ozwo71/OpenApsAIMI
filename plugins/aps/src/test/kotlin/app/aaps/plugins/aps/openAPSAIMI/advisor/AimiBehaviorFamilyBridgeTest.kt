@@ -33,7 +33,6 @@ class AimiBehaviorFamilyBridgeTest {
 
     @Test
     fun `meal rise bridge points to meal capture and autonomy`() {
-        every { preferences.get(BooleanKey.OApsAIMIautoDrive) } returns false
         every { preferences.get(BooleanKey.OApsAIMIautoDriveActive) } returns false
         every { preferences.get(BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled) } returns true
         every { preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB) } returns 1.0
