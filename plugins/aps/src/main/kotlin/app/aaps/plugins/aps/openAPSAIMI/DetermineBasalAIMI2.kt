@@ -189,10 +189,10 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaHarmonizer
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaProductionDecision
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaProductionMode
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSensorTelemetry
-import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationDecision
-import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationEngine
-import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationEnvironment
-import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationAction
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEngine
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEnvironment
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaAction
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalRiskLevel
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalTreeBuilder
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalTreeSnapshot
@@ -1542,7 +1542,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastPatientState = null
         lastPatientModeDecision = null
         lastPhysiologicalTreeSnapshot = null
-        lastHarmoniaSimulationDecision = null
+        lastHarmoniaDecision = null
         lastHarmoniaProductionDecision = null
         lastAuditorTickDisposition = null
         lastAuditorLoopSnapshot = null
@@ -2944,7 +2944,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             patientModeDecision = patientModeDecision,
             updatedAtMs = timestampMs,
             physiologicalTree = lastPhysiologicalTreeSnapshot,
-            harmoniaSimulation = lastHarmoniaSimulationDecision,
+            harmoniaDecision = lastHarmoniaDecision,
         )
     }
 
@@ -3050,14 +3050,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
             cobG = cob.toDouble(),
         )
-        val harmoniaSimulation = HarmoniaSimulationEngine.evaluate(
+        val harmoniaDecision = HarmoniaDecisionEngine.evaluate(
             tree = physiologicalTree,
             environment = physiologicalTree?.let {
                 val currentBasalForSimulation = basalaimi.toDouble().takeIf { basal -> basal.isFinite() && basal > 0.0 } ?: 1.0
                 val maxBasalForSimulation = preferences.get(DoubleKey.autodriveMaxBasal)
                     .takeIf { maxBasal -> maxBasal.isFinite() && maxBasal > 0.1 }
                     ?: maxOf(currentBasalForSimulation * 3.0, currentBasalForSimulation + 2.0, 3.0)
-                HarmoniaSimulationEnvironment(
+                HarmoniaDecisionEnvironment(
                     currentBgMgdl = bg,
                     deltaMgdl5m = delta.toDouble(),
                     iobU = iob.toDouble(),
@@ -3076,10 +3076,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             },
             timestampMs = nowMs,
         )
-        lastHarmoniaSimulationDecision = harmoniaSimulation
+        lastHarmoniaDecision = harmoniaDecision
         if (refreshSource == PatientRefreshSource.LOOP_TICK) {
             physiologicalTree?.compactSummary?.let { consoleLog.add(it) }
-            harmoniaSimulation?.compactSummary?.let { consoleLog.add(it) }
+            harmoniaDecision?.compactSummary?.let { consoleLog.add(it) }
         }
         val loopCache = PatientStateLoopCache(
             phaseOutput = lastPhysiologicalPhaseOutput,
@@ -3101,7 +3101,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             physioLive = physioLive,
             thermalBelief = enrichedSnap.thermalBelief,
             physiologicalTree = physiologicalTree,
-            harmoniaSimulation = harmoniaSimulation,
+            harmoniaDecision = harmoniaDecision,
             loopCache = loopCache,
             refreshSource = refreshSource,
         )
@@ -3362,8 +3362,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             t3cDemandRate <= 0.0 -> "NO_BASAL_DEMAND"
             else -> null
         }
-        val harmoniaSimulation = lastHarmoniaSimulationDecision
-        val harmoniaActive = harmoniaSimulation != null
+        val harmoniaDecision = lastHarmoniaDecision
+        val harmoniaActive = harmoniaDecision != null
         val harmoniaMealConflict = harmoniaActive &&
             lastMealAbsorptionOutput?.mealDeliveryPriority == true &&
             (
@@ -3380,11 +3380,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 harmoniaExerciseBlock ||
                 lastPhysiologicalTreeSnapshot?.trunk?.riskLevel == PhysiologicalRiskLevel.CRITICAL
             )
-        val harmoniaProductionAction = harmoniaSimulation?.action in setOf(
-            HarmoniaSimulationAction.BASAL_FIRST,
-            HarmoniaSimulationAction.MEAL_SUPPORT,
-            HarmoniaSimulationAction.PROTECTIVE_REDUCTION,
-            HarmoniaSimulationAction.STABILIZE,
+        val harmoniaProductionAction = harmoniaDecision?.action in setOf(
+            HarmoniaAction.BASAL_FIRST,
+            HarmoniaAction.MEAL_SUPPORT,
+            HarmoniaAction.PROTECTIVE_REDUCTION,
+            HarmoniaAction.STABILIZE,
         )
         val harmoniaBlockReason = when {
             !harmoniaActive -> null
@@ -3393,10 +3393,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             harmoniaPostHypoBlock -> "POST_HYPO"
             harmoniaMealConflict -> "MEAL_CONFLICT"
             harmoniaHardSafetyBlock -> "HARD_SAFETY"
-            harmoniaSimulation?.eligible != true -> harmoniaSimulation?.blockers?.firstOrNull()?.uppercase(Locale.US)
+            harmoniaDecision?.eligible != true -> harmoniaDecision?.blockers?.firstOrNull()?.uppercase(Locale.US)
                 ?: "SIMULATION_INELIGIBLE"
             !harmoniaProductionAction -> "NO_PRODUCTION_ACTION"
-            (harmoniaSimulation?.simulatedBasalUph ?: 0.0) <= 0.0 -> "NO_BASAL_DEMAND"
+            (harmoniaDecision?.targetBasalUph ?: 0.0) <= 0.0 -> "NO_BASAL_DEMAND"
             else -> null
         }
         return RbtExtendedSignals(
@@ -3423,14 +3423,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             t3cGovernanceBasalFloorUph = t3cGovernance.activeBasalFloor,
             t3cGovernanceAggressivenessFloor = t3cGovernance.activeAggressivenessFloor,
             harmoniaActive = harmoniaActive,
-            harmoniaSimulationEligible = harmoniaSimulation?.eligible == true,
-            harmoniaAction = harmoniaSimulation?.action?.name,
-            harmoniaBranch = harmoniaSimulation?.branch,
-            harmoniaBasalDemandRateUph = harmoniaSimulation?.simulatedBasalUph,
-            harmoniaBasalMaxRateUph = harmoniaSimulation?.environment?.maxBasalUph
+            harmoniaDecisionEligible = harmoniaDecision?.eligible == true,
+            harmoniaAction = harmoniaDecision?.action?.name,
+            harmoniaBranch = harmoniaDecision?.branch,
+            harmoniaBasalDemandRateUph = harmoniaDecision?.targetBasalUph,
+            harmoniaBasalMaxRateUph = harmoniaDecision?.environment?.maxBasalUph
                 ?.coerceAtMost(profile.max_basal.coerceAtLeast(profile.current_basal)),
-            harmoniaSmbDemandU = harmoniaSimulation?.simulatedSmbU,
-            harmoniaSmbMaxU = harmoniaSimulation?.environment?.maxSmbU
+            harmoniaSmbDemandU = harmoniaDecision?.targetSmbU,
+            harmoniaSmbMaxU = harmoniaDecision?.environment?.maxSmbU
                 ?.coerceAtMost(maxSMBHB.coerceAtLeast(maxSMB)),
             harmoniaMealConflict = harmoniaMealConflict,
             harmoniaPostHypoBlock = harmoniaPostHypoBlock,
@@ -6841,7 +6841,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private data class HarmoniaProductionApplyPlan(
         val rateUph: Double,
         val requestedRateUph: Double,
-        val sourceAction: HarmoniaSimulationAction,
+        val sourceAction: HarmoniaAction,
         val branch: String,
         val durationMin: Int = 30,
         val decisionSource: String = "HARMONIA_PRODUCTION_BASAL_FIRST",
@@ -7020,7 +7020,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         appliedDurationMin: Int?,
         runtimeBlocker: String?,
         safetyBlockers: List<String>,
-        sourceAction: HarmoniaSimulationAction?,
+        sourceAction: HarmoniaAction?,
         branch: String?,
         reason: String,
     ) {
@@ -7041,13 +7041,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     private fun blockHarmoniaProduction(
-        simulation: HarmoniaSimulationDecision?,
+        simulation: HarmoniaDecision?,
         runtimeBlocker: String,
     ): HarmoniaProductionApplyPlan? {
         recordHarmoniaProductionDecision(
             mode = HarmoniaProductionMode.BLOCKED,
             selectedForProduction = false,
-            requestedRateUph = simulation?.simulatedBasalUph,
+            requestedRateUph = simulation?.targetBasalUph,
             boundedRateUph = null,
             appliedRateUph = null,
             appliedDurationMin = null,
@@ -7075,7 +7075,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun planHarmoniaProductionBranch(
         b: AimiPostBasalEngineFinalizeBundle,
     ): HarmoniaProductionApplyPlan? {
-        val simulation = lastHarmoniaSimulationDecision ?: return null
+        val simulation = lastHarmoniaDecision ?: return null
         val rbtSnapshot = lastRecursiveBeliefSnapshot
         val rbtHarmonia = rbtSnapshot?.resolutions?.harmoniaBasalFirst
         if (rbtSnapshot != null) {
@@ -7100,14 +7100,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return blockHarmoniaProduction(simulation, blocker)
         }
         if (
-            sourceAction != HarmoniaSimulationAction.BASAL_FIRST &&
-            sourceAction != HarmoniaSimulationAction.MEAL_SUPPORT &&
-            sourceAction != HarmoniaSimulationAction.PROTECTIVE_REDUCTION &&
-            sourceAction != HarmoniaSimulationAction.STABILIZE
+            sourceAction != HarmoniaAction.BASAL_FIRST &&
+            sourceAction != HarmoniaAction.MEAL_SUPPORT &&
+            sourceAction != HarmoniaAction.PROTECTIVE_REDUCTION &&
+            sourceAction != HarmoniaAction.STABILIZE
         ) {
             return blockHarmoniaProduction(simulation, "no_production_action")
         }
-        if (!simulation.simulatedBasalUph.isFinite()) {
+        if (!simulation.targetBasalUph.isFinite()) {
             return blockHarmoniaProduction(simulation, "invalid_basal_demand")
         }
         if (lastRecursiveAuthorityGateDecision?.effectiveAuthority != ReleaseAuthority.NONE) {
@@ -7171,7 +7171,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val envMaxBasal = simulation.environment.maxBasalUph.takeIf { it.isFinite() && it > 0.0 }
             ?: profileMaxBasal
         val hardCap = minOf(envMaxBasal, profileMaxBasal).coerceAtLeast(0.0)
-        val requestedRate = simulation.simulatedBasalUph.coerceIn(0.0, hardCap)
+        val requestedRate = simulation.targetBasalUph.coerceIn(0.0, hardCap)
         val previousRate = if (b.ctx.currentTemp.duration > 0) b.ctx.currentTemp.rate else b.profile.current_basal
         val fragility = lastPatientState?.eventMemory?.correctionFragilityScore ?: 0.0
         val maxStepUp = when {
@@ -7196,7 +7196,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         recordHarmoniaProductionDecision(
             mode = HarmoniaProductionMode.READY,
             selectedForProduction = true,
-            requestedRateUph = simulation.simulatedBasalUph,
+            requestedRateUph = simulation.targetBasalUph,
             boundedRateUph = finalRate,
             appliedRateUph = null,
             appliedDurationMin = null,
@@ -7208,11 +7208,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         consoleLog.add(
             "🌿 HARMONIA_PROD: ready action=${sourceAction.name} rate=${"%.2f".format(Locale.US, finalRate)}U/h " +
-                "requested=${"%.2f".format(Locale.US, simulation.simulatedBasalUph)}U/h",
+                "requested=${"%.2f".format(Locale.US, simulation.targetBasalUph)}U/h",
         )
         return HarmoniaProductionApplyPlan(
             rateUph = finalRate,
-            requestedRateUph = simulation.simulatedBasalUph,
+            requestedRateUph = simulation.targetBasalUph,
             sourceAction = sourceAction,
             branch = simulation.branch,
         )
@@ -7462,14 +7462,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             recordHarmoniaProductionDecision(
                 mode = HarmoniaProductionMode.SKIPPED,
                 selectedForProduction = false,
-                requestedRateUph = lastHarmoniaSimulationDecision?.simulatedBasalUph,
+                requestedRateUph = lastHarmoniaDecision?.targetBasalUph,
                 boundedRateUph = null,
                 appliedRateUph = null,
                 appliedDurationMin = null,
                 runtimeBlocker = "t3c_native_owner",
                 safetyBlockers = emptyList(),
-                sourceAction = lastHarmoniaSimulationDecision?.action,
-                branch = lastHarmoniaSimulationDecision?.branch,
+                sourceAction = lastHarmoniaDecision?.action,
+                branch = lastHarmoniaDecision?.branch,
                 reason = "t3c_native_owner",
             )
             null
@@ -7492,7 +7492,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         val harmonizerOutcome = HarmoniaHarmonizer.evaluate(
             tree = lastPhysiologicalTreeSnapshot,
-            simulation = lastHarmoniaSimulationDecision,
+            simulation = lastHarmoniaDecision,
             bgMgdl = bg,
             deltaMgdl5m = delta.toDouble(),
             profileBasalUph = b.profile.current_basal,
@@ -7827,7 +7827,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.patient_state = lastPatientState?.toJsonObject()
         decisionCtx.adjustments.patient_mode = lastPatientModeDecision?.toJsonObject()
         decisionCtx.adjustments.physiological_tree = lastPhysiologicalTreeSnapshot?.toJsonObject()
-        decisionCtx.adjustments.harmonia_simulation = lastHarmoniaSimulationDecision?.toJsonObject()
+        decisionCtx.adjustments.harmonia_simulation = lastHarmoniaDecision?.toJsonObject()
         decisionCtx.adjustments.harmonia_production = lastHarmoniaProductionDecision?.toJsonObject()
         decisionCtx.adjustments.t3c_runtime_ownership = lastT3cRuntimeOwnership
         decisionCtx.adjustments.replay_quality = ReplayQualityExportBuilder.toJsonObject(
@@ -9032,7 +9032,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastPatientState: PatientStateSnapshot? = null
     private var lastPatientModeDecision: PatientModeOrchestrator.Decision? = null
     private var lastPhysiologicalTreeSnapshot: PhysiologicalTreeSnapshot? = null
-    private var lastHarmoniaSimulationDecision: HarmoniaSimulationDecision? = null
+    private var lastHarmoniaDecision: HarmoniaDecision? = null
     private var lastHarmoniaProductionDecision: HarmoniaProductionDecision? = null
     private var lastPatientSourceSensor: SourceSensor? = null
     /** Latest IOB surveillance snapshot for JSONL (updated each [finalizeAndCapSMB]). */
@@ -12022,8 +12022,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 patientModeDecision = lastPatientModeDecision,
                 patientState = lastPatientState,
                 postHypoDelivery = lastPostHypoDeliveryAuthority,
-                harmoniaAction = lastHarmoniaSimulationDecision?.action,
-                harmoniaEligible = lastHarmoniaSimulationDecision?.eligible == true,
+                harmoniaAction = lastHarmoniaDecision?.action,
+                harmoniaEligible = lastHarmoniaDecision?.eligible == true,
             ),
         )
 

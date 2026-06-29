@@ -5,7 +5,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
-class HarmoniaSimulationEngineTest {
+class HarmoniaDecisionEngineTest {
 
     @Test
     fun evaluate_returnsBasalFirstForResistanceWithoutPumpAuthority() {
@@ -21,14 +21,14 @@ class HarmoniaSimulationEngineTest {
                 learningQuality = 0.80,
             ),
         )
-        val decision = HarmoniaSimulationEngine.evaluate(
+        val decision = HarmoniaDecisionEngine.evaluate(
             tree = buildTree(state),
             environment = safeEnvironment(),
         )
 
         assertThat(decision?.eligible).isTrue()
-        assertThat(decision?.action).isEqualTo(HarmoniaSimulationAction.BASAL_FIRST)
-        assertThat(decision?.simulatedSmbU).isEqualTo(0.0)
+        assertThat(decision?.action).isEqualTo(HarmoniaAction.BASAL_FIRST)
+        assertThat(decision?.targetSmbU).isEqualTo(0.0)
         assertThat(decision?.toJsonObject()?.getBoolean("applies_to_pump")).isFalse()
         assertThat(decision?.compactSummary).contains("Harmonia sim:")
     }
@@ -43,15 +43,55 @@ class HarmoniaSimulationEngineTest {
                 dominantConfidence = 0.80,
             ),
         )
-        val decision = HarmoniaSimulationEngine.evaluate(
+        val decision = HarmoniaDecisionEngine.evaluate(
             tree = buildTree(state),
             environment = safeEnvironment().copy(currentBgMgdl = 76.0, deltaMgdl5m = -1.2),
         )
 
         assertThat(decision?.eligible).isFalse()
-        assertThat(decision?.action).isEqualTo(HarmoniaSimulationAction.BLOCKED)
-        assertThat(decision?.simulatedSmbU).isEqualTo(0.0)
+        assertThat(decision?.action).isEqualTo(HarmoniaAction.BLOCKED)
+        assertThat(decision?.targetSmbU).isEqualTo(0.0)
         assertThat(decision?.blockers).contains("hypo_or_recovery")
+    }
+
+    @Test
+    fun evaluate_blocksOnlyDuringSensorWarmupWindow() {
+        val resistanceState = stableState().copy(
+            phase = PhysiologicalPhase.DAWN_CORTISOL,
+            endogenousGlucoseDrive = 0.82,
+            transientResistanceProb = 0.70,
+            causalPosterior = CausalStatePosterior(
+                dawnEndogenousProb = 0.84,
+                stressResistanceProb = 0.62,
+                dominant = CausalStateId.DAWN_ENDOGENOUS,
+                dominantConfidence = 0.84,
+                learningQuality = 0.80,
+            ),
+        )
+
+        // Fresh sensor inside the warmup window → blocked.
+        val warmup = HarmoniaDecisionEngine.evaluate(
+            tree = buildTree(resistanceState),
+            environment = safeEnvironment().copy(sensorAgeMin = 30),
+        )
+        assertThat(warmup?.eligible).isFalse()
+        assertThat(warmup?.blockers).contains("sensor_warmup")
+
+        // Established sensor (real age in days) → no warmup block.
+        val established = HarmoniaDecisionEngine.evaluate(
+            tree = buildTree(resistanceState),
+            environment = safeEnvironment().copy(sensorAgeMin = 4_000),
+        )
+        assertThat(established?.blockers).doesNotContain("sensor_warmup")
+        assertThat(established?.eligible).isTrue()
+
+        // Unknown insertion time (no SENSOR_CHANGE event) maps to 0 → treated as established.
+        val unknownInsertion = HarmoniaDecisionEngine.evaluate(
+            tree = buildTree(resistanceState),
+            environment = safeEnvironment().copy(sensorAgeMin = 0),
+        )
+        assertThat(unknownInsertion?.blockers).doesNotContain("sensor_warmup")
+        assertThat(unknownInsertion?.eligible).isTrue()
     }
 
     @Test
@@ -68,7 +108,7 @@ class HarmoniaSimulationEngineTest {
                 learningQuality = 0.85,
             ),
         )
-        val decision = HarmoniaSimulationEngine.evaluate(
+        val decision = HarmoniaDecisionEngine.evaluate(
             tree = buildTree(state),
             environment = safeEnvironment().copy(
                 deltaMgdl5m = 4.0,
@@ -81,16 +121,16 @@ class HarmoniaSimulationEngineTest {
         )
 
         assertThat(decision?.eligible).isTrue()
-        assertThat(decision?.simulatedBasalUph).isAtMost(5.0)
-        assertThat(decision?.simulatedSmbU).isAtMost(0.10)
+        assertThat(decision?.targetBasalUph).isAtMost(5.0)
+        assertThat(decision?.targetSmbU).isAtMost(0.10)
         assertThat(decision?.capsApplied).contains("pump_basal_cap_or_step")
         assertThat(decision?.capsApplied).contains("pump_smb_or_iob_cap")
     }
 
     @Test
     fun randomizedEnvironment_isDeterministicForReplay() {
-        val first = HarmoniaSimulationEngine.randomizedEnvironment(seed = 42L)
-        val second = HarmoniaSimulationEngine.randomizedEnvironment(seed = 42L)
+        val first = HarmoniaDecisionEngine.randomizedEnvironment(seed = 42L)
+        val second = HarmoniaDecisionEngine.randomizedEnvironment(seed = 42L)
 
         assertThat(first).isEqualTo(second)
         assertThat(first.seed).isEqualTo(42L)
@@ -108,7 +148,7 @@ class HarmoniaSimulationEngineTest {
             appliedDurationMin = 30,
             runtimeBlocker = null,
             safetyBlockers = emptyList(),
-            sourceAction = HarmoniaSimulationAction.BASAL_FIRST,
+            sourceAction = HarmoniaAction.BASAL_FIRST,
             branch = "RESISTANT",
             reason = "harmonia_basal_first_applied",
         ).toJsonObject()
@@ -130,7 +170,7 @@ class HarmoniaSimulationEngineTest {
                 dominantConfidence = 0.0,
             ),
         )
-        val decision = HarmoniaSimulationEngine.evaluate(
+        val decision = HarmoniaDecisionEngine.evaluate(
             tree = buildTree(state),
             environment = safeEnvironment().copy(
                 correctionFragilityScore = 0.62,
@@ -138,8 +178,8 @@ class HarmoniaSimulationEngineTest {
             ),
         )
 
-        assertThat(decision?.action).isEqualTo(HarmoniaSimulationAction.STABILIZE)
-        assertThat(decision?.simulatedBasalUph).isLessThan(safeEnvironment().currentBasalUph)
+        assertThat(decision?.action).isEqualTo(HarmoniaAction.STABILIZE)
+        assertThat(decision?.targetBasalUph).isLessThan(safeEnvironment().currentBasalUph)
     }
 
     private fun buildTree(state: PatientStateSnapshot): PhysiologicalTreeSnapshot? =
@@ -149,8 +189,8 @@ class HarmoniaSimulationEngineTest {
             patientModeDecision = PatientModeOrchestrator.evaluate(state),
         )
 
-    private fun safeEnvironment(): HarmoniaSimulationEnvironment =
-        HarmoniaSimulationEnvironment(
+    private fun safeEnvironment(): HarmoniaDecisionEnvironment =
+        HarmoniaDecisionEnvironment(
             currentBgMgdl = 190.0,
             deltaMgdl5m = 2.5,
             iobU = 1.0,
@@ -159,7 +199,7 @@ class HarmoniaSimulationEngineTest {
             maxBasalUph = 5.0,
             maxSmbU = 1.0,
             maxIobU = 5.0,
-            sensorAgeMin = 2,
+            sensorAgeMin = 1_500, // established sensor (~25 h), well past the warmup window
             sensorNoise = 0.1,
         )
 

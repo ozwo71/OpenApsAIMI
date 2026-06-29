@@ -1,7 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.meal
 
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
-import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
 
 /**
  * Builds the user text sent to vision LLMs and hardens free-form context so it cannot
@@ -31,11 +31,11 @@ object MealVisionUserPrompt {
 
     fun appendHarmoniaContext(
         userDescription: String,
-        harmoniaSimulation: HarmoniaSimulationDecision?,
+        harmoniaDecision: HarmoniaDecision?,
     ): String {
-        if (harmoniaSimulation == null) return userDescription
+        if (harmoniaDecision == null) return userDescription
         val context = "AIMI Harmonia context for insulin_relevant_notes only, not visual carb estimation: " +
-            "${harmoniaSimulation.compactSummary}; applies_to_pump=false."
+            "${harmoniaDecision.compactSummary}; applies_to_pump=false."
         return listOf(userDescription.trim(), context)
             .filter { it.isNotBlank() }
             .joinToString(" ")

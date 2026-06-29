@@ -490,7 +490,7 @@ internal fun loadLatestHarmoniaRuntimeSnapshot(): AimiHarmoniaRuntimeSnapshot {
                 ),
             )
         }
-        if (tick.smbEligible || tick.smbAppliedToRbtDemand || tick.simulatedSmbU != null || tick.smbBlocker != null) {
+        if (tick.smbEligible || tick.smbAppliedToRbtDemand || tick.targetSmbU != null || tick.smbBlocker != null) {
             add(
                 AimiControlDetail(
                     titleResId = R.string.aimi_control_center_harmonia_smb_channel,
@@ -503,7 +503,7 @@ internal fun loadLatestHarmoniaRuntimeSnapshot(): AimiHarmoniaRuntimeSnapshot {
                     },
                 ),
             )
-            tick.simulatedSmbU?.let {
+            tick.targetSmbU?.let {
                 add(
                     AimiControlDetail(
                         titleResId = R.string.aimi_control_center_harmonia_smb_demand,
@@ -574,8 +574,8 @@ private fun formatHarmoniaAppliedRate(tick: HarmoniaRuntimeTickRecord): String {
 }
 
 private fun formatHarmoniaSmbDemand(tick: HarmoniaRuntimeTickRecord): String {
-    val simulated = formatControlCenterDoubleValue(tick.simulatedSmbU ?: 0.0, "U")
-    val bounded = formatControlCenterDoubleValue(tick.boundedSmbU ?: tick.simulatedSmbU ?: 0.0, "U")
+    val simulated = formatControlCenterDoubleValue(tick.targetSmbU ?: 0.0, "U")
+    val bounded = formatControlCenterDoubleValue(tick.boundedSmbU ?: tick.targetSmbU ?: 0.0, "U")
     val after = tick.smbDemandAfterU?.let { " RBT ${formatControlCenterDoubleValue(tick.smbDemandBeforeU ?: 0.0, "U")} -> ${formatControlCenterDoubleValue(it, "U")}" }.orEmpty()
     val cap = tick.maxSmbCapU?.let { " cap ${formatControlCenterDoubleValue(it, "U")}" }.orEmpty()
     return "$simulated -> $bounded$after$cap"

@@ -1,8 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.meal
 
-import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationAction
-import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationDecision
-import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationEnvironment
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaAction
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEnvironment
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -39,16 +39,16 @@ class MealVisionJsonParserTest {
     fun `appendHarmoniaContext keeps meal estimate boundary explicit`() {
         val enriched = MealVisionUserPrompt.appendHarmoniaContext(
             userDescription = "Large plate",
-            harmoniaSimulation = HarmoniaSimulationDecision(
+            harmoniaDecision = HarmoniaDecision(
                 timestampMs = 1_718_000_000_000L,
                 branch = "RESISTANCE_PROBABLE",
-                action = HarmoniaSimulationAction.BASAL_FIRST,
+                action = HarmoniaAction.BASAL_FIRST,
                 eligible = true,
-                simulatedBasalUph = 1.2,
-                simulatedSmbU = 0.0,
+                targetBasalUph = 1.2,
+                targetSmbU = 0.0,
                 basalFactor = 1.2,
                 smbFactor = 0.0,
-                environment = HarmoniaSimulationEnvironment(
+                environment = HarmoniaDecisionEnvironment(
                     currentBgMgdl = 180.0,
                     deltaMgdl5m = 2.0,
                     iobU = 1.0,

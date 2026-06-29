@@ -1,8 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
-import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationAction
-import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationDecision
-import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationEnvironment
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaAction
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEnvironment
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
@@ -54,7 +54,7 @@ class AuditorPromptSafeguardsTest {
     @Test
     fun `prompt carries Harmonia simulation as sandbox branch`() {
         val prompt = AuditorPromptBuilder.buildPrompt(
-            createDummyInput().copy(harmoniaSimulation = createSimulation())
+            createDummyInput().copy(harmoniaDecision = createSimulation())
         )
 
         assertTrue(prompt.contains("Harmonia Simulation Branch"), "Prompt must explain Harmonia sandbox semantics")
@@ -100,17 +100,17 @@ class AuditorPromptSafeguardsTest {
         )
     }
 
-    private fun createSimulation(): HarmoniaSimulationDecision =
-        HarmoniaSimulationDecision(
+    private fun createSimulation(): HarmoniaDecision =
+        HarmoniaDecision(
             timestampMs = 1_718_000_000_000L,
             branch = "RESISTANCE_PROBABLE",
-            action = HarmoniaSimulationAction.BASAL_FIRST,
+            action = HarmoniaAction.BASAL_FIRST,
             eligible = true,
-            simulatedBasalUph = 1.2,
-            simulatedSmbU = 0.0,
+            targetBasalUph = 1.2,
+            targetSmbU = 0.0,
             basalFactor = 1.2,
             smbFactor = 0.0,
-            environment = HarmoniaSimulationEnvironment(
+            environment = HarmoniaDecisionEnvironment(
                 currentBgMgdl = 180.0,
                 deltaMgdl5m = 2.0,
                 iobU = 1.0,

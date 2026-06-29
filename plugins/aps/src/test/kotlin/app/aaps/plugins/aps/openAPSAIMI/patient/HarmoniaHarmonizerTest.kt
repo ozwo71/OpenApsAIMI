@@ -26,16 +26,16 @@ class HarmoniaHarmonizerTest {
     @Test
     fun hypoBlock_ignoredDuringHyperWithoutRecentLow() {
         val tree = hyperTree()
-        val simulation = HarmoniaSimulationDecision(
+        val simulation = HarmoniaDecision(
             timestampMs = 1L,
             branch = "HYPO_RISK",
-            action = HarmoniaSimulationAction.BLOCKED,
+            action = HarmoniaAction.BLOCKED,
             eligible = false,
-            simulatedBasalUph = 1.0,
-            simulatedSmbU = 0.0,
+            targetBasalUph = 1.0,
+            targetSmbU = 0.0,
             basalFactor = 1.0,
             smbFactor = 0.0,
-            environment = HarmoniaSimulationEnvironment(
+            environment = HarmoniaDecisionEnvironment(
                 currentBgMgdl = 294.0,
                 deltaMgdl5m = 8.0,
                 iobU = 10.0,
@@ -71,16 +71,16 @@ class HarmoniaHarmonizerTest {
 
     @Test
     fun hypoBlock_softensWhenGenuineHypoContext() {
-        val simulation = HarmoniaSimulationDecision(
+        val simulation = HarmoniaDecision(
             timestampMs = 1L,
             branch = "HYPO_RISK",
-            action = HarmoniaSimulationAction.BLOCKED,
+            action = HarmoniaAction.BLOCKED,
             eligible = false,
-            simulatedBasalUph = 1.0,
-            simulatedSmbU = 0.0,
+            targetBasalUph = 1.0,
+            targetSmbU = 0.0,
             basalFactor = 1.0,
             smbFactor = 0.0,
-            environment = HarmoniaSimulationEnvironment(
+            environment = HarmoniaDecisionEnvironment(
                 currentBgMgdl = 118.0,
                 deltaMgdl5m = -0.5,
                 iobU = 1.0,

@@ -10,7 +10,7 @@ class RecursiveBeliefHarmoniaBasalFirstTest {
         val snapshot = resolveWith(
             RbtExtendedSignals(
                 harmoniaActive = true,
-                harmoniaSimulationEligible = true,
+                harmoniaDecisionEligible = true,
                 harmoniaAction = "BASAL_FIRST",
                 harmoniaBranch = "RESISTANCE_PROBABLE",
                 harmoniaBasalDemandRateUph = 1.8,
@@ -34,7 +34,7 @@ class RecursiveBeliefHarmoniaBasalFirstTest {
                 t3cBasalDemandRateUph = 2.0,
                 t3cBasalMaxRateUph = 5.0,
                 harmoniaActive = true,
-                harmoniaSimulationEligible = true,
+                harmoniaDecisionEligible = true,
                 harmoniaAction = "BASAL_FIRST",
                 harmoniaBranch = "RESISTANCE_PROBABLE",
                 harmoniaBasalDemandRateUph = 1.8,
@@ -53,7 +53,7 @@ class RecursiveBeliefHarmoniaBasalFirstTest {
         val snapshot = resolveWith(
             RbtExtendedSignals(
                 harmoniaActive = true,
-                harmoniaSimulationEligible = true,
+                harmoniaDecisionEligible = true,
                 harmoniaAction = "BASAL_FIRST",
                 harmoniaBranch = "RECOVERY",
                 harmoniaBasalDemandRateUph = 1.4,

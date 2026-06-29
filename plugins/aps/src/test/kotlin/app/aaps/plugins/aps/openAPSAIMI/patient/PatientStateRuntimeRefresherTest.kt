@@ -80,9 +80,9 @@ class PatientStateRuntimeRefresherTest {
             patientModeDecision = initialMode,
             updatedAtMs = nowMs,
             physiologicalTree = initialTree,
-            harmoniaSimulation = HarmoniaSimulationEngine.evaluate(
+            harmoniaDecision = HarmoniaDecisionEngine.evaluate(
                 tree = initialTree,
-                environment = HarmoniaSimulationEnvironment(
+                environment = HarmoniaDecisionEnvironment(
                     currentBgMgdl = 145.0,
                     deltaMgdl5m = 1.0,
                     iobU = 1.0,
@@ -115,7 +115,7 @@ class PatientStateRuntimeRefresherTest {
         assertThat(refreshed?.physioLive?.stepsLast15m).isEqualTo(420)
         assertThat(refreshed?.physioLive?.hrNowBpm).isEqualTo(112)
         assertThat(refreshed?.physiologicalTree?.compactSummary).contains("Tree:")
-        assertThat(refreshed?.harmoniaSimulation?.compactSummary).contains("Harmonia sim:")
+        assertThat(refreshed?.harmoniaDecision?.compactSummary).contains("Harmonia sim:")
     }
 
     @Test

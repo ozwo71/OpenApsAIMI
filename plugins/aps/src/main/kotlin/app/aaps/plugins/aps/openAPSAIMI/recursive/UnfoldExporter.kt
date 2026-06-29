@@ -122,7 +122,7 @@ internal object UnfoldExporter {
                         eligible = it.eligible,
                         sourceAction = it.sourceAction,
                         branch = it.branch,
-                        simulatedSmbU = it.simulatedSmbU,
+                        targetSmbU = it.targetSmbU,
                         boundedSmbU = it.boundedSmbU,
                         maxSmbCapU = it.maxSmbCapU,
                         demandBeforeU = it.demandBeforeU,
@@ -259,7 +259,7 @@ internal object UnfoldExporter {
                     put("eligible", harmonia.eligible)
                     put("source_action", harmonia.sourceAction ?: JSONObject.NULL)
                     put("branch", harmonia.branch ?: JSONObject.NULL)
-                    put("simulated_smb_u", harmonia.simulatedSmbU)
+                    put("simulated_smb_u", harmonia.targetSmbU)
                     put("bounded_smb_u", harmonia.boundedSmbU)
                     put("max_smb_cap_u", harmonia.maxSmbCapU)
                     put("demand_before_u", harmonia.demandBeforeU)

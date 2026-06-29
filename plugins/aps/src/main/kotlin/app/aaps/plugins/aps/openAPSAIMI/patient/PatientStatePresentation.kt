@@ -35,7 +35,7 @@ internal object PatientStatePresentationBuilder {
             updatedSummary = buildUpdatedSummary(snapshot.updatedAtMs, nowMs, snapshot.refreshSource),
             modeHeadline = "$modeLabel (${percent(patientMode.confidence)})",
             narrative = buildNarrative(patientMode),
-            physiologySummary = buildPhysiologySummary(patientState, snapshot.physiologicalTree, snapshot.harmoniaSimulation),
+            physiologySummary = buildPhysiologySummary(patientState, snapshot.physiologicalTree, snapshot.harmoniaDecision),
             physioLiveSummary = buildPhysioLiveSummary(snapshot.physioLive),
             thermalSummary = buildThermalSummary(snapshot.thermalBelief),
             intentSummary = buildIntentSummary(patientState),
@@ -91,14 +91,14 @@ internal object PatientStatePresentationBuilder {
     private fun buildPhysiologySummary(
         state: PatientStateSnapshot,
         physiologicalTree: PhysiologicalTreeSnapshot?,
-        harmoniaSimulation: HarmoniaSimulationDecision?,
+        harmoniaDecision: HarmoniaDecision?,
     ): String {
         val base = "Phase ${humanize(state.phase.name)} · Absorption ${humanize(state.mealAbsorptionPhase.name)} · " +
             "UAM ${humanize(state.uamDominant.name)} · Cause ${humanize(state.causalPosterior.dominant.name)}"
         return listOfNotNull(
             base,
             physiologicalTree?.compactSummary,
-            harmoniaSimulation?.compactSummary,
+            harmoniaDecision?.compactSummary,
         ).joinToString("\n")
     }
 

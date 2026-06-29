@@ -1,7 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor
 
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefAnalysisReport
-import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
 
 /**
  * =============================================================================
@@ -101,7 +101,7 @@ data class AdvisorReport(
     /** On-device OREF-aligned feature/outcome analysis (local DB); LGBM scores optional via ONNX. */
     val orefAnalysis: OrefAnalysisReport? = null,
     /** Latest Harmonia simulation branch attached to the runtime, sandbox-only. */
-    val harmoniaSimulation: HarmoniaSimulationDecision? = null,
+    val harmoniaDecision: HarmoniaDecision? = null,
 )
 
 /**
@@ -116,7 +116,7 @@ data class AdvisorContext(
     val profile: AimiProfileSnapshot,
     val prefs: AimiPrefsSnapshot,
     val pkpdPrefs: PkpdPrefsSnapshot,
-    val harmoniaSimulation: HarmoniaSimulationDecision? = null,
+    val harmoniaDecision: HarmoniaDecision? = null,
 )
 
 data class AimiProfileSnapshot(

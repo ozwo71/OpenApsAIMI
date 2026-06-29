@@ -600,6 +600,7 @@ object RecursiveBeliefResolver {
             "BASAL_FIRST",
             "MEAL_SUPPORT",
             "PROTECTIVE_REDUCTION",
+            "STABILIZE", // aligned with the production basal-first branch (DetermineBasalAIMI2 §7106 / §3387)
         )
         if (!active && demand <= 0.0 && !postHypoBlock && !exerciseBlock && !mealConflict && !hardSafetyBlock) {
             return null
@@ -610,14 +611,14 @@ object RecursiveBeliefResolver {
             postHypoBlock -> ext.harmoniaBlockReason ?: "POST_HYPO"
             exerciseBlock -> ext.harmoniaBlockReason ?: "EXERCISE_LOCKOUT"
             mealConflict -> ext.harmoniaBlockReason ?: "MEAL_CONFLICT"
-            active && !ext.harmoniaSimulationEligible -> ext.harmoniaBlockReason ?: "SIMULATION_INELIGIBLE"
+            active && !ext.harmoniaDecisionEligible -> ext.harmoniaBlockReason ?: "SIMULATION_INELIGIBLE"
             active && !productionAction -> ext.harmoniaBlockReason ?: "NO_PRODUCTION_ACTION"
             active && bounded <= 0.0 -> ext.harmoniaBlockReason ?: "NO_BASAL_DEMAND"
             !active -> "INACTIVE"
             else -> null
         }
         val eligible = active &&
-            ext.harmoniaSimulationEligible &&
+            ext.harmoniaDecisionEligible &&
             productionAction &&
             !hardSafetyBlock &&
             !postHypoBlock &&
@@ -631,7 +632,7 @@ object RecursiveBeliefResolver {
             if (postHypoBlock) add("HARMONIA_POST_HYPO_BLOCK")
             if (exerciseBlock) add("HARMONIA_EXERCISE_BLOCK")
             if (mealConflict) add("HARMONIA_MEAL_CONFLICT")
-            if (active && !ext.harmoniaSimulationEligible) add("HARMONIA_SIMULATION_INELIGIBLE")
+            if (active && !ext.harmoniaDecisionEligible) add("HARMONIA_SIMULATION_INELIGIBLE")
             if (active && !productionAction) add("HARMONIA_NO_PRODUCTION_ACTION")
             if (active && bounded <= 0.0) add("HARMONIA_NO_BASAL_DEMAND")
             if (eligible) add("HARMONIA_BASAL_FIRST_READY")
@@ -700,7 +701,7 @@ object RecursiveBeliefResolver {
             mealConflict -> ext.harmoniaBlockReason ?: "MEAL_CONFLICT"
             basalFirstChannel != BasalFirstChannel.NONE -> "BASAL_FIRST_OWNER_${basalFirstChannel.name}"
             releaseAuthority == ReleaseAuthority.NONE -> "NO_RBT_SMB_AUTHORITY"
-            active && !ext.harmoniaSimulationEligible -> ext.harmoniaBlockReason ?: "SIMULATION_INELIGIBLE"
+            active && !ext.harmoniaDecisionEligible -> ext.harmoniaBlockReason ?: "SIMULATION_INELIGIBLE"
             active && !smbAction -> "NO_SMB_ACTION"
             mealSupportAction && bounded <= 0.0 -> "NO_SMB_DEMAND"
             mealSupportAction && cap <= 0.0 -> "SMB_CAP_ZERO"
@@ -708,7 +709,7 @@ object RecursiveBeliefResolver {
             else -> null
         }
         val eligible = active &&
-            ext.harmoniaSimulationEligible &&
+            ext.harmoniaDecisionEligible &&
             smbAction &&
             releaseAuthority != ReleaseAuthority.NONE &&
             basalFirstChannel == BasalFirstChannel.NONE &&
@@ -732,7 +733,7 @@ object RecursiveBeliefResolver {
             if (mealConflict) add("HARMONIA_SMB_MEAL_CONFLICT")
             if (basalFirstChannel != BasalFirstChannel.NONE) add("HARMONIA_SMB_BASAL_FIRST_OWNER")
             if (releaseAuthority == ReleaseAuthority.NONE) add("HARMONIA_SMB_NO_RBT_AUTHORITY")
-            if (active && !ext.harmoniaSimulationEligible) add("HARMONIA_SMB_SIMULATION_INELIGIBLE")
+            if (active && !ext.harmoniaDecisionEligible) add("HARMONIA_SMB_SIMULATION_INELIGIBLE")
             if (active && !smbAction) add("HARMONIA_SMB_NO_ACTION")
             if (mealSupportAction && bounded <= 0.0) add("HARMONIA_SMB_NO_DEMAND")
             if (eligible && mealSupportAction) add("HARMONIA_SMB_SUPPORT_READY")
@@ -744,7 +745,7 @@ object RecursiveBeliefResolver {
             eligible = eligible,
             sourceAction = action,
             branch = ext.harmoniaBranch,
-            simulatedSmbU = simulated,
+            targetSmbU = simulated,
             boundedSmbU = bounded,
             maxSmbCapU = cap,
             demandBeforeU = currentDemandU,

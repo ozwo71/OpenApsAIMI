@@ -27,7 +27,7 @@ data class RbtExtendedSignals(
     val t3cGovernanceBasalFloorUph: Double? = null,
     val t3cGovernanceAggressivenessFloor: Double? = null,
     val harmoniaActive: Boolean = false,
-    val harmoniaSimulationEligible: Boolean = false,
+    val harmoniaDecisionEligible: Boolean = false,
     val harmoniaAction: String? = null,
     val harmoniaBranch: String? = null,
     val harmoniaBasalDemandRateUph: Double? = null,

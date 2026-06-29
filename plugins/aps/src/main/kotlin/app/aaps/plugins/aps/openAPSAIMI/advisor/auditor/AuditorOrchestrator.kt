@@ -337,7 +337,7 @@ class AuditorOrchestrator @Inject constructor(
                     physio = physioCtx,
                     effectiveProfile = effectiveProfile,
                     physiologicalTree = harmoniaRuntime?.physiologicalTree,
-                    harmoniaSimulation = harmoniaRuntime?.harmoniaSimulation,
+                    harmoniaDecision = harmoniaRuntime?.harmoniaDecision,
                 )
                 
                 // Get provider

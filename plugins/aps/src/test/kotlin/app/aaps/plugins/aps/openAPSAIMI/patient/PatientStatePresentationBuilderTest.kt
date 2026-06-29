@@ -89,7 +89,7 @@ class PatientStatePresentationBuilderTest {
                         reasonCodes = listOf("LATENT_ENDOGENOUS", "FALSE_MEAL_SUPPRESS"),
                     ),
                 ),
-                harmoniaSimulation = HarmoniaSimulationEngine.evaluate(
+                harmoniaDecision = HarmoniaDecisionEngine.evaluate(
                     tree = PhysiologicalTreeBuilder.build(
                         enabled = true,
                         patientState = PatientStateSnapshot(
@@ -122,7 +122,7 @@ class PatientStatePresentationBuilderTest {
                             reasonCodes = listOf("LATENT_ENDOGENOUS", "FALSE_MEAL_SUPPRESS"),
                         ),
                     ),
-                    environment = HarmoniaSimulationEnvironment(
+                    environment = HarmoniaDecisionEnvironment(
                         currentBgMgdl = 180.0,
                         deltaMgdl5m = 2.0,
                         iobU = 1.0,

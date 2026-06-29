@@ -6,7 +6,7 @@ import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
-data class HarmoniaSimulationEnvironment(
+data class HarmoniaDecisionEnvironment(
     val currentBgMgdl: Double,
     val deltaMgdl5m: Double,
     val iobU: Double,
@@ -47,16 +47,16 @@ data class HarmoniaSimulationEnvironment(
         }
 }
 
-data class HarmoniaSimulationDecision(
+data class HarmoniaDecision(
     val timestampMs: Long,
     val branch: String,
-    val action: HarmoniaSimulationAction,
+    val action: HarmoniaAction,
     val eligible: Boolean,
-    val simulatedBasalUph: Double,
-    val simulatedSmbU: Double,
+    val targetBasalUph: Double,
+    val targetSmbU: Double,
     val basalFactor: Double,
     val smbFactor: Double,
-    val environment: HarmoniaSimulationEnvironment,
+    val environment: HarmoniaDecisionEnvironment,
     val capsApplied: List<String>,
     val blockers: List<String>,
     val rationale: List<String>,
@@ -70,8 +70,8 @@ data class HarmoniaSimulationDecision(
             put("branch", branch)
             put("action", action.name)
             put("eligible", eligible)
-            put("simulated_basal_uph", simulatedBasalUph)
-            put("simulated_smb_u", simulatedSmbU)
+            put("simulated_basal_uph", targetBasalUph)
+            put("simulated_smb_u", targetSmbU)
             put("basal_factor", basalFactor)
             put("smb_factor", smbFactor)
             put("environment", environment.toJsonObject())
@@ -95,7 +95,7 @@ data class HarmoniaProductionDecision(
     val appliedDurationMin: Int?,
     val runtimeBlocker: String?,
     val safetyBlockers: List<String>,
-    val sourceAction: HarmoniaSimulationAction?,
+    val sourceAction: HarmoniaAction?,
     val branch: String?,
     val reason: String,
     val version: Int = 1,
@@ -129,7 +129,7 @@ enum class HarmoniaProductionMode {
     APPLIED,
 }
 
-enum class HarmoniaSimulationAction {
+enum class HarmoniaAction {
     OBSERVE,
     BASAL_FIRST,
     MEAL_SUPPORT,
@@ -138,13 +138,22 @@ enum class HarmoniaSimulationAction {
     BLOCKED,
 }
 
-internal object HarmoniaSimulationEngine {
+internal object HarmoniaDecisionEngine {
+
+    /**
+     * Sensor warmup window, in minutes since insertion, during which fresh CGM readings are
+     * unreliable and Harmonia must stand down. Note that [HarmoniaDecisionEnvironment.sensorAgeMin]
+     * carries the real sensor age (minutes since the last SENSOR_CHANGE event), so an established
+     * sensor reports thousands of minutes and is *not* in warmup. A value of `0` means the insertion
+     * time is unknown (no SENSOR_CHANGE recorded) and is likewise treated as established, never warmup.
+     */
+    private const val SENSOR_WARMUP_MAX_MIN = 120
 
     fun evaluate(
         tree: PhysiologicalTreeSnapshot?,
-        environment: HarmoniaSimulationEnvironment?,
+        environment: HarmoniaDecisionEnvironment?,
         timestampMs: Long = tree?.timestamp ?: 0L,
-    ): HarmoniaSimulationDecision? {
+    ): HarmoniaDecision? {
         if (tree == null || environment == null) return null
 
         val blockers = buildBlockers(tree, environment)
@@ -153,17 +162,17 @@ internal object HarmoniaSimulationEngine {
         val branch = tree.trunk.globalState.name
 
         val rawBasalFactor = when (action) {
-            HarmoniaSimulationAction.BASAL_FIRST -> 1.18
-            HarmoniaSimulationAction.MEAL_SUPPORT -> 1.10
-            HarmoniaSimulationAction.PROTECTIVE_REDUCTION -> 0.70
-            HarmoniaSimulationAction.STABILIZE -> 0.85
-            HarmoniaSimulationAction.OBSERVE,
-            HarmoniaSimulationAction.BLOCKED,
+            HarmoniaAction.BASAL_FIRST -> 1.18
+            HarmoniaAction.MEAL_SUPPORT -> 1.10
+            HarmoniaAction.PROTECTIVE_REDUCTION -> 0.70
+            HarmoniaAction.STABILIZE -> 0.85
+            HarmoniaAction.OBSERVE,
+            HarmoniaAction.BLOCKED,
             -> 1.0
         }
         val rawSmbFactor = when (action) {
-            HarmoniaSimulationAction.MEAL_SUPPORT -> 0.30
-            HarmoniaSimulationAction.BASAL_FIRST -> 0.0
+            HarmoniaAction.MEAL_SUPPORT -> 0.30
+            HarmoniaAction.BASAL_FIRST -> 0.0
             else -> 0.0
         }
 
@@ -187,19 +196,19 @@ internal object HarmoniaSimulationEngine {
         )
         if (simulatedSmb != requestedSmb) capsApplied.add("pump_smb_or_iob_cap")
 
-        val eligible = blockers.isEmpty() && action != HarmoniaSimulationAction.BLOCKED
+        val eligible = blockers.isEmpty() && action != HarmoniaAction.BLOCKED
         val safeBasal = if (eligible) simulatedBasal else environment.currentBasalUph
         val safeSmb = if (eligible) simulatedSmb else 0.0
         val rationale = buildRationale(tree, environment, action, blockers)
         val summary = buildSummary(action, branch, eligible, safeBasal, safeSmb, blockers)
 
-        return HarmoniaSimulationDecision(
+        return HarmoniaDecision(
             timestampMs = timestampMs,
             branch = branch,
-            action = if (eligible) action else HarmoniaSimulationAction.BLOCKED,
+            action = if (eligible) action else HarmoniaAction.BLOCKED,
             eligible = eligible,
-            simulatedBasalUph = safeBasal,
-            simulatedSmbU = safeSmb,
+            targetBasalUph = safeBasal,
+            targetSmbU = safeSmb,
             basalFactor = if (eligible) basalFactor else 1.0,
             smbFactor = if (eligible) smbFactor else 0.0,
             environment = environment,
@@ -216,9 +225,9 @@ internal object HarmoniaSimulationEngine {
         maxBasalUph: Double = 5.0,
         maxSmbU: Double = 1.0,
         maxIobU: Double = 5.0,
-    ): HarmoniaSimulationEnvironment {
+    ): HarmoniaDecisionEnvironment {
         val random = Random(seed)
-        return HarmoniaSimulationEnvironment(
+        return HarmoniaDecisionEnvironment(
             currentBgMgdl = random.nextDouble(65.0, 290.0),
             deltaMgdl5m = random.nextDouble(-5.0, 8.0),
             iobU = random.nextDouble(0.0, maxIobU.coerceAtLeast(0.1)),
@@ -235,10 +244,10 @@ internal object HarmoniaSimulationEngine {
 
     private fun buildBlockers(
         tree: PhysiologicalTreeSnapshot,
-        env: HarmoniaSimulationEnvironment,
+        env: HarmoniaDecisionEnvironment,
     ): List<String> =
         buildList {
-            if (env.sensorAgeMin > 10) add("sensor_age")
+            if (env.sensorAgeMin in 1..SENSOR_WARMUP_MAX_MIN) add("sensor_warmup")
             if (env.sensorNoise >= 0.75) add("sensor_noise")
             if (tree.branches.sensorTrust.confidence < 0.40) add("sensor_uncertain")
             if (tree.branches.hypoRisk.confidence >= 0.45) add("hypo_or_recovery")
@@ -249,20 +258,20 @@ internal object HarmoniaSimulationEngine {
 
     private fun chooseAction(
         tree: PhysiologicalTreeSnapshot,
-        env: HarmoniaSimulationEnvironment,
+        env: HarmoniaDecisionEnvironment,
         blockers: List<String>,
-    ): HarmoniaSimulationAction {
-        if (blockers.isNotEmpty()) return HarmoniaSimulationAction.BLOCKED
+    ): HarmoniaAction {
+        if (blockers.isNotEmpty()) return HarmoniaAction.BLOCKED
 
         val fragility = env.correctionFragilityScore.coerceIn(0.0, 1.0)
         val exhaustion = env.postHyperExhaustionScore.coerceIn(0.0, 1.0)
         val chaotic = env.chaoticEpisodeLoad.coerceIn(0.0, 1.0)
         if (fragility >= 0.55 || exhaustion >= 0.65 || chaotic >= 0.50) {
-            return HarmoniaSimulationAction.STABILIZE
+            return HarmoniaAction.STABILIZE
         }
 
         if (tree.branches.activity.confidence >= 0.55 || tree.branches.postActivity.confidence >= 0.45) {
-            return HarmoniaSimulationAction.PROTECTIVE_REDUCTION
+            return HarmoniaAction.PROTECTIVE_REDUCTION
         }
 
         val mealConfidence = tree.branches.meal.confidence
@@ -275,7 +284,7 @@ internal object HarmoniaSimulationEngine {
                 mealConfidence >= 0.50 &&
                 env.deltaMgdl5m >= 0.8
         if (undeclaredMealRise || declaredMealRise) {
-            return HarmoniaSimulationAction.MEAL_SUPPORT
+            return HarmoniaAction.MEAL_SUPPORT
         }
 
         if (
@@ -283,15 +292,15 @@ internal object HarmoniaSimulationEngine {
             tree.branches.stress.confidence >= 0.55 ||
             tree.branches.insulinEffectiveness.confidence >= 0.55
         ) {
-            return HarmoniaSimulationAction.BASAL_FIRST
+            return HarmoniaAction.BASAL_FIRST
         }
-        return HarmoniaSimulationAction.OBSERVE
+        return HarmoniaAction.OBSERVE
     }
 
     private fun buildRationale(
         tree: PhysiologicalTreeSnapshot,
-        env: HarmoniaSimulationEnvironment,
-        action: HarmoniaSimulationAction,
+        env: HarmoniaDecisionEnvironment,
+        action: HarmoniaAction,
         blockers: List<String>,
     ): List<String> =
         buildList {
@@ -305,7 +314,7 @@ internal object HarmoniaSimulationEngine {
         }
 
     private fun buildSummary(
-        action: HarmoniaSimulationAction,
+        action: HarmoniaAction,
         branch: String,
         eligible: Boolean,
         basal: Double,

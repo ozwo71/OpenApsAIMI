@@ -29,7 +29,7 @@ object HarmoniaHarmonizer {
 
     fun evaluate(
         tree: PhysiologicalTreeSnapshot?,
-        simulation: HarmoniaSimulationDecision?,
+        simulation: HarmoniaDecision?,
         bgMgdl: Double,
         deltaMgdl5m: Double,
         profileBasalUph: Double,
@@ -88,14 +88,14 @@ object HarmoniaHarmonizer {
             mealLeaf != null &&
             mealLeaf.confidence >= 0.60 &&
             deltaMgdl5m >= 1.0 &&
-            simulation?.action == HarmoniaSimulationAction.MEAL_SUPPORT
+            simulation?.action == HarmoniaAction.MEAL_SUPPORT
         ) {
             reasons += "tree_meal_support"
             return Outcome(Posture.CONFIRM, tbrFactor = 1.0, smbFactor = 1.0, reasons = reasons)
         }
 
-        if (simulation?.action == HarmoniaSimulationAction.PROTECTIVE_REDUCTION ||
-            simulation?.action == HarmoniaSimulationAction.STABILIZE
+        if (simulation?.action == HarmoniaAction.PROTECTIVE_REDUCTION ||
+            simulation?.action == HarmoniaAction.STABILIZE
         ) {
             reasons += "harmonia_${simulation.action.name.lowercase()}"
             return Outcome(Posture.SOFTEN, tbrFactor = 0.90, smbFactor = 0.65, reasons = reasons)

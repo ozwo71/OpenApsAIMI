@@ -8,7 +8,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
-import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSimulationAction
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaAction
 import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoDeliveryAuthority
 import kotlin.math.max
 
@@ -26,7 +26,7 @@ internal object MealCorrectionContextResolver {
         val patientModeDecision: PatientModeOrchestrator.Decision?,
         val patientState: PatientStateSnapshot?,
         val postHypoDelivery: PostHypoDeliveryAuthority.Decision = PostHypoDeliveryAuthority.INACTIVE,
-        val harmoniaAction: HarmoniaSimulationAction? = null,
+        val harmoniaAction: HarmoniaAction? = null,
         val harmoniaEligible: Boolean = false,
     )
 
@@ -111,19 +111,19 @@ internal object MealCorrectionContextResolver {
                 patientStateMealEvidence ||
                 (
                     input.harmoniaEligible &&
-                        input.harmoniaAction == HarmoniaSimulationAction.MEAL_SUPPORT &&
+                        input.harmoniaAction == HarmoniaAction.MEAL_SUPPORT &&
                         input.deltaMgdlPer5 >= 1.0
                     )
 
         val harmoniaOpposesMealPriority =
             input.mealCobG <= 0.0 &&
                 (
-                    input.harmoniaAction == HarmoniaSimulationAction.STABILIZE ||
-                        input.harmoniaAction == HarmoniaSimulationAction.PROTECTIVE_REDUCTION ||
-                        input.harmoniaAction == HarmoniaSimulationAction.BLOCKED ||
+                    input.harmoniaAction == HarmoniaAction.STABILIZE ||
+                        input.harmoniaAction == HarmoniaAction.PROTECTIVE_REDUCTION ||
+                        input.harmoniaAction == HarmoniaAction.BLOCKED ||
                         (
                             input.harmoniaEligible &&
-                                input.harmoniaAction == HarmoniaSimulationAction.OBSERVE &&
+                                input.harmoniaAction == HarmoniaAction.OBSERVE &&
                                 input.deltaMgdlPer5 < 2.5
                             )
                     )
@@ -168,7 +168,7 @@ internal object MealCorrectionContextResolver {
         if (patientStateMealEvidence) reasons += "PATIENT_STATE_MEAL"
         if (nonMealBlocks) reasons += "NON_MEAL_BLOCK"
         if (harmoniaOpposesMealPriority) reasons += "HARMONIA_MEAL_VETO"
-        if (input.harmoniaEligible && input.harmoniaAction == HarmoniaSimulationAction.MEAL_SUPPORT) {
+        if (input.harmoniaEligible && input.harmoniaAction == HarmoniaAction.MEAL_SUPPORT) {
             reasons += "HARMONIA_MEAL_SUPPORT"
         }
         if (mealPriorityEligible) reasons += "MEAL_PRIORITY_ELIGIBLE"

@@ -22,7 +22,7 @@ class RecursiveBeliefHarmoniaSmbTest {
     @Test
     fun resolve_liftsRbtSmbDemand_whenHarmoniaMealSupportIsSafeAndAuthorityExists() {
         val snapshot = resolveWith(
-            ext = harmoniaMealSupport(simulatedSmbU = 1.8, maxSmbU = 3.0),
+            ext = harmoniaMealSupport(targetSmbU = 1.8, maxSmbU = 3.0),
             releaseScales = true,
         )
 
@@ -51,7 +51,7 @@ class RecursiveBeliefHarmoniaSmbTest {
     @Test
     fun export_containsHarmoniaSmbDecisionDetails() {
         val snapshot = resolveWith(
-            ext = harmoniaMealSupport(simulatedSmbU = 1.5, maxSmbU = 2.0),
+            ext = harmoniaMealSupport(targetSmbU = 1.5, maxSmbU = 2.0),
             releaseScales = true,
         )
         val export = UnfoldExporter.toJsonObject(
@@ -74,18 +74,18 @@ class RecursiveBeliefHarmoniaSmbTest {
     }
 
     private fun harmoniaMealSupport(
-        simulatedSmbU: Double = 1.6,
+        targetSmbU: Double = 1.6,
         maxSmbU: Double = 3.0,
         postHypoBlock: Boolean = false,
     ): RbtExtendedSignals =
         RbtExtendedSignals(
             harmoniaActive = true,
-            harmoniaSimulationEligible = true,
+            harmoniaDecisionEligible = true,
             harmoniaAction = "MEAL_SUPPORT",
             harmoniaBranch = "MEAL_RISE",
             harmoniaBasalDemandRateUph = 1.6,
             harmoniaBasalMaxRateUph = 5.0,
-            harmoniaSmbDemandU = simulatedSmbU,
+            harmoniaSmbDemandU = targetSmbU,
             harmoniaSmbMaxU = maxSmbU,
             harmoniaPostHypoBlock = postHypoBlock,
             harmoniaBlockReason = if (postHypoBlock) "POST_HYPO" else null,

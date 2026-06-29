@@ -67,7 +67,7 @@ class FoodRecognitionService(
         try {
             val enrichedDescription = MealVisionUserPrompt.appendHarmoniaContext(
                 userDescription = userDescription,
-                harmoniaSimulation = PatientStateRuntimeRepository.getLatest()?.harmoniaSimulation,
+                harmoniaDecision = PatientStateRuntimeRepository.getLatest()?.harmoniaDecision,
             )
             return@withContext provider.estimateFromImage(bitmap, enrichedDescription, apiKey)
         } catch (e: Exception) {
