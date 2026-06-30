@@ -13,6 +13,7 @@ data class PhysioLiveDigest(
     val hrNowBpm: Int = 0,
     val hrAvg15mBpm: Int = 0,
     val rhrRestingBpm: Int = 0,
+    val hrvRmssd: Double = 0.0,
     val activityState: String = "IDLE",
     val sleepDebtMinutes: Int = 0,
     val asleepLiveConfidence: Double = 0.0,
@@ -32,6 +33,7 @@ data class PhysioLiveDigest(
             put("hr_now_bpm", hrNowBpm)
             put("hr_avg_15m_bpm", hrAvg15mBpm)
             put("rhr_resting_bpm", rhrRestingBpm)
+            put("hrv_rmssd", hrvRmssd)
             put("activity_state", activityState)
             put("sleep_debt_minutes", sleepDebtMinutes)
             put("asleep_live_confidence", asleepLiveConfidence)
@@ -58,6 +60,7 @@ data class PhysioLiveDigest(
                 hrNowBpm = snapshot.hrNow,
                 hrAvg15mBpm = snapshot.hrAvg15m,
                 rhrRestingBpm = snapshot.rhrResting,
+                hrvRmssd = snapshot.hrvRmssd,
                 activityState = snapshot.activityState,
                 sleepDebtMinutes = snapshot.sleepDebtMinutes,
                 asleepLiveConfidence = snapshot.asleepLiveConfidence,

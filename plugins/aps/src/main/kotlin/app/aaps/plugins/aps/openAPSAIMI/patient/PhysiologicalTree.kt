@@ -18,6 +18,8 @@ data class PhysiologicalTreeSnapshot(
     val leaves: PhysiologicalLeaves,
     val fruits: PhysiologicalFruits? = null,
     val seasons: PhysiologicalSeasons? = null,
+    /** Raw live wearable signals (HR / steps) feeding the tree — exported as structured fields. */
+    val physioLive: PhysioLiveDigest = PhysioLiveDigest(),
     val compactSummary: String,
     val version: Int = 1,
 ) {
@@ -31,6 +33,9 @@ data class PhysiologicalTreeSnapshot(
             put("leaves", leaves.toJsonObject())
             put("fruits", fruits?.toJsonObject() ?: JSONObject.NULL)
             put("seasons", seasons?.toJsonObject() ?: JSONObject.NULL)
+            // Structured HR/steps (the dashboard refreshes these each tick) — previously only present
+            // inside branches.activity.reasons strings, so invisible to field-level export consumers.
+            put("physio_live", physioLive.toJsonObject())
             put("compact_summary", compactSummary)
             put("insulin_authority", "none_lot1_context_only")
             put("source", "harmonia_tree_v1")
@@ -237,6 +242,7 @@ internal object PhysiologicalTreeBuilder {
             leaves = leaves.copy(userSummary = compactSummary),
             fruits = fruits,
             seasons = seasons,
+            physioLive = physioLive,
             compactSummary = compactSummary,
         )
     }
