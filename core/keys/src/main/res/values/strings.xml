@@ -552,6 +552,8 @@
     <string name="pref_summary_aimi_autodrive_v3_authoritative">When Autodrive V3 is active and issues a safe SMB/TBR, do not recompute SMB with the legacy MPC/PI blender (prevents post-hypo overshoot). Disable only for debugging.</string>
     <string name="pref_title_aimi_autodrive_aggressive_smb_floor">Aggressive-rise SMB floor</string>
     <string name="pref_summary_aimi_autodrive_aggressive_smb_floor">On a confirmed aggressive rise, guarantee at least the user-defined Autodrive prebolus amount, delivered as a floor on top of the model SMB. Always re-bounded by Autodrive V3 safety (post-hypo, max SMB, IOB headroom, correction aggression).</string>
+    <string name="pref_title_aimi_effort_activity_protection">Effort/activity SMB protection</string>
+    <string name="pref_summary_aimi_effort_activity_protection">Lower SMB when steps and heart rate show current or recent physical effort, even if no activity was declared in AIMI Context. Protection persists for a while after you stop (post-exercise sensitivity) and is skipped when the signals look like stress rather than exercise. Reduction-only.</string>
     <string name="pref_title_aimi_hyper_trajectory_release">Hyper trajectory SMB release (HTR)</string>
     <string name="pref_summary_aimi_hyper_trajectory_release">When Autodrive V3 is on, lift V3 micro-bolus using scenario projection and trajectory on credible hyper rise. Trigger is not a fixed 200 mg/dL threshold.</string>
     <string name="pref_title_aimi_hyper_trajectory_release_aggressive">HTR aggressive floors</string>

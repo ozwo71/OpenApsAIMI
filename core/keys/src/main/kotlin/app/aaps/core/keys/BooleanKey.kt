@@ -241,6 +241,17 @@ enum class BooleanKey(
         dependency = OApsAIMIautoDriveActive,
     ),
     /**
+     * Opt-in: sensor-driven effort protection. Caps SMB when steps/HR indicate current or recent
+     * physical effort, independent of any declared AIMI Context activity intent. Reduction-only
+     * (fail-safe); never reduces under a stress posture. See docs/AIMI_ARCHITECTURE_MAP.md §11.
+     */
+    OApsAIMIEffortActivityProtection(
+        key = "key_aimi_effort_activity_protection",
+        defaultValue = false,
+        titleResId = R.string.pref_title_aimi_effort_activity_protection,
+        summaryResId = R.string.pref_summary_aimi_effort_activity_protection,
+    ),
+    /**
      * When Autodrive V3 applies a safe command, skip the legacy MPC/PI blender so V3 safety
      * (night cap, post-hypo, weight-aware limits) is not overwritten.
      */

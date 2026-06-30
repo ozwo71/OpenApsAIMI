@@ -240,3 +240,115 @@ fired. When V3 was TBR-only, classic could still overwrite V3's TBR (conflict).
 - **JSON/console vocabulary migration** (optional): move `simulated_*` keys + `"Harmonia sim:"` to a
   `decision`-based vocabulary, versioned (bump record `version`, dual-write legacy + new key) so old
   exports stay readable.
+- **Activity/Effort protection** — see §11 (open defect: physiological activity does not arm the
+  therapeutic lockout; intent-propagation bug; no effort-load memory).
+
+---
+
+## 11. Activity / Effort protection — gap & design
+
+> **Origin.** Real episode (30 Jun, ~08:00–10:30): small breakfast → rise while *walking* (≈4000
+> cumulative steps, HR up). The system kept dosing (SMB up to ~0.75 U, TBR up to ~9 U/h, ~5 U total)
+> in a context of exercise + post-exercise insulin sensitivity. Runtime data (`AIMI_Decisions.jsonl`)
+> showed `patient_state.user_intent.has_activity = false` and `harmonia_smb.exercise_block = false`
+> on 100% of ticks. (`AIMI_HORMONITOR_loop_blackbox_v1.jsonl` is heartbeat/timing only — not a
+> decision log; the usable decision log is `AIMI_Decisions.jsonl`.)
+
+### 11.1 Two activity notions — only the *declared* one has authority
+
+| | **Intent channel** (declared / LLM) | **Sensor channel** (steps + HR) |
+|---|---|---|
+| Source | `ContextManager.getSnapshot().hasActivity && intentCount>0` → `aimiContextActivityActive` (DetermineBasalAIMI2 §13465) | `physioLive.stepsLast15m`, `hrNow` (PhysiologicalTree §286-289) |
+| Arms | **Hard lockout**: `maxSMB=0`, basal stop (§2228-2232); target→150; RBT `EXERCISE_LOCK` (weight **1.0**); `harmonia_exercise_block` | `tree.activity`; RBT `STEPS_15M` (weight **0.5**), `ACTIVITY_INT`, `SCEN_ACTIVITY`→`ACTIVITY_PROTECTION`; physio multipliers |
+| Strength | **STRONG** (stops insulin) | **WEAK + windowed** (modulates only) |
+
+The whole strong protection keys off `exerciseInsulinLockoutActive = sportTime || aimiContextActivityActive`
+(§2228) — i.e. **declared intent only**. Even the RBT high-authority `EXERCISE_LOCK` leaf reads
+`ctx.exerciseLockout = exerciseInsulinLockoutActive` (§3638). **Walking (steps↑ + HR↑) cannot, by
+itself, stop insulin.**
+
+### 11.2 Confirmed defects
+
+1. **Decoupling.** Physiologically-detected activity (steps/HR) does not arm the lockout / RBT
+   `EXERCISE_LOCK` / `harmonia_exercise_block`. Only declared intent does.
+2. **No effort-load memory.** Tree/RBT use `stepsLast15m` (15-min rolling) + instantaneous HR. There
+   is no cumulative effort load or "time-since-effort". So a walk that ended >15 min ago yields tree
+   `IDLE` while post-exercise sensitivity persists for hours — exactly the 09:20 dosing window.
+   `postActivity` exists but depends on `causal.exerciseAfterburnProb` (Tree §350), which did not fire.
+3. **Intent-propagation bug.** User confirmed the "walking" intent *was* declared, yet
+   `user_intent.has_activity=false`. `buildUserIntentSummary` returns EMPTY when `contextSnapshot==null`
+   and otherwise sets `hasActivity = contextSnapshot.hasActivity` (PatientStateSnapshot §163-174). So
+   either the context snapshot was **null** at patient-state build time (wiring/timing) or
+   `ContextManager.hasActivity` did not reflect the declared `ContextIntent.Activity`. **Needs a
+   dedicated trace.**
+
+### 11.3 Available signals (inventory — what a real branch can use)
+
+- **Steps**: `stepsLast5m`, `stepsLast15m`, `steps60` (HealthContextRepository / hormonitor export).
+  10-min / 30-min windows not yet materialised but derivable.
+- **HR**: `hrNow`, `rhrResting` (resting baseline).
+- **HRV**: `hrvRmssd` (DetermineBasal §2977), `hrvDeviationZ` (§3494), baseline `hrvRMSSDHistory`
+  (AIMIPhysioBaselineModelMTR), pattern `HRV_DEPRESSED`. Gated by `AimiPhysioHRVDataEnable`.
+- **Stress**: `transientResistanceProb`, `causal.stressResistanceProb`, `userIntent.hasStress`,
+  thermal `inflammationIndex`.
+
+### 11.4 Design vision — a single intelligent "Effort & Activity" belief branch
+
+A first-class branch that **fuses** signals and **carries authority**, independent of declared intent:
+
+1. **Multi-window step view** `5 / 10 / 15 / 30 (/60)` min → distinguishes *onset* (5–10 m), *sustained
+   load* (15–30 m) and provides the **memory effect** (recent cumulative load + minutes-since-effort)
+   so protection **persists** after the walk, matching post-exercise sensitivity.
+2. **HR elevation** (`hrNow − rhrResting`) **+ HRV depression** (`hrvDeviationZ < 0`, `HRV_DEPRESSED`)
+   as corroboration — raises confidence when steps + HR + HRV agree.
+3. **Stress as a third, *disambiguating* signal.** HRV depression is common to exertion **and** stress,
+   but they pull insulin **opposite ways** (exercise → ↑sensitivity → less insulin; acute stress →
+   ↑resistance → possibly more). The branch must separate them: steps↑ ⇒ exertion; steps flat + HR↑ +
+   HRV↓ + `stressResistanceProb`↑ ⇒ stress. Output a signed posture, not a single "activity" scalar.
+4. **Effort-load memory state** (cumulative recent steps + decay; minutes-since-last-effort) so the
+   branch reports `ACTIVE` / `RECENT_EFFORT` / `IDLE` with a decaying confidence over ~1–3 h.
+
+### 11.5 Wiring requirements (so it actually protects)
+
+- **Soft therapeutic lockout / SMB cap from the sensor branch** — arm a graded protection (SMB cap or
+  ×factor, target bump, basal damp) when the branch confidence ≥ threshold **OR** recent-effort memory
+  is high, **without** requiring `aimiContextActivityActive`. Keep the meal-priority bypass partial
+  (cover the meal but **cap** SMB under effort, don't restore full `maxSMB`).
+- **Real RBT authority** for `STEPS_15M` / `ACTIVITY_INT` / `ACTIVITY_PROTECTION` (not just low-weight
+  observation) so the belief tree can reduce the dose on sensor evidence alone.
+- **Harmonia honors sensor activity even outside the basal-first channel** — `PROTECTIVE_REDUCTION`
+  (and an SMB damp) should fire on the branch/effort-memory, not only when `tree.activity≥0.55` *now*
+  and Harmonia happens to own basal.
+- **Fix the intent-propagation bug** (§11.2-3) in parallel so the declared channel also works.
+
+> Direction agreed with the user (2026-06-30). Safety note: this is insulin **reduction** under effort
+> — fail-safe direction — but every change must stay bounded and validated on real episodes.
+
+### 11.6 Implementation status
+
+- **v1 (done):** `EffortActivityBelief` (pure, unit-tested) fuses multi-window steps (5/15/60), HR
+  elevation, optional HRV depression and a stress signal into a graded posture (exertion vs stress)
+  + an effort-load **memory** (`RECENT_EFFORT` persists ~120 min after movement stops). Opt-in via
+  `BooleanKey.OApsAIMIEffortActivityProtection` (default off). Two-phase wiring:
+  `refreshEffortActivityBelief()` (after the AIMI Context module) **computes** the belief once per
+  tick (gated on `HealthContextSnapshot.isValid`) and stores `lastEffortAssessment`; the **reduction
+  is applied once at the universal exit `finalizeAndCapSMB`** (`finalUnits ×= smbFactor`, skipping
+  explicit user actions). This single choke point is deliberate — applying at `maxSMB` was bypassable
+  because the meal-advisor one-shot, drift terminator and physio-latent refresh all reset `maxSMB`
+  *after* the context module within the same tick (verification agent CRITICAL/HIGH). Effort **memory**
+  persists across ticks; the per-tick **assessment** is reset in `buildDecisionContextInit…`. Stress
+  posture never reduces insulin; a past hard effort cannot inflate a later light one (peak resets on
+  memory expiry).
+- **Scope cut (decided 2026-06-30):** the effort cap protects every SMB path that flows through
+  `finalizeAndCapSMB` (Autodrive V3, global AIMI SMB, drift terminator). It deliberately does **not**
+  touch the two meal paths that write `rT.units` directly and bypass `finalizeAndCapSMB` — the legacy
+  meal-mode prebolus (`setLegacyPrebolusUnits`) and the Meal Advisor one-shot direct-send — because
+  reducing a *meal* bolus under effort is a clinical trade-off in both directions (under-treating a
+  meal → later spike). Left at full coverage by user decision; revisit only with explicit intent.
+  Verification agent rated this residual **Medium** (common SMB path protected; meal-gated bypass
+  reachable during a walk with a concurrent meal — the original episode).
+- **Deferred (next):** (a) HRV plumbing into the wiring (engine already accepts `hrvDeviationZ`, wiring
+  passes `null` for now); (b) **basal damping** (`basalFactor` is computed but not yet applied — the
+  episode's TBR contribution); (c) real **RBT authority** for the sensor leaves and **Harmonia**
+  honoring sensor effort outside basal-first; (d) the **intent-propagation bug** (§11.2-3, declared
+  activity not reaching `user_intent.has_activity`) — needs a dedicated trace, not a blind fix.

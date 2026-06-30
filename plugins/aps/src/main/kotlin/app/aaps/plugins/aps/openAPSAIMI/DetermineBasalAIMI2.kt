@@ -39,6 +39,7 @@ import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.R
+import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
@@ -1537,6 +1538,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastPhysiologicalPatternSnapshot = null
         lastMealAbsorptionOutput = null
         lastPhysioLatentState = null
+        lastEffortAssessment = null // per-tick computed; memory (lastEffortMemory) persists across ticks
         lastUamHypothesisState = null
         lastContextSnapshot = null
         lastPatientState = null
@@ -8376,6 +8378,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             mealClockActiveForSpiralRelax = therapyMealWindowActiveForSpiralAlign(),
         )
         val contextTargetOverride = applyContextModule(bg = bg, iob = iobData.iob, cob = cob.toDouble(), rT = rT)
+        refreshEffortActivityBelief()
         val sens = runTddRatesAndIsfFusionAfterContext(
             profile = profile,
             tdd7Days = tdd7Days,
@@ -8939,6 +8942,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastPredictionSize: Int = 0
     private var lastEventualBgSnapshot: Double = 0.0
     private var lastSmbProposed: Double = 0.0
+    /** Cross-tick effort-load memory for [EffortActivityBelief]; intentionally NOT reset per tick. */
+    private var lastEffortMemory = EffortActivityBelief.Memory()
+    private var lastEffortAssessment: EffortActivityBelief.Assessment? = null
     private var lastPhysioLatentState: PhysioLatentState? = null
     private var lastUamHypothesisState: UamHypothesisState? = null
     private var lastContextSnapshot: ContextSnapshot? = null
@@ -10993,6 +10999,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 )
                 finalUnits = floorCap
             }
+        }
+
+        // 🏃 Effort/activity protection — final, unbypassable SMB reduction (see [refreshEffortActivityBelief]).
+        // Applied at the universal SMB exit so no upstream maxSMB reset can silently discard it; skips
+        // explicit user actions; reduction-only.
+        val effortFactor = lastEffortAssessment?.smbFactor ?: 1.0
+        if (effortFactor < 1.0 && !isExplicitUserAction && finalUnits > 0.0) {
+            val beforeEffort = finalUnits
+            finalUnits = (finalUnits * effortFactor).coerceAtLeast(0.0)
+            consoleLog.add(
+                "🏃 EFFORT_PROTECT_SMB ×${"%.2f".format(Locale.US, effortFactor)} " +
+                    "${"%.2f".format(Locale.US, beforeEffort)}→${"%.2f".format(Locale.US, finalUnits)}U " +
+                    "[${lastEffortAssessment?.state?.name}/${lastEffortAssessment?.posture?.name}]",
+            )
+            rT.reason.append("🏃effort×${"%.2f".format(Locale.US, effortFactor)} ")
         }
         chainFinal = finalUnits
         
@@ -13487,6 +13508,48 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog.add(
                 "🏃 HYPER_EXERCISE_OVERRIDE active: BG=${bg.toInt()} Δ=${"%.1f".format(delta)} " +
                     "combΔ=${"%.1f".format(tickCombinedDelta)} thyroidEGP=${"%.2f".format(currentThyroidEffects.egpMultiplier)}"
+            )
+        }
+    }
+
+    /**
+     * Sensor-driven effort belief (reduction-only, opt-in). Computes [EffortActivityBelief] from
+     * steps/HR — **independent of any declared AIMI Context activity intent** (the gap that let
+     * insulin flow while walking) — and stores it in [lastEffortAssessment]. The actual SMB reduction
+     * is applied **once, at the universal exit [finalizeAndCapSMB]**, so no later `maxSMB` reset
+     * (meal-advisor one-shot, drift terminator, physio-latent refresh) can silently bypass it.
+     * Fail-safe: only lowers SMB, never under a stress posture, never on explicit user actions. Basal
+     * damping / HRV / RBT+Harmonia authority are deferred (docs/AIMI_ARCHITECTURE_MAP.md §11.6).
+     */
+    private fun refreshEffortActivityBelief() {
+        lastEffortAssessment = null
+        if (!preferences.get(BooleanKey.OApsAIMIEffortActivityProtection)) return
+        val snap = try {
+            physioAdapter.getLatestSnapshot()
+        } catch (_: Exception) {
+            return
+        }
+        if (!snap.isValid) return // no/stale wearable data → fail open (no reduction)
+        val (assessment, memory) = EffortActivityBelief.assess(
+            EffortActivityBelief.Inputs(
+                nowMs = dateUtil.now(),
+                stepsLast5m = snap.stepsLast5m,
+                stepsLast15m = snap.stepsLast15m,
+                stepsLast60m = snap.stepsLast60m,
+                hrAvg15mBpm = snap.hrAvg15m,
+                hrRestingBpm = snap.rhrResting,
+                hrvDeviationZ = null, // HRV plumbing is a follow-up; steps + HR drive v1
+                stressResistanceProb = lastPhysioLatentState?.transientResistanceProb ?: 0.0,
+            ),
+            lastEffortMemory,
+        )
+        lastEffortMemory = memory
+        lastEffortAssessment = assessment
+        if (assessment.smbFactor < 1.0) {
+            consoleLog.add(
+                "🏃 EFFORT_BELIEF[${assessment.state.name}/${assessment.posture.name}] " +
+                    "SMB ×${"%.2f".format(Locale.US, assessment.smbFactor)} (applied at SMB finalize) " +
+                    assessment.reasons.joinToString(","),
             )
         }
     }
