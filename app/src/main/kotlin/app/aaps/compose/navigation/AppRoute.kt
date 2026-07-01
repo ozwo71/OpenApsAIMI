@@ -124,7 +124,6 @@ sealed class AppRoute(val route: String) {
 
     data object FoodManagement : AppRoute("food_management")
     data object SiteRotationManagement : AppRoute("siteRotationManagement")
-    data object SiteRotationSettings : AppRoute("siteRotationSettings")
     data object SetupWizard : AppRoute("setup_wizard")
     data object AuthorizedClients : AppRoute("authorized_clients")
     data object PairWithMaster : AppRoute("pair_with_master")

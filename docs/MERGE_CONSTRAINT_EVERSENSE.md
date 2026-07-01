@@ -38,6 +38,24 @@ Full port of [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS
 
 **Fork kept:** Calibration activity readiness UI (CAPTCG strips it; we keep user-facing readiness text).
 
+### Merge `dev` → `dev_OAPSAIMI` (2026-07-01)
+
+- Upstream Nightscout `dev` at `79c3d7bdce` (28 commits: Tidepool mode/TBR fixes, SetupWizard
+  Master-Client, QuickWizard, client-master UI + SiteRotation client control + remote-control search,
+  insulin concentration fixes, profile-edit save, statistics, Dana bolus-block, gradle/junit).
+- **No Eversense / AIMI / SMB / autoISF file in upstream diff** — `settings.gradle`, `SourceSensor`,
+  `PluginsListModule`, DI, `AppRepository`, `KeepAliveWorker`, `AndroidManifest` untouched; constraint
+  satisfied without re-application. Nothing to port into AIMI.
+- **Conflicts (4, none Eversense):** `BooleanKey.kt` (fork Eversense keys kept + SiteRotation `sync`
+  from upstream), `IntKey.kt` (upstream `SiteRotationUserProfile` LIST/entries/sync + fork AIMI keys),
+  `MainApp.kt` (both `storageHelper` + `profileSwitchExpiryScheduler`), `RunningModeManagementViewModel.kt`
+  (upstream `ControlDisabled` + `failTextResId`, no fork logic).
+- **Fork preserved:** AIMI contexts/effort/hormonitor export, Eversense `SourceSensor` E3/365 +
+  `settings.gradle`, dashboard skin (`MainScreen`), ML `storageHelper`, adaptive smoothing
+  `calibratedOrValue`, `KeepAliveWorker runVacuum=false`, `AppRepository` guard, physio HC manifest.
+  `:app:compileFullDebugKotlin` **PASS**; AIMI unit tests **PASS**.
+- Log: [MERGE_DEV_2026-07-01.md](MERGE_DEV_2026-07-01.md).
+
 ### Merge `dev` → `dev_OAPSAIMI` (2026-06-28)
 
 - Upstream Nightscout `dev` at `989065e9b4` (30 commits: Crowdin, QuickWizard/QuickLaunch TT presets, AAPSClient HTTP 410 / remote-error dialogs / unpaired visibility, Medtrum bolus tracking, dagger 2.60, mmol constant move to `Constants`).
