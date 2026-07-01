@@ -2554,7 +2554,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             setTempBasal(advisorRes.tbrUph, advisorRes.tbrMin ?: 30, profile, rT, ctx.currentTemp, overrideSafetyLimits = true, adaptiveMultiplier = adaptiveMult)
         }
 
-        val bolusIntent = (advisorRes.bolusU ?: 0.0).toDouble()
+        // Declared hypo recovery suppresses the auto meal-advisor SMB (this path bypasses
+        // finalizeAndCapSMB); an explicit user-triggered advisor run is still honoured.
+        val hypoSuppressAdvisorSmb = lastContextSnapshot?.hasHypoRecovery == true && !isExplicitAdvisorRun
+        if (hypoSuppressAdvisorSmb && (advisorRes.bolusU ?: 0.0) > 0.0) {
+            consoleLog.add("🍬 CTX_HYPO_RECOVERY: meal advisor auto-SMB suppressed (intent=${"%.2f".format(Locale.US, advisorRes.bolusU ?: 0.0)}U)")
+        }
+        val bolusIntent = if (hypoSuppressAdvisorSmb) 0.0 else (advisorRes.bolusU ?: 0.0).toDouble()
 
         // Direct send for all Meal Advisor results — bypass finalizeAndCapSMB (refractory + min carb coverage inside advisor).
         if (bolusIntent > 0) {
@@ -8945,6 +8951,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     /** Cross-tick effort-load memory for [EffortActivityBelief]; intentionally NOT reset per tick. */
     private var lastEffortMemory = EffortActivityBelief.Memory()
     private var lastEffortAssessment: EffortActivityBelief.Assessment? = null
+    /** Absolute context SMB ceiling (SlowCarbMeal); enforced robustly at [finalizeAndCapSMB]. Per-tick. */
+    private var lastContextSmbCeilingU: Double? = null
+    /** Hard context SMB-off (HypoRecovery); enforced robustly at [finalizeAndCapSMB]. Per-tick. */
+    private var lastContextSuppressSmb: Boolean = false
+    /** Cumulative context-SMB budget for a SlowCarbMeal early window (anti-overshoot, Q5). Cross-tick. */
+    private val slowCarbEarlyBudgetU = 2.0
+    private var slowCarbBudgetWindowMs: Long = 0L
+    private var slowCarbBudgetDeliveredU: Double = 0.0
     private var lastPhysioLatentState: PhysioLatentState? = null
     private var lastUamHypothesisState: UamHypothesisState? = null
     private var lastContextSnapshot: ContextSnapshot? = null
@@ -11001,6 +11015,46 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
 
+        // 🎯 Context protective SMB caps (declared HypoRecovery = off, SlowCarbMeal early ceiling).
+        // Enforced at the universal SMB exit so no upstream maxSMB reset (advisor one-shot, drift, physio
+        // refresh) can silently bypass them. Reduction-only; skips explicit user actions.
+        var chargeSlowCarbBudget = false // set here, charged AFTER the effort reduction (actual delivered)
+        if (!isExplicitUserAction && finalUnits > 0.0) {
+            if (lastContextSuppressSmb) {
+                consoleLog.add("🍬 CTX_HYPO_RECOVERY: SMB off (was ${"%.2f".format(Locale.US, finalUnits)}U)")
+                rT.reason.append("🍬hypoRecovery SMB off ")
+                finalUnits = 0.0
+            } else {
+                lastContextSmbCeilingU?.let { ceil ->
+                    if (finalUnits > ceil) {
+                        consoleLog.add("🍕 CTX_SMB_CEILING: ${"%.2f".format(Locale.US, finalUnits)}→${"%.2f".format(Locale.US, ceil)}U")
+                        rT.reason.append("🍕slowCarb cap${"%.1f".format(Locale.US, ceil)} ")
+                        finalUnits = ceil.coerceAtLeast(0.0)
+                    }
+                }
+                // Cumulative early-window SMB budget (Q5): a past hard effort cannot stack context-SMB
+                // into an overshoot even with prolonged high BG. Per SlowCarbMeal window, reset on change.
+                val slowCarbEarlyStart = lastContextSnapshot?.activeIntents
+                    ?.filterIsInstance<app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.SlowCarbMeal>()
+                    ?.maxByOrNull { it.intensity }
+                    ?.takeIf { (dateUtil.now() - it.startTimeMs) < it.absorptionDelay.inWholeMilliseconds }
+                    ?.startTimeMs
+                if (slowCarbEarlyStart != null && finalUnits > 0.0) {
+                    if (slowCarbEarlyStart != slowCarbBudgetWindowMs) {
+                        slowCarbBudgetWindowMs = slowCarbEarlyStart
+                        slowCarbBudgetDeliveredU = 0.0
+                    }
+                    val remaining = (slowCarbEarlyBudgetU - slowCarbBudgetDeliveredU).coerceAtLeast(0.0)
+                    if (finalUnits > remaining) {
+                        consoleLog.add("🍕 CTX_SLOWCARB_BUDGET: ${"%.2f".format(Locale.US, finalUnits)}→${"%.2f".format(Locale.US, remaining)}U (used ${"%.2f".format(Locale.US, slowCarbBudgetDeliveredU)}/${"%.1f".format(Locale.US, slowCarbEarlyBudgetU)}U)")
+                        rT.reason.append("🍕slowCarb budget ")
+                        finalUnits = remaining
+                    }
+                    chargeSlowCarbBudget = true
+                }
+            }
+        }
+
         // 🏃 Effort/activity protection — final, unbypassable SMB reduction (see [refreshEffortActivityBelief]).
         // Applied at the universal SMB exit so no upstream maxSMB reset can silently discard it; skips
         // explicit user actions; reduction-only.
@@ -11015,6 +11069,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
             rT.reason.append("🏃effort×${"%.2f".format(Locale.US, effortFactor)} ")
         }
+        // Charge the SlowCarbMeal early-window budget with the ACTUAL delivered amount (post-effort).
+        if (chargeSlowCarbBudget && finalUnits > 0.0) slowCarbBudgetDeliveredU += finalUnits
         chainFinal = finalUnits
         
         lastSmbCapped = finalUnits
@@ -13291,6 +13347,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 rT.units = 0.0
                 return
             }
+            // Declared hypo recovery suppresses the legacy meal prebolus (this path bypasses finalizeAndCapSMB).
+            if (lastContextSnapshot?.hasHypoRecovery == true) {
+                consoleLog.add("🍬 CTX_HYPO_RECOVERY: legacy prebolus suppressed tag=$logTag (was ${"%.2f".format(Locale.US, units)}U)")
+                rT.units = 0.0
+                return
+            }
             rT.units = units
             onAllowed(units)
         }
@@ -13562,11 +13624,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         bg: Double, iob: Double, cob: Double, rT: RT
     ): Double? {
         var contextTargetOverride: Double? = null
+        // Reset per tick; set below when a context influence is computed. Enforced at finalizeAndCapSMB.
+        lastContextSmbCeilingU = null
+        lastContextSuppressSmb = false
         val contextEnabled = preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIContextEnabled)
         if (contextEnabled) {
             try {
                 consoleLog.add("═══ CONTEXT MODULE ═══")
                 val contextSnapshot = contextManager.getSnapshot(System.currentTimeMillis())
+                // Keep the fresh snapshot as the tick's source of truth so the meal-priority guards
+                // (legacy prebolus / meal advisor) read the same context as the finalize gate.
+                lastContextSnapshot = contextSnapshot
                 if (contextSnapshot.intentCount > 0) {
                     aimiContextActivityActive = contextSnapshot.hasActivity
                     val modeStr = preferences.get(app.aaps.core.keys.StringKey.ContextMode)
@@ -13579,6 +13647,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         snapshot = contextSnapshot, currentBG = bg,
                         iob = iob, cob = cob, mode = contextMode
                     )
+                    // Carry protective SMB caps to the universal finalize gate (robust vs upstream maxSMB resets).
+                    lastContextSmbCeilingU = contextInfluence.smbCeilingU
+                    lastContextSuppressSmb = contextInfluence.suppressSmb
                     consoleLog.add("🎯 Active Contexts: ${contextSnapshot.intentCount}")
                     contextSnapshot.activeIntents.take(3).forEach { intent ->
                         consoleLog.add("  • ${intent::class.simpleName ?: "Unknown"}")

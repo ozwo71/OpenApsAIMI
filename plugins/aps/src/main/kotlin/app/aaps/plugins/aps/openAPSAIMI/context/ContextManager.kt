@@ -164,10 +164,12 @@ class ContextManager @Inject constructor(
                 is Alcohol -> intent.copy(durationMs = customDuration.inWholeMilliseconds)
                 is Travel -> intent.copy(durationMs = customDuration.inWholeMilliseconds)
                 is MenstrualCycle -> intent.copy(durationMs = customDuration.inWholeMilliseconds)
+                is SlowCarbMeal -> intent.copy(durationMs = customDuration.inWholeMilliseconds)
+                is HypoRecovery -> intent.copy(durationMs = customDuration.inWholeMilliseconds)
                 is Custom -> intent.copy(durationMs = customDuration.inWholeMilliseconds)
             }
         }
-        
+
         // Override intensity if provided
         if (customIntensity != null) {
             intent = when (intent) {
@@ -178,6 +180,8 @@ class ContextManager @Inject constructor(
                 is Alcohol -> intent.copy(intensity = customIntensity)
                 is Travel -> intent.copy(intensity = customIntensity)
                 is MenstrualCycle -> intent.copy(intensity = customIntensity)
+                is SlowCarbMeal -> intent.copy(intensity = customIntensity)
+                is HypoRecovery -> intent.copy(intensity = customIntensity)
                 is Custom -> intent.copy(intensity = customIntensity)
             }
         }
@@ -328,9 +332,11 @@ class ContextManager @Inject constructor(
             is Alcohol -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
             is Travel -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
             is MenstrualCycle -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
+            is SlowCarbMeal -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
+            is HypoRecovery -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
             is Custom -> intent.copy(durationMs = intent.durationMs + additionalDuration.inWholeMilliseconds)
         }
-        
+
         activeIntents[id] = extended
         
         aapsLogger.info(LTag.APS, "[ContextManager] Extended intent $id by ${additionalDuration.inWholeMinutes}min")
@@ -409,6 +415,8 @@ class ContextManager @Inject constructor(
                     is UnannouncedMealRisk -> obj.put("riskWindow", intent.riskWindow.inWholeMinutes)
                     is Travel -> obj.put("tz", intent.timezoneShiftHours)
                     is MenstrualCycle -> obj.put("phase", intent.phase.name)
+                    is SlowCarbMeal -> obj.put("absorptionDelay", intent.absorptionDelay.inWholeMinutes)
+                    is HypoRecovery -> { /* no type-specific field */ }
                     is Custom -> {
                          obj.put("desc", intent.description)
                          obj.put("strat", intent.suggestedStrategy)
@@ -495,6 +503,19 @@ class ContextManager @Inject constructor(
                             confidence = confidence,
                             phase = MenstrualCycle.CyclePhase.valueOf(obj.getString("phase"))
                         )
+                        "SlowCarbMeal" -> SlowCarbMeal(
+                            startTimeMs = if (startTimeMs > 0) startTimeMs else System.currentTimeMillis(),
+                            durationMs = durationMs,
+                            intensity = intensity,
+                            confidence = confidence,
+                            absorptionDelay = obj.optLong("absorptionDelay", 90L).minutes
+                        )
+                        "HypoRecovery" -> HypoRecovery(
+                            startTimeMs = if (startTimeMs > 0) startTimeMs else System.currentTimeMillis(),
+                            durationMs = durationMs,
+                            intensity = intensity,
+                            confidence = confidence
+                        )
                         "Custom" -> Custom(
                             startTimeMs = if (startTimeMs > 0) startTimeMs else System.currentTimeMillis(),
                             durationMs = durationMs,
@@ -576,6 +597,8 @@ class ContextManager @Inject constructor(
             is Alcohol -> """{"type":"Alcohol","units":${intent.units},"dur":${intent.durationMs},"start":${intent.startTimeMs},"conf":${intent.confidence}}"""
             is Travel -> """{"type":"Travel","tz":${intent.timezoneShiftHours},"dur":${intent.durationMs},"start":${intent.startTimeMs},"conf":${intent.confidence}}"""
             is MenstrualCycle -> """{"type":"MenstrualCycle","phase":"${intent.phase}","int":"${intent.intensity}","dur":${intent.durationMs},"start":${intent.startTimeMs},"conf":${intent.confidence}}"""
+            is SlowCarbMeal -> """{"type":"SlowCarbMeal","int":"${intent.intensity}","dur":${intent.durationMs},"start":${intent.startTimeMs},"conf":${intent.confidence}}"""
+            is HypoRecovery -> """{"type":"HypoRecovery","int":"${intent.intensity}","dur":${intent.durationMs},"start":${intent.startTimeMs},"conf":${intent.confidence}}"""
             is Custom -> """{"type":"Custom","desc":"${intent.description}","strat":"${intent.suggestedStrategy}","int":"${intent.intensity}","dur":${intent.durationMs},"start":${intent.startTimeMs},"conf":${intent.confidence}}"""
         }
     }

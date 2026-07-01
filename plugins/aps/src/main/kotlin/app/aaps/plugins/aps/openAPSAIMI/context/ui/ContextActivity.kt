@@ -317,9 +317,13 @@ class ContextActivity : TranslatedDaggerAppCompatActivity() {
                 "🍷 Alcohol: ${intent.units}U ${intent.intensity.name}"
             is app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.Travel -> 
                 "✈️ Travel: ${intent.intensity.name}"
-            is app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.MenstrualCycle -> 
+            is app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.MenstrualCycle ->
                 "🔄 Cycle: ${intent.phase.name}"
-            is app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.Custom -> 
+            is app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.SlowCarbMeal ->
+                "🍕 Repas lent: ${intent.intensity.name}"
+            is app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.HypoRecovery ->
+                "🍬 Hypo récup: ${intent.intensity.name}"
+            is app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.Custom ->
                 "📝 ${intent.description}"
         }
     }

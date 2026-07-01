@@ -23,6 +23,8 @@ data class UserIntentSummary(
     val hasMealRisk: Boolean = false,
     val hasStress: Boolean = false,
     val hasAlcohol: Boolean = false,
+    val hasSlowCarbMeal: Boolean = false,
+    val hasHypoRecovery: Boolean = false,
     val dominantIntent: String = "NONE",
 ) {
     fun hasAnyIntent(): Boolean = enabled && intentCount > 0
@@ -37,6 +39,8 @@ data class UserIntentSummary(
             put("has_meal_risk", hasMealRisk)
             put("has_stress", hasStress)
             put("has_alcohol", hasAlcohol)
+            put("has_slow_carb_meal", hasSlowCarbMeal)
+            put("has_hypo_recovery", hasHypoRecovery)
             put("dominant_intent", dominantIntent)
         }
 
@@ -176,6 +180,8 @@ internal object PatientStateEngine {
             hasMealRisk = contextSnapshot.hasMealRisk,
             hasStress = contextSnapshot.hasStress,
             hasAlcohol = contextSnapshot.hasAlcohol,
+            hasSlowCarbMeal = contextSnapshot.hasSlowCarbMeal,
+            hasHypoRecovery = contextSnapshot.hasHypoRecovery,
             dominantIntent = dominantIntent,
         )
     }
@@ -185,7 +191,9 @@ internal object PatientStateEngine {
         is ContextIntent.Activity -> 6
         is ContextIntent.Illness -> 5
         is ContextIntent.Stress -> 4
+        is ContextIntent.HypoRecovery -> 8
         is ContextIntent.UnannouncedMealRisk -> 3
+        is ContextIntent.SlowCarbMeal -> 3
         is ContextIntent.MenstrualCycle -> 2
         is ContextIntent.Travel -> 1
         is ContextIntent.Custom -> 0
@@ -195,6 +203,8 @@ internal object PatientStateEngine {
         is ContextIntent.Activity -> "ACTIVITY"
         is ContextIntent.Illness -> "ILLNESS"
         is ContextIntent.UnannouncedMealRisk -> "MEAL_RISK"
+        is ContextIntent.SlowCarbMeal -> "SLOW_CARB_MEAL"
+        is ContextIntent.HypoRecovery -> "HYPO_RECOVERY"
         is ContextIntent.Stress -> "STRESS"
         is ContextIntent.MenstrualCycle -> "MENSTRUAL_CYCLE"
         is ContextIntent.Travel -> "TRAVEL"

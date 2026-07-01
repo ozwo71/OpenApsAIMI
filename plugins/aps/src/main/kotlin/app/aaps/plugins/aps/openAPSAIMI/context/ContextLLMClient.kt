@@ -72,7 +72,7 @@ ${LlmWorldConservativePreamble.FOR_JSON_CONTRACT}
 ```json
 [
   {
-    "type": "Activity" | "Illness" | "Stress" | "UnannouncedMealRisk" | "Alcohol" | "Travel" | "MenstrualCycle" | "Custom",
+    "type": "Activity" | "Illness" | "Stress" | "UnannouncedMealRisk" | "SlowCarbMeal" | "HypoRecovery" | "Alcohol" | "Travel" | "MenstrualCycle" | "Custom",
     "intensity": "LOW" | "MEDIUM" | "HIGH" | "EXTREME",
     "durationMinutes": <number>,
     "confidence": <0.0-1.0>,
@@ -88,6 +88,23 @@ ${LlmWorldConservativePreamble.FOR_JSON_CONTRACT}
     }
   }
 ]
+```
+
+**ROUTING RULES**:
+- For fat/protein-rich or slow-absorbing meals (pizza, fries, chips, cheese, creamy/greasy food),
+  use "SlowCarbMeal", NOT "UnannouncedMealRisk". UnannouncedMealRisk is only for fast/sugary unannounced spikes.
+- If the user reports being low / treating a hypo / just recovered from a low, use "HypoRecovery".
+
+User: "just ate a big plate of fries and cheese"
+Output:
+```json
+[{ "type": "SlowCarbMeal", "intensity": "MEDIUM", "durationMinutes": 300, "confidence": 0.9, "metadata": {} }]
+```
+
+User: "just had a hypo, treated it, watch me for the next hour"
+Output:
+```json
+[{ "type": "HypoRecovery", "intensity": "MEDIUM", "durationMinutes": 90, "confidence": 0.9, "metadata": {} }]
 ```
 
 **EXAMPLES**:
@@ -472,7 +489,25 @@ Output:
                         riskWindow = durationMin.minutes
                     )
                 }
-                
+
+                "SlowCarbMeal", "SlowMeal", "FatMeal" -> {
+                    SlowCarbMeal(
+                        startTimeMs = baseTimeMs,
+                        durationMs = durationMs,
+                        intensity = intensity,
+                        confidence = confidence
+                    )
+                }
+
+                "HypoRecovery", "Hypo", "Hypoglycemia" -> {
+                    HypoRecovery(
+                        startTimeMs = baseTimeMs,
+                        durationMs = durationMs,
+                        intensity = intensity,
+                        confidence = confidence
+                    )
+                }
+
                 "Alcohol" -> {
                     val units = metadata.optDouble("units", 0.0).toFloat()
                     Alcohol(

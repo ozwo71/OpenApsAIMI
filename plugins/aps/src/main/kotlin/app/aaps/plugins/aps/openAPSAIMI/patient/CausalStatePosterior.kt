@@ -110,6 +110,7 @@ internal object CausalStatePosteriorBuilder {
             latentState = latentState,
             hypothesisState = hypothesisState,
             patternSnapshot = patternSnapshot,
+            userIntent = userIntent,
             falseMealSuppression = falseMealSuppression,
         )
         val dawnEndogenousProb = buildDawnEndogenousProb(
@@ -248,6 +249,7 @@ internal object CausalStatePosteriorBuilder {
         latentState: PhysioLatentState?,
         hypothesisState: UamHypothesisState?,
         patternSnapshot: PhysiologicalPatternSnapshot?,
+        userIntent: UserIntentSummary,
         falseMealSuppression: Boolean,
     ): Double {
         val phaseSignal = when (mealAbsorptionOutput?.phase) {
@@ -262,11 +264,14 @@ internal object CausalStatePosteriorBuilder {
             PhysiologicalPatternId.MEAL_SECOND_WAVE,
             PhysiologicalPatternId.LATE_FAT_PROTEIN,
         )
+        // Declared slow-carb meal: mild prolonged prime only (never fast-meal → no front-loading).
+        val intentSignal = if (userIntent.hasSlowCarbMeal) userIntent.avgConfidence * 0.30 else 0.0
         val base = combineSignals(
             phaseSignal,
             (latentState?.mealProb ?: 0.0) * 0.56,
             (hypothesisState?.lateFatProb ?: 0.0) * 0.92,
             patternSignal,
+            intentSignal,
         )
         return if (falseMealSuppression) base * 0.72 else base
     }
@@ -303,6 +308,8 @@ internal object CausalStatePosteriorBuilder {
         (hypothesisState?.postHypoProb ?: 0.0) * 0.92,
         patternSnapshot.maxConfidence(PhysiologicalPatternId.POST_HYPO_REBOUND),
         if (userIntent.hasAlcohol) max(0.36, userIntent.avgConfidence * 0.58) else 0.0,
+        // Declared hypo recovery: strong prime so the protective post-hypo path engages on declaration.
+        if (userIntent.hasHypoRecovery) max(0.60, userIntent.avgConfidence * 0.75) else 0.0,
         eventMemory.correctionFragilityScore * 0.42,
         eventMemory.postHyperExhaustionScore * 0.26,
     )
