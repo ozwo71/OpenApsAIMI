@@ -1360,6 +1360,7 @@
     <string name="aimi_adv_loading_details" comment="Shown under the main Advisor report while RBT/T3c history sections load">Loading detailed history…</string>
     <string name="aimi_adv_error_prefix">Erreur: </string>
     <string name="aimi_adv_error_oom">Not enough memory to finish. Close other apps and try again.</string>
+    <string name="aimi_adv_card_render_error" comment="%1$s=card name, %2$s=exception type. Shown in place of a single advisor card that failed to render.">⚠️ %1$s unavailable (%2$s)</string>
     <string name="aimi_adv_report_weekly">Rapport Hebdo</string>
     <string name="aimi_adv_score_label">Score: %1$.1f/10</string>
     <string name="aimi_adv_apply_btn">APPLIQUER</string>

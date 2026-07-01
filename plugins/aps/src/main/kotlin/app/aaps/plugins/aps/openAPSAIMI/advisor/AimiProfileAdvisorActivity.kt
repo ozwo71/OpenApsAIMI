@@ -189,6 +189,9 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                             is OutOfMemoryError -> rh.gs(R.string.aimi_adv_error_oom)
                             else -> "${rh.gs(R.string.aimi_adv_error_prefix)}${t.localizedMessage ?: t.javaClass.simpleName}"
                         }
+                        // loadingText may already be detached (removed before populateCoreReportUi);
+                        // re-attach it so the error is actually visible instead of failing silently.
+                        if (loadingText.parent == null) rootLayout.addView(loadingText)
                         loadingText.text = msg
                         loadingText.setTextColor(Color.parseColor("#F87171"))
                     }
@@ -205,22 +208,25 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
     private fun populateCoreReportUi(report: AdvisorReport): Int {
         val advisorCtx = report.advisorContext
 
-        rootLayout.addView(createDashboardHeader(report))
-        rootLayout.addView(createTuningContextCard(report, cardColor))
+        safeAddCard("header") { rootLayout.addView(createDashboardHeader(report)) }
+        safeAddCard("tuning") { rootLayout.addView(createTuningContextCard(report, cardColor)) }
 
-        val familyBridgeSuggestions = buildAimiFamilyBridgeSuggestions(preferences, report.metrics)
-        val causalInsights = buildAimiBehaviorCausalInsights(
-            preferences = preferences,
-            metrics = report.metrics,
-            familyBridgeSuggestions = familyBridgeSuggestions,
-        )
+        val familyBridgeSuggestions =
+            runCatching { buildAimiFamilyBridgeSuggestions(preferences, report.metrics) }.getOrDefault(emptyList())
+        val causalInsights = runCatching {
+            buildAimiBehaviorCausalInsights(
+                preferences = preferences,
+                metrics = report.metrics,
+                familyBridgeSuggestions = familyBridgeSuggestions,
+            )
+        }.getOrDefault(emptyList())
 
-        rootLayout.addView(createBehaviorCausalMapCard(causalInsights, familyBridgeSuggestions, cardColor))
-        rootLayout.addView(createBehaviorFamilyBridgeCard(familyBridgeSuggestions, cardColor))
+        safeAddCard("causal map") { rootLayout.addView(createBehaviorCausalMapCard(causalInsights, familyBridgeSuggestions, cardColor)) }
+        safeAddCard("family bridge") { rootLayout.addView(createBehaviorFamilyBridgeCard(familyBridgeSuggestions, cardColor)) }
 
         val deferredInsertIndex = rootLayout.childCount
 
-        rootLayout.addView(createMetricsGrid(report.metrics, cardColor))
+        safeAddCard("metrics") { rootLayout.addView(createMetricsGrid(report.metrics, cardColor)) }
 
         val standardRecs = report.recommendations.filter { it.domain != AimiDomain.Pkpd }
         val pkpdRecs = report.recommendations.filter { it.domain == AimiDomain.Pkpd }
@@ -228,34 +234,55 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         if (standardRecs.isNotEmpty()) {
             rootLayout.addView(createSectionHeader(rh.gs(R.string.aimi_adv_section_obs)))
             standardRecs.forEach { rec ->
-                val card = createObservationCard(rec, report.metrics, cardColor)
-                rootLayout.addView(card)
-                recommendationRowViews.add(card to rec)
+                safeAddCard("observation") {
+                    val card = createObservationCard(rec, report.metrics, cardColor)
+                    rootLayout.addView(card)
+                    recommendationRowViews.add(card to rec)
+                }
             }
         }
 
         if (pkpdRecs.isNotEmpty()) {
             rootLayout.addView(createSectionHeader(rh.gs(R.string.aimi_adv_section_pkpd)))
             pkpdRecs.forEach { rec ->
-                val card = createObservationCard(rec, report.metrics, cardColor)
-                rootLayout.addView(card)
-                recommendationRowViews.add(card to rec)
+                safeAddCard("pkpd") {
+                    val card = createObservationCard(rec, report.metrics, cardColor)
+                    rootLayout.addView(card)
+                    recommendationRowViews.add(card to rec)
+                }
             }
         }
 
         rootLayout.addView(createSectionHeader(rh.gs(R.string.aimi_adv_section_brain)))
-        rootLayout.addView(createCognitiveCard(advisorCtx.prefs.unifiedReactivityFactor, cardColor))
+        safeAddCard("brain") { rootLayout.addView(createCognitiveCard(advisorCtx.prefs.unifiedReactivityFactor, cardColor)) }
 
         report.orefAnalysis?.let { oref ->
             rootLayout.addView(createSectionHeader(rh.gs(R.string.aimi_adv_section_oref)))
-            rootLayout.addView(createOrefAnalysisCard(oref, cardColor))
+            safeAddCard("oref") { rootLayout.addView(createOrefAnalysisCard(oref, cardColor)) }
         }
 
         rootLayout.addView(createSectionHeader(rh.gs(R.string.aimi_adv_section_coach)))
-        rootLayout.addView(createCoachCard(advisorCtx, report, causalInsights, cardColor))
-        rootLayout.addView(createFooter(report))
+        safeAddCard("coach") { rootLayout.addView(createCoachCard(advisorCtx, report, causalInsights, cardColor)) }
+        safeAddCard("footer") { rootLayout.addView(createFooter(report)) }
 
         return deferredInsertIndex
+    }
+
+    /** Adds a card, isolating render failures so one broken card never blanks the rest of the advisor. */
+    private inline fun safeAddCard(label: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (t: Throwable) {
+            t.printStackTrace()
+            rootLayout.addView(
+                TextView(this).apply {
+                    text = rh.gs(R.string.aimi_adv_card_render_error, label, t.javaClass.simpleName)
+                    textSize = 12f
+                    setTextColor(Color.parseColor("#F87171"))
+                    setPadding(24, 12, 24, 12)
+                }
+            )
+        }
     }
 
     private fun populateDeferredHistorySections(
@@ -1578,11 +1605,12 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                 append(formatPlanLevelDelta(plan))
                 plan.changes.take(8).forEach { change ->
                     append("\n• ")
-                    append(rh.gs(change.titleResId))
+                    // Same title-less-key guard as formatDriverKeyLabels: rh.gs(0) would throw.
+                    append(if (change.titleResId != 0) rh.gs(change.titleResId) else humanizePrefKey(change.preferenceKey))
                     append(": ")
-                    append(change.before.valueText ?: change.before.valueResId?.let(rh::gs).orEmpty())
+                    append(change.before.valueText ?: change.before.valueResId?.takeIf { it != 0 }?.let(rh::gs).orEmpty())
                     append(" -> ")
-                    append(change.after.valueText ?: change.after.valueResId?.let(rh::gs).orEmpty())
+                    append(change.after.valueText ?: change.after.valueResId?.takeIf { it != 0 }?.let(rh::gs).orEmpty())
                 }
                 if (plan.changes.size > 8) {
                     append("\n• ")
@@ -1601,7 +1629,22 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         rh.gs(plan.currentLabelResId) + " -> " + rh.gs(plan.targetLabelResId)
 
     private fun formatDriverKeyLabels(keys: List<PreferenceKey>): String =
-        keys.take(4).joinToString(", ") { key -> rh.gs(key.titleResId) }
+        keys.take(4).joinToString(", ") { key ->
+            // AIMI tuning keys are programmatic (no prefs screen) so titleResId is 0; rh.gs(0) throws
+            // Resources$NotFoundException. Fall back to a humanized pref-id instead of crashing.
+            if (key.titleResId != 0) rh.gs(key.titleResId) else humanizePrefKey(key.key)
+        }
+
+    /** Human-friendly label for a title-less programmatic preference key (e.g. "key_openapsaimi_max_smb" → "Max Smb"). */
+    private fun humanizePrefKey(rawKey: String): String =
+        rawKey
+            .removePrefix("key_")
+            .replace(Regex("^(oaps_?aimi_?|openapsaimi_?|aimi_?)", RegexOption.IGNORE_CASE), "")
+            .replace('_', ' ')
+            .split(' ')
+            .filter { it.isNotBlank() }
+            .joinToString(" ") { it.replaceFirstChar { c -> c.uppercaseChar() } }
+            .ifBlank { rawKey }
 
     private fun familyTitleResId(familyId: AimiBehaviorFamilyId): Int =
         when (familyId) {
