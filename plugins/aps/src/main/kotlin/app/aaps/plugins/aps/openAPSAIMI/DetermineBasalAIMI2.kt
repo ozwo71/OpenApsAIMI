@@ -8994,10 +8994,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         /** Fenêtre pour [minBgInLastMinutes] : min BG &lt; 70 dans cette durée → amortissement Ra post-hypo (AutoDrive V3). */
         private const val AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES = 75
-
-        /** 2ᵉ prébolus legacy repas : minutes depuis le démarrage du mode (inclus). */
-        private const val LEGACY_MEAL_PRE2_MIN = 15
-        private const val LEGACY_MEAL_PRE2_MAX = 22
     }
 
     private var internalLastSmbMillis: Long
@@ -11749,51 +11745,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun mealDeliveryOverridesLockouts(): Boolean =
         explicitMealDeliveryRequested() && bg > SEVERE_HYPO_MEAL_OVERRIDE_MGDL
 
-    private fun isMealModeCondition(): Boolean {
-        val pbolusM: Double = preferences.get(DoubleKey.OApsAIMIMealPrebolus)
-        return mealruntime in 0..7 && lastBolusSMBUnit != pbolusM.toFloat() && mealTime
-    }
-    private fun isbfastModeCondition(): Boolean {
-        val pbolusbfast: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus)
-        return bfastruntime in 0..7 && lastBolusSMBUnit != pbolusbfast.toFloat() && bfastTime
-    }
-    private fun isbfast2ModeCondition(): Boolean {
-        val pbolusbfast2: Double = preferences.get(DoubleKey.OApsAIMIBFPrebolus2)
-        return bfastruntime in LEGACY_MEAL_PRE2_MIN..LEGACY_MEAL_PRE2_MAX &&
-            lastBolusSMBUnit != pbolusbfast2.toFloat() && bfastTime
-    }
-    private fun isLunchModeCondition(): Boolean {
-        val pbolusLunch: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus)
-        return lunchruntime in 0..7 && lastBolusSMBUnit != pbolusLunch.toFloat() && lunchTime
-    }
-    private fun isLunch2ModeCondition(): Boolean {
-        val pbolusLunch2: Double = preferences.get(DoubleKey.OApsAIMILunchPrebolus2)
-        return lunchruntime in LEGACY_MEAL_PRE2_MIN..LEGACY_MEAL_PRE2_MAX &&
-            lastBolusSMBUnit != pbolusLunch2.toFloat() && lunchTime
-    }
-    private fun isDinnerModeCondition(): Boolean {
-        val pbolusDinner: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus)
-        return dinnerruntime in 0..7 && lastBolusSMBUnit != pbolusDinner.toFloat() && dinnerTime
-    }
-    private fun isDinner2ModeCondition(): Boolean {
-        val pbolusDinner2: Double = preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2)
-        return dinnerruntime in LEGACY_MEAL_PRE2_MIN..LEGACY_MEAL_PRE2_MAX &&
-            lastBolusSMBUnit != pbolusDinner2.toFloat() && dinnerTime
-    }
-    private fun isHighCarbModeCondition(): Boolean {
-        val pbolusHC: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus)
-        return highCarbrunTime in 0..7 && lastBolusSMBUnit != pbolusHC.toFloat() && highCarbTime
-    }
-    private fun isHighCarb2ModeCondition(): Boolean {
-        val pbolusHC: Double = preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus2)
-        return highCarbrunTime in LEGACY_MEAL_PRE2_MIN..LEGACY_MEAL_PRE2_MAX &&
-            lastBolusSMBUnit != pbolusHC.toFloat() && highCarbTime
-    }
-
-    private fun issnackModeCondition(): Boolean {
-        val pbolussnack: Double = preferences.get(DoubleKey.OApsAIMISnackPrebolus)
-        return snackrunTime in 0..7 && lastBolusSMBUnit != pbolussnack.toFloat() && snackTime
-    }
+    // Conditions repas legacy — forme d'origine (connue-bonne, 99 %) : fenêtre + mode actif.
+    // L'unicité du prébolus est assurée en aval par le one-shot lockout temporel (voir applyLegacyMealModes),
+    // PAS par une comparaison à lastBolusSMBUnit (variable partagée avec les autres SMB → blocages parasites).
+    private fun isMealModeCondition(): Boolean = mealruntime in 0..7 && mealTime
+    private fun isbfastModeCondition(): Boolean = bfastruntime in 0..7 && bfastTime
+    private fun isbfast2ModeCondition(): Boolean = bfastruntime in 15..29 && bfastTime
+    private fun isLunchModeCondition(): Boolean = lunchruntime in 0..7 && lunchTime
+    private fun isLunch2ModeCondition(): Boolean = lunchruntime in 15..24 && lunchTime
+    private fun isDinnerModeCondition(): Boolean = dinnerruntime in 0..7 && dinnerTime
+    private fun isDinner2ModeCondition(): Boolean = dinnerruntime in 15..24 && dinnerTime
+    private fun isHighCarbModeCondition(): Boolean = highCarbrunTime in 0..7 && highCarbTime
+    private fun isHighCarb2ModeCondition(): Boolean = highCarbrunTime in 15..23 && highCarbTime
+    private fun issnackModeCondition(): Boolean = snackrunTime in 0..7 && snackTime
     // --- Helpers "fenêtre repas 30 min" ---
     /**
      * Runtime repas pour le gros `determine_basal` : **nullable**, millisecondes si >600_000, sinon secondes si >180, sinon minutes.
@@ -13325,6 +13289,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun applyLegacyMealModes(profile: OapsProfileAimi, rT: RT, currenttemp: CurrentTemp, modeTbrLimit: Double): RT? {
         fun rbf(key: DoubleKey) = preferences.get(key)
+
+        // 🛡️ ONE-SHOT PREBOLUS GUARD (MTR Safety Patch — restauré, méthode d'origine 99 %).
+        // Empêche le re-tir du prébolus à chaque tick, SANS dépendre de lastBolusSMBUnit.
+        // 🚀 PRIORITÉ : un mode fraîchement lancé (< 5 min) contourne le lockout ET l'IOB guard,
+        // donc le prébolus part TOUJOURS au démarrage du mode ; les ticks suivants dans la fenêtre
+        // sont verrouillés (TBR seul). Le lockout redémarre à chaque tir via markLegacyMealDecision().
+        val isManualOnset = (listOf(mealruntime, bfastruntime, lunchruntime, dinnerruntime, highCarbrunTime, snackrunTime).minOrNull() ?: 100) < 5
+        val lockoutWindowMs = 15 * 60 * 1000L
+        // Note : sur process frais, internalLastSmbMillis == 0L (aucun prébolus persisté) → (now() - 0L) ≫ 15 min
+        // → isLockedOut = false, donc le 1er prébolus après redémarrage n'est pas verrouillé à tort.
+        // Après un tir, internalLastSmbMillis est persisté (AimiLongKey.LastPrebolusTime) → lockout survit au redémarrage.
+        val isLockedOut = (dateUtil.now() - internalLastSmbMillis) < lockoutWindowMs && !isManualOnset
+        val iobGuard = iob > this.maxIob && !isManualOnset
+
         fun markLegacyMealDecision() {
             recordSmbActionType(if ((rT.units ?: 0.0) > 0.0) "smb" else "none")
             val units = rT.units ?: 0.0
@@ -13341,6 +13319,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             logTag: String,
             onAllowed: (Double) -> Unit,
         ) {
+            // 🛡️ One-shot lockout / IOB guard (contournés à l'onset du mode). Le TBR du mode reste posé
+            // en amont ; ici on n'annule que le bolus pour éviter le multi-prébolus dans un intervalle court.
+            if (isLockedOut || iobGuard) {
+                val why = if (iobGuard) "IOB ${"%.2f".format(Locale.US, iob)}U > MaxIOB" else "lockout <15m"
+                consoleLog.add("🛡️ LEGACY prebolus verrouillé tag=$logTag ($why) — TBR seul")
+                rT.units = 0.0
+                return
+            }
             // 🍱 Exception repas : à l'intérieur d'un mode legacy explicite, le blocage post-hypo ne s'applique
             // plus que sous hypo sévère (BG ≤ [SEVERE_HYPO_MEAL_OVERRIDE_MGDL]). Au-dessus, le prebolus prime.
             if (bg <= SEVERE_HYPO_MEAL_OVERRIDE_MGDL && legacyPrebolusBlockedByPostHypo(logTag)) {

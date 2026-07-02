@@ -5,7 +5,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 object Versions {
 
     // On change edit aaps-ci.yml (fork builds use AIMI suffix; base tracks upstream dev-a)
-    const val appVersion = "4.0.0.0-dev.AIMI.010726"
+    const val appVersion = "4.0.0.0-dev.AIMI.020726"
     const val versionCode = 1500
 
     const val compileSdk = 37
