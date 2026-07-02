@@ -13,6 +13,7 @@ import javax.inject.Singleton
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
 import java.util.Locale
@@ -34,7 +35,7 @@ class AiCoachingService @Inject constructor() {
     companion object {
         private const val OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 
-        private const val OPENAI_MODEL = "gpt-4o-mini" // Efficient model for coaching logic
+        private const val OPENAI_MODEL = "gpt-5.4-mini" // Efficient current GA tier for coaching (gpt-4o-mini is legacy)
         
 
         
@@ -42,9 +43,9 @@ class AiCoachingService @Inject constructor() {
         private const val DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
         private const val DEEPSEEK_MODEL = "deepseek-chat"
         
-        // Claude Haiku (Fast & Cheap)
+        // Claude Haiku (Fast & Cheap) — current GA fast tier (claude-3-haiku-20240307 was retired).
         private const val CLAUDE_URL = "https://api.anthropic.com/v1/messages"
-        private const val CLAUDE_MODEL = "claude-3-haiku-20240307"
+        private const val CLAUDE_MODEL = "claude-haiku-4-5"
     }
 
     /**
@@ -111,11 +112,12 @@ class AiCoachingService @Inject constructor() {
     // ... (keep private methods)
 
 
-    private fun callOpenAI(apiKey: String, prompt: String): String {
+    private fun callOpenAI(apiKey: String, prompt: String): String = LlmHttpRetry.withTransientRetry {
         val jsonBody = buildOpenAiJson(prompt)
+        jsonBody.put("max_completion_tokens", 4096) // GPT-5.x requires this (rejects legacy max_tokens)
         val url = URL(OPENAI_URL)
         val connection = url.openConnection() as HttpURLConnection
-        
+
         connection.apply {
             requestMethod = "POST"
             setRequestProperty("Content-Type", "application/json")
@@ -137,37 +139,33 @@ class AiCoachingService @Inject constructor() {
             var line: String?
             while (reader.readLine().also { line = it } != null) response.append(line)
             reader.close()
-            return parseOpenAiResponse(response.toString())
+            parseOpenAiResponse(response.toString())
         } else {
-             // Try read error stream
+            // Try read error stream
             val reader = BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream))
             val err = StringBuilder()
             var line: String?
             while (reader.readLine().also { line = it } != null) err.append(line)
-            return "Erreur OpenAI ($responseCode): $err"
+            if (LlmHttpRetry.isTransientStatus(responseCode)) throw java.io.IOException("OpenAI Error ($responseCode): $err")
+            "Erreur OpenAI ($responseCode): $err"
         }
     }
 
     private fun callGemini(context: Context, apiKey: String, prompt: String): String {
         val resolver = app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver(context)
         
-        // 1. Try Preferred Model (Efficient: Gemini 3 Flash)
-        val primaryModel = resolver.resolveGenerateContentModel(apiKey, "gemini-3-flash-preview")
+        // 1. Try Preferred Model (efficient flash tier; durable *-latest alias tracks current GA)
+        val primaryModel = resolver.resolveGenerateContentModel(apiKey, "gemini-flash-latest")
         
         try {
-            return executeGeminiRequest(resolver, apiKey, prompt, primaryModel)
+            // Transient overload (503/UNAVAILABLE) is retried with bounded backoff on the same model.
+            return LlmHttpRetry.withTransientRetry { executeGeminiRequest(resolver, apiKey, prompt, primaryModel) }
         } catch (e: Exception) {
-            // 2. Check for Quota Exhaustion (429)
-            // Error message usually contains "429" or "RESOURCE_EXHAUSTED" or "quota"
-            val msg = e.message?.lowercase() ?: ""
-            if (msg.contains("429") || msg.contains("resource_exhausted") || msg.contains("quota")) {
-                
-                // 3. Fallback to Efficient Model (High Quota: Gemini 3 Flash)
-                // Flash models typically have 15 RPM free tier vs 2 RPM for Pro
-                val fallbackModel = "gemini-3-flash-preview" // Hardcoded safe fallback
-                android.util.Log.w("AIMI_GEMINI", "⚠️ Quota exceeded on $primaryModel. Auto-fallback to $fallbackModel")
-                
-                return executeGeminiRequest(resolver, apiKey, prompt, fallbackModel)
+            // 2. Quota (429) OR still-overloaded after retries → fallback to the resilient flash alias (also retried).
+            if (LlmHttpRetry.isQuota(e) || LlmHttpRetry.isTransient(e)) {
+                val fallbackModel = "gemini-flash-latest" // Durable flash alias (current GA)
+                android.util.Log.w("AIMI_GEMINI", "⚠️ $primaryModel failed (${e.message?.take(80)}). Fallback to $fallbackModel")
+                return LlmHttpRetry.withTransientRetry { executeGeminiRequest(resolver, apiKey, prompt, fallbackModel) }
             }
             throw e // Re-throw other errors
         }
@@ -373,6 +371,9 @@ class AiCoachingService @Inject constructor() {
         }
     }
 
+    // Builds the shared OpenAI-compatible body (model + messages). The token-limit parameter is set by the
+    // caller because it differs by provider: GPT-5.x rejects `max_tokens` and requires `max_completion_tokens`,
+    // whereas DeepSeek (older OpenAI-compatible spec) expects `max_tokens`.
     private fun buildOpenAiJson(prompt: String): JSONObject {
         val root = JSONObject()
         root.put("model", OPENAI_MODEL)
@@ -381,9 +382,6 @@ class AiCoachingService @Inject constructor() {
         val usr = JSONObject().put("role", "user").put("content", prompt)
         messages.put(usr)
         root.put("messages", messages)
-        root.put("messages", messages)
-        root.put("max_tokens", 4096)
-        
         return root
     }
 
@@ -408,13 +406,14 @@ class AiCoachingService @Inject constructor() {
         }
     }
     
-    private fun callDeepSeek(apiKey: String, prompt: String): String {
+    private fun callDeepSeek(apiKey: String, prompt: String): String = LlmHttpRetry.withTransientRetry {
         val jsonBody = buildOpenAiJson(prompt) // DeepSeek uses OpenAI-compatible format
         jsonBody.put("model", DEEPSEEK_MODEL) // Override model
-        
+        jsonBody.put("max_tokens", 4096) // DeepSeek uses the legacy max_tokens parameter
+
         val url = URL(DEEPSEEK_URL)
         val connection = url.openConnection() as HttpURLConnection
-        
+
         connection.apply {
             requestMethod = "POST"
             setRequestProperty("Content-Type", "application/json")
@@ -436,25 +435,26 @@ class AiCoachingService @Inject constructor() {
             var line: String?
             while (reader.readLine().also { line = it } != null) response.append(line)
             reader.close()
-            return parseOpenAiResponse(response.toString()) // Same format
+            parseOpenAiResponse(response.toString()) // Same format
         } else {
             val reader = BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream))
             val err = StringBuilder()
             var line: String?
             while (reader.readLine().also { line = it } != null) err.append(line)
-            return "Erreur DeepSeek ($responseCode): $err"
+            if (LlmHttpRetry.isTransientStatus(responseCode)) throw java.io.IOException("DeepSeek Error ($responseCode): $err")
+            "Erreur DeepSeek ($responseCode): $err"
         }
     }
     
-    private fun callClaude(apiKey: String, prompt: String): String {
+    private fun callClaude(apiKey: String, prompt: String): String = LlmHttpRetry.withTransientRetry {
         val url = URL(CLAUDE_URL)
         val connection = url.openConnection() as HttpURLConnection
-        
+
         val jsonBody = JSONObject()
         jsonBody.put("model", CLAUDE_MODEL)
         jsonBody.put("max_tokens", 4096)
         jsonBody.put("temperature", 0.7)
-        
+
         // Claude expects messages array with role/content
         val messages = JSONArray()
         val userMessage = JSONObject()
@@ -462,7 +462,7 @@ class AiCoachingService @Inject constructor() {
         userMessage.put("content", prompt)
         messages.put(userMessage)
         jsonBody.put("messages", messages)
-        
+
         connection.apply {
             requestMethod = "POST"
             setRequestProperty("Content-Type", "application/json")
@@ -485,13 +485,15 @@ class AiCoachingService @Inject constructor() {
             var line: String?
             while (reader.readLine().also { line = it } != null) response.append(line)
             reader.close()
-            return parseClaudeResponse(response.toString())
+            parseClaudeResponse(response.toString())
         } else {
             val reader = BufferedReader(InputStreamReader(connection.errorStream ?: connection.inputStream, java.nio.charset.StandardCharsets.UTF_8))
             val err = StringBuilder()
             var line: String?
             while (reader.readLine().also { line = it } != null) err.append(line)
-            return "Erreur Claude ($responseCode): $err"
+            // 503/529/500… → throw so it is retried with backoff; other errors surface as-is.
+            if (LlmHttpRetry.isTransientStatus(responseCode)) throw java.io.IOException("Claude Error ($responseCode): $err")
+            "Erreur Claude ($responseCode): $err"
         }
     }
     

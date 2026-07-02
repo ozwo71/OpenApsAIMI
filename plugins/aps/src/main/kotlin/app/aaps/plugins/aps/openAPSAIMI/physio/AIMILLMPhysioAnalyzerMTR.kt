@@ -4,6 +4,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.keys.StringKey
+import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -81,18 +82,17 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     ): String {
         val prompt = buildPrompt(features, baseline, context)
         
-        // 1. Try Preferred Model
-        val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-3-pro")
+        // 1. Try Preferred Model (pro tier for reasoning; durable *-latest alias tracks current GA)
+        val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-pro-latest")
         
         try {
-            return executeGeminiRequest(apiKey, prompt, primaryModel)
+            return LlmHttpRetry.withTransientRetry { executeGeminiRequest(apiKey, prompt, primaryModel) }
         } catch (e: Exception) {
-            // 2. Fallback on Quota Exceeded (429)
-            val msg = e.message?.lowercase() ?: ""
-            if (msg.contains("429") || msg.contains("quota") || msg.contains("resource_exhausted")) {
-                val fallbackModel = "gemini-3-flash-preview"
-                android.util.Log.w(TAG, "Physio Quota Exceeded. Fallback to $fallbackModel")
-                return executeGeminiRequest(apiKey, prompt, fallbackModel)
+            // 2. Quota (429) OR still-overloaded (503) after retries → flash fallback (also retried).
+            if (LlmHttpRetry.isQuota(e) || LlmHttpRetry.isTransient(e)) {
+                val fallbackModel = "gemini-flash-latest"
+                android.util.Log.w(TAG, "Physio: $primaryModel failed (${e.message?.take(80)}). Fallback to $fallbackModel")
+                return LlmHttpRetry.withTransientRetry { executeGeminiRequest(apiKey, prompt, fallbackModel) }
             }
             throw e
         }

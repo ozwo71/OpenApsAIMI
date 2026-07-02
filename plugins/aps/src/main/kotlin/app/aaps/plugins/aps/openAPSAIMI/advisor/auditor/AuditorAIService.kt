@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 import android.content.Context
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 import app.aaps.plugins.aps.openAPSAIMI.model.VerdictType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -201,21 +202,20 @@ class AuditorAIService @Inject constructor(
      * Call Gemini API
      */
     private fun callGemini(apiKey: String, prompt: String, useHighPerf: Boolean): String {
-        // 1. Select Model based on complexity
-        // HighPerf -> gemini-3-pro | Standard -> gemini-3-flash
-        val modelName = if (useHighPerf) "gemini-3-pro" else "gemini-3-flash-preview"
+        // 1. Select Model based on complexity (durable *-latest aliases track current GA)
+        // HighPerf -> pro tier | Standard -> flash tier
+        val modelName = if (useHighPerf) "gemini-pro-latest" else "gemini-flash-latest"
         
         val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, modelName)
         
         try {
-            return executeGeminiRequest(apiKey, prompt, primaryModel)
+            return LlmHttpRetry.withTransientRetry { executeGeminiRequest(apiKey, prompt, primaryModel) }
         } catch (e: Exception) {
-            // 2. Fallback on Quota Exceeded (429)
-            val msg = e.message?.lowercase() ?: ""
-            if (msg.contains("429") || msg.contains("quota") || msg.contains("resource_exhausted")) {
-                val fallbackModel = "gemini-3-flash-preview"
-                android.util.Log.w("AIMI_GEMINI", "Auditor Quota Exceeded. Fallback to $fallbackModel")
-                return executeGeminiRequest(apiKey, prompt, fallbackModel)
+            // 2. Quota (429) OR still-overloaded (503) after retries → flash fallback (also retried).
+            if (LlmHttpRetry.isQuota(e) || LlmHttpRetry.isTransient(e)) {
+                val fallbackModel = "gemini-flash-latest"
+                android.util.Log.w("AIMI_GEMINI", "Auditor: $primaryModel failed (${e.message?.take(80)}). Fallback to $fallbackModel")
+                return LlmHttpRetry.withTransientRetry { executeGeminiRequest(apiKey, prompt, fallbackModel) }
             }
             throw e
         }

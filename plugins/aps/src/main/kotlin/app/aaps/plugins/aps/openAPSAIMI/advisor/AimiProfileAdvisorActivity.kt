@@ -607,7 +607,7 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle(rh.gs(R.string.aimi_advisor_model_title)) // "Select Model"
             .setSingleChoiceItems(
-                arrayOf("ChatGPT (GPT-5.2)", "Gemini (2.5 Flash)", "DeepSeek (Chat)", "Claude (3.5 Sonnet)"), 
+                arrayOf("ChatGPT (GPT-5.4 mini)", "Gemini (Flash)", "DeepSeek (Chat)", "Claude (Haiku 4.5)"),
                 idx
             ) { dialog, which ->
                 val newValue = when (which) {

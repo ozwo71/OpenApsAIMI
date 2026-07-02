@@ -9,9 +9,10 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 
 class GeminiVisionProvider(private val context: android.content.Context) : AIVisionProvider {
-    override val displayName = "Gemini (3.0 Flash)"
+    override val displayName = "Gemini (Flash)"
     override val providerId = "GEMINI"
     
     private val geminiResolver = app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver(context)
@@ -33,15 +34,15 @@ class GeminiVisionProvider(private val context: android.content.Context) : AIVis
     }
     
     private fun callGeminiAPI(apiKey: String, base64Image: String, userDescription: String): String {
-        val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-3-flash")
+        // Vision needs a multimodal model; flash tier is multimodal. Durable *-latest alias.
+        val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-flash-latest")
         
         try {
-            return executeRequest(apiKey, base64Image, primaryModel, userDescription)
+            return LlmHttpRetry.withTransientRetry { executeRequest(apiKey, base64Image, primaryModel, userDescription) }
         } catch (e: Exception) {
-            val msg = e.message?.lowercase() ?: ""
-            if (msg.contains("429") || msg.contains("quota") || msg.contains("resource_exhausted")) {
-                val fallbackModel = "gemini-1.5-flash-latest"
-                return executeRequest(apiKey, base64Image, fallbackModel, userDescription)
+            if (LlmHttpRetry.isQuota(e) || LlmHttpRetry.isTransient(e)) {
+                val fallbackModel = "gemini-flash-latest"
+                return LlmHttpRetry.withTransientRetry { executeRequest(apiKey, base64Image, fallbackModel, userDescription) }
             }
             throw e
         }
