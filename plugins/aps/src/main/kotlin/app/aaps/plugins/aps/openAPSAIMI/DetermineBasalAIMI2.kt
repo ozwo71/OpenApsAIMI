@@ -9682,7 +9682,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 ),
             )
         }
-        return cap.cappedRateUph
+        // 🏃 Activity basal ceiling: during an active exercise / AIMI activity context, insulin sensitivity
+        // rises, so the basal must be capped too — not just the SMB. Without this, branches like the post-hypo
+        // REBOUND_GUARD TBR bridge or the meal boost concentrate the (SMB-suppressed) correction into a
+        // runaway TBR (observed 8–9× profile). Ceiling only (coerceAtMost): never raises a rate, never
+        // affects a 0/suspend command. Factor is user-tunable via [DoubleKey.OApsAIMIActivityBasalCapFactor].
+        var finalRateUph = cap.cappedRateUph
+        if (exerciseInsulinLockoutActive && profileBasalUph > 0.0) {
+            val activityFactor = preferences.get(DoubleKey.OApsAIMIActivityBasalCapFactor)
+            val activityCapUph = profileBasalUph * activityFactor
+            if (finalRateUph > activityCapUph) {
+                consoleLog.add(
+                    "🏃 ACTIVITY_BASAL_CAP[$source]: %.2f→%.2f U/h (≤ %.2f× profile %.2f)".format(
+                        Locale.US, finalRateUph, activityCapUph, activityFactor, profileBasalUph
+                    )
+                )
+                finalRateUph = activityCapUph
+            }
+        }
+        return finalRateUph
     }
 
     private fun evaluateAndLogCorrectionAggression(
