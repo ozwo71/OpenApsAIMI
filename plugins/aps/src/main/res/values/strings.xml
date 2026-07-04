@@ -237,8 +237,8 @@
     <string name="aimi_pkpd_prudence_right">More aggressive</string>
     <string name="aimi_pkpd_tail_prudence_title">Late insulin action (SMB)</string>
     <string name="aimi_pkpd_tail_prudence_summary">Reduce SMB when insulin is mostly finished — helps avoid late drops.</string>
-    <string name="aimi_pkpd_tail_left">More cautious</string>
-    <string name="aimi_pkpd_tail_right">Allow more</string>
+    <string name="aimi_pkpd_tail_left">Allow more</string>
+    <string name="aimi_pkpd_tail_right">More cautious</string>
     <string name="aimi_pkpd_open_advanced">Open advanced tuning…</string>
     <string name="aimi_pkpd_status_card_title">Insulin model used by the loop</string>
     <string name="aimi_pkpd_status_learned_format">AIMI estimate: DIA %1$.1f h · peak %2$.0f min</string>

@@ -2,9 +2,33 @@ package app.aaps.plugins.aps.openAPSAIMI.compose
 
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class PkpdSettingsSupportTest {
+
+    /**
+     * Guards the label ↔ mapping alignment for the "Late insulin action (SMB)" tail slider.
+     *
+     * The slider ends carry static labels rendered verbatim by `PkpdLabeledSlider` (no inversion):
+     * left = `aimi_pkpd_tail_left`, right = `aimi_pkpd_tail_right`. The mapping runs
+     * left (level 0) → mildest damping (allows MORE SMB) and right (level 1) → strongest damping
+     * (MOST cautious). Correct labels are therefore left = "Allow more", right = "More cautious".
+     * If the labels are ever swapped back to the corrections-slider convention ("More cautious" on
+     * the left), they would silently re-invert a hypo-safety guard — this test pins the direction.
+     */
+    @Test
+    fun `tail slider left end allows more, right end is most cautious`() {
+        // Left end = mildest damping = highest floor = least SMB reduction → labelled "Allow more".
+        assertEquals(PkpdSmbTailDamping.DAMPING_LIGHT, PkpdSmbTailDamping.dampingForSliderLevel(0.0), 0.001)
+        // Right end = strongest damping = lowest floor = most SMB reduction → labelled "More cautious".
+        assertEquals(PkpdSmbTailDamping.DAMPING_STRONG, PkpdSmbTailDamping.dampingForSliderLevel(1.0), 0.001)
+        // Lower stored value = stronger guard, so the "cautious" (right) end must store LESS than the left end.
+        assertTrue(
+            PkpdSmbTailDamping.dampingForSliderLevel(1.0) < PkpdSmbTailDamping.dampingForSliderLevel(0.0),
+            "Tail damping mapping inverted: right (cautious) end must store a lower floor than left (allow more) end"
+        )
+    }
 
     @Test
     fun `tail prudence round trip at center`() {
