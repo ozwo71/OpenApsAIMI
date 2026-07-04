@@ -282,7 +282,7 @@ sealed class ContextIntent : ContextIntentStrategy {
      */
     data class HypoRecovery(
         override val startTimeMs: Long,
-        override val durationMs: Long = 90.minutes.inWholeMilliseconds,
+        override val durationMs: Long = 60.minutes.inWholeMilliseconds,
         override val intensity: Intensity,
         override val confidence: Float = 1.0f,
     ) : ContextIntent() {

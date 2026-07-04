@@ -104,7 +104,7 @@ Output:
 User: "just had a hypo, treated it, watch me for the next hour"
 Output:
 ```json
-[{ "type": "HypoRecovery", "intensity": "MEDIUM", "durationMinutes": 90, "confidence": 0.9, "metadata": {} }]
+[{ "type": "HypoRecovery", "intensity": "MEDIUM", "durationMinutes": 60, "confidence": 0.9, "metadata": {} }]
 ```
 
 **EXAMPLES**:

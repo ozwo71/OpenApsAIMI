@@ -353,7 +353,7 @@ class ContextParser @Inject constructor(
 
     private fun matchHypoRecovery(text: String, baseTimeMs: Long): HypoRecovery? {
         if (!HYPO_PATTERNS.any { it.containsMatchIn(text) }) return null
-        val duration = extractDuration(text) ?: 90.minutes
+        val duration = extractDuration(text) ?: 60.minutes
         val intensity = extractIntensity(text) ?: Intensity.MEDIUM
         return HypoRecovery(
             startTimeMs = baseTimeMs,
@@ -461,7 +461,7 @@ data class ContextPreset(
             ContextPreset(PresetType.ALCOHOL, "Alcool", "🍷", 12.hours, Intensity.MEDIUM),
             ContextPreset(PresetType.TRAVEL, "Voyage", "✈️", 24.hours, Intensity.MEDIUM),
             ContextPreset(PresetType.SLOW_CARB, "Repas lent (gras)", "🧀", 5.hours, Intensity.MEDIUM),
-            ContextPreset(PresetType.HYPO_RECOVERY, "Hypo / récup", "🍬", 90.minutes, Intensity.MEDIUM)
+            ContextPreset(PresetType.HYPO_RECOVERY, "Hypo / récup", "🍬", 60.minutes, Intensity.MEDIUM)
         )
     }
 }
