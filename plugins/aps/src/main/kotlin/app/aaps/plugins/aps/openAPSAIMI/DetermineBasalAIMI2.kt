@@ -13313,7 +13313,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🚀 PRIORITÉ : un mode fraîchement lancé (< 5 min) contourne le lockout ET l'IOB guard,
         // donc le prébolus part TOUJOURS au démarrage du mode ; les ticks suivants dans la fenêtre
         // sont verrouillés (TBR seul). Le lockout redémarre à chaque tir via markLegacyMealDecision().
-        val isManualOnset = (listOf(mealruntime, bfastruntime, lunchruntime, dinnerruntime, highCarbrunTime, snackrunTime).minOrNull() ?: 100) < 5
+        // ⚠️ Seuls les modes ACTIFS comptent pour l'onset. getTimeElapsedSinceLastEvent renvoie -1 pour un mode
+        // non déclenché depuis 60 min ; sans filtre, minOrNull()=-1 rend isManualOnset TOUJOURS vrai → le lockout
+        // 15 min est en permanence contourné → le prébolus tire à chaque tick de la fenêtre (P1/P2 délivrés en
+        // double). On filtre runtime >= 0 pour que seul le temps écoulé du mode actif pilote l'onset.
+        val isManualOnset = (listOf(mealruntime, bfastruntime, lunchruntime, dinnerruntime, highCarbrunTime, snackrunTime)
+            .filter { it >= 0 }.minOrNull() ?: 100) < 5
         val lockoutWindowMs = 15 * 60 * 1000L
         // Note : sur process frais, internalLastSmbMillis == 0L (aucun prébolus persisté) → (now() - 0L) ≫ 15 min
         // → isLockedOut = false, donc le 1er prébolus après redémarrage n'est pas verrouillé à tort.
