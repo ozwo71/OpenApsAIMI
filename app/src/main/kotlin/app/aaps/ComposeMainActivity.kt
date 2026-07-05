@@ -92,6 +92,7 @@ import app.aaps.core.interfaces.overview.graph.OverviewDataCache
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.profile.ProfileUtil
+import app.aaps.core.interfaces.protection.ExportPasswordDataStore
 import app.aaps.core.interfaces.protection.PasswordCheck
 import app.aaps.core.interfaces.protection.ProtectionCheck
 import app.aaps.core.interfaces.protection.ProtectionResult
@@ -128,6 +129,7 @@ import app.aaps.core.ui.compose.dialogs.OkDialog
 import app.aaps.core.ui.compose.navigation.ElementType
 import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.core.ui.compose.preference.LocalCheckPassword
+import app.aaps.core.ui.compose.preference.LocalClearExportPasswordStore
 import app.aaps.core.ui.compose.preference.LocalHashPassword
 import app.aaps.core.ui.compose.preference.LocalVisibilityContext
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
@@ -203,6 +205,7 @@ class ComposeMainActivity : AppCompatActivity() {
     @Inject lateinit var protectionCheck: ProtectionCheck
     @Inject lateinit var passwordCheck: PasswordCheck
     @Inject lateinit var cryptoUtil: CryptoUtil
+    @Inject lateinit var exportPasswordDataStore: ExportPasswordDataStore
     @Inject lateinit var activePlugin: ActivePlugin
     @Inject lateinit var nsClient: NsClient
     @Inject lateinit var clientControlActionDispatcher: ClientControlActionDispatcher
@@ -367,6 +370,7 @@ class ComposeMainActivity : AppCompatActivity() {
             LocalProfileUtil provides profileUtil,
             LocalCheckPassword provides cryptoUtil::checkPassword,
             LocalHashPassword provides cryptoUtil::hashPassword,
+            LocalClearExportPasswordStore provides { exportPasswordDataStore.clearPasswordDataStore(this@ComposeMainActivity) },
             LocalVisibilityContext provides visibilityContext
         ) {
             AapsTheme {
@@ -737,6 +741,11 @@ class ComposeMainActivity : AppCompatActivity() {
                     onSearchResultClick = { entry ->
                         handleSearchResultClick(entry, navController)
                     },
+                    onSearchPluginToggle = { plugin -> searchViewModel.togglePlugin(plugin) },
+                    onConfirmSearchPluginSwitch = { searchViewModel.confirmPluginSwitch() },
+                    onDismissSearchPluginSwitch = { searchViewModel.dismissPluginSwitch() },
+                    onConfirmSearchHardwarePump = { searchViewModel.confirmHardwarePump() },
+                    onDismissSearchHardwarePump = { searchViewModel.dismissHardwarePump() },
                     onMenuClick = { mainViewModel.openDrawer() },
                     onUserManualClick = {
                         startActivity(Intent(this@ComposeMainActivity, UserManualActivity::class.java))

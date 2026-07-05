@@ -38,6 +38,22 @@ Full port of [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS
 
 **Fork kept:** Calibration activity readiness UI (CAPTCG strips it; we keep user-facing readiness text).
 
+### Merge `dev` → `dev_OAPSAIMI` (2026-07-05)
+
+- Upstream Nightscout `dev` at `2e09122620` (41 commits: Wear bolus-wizard correction, Plugin
+  enable/disable from search, Wizard alarm fix, dependabot compose-bom/sqlite/hilt/wear, Crowdin, tests).
+- **No Eversense / AIMI / SMB / autoISF file in upstream diff** — `settings.gradle`, `SourceSensor`,
+  `PluginsListModule`, DI, `AppRepository`, `KeepAliveWorker`, `AndroidManifest` untouched; constraint
+  satisfied without re-application. Nothing to port into AIMI.
+- **Conflicts (1, not Eversense):** `MainScreen.kt` — combined fork `dashboardOverview` skin switch +
+  embedded-dashboard UI with upstream "plugin enable/disable from search" (5 params, `SearchResults`
+  `revision`/`onPluginToggle`, plugin/hardware confirmation dialogs).
+- **Fork preserved:** AIMI contexts/hormonitor export + recent fork work (prebolus A+B, activity basal
+  cap), Eversense `SourceSensor` E3/365 + `settings.gradle`, dashboard skin, ML `storageHelper`,
+  adaptive smoothing `calibratedOrValue`, `KeepAliveWorker runVacuum=false`, `AppRepository` guard,
+  physio HC manifest, AIMI docs. `:app:compileFullDebugKotlin` **PASS**; AIMI unit tests **PASS**.
+- Log: [MERGE_DEV_2026-07-05.md](MERGE_DEV_2026-07-05.md).
+
 ### Merge `dev` → `dev_OAPSAIMI` (2026-07-01)
 
 - Upstream Nightscout `dev` at `79c3d7bdce` (28 commits: Tidepool mode/TBR fixes, SetupWizard
