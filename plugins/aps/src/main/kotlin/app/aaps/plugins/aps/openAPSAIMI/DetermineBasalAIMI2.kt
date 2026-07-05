@@ -11763,19 +11763,33 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun mealDeliveryOverridesLockouts(): Boolean =
         explicitMealDeliveryRequested() && bg > SEVERE_HYPO_MEAL_OVERRIDE_MGDL
 
-    // Conditions repas legacy — forme d'origine (connue-bonne, 99 %) : fenêtre + mode actif.
-    // L'unicité du prébolus est assurée en aval par le one-shot lockout temporel (voir applyLegacyMealModes),
-    // PAS par une comparaison à lastBolusSMBUnit (variable partagée avec les autres SMB → blocages parasites).
-    private fun isMealModeCondition(): Boolean = mealruntime in 0..7 && mealTime
-    private fun isbfastModeCondition(): Boolean = bfastruntime in 0..7 && bfastTime
-    private fun isbfast2ModeCondition(): Boolean = bfastruntime in 15..29 && bfastTime
-    private fun isLunchModeCondition(): Boolean = lunchruntime in 0..7 && lunchTime
-    private fun isLunch2ModeCondition(): Boolean = lunchruntime in 15..24 && lunchTime
-    private fun isDinnerModeCondition(): Boolean = dinnerruntime in 0..7 && dinnerTime
-    private fun isDinner2ModeCondition(): Boolean = dinnerruntime in 15..24 && dinnerTime
-    private fun isHighCarbModeCondition(): Boolean = highCarbrunTime in 0..7 && highCarbTime
-    private fun isHighCarb2ModeCondition(): Boolean = highCarbrunTime in 15..23 && highCarbTime
-    private fun issnackModeCondition(): Boolean = snackrunTime in 0..7 && snackTime
+    // Conditions repas legacy : fenêtre + mode actif + test de valeur (garde B).
+    // Double garde anti-double-envoi :
+    //   A = one-shot lockout temporel (15 min, via internalLastSmbMillis) dans applyLegacyMealModes ;
+    //   B = lastBolusSMBUnit != pbolus : ferme l'angle mort de la fenêtre onset (< 5 min) où A se contourne
+    //       lui-même — utile si le capteur rafraîchit à < 5 min (2 ticks dans l'onset). lastBolusSMBUnit est
+    //       posé en synchrone par markLegacyMealDecision et protégé du cache DB périmé (garde §2039), donc lag-free.
+    //   Risque accepté de B : sur-blocage si un SMB non-repas vaut par coïncidence la valeur du prébolus.
+    private fun isMealModeCondition(): Boolean =
+        mealruntime in 0..7 && mealTime && lastBolusSMBUnit != preferences.get(DoubleKey.OApsAIMIMealPrebolus).toFloat()
+    private fun isbfastModeCondition(): Boolean =
+        bfastruntime in 0..7 && bfastTime && lastBolusSMBUnit != preferences.get(DoubleKey.OApsAIMIBFPrebolus).toFloat()
+    private fun isbfast2ModeCondition(): Boolean =
+        bfastruntime in 15..29 && bfastTime && lastBolusSMBUnit != preferences.get(DoubleKey.OApsAIMIBFPrebolus2).toFloat()
+    private fun isLunchModeCondition(): Boolean =
+        lunchruntime in 0..7 && lunchTime && lastBolusSMBUnit != preferences.get(DoubleKey.OApsAIMILunchPrebolus).toFloat()
+    private fun isLunch2ModeCondition(): Boolean =
+        lunchruntime in 15..24 && lunchTime && lastBolusSMBUnit != preferences.get(DoubleKey.OApsAIMILunchPrebolus2).toFloat()
+    private fun isDinnerModeCondition(): Boolean =
+        dinnerruntime in 0..7 && dinnerTime && lastBolusSMBUnit != preferences.get(DoubleKey.OApsAIMIDinnerPrebolus).toFloat()
+    private fun isDinner2ModeCondition(): Boolean =
+        dinnerruntime in 15..24 && dinnerTime && lastBolusSMBUnit != preferences.get(DoubleKey.OApsAIMIDinnerPrebolus2).toFloat()
+    private fun isHighCarbModeCondition(): Boolean =
+        highCarbrunTime in 0..7 && highCarbTime && lastBolusSMBUnit != preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus).toFloat()
+    private fun isHighCarb2ModeCondition(): Boolean =
+        highCarbrunTime in 15..23 && highCarbTime && lastBolusSMBUnit != preferences.get(DoubleKey.OApsAIMIHighCarbPrebolus2).toFloat()
+    private fun issnackModeCondition(): Boolean =
+        snackrunTime in 0..7 && snackTime && lastBolusSMBUnit != preferences.get(DoubleKey.OApsAIMISnackPrebolus).toFloat()
     // --- Helpers "fenêtre repas 30 min" ---
     /**
      * Runtime repas pour le gros `determine_basal` : **nullable**, millisecondes si >600_000, sinon secondes si >180, sinon minutes.
