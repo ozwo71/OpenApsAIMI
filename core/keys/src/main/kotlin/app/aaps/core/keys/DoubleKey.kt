@@ -526,6 +526,14 @@ enum class DoubleKey(
     /** CFRD mode: exocrine malabsorption COB delay (minutes).
      *  Shifts the COB absorption curve forward to account for delayed / irregular carbohydrate digestion. */
     OApsAIMIT3cCfrdCobDelayMin("key_aimi_t3c_cfrd_cob_delay_min", 0.0, 0.0, 90.0),
+    /** Undeclared-meal COB estimation: hard upper bound (grams) the estimator may inject into the
+     *  prediction path. Conservative by default. Only active when [BooleanKey.OApsAIMIUndeclaredCobEnabled] is on. */
+    OApsAIMIUndeclaredCobMaxG(
+        "key_aimi_undeclared_cob_max_g", 25.0, 5.0, 80.0,
+        titleResId = R.string.pref_title_aimi_undeclared_cob_max_g,
+        summaryResId = R.string.pref_summary_aimi_undeclared_cob_max_g,
+        dependency = BooleanKey.OApsAIMIUndeclaredCobEnabled,
+    ),
     OApsAIMIAdaptiveBasalMaxScaling("key_aimi_adaptive_basal_max_scaling", 1.0, 0.5, 2.0),
 
     // --- AIMI adaptive basal governance (on-device; depends on Universal Adaptive Basal) ---

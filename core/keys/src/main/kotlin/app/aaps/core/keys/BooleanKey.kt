@@ -435,6 +435,17 @@ enum class BooleanKey(
      *  active pulmonary exacerbations or corticosteroid (steroid) treatment. */
     OApsAIMIT3cCfrdExacerbationMode("key_aimi_t3c_cfrd_exacerbation", false),
 
+    /** Undeclared-meal COB estimation: derives a bounded virtual COB (grams) from the glucose
+     *  appearance rate, BG dynamics, weight/TDD ceiling and rest/activity context, then injects it
+     *  into the prediction path so basal (TBR) anticipates a meal that was not declared. TBR-only:
+     *  it never adds autonomous SMB, and is muted by exercise / hypo / exacerbation / false-meal
+     *  suppression. Off by default. */
+    OApsAIMIUndeclaredCobEnabled(
+        "key_aimi_undeclared_cob_enabled", false,
+        titleResId = R.string.pref_title_aimi_undeclared_cob,
+        summaryResId = R.string.pref_summary_aimi_undeclared_cob,
+    ),
+
 
     // 🦋 Thyroid / Basedow Module (MTR)
     OApsAIMIThyroidEnabled("key_aimi_thyroid_enabled", false),

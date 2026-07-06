@@ -13734,6 +13734,58 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return contextTargetOverride
     }
 
+    /**
+     * 🍽️ Bounded virtual COB for an undeclared meal (Option A — feeds prediction/TBR anticipation only,
+     * never SMB). Returns 0.0 unless [BooleanKey.OApsAIMIUndeclaredCobEnabled] is on, no explicit carbs
+     * are already present, and all [UndeclaredCobEstimator] safety gates pass. Read-only w.r.t. the async
+     * physio / Ra state (same snapshots the tick already refreshed).
+     */
+    private fun estimateUndeclaredVirtualCob(
+        bg: Double,
+        delta: Float,
+        sens: Double,
+        profile: OapsProfileAimi,
+        mealData: MealData,
+        declaredOrAdvisorCob: Double,
+    ): Double {
+        if (!preferences.get(BooleanKey.OApsAIMIUndeclaredCobEnabled)) return 0.0
+        // Explicit carbs already drive the curve — do not stack a virtual estimate on top.
+        if (declaredOrAdvisorCob > 0.0) return 0.0
+
+        val snapshot = physioAdapter.getLatestSnapshot()
+        val hrElevation = (snapshot.hrNow - snapshot.rhrResting)
+        val hrInflammationElevated = snapshot.hrNow > 0 && snapshot.rhrResting > 0 && hrElevation >= 15
+        val cfrdExacerbationActive =
+            preferences.get(BooleanKey.OApsAIMIT3cCfrdMode) &&
+                preferences.get(BooleanKey.OApsAIMIT3cCfrdExacerbationMode)
+        val tdd24h = resolveTdd24hForExport()
+
+        val result = UndeclaredCobEstimator.estimate(
+            UndeclaredCobEstimator.Input(
+                estimatedRaMgdlPerMin = continuousStateEstimator.getLastRa(),
+                isfMgdlPerU = sens,
+                carbRatioGPerU = profile.carb_ratio,
+                bgMgdl = bg,
+                deltaMgdl5m = delta.toDouble(),
+                slopeFromMinDeviation = mealData.slopeFromMinDeviation,
+                patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
+                tdd24hU = tdd24h,
+                stepsLast5m = snapshot.stepsLast5m,
+                stepsLast15m = snapshot.stepsLast15m,
+                activityDetected = aimiContextActivityActive || snapshot.activityState != "IDLE",
+                mealProb = lastPhysioLatentState?.mealProb ?: 0.0,
+                falseMealSuppression = lastPhysioLatentState?.falseMealSuppression ?: false,
+                exerciseLockoutActive = exerciseInsulinLockoutActive,
+                postHypoActive = lastPostHypoDeliveryAuthority.active,
+                cfrdExacerbationActive = cfrdExacerbationActive,
+                hrInflammationElevated = hrInflammationElevated,
+                maxGramsPref = preferences.get(DoubleKey.OApsAIMIUndeclaredCobMaxG),
+            )
+        )
+        consoleLog.add("🍽️ VIRTUAL_COB: ${result.toLogString()}")
+        return result.grams
+    }
+
     private fun applyAdvancedPredictions(
         bg: Double, delta: Float, sens: Double,
         iob_data_array: Array<IobTotal>,
@@ -13744,7 +13796,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val advisorTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
             val advisorCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
             val isFreshAdvisor = (dateUtil.now() - advisorTime) < 60 * 60000
-            val effectiveCOB = if (mealData.mealCOB > 0) mealData.mealCOB else if (isFreshAdvisor) advisorCarbs else 0.0
+            val declaredOrAdvisorCob = if (mealData.mealCOB > 0) mealData.mealCOB else if (isFreshAdvisor) advisorCarbs else 0.0
+            // 🍽️ Undeclared-meal virtual COB (TBR anticipation only; never SMB). Off by default, and
+            // only added on top of declared/advisor COB when no explicit carbs are present.
+            val virtualCob = estimateUndeclaredVirtualCob(bg, delta, sens, profile, mealData, declaredOrAdvisorCob)
+            val effectiveCOB = declaredOrAdvisorCob + virtualCob
             val curves = AdvancedPredictionEngine.predictCurves(
                 currentBG = bg, iobArray = iob_data_array, finalSensitivity = sens,
                 cobG = effectiveCOB, profile = profile, delta = delta.toDouble(),

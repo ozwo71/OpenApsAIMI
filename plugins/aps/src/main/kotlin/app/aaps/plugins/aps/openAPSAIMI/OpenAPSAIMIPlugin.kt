@@ -1712,6 +1712,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 DoubleKey.OApsAIMIT3cActivationThreshold,
                 DoubleKey.OApsAIMIT3cAggressiveness,
                 DoubleKey.OApsAIMIT3cAnticipationStrength,
+                BooleanKey.OApsAIMIUndeclaredCobEnabled,
+                DoubleKey.OApsAIMIUndeclaredCobMaxG,
             ),
         )
 

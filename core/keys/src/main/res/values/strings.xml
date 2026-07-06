@@ -542,6 +542,10 @@
     <string name="pref_summary_aimi_tpo_notify_on_apply">Shows a system notification when a 2 h protection session starts or ends. Tap to open OpenAPS AIMI preferences.</string>
     <string name="pref_title_aimi_straight_line_tube">Straight-line tube advisor (SMB caps)</string>
     <string name="pref_summary_aimi_straight_line_tube">Discrete short-horizon control on max SMB: keeps predicted minimum BG above a floor using the PKPD min curve, favors larger caps when eventual BG is high, penalizes zig-zag SMB sizing. Does not replace PKPD or safety nets. Off by default.</string>
+    <string name="pref_title_aimi_undeclared_cob">Undeclared-meal COB estimation</string>
+    <string name="pref_summary_aimi_undeclared_cob">Estimates virtual carbs from the glucose appearance rate (Ra), BG dynamics, patient weight/TDD and rest/activity context, then feeds them into the prediction curves so basal (TBR) anticipates an undeclared meal. Never delivers autonomous SMB. Automatically muted during exercise, hypo/post-hypo, pulmonary exacerbation and any stress/dawn false-meal suppression. Off by default.</string>
+    <string name="pref_title_aimi_undeclared_cob_max_g" comment="%1$s is not used; plain title. Max grams the estimator may inject.">Undeclared COB: maximum grams</string>
+    <string name="pref_summary_aimi_undeclared_cob_max_g">Upper bound (grams) for the virtual carbs the estimator may inject into the prediction path. Lower = safer and smaller effect. Only used when undeclared-meal COB estimation is on.</string>
     <string name="pref_title_aimi_dyn_isf_trajectory_tuning">DynISF: trajectory tuning (CGM geometry)</string>
     <string name="pref_summary_aimi_dyn_isf_trajectory_tuning">Uses the same short-horizon CGM features as AutoISF (deltas, parabolic projection, acceleration) only when quality gates pass. Bounded change per tick; skips when physio already tightens ISF strongly. Requires dynamic sensitivity. Off by default.</string>
     <string name="pref_title_aimi_dyn_isf_trajectory_shadow">DynISF trajectory: shadow only</string>
