@@ -1111,6 +1111,7 @@
     <string name="reason_prebolus_highcarb">&#160;Microbolusing 1/2 High Carb Mode %.2fU.</string>
     <string name="reason_prebolus_highcarb2">&#160;Microbolusing 2/2 High Carb Mode %.2fU.</string>
     <string name="reason_prebolus_snack">&#160;Microbolusing Snack Mode %.2fU.</string>
+    <string name="aimi_prebolus_not_delivered" comment="%1$s=meal mode pre-bolus phase tag (example: LUNCH_P1), %2$s=requested insulin amount with units (example: 1.50 U). Warning shown when a requested meal pre-bolus was never confirmed as delivered by the pump.">Meal pre-bolus %1$s (%2$s) was requested but not confirmed as delivered by the pump. Check bolus history.</string>
     <string name="reason_maxsmb">&#160;| MaxSMB %.1f U&#160;\n</string>
     <string name="reason_cgm_calibrating">CGM is calibrating, in ??? state, or noise is high</string>
     <string name="reason_activity_cap">Activity SMB Cap (%.2f)</string>

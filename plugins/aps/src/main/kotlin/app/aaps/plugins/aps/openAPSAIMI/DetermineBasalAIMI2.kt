@@ -32,6 +32,7 @@ import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
@@ -8992,6 +8993,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         private val legacyPrebolusFiredAtMem = HashMap<String, Long>()
 
         /**
+         * Alerte « prébolus non délivré » déjà émise pour ce tag (Option A — détection seule).
+         * Même sémantique d'activation que [legacyPrebolusFiredAtMem] : une seule alerte par tag
+         * et par activation de mode, détectée via [legacyPrebolusLatchBlocks].
+         */
+        private val legacyPrebolusMissAlertedAtMem = HashMap<String, Long>()
+
+        /**
          * Décision pure du verrou one-shot par tag (testable). Renvoie true si ce tag a déjà tiré pour la
          * MÊME activation → à bloquer. [firedAtMs] = instant du dernier tir (null si jamais), [nowMs] = maintenant,
          * [runtimeMin] = minutes depuis l'activation du mode (redémarre à ~0 à chaque nouvelle activation).
@@ -9002,6 +9010,36 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (firedAtMs == null) return false
             val activationWindowMs = runtimeMin.coerceAtLeast(0) * 60_000L + 90_000L
             return (nowMs - firedAtMs) < activationWindowMs
+        }
+
+        /**
+         * Délai minimal (ms) après un tir prébolus avant de pouvoir conclure « non délivré » :
+         * un tick de boucle complet + marge. Couvre le retard du cache asynchrone [latestSmbCached]
+         * (voir commentaire dans [runTickClockMaxSmbTirCarbAndGlucoseCopy]) — conclure plus tôt
+         * produirait des faux négatifs (bolus délivré mais pas encore visible en cache).
+         */
+        internal const val LEGACY_PREBOLUS_CONFIRM_DELAY_MS = 390_000L // 6,5 min
+
+        /**
+         * Détection pure « prébolus demandé mais jamais confirmé par la pompe » (Option A — information
+         * seule, aucune re-délivrance : le verrou one-shot [legacyPrebolusLatchBlocks] reste intact).
+         * Renvoie true si le tag a tiré pour l'activation COURANTE ([firedAtMs] dans la fenêtre
+         * d'activation, même règle que le latch), que [LEGACY_PREBOLUS_CONFIRM_DELAY_MS] s'est écoulé
+         * depuis le tir, et qu'aucun bolus SMB confirmé pompe ([lastSmbConfirmedMs], timestamp du
+         * dernier BS.Type.SMB en base) n'existe depuis le tir.
+         */
+        internal fun legacyPrebolusMissedDelivery(
+            firedAtMs: Long?,
+            lastSmbConfirmedMs: Long?,
+            nowMs: Long,
+            runtimeMin: Long,
+        ): Boolean {
+            if (firedAtMs == null) return false
+            // Tir d'une activation précédente → hors sujet pour ce tick.
+            if (!legacyPrebolusLatchBlocks(firedAtMs, nowMs, runtimeMin)) return false
+            // Trop tôt pour conclure : le cache SMB asynchrone peut avoir un tick de retard.
+            if (nowMs - firedAtMs < LEGACY_PREBOLUS_CONFIRM_DELAY_MS) return false
+            return lastSmbConfirmedMs == null || lastSmbConfirmedMs < firedAtMs
         }
         /** Glycémie (mg/dL) au-dessus de laquelle la basale peut corriger malgré sport / contexte activité (SMB toujours off). */
         const val EXERCISE_BASAL_RESUME_BG_MGDL: Double = 220.0
@@ -13326,6 +13364,78 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
+    /**
+     * Option A — vérification de délivrance des prébolus legacy (information seule, aucune re-délivrance).
+     * Pour le mode manuel actif, compare le latch de tir [legacyPrebolusFiredAtMem] au dernier bolus SMB
+     * confirmé pompe (BS.Type.SMB en base via [latestSmbCached]). Si un prébolus a été demandé pour cette
+     * activation mais qu'aucun SMB n'a été confirmé depuis le tir (délai de confirmation écoulé, voir
+     * [legacyPrebolusMissedDelivery]), alerte UNE fois par tag/activation : console + rT.reason + notification.
+     * Le verrou one-shot n'est jamais modifié — le tag reste consommé pour l'activation.
+     * Limite connue : un autre SMB délivré après le tir masquerait le manque (en T3C brittle les SMB
+     * autonomes sont coupés, le prébolus est le seul SMB attendu dans sa fenêtre).
+     */
+    private fun checkLegacyPrebolusDeliveryAndAlert(rT: RT) {
+        val activeModeTags: Pair<Long, List<Pair<String, DoubleKey>>> = when {
+            mealTime && mealruntime in 0..29 -> mealruntime to listOf(
+                "MEAL_P1" to DoubleKey.OApsAIMIMealPrebolus,
+            )
+
+            bfastTime && bfastruntime in 0..29 -> bfastruntime to listOf(
+                "BF_P1" to DoubleKey.OApsAIMIBFPrebolus,
+                "BF_P2" to DoubleKey.OApsAIMIBFPrebolus2,
+            )
+
+            lunchTime && lunchruntime in 0..29 -> lunchruntime to listOf(
+                "LUNCH_P1" to DoubleKey.OApsAIMILunchPrebolus,
+                "LUNCH_P2" to DoubleKey.OApsAIMILunchPrebolus2,
+            )
+
+            dinnerTime && dinnerruntime in 0..29 -> dinnerruntime to listOf(
+                "DINNER_P1" to DoubleKey.OApsAIMIDinnerPrebolus,
+                "DINNER_P2" to DoubleKey.OApsAIMIDinnerPrebolus2,
+            )
+
+            highCarbTime && highCarbrunTime in 0..29 -> highCarbrunTime to listOf(
+                "HC_P1" to DoubleKey.OApsAIMIHighCarbPrebolus,
+                "HC_P2" to DoubleKey.OApsAIMIHighCarbPrebolus2,
+            )
+
+            snackTime && snackrunTime in 0..29 -> snackrunTime to listOf(
+                "SNACK_P1" to DoubleKey.OApsAIMISnackPrebolus,
+            )
+
+            else -> return
+        }
+        val (runtimeMin, tags) = activeModeTags
+        val lastSmbConfirmedMs = latestSmbCached()?.timestamp
+        val now = dateUtil.now()
+        for ((tag, prefKey) in tags) {
+            val firedAt = legacyPrebolusFiredAtMem[tag] ?: continue
+            // Une seule alerte par tag et par activation (même sémantique que le latch de tir).
+            if (legacyPrebolusLatchBlocks(legacyPrebolusMissAlertedAtMem[tag], now, runtimeMin)) continue
+            if (!legacyPrebolusMissedDelivery(firedAt, lastSmbConfirmedMs, now, runtimeMin)) continue
+            legacyPrebolusMissAlertedAtMem[tag] = now
+            val requestedU = preferences.get(prefKey)
+            val msg = context.getString(
+                R.string.aimi_prebolus_not_delivered,
+                tag,
+                context.getString(app.aaps.core.ui.R.string.format_insulin_units, requestedU),
+            )
+            consoleLog.add(
+                "⚠️ PREBOLUS_NOT_DELIVERED tag=$tag requested=${"%.2f".format(Locale.US, requestedU)}U " +
+                    "firedAt=${dateUtil.timeString(firedAt)} lastSmbConfirmed=${lastSmbConfirmedMs?.let { dateUtil.timeString(it) } ?: "none"}"
+            )
+            rT.reason.append(" | ").append(msg)
+            try {
+                notificationManager.post(
+                    id = NotificationId.AUTOMATION_MESSAGE,
+                    text = msg,
+                )
+            } catch (_: Exception) {
+            }
+        }
+    }
+
     private fun applyLegacyMealModes(profile: OapsProfileAimi, rT: RT, currenttemp: CurrentTemp, modeTbrLimit: Double): RT? {
         fun rbf(key: DoubleKey) = preferences.get(key)
 
@@ -13404,6 +13514,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
             consoleLog.add("MEAL_TBR_MANUAL[$logTag] rate=${"%.2f".format(rateUh)}U/h dur=30m rt=${runtimeMin}m")
         }
+
+        // Option A : contrôle a posteriori de la délivrance des prébolus déjà demandés (alerte seule,
+        // ne modifie ni le latch ni la décision de ce tick). Doit tourner AVANT les branches P1/P2/MAINT
+        // car à runtime 8-14 la branche P1 n'est plus exécutée.
+        checkLegacyPrebolusDeliveryAndAlert(rT)
 
         if (isMealModeCondition()) {
             manualMealModeTbr(mealruntime, "MEAL_P1", overrideSafetyLimits = false)
