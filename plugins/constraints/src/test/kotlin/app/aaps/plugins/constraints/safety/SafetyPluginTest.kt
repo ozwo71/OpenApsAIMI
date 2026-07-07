@@ -6,10 +6,8 @@ import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.bgQualityCheck.BgQualityCheck
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
-import app.aaps.core.data.iob.InMemoryGlucoseValue
-import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.interfaces.db.PersistenceLayer
-import app.aaps.core.interfaces.iob.AutosensDataStore
+import app.aaps.core.interfaces.aps.AutosensDataStore
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.profiling.Profiler
 import app.aaps.core.interfaces.pump.PumpWithConcentration
@@ -139,10 +137,9 @@ class SafetyPluginTest : TestBaseWithProfile() {
     }
 
     @Test
-    fun bgSourceShouldPreventSMBAlways() {
-        whenever(autosensDataStore.lastBg()).thenReturn(
-            InMemoryGlucoseValue(timestamp = 0L, value = 100.0, sourceSensor = SourceSensor.LIBRE_1_OTHER)
-        )
+    fun bgSourceShouldPreventSMBAlways() = runTest {
+        // Upstream: SafetyPlugin now asks persistenceLayer (suspend) instead of autosensDataStore.lastBg()
+        whenever(persistenceLayer.isAdvancedFilteringSupported()).thenReturn(false)
         val c = safetyPlugin.isAdvancedFilteringEnabled(ConstraintObject(true, aapsLogger))
         assertThat(c.getReasons()).isEqualTo("Safety: SMB always and after carbs disabled because active BG source doesn\\'t support advanced filtering")
         assertThat(c.value()).isFalse()

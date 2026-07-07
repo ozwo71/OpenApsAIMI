@@ -4,7 +4,7 @@ Purpose: enforce repeatable quality gates to prevent freezes and functional regr
 
 Use this file for every merge from `dev` and every release candidate.
 
-**Latest merge log:** [MERGE_DEV_2026-07-05.md](MERGE_DEV_2026-07-05.md) (dev @ `2e09122620` → `dev_OAPSAIMI`). Previous: [MERGE_DEV_2026-07-01.md](MERGE_DEV_2026-07-01.md) (dev @ `79c3d7bdce`).
+**Latest merge log:** [MERGE_DEV_2026-07-07.md](MERGE_DEV_2026-07-07.md) (dev @ `b45fb221e8` → `dev_OAPSAIMI`). Previous: [MERGE_DEV_2026-07-05.md](MERGE_DEV_2026-07-05.md) (dev @ `2e09122620`).
 
 ---
 

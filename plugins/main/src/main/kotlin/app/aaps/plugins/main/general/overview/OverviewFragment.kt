@@ -93,6 +93,7 @@ import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntNonKey
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.objects.extensions.apsAdjustedTargetMgdl
 import app.aaps.core.objects.extensions.directionToLegacyDrawable
 import app.aaps.core.objects.extensions.displayText
 import app.aaps.core.objects.extensions.round
@@ -1375,19 +1376,17 @@ class OverviewFragment : DaggerFragment(), View.OnClickListener, View.OnLongClic
                 )
             } else {
                 profileFunction.getProfile()?.let { profile ->
-                    // If the target is not the same as set in the profile then oref has overridden it
-                    val targetUsed =
-                        if (config.APS) loop.lastRun?.constraintsProcessed?.targetBG ?: 0.0
-                        else if (config.AAPSCLIENT) processedDeviceStatusData.getAPSResult()?.targetBG ?: 0.0
-                        else 0.0
-
-                    if (targetUsed != 0.0 && abs(profile.getTargetMgdl() - targetUsed) > 0.01) {
-                        aapsLogger.debug("Adjusted target. Profile: ${profile.getTargetMgdl()} APS: $targetUsed")
+                    // If the target is not the same as set in the profile then oref has overridden it.
+                    // Rounded comparison (apsAdjustedTargetMgdl) — parity with upstream f13d7e439a "Fix TT rounding":
+                    // the unrounded compare falsely flagged every loop run as "adjusted" with mmol profiles.
+                    val adjustedTarget = profile.apsAdjustedTargetMgdl(loop, config, processedDeviceStatusData)
+                    if (adjustedTarget != null) {
+                        aapsLogger.debug("Adjusted target. Profile: ${profile.getTargetMgdl()} APS: $adjustedTarget")
                         setRibbon(
                             binding.tempTarget,
                             app.aaps.core.ui.R.attr.ribbonTextWarningColor,
                             app.aaps.core.ui.R.attr.tempTargetBackgroundColor,
-                            profileUtil.toTargetRangeString(targetUsed, targetUsed, GlucoseUnit.MGDL, units)
+                            profileUtil.toTargetRangeString(adjustedTarget, adjustedTarget, GlucoseUnit.MGDL, units)
                         )
                     } else {
                         setRibbon(

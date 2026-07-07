@@ -9,7 +9,7 @@ import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.Objectives
 import app.aaps.core.interfaces.constraints.PluginConstraints
 import app.aaps.core.interfaces.db.PersistenceLayer
-import app.aaps.core.interfaces.iob.AutosensDataStore
+import app.aaps.core.interfaces.aps.AutosensDataStore
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.profiling.Profiler
 import app.aaps.core.interfaces.protection.PasswordCheck
@@ -241,7 +241,9 @@ class ConstraintsCheckerImplTest : TestBaseWithProfile() {
 
     // Safety
     @Test
-    fun isAdvancedFilteringEnabledTest() {
+    fun isAdvancedFilteringEnabledTest() = runTest {
+        // Upstream: SafetyPlugin now asks persistenceLayer (suspend) instead of autosensDataStore.lastBg()
+        whenever(persistenceLayer.isAdvancedFilteringSupported()).thenReturn(false)
         val c = constraintChecker.isAdvancedFilteringEnabled()
         assertThat(c.reasonList).hasSize(1) // Safety
         assertThat(c.mostLimitedReasonList).hasSize(1) // Safety

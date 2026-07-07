@@ -1,5 +1,6 @@
 package app.aaps.plugins.constraints.objectives.compose
 
+import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.UserEntryLogger
 import app.aaps.core.interfaces.receivers.ReceiverStatusStore
@@ -32,6 +33,7 @@ internal class ObjectivesViewModelTest {
 
     private val objectivesPlugin: ObjectivesPlugin = mock()
     private val sntpClient: SntpClient = mock()
+    @Mock private lateinit var config: Config
     @Mock private lateinit var rxBus: RxBus
     @Mock private lateinit var rh: ResourceHelper
     @Mock private lateinit var dateUtil: DateUtil
@@ -57,7 +59,7 @@ internal class ObjectivesViewModelTest {
             BooleanNonKey.ObjectivesLoopUsed, BooleanNonKey.ObjectivesScaleUsed
         ).forEach { whenever(preferences.observe(it)).thenReturn(MutableStateFlow(false)) }
         sut = ObjectivesViewModel(
-            objectivesPlugin, rxBus, rh, dateUtil, sntpClient, receiverStatusStore, aapsLogger, uel, preferences
+            objectivesPlugin, config, rxBus, rh, dateUtil, sntpClient, receiverStatusStore, aapsLogger, uel, preferences
         )
     }
 

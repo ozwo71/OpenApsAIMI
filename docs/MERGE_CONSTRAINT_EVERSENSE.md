@@ -38,6 +38,25 @@ Full port of [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS
 
 **Fork kept:** Calibration activity readiness UI (CAPTCG strips it; we keep user-facing readiness text).
 
+### Merge `dev` → `dev_OAPSAIMI` (2026-07-07)
+
+- Upstream Nightscout `dev` at `b45fb221e8` (12 commits: Wear scene tiles settings + color themes,
+  TT rounding fix `getRoundedTargetMgdl`/`apsAdjustedTargetMgdl`, BgQuality doubled-BG → LGS mode,
+  Tidepool upload ID, Equil fixes, UKF/Diaconn/Profile tests). **Zero conflicts.**
+- **No Eversense / AIMI / SMB / autoISF file in upstream diff** — `settings.gradle`, `SourceSensor`,
+  DI, `AppRepository`, `KeepAliveWorker`, `AndroidManifest` untouched; constraint satisfied without
+  re-application. Nothing to port into AIMI plugin logic.
+- **Ported to fork-only file:** `OverviewFragment.kt` (legacy overview, empty upstream) — TT rounding
+  fix via `apsAdjustedTargetMgdl` (compose overview/widget/wear were migrated upstream).
+- **Test adaptations:** new upstream `UnscentedKalmanFilterPluginTest` bridged to fork suspend
+  `smooth()`; pre-existing constraints test drift fixed (`AutosensDataStore` import, suspend
+  `isAdvancedFilteringEnabled`, `ObjectivesViewModel` `config` param).
+- **Fork preserved:** AIMI/hormonitor export, Eversense module + `SourceSensor` E3/365, dashboard
+  skin switch, ML `storageHelper`, adaptive smoothing `calibratedOrValue`, `KeepAliveWorker
+  runVacuum=false`, `AppRepository` guard, physio HC manifest. `:app` + `:wear` compile **PASS**;
+  smoothing/objects/constraints + AIMI unit tests **PASS**.
+- Log: [MERGE_DEV_2026-07-07.md](MERGE_DEV_2026-07-07.md).
+
 ### Merge `dev` → `dev_OAPSAIMI` (2026-07-05)
 
 - Upstream Nightscout `dev` at `2e09122620` (41 commits: Wear bolus-wizard correction, Plugin
