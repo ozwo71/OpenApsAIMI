@@ -19,7 +19,7 @@
         <activity
             android:name=".openAPSAIMI.advisor.auditor.ui.AuditorReportActivity"
             android:exported="false"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:theme="@style/Theme.MaterialComponents.Translucent"
             android:label="@string/aimi_auditor_report_dialog_title" />
 
         <activity
