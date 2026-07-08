@@ -38,6 +38,18 @@ Full port of [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS
 
 **Fork kept:** Calibration activity readiness UI (CAPTCG strips it; we keep user-facing readiness text).
 
+### Merge `dev` → `dev_OAPSAIMI` (2026-07-08)
+
+- Upstream Nightscout `dev` at `40275ce700` (4 commits: Wear wizard-correction press-and-hold, dependabot
+  dagger 2.60→2.60.1). **Zero conflicts.**
+- **No Eversense / AIMI / SMB / autoISF file in upstream diff** — only `gradle/libs.versions.toml` (dagger)
+  and `wear/.../AcceptActivity.kt`. Constraint satisfied without re-application. Nothing to port into AIMI.
+- **Fork preserved:** AIMI/hormonitor export + recent fork work (prebolus one-shot latch, concentration
+  zero-bolus guard), Eversense `SourceSensor` E3/365, dashboard skin, ML storage, adaptive smoothing
+  `calibratedOrValue`, `KeepAliveWorker runVacuum=false`, physio HC manifest, AIMI docs. Compile **PASS**;
+  concentration + AIMI unit tests **PASS**.
+- Log: [MERGE_DEV_2026-07-08.md](MERGE_DEV_2026-07-08.md).
+
 ### Merge `dev` → `dev_OAPSAIMI` (2026-07-07)
 
 - Upstream Nightscout `dev` at `b45fb221e8` (12 commits: Wear scene tiles settings + color themes,
