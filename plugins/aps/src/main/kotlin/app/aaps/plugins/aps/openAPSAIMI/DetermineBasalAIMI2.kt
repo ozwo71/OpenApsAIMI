@@ -1443,6 +1443,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         exerciseHyperBasalOverrideActive = false
         aimiContextActivityActive = false
         pkpdAbsorptionGuardAppliedThisTick = false
+        criticalSafetyZeroedThisTick = false
         cachedRiskEnvelopeEarly = null
         cachedRiskEnvelopeDecision = null
         lastSafetyRiskExport = null
@@ -5600,6 +5601,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val gatedUnits = smbToGiveLocal
         val proposedUnits = smbExecution.finalSmb.toFloat()
 
+        // F1-bis : cette copie V3 ignorait le frein IOB-surveillance que le site legacy
+        // (finalizeAndCapSMB) consulte déjà. Même évaluation (fonction pure), même sémantique.
+        val stackingEvalV3 = InsulinStackingStance.evaluate(
+            bg = bg,
+            delta = delta.toDouble(),
+            shortAvgDelta = shortAvgDelta.toDouble(),
+            targetBg = targetBg,
+            iob = iob.toDouble(),
+            maxIob = this.maxIob,
+            eventualBg = eventualBG.takeIf { it > 1.0 && it.isFinite() },
+            minPredBg = minPredictedBgForRbtWiring(minPredictedAcrossCurves(rT.predBGs)),
+            trajectoryEnergy = rT.trajectoryEnergy,
+            isExplicitUserAction = isExplicitAction,
+            enabled = preferences.get(BooleanKey.OApsAIMIIobSurveillanceGuard),
+            mealPriorityContext = isAggressivePriorityContext,
+            endogenousCounterRegulatory = lastPhysiologicalPhaseOutput?.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY,
+            mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
+        )
+        val suppressRedCarpetRestoreV3 = stackingEvalV3.suppressRedCarpetRestore
+
         if (isRedCarpetSituation && proposedUnits > 0.0) {
             if (implicitMealCorrection.redCarpetEligible && !anyMealModeForGuard && !isExplicitAction) {
                 consoleLog.add(
@@ -5613,9 +5634,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             } else {
                 baseRestoreThreshold
             }
+            // Un zéro posé par une sécurité VITALE (protection hypo) ou un frein IOB-surveillance actif
+            // interdit la restauration — seules les réductions « mineures » sont restaurables.
             val candidateUnits = if (gatedUnits <= proposedUnits * restoreThreshold) {
-                consoleLog.add("✨ RED CARPET: Restoring meal bolus blocked by minor safety (Proposed=${"%.2f".format(proposedUnits)} vs Gated=${"%.2f".format(gatedUnits)})")
-                proposedUnits
+                when {
+                    criticalSafetyZeroedThisTick -> {
+                        consoleLog.add("⛔ RED_CARPET_DENIED: vital hypo safety zeroed SMB this tick — no restore (Proposed=${"%.2f".format(proposedUnits)} Gated=${"%.2f".format(gatedUnits)})")
+                        gatedUnits
+                    }
+                    suppressRedCarpetRestoreV3 -> {
+                        consoleLog.add("⛔ RED_CARPET_DENIED: IOB surveillance active — no restore (${stackingEvalV3.summary.ifBlank { "surveillance" }})")
+                        gatedUnits
+                    }
+                    else -> {
+                        consoleLog.add("✨ RED CARPET: Restoring meal bolus blocked by minor safety (Proposed=${"%.2f".format(proposedUnits)} vs Gated=${"%.2f".format(gatedUnits)})")
+                        proposedUnits
+                    }
+                }
             } else {
                 gatedUnits
             }
@@ -8964,6 +8999,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     /** One PKPD absorption-guard multiply per [determine_basal] tick (see [applyPkpdAbsorptionGuardOncePerTick]). */
     private var pkpdAbsorptionGuardAppliedThisTick: Boolean = false
     private var isConfirmedHighRiseThisTick: Boolean = false
+    /**
+     * Sécurité VITALE ce tick : [applySafetyPrecautions] a mis le SMB à 0 via [isCriticalSafetyCondition]
+     * (protection hypo minPredBG, chute rapide, …). Le restore Red Carpet ne doit JAMAIS ressusciter ce
+     * zéro-là — il n'est autorisé que sur les réductions « mineures » (throttle, refractory, damping).
+     * N'affecte pas les actions explicites (elles passent avec ignoreSafetyConditions=true, le flag ne se
+     * pose pas) ni les prébolus des modes manuels (chemin applyLegacyMealModes, hors Red Carpet).
+     */
+    private var criticalSafetyZeroedThisTick: Boolean = false
     private var correctionAggressionDecision: CorrectionAggressionGate.Decision? = null
     private var lastPostHypoDeliveryAuthority: PostHypoDeliveryAuthority.Decision =
         PostHypoDeliveryAuthority.INACTIVE
@@ -11119,10 +11162,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
             
             // 1. Restauration de la demande
-            // Si les sécurités mineures ont coupé plus de 40% du bolus, on restaure la demande initiale.
-            val candidateUnits = if (gatedUnits < proposedUnits.toFloat() * 0.6f) { 
-                consoleLog.add("✨ RED CARPET: Restoring meal bolus blocked by minor safety (Proposed=${"%.2f".format(proposedUnits)} vs Gated=${"%.2f".format(gatedUnits)})")
-                 proposedUnits.toFloat()
+            // Si les sécurités MINEURES (throttle, refractory, damping) ont coupé plus de 40% du bolus,
+            // on restaure la demande initiale. Un zéro posé par une sécurité VITALE (protection hypo,
+            // minPredBG au plancher, chute rapide) n'est JAMAIS restauré : la protection hypo appartient
+            // aux hard caps, pas aux sécurités mineures.
+            val candidateUnits = if (gatedUnits < proposedUnits.toFloat() * 0.6f) {
+                if (criticalSafetyZeroedThisTick) {
+                    consoleLog.add("⛔ RED_CARPET_DENIED: vital hypo safety zeroed SMB this tick — no restore (Proposed=${"%.2f".format(proposedUnits)} Gated=${"%.2f".format(gatedUnits)})")
+                    gatedUnits
+                } else {
+                    consoleLog.add("✨ RED CARPET: Restoring meal bolus blocked by minor safety (Proposed=${"%.2f".format(proposedUnits)} vs Gated=${"%.2f".format(gatedUnits)})")
+                    proposedUnits.toFloat()
+                }
             } else {
                  gatedUnits 
             }
@@ -11513,6 +11564,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         val (isCrit, critMsg) = isCriticalSafetyCondition(mealData, hypoThreshold,context)
         if (isCrit && !ignoreSafetyConditions) {
+            criticalSafetyZeroedThisTick = true // sécurité VITALE : interdit le restore Red Carpet ce tick
             reason?.appendLine("🛑 $critMsg → SMB=0")
             consoleLog.add("SMB forced to 0 by critical safety: $critMsg")
             return 0f
