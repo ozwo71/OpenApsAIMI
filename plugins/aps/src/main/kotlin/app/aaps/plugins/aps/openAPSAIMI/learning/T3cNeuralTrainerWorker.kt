@@ -21,10 +21,11 @@ class T3cNeuralTrainerWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
     aapsLogger: AAPSLogger,
     fabricPrivacy: FabricPrivacy,
+    private val coordinator: BasalMlTrainingCoordinator,
 ) : LoggingWorker(appContext, workerParams, Dispatchers.IO, aapsLogger, fabricPrivacy) {
 
     override suspend fun doWorkAndLog(): Result {
         aapsLogger.debug(LTag.APS, "T3cNeuralTrainerWorker: delegating to BasalMlTrainingCoordinator")
-        return runBasalMlTrainingJob()
+        return runBasalMlTrainingJob(coordinator)
     }
 }

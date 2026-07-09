@@ -48,18 +48,24 @@ class BasalMlTrainingCoordinatorTest {
     }
 
     @Test
-    fun `parser builds aligned basal and t3c targets`() {
+    fun `parser aligns labels on realized future bg not floored eventualBg`() {
         val dataset = BasalMlDatasetParser.parse(csvFile)
         assertThat(dataset).isNotNull()
-        assertThat(dataset!!.rowCount).isEqualTo(120)
-        assertThat(dataset.basalTargets).hasSize(120)
-        assertThat(dataset.t3cTargets).hasSize(120)
+        // Tail rows without an observable +30min future are dropped (no fabricated label).
+        assertThat(dataset!!.rowCount).isGreaterThan(100)
+        assertThat(dataset.rowCount).isLessThan(120)
+        assertThat(dataset.basalTargets).hasSize(dataset.rowCount)
+        assertThat(dataset.t3cTargets).hasSize(dataset.rowCount)
         val basalTarget = dataset.basalTargets.first()[0]
         val t3cTarget = dataset.t3cTargets.first()[0]
         assertThat(basalTarget).isAtLeast(0.7)
         assertThat(basalTarget).isAtMost(1.5)
         assertThat(t3cTarget).isAtLeast(0.5)
         assertThat(t3cTarget).isAtMost(2.0)
+        // Regression guard: BG stayed high (145 > target) so the label must push basal UP. If the parser still
+        // used the floored eventualBg=39 as the outcome, actualDelta would be huge and it would learn to CUT
+        // (≈0.71) instead — the exact contamination this fix removes.
+        assertThat(basalTarget).isAtLeast(1.0)
     }
 
     @Test
@@ -82,12 +88,17 @@ class BasalMlTrainingCoordinatorTest {
     }
 
     private fun writeSyntheticCsv(file: File, rowCount: Int) {
-        val header = "bg,eventualBg,basal,target,accel,duraMin,duraAvg,iob,basalScale,t3cAgg"
+        // Real column order (parser matches by name). 5-min cadence for timestamp-based label alignment.
+        // BG held high at 145 (> target 100); eventualBg deliberately floored to 39 to prove the label now
+        // comes from the realized future bg, not this prediction column.
+        val header = "timestamp,bg,eventualBg,basal,target,accel,duraMin,duraAvg,iob,t3cAgg,basalScale"
+        val startTs = 1_700_000_000_000L
+        val stepMs = 5L * 60_000
         val lines = buildList {
             add(header)
             repeat(rowCount) { i ->
-                val bg = 140.0 + (i % 10)
-                add("$bg,${bg - 5},1.0,100,0.1,30,45,0.5,1.0,1.0")
+                val ts = startTs + i * stepMs
+                add("$ts,145.0,39.0,1.0,100,0.1,30,45,0.5,1.0,1.0")
             }
         }
         file.writeText(lines.joinToString("\n"))

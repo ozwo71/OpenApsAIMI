@@ -7511,6 +7511,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog.add("🌿 HARMONIA_HARMONIZER: ${outcome.toJsonSummary()} ${outcome.reasons.joinToString(",")}")
         }
 
+        // 🩸 Anti-whiplash : borne la HAUSSE de basale par tick (la baisse reste instantanée pour LGS). Exempté :
+        // boost forcé/override, modes repas et sport, qui doivent réagir vite. Voir [slewLimitBasalUp].
+        val mealModeActiveForSlew = mealTime || bfastTime || lunchTime || dinnerTime || snackTime || highCarbTime
+        if (preferences.get(BooleanKey.OApsAIMIBasalSlewLimitEnabled) &&
+            !finalOverrideSafetyLimits && !mealModeActiveForSlew && !sportTime
+        ) {
+            val prevRateUph = b.ctx.currentTemp.rate
+            val slewed = slewLimitBasalUp(prevRateUph, finalProposedRate, b.profile.current_basal)
+            if (slewed < finalProposedRate) {
+                consoleLog.add(
+                    "🩸 BASAL_SLEW_LIMIT: %.2f→%.2f U/h (prev %.2f)".format(Locale.US, finalProposedRate, slewed, prevRateUph)
+                )
+                b.rT.reason.append("; 🩸SLEW")
+                finalProposedRate = slewed
+            }
+        }
+
         val finalResult = setTempBasal(
             _rate = finalProposedRate,
             duration = finalDuration,
@@ -8510,6 +8527,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             cobG = effectiveCob,
             profile = profile,
             delta = delta.toDouble(),
+            endogenousReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
         )
         lastAdvancedPredictionCurves = curves
         val mealContext = buildMealSafetyContext(isExplicitAdvisorRun, iobData)
@@ -9114,6 +9132,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         private const val GLUCOSE_ACT_SOFT_SMB_FACTOR = 0.6       // réduction douce de la SMB (inférence activité)
         private const val GLUCOSE_ACT_SOFT_MEAL_COB_G = 12.0      // COB au-delà = contexte repas → pas d'adoucissement SMB
         private const val GLUCOSE_ACT_SOFT_MAX_DELTA_MGDL = 5.0   // delta au-delà = vraie montée → pas d'adoucissement SMB
+
+        // 🩸 Limiteur de pente MONTANTE de la basale (anti-whiplash). Voir [slewLimitBasalUp].
+        private const val BASAL_SLEW_UP_ABS_MIN_UPH = 1.5    // hausse mini autorisée par tick (permet de repartir de 0)
+        private const val BASAL_SLEW_UP_REL_FACTOR = 1.0     // +100 % du taux courant par tick
+        private const val BASAL_SLEW_UP_PROFILE_MULT = 2.0   // +2× la basale profil par tick
         /**
          * Verrou one-shot par tag prébolus (LUNCH_P1, LUNCH_P2, …). Statique = survit aux ticks (comme
          * [lastSmbTimestampMem]), car l'instance determine_basal peut être recréée à chaque cycle.
@@ -9140,6 +9163,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (firedAtMs == null) return false
             val activationWindowMs = runtimeMin.coerceAtLeast(0) * 60_000L + 90_000L
             return (nowMs - firedAtMs) < activationWindowMs
+        }
+
+        /**
+         * Limiteur de pente MONTANTE de la basale (anti-whiplash, testable). La cascade de règles produisait des
+         * à-coups (0→7 U/h en un tick puis coupure) — le ressenti « corrige trop ». On borne la HAUSSE par tick à
+         * `max(min absolu, %du taux courant, ×basale profil)` ; la BAISSE reste instantanée (sécurité LGS : jamais
+         * limitée). Une vraie correction rampe alors sur ~2-3 ticks au lieu de piquer d'un coup.
+         * @return le taux (U/h) borné à la hausse.
+         */
+        internal fun slewLimitBasalUp(prevRateUph: Double, proposedRateUph: Double, profileBasalUph: Double): Double {
+            if (!proposedRateUph.isFinite()) return proposedRateUph
+            if (proposedRateUph <= prevRateUph) return proposedRateUph              // descente → instantanée
+            if (!prevRateUph.isFinite() || prevRateUph < 0.0) return proposedRateUph
+            val maxIncrease = maxOf(
+                BASAL_SLEW_UP_ABS_MIN_UPH,
+                prevRateUph * BASAL_SLEW_UP_REL_FACTOR,
+                profileBasalUph.coerceAtLeast(0.0) * BASAL_SLEW_UP_PROFILE_MULT,
+            )
+            return minOf(proposedRateUph, prevRateUph + maxIncrease)
         }
 
         /**
@@ -13033,6 +13075,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 profile = profile,
                 delta = delta,
                 modulation = predictionModulation,
+                endogenousReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
             )
         } catch (e: Exception) {
             consoleLog.add("Error in AdvancedPredictionEngine: ${e.message}")
@@ -14222,6 +14265,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val curves = AdvancedPredictionEngine.predictCurves(
                 currentBG = bg, iobArray = iob_data_array, finalSensitivity = sens,
                 cobG = effectiveCOB, profile = profile, delta = delta.toDouble(),
+                endogenousReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
             )
             fun sanitizeCurve(points: List<Double>): List<Int> =
                 points.mapNotNull {

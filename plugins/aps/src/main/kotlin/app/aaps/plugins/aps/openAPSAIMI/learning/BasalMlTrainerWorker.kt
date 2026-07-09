@@ -20,14 +20,14 @@ class BasalMlTrainerWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
     aapsLogger: AAPSLogger,
     fabricPrivacy: FabricPrivacy,
+    // Injected (not @Assisted): forces Dagger to instantiate the @Singleton coordinator, so training
+    // actually runs. The previous static-`instance` lookup was never populated (nobody injected the
+    // coordinator) → the worker retried forever and no model was ever trained.
+    private val coordinator: BasalMlTrainingCoordinator,
 ) : LoggingWorker(appContext, workerParams, Dispatchers.IO, aapsLogger, fabricPrivacy) {
 
     override suspend fun doWorkAndLog(): Result {
-        if (BasalMlTrainingCoordinator.instance == null) {
-            aapsLogger.warn(LTag.APS, "BasalMlTrainerWorker: coordinator not initialized — retry")
-            return Result.retry()
-        }
         aapsLogger.debug(LTag.APS, "BasalMlTrainerWorker: starting coordinated training")
-        return runBasalMlTrainingJob()
+        return runBasalMlTrainingJob(coordinator)
     }
 }

@@ -427,6 +427,8 @@ enum class BooleanKey(
     ),
     OApsAIMIContextEnabled("key_aimi_context_enabled", false),  // 🎯 Context Module
     OApsAIMIBiometricActivityLockout("key_aimi_biometric_activity_lockout", true),  // 🏃 Biometric ACTIVE (steps/HR) arms exercise lockout
+    OApsAIMIBasalSlewLimitEnabled("key_aimi_basal_slew_limit", true),  // 🩸 Anti-whiplash: limit upward basal rate-of-change per tick
+    OApsAIMIPkpdEndogenousReversion("key_aimi_pkpd_endo_reversion", true),  // 🩸 pkpd hybrid/eventual: EGP reversion off the absorbing 39 floor
     OApsAIMIContextLLMEnabled("key_aimi_context_llm_enabled", false),  // 🤖 LLM-powered context parsing
     OApsAIMIT3cBrittleMode("key_aimi_t3c_brittle_mode", false),
     /** Cystic fibrosis-related diabetes (CFRD) adaptations in T3C mode:

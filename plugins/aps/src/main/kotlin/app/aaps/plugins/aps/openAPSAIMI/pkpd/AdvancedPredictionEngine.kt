@@ -15,6 +15,15 @@ object AdvancedPredictionEngine {
     private const val CARB_ABSORPTION_MINUTES = 180.0
     private const val STEP_MINUTES = 5
 
+    // 🩸 Réversion endogène anti-absorbante (hybrid/eventual UNIQUEMENT — n'affecte pas IOB/COB/UAM/ZT, donc
+    // pas minPredictedAcrossCurves ni la protection hypo). Sans terme de production endogène (EGP), la courbe
+    // hybride décline sur 4 h jusqu'au plancher 39 et y reste (plancher absorbant) → eventual = 39 sur ~24 %
+    // des ticks alors que le BG réel ne touche jamais l'hypo. Quand l'insuline est épuisée et la courbe sous la
+    // baseline, on laisse la contre-régulation ramener l'eventual vers un bas-normal (≈80), pas la remonter haut.
+    private const val ENDO_REVERSION_BASELINE_MGDL = 80.0
+    private const val ENDO_REVERSION_RATE = 0.06            // fraction du gap comblée par pas de 5 min (lent)
+    private const val ENDO_INSULIN_NEGLIGIBLE_MGDL = 0.3    // |impact insuline/pas| en dessous = insuline épuisée
+
     /**
      * Predict the BG evolution using the final ISF/sensitivity applied by the decision engine.
      * Returns the **hybrid** curve (legacy single-path behaviour).
@@ -56,6 +65,7 @@ object AdvancedPredictionEngine {
         delta: Double = 0.0,
         horizonMinutes: Int = 240,
         modulation: PredictionPhysioModulation = PredictionPhysioModulation(),
+        endogenousReversionEnabled: Boolean = false,
     ): AdvancedPredictionCurves {
         val effectiveHorizonMinutes = maxOf(Constants.PREDICTION_GRAPH_MIN_MINUTES, horizonMinutes)
         val iobSeries = mutableListOf(currentBG)
@@ -130,6 +140,15 @@ object AdvancedPredictionEngine {
             lastZt = lastIob
             lastHybrid = (lastHybrid - insulinImpact * iobDampingFactor + carbImpact + hybridMomentum)
                 .coerceIn(NUMERIC_FLOOR, NUMERIC_CEILING)
+            // 🩸 Réversion endogène (EGP) : insuline épuisée + sous baseline → dérive lente vers le bas-normal,
+            // pour que l'eventual ne reste pas collé au plancher absorbant 39. Hybrid seul (voir consts).
+            if (endogenousReversionEnabled &&
+                abs(insulinImpact) < ENDO_INSULIN_NEGLIGIBLE_MGDL &&
+                lastHybrid < ENDO_REVERSION_BASELINE_MGDL
+            ) {
+                lastHybrid = (lastHybrid + (ENDO_REVERSION_BASELINE_MGDL - lastHybrid) * ENDO_REVERSION_RATE)
+                    .coerceAtMost(ENDO_REVERSION_BASELINE_MGDL)
+            }
             hybridMomentum *= momentumDecay
 
             iobSeries.add(lastIob)

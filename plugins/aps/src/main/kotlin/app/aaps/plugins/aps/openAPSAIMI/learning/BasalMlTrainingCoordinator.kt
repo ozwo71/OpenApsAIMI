@@ -308,13 +308,33 @@ internal data class BasalMlDataset(
 
 internal object BasalMlDatasetParser {
 
+    // 🩸 Alignement temporel du label. La cible d'apprentissage doit être le résultat RÉELLEMENT observé, donc
+    // le BG mesuré ~30 min après le tick (colonne `bg` d'une ligne future), et NON la colonne `eventualBg` —
+    // qui est une prédiction pkpd plancherée à 39 mg/dL (≈24 % des lignes) et produisait des labels fictifs
+    // « crash à 39 » sur des BG réels normaux. On joint donc chaque ligne à son futur par timestamp.
+    private const val LABEL_HORIZON_MS = 30L * 60_000        // cible : BG réalisé à +30 min
+    private const val LABEL_HORIZON_MIN_MS = 20L * 60_000    // borne basse de la fenêtre d'acceptation
+    private const val LABEL_HORIZON_MAX_MS = 45L * 60_000    // borne haute (au-delà = trop décorrélé)
+    private const val MIN_VALID_BG = 40.0                    // en dessous = plancher/glitch capteur → ligne écartée
+    private const val MAX_VALID_BG = 400.0
+    private const val MAX_PLAUSIBLE_DELTA_MGDL = 150.0       // |bg − bgFutur| au-delà = glitch → écarté
+
+    private class RawRow(
+        val ts: Long,
+        val bg: Double,
+        val target: Double,
+        val currentScale: Double,
+        val currentAgg: Double,
+        val features: FloatArray,
+    )
+
     fun parse(csvFile: File): BasalMlDataset? {
         val allLines = csvFile.readLines()
         if (allLines.size < 2) return null
 
         val header = allLines.first().split(",")
+        val iTs = header.indexOf("timestamp")
         val iBg = header.indexOf("bg")
-        val iEventual = header.indexOf("eventualBg")
         val iBasal = header.indexOf("basal")
         val iTarget = header.indexOf("target")
         val iAccel = header.indexOf("accel")
@@ -324,48 +344,90 @@ internal object BasalMlDatasetParser {
         val iBasalScale = header.indexOf("basalScale")
         val iT3cAgg = header.indexOf("t3cAgg")
 
-        val required = listOf(iBg, iEventual, iBasal, iTarget, iAccel, iDuraMin, iDuraAvg, iIob, iBasalScale, iT3cAgg)
+        val required = listOf(iTs, iBg, iBasal, iTarget, iAccel, iDuraMin, iDuraAvg, iIob, iBasalScale, iT3cAgg)
         if (required.any { it < 0 }) return null
+
+        // 1) Parse + filtre de validité (BG plausible), puis tri chronologique pour la jointure du label.
+        val raw = ArrayList<RawRow>(allLines.size)
+        for (line in allLines.drop(1)) {
+            val cols = line.split(",")
+            if (cols.size < header.size) continue
+            val ts = cols[iTs].toLongOrNull() ?: continue
+            val bg = cols[iBg].toDoubleOrNull() ?: continue
+            if (!bg.isFinite() || bg < MIN_VALID_BG || bg > MAX_VALID_BG) continue
+            val basal = cols[iBasal].toFloatOrNull() ?: continue
+            val accel = cols[iAccel].toFloatOrNull() ?: continue
+            val duraMin = cols[iDuraMin].toFloatOrNull() ?: continue
+            val duraAvg = cols[iDuraAvg].toFloatOrNull() ?: continue
+            val iob = cols[iIob].toFloatOrNull() ?: continue
+            val target = cols[iTarget].toDoubleOrNull() ?: continue
+            val currentScale = cols[iBasalScale].toDoubleOrNull() ?: continue
+            val currentAgg = cols[iT3cAgg].toDoubleOrNull() ?: continue
+            raw.add(
+                RawRow(
+                    ts = ts,
+                    bg = bg,
+                    target = target,
+                    currentScale = currentScale,
+                    currentAgg = currentAgg,
+                    features = floatArrayOf(bg.toFloat(), basal, accel, duraMin, duraAvg, iob),
+                )
+            )
+        }
+        if (raw.size < 2) return null
+        raw.sortBy { it.ts }
 
         val inputs = mutableListOf<FloatArray>()
         val basalTargets = mutableListOf<DoubleArray>()
         val t3cTargets = mutableListOf<DoubleArray>()
 
-        for (line in allLines.drop(1)) {
-            val cols = line.split(",")
-            if (cols.size < header.size) continue
-
-            val inputFeatures = floatArrayOf(
-                cols[iBg].toFloat(),
-                cols[iBasal].toFloat(),
-                cols[iAccel].toFloat(),
-                cols[iDuraMin].toFloat(),
-                cols[iDuraAvg].toFloat(),
-                cols[iIob].toFloat(),
-            )
-
-            val bgBefore = cols[iBg].toDouble()
-            val bgAfter = cols[iEventual].toDouble()
-            val targetBg = cols[iTarget].toDouble()
-            val currentScale = cols[iBasalScale].toDouble()
-            val currentAgg = cols[iT3cAgg].toDouble()
-
-            val actualDelta = bgBefore - bgAfter
-            val neededDelta = bgBefore - targetBg
+        // 2) Cible = BG réalisé (vérité terrain) au lieu de la prédiction. Les lignes sans futur observable
+        //    (fin de log / trou de données) sont écartées — on ne fabrique pas de label.
+        for (i in raw.indices) {
+            val r = raw[i]
+            val realizedBg = realizedFutureBg(raw, i) ?: continue
+            val actualDelta = r.bg - realizedBg
+            if (abs(actualDelta) > MAX_PLAUSIBLE_DELTA_MGDL) continue
+            val neededDelta = r.bg - r.target
 
             val rawBasalWeight = if (abs(neededDelta) < 3.0) 1.0 else (neededDelta / actualDelta.coerceAtLeast(1.0))
             val adjustedBasalWeight = 1.0 + (rawBasalWeight - 1.0) * 0.5
-            val idealScale = (currentScale * adjustedBasalWeight).coerceIn(0.7, 1.5)
+            val idealScale = (r.currentScale * adjustedBasalWeight).coerceIn(0.7, 1.5)
 
             val t3cWeight = if (abs(neededDelta) < 5.0) 1.0 else (neededDelta / actualDelta.coerceAtLeast(1.0))
-            val idealAgg = (currentAgg * t3cWeight).coerceIn(0.5, 2.0)
+            val idealAgg = (r.currentAgg * t3cWeight).coerceIn(0.5, 2.0)
 
-            inputs.add(inputFeatures)
+            inputs.add(r.features)
             basalTargets.add(doubleArrayOf(idealScale))
             t3cTargets.add(doubleArrayOf(idealAgg))
         }
 
         if (inputs.isEmpty()) return null
         return BasalMlDataset(inputs, basalTargets, t3cTargets)
+    }
+
+    /**
+     * BG réellement mesuré ~[LABEL_HORIZON_MS] après la ligne [i] : ligne future dont le timestamp est le plus
+     * proche de la cible, dans la fenêtre [[LABEL_HORIZON_MIN_MS], [LABEL_HORIZON_MAX_MS]]. `null` si aucune
+     * (fin du log ou trou de données) → la ligne ne peut pas être labellisée. [rows] doit être trié par ts.
+     */
+    private fun realizedFutureBg(rows: List<RawRow>, i: Int): Double? {
+        val base = rows[i].ts
+        val targetTs = base + LABEL_HORIZON_MS
+        val minTs = base + LABEL_HORIZON_MIN_MS
+        val maxTs = base + LABEL_HORIZON_MAX_MS
+        var best: Double? = null
+        var bestDiff = Long.MAX_VALUE
+        for (j in i + 1 until rows.size) {
+            val ts = rows[j].ts
+            if (ts < minTs) continue
+            if (ts > maxTs) break
+            val diff = abs(ts - targetTs)
+            if (diff < bestDiff) {
+                bestDiff = diff
+                best = rows[j].bg
+            }
+        }
+        return best
     }
 }
