@@ -1683,6 +1683,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             titleResId = R.string.oaps_aimi_adaptive_basal_title,
             items = buildList {
                 add(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)
+                add(BooleanKey.OApsAIMIBasalSlewLimitEnabled)
                 add(DoubleKey.OApsAIMIAdaptiveBasalMaxScaling)
                 add(DoubleKey.OApsAIMIGovernanceHypoRateEnter)
                 add(DoubleKey.OApsAIMIGovernanceHypoRateExit)
@@ -1709,6 +1710,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             titleResId = R.string.aimi_t3c_settings_title,
             items = listOf(
                 BooleanKey.OApsAIMIT3cBrittleMode,
+                BooleanKey.OApsAIMIBiometricActivityLockout,
                 DoubleKey.OApsAIMIT3cActivationThreshold,
                 DoubleKey.OApsAIMIT3cAggressiveness,
                 DoubleKey.OApsAIMIT3cAnticipationStrength,
@@ -1958,6 +1960,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             items = buildList {
                 add(aimiComposePkpdSetupItem())
                 add(BooleanKey.OApsAIMIPkpdEnabled)
+                add(BooleanKey.OApsAIMIPkpdEndogenousReversion)
                 add(BooleanKey.OApsAIMIPeakGovernorEnabled)
                 add(DoubleKey.OApsAIMIPeakGovernorLearnedWeight)
                 add(DoubleKey.OApsAIMIPkpdInitialDiaH)

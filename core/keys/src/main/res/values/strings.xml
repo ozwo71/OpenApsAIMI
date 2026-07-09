@@ -625,5 +625,11 @@
     <string name="eversense_use_smoothing">Use ESEL smoothing</string>
     <string name="eversense_cloud_upload_enabled">Enable Eversense cloud upload</string>
     <string name="eversense_cloud_upload_toast">Show cloud upload result</string>
+    <string name="pref_title_aimi_basal_slew_limit">Basal anti-whiplash (slew limit)</string>
+    <string name="pref_summary_aimi_basal_slew_limit">Limit how fast the basal rate can rise each cycle to smooth out over-corrections. Basal cuts stay instant for hypo safety; meal and forced-boost paths are exempt.</string>
+    <string name="pref_title_aimi_biometric_activity_lockout">Biometric activity → exercise lockout</string>
+    <string name="pref_summary_aimi_biometric_activity_lockout">When steps and heart rate detect activity, arm the exercise lockout (SMB off, basal reduced) even without a declared sport event.</string>
+    <string name="pref_title_aimi_pkpd_endo_reversion">Prediction: endogenous reversion</string>
+    <string name="pref_summary_aimi_pkpd_endo_reversion">Stop the pkpd eventual prediction from sticking at the 39 mg/dL floor once insulin is spent, letting counter-regulation drift it back toward a low-normal. Affects the eventual only; the hypo-protection floor is unchanged.</string>
 </resources>
 
