@@ -426,6 +426,7 @@ enum class BooleanKey(
         summaryResId = R.string.pref_summary_aimi_straight_line_tube,
     ),
     OApsAIMIContextEnabled("key_aimi_context_enabled", false),  // 🎯 Context Module
+    OApsAIMIBiometricActivityLockout("key_aimi_biometric_activity_lockout", true),  // 🏃 Biometric ACTIVE (steps/HR) arms exercise lockout
     OApsAIMIContextLLMEnabled("key_aimi_context_llm_enabled", false),  // 🤖 LLM-powered context parsing
     OApsAIMIT3cBrittleMode("key_aimi_t3c_brittle_mode", false),
     /** Cystic fibrosis-related diabetes (CFRD) adaptations in T3C mode:

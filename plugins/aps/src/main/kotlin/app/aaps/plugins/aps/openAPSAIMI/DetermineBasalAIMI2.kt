@@ -1442,6 +1442,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         exerciseInsulinLockoutActive = false
         exerciseHyperBasalOverrideActive = false
         aimiContextActivityActive = false
+        biometricActivityActive = false
+        recentLowBasalBrakeActive = false
+        glucoseInferredActivityActive = false
         pkpdAbsorptionGuardAppliedThisTick = false
         criticalSafetyZeroedThisTick = false
         cachedRiskEnvelopeEarly = null
@@ -2257,7 +2260,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val nightbis = hourOfDay <= 7
 
         refreshAimiContextActivityFlag()
-        exerciseInsulinLockoutActive = sportTime || aimiContextActivityActive
+        exerciseInsulinLockoutActive = sportTime || aimiContextActivityActive || biometricActivityActive
         refreshExerciseHyperBasalOverride(profile)
         if (exerciseInsulinLockoutActive) {
             this.maxSMB = 0.0
@@ -2268,7 +2271,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 "basale autorisée seulement si BG>${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()} (T3c PI ou flux standard)"
             }
             consoleLog.add(
-                "🏃 EXERCISE_LOCKOUT[therapy]: SMB off (sportTime=$sportTime aimiActivity=$aimiContextActivityActive) | $basalHint"
+                "🏃 EXERCISE_LOCKOUT: SMB off (sportTime=$sportTime aimiActivity=$aimiContextActivityActive biometric=$biometricActivityActive) | $basalHint"
             )
         }
 
@@ -3056,6 +3059,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val patientModeDecision = PatientModeOrchestrator.evaluate(patientState)
         lastPatientModeDecision = patientModeDecision
         val physioLive = PhysioLiveDigest.from(enrichedSnap, nowMs)
+        updateGlucoseInferredActivity(physioLive, nowMs)
         val physiologicalTree = PhysiologicalTreeBuilder.build(
             enabled = preferences.get(BooleanKey.AimiPhysioAssistantEnable),
             patientState = patientState,
@@ -8968,8 +8972,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var sportTime = false
     /** Intent contexte AIMI : activité déclarée (snapshot.hasActivity). */
     private var aimiContextActivityActive = false
+    private var biometricActivityActive = false  // 🏃 activité détectée par la biométrie (pas/FC) → arme le lockout exercice
     /** Sport thérapie OU activité AIMI : SMB off ; basale off si BG ≤ [EXERCISE_BASAL_RESUME_BG_MGDL], sauf T3c/standard si BG > seuil. */
     private var exerciseInsulinLockoutActive = false
+
+    // 🩸 Repli activité vérité-glucose (biométrie muette) — recalculés chaque tick par [updateGlucoseInferredActivity].
+    private var recentLowBasalBrakeActive = false      // frein basale ≤ profil (creux récent)
+    private var glucoseInferredActivityActive = false  // inférence activité douce (réduit aussi la SMB)
     /** Hyper en montée pendant lockout exercice : basale non réduite (thyroïde / stress activité). SMB reste off par défaut. */
     private var exerciseHyperBasalOverrideActive = false
     /** Combined Δ G6-adjusted for the current tick (set in [runTickClockMaxSmbTirCarbAndGlucoseCopy]). */
@@ -9081,6 +9090,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     companion object {
         private var lastSmbTimestampMem: Long = 0L
+        /**
+         * Dernier instant (ms) où le BG a été vu sous [GLUCOSE_ACT_LOW_MGDL]. Statique = survit aux ticks
+         * (comme [lastSmbTimestampMem]). Alimente le repli activité vérité-glucose quand la biométrie est muette.
+         * Non persisté : un redémarrage process en plein cooldown relâche le frein un peu tôt (risque mineur).
+         */
+        private var lastLowBgSeenMem: Long = 0L
 
         // 🩹 Réconciliation clamp-pkpd ↔ scénario au gate SMB (voir [reconcileSmbEventualWithScenario]).
         // Seuils validés sur données terrain (docs/AIMI_PREDICTION_DIVERGENCE.md) : faux planchers → min BG ≥ 70, 0 hypo.
@@ -9092,6 +9107,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         private const val SAFETYNET_ZONE1_OFFSET_MGDL = 20.0
         private const val SAFETYNET_ZONE2_FLOOR_MGDL = 160.0
         private const val SAFETYNET_ZONE2_OFFSET_MGDL = 70.0
+
+        // 🩸 Repli activité vérité-glucose (biométrie muette). Voir [updateGlucoseInferredActivity].
+        private const val GLUCOSE_ACT_LOW_MGDL = 80.0             // BG sous ce seuil = "creux récent"
+        private const val GLUCOSE_ACT_COOLDOWN_MIN = 40L          // durée du repli après le dernier creux
+        private const val GLUCOSE_ACT_SOFT_SMB_FACTOR = 0.6       // réduction douce de la SMB (inférence activité)
+        private const val GLUCOSE_ACT_SOFT_MEAL_COB_G = 12.0      // COB au-delà = contexte repas → pas d'adoucissement SMB
+        private const val GLUCOSE_ACT_SOFT_MAX_DELTA_MGDL = 5.0   // delta au-delà = vraie montée → pas d'adoucissement SMB
         /**
          * Verrou one-shot par tag prébolus (LUNCH_P1, LUNCH_P2, …). Statique = survit aux ticks (comme
          * [lastSmbTimestampMem]), car l'instance determine_basal peut être recréée à chaque cycle.
@@ -9121,12 +9143,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         /**
-         * Délai minimal (ms) après un tir prébolus avant de pouvoir conclure « non délivré » :
-         * un tick de boucle complet + marge. Couvre le retard du cache asynchrone [latestSmbCached]
-         * (voir commentaire dans [runTickClockMaxSmbTirCarbAndGlucoseCopy]) — conclure plus tôt
-         * produirait des faux négatifs (bolus délivré mais pas encore visible en cache).
+         * Délai minimal (ms) après un tir prébolus avant de pouvoir conclure « non délivré ».
+         * Doit rester inférieur à [LEGACY_PREBOLUS_DELIVERY_TTL_MS] (30 min) pour laisser au
+         * carry-forward le temps de retenter (cooldown 6 min) avant d'alerter l'utilisateur —
+         * un délai trop court (ex. 6,5 min) déclenchait l'alerte Option A pendant que le carry
+         * retentait encore, souvent avec succès quelques minutes plus tard.
          */
-        internal const val LEGACY_PREBOLUS_CONFIRM_DELAY_MS = 390_000L // 6,5 min
+        internal const val LEGACY_PREBOLUS_CONFIRM_DELAY_MS = 1_500_000L // 25 min
 
         /**
          * Détection pure « prébolus demandé mais jamais confirmé par la pompe » (Option A — information
@@ -9889,6 +9912,36 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             cob = cobValue,
         )
 
+    /**
+     * Repli activité vérité-glucose : quand la biométrie est muette (pas de pas / FC), aucune voie de détection
+     * d'exercice ne s'arme (activity_state IDLE, exercise_afterburn ≈ 0, lockout non déclaré). On infère l'état
+     * sensible depuis la VÉRITÉ GLUCOSE — un creux récent sous [GLUCOSE_ACT_LOW_MGDL] — pour (a) freiner
+     * l'amplification de basale à ≤ profil ([recentLowBasalBrakeActive]) et (b) adoucir la SMB hors contexte
+     * repas ([glucoseInferredActivityActive]). Purement défensif : n'ôte de l'insuline qu'après un vrai creux,
+     * se relâche seul après [GLUCOSE_ACT_COOLDOWN_MIN] min, jamais de hausse.
+     */
+    private fun updateGlucoseInferredActivity(physioLive: PhysioLiveDigest, nowMs: Long) {
+        if (bg >= 1.0 && bg < GLUCOSE_ACT_LOW_MGDL) lastLowBgSeenMem = nowMs
+        val sinceLowMs = if (lastLowBgSeenMem > 0L) nowMs - lastLowBgSeenMem else Long.MAX_VALUE
+        val recentLow = sinceLowMs in 0..(GLUCOSE_ACT_COOLDOWN_MIN * 60_000L)
+        // Frein basale : creux récent, et pas déjà couvert par un lockout d'exercice déclaré/biométrique.
+        recentLowBasalBrakeActive = recentLow && !exerciseInsulinLockoutActive
+        // Inférence activité douce : biométrie muette + hors repas + pas en vraie montée.
+        val biometricsSilent = physioLive.stepsLast15m == 0 && physioLive.hrNowBpm == 0
+        val notMeal = cob.toDouble() < GLUCOSE_ACT_SOFT_MEAL_COB_G &&
+            !(mealTime || lunchTime || dinnerTime || snackTime || highCarbTime || bfastTime)
+        val notRisingFast = delta.toDouble() < GLUCOSE_ACT_SOFT_MAX_DELTA_MGDL
+        glucoseInferredActivityActive = recentLowBasalBrakeActive && biometricsSilent && notMeal && notRisingFast
+        if (recentLowBasalBrakeActive) {
+            consoleLog.add(
+                "🩸 GLUCOSE_ACTIVITY: brakeBasal≤profile=on softSMB=%s (creux il y a %d min, bg=%d cob=%.0f delta=%.1f steps=%d hr=%d)".format(
+                    Locale.US, glucoseInferredActivityActive, sinceLowMs / 60_000L, bg.toInt(), cob.toDouble(),
+                    delta.toDouble(), physioLive.stepsLast15m, physioLive.hrNowBpm
+                )
+            )
+        }
+    }
+
     private fun capBasalRateForCorrectionAggression(
         requestedRateUph: Double,
         profileBasalUph: Double,
@@ -9926,6 +9979,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 )
                 finalRateUph = activityCapUph
             }
+        }
+        // 🩸 Frein basale vérité-glucose (biométrie muette) : un creux récent contredit l'hypothèse de résistance
+        // → on plafonne la basale à la basale profil (≤ 1×), même sans lockout d'exercice déclaré. Plafond seul,
+        // jamais de hausse, jamais sur une commande 0/suspend. Voir [updateGlucoseInferredActivity].
+        if (recentLowBasalBrakeActive && profileBasalUph > 0.0 && finalRateUph > profileBasalUph) {
+            consoleLog.add(
+                "🩸 GLUCOSE_ACTIVITY_BASAL_CAP[$source]: %.2f→%.2f U/h (≤ profile)".format(
+                    Locale.US, finalRateUph, profileBasalUph
+                )
+            )
+            finalRateUph = profileBasalUph
         }
         return finalRateUph
     }
@@ -10960,14 +11024,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             cachedRiskEnvelopeDecision?.eventualTerminalMgdl?.takeIf { it.isFinite() } ?: this.eventualBG
         // 🩹 Relâche le clamp zone-2 uniquement sur faux plancher pkpd confirmé par le scénario borné.
         val decisionEventualBgForSmb = reconcileSmbEventualWithScenario(pkpdEventualForSmb, targetBg.toDouble())
+        // 🩸 Inférence activité douce (biométrie muette, hors repas) : réduit le plafond SMB pendant le cooldown.
+        val activitySmbFactor = if (glucoseInferredActivityActive) {
+            consoleLog.add("🩸 GLUCOSE_ACTIVITY_SMB: maxSMB ×%.2f (inférence activité douce)".format(Locale.US, GLUCOSE_ACT_SOFT_SMB_FACTOR))
+            GLUCOSE_ACT_SOFT_SMB_FACTOR
+        } else 1.0
         val baseLimit = app.aaps.plugins.aps.openAPSAIMI.safety.SafetyNet.calculateSafeSmbLimit(
             bg = this.bg,
             targetBg = targetBg.toDouble(),
             eventualBg = decisionEventualBgForSmb,
             delta = this.delta.toDouble(),
             shortAvgDelta = this.shortAvgDelta.toDouble(),
-            maxSmbLow = this.maxSMB,
-            maxSmbHigh = this.maxSMBHB,
+            maxSmbLow = this.maxSMB * activitySmbFactor,
+            maxSmbHigh = this.maxSMBHB * activitySmbFactor,
             isExplicitUserAction = isExplicitUserAction,
             auditorConfidence = auditorLastConfidence,
             mealPriorityContext = smbDeliveryPriorityContext
@@ -13915,6 +13984,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun refreshAimiContextActivityFlag(nowMs: Long = System.currentTimeMillis()) {
         aimiContextActivityActive = false
+        // 🏃 Biométrie : une activité détectée par les pas/FC (activityState == ACTIVE) arme le lockout exercice,
+        // même sans déclaration ni contexte AIMI. Kill-switch : [BooleanKey.OApsAIMIBiometricActivityLockout].
+        biometricActivityActive = if (preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIBiometricActivityLockout)) {
+            try { physioAdapter.getLatestSnapshot().activityState == "ACTIVE" } catch (_: Exception) { false }
+        } else false
         if (!preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIContextEnabled)) return
         try {
             val snap = contextManager.getSnapshot(nowMs)
