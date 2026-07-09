@@ -9053,8 +9053,45 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     // 🛡️ PERSISTENT PREBOLUS LOCKOUT (MTR Safety Patch)
     // Survives instance re-creations and app restarts by combining Memory + SharedPreferences.
+    /**
+     * Réconciliation gatée du plancher pkpd au gate SMB. Le clamp zone-2 de [app.aaps.plugins.aps.openAPSAIMI.safety.SafetyNet]
+     * rabat la limite SMB dès que l'eventual pkpd repasse sous zone-1, ce qui fige la délivrance même quand le
+     * scénario borné projette une trajectoire sûre. On relâche l'eventual (vers le terminal scénario, borné à la
+     * rampe zone-2) UNIQUEMENT si toutes les conditions de sûreté sont réunies ; sinon on rend l'eventual pkpd inchangé.
+     * Seuils validés sur données terrain : sur les faux planchers ainsi relâchés, min BG réalisé ≥ 70, 0 hypo.
+     * @return l'eventual (mg/dL) à passer au gate SMB.
+     */
+    private fun reconcileSmbEventualWithScenario(pkpdEventualMgdl: Double, targetBgMgdl: Double): Double {
+        val scenarioBest = lastScenarioProjection?.scenarioBest ?: return pkpdEventualMgdl
+        val zone1Upper = maxOf(SAFETYNET_ZONE1_FLOOR_MGDL, targetBgMgdl + SAFETYNET_ZONE1_OFFSET_MGDL)
+        val zone2Upper = maxOf(SAFETYNET_ZONE2_FLOOR_MGDL, targetBgMgdl + SAFETYNET_ZONE2_OFFSET_MGDL)
+        val pkpdWouldClamp = bg >= zone1Upper && bg < zone2Upper && pkpdEventualMgdl < zone1Upper
+        val scenarioSafe = scenarioBest.pathMinMgdl >= CLAMP_RECONCILE_SCN_PATHMIN_MGDL && !scenarioBest.pathMinHitFloor
+        val divergenceReal = scenarioBest.terminalMgdl - pkpdEventualMgdl >= CLAMP_RECONCILE_MIN_DIVERGENCE_MGDL
+        val notFalling = delta.toDouble() > CLAMP_RECONCILE_MAX_NEG_DELTA_MGDL
+        val notProtected = !sportTime && !lastPostHypoDeliveryAuthority.active
+        if (!(pkpdWouldClamp && scenarioSafe && divergenceReal && notFalling && notProtected)) return pkpdEventualMgdl
+        val reconciled = minOf(scenarioBest.terminalMgdl, zone2Upper - 1.0)
+        consoleLog.add(
+            "🩹 CLAMP_RECONCILE pkpdEv=${pkpdEventualMgdl.toInt()}→${reconciled.toInt()} " +
+                "(scnMin=${scenarioBest.pathMinMgdl.toInt()} scnBest=${scenarioBest.terminalMgdl.toInt()} Δ=${(scenarioBest.terminalMgdl - pkpdEventualMgdl).toInt()})"
+        )
+        return reconciled
+    }
+
     companion object {
         private var lastSmbTimestampMem: Long = 0L
+
+        // 🩹 Réconciliation clamp-pkpd ↔ scénario au gate SMB (voir [reconcileSmbEventualWithScenario]).
+        // Seuils validés sur données terrain (docs/AIMI_PREDICTION_DIVERGENCE.md) : faux planchers → min BG ≥ 70, 0 hypo.
+        private const val CLAMP_RECONCILE_SCN_PATHMIN_MGDL = 80.0    // le scénario doit rester ≥ ce plancher sur toute la trajectoire
+        private const val CLAMP_RECONCILE_MIN_DIVERGENCE_MGDL = 25.0 // écart mini terminal-scénario − eventual-pkpd
+        private const val CLAMP_RECONCILE_MAX_NEG_DELTA_MGDL = -3.0  // pas de relâche si le BG chute (delta ≤ ce seuil)
+        // Miroir des seuils de zone de SafetyNet — garder alignés sur SafetyNet.ZONE*_FLOOR/OFFSET.
+        private const val SAFETYNET_ZONE1_FLOOR_MGDL = 115.0
+        private const val SAFETYNET_ZONE1_OFFSET_MGDL = 20.0
+        private const val SAFETYNET_ZONE2_FLOOR_MGDL = 160.0
+        private const val SAFETYNET_ZONE2_OFFSET_MGDL = 70.0
         /**
          * Verrou one-shot par tag prébolus (LUNCH_P1, LUNCH_P2, …). Statique = survit aux ticks (comme
          * [lastSmbTimestampMem]), car l'instance determine_basal peut être recréée à chaque cycle.
@@ -10919,8 +10956,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache.get(300_000)?.verdict?.confidence
         } catch (e: Exception) { null }
         
-        val decisionEventualBgForSmb =
+        val pkpdEventualForSmb =
             cachedRiskEnvelopeDecision?.eventualTerminalMgdl?.takeIf { it.isFinite() } ?: this.eventualBG
+        // 🩹 Relâche le clamp zone-2 uniquement sur faux plancher pkpd confirmé par le scénario borné.
+        val decisionEventualBgForSmb = reconcileSmbEventualWithScenario(pkpdEventualForSmb, targetBg.toDouble())
         val baseLimit = app.aaps.plugins.aps.openAPSAIMI.safety.SafetyNet.calculateSafeSmbLimit(
             bg = this.bg,
             targetBg = targetBg.toDouble(),
