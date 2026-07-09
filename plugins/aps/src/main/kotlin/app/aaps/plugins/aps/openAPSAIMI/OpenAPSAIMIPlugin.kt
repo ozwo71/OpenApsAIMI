@@ -129,6 +129,7 @@ import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
 import kotlinx.coroutines.withContext
 import app.aaps.plugins.aps.openAPSAIMI.learning.AimiMlTrainingScheduler
+import app.aaps.plugins.aps.openAPSAIMI.hormonitor.viewer.HormonitorViewerScreen
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiBackupManager
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.core.objects.extensions.put
@@ -1593,6 +1594,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         add(aimiComposeLabSubScreen())
     }
 
+    private fun aimiComposeHormonitorViewerItem(): PreferenceItem =
+        ApsIntentKey.HormonitorViewer.withCompose(
+            ComposeScreenContent { onBack ->
+                HormonitorViewerScreen(onBack = onBack)
+            }
+        )
+
     private fun aimiComposePkpdSetupItem(): PreferenceItem =
         ApsIntentKey.PkpdSetup.withCompose(
             ComposeScreenContent { onBack ->
@@ -1663,6 +1671,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             titleResId = R.string.aimi_lab_title,
             items = buildList {
                 add(BooleanKey.OApsAIMIMLtraining)
+                add(aimiComposeHormonitorViewerItem())
                 add(DoubleKey.OApsAIMIMaxSMB)
                 add(DoubleKey.OApsAIMIHighBGMaxSMB)
                 add(aimiComposePkpdSubScreen())
