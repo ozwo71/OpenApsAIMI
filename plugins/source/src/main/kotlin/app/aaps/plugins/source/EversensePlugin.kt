@@ -3,6 +3,7 @@
 import android.Manifest
 import android.content.Intent
 import android.content.Context
+import android.view.ContextThemeWrapper
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
@@ -197,13 +198,24 @@ class EversensePlugin @Inject constructor(
         }
     }
 
+    /**
+     * The injected [context] is the application context, which has no Activity theme. AppCompat dialogs
+     * require a Theme.AppCompat descendant, so wrap it before building a dialog from a non-Activity context
+     * (e.g. a Compose preference click handler) — otherwise `.show()` throws "You need to use a Theme.AppCompat".
+     */
+    private fun Context.appCompatDialogContext(): Context =
+        ContextThemeWrapper(this, androidx.appcompat.R.style.Theme_AppCompat_DayNight_Dialog_Alert)
+
     override fun getPreferenceScreenContent() = PreferenceSubScreenDef(
         key = "eversense_settings",
         titleResId = R.string.source_eversense,
         summaryResId = R.string.eversense_plugin_summary,
         items = listOf(
             EversenseIntentKey.EversenseAbout.withClick {
-                AlertDialog.Builder(context)
+                // The injected [context] is the application context (no Activity theme). An AppCompat
+                // AlertDialog needs a Theme.AppCompat descendant, so wrap it — otherwise showing the dialog
+                // from the Compose preference host crashes with "You need to use a Theme.AppCompat theme".
+                AlertDialog.Builder(context.appCompatDialogContext())
                     .setTitle(rh.gs(R.string.eversense_about_title))
                     .setMessage(rh.gs(R.string.eversense_about_detail))
                     .setPositiveButton(android.R.string.ok, null)
@@ -562,6 +574,7 @@ class EversensePlugin @Inject constructor(
     }
 
     private fun showDeviceSelectionDialog(context: Context) {
+        val dialogContext = context.appCompatDialogContext()
         val foundDevices = mutableListOf<EversenseScanResult>()
         var isCancelled = false
         var dialog: AlertDialog? = null
@@ -584,14 +597,14 @@ class EversensePlugin @Inject constructor(
             dialog?.dismiss()
 
             if (foundDevices.isEmpty()) {
-                AlertDialog.Builder(context)
+                AlertDialog.Builder(dialogContext)
                     .setTitle(rh.gs(R.string.eversense_scan_title))
                     .setMessage("No Eversense transmitters found. Make sure the transmitter is nearby and try again.")
                     .setPositiveButton("OK", null)
                     .show()
             } else {
                 val items = foundDevices.map { it.name }.toTypedArray()
-                AlertDialog.Builder(context)
+                AlertDialog.Builder(dialogContext)
                     .setTitle(rh.gs(R.string.eversense_scan_title))
                     .setItems(items) { _, position ->
                         val selected = foundDevices[position]
@@ -603,7 +616,7 @@ class EversensePlugin @Inject constructor(
             }
         }, 10000)
 
-        dialog = AlertDialog.Builder(context)
+        dialog = AlertDialog.Builder(dialogContext)
             .setTitle(rh.gs(R.string.eversense_scan_title))
             .setMessage("Scanning for Eversense devices (10 seconds)...")
             .setNegativeButton(rh.gs(R.string.eversense_scan_cancel)) { _, _ ->

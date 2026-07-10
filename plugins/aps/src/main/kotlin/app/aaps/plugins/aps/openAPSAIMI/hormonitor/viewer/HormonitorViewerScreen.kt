@@ -62,12 +62,11 @@ import kotlin.math.roundToInt
 fun HormonitorViewerScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val reader = remember {
-        HormonitorReader(
-            listOf(
-                File(Environment.getExternalStorageDirectory(), "Documents/AAPS"),
-                File(context.getExternalFilesDir(null), "AAPS"),
-            )
-        )
+        val dirs = buildList {
+            runCatching { Environment.getExternalStorageDirectory() }.getOrNull()?.let { add(File(it, "Documents/AAPS")) }
+            runCatching { context.getExternalFilesDir(null) }.getOrNull()?.let { add(File(it, "AAPS")) }
+        }
+        HormonitorReader(dirs)
     }
 
     var days by remember { mutableStateOf<List<HormonitorDaySummary>>(emptyList()) }

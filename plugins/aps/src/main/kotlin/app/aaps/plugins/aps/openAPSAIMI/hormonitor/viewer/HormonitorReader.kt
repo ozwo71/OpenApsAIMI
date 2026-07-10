@@ -29,7 +29,8 @@ class HormonitorReader(
         SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getDefault() }
 
     private fun firstExisting(fileName: String): File? =
-        candidateDirs.map { File(it, fileName) }.firstOrNull { it.isFile && it.length() > 0 }
+        runCatching { candidateDirs.map { File(it, fileName) }.firstOrNull { it.isFile && it.length() > 0 } }
+            .getOrNull()
 
     /** True when at least one Hormonitor file is present. */
     suspend fun hasData(): Boolean = withContext(Dispatchers.IO) {
@@ -39,9 +40,14 @@ class HormonitorReader(
     /**
      * Day list from the compact daily_outcomes file. The file appends a cumulative record every ~30 min, so
      * we keep the LATEST record per `day_local` (highest generated_at). Sorted most-recent-day first.
+     * Never throws — any I/O or permission failure yields an empty list (the UI shows an empty state).
      */
     suspend fun readDays(): List<HormonitorDaySummary> = withContext(Dispatchers.IO) {
-        val file = firstExisting(DAILY_FILE) ?: return@withContext emptyList()
+        runCatching { readDaysInternal() }.getOrDefault(emptyList())
+    }
+
+    private fun readDaysInternal(): List<HormonitorDaySummary> {
+        val file = firstExisting(DAILY_FILE) ?: return emptyList()
         val latestByDay = HashMap<String, Pair<String, HormonitorDaySummary>>() // day -> (generatedAt, summary)
         file.bufferedReader().useLines { lines ->
             lines.forEach { raw ->
@@ -72,15 +78,20 @@ class HormonitorReader(
                 if (prev == null || generatedAt >= prev.first) latestByDay[day] = generatedAt to summary
             }
         }
-        latestByDay.values.map { it.second }.sortedByDescending { it.dayLocal }
+        return latestByDay.values.map { it.second }.sortedByDescending { it.dayLocal }
     }
 
     /**
      * Rich aggregation for one day from the event stream. Streams the file line by line (constant memory),
      * keeps only events whose local day matches [dayLocal], and folds them into a [HormonitorDayDetail].
+     * Never throws — any I/O or permission failure yields null (the UI shows a no-events state).
      */
     suspend fun readDayDetail(dayLocal: String): HormonitorDayDetail? = withContext(Dispatchers.IO) {
-        val file = firstExisting(EVENT_FILE) ?: return@withContext null
+        runCatching { readDayDetailInternal(dayLocal) }.getOrNull()
+    }
+
+    private fun readDayDetailInternal(dayLocal: String): HormonitorDayDetail? {
+        val file = firstExisting(EVENT_FILE) ?: return null
         val fmt = dayKeyFormatter()
         val acc = DayAccumulator()
         file.bufferedReader().useLines { lines ->
@@ -95,7 +106,7 @@ class HormonitorReader(
                 acc.fold(o, ts)
             }
         }
-        if (acc.eventCount == 0 && acc.malformed == 0) null else acc.build(dayLocal)
+        return if (acc.eventCount == 0 && acc.malformed == 0) null else acc.build(dayLocal)
     }
 
     // --- JSONObject helpers (treat JSON null / "null" / blank as absent) ---
