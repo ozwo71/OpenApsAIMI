@@ -262,13 +262,14 @@ private fun DistributionBlock(title: String, items: List<LabelCount>, max: Int =
     items.take(max).forEach { lc ->
         Row(Modifier.fillMaxWidth().padding(vertical = AapsSpacing.extraSmall), verticalAlignment = Alignment.CenterVertically) {
             Text(lc.label, modifier = Modifier.width(150.dp), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val barWeight = lc.share.toFloat().coerceIn(0.02f, 1f)
             Box(
                 Modifier
-                    .weight(lc.share.toFloat().coerceIn(0.02f, 1f))
+                    .weight(barWeight)
                     .height(8.dp)
                     .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp)),
             )
-            Box(Modifier.weight((1f - lc.share.toFloat()).coerceIn(0f, 0.98f)))
+            if (barWeight < 1f) Box(Modifier.weight(1f - barWeight))
             Spacer(Modifier.width(AapsSpacing.small))
             Text("${lc.count} (${(lc.share * 100).roundToInt()}%)", style = MaterialTheme.typography.bodySmall)
         }
