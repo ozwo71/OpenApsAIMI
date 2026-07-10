@@ -38,6 +38,21 @@ Full port of [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS
 
 **Fork kept:** Calibration activity readiness UI (CAPTCG strips it; we keep user-facing readiness text).
 
+### Merge `dev` → `dev_OAPSAIMI_mergeDEV` (2026-07-10)
+
+- Upstream Nightscout `dev` at `d389d5e1c2` (7 commits: **Plugin self registration**, automation
+  timer alarm from background, locs, test threading). **1 conflict** in `PluginsListModule.kt`.
+- **Plugin registration (combine, not theirs-only):** upstream Multibinds-only central module kept;
+  fork plugins re-bound in `*PluginsListModule`: AIMI @225, Eversense @445, Ottai @475,
+  AdaptiveSmoothing @615, OverviewPlugin @20 (skin switch), RemoteControl @315.
+- **Eversense:** `EversensePlugin` binding moved to `SourcePluginsListModule` — module + `SourceSensor`
+  E3/365 unchanged. Constraint satisfied.
+- **Build fix:** `:pump:apex` (fork WIP, non-compiling) excluded from dynamic pump wiring in
+  `app/build.gradle.kts` (was never in pre-merge explicit pump list).
+- **Fork preserved:** AIMI/hormonitor, adaptive `calibratedOrValue`, dashboard skin, ML/physio manifest,
+  `KeepAliveWorker runVacuum=false`. No AIMI determine_basal parity port required.
+- Log: [MERGE_DEV_2026-07-10.md](MERGE_DEV_2026-07-10.md).
+
 ### Merge `dev` → `dev_OAPSAIMI` (2026-07-08)
 
 - Upstream Nightscout `dev` at `40275ce700` (4 commits: Wear wizard-correction press-and-hold, dependabot
