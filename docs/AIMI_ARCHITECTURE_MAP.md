@@ -193,6 +193,17 @@ PhysiologicalTree ──▶ HarmoniaDecisionEngine.evaluate ──▶ HarmoniaDe
    **Legacy JSON keys kept** (`simulated_basal_uph`, `simulated_smb_u`, `simulation_only`,
    `applies_to_pump`, `harmonia_simulation_branch_v1`) and console `"Harmonia sim:"` for the analysis
    pipeline / history readers.
+4. **Effort/activity harmonization + activation** (2026-07-10). `EffortActivityBelief` made the single
+   activity-protection path: `basalFactor` wired to basal (§11.6 v2), enabled by default, and a short-lived
+   **parallel** biometric hard-lockout + glucose brake (added 07-09) **removed**. See §11.6.
+5. **Other 07-09/10 working-tree work** (not yet reflected elsewhere in this doc): evidence-gated SMB
+   scenario reconciliation (`reconcileSmbEventualWithScenario`); pkpd hybrid **endogenous reversion** off
+   the absorbing 39 floor (`OApsAIMIPkpdEndogenousReversion`, hybrid-only → minPred hypo-protection intact);
+   basal **anti-whiplash slew limiter** (`slewLimitBasalUp`); basal-ML **DI fix** (coordinator injected so the
+   NN actually trains) + **label fix** (realized future BG instead of the floored `eventualBg`); Hormonitor
+   **in-app viewer**. Full plan: `docs/AIMI_ROADMAP.md`. **Correction:** the physiological tree is **not**
+   observational — Harmonia (built from it) reaches the pump; stale "Lot 1 read-only" labels in
+   `PhysiologicalTree.kt:260-276` are misleading (fix pending).
 
 ## 9. Autodrive — unified V3 product (classic V1/V2 removed)
 
@@ -347,8 +358,17 @@ A first-class branch that **fuses** signals and **carries authority**, independe
   meal → later spike). Left at full coverage by user decision; revisit only with explicit intent.
   Verification agent rated this residual **Medium** (common SMB path protected; meal-gated bypass
   reachable during a walk with a concurrent meal — the original episode).
-- **Deferred (next):** (a) HRV plumbing into the wiring (engine already accepts `hrvDeviationZ`, wiring
-  passes `null` for now); (b) **basal damping** (`basalFactor` is computed but not yet applied — the
-  episode's TBR contribution); (c) real **RBT authority** for the sensor leaves and **Harmonia**
-  honoring sensor effort outside basal-first; (d) the **intent-propagation bug** (§11.2-3, declared
-  activity not reaching `user_intent.has_activity`) — needs a dedicated trace, not a blind fix.
+- **v2 (2026-07-10) — harmonized + activated.** `EffortActivityBelief` is now the **single** activity-protection
+  path and is **enabled by default** (`OApsAIMIEffortActivityProtection = true`). Its `basalFactor` is **wired** to
+  the basal side (reduction-only damping just before `setTempBasal`, alongside the anti-whiplash slew limiter), so
+  detected effort now lowers **both** SMB and basal (deferred item *b* done). A short-lived **parallel** biometric
+  hard-lockout (`biometricActivityActive` → `exerciseInsulinLockoutActive`, added 07-09) plus a glucose-truth basal
+  brake were **removed** as design-inconsistent duplicates (hard stop + default-on vs. the agreed graded reduction);
+  the `HealthContextRepository` `activityState` step threshold was reverted to its original. No parallel exercise
+  logic remains.
+- **Deferred (next):** (a) HRV plumbing (engine accepts `hrvDeviationZ`; wiring passes `null`); (b) real **RBT
+  authority** for the sensor leaves + **Harmonia** honoring sensor effort outside basal-first; (c) the
+  **intent-propagation bug** (§11.2-3, declared activity not reaching `user_intent.has_activity`) — needs a trace,
+  not a blind fix; (d) **biometric-silent fallback** — `refreshEffortActivityBelief` fails open when wearable data
+  is absent (no protection). The harmonized cover is a glucose-corroboration **input to the belief**, not a parallel
+  brake.

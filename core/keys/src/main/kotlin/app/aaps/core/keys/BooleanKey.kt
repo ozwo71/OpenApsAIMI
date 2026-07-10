@@ -304,7 +304,7 @@ enum class BooleanKey(
      */
     OApsAIMIEffortActivityProtection(
         key = "key_aimi_effort_activity_protection",
-        defaultValue = false,
+        defaultValue = true,
         titleResId = R.string.pref_title_aimi_effort_activity_protection,
         summaryResId = R.string.pref_summary_aimi_effort_activity_protection,
     ),
@@ -426,12 +426,6 @@ enum class BooleanKey(
         summaryResId = R.string.pref_summary_aimi_straight_line_tube,
     ),
     OApsAIMIContextEnabled("key_aimi_context_enabled", false),  // 🎯 Context Module
-    // 🏃 Biometric ACTIVE (steps/HR) arms exercise lockout
-    OApsAIMIBiometricActivityLockout(
-        "key_aimi_biometric_activity_lockout", true,
-        titleResId = R.string.pref_title_aimi_biometric_activity_lockout,
-        summaryResId = R.string.pref_summary_aimi_biometric_activity_lockout,
-    ),
     // 🩸 Anti-whiplash: limit upward basal rate-of-change per tick
     OApsAIMIBasalSlewLimitEnabled(
         "key_aimi_basal_slew_limit", true,
