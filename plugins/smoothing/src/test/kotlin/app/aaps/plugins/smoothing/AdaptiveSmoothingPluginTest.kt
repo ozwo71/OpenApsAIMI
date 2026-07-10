@@ -5,6 +5,7 @@ import app.aaps.core.data.model.TE
 import app.aaps.core.data.model.TrendArrow
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.profile.EffectiveProfile
 import app.aaps.core.interfaces.rx.events.AdaptiveSmoothingQualityTier
 import app.aaps.core.interfaces.smoothing.SmoothingContext
 import app.aaps.plugins.smoothing.keys.UkfDoubleNonKey
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test
 import org.mockito.Mock
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import kotlin.math.abs
 import kotlin.math.sqrt
@@ -41,6 +43,9 @@ class AdaptiveSmoothingPluginTest : TestBaseWithProfile() {
             whenever(persistenceLayer.getTherapyEventDataFromTime(any(), any())).thenReturn(emptyList())
             whenever(iobCobCalculator.calculateIobFromBolus()).thenReturn(IobTotal(time = 0L, iob = 0.2))
             whenever(iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended()).thenReturn(IobTotal(time = 0L, iob = 0.2))
+            val defaultProfile = mock<EffectiveProfile>()
+            whenever(defaultProfile.getProfileIsfMgdl()).thenReturn(54.0) // enables patient-relative compression detection
+            whenever(profileFunction.getProfile()).thenReturn(defaultProfile)
         }
 
         plugin = AdaptiveSmoothingPlugin(
@@ -50,7 +55,8 @@ class AdaptiveSmoothingPluginTest : TestBaseWithProfile() {
             config = config,
             persistenceLayer = persistenceLayer,
             preferences = preferences,
-            iobCobCalculator = iobCobCalculator
+            iobCobCalculator = iobCobCalculator,
+            profileFunction = profileFunction
         )
     }
 
@@ -94,6 +100,49 @@ class AdaptiveSmoothingPluginTest : TestBaseWithProfile() {
         assertThat(snapshot).isNotNull()
         assertThat(snapshot!!.compressionRate).isGreaterThan(0.0)
         assertThat(snapshot.tier).isNotEqualTo(AdaptiveSmoothingQualityTier.OK)
+    }
+
+    @Test
+    fun `high ISF fast fall is respected and not treated as compression`() {
+        // A high-ISF patient (e.g. a child) can genuinely fall fast on little insulin. With ISF 220 a steep -35 mg/dL
+        // per 5 min fall stays physiologically plausible → it must NOT be dismissed as compression (dismissing a real
+        // fall would mask a hypo). The old absolute `iob < 3` gate would have wrongly flagged it.
+        val hiIsfProfile = mock<EffectiveProfile>()
+        runBlocking {
+            whenever(hiIsfProfile.getProfileIsfMgdl()).thenReturn(220.0)
+            whenever(profileFunction.getProfile()).thenReturn(hiIsfProfile)
+            whenever(iobCobCalculator.calculateIobFromBolus()).thenReturn(IobTotal(time = 0L, iob = 1.0))
+            whenever(iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended()).thenReturn(IobTotal(time = 0L, iob = 0.0))
+        }
+
+        val series = cgmSeries(150.0, 148.0, 145.0, 140.0, 133.0, 124.0, 89.0, 68.0, 54.0, 46.0)
+        val smoothed = runBlocking { plugin.smooth(series, SmoothingContext.NONE) }
+        val snapshot = plugin.lastAdaptiveSmoothingQualitySnapshot()
+
+        assertThat(snapshot!!.compressionRate).isEqualTo(0.0)      // no point dismissed as compression
+        assertThat(smoothed.first().smoothed!!).isLessThan(85.0)   // the real fall is followed down, not held high
+    }
+
+    @Test
+    fun `missing profile ISF disables compression detection and never blocks`() {
+        // Fail-safe (decision): with no reliable ISF we never declare compression — respect the fall (safer on the
+        // hypo side) rather than fall back to an absolute IOB gate that mis-scales across patients.
+        runBlocking {
+            whenever(profileFunction.getProfile()).thenReturn(null)
+            whenever(iobCobCalculator.calculateIobFromBolus()).thenReturn(IobTotal(time = 0L, iob = 0.1))
+            whenever(iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended()).thenReturn(IobTotal(time = 0L, iob = 0.1))
+        }
+
+        // Same implausible steep drop as the compression test, but no profile ISF → must NOT be flagged.
+        val series = cgmSeries(
+            118.0, 116.0, 115.0, 112.0, 108.0, 104.0,
+            72.0, 54.0, 112.0, 118.0, 121.0, 119.0
+        )
+        val smoothed = runBlocking { plugin.smooth(series, SmoothingContext.NONE) }
+        val snapshot = plugin.lastAdaptiveSmoothingQualitySnapshot()
+
+        assertThat(smoothed.all { it.smoothed!!.isFinite() }).isTrue()
+        assertThat(snapshot!!.compressionRate).isEqualTo(0.0)
     }
 
     @Test

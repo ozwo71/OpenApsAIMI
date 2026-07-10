@@ -5,6 +5,7 @@ import app.aaps.core.data.model.TE
 import app.aaps.core.data.model.TrendArrow
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.iob.IobCobCalculator
+import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -59,7 +60,8 @@ class AdaptiveSmoothingPlugin @Inject constructor(
     private val config: Config,
     private val persistenceLayer: PersistenceLayer,
     private val preferences: Preferences,
-    private val iobCobCalculator: IobCobCalculator
+    private val iobCobCalculator: IobCobCalculator,
+    private val profileFunction: ProfileFunction
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.SMOOTHING)
@@ -110,6 +112,10 @@ class AdaptiveSmoothingPlugin @Inject constructor(
     private var lastProcessedTimestamp: Long = 0
     private var lastSensorChangeTimestamp: Long = 0
 
+    /** Profile ISF (mg/dL per U) snapshot for the current [smooth] pass. Drives patient-relative compression
+     *  feasibility; null when the profile is unavailable → compression detection is disabled (never blocks). */
+    private var passIsfMgdlPerU: Double? = null
+
     private val smoothingSupervisor = SupervisorJob()
     private val smoothingScope = CoroutineScope(smoothingSupervisor + Dispatchers.IO)
 
@@ -130,7 +136,9 @@ class AdaptiveSmoothingPlugin @Inject constructor(
         val currentBg: Double,
         val iob: Double,
         val isNight: Boolean,
-        val rawDelta: Double // Heuristic delta for rules
+        val rawDelta: Double, // Heuristic delta for rules
+        val dtMin: Double, // minutes between this sample and the previous (older) one — normalizes irregular feeds
+        val isfMgdlPerU: Double? // profile ISF snapshot; null → compression detection disabled (never blocks)
     )
 
     private enum class GlycemicZone { HYPO, LOW_NORMAL, TARGET, HYPER }
@@ -234,6 +242,11 @@ class AdaptiveSmoothingPlugin @Inject constructor(
                 val basalIob = iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended().iob
                 bolusIob + basalIob
             }
+            // Profile ISF snapshot for patient-relative compression feasibility (stable proxy — using the profile
+            // ISF rather than dynISF avoids a smoothed-BG → dynISF → smoothing feedback loop; the margin + metabolic
+            // floor absorb the approximation). Null (profile unavailable) disables compression detection this pass.
+            passIsfMgdlPerU = runCatching { profileFunction.getProfile()?.getProfileIsfMgdl() }
+                .getOrNull()?.takeIf { it.isFinite() && it > 0.0 }
             processHybridSegments(data, cachedIobTotalU)
 
             val newDataProcessed = data.any { it.timestamp > previousTimestamp }
@@ -652,9 +665,15 @@ class AdaptiveSmoothingPlugin @Inject constructor(
         
         val valCur = data[index].calibratedOrValue
         val valOld1 = if (index + 1 < data.size) data[index + 1].calibratedOrValue else valCur
-        
-        // Heuristic Delta (Raw) 
+
+        // Heuristic Delta (Raw)
         val rawDelta = valCur - valOld1
+
+        // Spacing to the previous (older) sample, used to normalize the fall to a 5-min equivalent (xDrip / NL safe).
+        val dtMin = if (index + 1 < data.size)
+            ((data[index].timestamp - data[index + 1].timestamp) / MILLIS_PER_MINUTE)
+                .coerceIn(COMPRESSION_DT_MIN_MINUTES, COMPRESSION_DT_MAX_MINUTES)
+        else DEFAULT_ASSUMED_SAMPLE_MINUTES
         
         // IOB Safety (current IOB; same for all points in this pass)
         val iob = cachedIobTotalU
@@ -678,24 +697,38 @@ class AdaptiveSmoothingPlugin @Inject constructor(
             currentBg = valCur,
             iob = iob,
             isNight = isNight,
-            rawDelta = rawDelta
+            rawDelta = rawDelta,
+            dtMin = dtMin,
+            isfMgdlPerU = passIsfMgdlPerU
         )
     }
 
     @Suppress("unused")
     private fun isCompressionArtifactCandidate(ctx: GlycemicContext, data: List<InMemoryGlucoseValue>, index: Int): Boolean {
-        // 1. Massive Drop Check
-        // If raw delta is impossibly steep negative e.g. -20mg/dl in 5 mins
-        val dropThreshold = if (ctx.isNight) -15.0 else -25.0
-        
-        if (ctx.rawDelta < dropThreshold) {
-            // 2. Verify Physiological Feasibility
-            // If IOB is low, such a drop is likely fake.
-            if (ctx.iob < 3.0) {
-                 return true
-            }
-        }
-        return false
+        // Patient-relative compression detection. A pressure artifact is a fall STEEPER than the patient's insulin
+        // plus metabolism can physiologically cause — which scales with the person (a high-ISF child can fall fast on
+        // little insulin; a fixed "IOB < 3 U" gate would wrongly dismiss that real fall). Fail-safe by design: the
+        // dangerous smoother error is masking a REAL fall (loop then sees BG too high → over-doses → deeper hypo), so
+        // when in doubt we do NOT declare compression. With no reliable ISF we never block (respect the fall).
+        val isf = ctx.isfMgdlPerU ?: return false
+        if (isf <= 0.0) return false
+
+        // Normalize the observed fall to a 5-minute equivalent so irregular feeds (xDrip / NL) are not mis-flagged.
+        val dtMin = ctx.dtMin.takeIf { it.isFinite() && it > 0.0 } ?: DEFAULT_ASSUMED_SAMPLE_MINUTES
+        val fallPer5 = -ctx.rawDelta * (5.0 / dtMin) // positive when BG is falling
+        if (fallPer5 <= 0.0) return false
+
+        // 1. Steepness gate (kept): only steep falls are candidates.
+        val steepFloor5 = if (ctx.isNight) COMPRESSION_STEEP_FLOOR_NIGHT_5MIN else COMPRESSION_STEEP_FLOOR_DAY_5MIN
+        if (fallPer5 < steepFloor5) return false
+
+        // 2. Feasibility gate (new): flag only when the fall exceeds what active insulin + metabolism can explain.
+        //    insulin term = IOB × ISF × (fraction of IOB acting per 5 min); generous fraction → blocks LESS → safer.
+        //    metabolic floor = non-insulin fall that is physiologically possible (exercise, GNG suppression) so a real
+        //    effort-driven fall is never taken for compression.
+        val insulinPlausibleDrop5 = ctx.iob.coerceAtLeast(0.0) * isf * COMPRESSION_INSULIN_ACTIVE_FRACTION_5MIN
+        val plausibleDrop5 = COMPRESSION_METABOLIC_DROP_FLOOR_5MIN + insulinPlausibleDrop5
+        return fallPer5 > COMPRESSION_FEASIBILITY_MARGIN * plausibleDrop5
     }
 
     // ============================================================
@@ -996,6 +1029,19 @@ class AdaptiveSmoothingPlugin @Inject constructor(
         /** After a major gap, blend at most this weight toward default R over [R_BLEND_SLOPE_MINUTES] beyond major. */
         private const val R_BLEND_MAX_WEIGHT = 0.35
         private const val R_BLEND_SLOPE_MINUTES = 90.0
+
+        /**
+         * Patient-relative compression detection (see [isCompressionArtifactCandidate]). A pressure artifact is a
+         * fall steeper than [COMPRESSION_STEEP_FLOOR_*] AND exceeding [COMPRESSION_FEASIBILITY_MARGIN] × the
+         * physiologically plausible fall (metabolic floor + IOB × ISF × active fraction), all per 5 min.
+         */
+        private const val COMPRESSION_STEEP_FLOOR_NIGHT_5MIN = 15.0
+        private const val COMPRESSION_STEEP_FLOOR_DAY_5MIN = 25.0
+        private const val COMPRESSION_METABOLIC_DROP_FLOOR_5MIN = 18.0
+        private const val COMPRESSION_INSULIN_ACTIVE_FRACTION_5MIN = 0.15
+        private const val COMPRESSION_FEASIBILITY_MARGIN = 1.5
+        private const val COMPRESSION_DT_MIN_MINUTES = 2.0
+        private const val COMPRESSION_DT_MAX_MINUTES = 15.0
 
         /** 99.99% chi-square, 1 DoF — used only for informational outlier rate (badge / study). */
         const val CHI_SQUARED_THRESHOLD: Double = 15.13
