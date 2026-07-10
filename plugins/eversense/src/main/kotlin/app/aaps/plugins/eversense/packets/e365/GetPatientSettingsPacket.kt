@@ -49,8 +49,11 @@ class GetPatientSettingsPacket : EversenseBasePacket() {
         return Response(
             vibrateMode = receivedData[44].toInt() != 0x00,
             highGlucoseEnabled = receivedData[59].toInt() != 0x00,
-            lowGlucoseAlarmInMgDl = receivedData.copyOfRange(60, 62).toShort().toInt(),
-            highGlucoseAlarmInMgDl = receivedData.copyOfRange(63, 65).toShort().toInt(),
+            // Per the byte map above: High Glucose Threshold is at 60-61 (e.g. FA 00 = 250) and Low Glucose
+            // Threshold at 63-64 (e.g. 41 00 = 65). They were previously swapped (low read 60-62 → 250, high read
+            // 63-65 → 65), which showed the alarm thresholds inverted to the user.
+            highGlucoseAlarmInMgDl = receivedData.copyOfRange(60, 62).toShort().toInt(),
+            lowGlucoseAlarmInMgDl = receivedData.copyOfRange(63, 65).toShort().toInt(),
             predictionLowEnabled = receivedData[55].toInt() != 0x00,
             predictionHighEnabled = receivedData[57].toInt() != 0x00,
             predictionFallingInterval = receivedData[56].toInt(),

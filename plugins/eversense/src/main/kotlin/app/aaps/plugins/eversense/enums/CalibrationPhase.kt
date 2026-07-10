@@ -32,6 +32,10 @@ enum class CalibrationPhase(private val value: Int) {
 
     companion object {
         fun fromE3(value: Int): CalibrationPhase {
+            // NOTE: E3 uses 5 -> UNKNOWN / 7 -> DROPOUT (matches this enum's own value declarations and is locked by
+            // GetCalibrationPhasePacketTest). This differs from [from365] (5 -> DROPOUT) — the E3 and 365 are distinct
+            // hardware generations, so the mappings may legitimately differ. Do NOT realign to from365 without
+            // confirming the E3 CAL_PHASE ordinals against a real E3 transmitter.
             return when(value) {
                 1 -> WARMING_UP
                 2 -> INITIALIZATION
