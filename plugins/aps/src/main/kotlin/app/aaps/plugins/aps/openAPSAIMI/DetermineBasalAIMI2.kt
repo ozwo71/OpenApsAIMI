@@ -2938,6 +2938,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         lastUamHypothesisState = hypothesisState
         lastPhysioLatentState = latentState
+        // Effort/activity belief computed HERE (before the basal decision + meal detection) so its posture and
+        // effort-memory can both (a) reduce SMB/basal and (b) veto the undeclared-meal reading of an effort or
+        // post-effort adrenaline rise — see [effortSuppressesUndeclaredMeal].
+        refreshEffortActivityBelief()
         refreshPatientStateRuntime(
             nowMs = dateUtil.now(),
             contextSnapshot = lastContextSnapshot,
@@ -8480,7 +8484,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             mealClockActiveForSpiralRelax = therapyMealWindowActiveForSpiralAlign(),
         )
         val contextTargetOverride = applyContextModule(bg = bg, iob = iobData.iob, cob = cob.toDouble(), rT = rT)
-        refreshEffortActivityBelief()
         val sens = runTddRatesAndIsfFusionAfterContext(
             profile = profile,
             tdd7Days = tdd7Days,
@@ -9130,6 +9133,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         private const val BASAL_SLEW_UP_ABS_MIN_UPH = 1.5    // hausse mini autorisée par tick (permet de repartir de 0)
         private const val BASAL_SLEW_UP_REL_FACTOR = 1.0     // +100 % du taux courant par tick
         private const val BASAL_SLEW_UP_PROFILE_MULT = 2.0   // +2× la basale profil par tick
+
+        // 🏃 Effort → veto de l'interprétation « repas non déclaré » (voir [effortSuppressesUndeclaredMeal]).
+        private const val EFFORT_MEAL_SUPPRESS_CONF = 0.30       // confiance mini de la croyance d'effort
+        private const val EFFORT_MEAL_SUPPRESS_MAX_COB_G = 12.0  // au-delà = vrai repas (COB) → pas de veto
         /**
          * Verrou one-shot par tag prébolus (LUNCH_P1, LUNCH_P2, …). Statique = survit aux ticks (comme
          * [lastSmbTimestampMem]), car l'instance determine_basal peut être recréée à chaque cycle.
@@ -13280,6 +13287,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     fun detectMealOnset(delta: Float, predictedDelta: Float, acceleration: Float, predictedBg: Float, targetBg: Float): Boolean {
+        // 🏃 Under effort / post-effort adrenaline (undeclared context), a rise is NOT a meal onset → never trigger
+        // the undeclared-meal escalation (forced meal TBR, meal-onset SMB). Declared meals keep their own paths.
+        if (effortSuppressesUndeclaredMeal()) return false
         val combinedDelta = (delta + predictedDelta) / 2.0f
         
         // 1. Existing strict check (Explosive Rise)
@@ -14047,6 +14057,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     assessment.reasons.joinToString(","),
             )
         }
+    }
+
+    /**
+     * True when a BG rise should be read as EFFORT / post-effort adrenaline, NOT an undeclared meal. Uses the
+     * effort belief's EXERTION posture in ACTIVE **or** RECENT_EFFORT state — its ~120-min memory covers the
+     * post-effort adrenaline window (residual adrenaline can push BG up after exercise). Vetoes only the
+     * *undeclared* interpretation: a declared meal mode or real COB is still treated as a meal. Fail-safe —
+     * this only suppresses an insulin escalation, never adds insulin. See [detectMealOnset] / [inferredMealSafetyIntent].
+     */
+    private fun effortSuppressesUndeclaredMeal(): Boolean {
+        val a = lastEffortAssessment ?: return false
+        if (a.posture != EffortActivityBelief.Posture.EXERTION) return false
+        if (a.state != EffortActivityBelief.State.ACTIVE && a.state != EffortActivityBelief.State.RECENT_EFFORT) return false
+        if (a.confidence < EFFORT_MEAL_SUPPRESS_CONF) return false
+        val declaredMeal = mealTime || bfastTime || lunchTime || dinnerTime || snackTime || highCarbTime
+        return !declaredMeal && cob.toDouble() < EFFORT_MEAL_SUPPRESS_MAX_COB_G
     }
 
     /**
@@ -15524,6 +15550,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun inferredMealSafetyIntent(): Boolean {
         val postHypo = lastPostHypoDeliveryAuthority
         if (postHypo.active && postHypo.forceMealInterpretationSuppressed) return false
+        // 🏃 Effort / post-effort adrenaline rise is not a meal (undeclared context only).
+        if (effortSuppressesUndeclaredMeal()) return false
 
         val patientState = lastPatientState
         val patientModeDecision = lastPatientModeDecision

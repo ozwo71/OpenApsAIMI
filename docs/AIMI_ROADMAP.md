@@ -71,7 +71,10 @@ memory: `basal-ml-training-bugs`, `pkpd-floor-39-contamination`, `hormonitor-vie
   hard-lockout + glucose brake. That parallel path has been **removed**; we harmonize into the belief instead.
 - **Done this session:** `EffortActivityBelief` is now the single path — `basalFactor` **wired** to basal (was
   computed-not-applied), **enabled by default** (`OApsAIMIEffortActivityProtection`); parallel biometric-lockout +
-  glucose brake removed; `HealthContextRepository` threshold reverted. See map §11.6 v2.
+  glucose brake removed; `HealthContextRepository` threshold reverted. Plus **post-effort adrenaline ≠ meal**: the
+  belief is computed before meal detection and vetoes the undeclared-meal reading of an effort/adrenaline rise
+  (`effortSuppressesUndeclaredMeal` → `detectMealOnset`/`inferredMealSafetyIntent` return false in EXERTION
+  ACTIVE/RECENT_EFFORT, no declared meal, COB<12) — kills the `FAST_MEAL` over-correction. See map §11.6 v2/v2.1.
 - **TODO (map §11.6 deferred):** (1) **HRV plumbing** into the belief inputs (engine ready, wiring passes null).
   (2) Real **RBT authority** for the sensor leaves + **Harmonia** honoring sensor effort outside basal-first.
   (3) **Intent-propagation bug** (declared activity not reaching `user_intent.has_activity`) — needs a trace.

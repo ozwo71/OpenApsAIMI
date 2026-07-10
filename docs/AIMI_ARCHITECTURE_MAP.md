@@ -366,6 +366,15 @@ A first-class branch that **fuses** signals and **carries authority**, independe
   brake were **removed** as design-inconsistent duplicates (hard stop + default-on vs. the agreed graded reduction);
   the `HealthContextRepository` `activityState` step threshold was reverted to its original. No parallel exercise
   logic remains.
+- **v2.1 (2026-07-10) — post-effort adrenaline ≠ meal.** The effort belief is now computed *before* the basal
+  decision + meal detection (`refreshEffortActivityBelief()` moved just after `lastPhysioLatentState`), and vetoes
+  the **undeclared-meal** interpretation of an effort/adrenaline rise: `detectMealOnset` and `inferredMealSafetyIntent`
+  return false when `effortSuppressesUndeclaredMeal()` — EXERTION posture in ACTIVE **or RECENT_EFFORT** (the ~120-min
+  memory covers the post-effort adrenaline window), *and* no declared meal mode, *and* COB < 12 g. This kills the
+  `FAST_MEAL` → forced-TBR over-correction seen in the pickleball episode, **without** touching declared meals (which
+  keep full coverage — the §11.6 scope-cut still holds for the legacy prebolus / Meal Advisor one-shot). Fail-safe:
+  the veto only *suppresses* an escalation, never adds insulin. Intermittent bursts ("petits pas répétés" / HR by
+  sequence) are naturally handled: each burst refreshes the effort memory, keeping protection alive between sequences.
 - **Deferred (next):** (a) HRV plumbing (engine accepts `hrvDeviationZ`; wiring passes `null`); (b) real **RBT
   authority** for the sensor leaves + **Harmonia** honoring sensor effort outside basal-first; (c) the
   **intent-propagation bug** (§11.2-3, declared activity not reaching `user_intent.has_activity`) — needs a trace,
