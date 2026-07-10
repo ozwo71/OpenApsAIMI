@@ -14,6 +14,7 @@ import app.aaps.plugins.eversense.callbacks.EversenseWatcher
 import app.aaps.plugins.eversense.enums.CalibrationReadiness
 import app.aaps.plugins.eversense.models.EversenseState
 import app.aaps.plugins.eversense.models.EversenseTransmitterSettings
+import app.aaps.plugins.eversense.packets.Eversense365Communicator
 import app.aaps.plugins.eversense.packets.EversenseE3Communicator
 import app.aaps.plugins.eversense.packets.e3.EnterDiagnosticModePacket
 import app.aaps.plugins.eversense.packets.e3.ExitDiagnosticModePacket
@@ -27,6 +28,7 @@ import app.aaps.plugins.eversense.util.EversenseLogger
 import app.aaps.plugins.eversense.util.EversenseScanner
 import app.aaps.plugins.eversense.util.StorageKeys
 import kotlinx.serialization.json.Json
+import java.util.concurrent.CopyOnWriteArrayList
 
 class EversenseCGMPlugin {
 
@@ -41,7 +43,9 @@ class EversenseCGMPlugin {
     private val connectionLock = Any()
 
     private var scanner: EversenseScanner? = null
-    var watchers: List<EversenseWatcher> = listOf()
+
+    // Thread-safe: watchers are added/removed on main thread but iterated from bleExecutor.
+    val watchers: MutableList<EversenseWatcher> = CopyOnWriteArrayList()
 
     // Credentials set by AAPS layer before any DMS login attempt
     var username: String = ""
@@ -60,11 +64,11 @@ class EversenseCGMPlugin {
 
 
     fun addWatcher(watcher: EversenseWatcher) {
-        this.watchers += watcher
+        if (!watchers.contains(watcher)) watchers.add(watcher)
     }
 
     fun removeWatcher(watcher: EversenseWatcher) {
-        this.watchers -= watcher
+        watchers.remove(watcher)
     }
 
     fun isConnected(): Boolean = gattCallback?.isConnected() ?: false
@@ -348,8 +352,13 @@ class EversenseCGMPlugin {
         }
         EversenseLogger.info(TAG, "Triggering full sync on user request")
         gattCallback.submitToExecutor {
-            EversenseE3Communicator.fullSync(gattCallback, preferences, watchers.toList(), force)
-            EversenseE3Communicator.readGlucose(gattCallback, preferences, watchers.toList())
+            if (gattCallback.is365()) {
+                Eversense365Communicator.fullSync(gattCallback, preferences, watchers.toList(), force)
+                Eversense365Communicator.readGlucose(gattCallback, preferences, watchers.toList())
+            } else {
+                EversenseE3Communicator.fullSync(gattCallback, preferences, watchers.toList(), force)
+                EversenseE3Communicator.readGlucose(gattCallback, preferences, watchers.toList())
+            }
             gattCallback.readRssi()
         }
     }

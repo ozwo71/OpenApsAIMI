@@ -16,12 +16,10 @@ import app.aaps.plugins.eversense.packets.e3.util.EversenseE3Writer
  * [3-4]  = sampleTime — FAT-encoded time of the BG measurement
  * [5-6]  = currentDate — FAT-encoded date of submission (NOW)
  * [7-8]  = currentTime — FAT-encoded time of submission (NOW)
- * [9]    = glucoseMgDl raw value (low byte)
- * [10]   = glucose MSB (data16BitsFromIntLSByteFirst[1])
- * [11]   = glucose LSB (data16BitsFromIntLSByteFirst[0])
- * [12]   = 0x00 — additional param (zeros)
- * [13]   = 0x00 — additional param (zeros)
- * [14]   = 0x00 — rolling cal disabled for non-US devices
+ * [9]    = glucose LSB (data16Bits low byte)
+ * [10]   = glucose MSB (data16Bits high byte)
+ * [11-13]= 0x00 — additional params
+ * [14]   = 0x55 — calibration flag (EversenseKit PR#35)
  * [15-16]= CRC16, appended by buildRequest()
  *
  * NOTE: The previous implementation used command 0x15 (single timestamp, 365-style)
@@ -60,10 +58,10 @@ class SendCalibrationPacket(
             currentTime[0], currentTime[1],
             bgLsb,
             bgMsb,
-            bgLsb,
             0x00.toByte(),
             0x00.toByte(),
-            0x00.toByte()
+            0x00.toByte(),
+            0x55.toByte()
         )
     }
 

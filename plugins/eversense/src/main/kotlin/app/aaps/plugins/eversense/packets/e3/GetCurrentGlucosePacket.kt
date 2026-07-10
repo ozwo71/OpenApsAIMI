@@ -24,9 +24,16 @@ class GetCurrentGlucosePacket : EversenseBasePacket() {
         }
 
         val rawHex = receivedData.toByteArray().joinToString("") { "%02x".format(it) }
+        val glucoseInMgDl = EversenseE3Parser.readGlucose(receivedData, 9)
+        // Reject implausible glucose values — the transmitter occasionally sends
+        // unsolicited 0x88 packets after calibration with different byte layout
+        // that produce out-of-range values when parsed at offset 9.
+        if (glucoseInMgDl < 20 || glucoseInMgDl > 600) {
+            return null
+        }
         return Response(
             datetime = EversenseE3Parser.readDate(receivedData, 4) + EversenseE3Parser.readTime(receivedData, 6),
-            glucoseInMgDl = EversenseE3Parser.readGlucose(receivedData, 9),
+            glucoseInMgDl = glucoseInMgDl,
             trend = parseTrend(receivedData[13].toInt()),
             rawResponseHex = rawHex
         )

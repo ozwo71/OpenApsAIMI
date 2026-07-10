@@ -38,6 +38,33 @@ Full port of [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS
 
 **Fork kept:** Calibration activity readiness UI (CAPTCG strips it; we keep user-facing readiness text).
 
+### CAPTCG sync targeted port (2026-07-10)
+
+Reference: [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS-Eversense-) master @ `6a06ba825c95`
+(republished 2026-07-09 on top of plugin self-registration `d389d5e1c2`).
+
+**Ported (surgical, product-critical):**
+
+| Change | File | Notes |
+|--------|------|-------|
+| E3 calibration packet byte [14] = `0x55` | `SendCalibrationPacket.kt` | Replaces erroneous duplicate LSB at [11]; aligns with CAPTCG / EversenseKit PR#35 |
+| Reject implausible E3 glucose (20–600 mg/dL) | `GetCurrentGlucosePacket.kt` | Filters post-calibration 0x88 misparsed packets |
+| 365 push alarm code index | `EversenseGattCallback.kt` | `data[2]` not `data[3]` for NotificationResponseId |
+| 365 manual full sync | `EversenseCGMPlugin.triggerFullSync` | Routes to `Eversense365Communicator` when connected to 365 |
+| Thread-safe watchers | `EversenseCGMPlugin.watchers` | `CopyOnWriteArrayList` + duplicate guard on `addWatcher` |
+
+**Intentionally not ported (fork keeps advantage or out of scope):**
+
+- Full DI refactor (`EversenseCGMPlugin` singleton → Hilt `@Singleton` via `SourceModule.Providers`) — singleton +
+  `setContext()` works; no product regression without it.
+- Calibration activity readiness UI — fork keeps user-facing readiness text (CAPTCG strips it).
+- `notification_reader_packages.json` v3 E3/365 mapping — fork ahead of CAPTCG v2 generic `"Eversense"`.
+- E3 DMS EU endpoints (`ousiamapialpha`) — already on fork.
+- DMS `buildAlertBytes` with live alerts + `EversenseAlarm.dmsCode` — requires enum/API extension; deferred.
+- `@IntKey(575)` vs fork `@445` — cosmetic ordering only.
+
+**Post-port verify:** `:plugins:eversense:testFullDebugUnitTest`, Eversense smoke on device (E3 cal + 365 alarm).
+
 ### Merge `dev` → `dev_OAPSAIMI_mergeDEV` (2026-07-10)
 
 - Upstream Nightscout `dev` at `d389d5e1c2` (7 commits: **Plugin self registration**, automation
