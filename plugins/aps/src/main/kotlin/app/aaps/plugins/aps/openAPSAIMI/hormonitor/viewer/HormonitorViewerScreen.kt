@@ -260,7 +260,7 @@ private fun DistributionBlock(title: String, items: List<LabelCount>, max: Int =
     Text(title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
     items.take(max).forEach { lc ->
         Row(Modifier.fillMaxWidth().padding(vertical = AapsSpacing.extraSmall), verticalAlignment = Alignment.CenterVertically) {
-            Text(lc.label, modifier = Modifier.width(150.dp), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(HormonitorLabels.humanize(lc.label), modifier = Modifier.width(150.dp), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             val barWeight = lc.share.toFloat().coerceIn(0.02f, 1f)
             Box(
                 Modifier

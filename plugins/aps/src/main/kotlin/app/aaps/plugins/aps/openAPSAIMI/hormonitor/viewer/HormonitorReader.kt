@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import java.io.RandomAccessFile
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -92,10 +93,15 @@ class HormonitorReader(
 
     private fun readDayDetailInternal(dayLocal: String): HormonitorDayDetail? {
         val file = firstExisting(EVENT_FILE) ?: return null
+        val bounds = ensureIndex(file).dayRanges[dayLocal] ?: return null // day not in index → absent
         val fmt = dayKeyFormatter()
         val acc = DayAccumulator()
-        file.bufferedReader().useLines { lines ->
-            lines.forEach { raw ->
+        RandomAccessFile(file, "r").use { raf ->
+            raf.seek(bounds.first)
+            val bytes = ByteArray((bounds.second - bounds.first).toInt())
+            raf.readFully(bytes)
+            // Decode the day's slice as UTF-8 (narratives may be multi-byte) and fold, re-checking the day.
+            String(bytes, Charsets.UTF_8).lineSequence().forEach { raw ->
                 val line = raw.trim()
                 if (line.isEmpty()) return@forEach
                 val o = runCatching { JSONObject(line) }.getOrNull()
@@ -107,6 +113,51 @@ class HormonitorReader(
             }
         }
         return if (acc.eventCount == 0 && acc.malformed == 0) null else acc.build(dayLocal)
+    }
+
+    // --- Per-day byte-offset index over the event stream. Built once (single fast scan that only parses each
+    //     line's timestamp), cached, and rebuilt when the file grows/changes. Lets a day's detail seek straight
+    //     to its slice instead of re-scanning the whole (~16 MB) file on every day switch. ---
+    private data class EventIndex(
+        val path: String,
+        val length: Long,
+        val lastModified: Long,
+        val dayRanges: Map<String, Pair<Long, Long>>, // day_local -> [startByte, endByteExclusive)
+    )
+
+    @Volatile
+    private var cachedIndex: EventIndex? = null
+    private val tsRegex = Regex("\"timestamp\"\\s*:\\s*(\\d+)")
+
+    @Synchronized
+    private fun ensureIndex(file: File): EventIndex {
+        val cur = cachedIndex
+        if (cur != null && cur.path == file.path && cur.length == file.length() && cur.lastModified == file.lastModified()) {
+            return cur
+        }
+        val built = buildIndex(file)
+        cachedIndex = built
+        return built
+    }
+
+    private fun buildIndex(file: File): EventIndex {
+        val fmt = dayKeyFormatter()
+        val ranges = LinkedHashMap<String, Pair<Long, Long>>()
+        RandomAccessFile(file, "r").use { raf ->
+            var lineStart = raf.filePointer
+            while (true) {
+                val line = raf.readLine() ?: break
+                val lineEnd = raf.filePointer
+                val ts = tsRegex.find(line)?.groupValues?.getOrNull(1)?.toLongOrNull()
+                if (ts != null && ts > 0L) {
+                    val day = fmt.format(Date(ts))
+                    val existing = ranges[day]
+                    ranges[day] = if (existing == null) lineStart to lineEnd else existing.first to lineEnd
+                }
+                lineStart = lineEnd
+            }
+        }
+        return EventIndex(file.path, file.length(), file.lastModified(), ranges)
     }
 
     // --- JSONObject helpers (treat JSON null / "null" / blank as absent) ---
