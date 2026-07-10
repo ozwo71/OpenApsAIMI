@@ -265,8 +265,12 @@ internal object PhysiologicalTreeBuilder {
                 label = "Recent load memory",
                 reasons = listOf("hyper=${fmt(state.eventMemory.recentHyperLoad)} hypo=${fmt(state.eventMemory.recentHypoLoad)}"),
             ),
-            basalState = signal(true, 1.0, 0.0, "Basal root read-only", "no basal write path in Harmonia Lot 1"),
-            isfState = signal(true, 1.0, 0.0, "ISF root read-only", "no ISF write path in Harmonia Lot 1"),
+            // NOTE: the tree is NOT observational-only. Harmonia is built from these branches
+            // (HarmoniaDecisionEngine.evaluate(tree=…)) and DOES reach the pump via planHarmoniaProductionBranch →
+            // setTempBasal. The old "Lot 1 read-only / no write path" labels were stale and misled a reader into
+            // thinking physiology can't decide — corrected below.
+            basalState = signal(true, 1.0, 0.0, "Basal root", "basal is written by Harmonia production + the AIMI cascade"),
+            isfState = signal(true, 1.0, 0.0, "ISF root", "ISF fused via dynISF/pkpd; not written by the Harmonia decision"),
             preferenceState = signal(true, 1.0, 0.0, "Existing preference surface", "uses AimiPhysioAssistantEnable as disable gate"),
             historicalPatternState = signal(
                 detected = state.causalPosterior.dominant != CausalStateId.UNKNOWN,
@@ -280,8 +284,11 @@ internal object PhysiologicalTreeBuilder {
                 confidence = 1.0,
                 intensity = 0.0,
                 label = "Async ML only",
-                reasons = listOf("Harmonia Lot 1 adds no synchronous ML call"),
-                safetyImpact = "no direct dosing authority",
+                // Scope: THIS root only — the tree adds no *synchronous* ML call; ML (SMB TFLite, basal NN) runs
+                // async and feeds dosing through its own paths. Not a statement about the tree's authority
+                // (the tree drives Harmonia which reaches the pump — see basalState note above).
+                reasons = listOf("no synchronous ML call inside the tree; ML runs async"),
+                safetyImpact = "this root carries no direct dosing command",
             ),
         )
 

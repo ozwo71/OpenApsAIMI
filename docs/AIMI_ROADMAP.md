@@ -58,8 +58,8 @@ memory: `basal-ml-training-bugs`, `pkpd-floor-39-contamination`, `hormonitor-vie
   `PhysiologicalTree` "Lot 1 read-only" labels/comments are stale and misleading.
 - **TODO:** (1) **Measure** from Hormonitor: share of ticks with `harmonia_production.selected_for_production=true`
   vs cascade; distribution of `runtime_blocker` reasons (why Harmonia is blocked). The viewer can surface this.
-  (2) **Rename/correct** the stale "Lot 1 / no write path" labels in `PhysiologicalTree.kt` to reflect the current
-  production path (docs hygiene, prevents future hallucination). (3) Decide, per branch, whether Harmonia should
+  (2) ~~Rename the stale "Lot 1 / no write path" labels~~ **DONE 2026-07-10** (`PhysiologicalTree.kt` roots corrected +
+  anti-hallucination note added). (3) Decide, per branch, whether Harmonia should
   win MORE (bounded, evidence-gated like the SMB reconciliation) rather than deferring to the cascade so often.
 - **Validation:** the Hormonitor viewer per-day aggregation (already built) — add a "Harmonia authority" line.
 
