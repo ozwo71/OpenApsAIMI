@@ -621,10 +621,11 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
         // Header
         sb.append("🏥 Physio Status (${ageMin}m ago) | Conf: ${(snapshot.confidence * 100).toInt()}%")
         
-        // Activity: 5m reacts faster to recent walking; 15m matches modulation window; ACTIVE if steps15 > 1000 (not a display minimum).
+        // Activity: 5m reacts faster to recent walking; 15m matches modulation window. ACTIVE if ≥200 steps/5m
+        // (a burst = already on the move) or ≥375 steps/15m (sustained). The effort belief drives the protection.
         sb.append(
             "\n🏃 Activity: ${snapshot.stepsLast5m} steps/5m | ${snapshot.stepsLast15m} steps/15m " +
-                "(State: ${snapshot.activityState}, ACTIVE if >1000/15m)"
+                "(State: ${snapshot.activityState}, ACTIVE if ≥200/5m or ≥375/15m)"
         )
         
         // Heart

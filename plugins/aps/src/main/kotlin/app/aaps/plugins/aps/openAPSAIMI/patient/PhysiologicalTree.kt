@@ -223,10 +223,18 @@ internal object PhysiologicalTreeBuilder {
         timestampMs: Long = patientState.timestampMs,
         currentBgMgdl: Double? = null,
         deltaMgdl5m: Double? = null,
+        // Sensor effort belief confidences (0..1) injected from EffortActivityBelief so the activity /
+        // post-activity branches reflect real multi-window effort + its ~120-min memory, not just the coarse
+        // 15-min step count. Harmonia then reads these branches to choose PROTECTIVE_REDUCTION natively.
+        effortActiveConfidence: Double = 0.0,
+        effortRecentConfidence: Double = 0.0,
     ): PhysiologicalTreeSnapshot? {
         if (!enabled) return null
 
-        val branches = buildBranches(patientState, patientModeDecision, physioLive, thermalBelief)
+        val branches = buildBranches(
+            patientState, patientModeDecision, physioLive, thermalBelief,
+            effortActiveConfidence, effortRecentConfidence,
+        )
         val trunk = buildTrunk(patientState, patientModeDecision, branches, currentBgMgdl, deltaMgdl5m)
         val roots = buildRoots(patientState)
         val leaves = buildLeaves(patientState, patientModeDecision, branches, trunk, physioLive)
@@ -282,15 +290,19 @@ internal object PhysiologicalTreeBuilder {
         mode: PatientModeOrchestrator.Decision,
         physioLive: PhysioLiveDigest,
         thermal: ThermalBeliefDigest,
+        effortActiveConfidence: Double = 0.0,
+        effortRecentConfidence: Double = 0.0,
     ): PhysiologicalBranches {
         val causal = state.causalPosterior
         val digestionActive = state.mealAbsorptionPhase.isActive || state.mealAbsorptionBelief >= 0.20
         val mealConfidence = max(state.mealProb, causal.mealConfidence)
         val activityConfidence = max(
             if (state.userIntent.hasActivity) state.userIntent.avgConfidence else 0.0,
+            // Efficient step thresholds (≈40 / 25 steps/min) so sustained movement registers; the injected
+            // effort belief (5-min window + memory) is fused above via effortActiveConfidence for bursts.
             when {
-                physioLive.stepsLast15m >= 1_000 -> 0.80
-                physioLive.stepsLast15m >= 500 -> 0.58
+                physioLive.stepsLast15m >= 600 -> 0.80
+                physioLive.stepsLast15m >= 375 -> 0.58
                 physioLive.hrNowBpm > 0 && physioLive.rhrRestingBpm > 0 &&
                     physioLive.hrNowBpm >= physioLive.rhrRestingBpm + 30 -> 0.62
                 else -> 0.0
@@ -345,20 +357,24 @@ internal object PhysiologicalTreeBuilder {
                 safetyImpact = if (state.falseMealSuppression) "meal interpretation suppressed by protective context" else null,
             ),
             activity = signal(
-                detected = activityConfidence >= 0.30,
-                confidence = activityConfidence,
-                intensity = activityConfidence,
+                // Fuse the coarse step count with the sensor effort belief (multi-window, HR) so a burst
+                // pattern (high 5-min rate, modest 15-min count) is seen — Harmonia reads this to protect.
+                detected = maxOf(activityConfidence, effortActiveConfidence) >= 0.30,
+                confidence = maxOf(activityConfidence, effortActiveConfidence),
+                intensity = maxOf(activityConfidence, effortActiveConfidence),
                 label = physioLive.activityState.ifBlank { "Activity" },
-                reasons = listOf("steps15=${physioLive.stepsLast15m}", "hr=${physioLive.hrNowBpm}"),
-                safetyImpact = if (activityConfidence >= 0.55) "watch for increased insulin sensitivity" else null,
+                reasons = listOf("steps15=${physioLive.stepsLast15m}", "hr=${physioLive.hrNowBpm}", "effort=${fmt(effortActiveConfidence)}"),
+                safetyImpact = if (maxOf(activityConfidence, effortActiveConfidence) >= 0.55) "watch for increased insulin sensitivity" else null,
             ),
             postActivity = signal(
-                detected = causal.exerciseAfterburnProb >= 0.25,
-                confidence = causal.exerciseAfterburnProb,
-                intensity = causal.exerciseAfterburnProb,
+                // Post-effort adrenaline / sensitivity window: the effort belief's ~120-min memory drives this
+                // even when the biometric afterburn probability has not fired.
+                detected = maxOf(causal.exerciseAfterburnProb, effortRecentConfidence) >= 0.25,
+                confidence = maxOf(causal.exerciseAfterburnProb, effortRecentConfidence),
+                intensity = maxOf(causal.exerciseAfterburnProb, effortRecentConfidence),
                 label = "Post-activity sensitivity",
-                reasons = listOf("exercise_afterburn=${fmt(causal.exerciseAfterburnProb)}"),
-                safetyImpact = if (causal.exerciseAfterburnProb >= 0.45) "hypo-prone recovery context" else null,
+                reasons = listOf("exercise_afterburn=${fmt(causal.exerciseAfterburnProb)}", "effort_recent=${fmt(effortRecentConfidence)}"),
+                safetyImpact = if (maxOf(causal.exerciseAfterburnProb, effortRecentConfidence) >= 0.45) "hypo-prone recovery context" else null,
             ),
             sleepRecovery = signal(
                 detected = state.sleepDebtScore >= 0.25 || thermal.recoveryBurden >= 0.25,

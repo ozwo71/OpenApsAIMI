@@ -375,8 +375,23 @@ A first-class branch that **fuses** signals and **carries authority**, independe
   keep full coverage — the §11.6 scope-cut still holds for the legacy prebolus / Meal Advisor one-shot). Fail-safe:
   the veto only *suppresses* an escalation, never adds insulin. Intermittent bursts ("petits pas répétés" / HR by
   sequence) are naturally handled: each burst refreshes the effort memory, keeping protection alive between sequences.
-- **Deferred (next):** (a) HRV plumbing (engine accepts `hrvDeviationZ`; wiring passes `null`); (b) real **RBT
-  authority** for the sensor leaves + **Harmonia** honoring sensor effort outside basal-first; (c) the
+- **v2.2 (2026-07-10) — effort is now a first-class TREE branch, Harmonia applies natively (deferred item *b* done).**
+  The effort belief confidences are injected into `PhysiologicalTreeBuilder.build(effortActiveConfidence,
+  effortRecentConfidence)`: `branches.activity` fuses them with the step count (`max`), `branches.postActivity` is
+  driven by the RECENT_EFFORT memory. So `HarmoniaDecisionEngine.chooseAction` (`activity.confidence≥0.55 ||
+  postActivity.confidence≥0.45 → PROTECTIVE_REDUCTION`) now fires from **real multi-window effort + memory**, not the
+  coarse 15-min count — the tree holds the branch, Harmonia decides behind it. **Same performance guaranteed / single
+  reduction per tick:** the belief reduction is applied once — by Harmonia PROTECTIVE_REDUCTION when it owns the basal,
+  else by the orchestration damping; the orchestration basal damping is **skipped when
+  `harmoniaProductionPlan.sourceAction == PROTECTIVE_REDUCTION`** (fixes a latent double-count, keeps universal
+  every-tick coverage → no gap). **Efficient detection:** `HealthContextRepository.activityState` + tree
+  `activityConfidence` lowered from `>1000/15m` to `≥200 steps/5m` (burst = already moving) or `≥375–600/15m`
+  (sustained); physio-status display updated. SMB stays reduction-only at `finalizeAndCapSMB` (extra reduction under
+  effort is fail-safe). Files: `PhysiologicalTree.kt`, `DetermineBasalAIMI2.kt`, `HealthContextRepository.kt`,
+  `AIMIInsulinDecisionAdapterMTR.kt`.
+- **Deferred (next):** (a) HRV plumbing (engine accepts `hrvDeviationZ`; wiring passes `null`); (b) ~~RBT/Harmonia
+  authority~~ **done in v2.2** (Harmonia now reads the effort-fed tree branches → PROTECTIVE_REDUCTION); remaining:
+  native **RBT leaf** weights for the sensor effort (belief tree still low-weight observation); (c) the
   **intent-propagation bug** (§11.2-3, declared activity not reaching `user_intent.has_activity`) — needs a trace,
   not a blind fix; (d) **biometric-silent fallback** — `refreshEffortActivityBelief` fails open when wearable data
   is absent (no protection). The harmonized cover is a glucose-corroboration **input to the belief**, not a parallel

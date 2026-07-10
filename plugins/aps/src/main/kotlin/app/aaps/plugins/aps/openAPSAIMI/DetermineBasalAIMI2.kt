@@ -3069,6 +3069,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             timestampMs = nowMs,
             currentBgMgdl = bg,
             deltaMgdl5m = delta.toDouble(),
+            // Effort belief → tree branches: ACTIVE drives `activity`, RECENT_EFFORT (adrenaline memory) drives
+            // `postActivity`, so Harmonia chooses PROTECTIVE_REDUCTION natively during and after effort.
+            effortActiveConfidence = lastEffortAssessment
+                ?.takeIf { it.state == EffortActivityBelief.State.ACTIVE }?.confidence ?: 0.0,
+            effortRecentConfidence = lastEffortAssessment
+                ?.takeIf { it.state == EffortActivityBelief.State.RECENT_EFFORT }?.confidence ?: 0.0,
         )
         lastPhysiologicalTreeSnapshot = physiologicalTree
         val sensorTelemetry = HarmoniaSensorTelemetry.resolve(
@@ -7511,11 +7517,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog.add("🌿 HARMONIA_HARMONIZER: ${outcome.toJsonSummary()} ${outcome.reasons.joinToString(",")}")
         }
 
-        // 🏃 Effort/activity protection — basal side. Reduction-only basal damping from the single sensor effort
-        // belief ([refreshEffortActivityBelief] / [EffortActivityBelief], graded, fail-safe: only lowers). This is
-        // the SMB side's basal counterpart (SMB is reduced at finalizeAndCapSMB); together they are the one
-        // effort-protection path — no parallel exercise logic.
-        lastEffortAssessment?.basalFactor?.takeIf { it < 1.0 }?.let { factor ->
+        // 🏃 Effort/activity protection — basal side. Reduction-only damping from the single sensor effort belief
+        // (graded, fail-safe: only lowers). SINGLE reduction per tick, guaranteed coverage: applied here for every
+        // tick EXCEPT when Harmonia already owns the basal via PROTECTIVE_REDUCTION (fed by the same effort branch,
+        // so it already reduced) — that avoids double-counting while keeping the same protection on every tick.
+        val harmoniaAlreadyReducedForEffort =
+            harmoniaProductionPlan?.sourceAction == HarmoniaAction.PROTECTIVE_REDUCTION
+        lastEffortAssessment?.basalFactor?.takeIf { it < 1.0 && !harmoniaAlreadyReducedForEffort }?.let { factor ->
             val damped = (finalProposedRate * factor).coerceAtLeast(0.0)
             consoleLog.add(
                 "🏃 EFFORT_BASAL_DAMP: %.2f→%.2f U/h (×%.2f, %s)".format(

@@ -168,9 +168,12 @@ class HealthContextRepository @Inject constructor(
                 clockIsNight = clockIsNight,
             ),
         )
+        // Efficient movement detection: >200 steps in the last 5 min already means "on the move" (a burst that
+        // the old 1000/15m threshold missed), or a sustained ~25 steps/min over 15 min. Aligned with
+        // EffortActivityBelief's ACTIVE reference so the displayed state matches the effort branch that protects.
         val activityState = when {
             sleepLive.isAsleep -> "SLEEPING"
-            steps15 > 1000 -> "ACTIVE"
+            steps5 >= 200 || steps15 >= 375 -> "ACTIVE"
             else -> "IDLE"
         }
 
