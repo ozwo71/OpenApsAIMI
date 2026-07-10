@@ -21,6 +21,10 @@ data class AimiTickContext(
     val glucoseStatus: GlucoseStatusAIMI,
     val currentTemp: CurrentTemp,
     val iobDataArray: Array<IobTotal>,
+    /** Insulin-activity array rebuilt on the LEARNED PK/PD DIA/peak, used only to shape the prediction
+     *  curves (predictCurves). Null when the learned-kinetics pref is off or the learner is invalid → the
+     *  prediction falls back to [iobDataArray] (static profile kinetics). See OApsAIMIPkpdPredictionKinetics. */
+    val pkpdIobDataArray: Array<IobTotal>? = null,
     val profile: OapsProfileAimi,
     val autosensData: AutosensResult,
     val mealData: MealData,

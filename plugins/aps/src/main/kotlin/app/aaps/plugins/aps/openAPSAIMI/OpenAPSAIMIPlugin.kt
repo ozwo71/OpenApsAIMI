@@ -11,6 +11,7 @@ import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
 import app.aaps.plugins.aps.afrezza.AfrezzaMaxBasalConstraints
 import app.aaps.core.data.aps.SMBDefaults
 import app.aaps.core.data.model.GlucoseUnit
+import app.aaps.core.data.model.ICfg
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.TrendArrow
@@ -20,6 +21,7 @@ import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.aps.APS
 import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.aps.AutosensResult
+import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.CurrentTemp
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.core.interfaces.bgQualityCheck.BgQualityCheck
@@ -401,6 +403,42 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             } finally {
                 cannulaSiteRefreshInFlight.set(false)
             }
+        }
+    }
+
+    /**
+     * Rebuild the forward insulin-activity array using the LEARNED PK/PD kinetics (adaptive DIA/peak) instead
+     * of the fixed insulin profile, so the AIMI prediction curves (eventual / minPred / pkpd graph) reflect how
+     * this patient's insulin actually acts. Reuses the production [IobCobCalculator.calculateIobArrayInDia] with
+     * a profile whose [ICfg] carries the learned kinetics — no parallel IOB math, same treatment iteration.
+     *
+     * Fail-safe: returns null (→ caller falls back to the static-profile array) when the pref is off, the learner
+     * exposes no valid DIA/peak, the exponential model would be numerically invalid (peak must stay < DIA/2), or
+     * anything throws. Only the prediction curves consume this array; SMB IOB accounting is untouched.
+     */
+    private suspend fun buildLearnedKineticsIobArray(
+        effectiveProfile: EffectiveProfile,
+        learnedDiaHrs: Double?,
+        learnedPeakMin: Double?,
+    ): Array<IobTotal>? {
+        if (!preferences.get(BooleanKey.OApsAIMIPkpdPredictionKinetics)) return null
+        val diaHrs = learnedDiaHrs?.takeIf { it.isFinite() && it in 3.0..12.0 } ?: return null
+        val peakMin = learnedPeakMin?.takeIf { it.isFinite() && it in 20.0..240.0 } ?: return null
+        return try {
+            val learnedICfg: ICfg = effectiveProfile.iCfg.copy(
+                insulinEndTime = (diaHrs * 3_600_000.0).toLong(),
+                insulinPeakTime = (peakMin * 60_000.0).toLong(),
+            )
+            // Exponential insulin model requires peak strictly below DIA/2 (else tau ≤ 0 → NaN). The learner
+            // clamps DIA and peak independently, so a high-peak / short-DIA combo can violate this → fall back.
+            if (learnedICfg.insulinPeakTime * 2 >= learnedICfg.insulinEndTime) return null
+            val learnedProfile = object : EffectiveProfile by effectiveProfile { override val iCfg: ICfg = learnedICfg }
+            iobCobCalculator.calculateIobArrayInDia(learnedProfile).also {
+                aapsLogger.debug(LTag.APS, "PK/PD prediction kinetics: curves on learned DIA=${"%.1f".format(diaHrs)}h peak=${peakMin.toInt()}m")
+            }
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "PK/PD learned-kinetics prediction array failed; using profile kinetics", e)
+            null
         }
     }
 
@@ -1045,6 +1083,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 LTag.APS,
                 "PK/PD: pkpdScale=$lastPkpdScale (bg=$bgNowForPkpd, delta=$deltaNowForPkpd, iob=$iobNowForPkpd, tdd24=$tdd24Hrs, isfRaw=$profileIsfRawForPkpd)",
             )
+            // 🩸 Prediction curves on the LEARNED PK/PD kinetics: rebuild the forward insulin-activity array with
+            // the adaptive learned DIA/peak (not the fixed insulin profile) so eventual/minPred reflect how this
+            // patient's insulin actually acts. Null → determine_basal falls back to the static-profile array.
+            val pkpdIobDataArray: Array<IobTotal>? = buildLearnedKineticsIobArray(
+                effectiveProfile = profile as EffectiveProfile,
+                learnedDiaHrs = pkpdRuntimeForActivity?.params?.diaHrs,
+                learnedPeakMin = pkpdRuntimeForActivity?.params?.peakMin,
+            )
             val trajectoryPeakNudgeMinutes = computeTrajectoryPeakNudgeForGovernor(
                 nowMsForPkpd = nowMsForPkpd,
                 profile = profile as EffectiveProfile,
@@ -1227,6 +1273,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 flatBGsDetected = flatBGsDetected,
                 dynIsfMode = dynIsfMode,
                 uiInteraction = uiInteraction,
+                pkpd_iob_data_array = pkpdIobDataArray,
                 extraDebug = physioMults.detailedReason
             ).also {
                 val determineBasalResult = apsResultProvider.get().with(it)

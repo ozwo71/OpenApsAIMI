@@ -1844,7 +1844,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         val earlyPkpdPredictions = computePkpdPredictions(
             currentBg = glucoseStatus.glucose,
-            iobArray = ctx.iobDataArray,
+            iobArray = ctx.pkpdIobDataArray ?: ctx.iobDataArray,
             finalSensitivity = earlySens,
             cobG = ctx.mealData.mealCOB,
             profile = ctx.profile,
@@ -5054,7 +5054,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val effectiveSens = sens * ctx.autosensData.ratio
         val pkpdPredictions = computePkpdPredictions(
             currentBg = bg,
-            iobArray = ctx.iobDataArray,
+            iobArray = ctx.pkpdIobDataArray ?: ctx.iobDataArray,
             finalSensitivity = effectiveSens,
             cobG = ctx.mealData.mealCOB,
             profile = profile,
@@ -15203,12 +15203,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @SuppressLint("NewApi", "DefaultLocale") fun determine_basal(
         glucose_status: GlucoseStatusAIMI, currenttemp: CurrentTemp, iob_data_array: Array<IobTotal>, profile: OapsProfileAimi, autosens_data: AutosensResult, mealData: MealData,
         microBolusAllowed: Boolean, currentTime: Long, flatBGsDetected: Boolean, dynIsfMode: Boolean, uiInteraction: UiInteraction,
+        pkpd_iob_data_array: Array<IobTotal>? = null, // learned-kinetics activity array for prediction curves (null → static profile fallback)
         extraDebug: String = "" // 🌀 Extensible Debug Channel (e.g. Cosine Gate)
     ): RT {
         val ctx = AimiTickContext(
             glucoseStatus = glucose_status,
             currentTemp = currenttemp,
             iobDataArray = iob_data_array,
+            pkpdIobDataArray = pkpd_iob_data_array,
             profile = profile,
             autosensData = autosens_data,
             mealData = mealData,

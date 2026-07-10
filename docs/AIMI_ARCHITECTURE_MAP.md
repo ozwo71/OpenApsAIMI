@@ -204,6 +204,14 @@ PhysiologicalTree ──▶ HarmoniaDecisionEngine.evaluate ──▶ HarmoniaDe
    **in-app viewer**. Full plan: `docs/AIMI_ROADMAP.md`. **Correction:** the physiological tree is **not**
    observational — Harmonia (built from it) reaches the pump; stale "Lot 1 read-only" labels in
    `PhysiologicalTree.kt:260-276` are misleading (fix pending).
+6. **Learned PK/PD kinetics now shape the prediction curves** (2026-07-10). Until now `predictCurves` read
+   insulin action from the **static** insulin profile (`iCfg.dia/peak`), so the adaptive *learned* DIA/peak
+   drove SMB/ISF/TAP-G but **not** `eventual`/`minPred`/the pkpd graph. Now the forward insulin-activity array
+   is rebuilt on the learned DIA/peak via the production `IobCobCalculator.calculateIobArrayInDia` fed a profile
+   whose `ICfg` carries the learned kinetics (no parallel IOB math). Built in `OpenAPSAIMIPlugin` (suspend) from
+   `pkpdRuntime.params.diaHrs`/`.peakMin`, plumbed as `AimiTickContext.pkpdIobDataArray` → `computePkpdPredictions`
+   (`ctx.pkpdIobDataArray ?: ctx.iobDataArray`). Pref `OApsAIMIPkpdPredictionKinetics` (default on); fail-safe to
+   the static array when off / params out of range / peak ≥ DIA/2 (invalid exponential kernel). See `docs/AIMI_ROADMAP.md` §P1.
 
 ## 9. Autodrive — unified V3 product (classic V1/V2 removed)
 

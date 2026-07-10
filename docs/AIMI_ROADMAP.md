@@ -31,6 +31,17 @@ memory: `basal-ml-training-bugs`, `pkpd-floor-39-contamination`, `hormonitor-vie
 - **Done this session:** anti-absorbing endogenous reversion on the **hybrid curve only** (pref
   `OApsAIMIPkpdEndogenousReversion`, default on) — leaves `minPredictedAcrossCurves` (IOB/COB/UAM/ZT) intact, so
   hypo-protection is untouched. Evidence-gated SMB reconciliation (`reconcileSmbEventualWithScenario`).
+- **Done this session — learned insulin kinetics now shape the curves (the missing link).** The prediction curves
+  computed insulin action from the **static** insulin profile (`iCfg.dia/peak`), so the adaptive PK/PD *learned*
+  DIA/peak drove SMB/ISF/TAP-G but **not** the shape of `eventual`/`minPred`/the pkpd graph. Fixed by rebuilding the
+  forward insulin-activity array on the **learned** DIA/peak — reusing the production
+  `IobCobCalculator.calculateIobArrayInDia` with a profile whose `ICfg` carries the learned kinetics (no parallel
+  IOB math; same treatment iteration). Built in the plugin's suspend context from `pkpdRuntime.params.diaHrs`/
+  `.peakMin` (raw learner output), plumbed as `AimiTickContext.pkpdIobDataArray` → the two `computePkpdPredictions`
+  call sites (`ctx.pkpdIobDataArray ?: ctx.iobDataArray`) → `predictCurves`. Pref `OApsAIMIPkpdPredictionKinetics`
+  (default **on**); **fail-safe** → static profile array when pref off, learner params out of range, or the
+  exponential model would be invalid (guard: peak must stay `< DIA/2`, else tau ≤ 0 → NaN). Only the prediction
+  curves consume this; SMB IOB accounting is untouched.
 - **TODO:** (1) **validate on device** — could not be validated offline (predictCurves needs the full IOB array,
   absent from CSVs). (2) Consider feeding the Kalman `getLastRa()` (already computed, **not wired** into
   predictCurves) as the physiological source of the reversion instead of a fixed baseline. (3) Multi-day
@@ -114,6 +125,7 @@ memory: `basal-ml-training-bugs`, `pkpd-floor-39-contamination`, `hormonitor-vie
 | Item | Status |
 |---|---|
 | pkpd endogenous reversion (hybrid-only) | done, **needs device validation** |
+| pkpd **learned kinetics drive the prediction curves** (`OApsAIMIPkpdPredictionKinetics`, default on, fail-safe) | done, **needs device validation** |
 | SMB evidence-gated scenario reconciliation | done (committed earlier) |
 | Basal ML: DI fix (coordinator injected) | done |
 | Basal ML: label fix (realized future BG) | done |

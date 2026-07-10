@@ -629,5 +629,7 @@
     <string name="pref_summary_aimi_basal_slew_limit">Limit how fast the basal rate can rise each cycle to smooth out over-corrections. Basal cuts stay instant for hypo safety; meal and forced-boost paths are exempt.</string>
     <string name="pref_title_aimi_pkpd_endo_reversion">Prediction: endogenous reversion</string>
     <string name="pref_summary_aimi_pkpd_endo_reversion">Stop the pkpd eventual prediction from sticking at the 39 mg/dL floor once insulin is spent, letting counter-regulation drift it back toward a low-normal. Affects the eventual only; the hypo-protection floor is unchanged.</string>
+    <string name="pref_title_aimi_pkpd_prediction_kinetics">Prediction: learned insulin kinetics</string>
+    <string name="pref_summary_aimi_pkpd_prediction_kinetics">Shape the glucose prediction curves with the adaptive PK/PD learned DIA and peak instead of the fixed insulin profile, so eventual and minPred reflect how your insulin actually acts. Falls back to the profile kinetics when the learner is off or its values are out of range.</string>
 </resources>
 
