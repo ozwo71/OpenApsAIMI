@@ -2,8 +2,6 @@ package app.aaps.plugins.aps.openAPSAIMI.learning
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.keys.BooleanKey
-import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
 import app.aaps.plugins.aps.openAPSAIMI.TrainingConfig
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
@@ -24,7 +22,6 @@ import kotlin.math.abs
 @Singleton
 class BasalMlTrainingCoordinator @Inject constructor(
     private val storageHelper: AimiStorageHelper,
-    private val preferences: Preferences,
     private val basalNeuralLearner: BasalNeuralLearner,
     private val log: AAPSLogger,
 ) {
@@ -96,18 +93,17 @@ class BasalMlTrainingCoordinator @Inject constructor(
             return TrainingOutcome.SKIPPED
         }
 
-        val trainBasal = preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)
-        val trainT3c = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
-        if (!trainBasal && !trainT3c) {
-            log.debug(LTag.APS, "$TAG: basal/T3C ML prefs off — skip")
-            return TrainingOutcome.SKIPPED
-        }
-
+        // Training is DECOUPLED from usage: both heads are trained whenever enough recorded data exists, so the
+        // weights files (basal_adaptive_weights.json / t3c_brain_weights.json) are always produced and kept fresh.
+        // The feature prefs (OApsAIMIT3cAdaptiveBasalEnabled / OApsAIMIT3cBrittleMode) gate only whether
+        // BasalNeuralLearner APPLIES the models at runtime — never whether they are trained. This guarantees a model
+        // is ready the instant the feature is enabled, instead of starting from an empty model. Recording is likewise
+        // pref-independent (BasalNeuralLearner.logRecord), so the dataset keeps growing for everyone.
         return try {
             var published = false
             var hardFailure = false
 
-            if (trainBasal && parsed.rowCount >= BASAL_MIN_ROWS) {
+            if (parsed.rowCount >= BASAL_MIN_ROWS) {
                 when (trainBasalHead(parsed)) {
                     HeadTrainResult.PUBLISHED -> published = true
                     HeadTrainResult.FAILED -> hardFailure = true
@@ -115,7 +111,7 @@ class BasalMlTrainingCoordinator @Inject constructor(
                 }
             }
 
-            if (trainT3c && parsed.rowCount >= T3C_MIN_ROWS) {
+            if (parsed.rowCount >= T3C_MIN_ROWS) {
                 when (trainT3cHead(parsed)) {
                     HeadTrainResult.PUBLISHED -> published = true
                     HeadTrainResult.FAILED -> hardFailure = true

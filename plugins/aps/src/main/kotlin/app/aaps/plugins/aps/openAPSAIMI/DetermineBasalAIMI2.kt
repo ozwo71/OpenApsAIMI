@@ -9241,6 +9241,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
          */
         private const val LEGACY_PREBOLUS_DELIVERY_TTL_MS = 30 * 60 * 1000L
 
+        /**
+         * Carry-forward retry cooldown. Its only job is to bridge the delivery→DB-write latency (a real SMB is
+         * recorded in the treatments DB within seconds), so we don't re-propose a prebolus that was just delivered
+         * but not yet confirmed (the pending is cleared on that confirmation — see the pending-clear path). It must
+         * stay SHORT so that when the first fire is NOT delivered (e.g. the bundled TBR command didn't succeed at the
+         * LoopPlugin gate, or a bolus was already queued) the carry-forward re-proposes it on the very next loop tick
+         * instead of waiting minutes. 90 s < the ~5-min loop cadence → next-tick retry on normal cadence, while still
+         * blocking a rapid re-invoke (pull-to-refresh) within the delivery/DB window → no double-send.
+         */
+        private const val CARRY_RETRY_COOLDOWN_MS = 90 * 1000L
+
         /** Timestamp mémoire du dernier prébolus legacy demandé (voir [internalLastLegacyPrebolusMillis]). */
         private var lastLegacyPrebolusTimestampMem: Long = 0L
 
@@ -13721,8 +13732,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 pendingLegacyPrebolusUnit = units.toFloat()
                 pendingLegacyPrebolusExpiry = dateUtil.now() + LEGACY_PREBOLUS_DELIVERY_TTL_MS
                 internalLastLegacyPrebolusMillis = dateUtil.now()
-                // Amorce le cooldown : le premier retry carry attend ≥6 min après le tir d'origine
-                // (fenêtre de sync DB complète), pas dès le tick suivant si la base est juste lente.
+                // Seed the carry cooldown (short — see [CARRY_RETRY_COOLDOWN_MS]): guards a rapid re-invoke from
+                // double-sending while the initial delivery reaches the DB, WITHOUT blocking the next loop tick — so
+                // a first fire that wasn't enacted (bundled TBR command failed at the Loop gate, or bolus queued) is
+                // re-proposed on the next tick instead of waiting minutes.
                 lastCarryRetryFireMillis = dateUtil.now()
             }
         }
@@ -13814,7 +13827,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 // Throttle des retries avec un timer DÉDIÉ : ne pas réutiliser internalLastLegacyPrebolusMillis
                 // (référence du tir P1 d'origine) sous peine de décaler les fenêtres P2 à chaque retry.
                 val timeSinceLastCarryRetry = dateUtil.now() - lastCarryRetryFireMillis
-                val carryOnCooldown = lastCarryRetryFireMillis > 0L && timeSinceLastCarryRetry < 6 * 60_000L
+                val carryOnCooldown = lastCarryRetryFireMillis > 0L && timeSinceLastCarryRetry < CARRY_RETRY_COOLDOWN_MS
                 if (!carryOnCooldown) {
                     rT.units = pendingLegacyPrebolusUnit.toDouble()
                     rT.deliverAt = dateUtil.now()

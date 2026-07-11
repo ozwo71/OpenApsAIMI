@@ -899,9 +899,17 @@ class LoopPlugin @Inject constructor(
                                 aapsLogger.debug(LTag.APS, "No SMB requested")
                                 scheduleBuildAndStoreDeviceStatus("applyTBRRequest")
                             }
+                        } else if (resultAfterConstraints.isBolusRequested) {
+                            // Diagnostic: SMB delivery is gated on the bundled TBR succeeding (above). When it does
+                            // not, the SMB is dropped here and only the AIMI carry-forward re-delivers it next tick.
+                            aapsLogger.debug(LTag.APS, "SMB skipped: TBR not enacted/success (smb=%.2fU comment=%s) — carry-forward will retry".format(resultAfterConstraints.smb, tbrResult.comment ?: ""))
                         }
                         rxBus.send(EventLoopUpdateGui())
                     } else {
+                        // Diagnostic: a bolus already queued blocks the whole change block, so a requested SMB is
+                        // dropped and only the AIMI carry-forward re-delivers it next tick.
+                        if (resultAfterConstraints.isBolusRequested && commandQueue.bolusInQueue())
+                            aapsLogger.debug(LTag.APS, "SMB skipped: bolus already in queue (smb=%.2fU) — carry-forward will retry".format(resultAfterConstraints.smb))
                         lastRun.tbrSetByPump = null
                         lastRun.smbSetByPump = null
                     }

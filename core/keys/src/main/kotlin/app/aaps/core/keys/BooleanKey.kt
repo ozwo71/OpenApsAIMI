@@ -281,7 +281,7 @@ enum class BooleanKey(
     OApsAIMInight("OApsAIMI_Enable_night",false),
     OApsAIMIhoneymoon("key_use_Aimi_honeymoon",false),
     OApsxdriponeminute(key = "key_use_Aimi_xdripOM",defaultValue = false),
-    OApsAIMIT3cAdaptiveBasalEnabled("key_use_aimi_t3c_adaptive_basal", false),
+    OApsAIMIT3cAdaptiveBasalEnabled("key_use_aimi_t3c_adaptive_basal", true),
     OApsAIMIAutodriveV3EnhancedGater("key_use_aimi_autodrive_v3_enhanced_gater", false),
     OApsAIMIautoDriveActive(key = "key_use_aimi_autodrive_active", defaultValue = true),
     /**

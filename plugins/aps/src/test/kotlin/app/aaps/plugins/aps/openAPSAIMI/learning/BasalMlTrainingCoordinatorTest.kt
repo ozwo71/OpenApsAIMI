@@ -8,6 +8,9 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
+import io.mockk.verify
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -44,7 +47,7 @@ class BasalMlTrainingCoordinatorTest {
         every { preferences.get(BooleanKey.OApsAIMIT3cBrittleMode) } returns false
 
         learner = BasalNeuralLearner(context, preferences, storage, log)
-        coordinator = BasalMlTrainingCoordinator(storage, preferences, learner, log)
+        coordinator = BasalMlTrainingCoordinator(storage, learner, log)
     }
 
     @Test
@@ -69,12 +72,24 @@ class BasalMlTrainingCoordinatorTest {
     }
 
     @Test
-    fun `skips when both ML feature prefs are off`() = runBlocking {
-        every { preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled) } returns false
-        every { preferences.get(BooleanKey.OApsAIMIT3cBrittleMode) } returns false
+    fun `training is reached even when both feature prefs are off (decoupled from usage)`() = runBlocking {
+        // Old behavior returned SKIPPED before any training when the feature prefs were off. New contract: training
+        // depends only on data availability; the prefs gate only runtime usage (BasalNeuralLearner). We assert the
+        // training path is REACHED — deterministically, via the model-store read that trainAndMaybePublish performs
+        // before training — rather than the stochastic publish result (the net is unseeded).
+        mockkObject(BasalMlModelStore)
+        try {
+            every { BasalMlModelStore.loadValid(any(), any()) } returns null
+            every { preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled) } returns false
+            every { preferences.get(BooleanKey.OApsAIMIT3cBrittleMode) } returns false
 
-        val outcome = coordinator.runScheduledTraining()
-        assertThat(outcome).isEqualTo(BasalMlTrainingCoordinator.TrainingOutcome.SKIPPED)
+            coordinator.runScheduledTraining()
+
+            // Reached only if the pref-gate is gone (both heads read their incumbent before training).
+            verify(atLeast = 1) { BasalMlModelStore.loadValid(any(), any()) }
+        } finally {
+            unmockkObject(BasalMlModelStore)
+        }
     }
 
     @Test
@@ -82,7 +97,7 @@ class BasalMlTrainingCoordinatorTest {
         val stateFile = File(tempDir, "basal_ml_training_state.json")
         stateFile.writeText("""{"lastTrainMs":0,"rowsAtLastTrain":110}""")
 
-        val freshCoordinator = BasalMlTrainingCoordinator(storage, preferences, learner, mockk(relaxed = true))
+        val freshCoordinator = BasalMlTrainingCoordinator(storage, learner, mockk(relaxed = true))
         val outcome = freshCoordinator.runScheduledTraining()
         assertThat(outcome).isEqualTo(BasalMlTrainingCoordinator.TrainingOutcome.SKIPPED)
     }
