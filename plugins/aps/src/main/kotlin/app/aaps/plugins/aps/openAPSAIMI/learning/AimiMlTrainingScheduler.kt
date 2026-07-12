@@ -3,6 +3,8 @@ package app.aaps.plugins.aps.openAPSAIMI.learning
 import android.content.Context
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -47,7 +49,14 @@ class AimiMlTrainingScheduler @Inject constructor(
                 ExistingPeriodicWorkPolicy.UPDATE,
                 basalRequest,
             )
-            aapsLogger.info(LTag.APS, "AimiMlTrainingScheduler: basal/T3C trainer scheduled (6h, battery-not-low)")
+            // Bootstrap: one immediate pass so the FIRST model is created ASAP (no 6h/charging/idle wait) when enough
+            // CSV data already exists. The coordinator no-ops it once a fresh model exists (rate limit + min-rows),
+            // and bypasses the rate limit while the weights are still missing (first creation).
+            val bootstrapRequest = OneTimeWorkRequestBuilder<BasalMlTrainerWorker>()
+                .setConstraints(constraints)
+                .build()
+            wm.enqueueUniqueWork(WORK_BASAL_ML_BOOTSTRAP, ExistingWorkPolicy.KEEP, bootstrapRequest)
+            aapsLogger.info(LTag.APS, "AimiMlTrainingScheduler: basal/T3C trainer scheduled (6h) + bootstrap enqueued")
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "AimiMlTrainingScheduler: schedule failed", e)
         }
@@ -64,6 +73,7 @@ class AimiMlTrainingScheduler @Inject constructor(
 
     companion object {
         const val WORK_BASAL_ML = "AIMI_BASAL_ML_TRAINER"
+        const val WORK_BASAL_ML_BOOTSTRAP = "AIMI_BASAL_ML_TRAINER_BOOTSTRAP"
         private const val LEGACY_AUTODRIVE_6H_WORK = "AIMINeuralTrainer"
     }
 }

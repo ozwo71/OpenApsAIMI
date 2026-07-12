@@ -15,7 +15,7 @@ class PredictionAuthorityApplierTest {
 
     @Test
     fun applyEnabledRemapsEventualAndCurves() {
-        val rT = RT()
+        val rT = RT(runningDynamicIsf = false)
         rT.predBGs = Predictions().apply { IOB = listOf(39, 40) }
         val authority = DecisionPredictionAuthority(
             predTerminalMgdl = 85.0,
@@ -60,7 +60,7 @@ class PredictionAuthorityApplierTest {
 
     @Test
     fun shadowDoesNotMutateRt() {
-        val rT = RT()
+        val rT = RT(runningDynamicIsf = false)
         rT.eventualBG = 39.0
         val authority = DecisionPredictionAuthority(
             predTerminalMgdl = 80.0,

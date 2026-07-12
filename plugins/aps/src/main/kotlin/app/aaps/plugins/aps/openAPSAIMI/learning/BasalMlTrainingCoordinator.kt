@@ -67,11 +67,14 @@ class BasalMlTrainingCoordinator @Inject constructor(
 
     suspend fun runScheduledTraining(): TrainingOutcome = trainMutex.withLock {
         val now = System.currentTimeMillis()
+        // First-ever model creation bypasses the rate limit: if no basal weights exist yet, train now (bootstrap) so
+        // the model is created ASAP from the already-accumulated CSV, instead of waiting for the next 6h window.
+        val bootstrapNeeded = !storageHelper.getAimiFile(BASAL_WEIGHTS).exists()
         if (isCircuitOpen(now)) {
             log.debug(LTag.APS, "$TAG: circuit breaker open — skip")
             return TrainingOutcome.SKIPPED
         }
-        if (now - lastTrainMs.get() < TRAIN_INTERVAL_MS) {
+        if (!bootstrapNeeded && now - lastTrainMs.get() < TRAIN_INTERVAL_MS) {
             log.debug(LTag.APS, "$TAG: rate limit — skip")
             return TrainingOutcome.SKIPPED
         }
