@@ -6,6 +6,9 @@
 
 *Automated insulin delivery that models the **person**, not just the glucose curve.*
 
+**Ten years of daily development, reflection, research and innovation** — a decade of lived, day‑after‑day
+iteration distilled into an engine.
+
 > 🌿 **The most advanced version lives on the [`dev_OAPSAIMI`](../../tree/dev_OAPSAIMI) branch.**
 > That is where active development happens and where every capability below is implemented.
 
@@ -83,10 +86,31 @@ AIMI already models the person's context, which most AID systems don't:
 - **Adult** — stress, variable schedule, exercise.
 - **T3C** — pancreatectomy / CFRD adaptations (brittle mode, exacerbation support).
 
+### 📸 Photo‑based carb estimation (opt‑in, safety‑gated)
+For anyone who wants it, AIMI can estimate a meal's carbs **from a photo** via an on‑request AI vision model. It's
+built to be **cautious, not clever**: the model returns separate **food** and **portion confidence** levels and a
+hidden‑carb risk, the response is **sanitized**, and a low‑confidence or unclear reading is **downweighted or
+rejected** rather than trusted — the system would rather ask you than dose on a blurry guess. Fully optional, and
+always a *suggestion* that you confirm.
+
 ### 🔬 Hormonitor — measurable by design
 A structured on‑device study‑data pipeline (decisions, outcomes, blackbox, physiology) **with an in‑app viewer**
 (indexed, English/French), so the loop's behavior can actually be read, audited, and improved — closing the
 feedback loop that most DIY systems leave open.
+
+---
+
+## The cockpit — you stay in command
+
+AIMI is powerful, so it's built to be **legible and steerable**, not a black box:
+
+- **🎛️ Control Center** — a single cockpit to set the system's **autonomy** (from observation‑only up to controlled
+  authority) and its **behavior families** (stability, meal capture, protection, physiology) with human‑readable
+  levels, instead of hunting through dozens of raw switches.
+- **🧭 Advisor** — a suite of assistants (profile, PK/PD, carbs, meal, straight‑line insulin) that **surface
+  reasoning and suggestions** and let you apply them deliberately — guidance, not silent overrides.
+- **🕵️ Auditor** — an independent "second brain" that **reviews the loop's own decisions** against a stable context,
+  caches verdicts, and can gate or flag a decision when its confidence is low — a check on the checker.
 
 ---
 

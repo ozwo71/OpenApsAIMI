@@ -7851,6 +7851,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
 
+        // Main-path basal neural CSV + ML training (same hook as logDecisionFinal early exits).
+        applyBasalNeuralLearningAndTraining(
+            rT = finalResult,
+            tbrUph = (finalResult.rate ?: 0.0).coerceAtLeast(0.0),
+            govTag = "MAIN",
+        )
+
         return finalResult
     }
 
@@ -15706,37 +15713,33 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     /**
-     * TDD-derived activity threshold + basal neural [updateLearning] + BASAL_GOV console line.
-     * Order preserved vs legacy single function (threshold before learning; gov before TICK).
+     * Records one basal-neural CSV row, triggers async ML training, and logs BASAL_GOV.
+     * Shared by the main post-engine path and [logDecisionFinal] early exits.
      */
-    private fun triggerBasalMlTrainingIfNeeded() {
-        if (::basalMlTrainingCoordinator.isInitialized) {
-            basalMlTrainingCoordinator.maybeTrainAsync()
-        }
-    }
-
-    private fun runDecisionFinalBasalNeuralStep(rT: RT, diag: DecisionFinalDiagSnapshot): Double {
+    private fun applyBasalNeuralLearningAndTraining(
+        rT: RT,
+        tbrUph: Double,
+        govTag: String,
+    ) {
         val eventual = (rT.eventualBG ?: lastEventualBgSnapshot)
-        val tdd24h = resolveTdd24hForLoop(30.0)
-        val activityThreshold = (tdd24h / 24.0) * 0.15
         basalNeuralLearner.updateLearning(
-            bgBefore = diag.bgValue,
+            bgBefore = bg,
             bgAfter = eventual,
-            basalDelivered = diag.tbrUph,
+            basalDelivered = tbrUph,
             targetBg = targetBg.toDouble(),
             accel = bgacc,
             duraISFminutes = duraISFminutes,
             duraISFaverage = duraISFaverage,
             iob = iobNet,
-            loopDeltaMgDl5m = diag.deltaValue,
-            sensorNoise = diag.cgmNoise,
+            loopDeltaMgDl5m = delta.toDouble(),
+            sensorNoise = lastLoopCgmNoise,
             shortMinPredBg = minPredictedAcrossCurves(rT.predBGs),
             physioFeatures = currentBasalPhysioFeatures(),
         )
         triggerBasalMlTrainingIfNeeded()
         val gov = basalNeuralLearner.getGovernanceSnapshot()
         consoleLog.add(
-            "🧭 BASAL_GOV: action=${gov.action} conf=${"%.2f".format(Locale.US, gov.confidence)} " +
+            "🧭 BASAL_GOV[$govTag]: action=${gov.action} conf=${"%.2f".format(Locale.US, gov.confidence)} " +
                 "n=${gov.sampleCount} hypo=${"%.2f".format(Locale.US, gov.hypoRate)} hypoG=${"%.2f".format(Locale.US, gov.hypoRateGovernance)} " +
                 "hypoAdj=${"%.2f".format(Locale.US, gov.hypoGovernanceAdjusted)} ant=${"%.2f".format(Locale.US, gov.anticipationRelief)} " +
                 "wMean=${"%.2f".format(Locale.US, gov.meanGovernanceWeight)} high=${"%.2f".format(Locale.US, gov.highRate)} " +
@@ -15745,6 +15748,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 "floorA=${gov.activeAggressivenessFloor?.let { "%.2f".format(Locale.US, it) } ?: "-"} " +
                 "reason=${gov.reason}"
         )
+    }
+
+    private fun triggerBasalMlTrainingIfNeeded() {
+        if (::basalMlTrainingCoordinator.isInitialized) {
+            aapsLogger.debug(LTag.APS, "BasalMlTraining: maybeTrainAsync triggered")
+            basalMlTrainingCoordinator.maybeTrainAsync()
+        }
+    }
+
+    private fun runDecisionFinalBasalNeuralStep(rT: RT, diag: DecisionFinalDiagSnapshot): Double {
+        val tdd24h = resolveTdd24hForLoop(30.0)
+        val activityThreshold = (tdd24h / 24.0) * 0.15
+        applyBasalNeuralLearningAndTraining(rT, diag.tbrUph, "FINAL")
         return activityThreshold
     }
 
@@ -16161,33 +16177,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
 
         // 🧬 Adaptive Learning Update
-        basalNeuralLearner.updateLearning(
-            bgBefore = bg,
-            bgAfter = eventualBg,
-            basalDelivered = t3cFinalRate,
-            targetBg = targetBg,
-            accel = accel,
-            duraISFminutes = duraISFminutes,
-            duraISFaverage = duraISFaverage,
-            iob = iob.iob,
-            loopDeltaMgDl5m = delta.toDouble(),
-            sensorNoise = cgmNoise,
-            shortMinPredBg = minPredictedAcrossCurves(rT.predBGs),
-            physioFeatures = currentBasalPhysioFeatures(),
+        applyBasalNeuralLearningAndTraining(
+            rT = rT,
+            tbrUph = t3cFinalRate,
+            govTag = "T3C",
         )
-        triggerBasalMlTrainingIfNeeded()
-        val gov = basalNeuralLearner.getGovernanceSnapshot()
-        consoleLog.add(
-            "🧭 BASAL_GOV[T3C]: action=${gov.action} conf=${"%.2f".format(Locale.US, gov.confidence)} " +
-                "n=${gov.sampleCount} hypo=${"%.2f".format(Locale.US, gov.hypoRate)} hypoG=${"%.2f".format(Locale.US, gov.hypoRateGovernance)} " +
-                "hypoAdj=${"%.2f".format(Locale.US, gov.hypoGovernanceAdjusted)} ant=${"%.2f".format(Locale.US, gov.anticipationRelief)} " +
-                "wMean=${"%.2f".format(Locale.US, gov.meanGovernanceWeight)} high=${"%.2f".format(Locale.US, gov.highRate)} " +
-                "mae=${"%.1f".format(Locale.US, gov.meanAbsTargetError)} latch=${gov.hypoHoldLatched} " +
-                "floorB=${gov.activeBasalFloor?.let { "%.2f".format(Locale.US, it) } ?: "-"} " +
-                "floorA=${gov.activeAggressivenessFloor?.let { "%.2f".format(Locale.US, it) } ?: "-"} " +
-                "reason=${gov.reason}"
-        )
-
         consoleLog.add(rT.reason.toString())
         markFinalLoopDecisionFromRT(rT, currenttemp)
         return rT
