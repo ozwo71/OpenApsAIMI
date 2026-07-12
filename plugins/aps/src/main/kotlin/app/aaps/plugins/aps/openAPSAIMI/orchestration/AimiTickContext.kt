@@ -25,6 +25,9 @@ data class AimiTickContext(
      *  curves (predictCurves). Null when the learned-kinetics pref is off or the learner is invalid → the
      *  prediction falls back to [iobDataArray] (static profile kinetics). See OApsAIMIPkpdPredictionKinetics. */
     val pkpdIobDataArray: Array<IobTotal>? = null,
+    /** TAP-D + TAP-G effective kinetics from [InsulinKineticsAuthority] (plugin invoke). */
+    val effectiveDiaHours: Double? = null,
+    val effectivePeakMinutes: Double? = null,
     val profile: OapsProfileAimi,
     val autosensData: AutosensResult,
     val mealData: MealData,

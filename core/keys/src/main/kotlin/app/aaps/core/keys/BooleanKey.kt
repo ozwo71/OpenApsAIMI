@@ -340,6 +340,14 @@ enum class BooleanKey(
     OApsAIMIDiaGovernorEnabled("key_aimi_dia_governor_enabled", true),
     /** InsulinActionProfiler uses prediction IOB array from kinetics authority. */
     OApsAIMIIntelligenceKineticsProfiler("key_aimi_intelligence_kinetics_profiler", true),
+    /** C1 shadow: log authority vs PKPD deltas without applying to dose path. */
+    OApsAIMIPredictionAuthorityShadow("key_aimi_prediction_authority_shadow", true),
+    /** C1 prod: apply DecisionPredictionAuthority to eventualBG, predBGs, stacking, SafetyNet. */
+    OApsAIMIPredictionAuthorityEnabled(
+        key = "key_aimi_prediction_authority_enabled",
+        defaultValue = false,
+        dependency = OApsAIMIIntelligenceSnapshotExport,
+    ),
     OApsAIMIPkpdPragmaticReliefEnabled("key_aimi_pkpd_pragmatic_relief_enabled", true),
     /** When false, AIMI stops writing loop_blackbox_v1.jsonl only; hormonitor event/daily streams unchanged. */
     OApsAIMILoopBlackboxFileEnabled("key_aimi_loop_blackbox_file_enabled", true),

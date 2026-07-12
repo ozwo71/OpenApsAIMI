@@ -674,7 +674,11 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         return recent
     }
     @SuppressLint("DefaultLocale")
-    private suspend fun calculateVariableIsf(timestamp: Long): Pair<String, Double?> {
+    private suspend fun calculateVariableIsf(
+        timestamp: Long,
+        pkpdScaleForTick: Double = lastPkpdScale,
+        fusedSlowIsfOverride: Double? = null,
+    ): Pair<String, Double?> {
         if (!preferences.get(BooleanKey.ApsUseDynamicSensitivity)) return "OFF" to null
 
         // 0) cache DB existant
@@ -697,8 +701,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // 4) ISF lent (socle) : profil/TDD fusionnù + pkpdScale (inchangù)
         val profileIsf = profileFunction.getProfile()?.getProfileIsfMgdl() ?: 20.0
         val tddIsf = tddIsf24hOr(profileIsf)
-        val fusedSlowIsf = isfFusion().fused(profileIsf, tddIsf, lastPkpdScale)
-        aapsLogger.debug(LTag.APS, "Fused slow ISF: $fusedSlowIsf (profile=$profileIsf, tddIsf=$tddIsf, pkpdScale=$lastPkpdScale)")
+        val fusedSlowIsf = fusedSlowIsfOverride?.takeIf { it.isFinite() && it > 0.0 }
+            ?: isfFusion().fused(profileIsf, tddIsf, pkpdScaleForTick)
+        aapsLogger.debug(LTag.APS, "Fused slow ISF: $fusedSlowIsf (profile=$profileIsf, tddIsf=$tddIsf, pkpdScale=$pkpdScaleForTick)")
 
         // 5) EMA TDD (stabilise lùajustement AF)
         val tdd24 = tddCalculator.calculateDaily(-24, 0)?.totalAmount ?: tddIsf /* fallback */
@@ -776,7 +781,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         aapsLogger.debug(LTag.APS, "Final DynISF: $blended")
         aapsLogger.debug(
             LTag.APS,
-            "DynISF inputs: fusedSlowIsf=$fusedSlowIsf, kalmanFastIsf=$kalmanFastIsf, isfAdj=$isfAdj, trustFast=$kalmanTrustProxy, pkpdScale=$lastPkpdScale"
+            "DynISF inputs: fusedSlowIsf=$fusedSlowIsf, kalmanFastIsf=$kalmanFastIsf, isfAdj=$isfAdj, trustFast=$kalmanTrustProxy, pkpdScale=$pkpdScaleForTick"
         )
 
         // 11) cache
@@ -934,7 +939,28 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val predictedDelta = predictedDelta(recentDeltas)
 
             // Calcul adaptatif de l'ISF via la fonction centralisùe encapsulant le tout (incluant l'alimentation du cache)
-            val (source, calcSensitivity) = calculateVariableIsf(now)
+            val mealCobForEarlyPkpd = mealDataForPhysio.carbs.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
+            val pkpdRuntimeForActivity = pkpdIntegration.computeRuntime(
+                epochMillis = now,
+                bg = currentBG,
+                deltaMgDlPer5 = currentDelta ?: 0.0,
+                iobU = iobCalc.iob,
+                carbsActiveG = mealCobForEarlyPkpd,
+                windowMin = 90,
+                exerciseFlag = false,
+                profileIsf = profile.getProfileIsfMgdl(),
+                tdd24h = tdd24Hrs,
+                combinedDelta = currentDelta ?: 0.0,
+                uamConfidence = AimiUamHandler.confidenceOrZero(),
+                allowLearning = !preferences.get(BooleanKey.OApsAIMIIntelligenceSingleLearnPath),
+            )
+            lastPkpdScale = pkpdRuntimeForActivity?.pkpdScale ?: 1.0
+
+            val (source, calcSensitivity) = calculateVariableIsf(
+                timestamp = now,
+                pkpdScaleForTick = lastPkpdScale,
+                fusedSlowIsfOverride = pkpdRuntimeForActivity?.fusedIsf,
+            )
             var variableSensitivity = calcSensitivity ?: profile.getProfileIsfMgdl()
             
             aapsLogger.debug(LTag.APS, "Adaptive ISF computed (source: $source): $variableSensitivity for BG: $currentBG, currentDelta: $currentDelta, predictedDelta: $predictedDelta")
@@ -1067,21 +1093,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 90
             }
             val mealCobForPkpd = mealData.mealCOB.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
-            val pkpdRuntimeForActivity = pkpdIntegration.computeRuntime(
-                epochMillis = nowMsForPkpd,
-                bg = bgNowForPkpd,
-                deltaMgDlPer5 = deltaNowForPkpd,
-                iobU = iobNowForPkpd,
-                carbsActiveG = mealCobForPkpd,
-                windowMin = pkpdWindowSinceDoseMinForPkpd,
-                exerciseFlag = false,
-                profileIsf = profileIsfRawForPkpd,
-                tdd24h = tdd24Hrs,
-                combinedDelta = deltaNowForPkpd,
-                uamConfidence = AimiUamHandler.confidenceOrZero(),
-                allowLearning = !preferences.get(BooleanKey.OApsAIMIIntelligenceSingleLearnPath),
-            )
-            lastPkpdScale = pkpdRuntimeForActivity?.pkpdScale ?: 1.0
+            // Rùutilise le runtime PKPD calculù avant DynISF (mùme tick, pkpdScale/fusedIsf alignùs snapshot)
             aapsLogger.debug(
                 LTag.APS,
                 "PK/PD: pkpdScale=$lastPkpdScale (bg=$bgNowForPkpd, delta=$deltaNowForPkpd, iob=$iobNowForPkpd, tdd24=$tdd24Hrs, isfRaw=$profileIsfRawForPkpd)",
@@ -1300,6 +1312,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 dynIsfMode = dynIsfMode,
                 uiInteraction = uiInteraction,
                 pkpd_iob_data_array = pkpdIobDataArray,
+                effective_dia_hours = kineticsView.effective.diaHours,
+                effective_peak_minutes = kineticsView.effective.peakMinutes,
                 extraDebug = physioMults.detailedReason
             ).also {
                 val determineBasalResult = apsResultProvider.get().with(it)

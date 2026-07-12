@@ -44,9 +44,9 @@ COUCHE 3 — Consommateurs (lecture seule)
 |-------|---------|--------|
 | **0** | Types snapshot + builder + export JSONL | ✅ Livré |
 | **1** | `InsulinKineticsAuthority`, `DiaGovernor`, `CausalKineticsModulator`, learn unique | ✅ Livré |
-| **2** | `PredictionAuthorityView` + C1 consommateurs | 🔲 Partiel (types + export) |
-| **3** | Profiler / observer / DynISF via snapshot | 🔲 Flag `kinetics_profiler` |
-| **4** | Arbre Lot 2 `insulin_kinetics_context` | 🔲 Modulateur causal livré |
+| **2** | `PredictionAuthorityApplier` + C1 consommateurs (flag) | ✅ Livré (shadow ON, prod OFF) |
+| **3** | Profiler / observer / DynISF via snapshot | ✅ Livré |
+| **4** | Arbre Lot 2 `insulin_kinetics_context` | ✅ Modulateur causal livré |
 | **5** | Accounting IOB policy (shadow → prod) | 🔲 Non démarré |
 
 ---
@@ -58,7 +58,8 @@ COUCHE 3 — Consommateurs (lecture seule)
 | `key_aimi_intelligence_snapshot_export` | true | Export `intelligence_snapshot_v1` JSONL |
 | `key_aimi_intelligence_single_learn_path` | true | Un seul `computeRuntime` apprenant / tick |
 | `key_aimi_dia_governor_enabled` | true | TAP-D blend profil + learned DIA |
-| `key_aimi_intelligence_kinetics_profiler` | true | Profiler sur `predictionIobArray` |
+| `key_aimi_prediction_authority_shadow` | true | Log Δ eventual/predT sans impact dose |
+| `key_aimi_prediction_authority_enabled` | **false** | C1 prod : applicator + stacking + SafetyNet |
 
 ---
 

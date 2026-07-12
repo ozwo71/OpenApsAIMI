@@ -53,10 +53,15 @@ data class IsfAuthorityView(
 )
 
 data class PredictionAuthorityView(
+    val predTerminalMgdl: Double,
+    val eventualTerminalMgdl: Double,
     val pkpdEventualMgdl: Double?,
     val scenarioFloorMgdl: Double?,
     val scenarioBestMgdl: Double?,
     val source: String?,
+    val scenarioUpliftApplied: Boolean = false,
+    val falseMealSuppression: Boolean = false,
+    val reason: String? = null,
 )
 
 data class SmbPolicyContextView(

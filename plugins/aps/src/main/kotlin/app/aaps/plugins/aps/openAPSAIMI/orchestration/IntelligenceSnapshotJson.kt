@@ -60,10 +60,15 @@ object IntelligenceSnapshotJson {
                 put("pkpd_scale", snapshot.isf.pkpdScale)
             })
             put("predictions", JSONObject().apply {
+                put("pred_terminal_mgdl", snapshot.predictions.predTerminalMgdl)
+                put("eventual_terminal_mgdl", snapshot.predictions.eventualTerminalMgdl)
                 snapshot.predictions.pkpdEventualMgdl?.let { put("pkpd_eventual_mgdl", it) }
                 snapshot.predictions.scenarioFloorMgdl?.let { put("scenario_floor_mgdl", it) }
                 snapshot.predictions.scenarioBestMgdl?.let { put("scenario_best_mgdl", it) }
                 snapshot.predictions.source?.let { put("authority_source", it) }
+                put("scenario_uplift_applied", snapshot.predictions.scenarioUpliftApplied)
+                put("false_meal_suppression", snapshot.predictions.falseMealSuppression)
+                snapshot.predictions.reason?.let { put("reason", it) }
             })
             put("smb_policy", JSONObject().apply {
                 put("tail_fraction", snapshot.smbPolicy.tailFraction)

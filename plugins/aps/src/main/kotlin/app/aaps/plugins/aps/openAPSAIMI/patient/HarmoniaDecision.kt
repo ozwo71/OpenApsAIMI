@@ -23,6 +23,8 @@ data class HarmoniaDecisionEnvironment(
     val correctionFragilityScore: Double = 0.0,
     val postHyperExhaustionScore: Double = 0.0,
     val chaoticEpisodeLoad: Double = 0.0,
+    val effectiveDiaHours: Double? = null,
+    val effectivePeakMinutes: Double? = null,
     val seed: Long? = null,
 ) {
     fun toJsonObject(): JSONObject =
@@ -43,6 +45,8 @@ data class HarmoniaDecisionEnvironment(
             put("correction_fragility_score", correctionFragilityScore)
             put("post_hyper_exhaustion_score", postHyperExhaustionScore)
             put("chaotic_episode_load", chaoticEpisodeLoad)
+            effectiveDiaHours?.let { put("effective_dia_h", it) }
+            effectivePeakMinutes?.let { put("effective_peak_min", it) }
             put("seed", seed ?: JSONObject.NULL)
         }
 }

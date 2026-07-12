@@ -6,6 +6,7 @@ import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
+import app.aaps.plugins.aps.openAPSAIMI.orchestration.PredictionAuthorityApplier
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinKineticsAuthority
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdLearningDiagnostics
@@ -58,6 +59,19 @@ object AimiIntelligenceSnapshotBuilder {
         val pkpdScale = runtime?.pkpdScale ?: 1.0
         val fusionFactor = if (profileIsf > 0.0) fusedIsf / profileIsf else 1.0
         val predAuth = input.predictionAuthority
+        val predictions = if (predAuth != null) {
+            PredictionAuthorityApplier.fromAuthority(predAuth)
+        } else {
+            val pkpdEv = input.pkpdEventualMgdl
+            PredictionAuthorityView(
+                predTerminalMgdl = pkpdEv ?: profileIsf,
+                eventualTerminalMgdl = pkpdEv ?: profileIsf,
+                pkpdEventualMgdl = pkpdEv,
+                scenarioFloorMgdl = null,
+                scenarioBestMgdl = null,
+                source = null,
+            )
+        }
         return AimiIntelligenceSnapshot(
             meta = SnapshotMeta(timestampMs = input.timestampMs),
             causal = InsulinKineticsAuthority.buildCausalContext(input.causalPosterior),
@@ -69,12 +83,7 @@ object AimiIntelligenceSnapshotBuilder {
                 pkpdScale = pkpdScale,
                 fusionFactor = fusionFactor,
             ),
-            predictions = PredictionAuthorityView(
-                pkpdEventualMgdl = input.pkpdEventualMgdl ?: predAuth?.pkpdEventualMgdl,
-                scenarioFloorMgdl = predAuth?.scenarioFloorTerminalMgdl,
-                scenarioBestMgdl = predAuth?.scenarioBestTerminalMgdl,
-                source = predAuth?.source?.name,
-            ),
+            predictions = predictions,
             smbPolicy = SmbPolicyContextView(
                 tailFraction = kinetics.activity.tailFraction,
                 activityStage = kinetics.activity.stage,

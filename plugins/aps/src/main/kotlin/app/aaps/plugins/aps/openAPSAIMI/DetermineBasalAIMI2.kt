@@ -76,6 +76,8 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdLearningDiagnostics
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiIntelligenceSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiIntelligenceSnapshotBuilder
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.IntelligenceSnapshotJson
+import app.aaps.plugins.aps.openAPSAIMI.orchestration.PredictionAuthorityApplier
+import app.aaps.plugins.aps.openAPSAIMI.orchestration.PredictionAuthorityApplyResult
 import app.aaps.plugins.aps.openAPSAIMI.ports.PkpdPort
 import app.aaps.plugins.aps.openAPSAIMI.prediction.NaiveEventualBgSignGuard
 import app.aaps.plugins.aps.openAPSAIMI.prediction.PredictionSanityResult
@@ -1464,12 +1466,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastPredDivergenceExport = null
         lastDecisionPredictionAuthority = null
         lastIntelligenceSnapshot = null
+        lastPredictionAuthorityApplyResult = null
         isConfirmedHighRiseThisTick = false
         correctionAggressionDecision = null
         mealAdvisorOneShotThisTick = false
         lastTubeAdvisorSmbCapScale = null
         lastInflammationResult = null
         tickInsulinActionState = null
+        tickEffectiveDiaHours = ctx.effectiveDiaHours
+        tickEffectivePeakMinutes = ctx.effectivePeakMinutes
         lastLoopCgmNoise = ctx.glucoseStatus.noise
 
         if (ctx.extraDebug.isNotEmpty()) {
@@ -1673,14 +1678,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 "Activity Now=${"%.0f".format(iobActivityNow * 100)}%, " +
                 "in 30m=${"%.0f".format(iobActivityIn30Min * 100)}%"
         )
+        val observerDiaHours = ctx.effectiveDiaHours?.takeIf { it.isFinite() && it > 0.0 } ?: ctx.profile.dia
+        val observerPeakMinutes = ctx.effectivePeakMinutes?.takeIf { it.isFinite() && it > 0.0 }?.toInt()
+            ?: iobPeakMinutes.toInt()
         val insulinActionState = insulinObserver.update(
             currentBg = bg,
             bgDelta = delta.toDouble(),
             iobTotal = iobTotal,
             iobActivityNow = iobActivityNow,
             iobActivityIn30 = iobActivityIn30Min,
-            peakMinutesAbs = iobPeakMinutes.toInt(),
-            diaHours = ctx.profile.dia,
+            peakMinutesAbs = observerPeakMinutes,
+            diaHours = observerDiaHours,
             carbsActiveG = cob.toDouble(),
             now = dateUtil.now()
         )
@@ -3151,6 +3159,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     correctionFragilityScore = eventMemory.correctionFragilityScore,
                     postHyperExhaustionScore = eventMemory.postHyperExhaustionScore,
                     chaoticEpisodeLoad = lastRbtChaosEvaluation?.score ?: 0.0,
+                    effectiveDiaHours = ctx.effectiveDiaHours,
+                    effectivePeakMinutes = ctx.effectivePeakMinutes,
                 )
             },
             timestampMs = nowMs,
@@ -5170,6 +5180,31 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastDecisionPredictionAuthority = decisionPrediction
         consoleLog.add(DecisionPredictionAuthorityResolver.formatLogLine(decisionPrediction))
 
+        val authorityEnabled = predictionAuthorityEnabled()
+        val authorityShadow = preferences.get(BooleanKey.OApsAIMIPredictionAuthorityShadow)
+        val pkpdPredTerminalBefore = minPredictedAcrossCurves(rT.predBGs) ?: pkpdPredictions.eventual
+        val applyResult = PredictionAuthorityApplier.apply(
+            rT = rT,
+            authority = decisionPrediction,
+            scenarioProjection = lastScenarioProjection,
+            enabled = authorityEnabled,
+            shadowOnly = authorityShadow && !authorityEnabled,
+            pkpdEventualBeforeApply = pkpdPredictions.eventual,
+            pkpdPredTerminalBeforeApply = pkpdPredTerminalBefore,
+        )
+        lastPredictionAuthorityApplyResult = applyResult
+        PredictionAuthorityApplier.formatShadowLogLine(applyResult)?.let { line -> consoleLog.add(line) }
+        if (applyResult.applied) {
+            this.eventualBG = applyResult.eventualMgdl
+            this.predictedBg = applyResult.eventualMgdl.toFloat()
+            rT.eventualBG = applyResult.eventualMgdl
+            consoleLog.add(
+                "PRED_AUTHORITY_C1: eventual=${applyResult.eventualMgdl.toInt()} " +
+                    "predT=${applyResult.predTerminalMgdl.toInt()} " +
+                    "curves=${applyResult.predBGsRemapped} src=${applyResult.source}",
+            )
+        }
+
         val projectionInput = correctionAggressionProjectionInput(
             targetBgValue = targetBg,
             cobValue = cob.toDouble(),
@@ -5658,8 +5693,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             targetBg = targetBg,
             iob = iob.toDouble(),
             maxIob = this.maxIob,
-            eventualBg = eventualBG.takeIf { it > 1.0 && it.isFinite() },
-            minPredBg = minPredictedBgForRbtWiring(minPredictedAcrossCurves(rT.predBGs)),
+            eventualBg = authoritativeEventualBg(eventualBG).takeIf { it > 1.0 && it.isFinite() },
+            minPredBg = minPredictedBgForRbtWiring(
+                authoritativeMinPredBg(rT, minPredictedAcrossCurves(rT.predBGs)),
+            ),
             trajectoryEnergy = rT.trajectoryEnergy,
             isExplicitUserAction = isExplicitAction,
             enabled = preferences.get(BooleanKey.OApsAIMIIobSurveillanceGuard),
@@ -7931,7 +7968,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (preferences.get(BooleanKey.OApsAIMIIntelligenceSnapshotExport)) {
             lastIntelligenceSnapshot = buildIntelligenceSnapshot(ctx, profile, pkpdRuntime)
             decisionCtx.adjustments.intelligence_snapshot =
-                lastIntelligenceSnapshot?.let { IntelligenceSnapshotJson.toJsonObject(it) }
+                lastIntelligenceSnapshot?.let { snap ->
+                    IntelligenceSnapshotJson.toJsonObject(snap).apply {
+                        lastPredictionAuthorityApplyResult?.let { ar ->
+                            optJSONObject("predictions")?.apply {
+                                put("authority_applied", ar.applied)
+                                put("shadow_only", ar.shadowOnly)
+                                ar.shadowDeltaEventualMgdl?.let { put("shadow_delta_eventual", it) }
+                                ar.shadowDeltaPredTerminalMgdl?.let { put("shadow_delta_pred_terminal", it) }
+                            }
+                        }
+                    }
+                }
         }
 
         decisionCtx.adjustments.physiological_tree = lastPhysiologicalTreeSnapshot?.toJsonObject()?.apply {
@@ -9025,6 +9073,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastPredDivergenceExport: org.json.JSONObject? = null
     private var lastDecisionPredictionAuthority: DecisionPredictionAuthority? = null
     private var lastIntelligenceSnapshot: AimiIntelligenceSnapshot? = null
+    private var lastPredictionAuthorityApplyResult: PredictionAuthorityApplyResult? = null
+
+    private fun predictionAuthorityEnabled(): Boolean =
+        preferences.get(BooleanKey.OApsAIMIPredictionAuthorityEnabled)
+
+    private fun authoritativeEventualBg(fallback: Double = this.eventualBG): Double =
+        if (predictionAuthorityEnabled()) {
+            lastDecisionPredictionAuthority?.eventualTerminalMgdl
+                ?: cachedRiskEnvelopeDecision?.eventualTerminalMgdl
+                ?: fallback
+        } else {
+            fallback
+        }
+
+    private fun authoritativeMinPredBg(rT: RT, rawMinPred: Double?): Double? =
+        if (predictionAuthorityEnabled()) {
+            lastDecisionPredictionAuthority?.predTerminalMgdl
+                ?: cachedRiskEnvelopeDecision?.predTerminalMgdl
+                ?: rawMinPred
+        } else {
+            rawMinPred
+        }
     private var lastAdvancedPredictionCurves: AdvancedPredictionCurves? = null
     private var lastSafetyTerminalsForRbt: SafetyPredictionTerminals? = null
     private var lastHyperTrajectoryRelease: HyperTrajectoryReleaseResult? = null
@@ -9161,6 +9231,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastTubeAdvisorSmbCapScale: Double? = null
     private var lastInflammationResult: app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster.InflammationResult? = null
     private var tickInsulinActionState: InsulinActionState? = null
+    private var tickEffectiveDiaHours: Double? = null
+    private var tickEffectivePeakMinutes: Double? = null
     private var lastDecisionSource: String = "AIMI"
     private var lastSafetySource: String = "NONE"
     private var lastPredictionAvailable: Boolean = false
@@ -11110,12 +11182,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
         }
         val eventualForStacking = when {
+            predictionAuthorityEnabled() -> authoritativeEventualBg().takeIf { it.isFinite() && it > 1.0 }
             this.eventualBG > 1.0 -> this.eventualBG
             rT.eventualBG != null && rT.eventualBG!! > 1.0 -> rT.eventualBG!!
             else -> null
         }
         val rawMinPred = minPredictedAcrossCurves(rT.predBGs)
-        val minPredForStacking = minPredictedBgForRbtWiring(rawMinPred)
+        val minPredForStacking = minPredictedBgForRbtWiring(authoritativeMinPredBg(rT, rawMinPred))
         val endogenousCounterRegulatory =
             lastPhysiologicalPhaseOutput?.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY
         val stackingEval = InsulinStackingStance.evaluate(
@@ -11155,9 +11228,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } catch (e: Exception) { null }
         
         val pkpdEventualForSmb =
-            cachedRiskEnvelopeDecision?.eventualTerminalMgdl?.takeIf { it.isFinite() } ?: this.eventualBG
-        // 🩹 Relâche le clamp zone-2 uniquement sur faux plancher pkpd confirmé par le scénario borné.
-        val decisionEventualBgForSmb = reconcileSmbEventualWithScenario(pkpdEventualForSmb, targetBg.toDouble())
+            cachedRiskEnvelopeDecision?.eventualTerminalMgdl?.takeIf { it.isFinite() }
+                ?: authoritativeEventualBg(this.eventualBG)
+        val decisionEventualBgForSmb = if (predictionAuthorityEnabled()) {
+            pkpdEventualForSmb
+        } else {
+            reconcileSmbEventualWithScenario(pkpdEventualForSmb, targetBg.toDouble())
+        }
         val baseLimit = app.aaps.plugins.aps.openAPSAIMI.safety.SafetyNet.calculateSafeSmbLimit(
             bg = this.bg,
             targetBg = targetBg.toDouble(),
@@ -11276,14 +11353,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
          
          // 🚀 NOUVEAUTÉ: Real-Time Insulin Observer Throttle
          if (!isExplicitUserAction) {
-             val actionState = insulinObserver.update(
+             val throttleDiaHours = tickEffectiveDiaHours?.takeIf { it.isFinite() && it > 0.0 }
+                 ?: lastProfile?.dia
+                 ?: 6.0
+             val throttlePeakMinutes = tickEffectivePeakMinutes?.takeIf { it.isFinite() && it > 0.0 }?.toInt()
+                 ?: tickInsulinActionState?.timeToPeakMin?.takeIf { it > 0 }
+                 ?: 0
+             val actionState = tickInsulinActionState ?: insulinObserver.update(
                  currentBg = this.bg,
                  bgDelta = this.delta.toDouble(),
                  iobTotal = this.iob.toDouble(),
                  iobActivityNow = this.iobActivityNow,
-                 iobActivityIn30 = 0.0,  // Not critical for throttle
-                 peakMinutesAbs = 0,     // Not critical for throttle
-                 diaHours = 4.0,         // Approximation
+                 iobActivityIn30 = 0.0,
+                 peakMinutesAbs = throttlePeakMinutes,
+                 diaHours = throttleDiaHours,
                  carbsActiveG = this.cob.toDouble(),
                  now = dateUtil.now()
              )
@@ -15329,14 +15412,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @SuppressLint("NewApi", "DefaultLocale") fun determine_basal(
         glucose_status: GlucoseStatusAIMI, currenttemp: CurrentTemp, iob_data_array: Array<IobTotal>, profile: OapsProfileAimi, autosens_data: AutosensResult, mealData: MealData,
         microBolusAllowed: Boolean, currentTime: Long, flatBGsDetected: Boolean, dynIsfMode: Boolean, uiInteraction: UiInteraction,
-        pkpd_iob_data_array: Array<IobTotal>? = null, // learned-kinetics activity array for prediction curves (null → static profile fallback)
-        extraDebug: String = "" // 🌀 Extensible Debug Channel (e.g. Cosine Gate)
+        pkpd_iob_data_array: Array<IobTotal>? = null,
+        effective_dia_hours: Double? = null,
+        effective_peak_minutes: Double? = null,
+        extraDebug: String = ""
     ): RT {
         val ctx = AimiTickContext(
             glucoseStatus = glucose_status,
             currentTemp = currenttemp,
             iobDataArray = iob_data_array,
             pkpdIobDataArray = pkpd_iob_data_array,
+            effectiveDiaHours = effective_dia_hours,
+            effectivePeakMinutes = effective_peak_minutes,
             profile = profile,
             autosensData = autosens_data,
             mealData = mealData,
