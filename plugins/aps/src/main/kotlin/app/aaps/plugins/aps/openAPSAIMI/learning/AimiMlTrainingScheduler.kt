@@ -14,7 +14,7 @@ import javax.inject.Singleton
 /**
  * Central WorkManager scheduling for AIMI on-device ML trainers.
  *
- * - Basal / T3C: every 6h (idle + charging)
+ * - Basal / T3C: every 6h (battery-not-low; runs regardless of charging / device-idle)
  * - Autodrive attention: 24h via [app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveNeuralTrainer]
  */
 @Singleton
@@ -24,9 +24,12 @@ class AimiMlTrainingScheduler @Inject constructor(
 ) {
 
     fun schedule() {
+        // Train regardless of charging / device-idle. The previous setRequiresCharging + setRequiresDeviceIdle combo
+        // almost never coincided on real phones, so this 6h worker rarely fired and the weights files were never
+        // produced — while the loop-written CSVs/state and the loop-trained SMB model always were. Keep only a
+        // battery-not-low guard (avoid heavy training on a nearly-dead battery), matching the on-loop SMB training.
         val constraints = Constraints.Builder()
-            .setRequiresCharging(true)
-            .setRequiresDeviceIdle(true)
+            .setRequiresBatteryNotLow(true)
             .build()
 
         val basalRequest = PeriodicWorkRequestBuilder<BasalMlTrainerWorker>(6, TimeUnit.HOURS)
@@ -37,12 +40,14 @@ class AimiMlTrainingScheduler @Inject constructor(
             val wm = WorkManager.getInstance(context)
             // Legacy duplicate Autodrive 6h work (superseded by 24h AutodriveNeuralTrainer schedule)
             wm.cancelUniqueWork(LEGACY_AUTODRIVE_6H_WORK)
+            // UPDATE (not KEEP): existing installs already enqueued the old charging+idle work; UPDATE re-applies the
+            // relaxed constraints while preserving the periodic schedule, so the fix reaches devices that scheduled it.
             wm.enqueueUniquePeriodicWork(
                 WORK_BASAL_ML,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 basalRequest,
             )
-            aapsLogger.info(LTag.APS, "AimiMlTrainingScheduler: basal/T3C trainer scheduled (6h)")
+            aapsLogger.info(LTag.APS, "AimiMlTrainingScheduler: basal/T3C trainer scheduled (6h, battery-not-low)")
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "AimiMlTrainingScheduler: schedule failed", e)
         }
