@@ -32,7 +32,8 @@ internal object NeuralModelTrainer {
     /**
      * Train a fresh candidate on [split], validate it, and publish to [weightsFile] on success.
      *
-     * @param outputRange if non-null, the zero-probe output must fall inside it (rejects degenerate models).
+     * @param probeInput optional sanity-check input; defaults to all-zero (legacy). Basal/T3C pass a training-centroid vector.
+     * @param outputRange if non-null, the probe output must fall inside it (rejects degenerate models).
      * @param requireIncumbentBeat if true, the candidate's best validation loss must not exceed the incumbent's by
      *   more than [valLossTolerance] (keep the better model); if false, any finite / in-range candidate publishes.
      * @param log optional diagnostic sink (reject reasons + publish); defaults to no-op.
@@ -46,6 +47,7 @@ internal object NeuralModelTrainer {
         hiddenSize: Int = 8,
         regularizationLambda: Double = 0.01,
         outputRange: ClosedFloatingPointRange<Double>? = null,
+        probeInput: FloatArray? = null,
         requireIncumbentBeat: Boolean = false,
         valLossTolerance: Double = 1.0,
         log: (String) -> Unit = {},
@@ -58,7 +60,8 @@ internal object NeuralModelTrainer {
         val candidate = AimiNeuralNetwork(inputSize, hiddenSize, 1, config, regularizationLambda)
         candidate.trainWithValidation(split.trainInputs, split.trainTargets, split.valInputs, split.valTargets)
 
-        val probeOut = candidate.predict(FloatArray(inputSize) { 0f })
+        val probe = probeInput?.takeIf { it.size == inputSize } ?: FloatArray(inputSize) { 0f }
+        val probeOut = candidate.predict(probe)
         if (!probeOut.all { it.isFinite() }) {
             log("candidate probe NaN/Inf — discard")
             return null

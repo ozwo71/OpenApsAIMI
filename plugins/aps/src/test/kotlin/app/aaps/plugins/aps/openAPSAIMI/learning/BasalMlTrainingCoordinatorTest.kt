@@ -109,6 +109,18 @@ class BasalMlTrainingCoordinatorTest {
     }
 
     @Test
+    fun `representativeProbeInput averages training features`() {
+        val inputs = listOf(
+            floatArrayOf(100f, 1f, 0f, 30f, 45f, 0.5f) + FloatArray(10) { 0f },
+            floatArrayOf(200f, 2f, 0f, 60f, 90f, 1.0f) + FloatArray(10) { 1f },
+        )
+        val probe = BasalMlDatasetParser.representativeProbeInput(inputs)
+        assertThat(probe.size).isEqualTo(BasalMlTrainingCoordinator.INPUT_SIZE)
+        assertThat(probe[0]).isWithin(0.01f).of(150f)
+        assertThat(probe[1]).isWithin(0.01f).of(1.5f)
+    }
+
+    @Test
     fun `maybeTrainAsync is fire and forget`() {
         coordinator.maybeTrainAsync()
     }

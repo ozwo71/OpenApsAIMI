@@ -216,17 +216,21 @@ class BasalMlTrainingCoordinator @Inject constructor(
         valTargets: List<DoubleArray>,
         config: TrainingConfig,
         outputRange: ClosedFloatingPointRange<Double>,
-    ): Boolean =
-        NeuralModelTrainer.trainAndPublish(
+    ): Boolean {
+        val hasIncumbent = weightsFile.exists()
+        return NeuralModelTrainer.trainAndPublish(
             weightsFile = weightsFile,
             split = NeuralModelTrainer.Split(trainInputs, trainTargets, valInputs, valTargets),
             config = config,
             inputSize = INPUT_SIZE,
-            outputRange = outputRange,
-            requireIncumbentBeat = true,
+            probeInput = BasalMlDatasetParser.representativeProbeInput(trainInputs),
+            // Bootstrap: publish any finite candidate (SMB-style). Retrain: probe + range + beat incumbent.
+            outputRange = if (hasIncumbent) outputRange else null,
+            requireIncumbentBeat = hasIncumbent,
             valLossTolerance = VAL_LOSS_TOLERANCE,
             log = { log.info(LTag.APS, "$TAG: $it") },
         ) != null
+    }
 
     private fun isCircuitOpen(now: Long): Boolean = circuitBreaker.isOpen(now)
 
@@ -293,6 +297,32 @@ internal data class BasalMlDataset(
 }
 
 internal object BasalMlDatasetParser {
+
+    /** Feature centroid for publish-time probe (replaces all-zero vector that never appears in training data). */
+    fun representativeProbeInput(trainInputs: List<FloatArray>): FloatArray {
+        if (trainInputs.isEmpty()) return neutralProbeInput()
+        val size = trainInputs.first().size
+        val acc = FloatArray(size)
+        var used = 0
+        for (row in trainInputs) {
+            if (row.size != size) continue
+            for (i in row.indices) acc[i] += row[i]
+            used++
+        }
+        if (used == 0) return neutralProbeInput()
+        val n = used.toFloat()
+        for (i in acc.indices) acc[i] /= n
+        return acc
+    }
+
+    /** Fallback probe when the train set is empty (should not happen in normal publish flow). */
+    fun neutralProbeInput(): FloatArray {
+        val base = floatArrayOf(100f, 1f, 0f, 30f, 45f, 0.5f)
+        val physio = SmbRefinementFeatureSchema.latentFeatureValues(null) +
+            SmbRefinementFeatureSchema.modeFeatureValues(null) +
+            SmbRefinementFeatureSchema.causalFeatureValues(null)
+        return base + physio
+    }
 
     // 🩸 Alignement temporel du label. La cible d'apprentissage doit être le résultat RÉELLEMENT observé, donc
     // le BG mesuré ~30 min après le tick (colonne `bg` d'une ligne future), et NON la colonne `eventualBg` —
