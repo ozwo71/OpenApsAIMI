@@ -72,6 +72,20 @@ class BasalMlTrainingCoordinatorTest {
     }
 
     @Test
+    fun `parser appends physio context features and backfills neutral for legacy rows`() {
+        // Legacy CSV (no physio columns) must still yield full-width inputs: 6 glucose-dynamics base + 10 physio
+        // (mirror of the SMB schema), the physio slots filled with neutral values (schema versioning + backfill).
+        val dataset = BasalMlDatasetParser.parse(csvFile)!!
+        val input = dataset.inputs.first()
+
+        assertThat(input.size).isEqualTo(BasalMlTrainingCoordinator.INPUT_SIZE)
+        assertThat(input.size).isEqualTo(16)
+        // Physio block starts at BASE_FEATURE_COUNT: mealProb neutral = 0.0, circadianSiFactor neutral = 1.0.
+        assertThat(input[BasalMlTrainingCoordinator.BASE_FEATURE_COUNT]).isEqualTo(0.0f)
+        assertThat(input[BasalMlTrainingCoordinator.BASE_FEATURE_COUNT + 2]).isEqualTo(1.0f)
+    }
+
+    @Test
     fun `training is reached even when both feature prefs are off (decoupled from usage)`() = runBlocking {
         // Old behavior returned SKIPPED before any training when the feature prefs were off. New contract: training
         // depends only on data availability; the prefs gate only runtime usage (BasalNeuralLearner). We assert the

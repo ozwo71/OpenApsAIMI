@@ -1508,7 +1508,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 accel = accel,
                 duraMin = ctx.glucoseStatus.duraISFminutes,
                 duraAvg = ctx.glucoseStatus.duraISFaverage,
-                iob = iobObj.iob
+                iob = iobObj.iob,
+                physioFeatures = currentBasalPhysioFeatures()
             )
         } else 1.0
         adaptiveMult = BasalAdaptiveMultiplier.combine(hMult, nMult)
@@ -3340,6 +3341,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 duraMin = duraISFminutes,
                 duraAvg = duraISFaverage,
                 iob = iob.toDouble(),
+                physioFeatures = currentBasalPhysioFeatures(),
             )
             val adaptiveBoost = if (adaptiveMult > 1.0) {
                 (adaptiveMult - 1.0).coerceAtMost(0.40)
@@ -9081,6 +9083,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastPatientState: PatientStateSnapshot? = null
     private var lastPatientModeDecision: PatientModeOrchestrator.Decision? = null
     private var lastPhysiologicalTreeSnapshot: PhysiologicalTreeSnapshot? = null
+
+    /**
+     * Physiological-context feature vector for the basal NN (record + inference), mirroring the SMB feature schema so
+     * the basal model shares the tree's physiological view (latent physio + patient-mode + causal) instead of being
+     * context-blind. Same order as [BasalNeuralLearner.modelInput] and the CSV physio columns: 4 latent + 3 mode + 3 causal.
+     */
+    private fun currentBasalPhysioFeatures(): FloatArray =
+        SmbRefinementFeatureSchema.latentFeatureValues(lastPhysioLatentState) +
+            SmbRefinementFeatureSchema.modeFeatureValues(lastPatientModeDecision) +
+            SmbRefinementFeatureSchema.causalFeatureValues(lastPatientState?.causalPosterior)
     private var lastHarmoniaDecision: HarmoniaDecision? = null
     private var lastHarmoniaProductionDecision: HarmoniaProductionDecision? = null
     private var lastPatientSourceSensor: SourceSensor? = null
@@ -15523,6 +15535,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             loopDeltaMgDl5m = diag.deltaValue,
             sensorNoise = diag.cgmNoise,
             shortMinPredBg = minPredictedAcrossCurves(rT.predBGs),
+            physioFeatures = currentBasalPhysioFeatures(),
         )
         val gov = basalNeuralLearner.getGovernanceSnapshot()
         consoleLog.add(
@@ -15858,7 +15871,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             accel = accel,
             duraMin = duraISFminutes,
             duraAvg = duraISFaverage,
-            iob = iob.iob
+            iob = iob.iob,
+            physioFeatures = currentBasalPhysioFeatures()
         )
         // Clamp the blend so adaptiveMult never turns T3C hyper-aggressive:
         //  - Resistance (adaptiveMult > 1.0): amplify up to 40% extra
@@ -15962,6 +15976,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             loopDeltaMgDl5m = delta.toDouble(),
             sensorNoise = cgmNoise,
             shortMinPredBg = minPredictedAcrossCurves(rT.predBGs),
+            physioFeatures = currentBasalPhysioFeatures(),
         )
         val gov = basalNeuralLearner.getGovernanceSnapshot()
         consoleLog.add(

@@ -4,6 +4,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
 import app.aaps.plugins.aps.openAPSAIMI.TrainingConfig
+import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -29,7 +30,10 @@ class BasalMlTrainingCoordinator @Inject constructor(
     companion object {
         private const val TAG = "BasalMlTraining"
 
-        const val INPUT_SIZE = 6
+        // 6 glucose-dynamics base features + 10 physiological-context features (mirror of the SMB schema:
+        // 4 latent + 3 patient-mode + 3 causal). Keep in sync with BasalNeuralLearner.modelInput / the parser.
+        const val BASE_FEATURE_COUNT = 6
+        const val INPUT_SIZE = 16
         private const val TRAIN_INTERVAL_MS = 6L * 60 * 60 * 1000
         private const val MIN_NEW_ROWS = 80L
         private const val BASAL_MIN_ROWS = 100
@@ -342,12 +346,24 @@ internal object BasalMlDatasetParser {
 
         val required = listOf(iTs, iBg, iBasal, iTarget, iAccel, iDuraMin, iDuraAvg, iIob, iBasalScale, iT3cAgg)
         if (required.any { it < 0 }) return null
+        val requiredMaxIdx = required.max()
+
+        // Physio-context columns (mirror of the SMB schema). Read by name; absent column OR short (legacy) row →
+        // neutral value → schema versioning + neutral backfill so the pre-physio history keeps training.
+        val physioNames = SmbRefinementFeatureSchema.latentFeatureNames +
+            SmbRefinementFeatureSchema.modeFeatureNames +
+            SmbRefinementFeatureSchema.causalFeatureNames
+        val neutralPhysio = SmbRefinementFeatureSchema.latentFeatureValues(null) +
+            SmbRefinementFeatureSchema.modeFeatureValues(null) +
+            SmbRefinementFeatureSchema.causalFeatureValues(null)
+        val physioIdx = physioNames.map { header.indexOf(it) }
 
         // 1) Parse + filtre de validité (BG plausible), puis tri chronologique pour la jointure du label.
         val raw = ArrayList<RawRow>(allLines.size)
         for (line in allLines.drop(1)) {
             val cols = line.split(",")
-            if (cols.size < header.size) continue
+            // Require only the base columns (physio columns are optional → neutral backfill for legacy rows).
+            if (cols.size <= requiredMaxIdx) continue
             val ts = cols[iTs].toLongOrNull() ?: continue
             val bg = cols[iBg].toDoubleOrNull() ?: continue
             if (!bg.isFinite() || bg < MIN_VALID_BG || bg > MAX_VALID_BG) continue
@@ -359,6 +375,10 @@ internal object BasalMlDatasetParser {
             val target = cols[iTarget].toDoubleOrNull() ?: continue
             val currentScale = cols[iBasalScale].toDoubleOrNull() ?: continue
             val currentAgg = cols[iT3cAgg].toDoubleOrNull() ?: continue
+            val physio = FloatArray(physioNames.size) { j ->
+                val idx = physioIdx[j]
+                if (idx >= 0) cols.getOrNull(idx)?.toFloatOrNull() ?: neutralPhysio[j] else neutralPhysio[j]
+            }
             raw.add(
                 RawRow(
                     ts = ts,
@@ -366,7 +386,7 @@ internal object BasalMlDatasetParser {
                     target = target,
                     currentScale = currentScale,
                     currentAgg = currentAgg,
-                    features = floatArrayOf(bg.toFloat(), basal, accel, duraMin, duraAvg, iob),
+                    features = floatArrayOf(bg.toFloat(), basal, accel, duraMin, duraAvg, iob) + physio,
                 )
             )
         }

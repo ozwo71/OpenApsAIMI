@@ -8,6 +8,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
+import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -130,6 +131,27 @@ class BasalNeuralLearner @Inject constructor(
         )
     }
 
+    /** Neutral physiological context (backfill / when no live state is available): 4 latent + 3 mode + 3 causal = 10,
+     *  reusing the SMB feature schema so the two models share one physio vocabulary. */
+    private val neutralPhysioFeatures: FloatArray =
+        SmbRefinementFeatureSchema.latentFeatureValues(null) +
+            SmbRefinementFeatureSchema.modeFeatureValues(null) +
+            SmbRefinementFeatureSchema.causalFeatureValues(null)
+
+    /**
+     * Model input = 6 glucose-dynamics base features + 10 physiological-context features (mirror of the SMB schema)
+     * → [BasalMlTrainingCoordinator.INPUT_SIZE]. Falls back to neutral physio if the caller's vector is the wrong
+     * size, so a wiring mistake degrades to context-blind rather than crashing on an input-size mismatch.
+     */
+    private fun modelInput(
+        bg: Double, basal: Double, accel: Double, duraMin: Double, duraAvg: Double, iob: Double,
+        physioFeatures: FloatArray,
+    ): FloatArray {
+        val base = floatArrayOf(bg.toFloat(), basal.toFloat(), accel.toFloat(), duraMin.toFloat(), duraAvg.toFloat(), iob.toFloat())
+        val physio = if (physioFeatures.size == neutralPhysioFeatures.size) physioFeatures else neutralPhysioFeatures
+        return base + physio
+    }
+
     /**
      * Returns the aggressiveness factor for T3C Brittle Mode.
      */
@@ -139,11 +161,12 @@ class BasalNeuralLearner @Inject constructor(
         accel: Double,
         duraMin: Double,
         duraAvg: Double,
-        iob: Double
+        iob: Double,
+        physioFeatures: FloatArray = neutralPhysioFeatures,
     ): Double {
         val baseAggressiveness = preferences.get(DoubleKey.OApsAIMIT3cAggressiveness)
-        val neuralFactor = neuralT3cNet?.predict(floatArrayOf(bg.toFloat(), basal.toFloat(), accel.toFloat(), duraMin.toFloat(), duraAvg.toFloat(), iob.toFloat()))?.get(0)
-        
+        val neuralFactor = neuralT3cNet?.predict(modelInput(bg, basal, accel, duraMin, duraAvg, iob, physioFeatures))?.get(0)
+
         return baseAggressiveness * (neuralFactor ?: internalAggressivenessFactor)
     }
 
@@ -156,13 +179,14 @@ class BasalNeuralLearner @Inject constructor(
         accel: Double,
         duraMin: Double,
         duraAvg: Double,
-        iob: Double
+        iob: Double,
+        physioFeatures: FloatArray = neutralPhysioFeatures,
     ): Double {
         if (!preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)) return 1.0
         val maxScaling = preferences.get(DoubleKey.OApsAIMIAdaptiveBasalMaxScaling)
-        
-        val neuralFactor = neuralBasalNet?.predict(floatArrayOf(bg.toFloat(), basal.toFloat(), accel.toFloat(), duraMin.toFloat(), duraAvg.toFloat(), iob.toFloat()))?.get(0)
-        
+
+        val neuralFactor = neuralBasalNet?.predict(modelInput(bg, basal, accel, duraMin, duraAvg, iob, physioFeatures))?.get(0)
+
         return (neuralFactor ?: internalBasalScalingFactor).coerceIn(0.7, max(1.0, maxScaling))
     }
 
@@ -181,6 +205,7 @@ class BasalNeuralLearner @Inject constructor(
         loopDeltaMgDl5m: Double? = null,
         sensorNoise: Double = 0.0,
         shortMinPredBg: Double? = null,
+        physioFeatures: FloatArray = neutralPhysioFeatures,
     ) {
         val isT3cActive = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
         val isAdaptiveBasalActive = preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)
@@ -210,7 +235,7 @@ class BasalNeuralLearner @Inject constructor(
 
         // 3. Data Logging (Synchronous for reliability in loop)
         try {
-            logRecord(bgBefore, bgAfter, basalDelivered, targetBg, accel, duraISFminutes, duraISFaverage, iob)
+            logRecord(bgBefore, bgAfter, basalDelivered, targetBg, accel, duraISFminutes, duraISFaverage, iob, physioFeatures)
             updateGovernanceWindow(
                 bgBefore = bgBefore,
                 bgAfter = bgAfter,
@@ -229,6 +254,35 @@ class BasalNeuralLearner @Inject constructor(
     @Synchronized
     fun getGovernanceSnapshot(): GovernanceSnapshot = lastGovernanceSnapshot
 
+    /** CSV header: legacy columns + the physio-context columns (mirror of the SMB schema), appended after basalScale. */
+    private val basalCsvHeader: String =
+        "timestamp,bg,eventualBg,basal,target,accel,duraMin,duraAvg,iob,t3cAgg,basalScale," +
+            (SmbRefinementFeatureSchema.latentFeatureNames +
+                SmbRefinementFeatureSchema.modeFeatureNames +
+                SmbRefinementFeatureSchema.causalFeatureNames).joinToString(",")
+
+    /**
+     * Ensure the CSV header carries the physio columns. Fresh file → write the current header. Existing legacy file
+     * (pre-physio header) → migrate the header line in place: legacy data rows simply lack the extra columns, so the
+     * parser reads them as neutral by name-absence (schema versioning + neutral backfill). Done once.
+     */
+    private fun ensureCsvSchema(file: File) {
+        if (!file.exists()) {
+            file.writeText(basalCsvHeader + "\n")
+            return
+        }
+        val firstLine = file.bufferedReader().use { it.readLine() } ?: ""
+        if (!firstLine.contains(SmbRefinementFeatureSchema.latentFeatureNames.first())) {
+            val lines = file.readLines().toMutableList()
+            if (lines.isEmpty()) {
+                file.writeText(basalCsvHeader + "\n")
+            } else {
+                lines[0] = basalCsvHeader
+                file.writeText(lines.joinToString("\n") + "\n")
+            }
+        }
+    }
+
     private fun logRecord(
         bg: Double,
         eventualBg: Double,
@@ -237,15 +291,15 @@ class BasalNeuralLearner @Inject constructor(
         accel: Double,
         duraMin: Double,
         duraAvg: Double,
-        iob: Double
+        iob: Double,
+        physioFeatures: FloatArray,
     ) {
         val file = storageHelper.getAimiFile("basal_adaptive_records.csv")
-        
-        if (!file.exists()) {
-            file.writeText("timestamp,bg,eventualBg,basal,target,accel,duraMin,duraAvg,iob,t3cAgg,basalScale\n")
-        }
-        
-        val row = "${System.currentTimeMillis()},$bg,$eventualBg,$basal,$target,$accel,$duraMin,$duraAvg,$iob,$internalAggressivenessFactor,$internalBasalScalingFactor\n"
+        ensureCsvSchema(file)
+
+        val physio = if (physioFeatures.size == neutralPhysioFeatures.size) physioFeatures else neutralPhysioFeatures
+        val row = "${System.currentTimeMillis()},$bg,$eventualBg,$basal,$target,$accel,$duraMin,$duraAvg,$iob," +
+            "$internalAggressivenessFactor,$internalBasalScalingFactor,${physio.joinToString(",")}\n"
         file.appendText(row)
     }
 
