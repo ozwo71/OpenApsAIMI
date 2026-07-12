@@ -1434,7 +1434,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         consoleLog = mutableListOf()
         if (::aapsLogger.isInitialized) {
             try {
-                hormonitorStudyExporter.recordLoopPulse(ctx.currentTime, AimiLoopTelemetry.activeTickId)
+                hormonitorStudyExporter?.recordLoopPulse(ctx.currentTime, AimiLoopTelemetry.activeTickId)
             } catch (_: Throwable) {
                 // Never break determine_basal on telemetry.
             }
@@ -7964,9 +7964,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 patientThermalBelief = patientRuntimeSnapshot?.thermalBelief
                     ?: enrichThermalSnapshot(latestSnapshot).thermalBelief,
             )
-            hormonitorStudyExporter.export(event)
-            hormonitorStudyExporter.exportShadowContributions(event)
-            hormonitorStudyExporter.exportDailyOutcomes(
+            hormonitorStudyExporter?.export(event)
+            hormonitorStudyExporter?.exportShadowContributions(event)
+            hormonitorStudyExporter?.exportDailyOutcomes(
                 event = event,
                 tirLowPct = currentTIRLow,
                 tirInRangePct = currentTIRRange,
@@ -8894,7 +8894,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val appExternalFallbackDir by lazy {
         File(context.getExternalFilesDir(null) ?: storageHelper.getAimiDirectory(), "AAPS")
     }
-    private val hormonitorStudyExporter by lazy { AimiHormonitorStudyExporterMTR(context, aapsLogger, preferences) }
+    // Telemetry must never crash the loop: if the study exporter can't initialize (storage / permissions / context),
+    // degrade to no telemetry rather than letting its construction abort the tick into a safe-hold. Null → all
+    // telemetry calls below are no-ops (`?.`); AimiLoopTelemetry.enterPhase already accepts a null exporter.
+    private val hormonitorStudyExporter: AimiHormonitorStudyExporterMTR? by lazy {
+        runCatching { AimiHormonitorStudyExporterMTR(context, aapsLogger, preferences) }
+            .onFailure { aapsLogger.error(LTag.APS, "Hormonitor exporter init failed — telemetry disabled this session", it) }
+            .getOrNull()
+    }
     private var csvPrimaryStorageDeniedLogged = false
     private val pkpdIntegration = PkPdIntegration(preferences)
     //private val tempFile = File(externalDir, "temp.csv")
@@ -15255,7 +15262,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             },
             onTickEnd = { tickId, startedWallMs, endedWallMs ->
                 try {
-                    hormonitorStudyExporter.recordLoopTickEnd(
+                    hormonitorStudyExporter?.recordLoopTickEnd(
                         tickId = tickId,
                         startedWallMs = startedWallMs,
                         endedWallMs = endedWallMs,
@@ -15268,7 +15275,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             onTickAbort = { tickId, startedWallMs, endedWallMs, error ->
                 determineBasalInvocationCaches.abandonInvocationAfterUnhandledError()
                 try {
-                    hormonitorStudyExporter.recordLoopTickAborted(
+                    hormonitorStudyExporter?.recordLoopTickAborted(
                         tickId = tickId,
                         startedWallMs = startedWallMs,
                         endedWallMs = endedWallMs,

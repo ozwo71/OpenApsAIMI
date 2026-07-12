@@ -46,6 +46,9 @@ internal class DetermineBasalAimiScenarioTestHarness(
         every { Environment.getExternalStorageDirectory() } returns mockFile
         every { Environment.getExternalStoragePublicDirectory(any()) } returns mockFile
         every { mockFile.absolutePath } returns "/tmp"
+        // Real temp dir so the engine's file-path lazies (appExternalFallbackDir, exporter dirs) don't NPE on a mock
+        // File with a null path — the tick must reach its decision branches, not abort into a safe-hold.
+        val realTmpDir = File(System.getProperty("java.io.tmpdir"))
 
         coEvery { persistenceLayer.getUserEntryDataFromTime(any()) } returns emptyList()
         coEvery { persistenceLayer.getBolusesFromTime(any(), any()) } returns emptyList()
@@ -87,7 +90,9 @@ internal class DetermineBasalAimiScenarioTestHarness(
             pumpCapabilityValidator = mockk(relaxed = true),
             dynamicBasalController = mockk<DynamicBasalController>(relaxed = true),
             autodriveEngine = autodriveEngine,
-            context = mockk(relaxed = true)
+            context = mockk(relaxed = true) {
+                every { getExternalFilesDir(any()) } returns realTmpDir
+            }
         ).apply {
             this.persistenceLayer = this@DetermineBasalAimiScenarioTestHarness.persistenceLayer
             this.tddCalculator = tddCalculator

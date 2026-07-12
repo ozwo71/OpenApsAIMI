@@ -122,7 +122,7 @@ class DetermineBasalAimiLogDecisionFinalScenarioTest {
         )
         assertThat(rt).isNotNull()
         verify(exactly = 1) {
-            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -190,7 +190,7 @@ class DetermineBasalAimiLogDecisionFinalScenarioTest {
             extraDebug = "TRAJ_SAFETY scenario"
         )
         verify(exactly = 1) {
-            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -241,7 +241,7 @@ class DetermineBasalAimiLogDecisionFinalScenarioTest {
             extraDebug = "HARD_BRAKE scenario"
         )
         verify(exactly = 1) {
-            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -292,7 +292,7 @@ class DetermineBasalAimiLogDecisionFinalScenarioTest {
             extraDebug = "COMPRESSION scenario"
         )
         verify(exactly = 1) {
-            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -346,7 +346,7 @@ class DetermineBasalAimiLogDecisionFinalScenarioTest {
             extraDebug = "MEAL_ADVISOR scenario"
         )
         verify(exactly = 1) {
-            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -412,7 +412,7 @@ class DetermineBasalAimiLogDecisionFinalScenarioTest {
             extraDebug = "AUTODRIVE_V3 scenario"
         )
         verify(exactly = 1) {
-            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -465,7 +465,7 @@ class DetermineBasalAimiLogDecisionFinalScenarioTest {
             extraDebug = "DRIFT_TERMINATOR scenario",
         )
         verify(exactly = 1) {
-            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -520,7 +520,7 @@ class DetermineBasalAimiLogDecisionFinalScenarioTest {
             extraDebug = "MAX_IOB scenario",
         )
         verify(exactly = 1) {
-            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 }
