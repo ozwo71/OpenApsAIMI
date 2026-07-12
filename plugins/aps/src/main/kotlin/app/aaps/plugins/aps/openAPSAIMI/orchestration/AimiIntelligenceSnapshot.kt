@@ -80,7 +80,7 @@ data class MlFeatureSliceView(
 )
 
 data class SnapshotMeta(
-    val version: Int = SNAPSHOT_VERSION,
+    val version: Int = AimiIntelligenceSnapshot.SNAPSHOT_VERSION,
     val timestampMs: Long,
     val buildTag: String = "intelligence_snapshot_v1",
 )

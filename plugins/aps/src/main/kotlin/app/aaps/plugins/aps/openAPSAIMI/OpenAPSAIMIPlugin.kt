@@ -1125,7 +1125,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val kineticsView = InsulinKineticsAuthority.resolve(
                 InsulinKineticsAuthority.ResolveInput(
                     accountingIobArray = iobArray,
-                    profile = oapsProfile,
+                    profileDiaHours = eff.iCfg.dia,
+                    profilePeakMinutes = peakGovernorForActivity.effectivePeakMinutes,
                     effectiveProfile = profile as EffectiveProfile,
                     pkpdRuntime = pkpdRuntimeForActivity,
                     peakGovernor = peakGovernorForActivity,
@@ -1134,7 +1135,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     sitePeakShiftMinutes = sitePeakShiftMinutes,
                     trajectoryPeakNudgeMinutes = trajectoryPeakNudgeMinutes,
                     preferences = preferences,
-                    iobCobCalculator = iobCobCalculator,
                     learningDiagnostics = PkpdLearningDiagnostics.from(
                         causalStatePosterior = null,
                         allowLearning = false,
@@ -1146,11 +1146,11 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     ),
                 ),
             )
-            val pkpdIobDataArray: Array<IobTotal>? = if (kineticsView.predictionUsesLearnedKinetics) {
-                kineticsView.predictionIobArray
-            } else {
-                null
-            }
+            val pkpdIobDataArray: Array<IobTotal>? = buildLearnedKineticsIobArray(
+                effectiveProfile = profile as EffectiveProfile,
+                learnedDiaHrs = kineticsView.effective.diaHours,
+                learnedPeakMin = kineticsView.effective.peakMinutes,
+            )
             kineticsView.diaGovernor?.logLine?.let { line -> aapsLogger.debug(LTag.APS, line) }
             peakGovernorForActivity.logLine?.let { line -> aapsLogger.debug(LTag.APS, line) }
             preferences.put(

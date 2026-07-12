@@ -29,6 +29,7 @@ object AimiIntelligenceSnapshotBuilder {
         val trajectoryPeakNudgeMinutes: Double = 0.0,
         val preferences: Preferences,
         val iobCobCalculator: IobCobCalculator,
+        val pkpdPredictionIobArray: Array<IobTotal>? = null,
         val learningDiagnostics: PkpdLearningDiagnostics,
         val predictionAuthority: DecisionPredictionAuthority? = null,
         val pkpdEventualMgdl: Double? = null,
@@ -39,7 +40,8 @@ object AimiIntelligenceSnapshotBuilder {
         val kinetics = InsulinKineticsAuthority.resolve(
             InsulinKineticsAuthority.ResolveInput(
                 accountingIobArray = input.accountingIobArray,
-                profile = input.profile,
+                profileDiaHours = input.profile.dia,
+                profilePeakMinutes = input.profile.peakTime,
                 effectiveProfile = input.effectiveProfile,
                 pkpdRuntime = input.pkpdRuntime,
                 peakGovernor = input.peakGovernor,
@@ -48,8 +50,8 @@ object AimiIntelligenceSnapshotBuilder {
                 sitePeakShiftMinutes = input.sitePeakShiftMinutes,
                 trajectoryPeakNudgeMinutes = input.trajectoryPeakNudgeMinutes,
                 preferences = input.preferences,
-                iobCobCalculator = input.iobCobCalculator,
                 learningDiagnostics = input.learningDiagnostics,
+                predictionIobArray = input.pkpdPredictionIobArray,
             ),
         )
         val runtime = input.pkpdRuntime

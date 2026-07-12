@@ -3159,8 +3159,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     correctionFragilityScore = eventMemory.correctionFragilityScore,
                     postHyperExhaustionScore = eventMemory.postHyperExhaustionScore,
                     chaoticEpisodeLoad = lastRbtChaosEvaluation?.score ?: 0.0,
-                    effectiveDiaHours = ctx.effectiveDiaHours,
-                    effectivePeakMinutes = ctx.effectivePeakMinutes,
+                    effectiveDiaHours = tickEffectiveDiaHours,
+                    effectivePeakMinutes = tickEffectivePeakMinutes,
                 )
             },
             timestampMs = nowMs,
@@ -7884,6 +7884,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 physioPeakShiftMinutes = physioMults.peakShiftMinutes,
                 preferences = preferences,
                 iobCobCalculator = iobCobCalculator,
+                pkpdPredictionIobArray = ctx.pkpdIobDataArray,
                 learningDiagnostics = learningDiagnostics,
                 predictionAuthority = lastDecisionPredictionAuthority,
             ),
