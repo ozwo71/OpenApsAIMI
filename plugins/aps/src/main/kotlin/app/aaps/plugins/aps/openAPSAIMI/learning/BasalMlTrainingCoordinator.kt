@@ -223,8 +223,7 @@ class BasalMlTrainingCoordinator @Inject constructor(
             config = config,
             inputSize = INPUT_SIZE,
             outputRange = outputRange,
-            // First creation: publish any valid candidate (SMB-style). Retrain: must beat incumbent.
-            requireIncumbentBeat = weightsFile.exists(),
+            requireIncumbentBeat = true,
             valLossTolerance = VAL_LOSS_TOLERANCE,
             log = { log.info(LTag.APS, "$TAG: $it") },
         ) != null
