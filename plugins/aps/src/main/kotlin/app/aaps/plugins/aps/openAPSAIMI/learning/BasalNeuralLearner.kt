@@ -233,9 +233,8 @@ class BasalNeuralLearner @Inject constructor(
             }
         }
 
-        // 3. Data Logging (Synchronous for reliability in loop)
+        // 3. Governance window (in-memory, dosing-relevant): must not be skipped by a logging I/O failure.
         try {
-            logRecord(bgBefore, bgAfter, basalDelivered, targetBg, accel, duraISFminutes, duraISFaverage, iob, physioFeatures)
             updateGovernanceWindow(
                 bgBefore = bgBefore,
                 bgAfter = bgAfter,
@@ -246,6 +245,13 @@ class BasalNeuralLearner @Inject constructor(
                 shortMinPredBg = shortMinPredBg,
             )
             evaluateGovernance()
+        } catch (e: Exception) {
+            log.error("LEARNER_GOV", "Governance update failed: ${e.message}")
+        }
+
+        // 4. Data logging (best-effort, feeds background training): a file error here never affects governance.
+        try {
+            logRecord(bgBefore, bgAfter, basalDelivered, targetBg, accel, duraISFminutes, duraISFaverage, iob, physioFeatures)
         } catch (e: Exception) {
             log.error("LEARNER_LOG", "Failed to log records: ${e.message}")
         }
