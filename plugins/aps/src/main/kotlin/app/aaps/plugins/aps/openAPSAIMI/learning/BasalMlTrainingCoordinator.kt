@@ -7,6 +7,10 @@ import app.aaps.plugins.aps.openAPSAIMI.ml.NeuralModelTrainer
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
 import app.aaps.plugins.aps.openAPSAIMI.ml.TrainingCircuitBreaker
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
@@ -56,6 +60,7 @@ class BasalMlTrainingCoordinator @Inject constructor(
     }
 
     private val trainMutex = Mutex()
+    private val trainScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val lastTrainMs = AtomicLong(0L)
     private val rowsAtLastTrain = AtomicLong(0L)
     private val circuitBreaker = TrainingCircuitBreaker()
@@ -63,6 +68,21 @@ class BasalMlTrainingCoordinator @Inject constructor(
     init {
         instance = this
         loadPersistedState()
+    }
+
+    /**
+     * Fire-and-forget training trigger (SMB-style): called from the loop hot path after each basal record.
+     * Never blocks the caller; [runScheduledTraining] enforces rate limit, min new rows, and mutex.
+     */
+    fun maybeTrainAsync() {
+        trainScope.launch {
+            if (trainMutex.isLocked) return@launch
+            try {
+                runScheduledTraining()
+            } catch (e: Exception) {
+                log.error(LTag.APS, "$TAG: maybeTrainAsync failed", e)
+            }
+        }
     }
 
     suspend fun runScheduledTraining(): TrainingOutcome = trainMutex.withLock {
@@ -203,7 +223,8 @@ class BasalMlTrainingCoordinator @Inject constructor(
             config = config,
             inputSize = INPUT_SIZE,
             outputRange = outputRange,
-            requireIncumbentBeat = true,
+            // First creation: publish any valid candidate (SMB-style). Retrain: must beat incumbent.
+            requireIncumbentBeat = weightsFile.exists(),
             valLossTolerance = VAL_LOSS_TOLERANCE,
             log = { log.info(LTag.APS, "$TAG: $it") },
         ) != null

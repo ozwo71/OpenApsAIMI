@@ -945,6 +945,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var basalLearner: app.aaps.plugins.aps.openAPSAIMI.learning.BasalLearner
     @Inject lateinit var unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner
     @Inject lateinit var basalNeuralLearner: app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
+    @Inject lateinit var basalMlTrainingCoordinator: app.aaps.plugins.aps.openAPSAIMI.learning.BasalMlTrainingCoordinator
     @Inject lateinit var storageHelper: AimiStorageHelper  // 🛡️ Restored StorageHelper
     
     // Helper to safely access learner (handles potential early access before injection)
@@ -15708,6 +15709,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * TDD-derived activity threshold + basal neural [updateLearning] + BASAL_GOV console line.
      * Order preserved vs legacy single function (threshold before learning; gov before TICK).
      */
+    private fun triggerBasalMlTrainingIfNeeded() {
+        if (::basalMlTrainingCoordinator.isInitialized) {
+            basalMlTrainingCoordinator.maybeTrainAsync()
+        }
+    }
+
     private fun runDecisionFinalBasalNeuralStep(rT: RT, diag: DecisionFinalDiagSnapshot): Double {
         val eventual = (rT.eventualBG ?: lastEventualBgSnapshot)
         val tdd24h = resolveTdd24hForLoop(30.0)
@@ -15726,6 +15733,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             shortMinPredBg = minPredictedAcrossCurves(rT.predBGs),
             physioFeatures = currentBasalPhysioFeatures(),
         )
+        triggerBasalMlTrainingIfNeeded()
         val gov = basalNeuralLearner.getGovernanceSnapshot()
         consoleLog.add(
             "🧭 BASAL_GOV: action=${gov.action} conf=${"%.2f".format(Locale.US, gov.confidence)} " +
@@ -16167,6 +16175,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             shortMinPredBg = minPredictedAcrossCurves(rT.predBGs),
             physioFeatures = currentBasalPhysioFeatures(),
         )
+        triggerBasalMlTrainingIfNeeded()
         val gov = basalNeuralLearner.getGovernanceSnapshot()
         consoleLog.add(
             "🧭 BASAL_GOV[T3C]: action=${gov.action} conf=${"%.2f".format(Locale.US, gov.confidence)} " +

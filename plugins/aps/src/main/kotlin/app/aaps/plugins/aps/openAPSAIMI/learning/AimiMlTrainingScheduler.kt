@@ -8,6 +8,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -22,6 +23,7 @@ import javax.inject.Singleton
 class AimiMlTrainingScheduler @Inject constructor(
     private val context: Context,
     private val aapsLogger: AAPSLogger,
+    private val storageHelper: AimiStorageHelper,
 ) {
 
     fun schedule() {
@@ -44,13 +46,20 @@ class AimiMlTrainingScheduler @Inject constructor(
                 ExistingPeriodicWorkPolicy.UPDATE,
                 basalRequest,
             )
-            // Bootstrap: one immediate pass so the FIRST model is created ASAP (no 6h/charging/idle wait) when enough
-            // CSV data already exists. The coordinator no-ops it once a fresh model exists (rate limit + min-rows),
-            // and bypasses the rate limit while the weights are still missing (first creation).
+            // Bootstrap: one immediate pass so the FIRST model is created ASAP when enough CSV data already exists.
+            // REPLACE (not KEEP) while weights are still missing — a prior failed bootstrap must not block retries.
+            val bootstrapNeeded =
+                !storageHelper.getAimiFile(BASAL_WEIGHTS).exists() ||
+                    !storageHelper.getAimiFile(T3C_WEIGHTS).exists()
+            val bootstrapPolicy = if (bootstrapNeeded) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP
             val bootstrapRequest = OneTimeWorkRequestBuilder<BasalMlTrainerWorker>()
                 .build()
-            wm.enqueueUniqueWork(WORK_BASAL_ML_BOOTSTRAP, ExistingWorkPolicy.KEEP, bootstrapRequest)
-            aapsLogger.info(LTag.APS, "AimiMlTrainingScheduler: basal/T3C trainer scheduled (1h, no constraints) + bootstrap enqueued")
+            wm.enqueueUniqueWork(WORK_BASAL_ML_BOOTSTRAP, bootstrapPolicy, bootstrapRequest)
+            aapsLogger.info(
+                LTag.APS,
+                "AimiMlTrainingScheduler: basal/T3C trainer scheduled (1h, no constraints) + bootstrap " +
+                    "enqueued (policy=$bootstrapPolicy, needed=$bootstrapNeeded)",
+            )
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "AimiMlTrainingScheduler: schedule failed", e)
         }
@@ -69,5 +78,7 @@ class AimiMlTrainingScheduler @Inject constructor(
         const val WORK_BASAL_ML = "AIMI_BASAL_ML_TRAINER"
         const val WORK_BASAL_ML_BOOTSTRAP = "AIMI_BASAL_ML_TRAINER_BOOTSTRAP"
         private const val LEGACY_AUTODRIVE_6H_WORK = "AIMINeuralTrainer"
+        private const val BASAL_WEIGHTS = "basal_adaptive_weights.json"
+        private const val T3C_WEIGHTS = "t3c_brain_weights.json"
     }
 }

@@ -12,6 +12,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.AutodriveEngine
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.AutoDriveGater
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
+import app.aaps.plugins.aps.openAPSAIMI.learning.BasalMlTrainingCoordinator
 import app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
@@ -112,6 +113,7 @@ internal class DetermineBasalAimiScenarioTestHarness(
             basalLearner = mockk(relaxed = true)
             unifiedReactivityLearner = mockk(relaxed = true)
             basalNeuralLearner = this@DetermineBasalAimiScenarioTestHarness.basalNeuralLearner
+            basalMlTrainingCoordinator = mockk(relaxed = true)
             storageHelper = mockk(relaxed = true)
             aapsLogger = mockk(relaxed = true)
             trajectoryGuard = this@DetermineBasalAimiScenarioTestHarness.trajectoryGuard

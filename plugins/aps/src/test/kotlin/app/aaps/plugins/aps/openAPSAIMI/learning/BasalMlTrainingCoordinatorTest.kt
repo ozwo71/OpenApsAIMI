@@ -12,6 +12,7 @@ import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import io.mockk.verify
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -102,6 +103,22 @@ class BasalMlTrainingCoordinatorTest {
             coordinator.runScheduledTraining()
 
             // Reached only if the pref-gate is gone: NeuralModelTrainer reads the incumbent before training each head.
+            verify(atLeast = 1) { AimiNeuralModelStore.load(any(), any()) }
+        } finally {
+            unmockkObject(AimiNeuralModelStore)
+        }
+    }
+
+    @Test
+    fun `maybeTrainAsync triggers scheduled training without blocking`() = runBlocking {
+        mockkObject(AimiNeuralModelStore)
+        try {
+            every { AimiNeuralModelStore.load(any(), any()) } returns null
+            every { AimiNeuralModelStore.save(any(), any()) } returns true
+
+            coordinator.maybeTrainAsync()
+            delay(500)
+
             verify(atLeast = 1) { AimiNeuralModelStore.load(any(), any()) }
         } finally {
             unmockkObject(AimiNeuralModelStore)
