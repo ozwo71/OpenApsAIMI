@@ -5,12 +5,12 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
 import app.aaps.plugins.aps.openAPSAIMI.TrainingConfig
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
+import app.aaps.plugins.aps.openAPSAIMI.ml.TrainingCircuitBreaker
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.io.File
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -38,8 +38,6 @@ class BasalMlTrainingCoordinator @Inject constructor(
         private const val MIN_NEW_ROWS = 80L
         private const val BASAL_MIN_ROWS = 100
         private const val T3C_MIN_ROWS = 50
-        private const val CB_MAX_FAILURES = 3
-        private const val CB_COOLDOWN_MS = 6L * 60 * 60 * 1000
         private const val VAL_LOSS_TOLERANCE = 1.05
         private const val STATE_FILE = "basal_ml_training_state.json"
         private const val CSV_FILE = "basal_adaptive_records.csv"
@@ -60,8 +58,7 @@ class BasalMlTrainingCoordinator @Inject constructor(
     private val trainMutex = Mutex()
     private val lastTrainMs = AtomicLong(0L)
     private val rowsAtLastTrain = AtomicLong(0L)
-    private val cbFailures = AtomicInteger(0)
-    private val cbCoolingUntilMs = AtomicLong(0L)
+    private val circuitBreaker = TrainingCircuitBreaker()
 
     init {
         instance = this
@@ -131,7 +128,7 @@ class BasalMlTrainingCoordinator @Inject constructor(
                 published -> {
                     lastTrainMs.set(now)
                     rowsAtLastTrain.set(totalRows)
-                    cbFailures.set(0)
+                    circuitBreaker.reset()
                     persistState()
                     basalNeuralLearner.reloadModels()
                     log.info(LTag.APS, "$TAG: training complete — models reloaded ($totalRows CSV rows)")
@@ -239,14 +236,11 @@ class BasalMlTrainingCoordinator @Inject constructor(
         return true
     }
 
-    private fun isCircuitOpen(now: Long): Boolean =
-        cbFailures.get() >= CB_MAX_FAILURES && now < cbCoolingUntilMs.get()
+    private fun isCircuitOpen(now: Long): Boolean = circuitBreaker.isOpen(now)
 
     private fun recordFailure() {
-        val failures = cbFailures.incrementAndGet()
-        if (failures >= CB_MAX_FAILURES) {
-            cbCoolingUntilMs.set(System.currentTimeMillis() + CB_COOLDOWN_MS)
-            log.warn(LTag.APS, "$TAG: circuit breaker OPEN for 6h after $failures failures")
+        if (circuitBreaker.recordFailure()) {
+            log.warn(LTag.APS, "$TAG: circuit breaker OPEN for 6h after ${TrainingCircuitBreaker.DEFAULT_MAX_FAILURES} failures")
         }
     }
 
