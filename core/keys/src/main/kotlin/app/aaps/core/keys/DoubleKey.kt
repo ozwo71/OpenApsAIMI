@@ -350,6 +350,12 @@ enum class DoubleKey(
         titleResId = R.string.pref_title_aimi_peak_governor_learned_weight,
         summaryResId = R.string.pref_summary_aimi_peak_governor_learned_weight,
     ),
+    OApsAIMIDiaGovernorLearnedWeight(
+        key = "aimi_dia_governor_learned_weight",
+        defaultValue = 0.45,
+        min = 0.0,
+        max = 1.0,
+    ),
     OApsAIMIIsfFusionMinFactor("aimi_isf_fusion_min_factor", 0.75, 0.3, 1.0),
     OApsAIMIIsfFusionMaxFactor("aimi_isf_fusion_max_factor", 2.0, 1.0, 2.0),
     OApsAIMIIsfFusionMaxChangePerTick("aimi_isf_fusion_max_change_per_tick", 0.4, 0.0, 0.5),

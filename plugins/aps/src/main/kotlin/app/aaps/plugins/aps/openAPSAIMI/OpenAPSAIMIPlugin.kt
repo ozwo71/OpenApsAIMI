@@ -109,6 +109,8 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfFusion
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfFusionBounds
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinKineticsAuthority
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdLearningDiagnostics
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
@@ -166,14 +168,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val profiler: Profiler,
     private val context: Context,
     private val apsResultProvider: Provider<APSResult>,
-    private val unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner, // 🧠 Brain Injection
-    private val stepsManager: app.aaps.plugins.aps.openAPSAIMI.steps.AIMIStepsManagerMTR, // 🏃 Steps Manager MTR
-    private val physioManager: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIPhysioManagerMTR, // 🏥 Physiological Manager MTR
-    // 🏥 Physiological Decision Adapter (The Safety Gate)
+    private val unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner, // ?? Brain Injection
+    private val stepsManager: app.aaps.plugins.aps.openAPSAIMI.steps.AIMIStepsManagerMTR, // ?? Steps Manager MTR
+    private val physioManager: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIPhysioManagerMTR, // ?? Physiological Manager MTR
+    // ?? Physiological Decision Adapter (The Safety Gate)
     private val physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR,
-    private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator, // 🧠 AI Auditor MTR
-    private val contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager, // 🎯 Context Manager
-    private val aimiBackupManager: AimiBackupManager, // ☁️ Cloud Backup Manager (Force Init)
+    private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator, // ?? AI Auditor MTR
+    private val contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager, // ?? Context Manager
+    private val aimiBackupManager: AimiBackupManager, // ?? Cloud Backup Manager (Force Init)
     private val aimiMlTrainingScheduler: AimiMlTrainingScheduler,
     private val storageHelper: AimiStorageHelper,
     private val insulin: Insulin,
@@ -217,7 +219,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         if (!sp.contains(legacyClassicKey)) return
         if (sp.getBoolean(legacyClassicKey, true) && !preferences.get(BooleanKey.OApsAIMIautoDriveActive)) {
             preferences.put(BooleanKey.OApsAIMIautoDriveActive, true)
-            aapsLogger.info(LTag.APS, "Autodrive V1→V3 migration: enabled V3 (classic was on, V3 was off)")
+            aapsLogger.info(LTag.APS, "Autodrive V1?V3 migration: enabled V3 (classic was on, V3 was off)")
         }
         sp.remove(legacyClassicKey)
     }
@@ -230,23 +232,23 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // Prewarm Therapy snapshot cache at plugin start to avoid first-loop default flags.
         aimiPluginIoScope.launch {
             runCatching { Therapy(persistenceLayer).updateStatesBasedOnTherapyEvents() }
-                .onFailure { t -> aapsLogger.error(LTag.APS, "❌ Failed to prewarm Therapy snapshot", t) }
+                .onFailure { t -> aapsLogger.error(LTag.APS, "? Failed to prewarm Therapy snapshot", t) }
         }
 
-        // 🏃 Start AIMI Steps Manager (Health Connect + Phone Sensor sync)
+        // ?? Start AIMI Steps Manager (Health Connect + Phone Sensor sync)
         try {
             stepsManager.start()
-            aapsLogger.info(LTag.APS, "✅ AIMI Steps Manager started successfully")
+            aapsLogger.info(LTag.APS, "? AIMI Steps Manager started successfully")
         } catch (e: Exception) {
-            aapsLogger.error(LTag.APS, "❌ Failed to start AIMI Steps Manager", e)
+            aapsLogger.error(LTag.APS, "? Failed to start AIMI Steps Manager", e)
         }
         
-        // 🏥 Start AIMI Physiological Manager
+        // ?? Start AIMI Physiological Manager
         try {
             physioManager.start()
-            aapsLogger.info(LTag.APS, "✅ AIMI Physiological Manager started successfully")
+            aapsLogger.info(LTag.APS, "? AIMI Physiological Manager started successfully")
         } catch (e: Exception) {
-            aapsLogger.error(LTag.APS, "❌ Failed to start AIMI Physiological Manager", e)
+            aapsLogger.error(LTag.APS, "? Failed to start AIMI Physiological Manager", e)
         }
 
         physioPreferenceDisposable?.dispose()
@@ -266,11 +268,11 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             { t -> aapsLogger.error(LTag.APS, "Physio preference Rx error", t) }
         )
         
-        // 🧠 Basal / T3C ML trainer (6h); Autodrive attention stays on 24h schedule in AutodriveNeuralTrainer
+        // ?? Basal / T3C ML trainer (6h); Autodrive attention stays on 24h schedule in AutodriveNeuralTrainer
         try {
             aimiMlTrainingScheduler.schedule()
         } catch (e: Exception) {
-            aapsLogger.error(LTag.APS, "❌ Failed to schedule AIMI basal/T3C ML trainer", e)
+            aapsLogger.error(LTag.APS, "? Failed to schedule AIMI basal/T3C ML trainer", e)
         }
         
         AimiUamHandler.clearCache(context)
@@ -299,16 +301,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             }
         }
 
-        // 🧠 Pre-load ML model into memory for O(1) SMB inference on hot path
+        // ?? Pre-load ML model into memory for O(1) SMB inference on hot path
         try {
             val aimiDir = storageHelper.getAimiDirectory()
             val (status, path, error) = storageHelper.getStorageStatus()
             PkPdCsvLogger.configureStorageDirectory(aimiDir)
             AimiSmbTrainer.loadModel(aimiDir)
             aapsLogger.info(LTag.APS, "AIMI storage status=$status path=${path ?: "n/a"} error=${error ?: "none"}")
-            aapsLogger.info(LTag.APS, "✅ AimiSmbTrainer: model load requested (async)")
+            aapsLogger.info(LTag.APS, "? AimiSmbTrainer: model load requested (async)")
         } catch (e: Exception) {
-            aapsLogger.error(LTag.APS, "❌ AimiSmbTrainer: failed to request model load", e)
+            aapsLogger.error(LTag.APS, "? AimiSmbTrainer: failed to request model load", e)
         }
     }
     override fun getGlucoseStatusData(allowOldData: Boolean): GlucoseStatus? =
@@ -319,18 +321,18 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         physioPreferenceDisposable?.dispose()
         physioPreferenceDisposable = null
         
-        // 🏃 Stop AIMI Steps Manager
+        // ?? Stop AIMI Steps Manager
         try {
             stepsManager.stop()
-            aapsLogger.info(LTag.APS, "🛑 AIMI Steps Manager stopped")
+            aapsLogger.info(LTag.APS, "?? AIMI Steps Manager stopped")
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "Error stopping AIMI Steps Manager", e)
         }
         
-        // 🏥 Stop AIMI Physiological Manager
+        // ?? Stop AIMI Physiological Manager
         try {
             physioManager.stop()
-            aapsLogger.info(LTag.APS, "🛑 AIMI Physiological Manager stopped")
+            aapsLogger.info(LTag.APS, "?? AIMI Physiological Manager stopped")
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "Error stopping AIMI Physiological Manager", e)
         }
@@ -350,24 +352,24 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     override fun supportsDynamicIsf(): Boolean = preferences.get(BooleanKey.ApsUseDynamicSensitivity)
     private val pkpdIntegration = PkPdIntegration(preferences)
     private var lastPkpdScale: Double = 1.0
-    // Dans votre classe principale (ou plugin), vous pouvez déclarer :
+    // Dans votre classe principale (ou plugin), vous pouvez d�clarer :
     private val kalmanISFCalculator = KalmanISFCalculator(tddCalculator, preferences, aapsLogger)
     // Fusion lente (TDD/profile) + rate-limit de blend
     private val isfBlender = IsfBlender()
-    // top-level (à côté de isfBlender / pkpdIntegration)
+    // top-level (� c�t� de isfBlender / pkpdIntegration)
     private val isfAdjEngine = IsfAdjustmentEngine()
 
-    /** Réagit au switch Physio sans redémarrer l’app (planifie / annule WorkManager). */
+    /** R�agit au switch Physio sans red�marrer l�app (planifie / annule WorkManager). */
     private var physioPreferenceDisposable: Disposable? = null
 
-    // état EMA persistant (clé Prefs à créer si tu veux le garder entre runs)
+    // �tat EMA persistant (cl� Prefs � cr�er si tu veux le garder entre runs)
     private var tddEma: Double? = null
     private val TDD_EMA_ALPHA = 0.2 // ou pref
     @Volatile private var cachedCannulaSiteAgeDays: Float = 0f
     private val cannulaSiteRefreshInFlight = AtomicBoolean(false)
 
 
-    // Recrée les bornes de la fusion ISF depuis les préférences (mêmes clés que PkPdIntegration)
+    // Recr�e les bornes de la fusion ISF depuis les pr�f�rences (m�mes cl�s que PkPdIntegration)
     private fun isfFusion(): IsfFusion {
         val bounds = IsfFusionBounds(
             minFactor = preferences.get(DoubleKey.OApsAIMIIsfFusionMinFactor),
@@ -410,9 +412,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
      * Rebuild the forward insulin-activity array using the LEARNED PK/PD kinetics (adaptive DIA/peak) instead
      * of the fixed insulin profile, so the AIMI prediction curves (eventual / minPred / pkpd graph) reflect how
      * this patient's insulin actually acts. Reuses the production [IobCobCalculator.calculateIobArrayInDia] with
-     * a profile whose [ICfg] carries the learned kinetics — no parallel IOB math, same treatment iteration.
+     * a profile whose [ICfg] carries the learned kinetics � no parallel IOB math, same treatment iteration.
      *
-     * Fail-safe: returns null (→ caller falls back to the static-profile array) when the pref is off, the learner
+     * Fail-safe: returns null (? caller falls back to the static-profile array) when the pref is off, the learner
      * exposes no valid DIA/peak, the exponential model would be numerically invalid (peak must stay < DIA/2), or
      * anything throws. Only the prediction curves consume this array; SMB IOB accounting is untouched.
      */
@@ -429,8 +431,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 insulinEndTime = (diaHrs * 3_600_000.0).toLong(),
                 insulinPeakTime = (peakMin * 60_000.0).toLong(),
             )
-            // Exponential insulin model requires peak strictly below DIA/2 (else tau ≤ 0 → NaN). The learner
-            // clamps DIA and peak independently, so a high-peak / short-DIA combo can violate this → fall back.
+            // Exponential insulin model requires peak strictly below DIA/2 (else tau ? 0 ? NaN). The learner
+            // clamps DIA and peak independently, so a high-peak / short-DIA combo can violate this ? fall back.
             if (learnedICfg.insulinPeakTime * 2 >= learnedICfg.insulinEndTime) return null
             val learnedProfile = object : EffectiveProfile by effectiveProfile { override val iCfg: ICfg = learnedICfg }
             iobCobCalculator.calculateIobArrayInDia(learnedProfile).also {
@@ -450,7 +452,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         }
 
     /**
-     * Trajectory geometry → small bounded peak nudge for [TapPeakGovernor] (TAP-G Phase D, same APS tick).
+     * Trajectory geometry ? small bounded peak nudge for [TapPeakGovernor] (TAP-G Phase D, same APS tick).
      */
     private suspend fun computeTrajectoryPeakNudgeForGovernor(
         nowMsForPkpd: Long,
@@ -596,10 +598,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val dynIsfCache = LongSparseArray<Double>()
     private val dynIsfCacheLock = Any()
 
-    // Exemple de fonction pour prédire le delta futur à partir d'un historique récent
+    // Exemple de fonction pour pr�dire le delta futur � partir d'un historique r�cent
     private fun predictedDelta(deltaHistory: List<Double>): Double {
         if (deltaHistory.isEmpty()) return 0.0
-        // Par exemple, on peut utiliser une moyenne pondérée avec des poids croissants pour donner plus d'importance aux valeurs récentes
+        // Par exemple, on peut utiliser une moyenne pond�r�e avec des poids croissants pour donner plus d'importance aux valeurs r�centes
         val weights = (1..deltaHistory.size).map { it.toDouble() }
         val weightedSum = deltaHistory.zip(weights).sumOf { it.first * it.second }
         return weightedSum / weights.sum()
@@ -610,7 +612,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         return (d / 10.0).coerceIn(0.1, 0.9)
     }
 
-    // ISF basé TDD (ancre 1800/TDD 24h) avec garde-fous
+    // ISF bas� TDD (ancre 1800/TDD 24h) avec garde-fous
     private suspend fun tddIsf24hOr(profileIsf: Double): Double {
         val tdd24 = tddCalculator
             .averageTDD(tddCalculator.calculate(1, allowMissingDays = false))
@@ -623,18 +625,18 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         if (delta == null || predicted == null || bg == null) return 1.0
         val combinedDelta = (delta + predicted) / 2.0
         return when {
-            // En cas d'hypoglycémie (delta négatif), on augmente progressivement l'ISF
+            // En cas d'hypoglyc�mie (delta n�gatif), on augmente progressivement l'ISF
             combinedDelta < 0 -> {
                 val factor = exp(0.15 * abs(combinedDelta))
                 factor.coerceAtMost(1.4)
             }
-            // En hyperglycémie : si BG est > 130, on applique une réduction progressive
+            // En hyperglyc�mie : si BG est > 130, on applique une r�duction progressive
             bg > 110.0        -> {
-                // On réduit d’un certain pourcentage (ici jusqu’à 30%) en fonction de BG
+                // On r�duit d�un certain pourcentage (ici jusqu�� 30%) en fonction de BG
                 val bgReduction = 1.0 - ((bg - 110.0) / (200.0 - 110.0)) * 0.5
-                // On combine ce facteur avec la réponse exponentielle basée sur combinedDelta si nécessaire
+                // On combine ce facteur avec la r�ponse exponentielle bas�e sur combinedDelta si n�cessaire
                 if (combinedDelta > 10) {
-                    // Si le delta est important, on accentue la réduction avec une réponse exponentielle
+                    // Si le delta est important, on accentue la r�duction avec une r�ponse exponentielle
                     val expFactor = exp(-0.3 * (combinedDelta - 10))
                     minOf(expFactor, bgReduction)
                 } else {
@@ -692,20 +694,20 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val kalmanFastIsf = kalmanISFCalculator.calculateISF(glucose, currentDelta, predictedDelta)
         aapsLogger.debug(LTag.APS, "Adaptive ISF via Kalman: $kalmanFastIsf for BG: $glucose")
 
-        // 4) ISF lent (socle) : profil/TDD fusionné + pkpdScale (inchangé)
+        // 4) ISF lent (socle) : profil/TDD fusionn� + pkpdScale (inchang�)
         val profileIsf = profileFunction.getProfile()?.getProfileIsfMgdl() ?: 20.0
         val tddIsf = tddIsf24hOr(profileIsf)
         val fusedSlowIsf = isfFusion().fused(profileIsf, tddIsf, lastPkpdScale)
         aapsLogger.debug(LTag.APS, "Fused slow ISF: $fusedSlowIsf (profile=$profileIsf, tddIsf=$tddIsf, pkpdScale=$lastPkpdScale)")
 
-        // 5) EMA TDD (stabilise l’ajustement AF)
+        // 5) EMA TDD (stabilise l�ajustement AF)
         val tdd24 = tddCalculator.calculateDaily(-24, 0)?.totalAmount ?: tddIsf /* fallback */
         tddEma = when (val prev = tddEma) {
             null -> tdd24
             else -> prev + TDD_EMA_ALPHA * (tdd24 - prev)
         }
 
-        // 6) proxys de confiance (si variance non exposée ici)
+        // 6) proxys de confiance (si variance non expos�e ici)
         val kalmanTrustProxy = estimateKalmanTrustFromDelta(currentDelta)             // 0..1
         val kalmanVarProxy = (1.0 - kalmanTrustProxy).coerceIn(0.0, 1.0)             // 1-trust
         val sippConfidence = AimiUamHandler.confidenceOrZero().coerceIn(0.0, 1.0)
@@ -721,7 +723,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         )
         aapsLogger.debug(LTag.APS, "Adaptive ISF via IsfAdjustmentEngine: $isfAdj (tddEma=$tddEma, sipp=$sippConfidence, var=$kalmanVarProxy)")
 
-        // 8) Combine les deux rapides par médiane robuste (résistant aux outliers)
+        // 8) Combine les deux rapides par m�diane robuste (r�sistant aux outliers)
         val fastMedian = listOf(kalmanFastIsf, isfAdj).sorted()[1]
 
         // 9) Blend final (socle lent vs rapide), avec rate-limit temporel de IsfBlender
@@ -735,7 +737,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // 10) facteur dynamique + bornes globales
         blended *= dynamicFactor
 
-        // 10b) ajustement trajectoire (géométrie CGM type AutoISF), borné — avant physio pour limiter le cumul
+        // 10b) ajustement trajectoire (g�om�trie CGM type AutoISF), born� � avant physio pour limiter le cumul
         val profileForPhysio = profileFunction.getProfile()
         val physioIsfFactor: Double
         val physioMultsNullable: PhysioMultipliersMTR?
@@ -763,10 +765,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         )
         blended = trajectoryTuning.isfMgdlPerU
 
-        // 🏥 PHYSIO MODULATION (ISF) — après trajectoire
+        // ?? PHYSIO MODULATION (ISF) � apr�s trajectoire
         if (physioMultsNullable != null && physioMultsNullable.isfFactor != 1.0) {
             blended *= physioMultsNullable.isfFactor
-            aapsLogger.debug(LTag.APS, "🏥 DynISF modulated by Physio: x${physioMultsNullable.isfFactor} -> $blended")
+            aapsLogger.debug(LTag.APS, "?? DynISF modulated by Physio: x${physioMultsNullable.isfFactor} -> $blended")
         }
 
         blended = blended.coerceIn(5.0, 300.0)
@@ -828,7 +830,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         // End of check, start gathering data
         
-        // 🏥 PHYSIO INTEGRATION: Retrieve Context & Multipliers
+        // ?? PHYSIO INTEGRATION: Retrieve Context & Multipliers
         val glucoseForPhysio = glucoseStatusProvider.glucoseStatusData?.glucose ?: 100.0
         val deltaForPhysio = glucoseStatusProvider.glucoseStatusData?.delta ?: 0.0
         
@@ -845,7 +847,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         )
         
         if (!physioMults.isNeutral()) {
-            aapsLogger.info(LTag.APS, "🏥 LOOP: Applying Physio Factors: ISF x${physioMults.isfFactor}, Basal x${physioMults.basalFactor}, SMB x${physioMults.smbFactor}")
+            aapsLogger.info(LTag.APS, "?? LOOP: Applying Physio Factors: ISF x${physioMults.isfFactor}, Basal x${physioMults.basalFactor}, SMB x${physioMults.smbFactor}")
         }
 
         val dynIsfMode = preferences.get(BooleanKey.ApsUseDynamicSensitivity)
@@ -882,10 +884,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         if (true) { // FIX: Always run, DetermineBasalAIMI2 handles dynIsfMode internally
             val tdd7P: Double = preferences.get(DoubleKey.OApsAIMITDD7)
 //
-// // Plancher pour éviter des TDD trop faibles au démarrage
+// // Plancher pour �viter des TDD trop faibles au d�marrage
             val minTDD = 10.0
 //
-// Récupération et ajustement du TDD sur 7 jours
+// R�cup�ration et ajustement du TDD sur 7 jours
             val tdd7D = tddCalculator.averageTDD(tddCalculator.calculate(7, allowMissingDays = false))
             if (tdd7D != null && tdd7D.data.totalAmount > tdd7P && tdd7D.data.totalAmount > 1.3 * tdd7P) {
                 tdd7D.data.totalAmount = 1.2 * tdd7P
@@ -903,7 +905,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val tdd2DaysPerHour = tdd2Days / 24
             val tddLast4H = tdd2DaysPerHour * 4
 //
-// Calcul du TDD sur 1 jour avec une limite minimale pour éviter des instabilités
+// Calcul du TDD sur 1 jour avec une limite minimale pour �viter des instabilit�s
             var tddDaily = tddCalculator.averageTDD(tddCalculator.calculate(1, allowMissingDays = false))?.data?.totalAmount ?: 0.0
             if (tddDaily == 0.0 || tddDaily < tdd7P / 2) tddDaily = maxOf(tdd7P, minTDD)
 
@@ -916,34 +918,34 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             if (tdd24Hrs == 0.0) tdd24Hrs = tdd7P
             val tdd24HrsPerHour = tdd24Hrs / 24
             val tddLast8to4H = tdd24HrsPerHour * 4
-// // Calcul pondéré du TDD récent pour éviter les fluctuations extrêmes
+// // Calcul pond�r� du TDD r�cent pour �viter les fluctuations extr�mes
             val tddWeightedFromLast8H = ((1.2 * tdd2DaysPerHour) + (0.3 * tddLast4H) + (0.5 * tddLast8to4H)) * 3
             val tdd = (tddWeightedFromLast8H * 0.20) + (tdd2Days * 0.50) + (tddDaily * 0.30)
 
-            // On récupère la glycémie et le delta actuel
+            // On r�cup�re la glyc�mie et le delta actuel
             val gsData = glucoseStatusProvider.glucoseStatusData
             val currentBG = gsData?.glucose
             if (currentBG == null) {
-                aapsLogger.error(LTag.APS, "Données de glycémie indisponibles, impossibilité de calculer l'ISF adaptatif.")
+                aapsLogger.error(LTag.APS, "Donn�es de glyc�mie indisponibles, impossibilit� de calculer l'ISF adaptatif.")
                 return@withContext
             }
             val currentDelta = gsData?.delta
             val recentDeltas = getRecentDeltas()
             val predictedDelta = predictedDelta(recentDeltas)
 
-            // Calcul adaptatif de l'ISF via la fonction centralisée encapsulant le tout (incluant l'alimentation du cache)
+            // Calcul adaptatif de l'ISF via la fonction centralis�e encapsulant le tout (incluant l'alimentation du cache)
             val (source, calcSensitivity) = calculateVariableIsf(now)
             var variableSensitivity = calcSensitivity ?: profile.getProfileIsfMgdl()
             
             aapsLogger.debug(LTag.APS, "Adaptive ISF computed (source: $source): $variableSensitivity for BG: $currentBG, currentDelta: $currentDelta, predictedDelta: $predictedDelta")
 
-            // 🏥 Apply Physio ISF Modulation to Dynamic ISF (it might already be in calculateVariableIsf, but applying it if not fully wrapped)
+            // ?? Apply Physio ISF Modulation to Dynamic ISF (it might already be in calculateVariableIsf, but applying it if not fully wrapped)
             // (calculateVariableIsf does apply physioMults internally before returning blended, 
             // but if we fell back to profile ISF, we apply it here for safety)
             if (source == "OFF" || calcSensitivity == null) {
                 if (physioMults.isfFactor != 1.0) {
                     variableSensitivity *= physioMults.isfFactor
-                    aapsLogger.debug(LTag.APS, "🏥 LOOP: DynISF modulated: $variableSensitivity (x${physioMults.isfFactor})")
+                    aapsLogger.debug(LTag.APS, "?? LOOP: DynISF modulated: $variableSensitivity (x${physioMults.isfFactor})")
                 }
                 // Imposition des bornes
                 variableSensitivity = variableSensitivity.coerceIn(5.0, 300.0)
@@ -951,26 +953,26 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             
             aapsLogger.debug(LTag.APS, "Final adaptive ISF after clamping: $variableSensitivity")
 
-// 🔹 Création du résultat final (Convention: Ratio < 1 = Résistant)
+// ?? Cr�ation du r�sultat final (Convention: Ratio < 1 = R�sistant)
             autosensResult = AutosensResult(
                 ratio = tdd2Days / tdd24Hrs,
                 ratioFromTdd = tdd2Days / tdd24Hrs,
                 ratioFromCarbs = 1.0 
             )
 
-            // 🧠 AIMI BRAIN INTEGRATION (UnifiedReactivityLearner)
+            // ?? AIMI BRAIN INTEGRATION (UnifiedReactivityLearner)
             // "The Cognitive Bridge": Adjusts BOTH Sensitivity (ISF) and Resistance (Autosens Ratio)
             //
-            // ⛔ Skipped in T3C brittle mode: T3C has its own aggressiveness pipeline
+            // ? Skipped in T3C brittle mode: T3C has its own aggressiveness pipeline
             // (rawAggressiveness / adaptiveMult / CFRD boost). Applying Brain Boost on top would
-            // create a redundant, conflicting autosens manipulation — and could amplify the
+            // create a redundant, conflicting autosens manipulation � and could amplify the
             // pre-bolus preserved from applyLegacyMealModes, violating T3C's TBR-only design intent.
             val t3cBrittleActive = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
             if (t3cBrittleActive) {
-                aapsLogger.debug(LTag.APS, "🧠 Brain Boost: skipped (T3C brittle mode active — TBR-only path)")
+                aapsLogger.debug(LTag.APS, "?? Brain Boost: skipped (T3C brittle mode active � TBR-only path)")
             }
             if (!t3cBrittleActive) try {
-                // 🚀 TRIPLE-SIGNAL CONFIRMATION for Confirmed Rise
+                // ?? TRIPLE-SIGNAL CONFIRMATION for Confirmed Rise
                 val gsAimi = gsData as? GlucoseStatusAIMI
                 val accel = gsAimi?.bgAcceleration ?: 0.0
                 val combDelta = ((gsData?.delta ?: 0.0) + predictedDelta) / 2.0
@@ -1000,7 +1002,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 }
                 val hasFormalMealEvidence = evidenceScore >= 60
                 
-                // 🚨 SAFETY OVERRIDE (FCL 10.3) - Refined for "Blind Spot" Removal:
+                // ?? SAFETY OVERRIDE (FCL 10.3) - Refined for "Blind Spot" Removal:
                 // If we are in Hyper (>150) AND Rising/Stable, we MUST NOT be protective (<1.0).
                 // ANTI-LAG: Lower threshold to 110 if rising fast (delta > 3.0)
                 val isFastRise = (gsData?.delta ?: 0.0) > 3.0
@@ -1009,26 +1011,26 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 val isRising = (gsData?.delta ?: 0.0) > -0.5
                 
                 if (isHyper && isRising && brainFactor < 1.0) {
-                    aapsLogger.debug(LTag.APS, "🧠 Brain Override: IGNORING protective factor ${"%.2f".format(brainFactor)} because BG ${gsData?.glucose ?: 0.0} is > $overrideThreshold & stable/rising.")
+                    aapsLogger.debug(LTag.APS, "?? Brain Override: IGNORING protective factor ${"%.2f".format(brainFactor)} because BG ${gsData?.glucose ?: 0.0} is > $overrideThreshold & stable/rising.")
                     brainFactor = 1.0
                 }
 
-                // 🛡️ Evidence Gate: near target, do not over-correct without formal rise evidence.
+                // ??? Evidence Gate: near target, do not over-correct without formal rise evidence.
                 if (isNearTargetBand && !hasFormalMealEvidence && brainFactor > 1.02) {
                     aapsLogger.debug(
                         LTag.APS,
-                        "🛡️ Evidence Gate: Near-target BG=${"%.1f".format(bgNow)} score=$evidenceScore → cap brainFactor ${"%.2f".format(brainFactor)}→1.02"
+                        "??? Evidence Gate: Near-target BG=${"%.1f".format(bgNow)} score=$evidenceScore ? cap brainFactor ${"%.2f".format(brainFactor)}?1.02"
                     )
                     brainFactor = 1.02
                 }
 
-                // 🚀 EXPLOSIVE RISE BOOST: If delta is very high, force a slight aggressive factor
+                // ?? EXPLOSIVE RISE BOOST: If delta is very high, force a slight aggressive factor
                 if (glucoseStatus.delta > 6.0 && brainFactor < 1.1 && (!isNearTargetBand || hasFormalMealEvidence)) {
-                    aapsLogger.debug(LTag.APS, "🚀 Brain Boost: Forcing factor 1.1 due to explosive rise (delta=${glucoseStatus.delta})")
+                    aapsLogger.debug(LTag.APS, "?? Brain Boost: Forcing factor 1.1 due to explosive rise (delta=${glucoseStatus.delta})")
                     brainFactor = 1.1
                 }
                 if (glucoseStatus.delta > 6.0 && isNearTargetBand && !hasFormalMealEvidence) {
-                    aapsLogger.debug(LTag.APS, "🛡️ Evidence Gate: Explosive boost blocked near target (score=$evidenceScore, BG=${"%.1f".format(bgNow)})")
+                    aapsLogger.debug(LTag.APS, "??? Evidence Gate: Explosive boost blocked near target (score=$evidenceScore, BG=${"%.1f".format(bgNow)})")
                 }
 
                 if (brainFactor != 1.0) {
@@ -1039,11 +1041,11 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     // High Brain Factor (Aggressive) -> Ratio decreases (e.g. 0.8 / 1.5 = 0.53) -> More Resistant
                     autosensResult.ratio = originalRatio / brainFactor
                     
-                    // 🚨 IMPORTANT: variableSensitivity (Dynamic ISF) is NO LONGER modulated here.
+                    // ?? IMPORTANT: variableSensitivity (Dynamic ISF) is NO LONGER modulated here.
                     // It will be modulated by autosensResult.ratio in DetermineBasalAIMI2.kt 
                     // to ensure a single, consistent point of application for the "Resistance" multiplier.
                     
-                    aapsLogger.debug(LTag.APS, "🧠 AIMI Brain Override: " +
+                    aapsLogger.debug(LTag.APS, "?? AIMI Brain Override: " +
                         "Autosens ${"%.2f".format(originalRatio)}->${"%.2f".format(autosensResult.ratio)} " +
                         "(Factor ${"%.2f".format(brainFactor)})")
                 }
@@ -1077,20 +1079,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 tdd24h = tdd24Hrs,
                 combinedDelta = deltaNowForPkpd,
                 uamConfidence = AimiUamHandler.confidenceOrZero(),
+                allowLearning = !preferences.get(BooleanKey.OApsAIMIIntelligenceSingleLearnPath),
             )
             lastPkpdScale = pkpdRuntimeForActivity?.pkpdScale ?: 1.0
             aapsLogger.debug(
                 LTag.APS,
                 "PK/PD: pkpdScale=$lastPkpdScale (bg=$bgNowForPkpd, delta=$deltaNowForPkpd, iob=$iobNowForPkpd, tdd24=$tdd24Hrs, isfRaw=$profileIsfRawForPkpd)",
             )
-            // 🩸 Prediction curves on the LEARNED PK/PD kinetics: rebuild the forward insulin-activity array with
-            // the adaptive learned DIA/peak (not the fixed insulin profile) so eventual/minPred reflect how this
-            // patient's insulin actually acts. Null → determine_basal falls back to the static-profile array.
-            val pkpdIobDataArray: Array<IobTotal>? = buildLearnedKineticsIobArray(
-                effectiveProfile = profile as EffectiveProfile,
-                learnedDiaHrs = pkpdRuntimeForActivity?.params?.diaHrs,
-                learnedPeakMin = pkpdRuntimeForActivity?.params?.peakMin,
-            )
+            // Prediction curves on learned/effective PK/PD kinetics via InsulinKineticsAuthority.
             val trajectoryPeakNudgeMinutes = computeTrajectoryPeakNudgeForGovernor(
                 nowMsForPkpd = nowMsForPkpd,
                 profile = profile as EffectiveProfile,
@@ -1114,6 +1110,36 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 learnedBlendWeight = preferences.get(DoubleKey.OApsAIMIPeakGovernorLearnedWeight),
                 trajectoryMinutesNudge = trajectoryPeakNudgeMinutes,
             )
+            val kineticsView = InsulinKineticsAuthority.resolve(
+                InsulinKineticsAuthority.ResolveInput(
+                    accountingIobArray = iobArray,
+                    profile = oapsProfile,
+                    effectiveProfile = profile as EffectiveProfile,
+                    pkpdRuntime = pkpdRuntimeForActivity,
+                    peakGovernor = peakGovernorForActivity,
+                    causalPosterior = null,
+                    physioPeakShiftMinutes = physioMults.peakShiftMinutes,
+                    sitePeakShiftMinutes = sitePeakShiftMinutes,
+                    trajectoryPeakNudgeMinutes = trajectoryPeakNudgeMinutes,
+                    preferences = preferences,
+                    iobCobCalculator = iobCobCalculator,
+                    learningDiagnostics = PkpdLearningDiagnostics.from(
+                        causalStatePosterior = null,
+                        allowLearning = false,
+                        exerciseFlag = false,
+                        iobU = iobNowForPkpd,
+                        carbsActiveG = mealCobForPkpd,
+                        bg = bgNowForPkpd,
+                        deltaMgDlPer5 = deltaNowForPkpd,
+                    ),
+                ),
+            )
+            val pkpdIobDataArray: Array<IobTotal>? = if (kineticsView.predictionUsesLearnedKinetics) {
+                kineticsView.predictionIobArray
+            } else {
+                null
+            }
+            kineticsView.diaGovernor?.logLine?.let { line -> aapsLogger.debug(LTag.APS, line) }
             peakGovernorForActivity.logLine?.let { line -> aapsLogger.debug(LTag.APS, line) }
             preferences.put(
                 AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine,
@@ -1131,7 +1157,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             preferences.put(DoubleKey.OApsAIMIPkpdStateEffectivePeak, peakGovernorForActivity.effectivePeakMinutes)
             preferences.put(AimiStringKey.OApsAIMIPkpdStateDominantBranch, peakGovernorForActivity.dominantBranch)
 
-            val peakTimeMinutesForProfile = peakGovernorForActivity.effectivePeakMinutes
+            val peakTimeMinutesForProfile = kineticsView.effective.peakMinutes
             var currentActivity = 0.0
             for (i in -4..0) { //MP: -4 to 0 calculates all the insulin active during the last 5 minutes
                 val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(i.toLong()), profile)
@@ -1159,7 +1185,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 val iob = iobCobCalculator.calculateFromTreatmentsAndTemps(System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(activityHistoric - i), profile)
                 historicActivity += iob.activity
             }
-// Récupère GS standard + features AIMI
+// R�cup�re GS standard + features AIMI
             val pack = glucoseStatusCalculatorAimi.compute(allowOldData = true)
             val gs = pack.gs ?: run {
                 rxBus.send(EventResetOpenAPSGui(rh.gs(R.string.openapsma_no_glucose_data)))
@@ -1168,7 +1194,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             }
             val f = pack.features
 
-// Construit l’objet attendu par determine_basal
+// Construit l�objet attendu par determine_basal
             val glucoseStatusAimi = GlucoseStatusAIMI(
                 glucose         = gs.glucose,
                 noise           = gs.noise,
@@ -1184,7 +1210,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 bgAcceleration  = f?.accel ?: 0.0,
                 corrSqu         = f?.corrR2 ?: 0.0,
 
-                // Champs non exposés par AimiBgFeatures => valeurs neutres
+                // Champs non expos�s par AimiBgFeatures => valeurs neutres
                 duraISFaverage  = 0.0,
                 parabolaMinutes = 0.0,
                 a0              = 0.0,
@@ -1206,10 +1232,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 max_bg = maxBg,
                 target_bg = targetBg,
                 carb_ratio = profile.getIc(),
-                sens = profile.getIsfMgdl("OpenAPSAIMIPlugin") * physioMults.isfFactor, // 🏥 ISF Modulation
+                sens = profile.getIsfMgdl("OpenAPSAIMIPlugin") * physioMults.isfFactor, // ?? ISF Modulation
                 autosens_adjust_targets = false, // not used
-                max_daily_safety_multiplier = preferences.get(DoubleKey.ApsMaxDailyMultiplier) * physioMults.smbFactor, // 🏥 SMB Cap modulation
-                current_basal_safety_multiplier = preferences.get(DoubleKey.ApsMaxCurrentBasalMultiplier) * physioMults.basalFactor, // 🏥 Basal Cap modulation
+                max_daily_safety_multiplier = preferences.get(DoubleKey.ApsMaxDailyMultiplier) * physioMults.smbFactor, // ?? SMB Cap modulation
+                current_basal_safety_multiplier = preferences.get(DoubleKey.ApsMaxCurrentBasalMultiplier) * physioMults.basalFactor, // ?? Basal Cap modulation
                 lgsThreshold = profileUtil.convertToMgdlDetect(preferences.get(UnitDoubleKey.ApsLgsThreshold)).toInt(),
                 high_temptarget_raises_sensitivity = false,
                 low_temptarget_lowers_sensitivity = false,
@@ -1233,7 +1259,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 maxUAMSMBBasalMinutes = preferences.get(IntKey.ApsUamMaxMinutesOfBasalToLimitSmb),
                 bolus_increment = pump.pumpDescription.bolusStep,
                 carbsReqThreshold = preferences.get(IntKey.ApsCarbsRequestThreshold),
-                current_basal = ch.fromPump(activePlugin.activePump.baseBasalRate) * physioMults.basalFactor, // 🏥 Basal Rate Modulation
+                current_basal = ch.fromPump(activePlugin.activePump.baseBasalRate) * physioMults.basalFactor, // ?? Basal Rate Modulation
                 temptargetSet = isTempTarget,
                 autosens_max = preferences.get(DoubleKey.AutosensMax),
                 out_units = if (profileFunction.getUnits() == GlucoseUnit.MMOL) "mmol/L" else "mg/dl",
@@ -1278,8 +1304,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             ).also {
                 val determineBasalResult = apsResultProvider.get().with(it)
                 
-                // 🔮 FCL 11.0: Force Copy Predictions via JSON (Manual Construction)
-                // 🔮 FCL 11.0: Force Copy Predictions via JSON (Manual Construction)
+                // ?? FCL 11.0: Force Copy Predictions via JSON (Manual Construction)
+                // ?? FCL 11.0: Force Copy Predictions via JSON (Manual Construction)
                 if (it.predBGs != null) {
                     val count = it.predBGs?.IOB?.size ?: 0
                     aapsLogger.debug(LTag.APS, "Plugin: Injecting predictions via JSON manually (Size: $count)")
@@ -1298,7 +1324,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         aapsLogger.error(LTag.APS, "Failed to inject JSON predictions: $e")
                     }
 
-                    // 🔮 FCL 11.1: Force Populate predictionsAsGv for UI (OverviewViewModel)
+                    // ?? FCL 11.1: Force Populate predictionsAsGv for UI (OverviewViewModel)
                     // If 'with(RT)' failed to populate the list, we do it manually here.
                     if (determineBasalResult.predictionsAsGv.isEmpty()) {
                         it.predBGs?.IOB?.forEachIndexed { index, value ->
@@ -1356,11 +1382,11 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         absoluteRate: Constraint<Double>,
         profile: Profile
     ): Constraint<Double> {
-        // ────────────────────────────────────────────────────
-        // 1️⃣ On détecte si l’on est en mode “meal” ou “early autodrive”
+        // ????????????????????????????????????????????????????
+        // 1?? On d�tecte si l�on est en mode �meal� ou �early autodrive�
         val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
         
-        // 🎯 Context Integration (Remote/AI)
+        // ?? Context Integration (Remote/AI)
         val contextSnapshot = contextManager.getSnapshot(dateUtil.now())
         
         val isMealMode = therapy.snackTime
@@ -1369,9 +1395,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             || therapy.lunchTime
             || therapy.dinnerTime
             || therapy.bfastTime
-            || contextSnapshot.hasMealRisk // 🍕 Remote "Lunch/Meal" triggers this
+            || contextSnapshot.hasMealRisk // ?? Remote "Lunch/Meal" triggers this
 
-        val isSportMode = therapy.sportTime || contextSnapshot.hasActivity // 🏃 Remote "Sport" triggers this
+        val isSportMode = therapy.sportTime || contextSnapshot.hasActivity // ?? Remote "Sport" triggers this
 
         val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
         val night = hour <= 7
@@ -1383,8 +1409,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         val isSpecialMode = isMealMode || isEarlyAutodrive || preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
 
-        // ────────────────────────────────────────────────────
-        // 2️⃣ On choisit la bonne pref en fonction du mode
+        // ????????????????????????????????????????????????????
+        // 2?? On choisit la bonne pref en fonction du mode
         var maxBasal = when {
             isMealMode       -> preferences.get(DoubleKey.meal_modes_MaxBasal)
             isEarlyAutodrive -> preferences.get(DoubleKey.autodriveMaxBasal)
@@ -1392,7 +1418,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         }
 
         if (isEnabled()) {
-            // 3️⃣ On remonte au maxDailyBasal si besoin
+            // 3?? On remonte au maxDailyBasal si besoin
             if (maxBasal < profile.getMaxDailyBasal()) {
                 maxBasal = profile.getMaxDailyBasal()
                 absoluteRate.addReason(
@@ -1401,7 +1427,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 )
             }
 
-            // 4️⃣ On bride toujours sur maxBasal
+            // 4?? On bride toujours sur maxBasal
             absoluteRate.setIfSmaller(
                 maxBasal,
                 rh.gs(
@@ -1412,13 +1438,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 this
             )
 
-            // ───> **Si on est dans un mode spécial, on s’arrête là :**
+            // ???> **Si on est dans un mode sp�cial, on s�arr�te l� :**
             if (isSpecialMode) {
                 return absoluteRate
             }
 
-            // ────────────────────────────────────────────────────
-            // 5️⃣ Sinon, on applique en plus le multiplicateur “current basal”
+            // ????????????????????????????????????????????????????
+            // 5?? Sinon, on applique en plus le multiplicateur �current basal�
             val maxBasalMultiplier = preferences.get(DoubleKey.ApsMaxCurrentBasalMultiplier)
             val maxFromBasalMultiplier = floor(maxBasalMultiplier * profile.getBasal() * 100) / 100
             absoluteRate.setIfSmaller(
@@ -1431,7 +1457,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 this
             )
 
-            // 6️⃣ Et le multiplicateur “daily basal”
+            // 6?? Et le multiplicateur �daily basal�
             val maxDailyMultiplier = preferences.get(DoubleKey.ApsMaxDailyMultiplier)
             val maxFromDaily = floor(profile.getMaxDailyBasal() * maxDailyMultiplier * 100) / 100
             absoluteRate.setIfSmaller(

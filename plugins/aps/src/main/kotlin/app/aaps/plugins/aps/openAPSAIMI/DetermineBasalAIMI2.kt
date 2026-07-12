@@ -69,6 +69,13 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLogRow
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfTddProvider
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PredictionPhysioModulationResolver
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.CausalKineticsModulator
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.DiaGovernor
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinKineticsAuthority
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdLearningDiagnostics
+import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiIntelligenceSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiIntelligenceSnapshotBuilder
+import app.aaps.plugins.aps.openAPSAIMI.orchestration.IntelligenceSnapshotJson
 import app.aaps.plugins.aps.openAPSAIMI.ports.PkpdPort
 import app.aaps.plugins.aps.openAPSAIMI.prediction.NaiveEventualBgSignGuard
 import app.aaps.plugins.aps.openAPSAIMI.prediction.PredictionSanityResult
@@ -100,6 +107,7 @@ import app.aaps.plugins.aps.openAPSAIMI.prediction.PredictionDivergenceAuditor
 import app.aaps.plugins.aps.openAPSAIMI.prediction.sanitizePredictionValues
 import app.aaps.plugins.aps.openAPSAIMI.risk.AimiRiskEnvelope
 import app.aaps.plugins.aps.openAPSAIMI.risk.AimiRiskEnvelopeBuilder
+import app.aaps.plugins.aps.openAPSAIMI.risk.DecisionPredictionAuthority
 import app.aaps.plugins.aps.openAPSAIMI.risk.DecisionPredictionAuthorityResolver
 import app.aaps.plugins.aps.openAPSAIMI.risk.IobConsensus
 import app.aaps.plugins.aps.openAPSAIMI.risk.IobDecisionSource
@@ -295,6 +303,8 @@ internal data class AimiDecisionContext(
         var harmonia_simulation: org.json.JSONObject? = null,
         /** AIMI Harmonia production owner state; basal-first only and safety-gated. */
         var harmonia_production: org.json.JSONObject? = null,
+        /** Unified intelligence snapshot (kinetics, causal, ISF, predictions) — intelligence_snapshot_v1. */
+        var intelligence_snapshot: org.json.JSONObject? = null,
         /** Runtime ownership of T3C for this tick: native RBT, legacy fallback, or safety terminal. */
         var t3c_runtime_ownership: T3cRuntimeOwnershipExport? = null,
         /** Loop vs auditor binding for this tick (sync disposition; follow-up may arrive async). */
@@ -611,6 +621,9 @@ internal data class AimiDecisionContext(
             }
             adjustments.harmonia_production?.let { production ->
                 adj.put("harmonia_production", production)
+            }
+            adjustments.intelligence_snapshot?.let { snapshot ->
+                adj.put("intelligence_snapshot_v1", snapshot)
             }
             adjustments.t3c_runtime_ownership?.let { ownership ->
                 val ownershipJson = org.json.JSONObject()
@@ -1449,6 +1462,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastSafetyRiskExport = null
         lastScenarioProjection = null
         lastPredDivergenceExport = null
+        lastDecisionPredictionAuthority = null
+        lastIntelligenceSnapshot = null
         isConfirmedHighRiseThisTick = false
         correctionAggressionDecision = null
         mealAdvisorOneShotThisTick = false
@@ -1643,7 +1658,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             hormonal_cycle_phase = wCycleInfoForRun?.let { "${it.phase.name}_Day${it.dayInCycle}" } ?: "Unknown",
             physical_activity_mode = if (snsDominance > 0.6) "Stress/Activity" else "Resting"
         )
-        val iobActionProfile = InsulinActionProfiler.calculate(ctx.iobDataArray, ctx.profile, snsDominance)
+        val iobArrayForProfiler = if (preferences.get(BooleanKey.OApsAIMIIntelligenceKineticsProfiler)) {
+            ctx.pkpdIobDataArray ?: ctx.iobDataArray
+        } else {
+            ctx.iobDataArray
+        }
+        val iobActionProfile = InsulinActionProfiler.calculate(iobArrayForProfiler, ctx.profile, snsDominance)
         val iobTotal = iobActionProfile.iobTotal
         val iobPeakMinutes = iobActionProfile.peakMinutes
         iobActivityNow = iobActionProfile.activityNow
@@ -1811,6 +1831,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             predictedBgMgdl = glucoseStatus.glucose,
             targetBgMgdl = ctx.profile.target_bg,
         )
+        val singleLearnPath = preferences.get(BooleanKey.OApsAIMIIntelligenceSingleLearnPath)
         this.cachedPkpdRuntime = try {
             pkpdIntegration.setRecentBolusSamples(
                 buildRecentPkpdBolusSamples(
@@ -1837,6 +1858,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 estimatedRaMgdlPerMin = continuousStateEstimator.getLastRa().takeIf { it.isFinite() && it > 0.0 },
                 causalStatePosterior = lastPatientState?.causalPosterior,
                 patientEventMemory = lastPatientState?.eventMemory,
+                allowLearning = !singleLearnPath,
             )
         } catch (e: Exception) {
             consoleError.add("❌ Early PKPD Runtime init failed: ${e.message}")
@@ -1883,8 +1905,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         val pumpAgeDays: Float = pumpAgeDaysCached()
-        val effectiveDiaH = pkpdRuntime?.params?.diaHrs
-            ?: profile.dia
+        val causalMod = CausalKineticsModulator.modulate(lastPatientState?.causalPosterior)
+        val effectiveDiaH = if (preferences.get(BooleanKey.OApsAIMIDiaGovernorEnabled)) {
+            DiaGovernor.resolve(
+                profileDiaHours = profile.dia,
+                contextualDiaShiftHours = causalMod.diaShiftHours,
+                pkpdLearnedDiaHours = pkpdRuntime?.params?.diaHrs,
+                pkpdEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEnabled),
+                governorEnabled = true,
+                diaMinBound = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMinH),
+                diaMaxBound = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMaxH),
+                learnedBlendWeight = preferences.get(DoubleKey.OApsAIMIDiaGovernorLearnedWeight),
+            ).effectiveDiaHours
+        } else {
+            pkpdRuntime?.params?.diaHrs ?: profile.dia
+        }
 
         // TAP-G peak governor: echo last log line once per distinct string (clipped).
         val peakGovLine = preferences.get(app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine)
@@ -5132,6 +5167,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             uamConfidence = AimiUamHandler.confidenceOrZero(),
             postHypoDelivery = lastPostHypoDeliveryAuthority,
         )
+        lastDecisionPredictionAuthority = decisionPrediction
         consoleLog.add(DecisionPredictionAuthorityResolver.formatLogLine(decisionPrediction))
 
         val projectionInput = correctionAggressionProjectionInput(
@@ -7781,12 +7817,45 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     /**
+     * Builds the unified intelligence snapshot for JSONL export and downstream consumers.
+     */
+    private fun buildIntelligenceSnapshot(
+        ctx: AimiTickContext,
+        profile: OapsProfileAimi,
+        pkpdRuntime: PkPdRuntime?,
+    ): AimiIntelligenceSnapshot? {
+        val effectiveProfile = effectiveProfileCached(ctx.currentTime) ?: return null
+        val physioMults = lastFusedPhysioMultipliers ?: lastBasePhysioMultipliers
+        val learningDiagnostics = PkpdLearningDiagnostics.from(
+            causalStatePosterior = lastPatientState?.causalPosterior,
+            allowLearning = preferences.get(BooleanKey.OApsAIMIIntelligenceSingleLearnPath),
+            exerciseFlag = sportTime,
+            iobU = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
+            carbsActiveG = ctx.mealData.mealCOB,
+            bg = ctx.glucoseStatus.glucose,
+            deltaMgDlPer5 = ctx.glucoseStatus.delta,
+        )
+        return AimiIntelligenceSnapshotBuilder.build(
+            AimiIntelligenceSnapshotBuilder.BuildInput(
+                timestampMs = ctx.currentTime,
+                accountingIobArray = ctx.iobDataArray,
+                profile = profile,
+                effectiveProfile = effectiveProfile,
+                pkpdRuntime = pkpdRuntime,
+                peakGovernor = null,
+                causalPosterior = lastPatientState?.causalPosterior,
+                physioPeakShiftMinutes = physioMults.peakShiftMinutes,
+                preferences = preferences,
+                iobCobCalculator = iobCobCalculator,
+                learningDiagnostics = learningDiagnostics,
+                predictionAuthority = lastDecisionPredictionAuthority,
+            ),
+        )
+    }
+
+    /**
      * [decisionCtx] dynamique ISF + outcome + surveillance IOB ; persistance **AIMI_Decisions.jsonl** ;
      * [AimiLoopTelemetry.enterPhase] EXPORT ; export Hormonitor (**I/O disque**).
-     *
-     * **Timing vs auditor** : cette méthode matérialise l’état **au moment de l’appel** (après
-     * [runPostBasalEngineLearnersRtInstrumentationAndAuditorStage]). `adjustments.auditor_tick` documente
-     * la disposition sync ; un audit externe async peut append `auditor_followup` après cette ligne.
      */
     private fun runAimiSnapshotMedicalJsonAndHormonitorExportStage(
         ctx: AimiTickContext,
@@ -7858,7 +7927,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.uam_hypotheses = lastUamHypothesisState?.toJsonObject()
         decisionCtx.adjustments.patient_state = lastPatientState?.toJsonObject()
         decisionCtx.adjustments.patient_mode = lastPatientModeDecision?.toJsonObject()
-        decisionCtx.adjustments.physiological_tree = lastPhysiologicalTreeSnapshot?.toJsonObject()
+
+        if (preferences.get(BooleanKey.OApsAIMIIntelligenceSnapshotExport)) {
+            lastIntelligenceSnapshot = buildIntelligenceSnapshot(ctx, profile, pkpdRuntime)
+            decisionCtx.adjustments.intelligence_snapshot =
+                lastIntelligenceSnapshot?.let { IntelligenceSnapshotJson.toJsonObject(it) }
+        }
+
+        decisionCtx.adjustments.physiological_tree = lastPhysiologicalTreeSnapshot?.toJsonObject()?.apply {
+            lastIntelligenceSnapshot?.let { snap ->
+                put("insulin_authority", "context_modulation_lot2")
+                put("insulin_kinetics_context", org.json.JSONObject().apply {
+                    put("effective_dia_h", snap.kinetics.effective.diaHours)
+                    put("effective_peak_min", snap.kinetics.effective.peakMinutes)
+                    put("structural_dia_h", snap.kinetics.structural.diaHrs)
+                    put("structural_peak_min", snap.kinetics.structural.peakMin)
+                    put("learning_gate_pass", snap.kinetics.learning.learningGatePass)
+                    put("causal_modulation", snap.causal.causalModulationReason)
+                })
+            }
+        }
         decisionCtx.adjustments.harmonia_simulation = lastHarmoniaDecision?.toJsonObject()
         decisionCtx.adjustments.harmonia_production = lastHarmoniaProductionDecision?.toJsonObject()
         decisionCtx.adjustments.t3c_runtime_ownership = lastT3cRuntimeOwnership
@@ -8398,6 +8486,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 estimatedRaMgdlPerMin = continuousStateEstimator.getLastRa().takeIf { it.isFinite() && it > 0.0 },
                 causalStatePosterior = lastPatientState?.causalPosterior,
                 patientEventMemory = lastPatientState?.eventMemory,
+                allowLearning = true,
             )
         } catch (e: Exception) {
             consoleError.add("❌ PKPD runtime failed: ${e.message}")
@@ -8408,6 +8497,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         var pkpdRuntime = pkpdRuntimeIn
         if (pkpdRuntimeTemp != null) {
             pkpdRuntime = pkpdRuntimeTemp
+            if (preferences.get(BooleanKey.OApsAIMIIntelligenceSingleLearnPath)) {
+                this.cachedPkpdRuntime = pkpdRuntimeTemp
+            }
 
             consoleLog.add("📊 PKPD_LEARNER:")
             consoleLog.add("  │ DIA (learned): ${"%.2f".format(Locale.US, pkpdRuntime.params.diaHrs)}h")
@@ -8931,6 +9023,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     /** PKPD vs scenario divergence audit of the current tick (PredictionDivergenceAuditor). */
     private var lastPredDivergenceExport: org.json.JSONObject? = null
+    private var lastDecisionPredictionAuthority: DecisionPredictionAuthority? = null
+    private var lastIntelligenceSnapshot: AimiIntelligenceSnapshot? = null
     private var lastAdvancedPredictionCurves: AdvancedPredictionCurves? = null
     private var lastSafetyTerminalsForRbt: SafetyPredictionTerminals? = null
     private var lastHyperTrajectoryRelease: HyperTrajectoryReleaseResult? = null

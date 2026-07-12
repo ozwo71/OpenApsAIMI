@@ -93,6 +93,7 @@ class PkPdIntegration(private val preferences: Preferences) {
         physioLatentState: PhysioLatentState? = null,
         estimatedRaMgdlPerMin: Double? = null,
         causalStatePosterior: CausalStatePosterior? = null,
+        allowLearning: Boolean = true,
         patientEventMemory: PatientEventMemory? = null,
     ): PkPdRuntime? {
         val structural = readStructuralConfig()
@@ -140,7 +141,7 @@ class PkPdIntegration(private val preferences: Preferences) {
             learningContextClean = learningContextClean,
             consoleLog = consoleLog,
         )
-        if (learningContextClean) {
+        if (allowLearning && learningContextClean) {
             estimator.update(
                 epochMin = epochMin,
                 bg = bg,
