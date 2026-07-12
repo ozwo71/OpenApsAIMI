@@ -2,8 +2,8 @@ package app.aaps.plugins.aps.openAPSAIMI.learning
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
 import app.aaps.plugins.aps.openAPSAIMI.TrainingConfig
+import app.aaps.plugins.aps.openAPSAIMI.ml.NeuralModelTrainer
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
 import app.aaps.plugins.aps.openAPSAIMI.ml.TrainingCircuitBreaker
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
@@ -183,6 +183,8 @@ class BasalMlTrainingCoordinator @Inject constructor(
         }
     }
 
+    // Basal/T3C publish strictly: the candidate must beat the incumbent within [VAL_LOSS_TOLERANCE] and probe inside
+    // [outputRange]. Shared training/validation/publish mechanics live in [NeuralModelTrainer].
     private fun trainAndMaybePublish(
         weightsFile: File,
         trainInputs: List<FloatArray>,
@@ -191,50 +193,17 @@ class BasalMlTrainingCoordinator @Inject constructor(
         valTargets: List<DoubleArray>,
         config: TrainingConfig,
         outputRange: ClosedFloatingPointRange<Double>,
-    ): Boolean {
-        if (trainInputs.isEmpty() || valInputs.isEmpty()) return false
-
-        val incumbent = BasalMlModelStore.loadValid(weightsFile, INPUT_SIZE)
-        val incumbentLoss = incumbent?.validate(valInputs, valTargets) ?: Double.MAX_VALUE
-
-        val candidate = AimiNeuralNetwork(
-            inputSize = INPUT_SIZE,
-            hiddenSize = 8,
-            outputSize = 1,
+    ): Boolean =
+        NeuralModelTrainer.trainAndPublish(
+            weightsFile = weightsFile,
+            split = NeuralModelTrainer.Split(trainInputs, trainTargets, valInputs, valTargets),
             config = config,
-        )
-        candidate.trainWithValidation(trainInputs, trainTargets, valInputs, valTargets)
-
-        val probeOut = candidate.predict(FloatArray(INPUT_SIZE) { 0f })
-        if (!probeOut.all { it.isFinite() }) {
-            log.warn(LTag.APS, "$TAG: candidate probe NaN/Inf — discard")
-            return false
-        }
-        val probeVal = probeOut.first().toDouble()
-        if (probeVal !in outputRange) {
-            log.warn(LTag.APS, "$TAG: candidate probe $probeVal outside $outputRange — discard")
-            return false
-        }
-
-        val candidateLoss = candidate.lastBestValidationLoss()
-        if (!candidateLoss.isFinite()) return false
-
-        val maxAllowed = incumbentLoss * VAL_LOSS_TOLERANCE + 1e-6
-        if (incumbent != null && candidateLoss > maxAllowed) {
-            log.info(
-                LTag.APS,
-                "$TAG: reject ${weightsFile.name} val=$candidateLoss > incumbent=$incumbentLoss (tol=$VAL_LOSS_TOLERANCE)",
-            )
-            return false
-        }
-
-        if (!BasalMlModelStore.saveAtomic(weightsFile, candidate)) {
-            log.warn(LTag.APS, "$TAG: atomic save failed for ${weightsFile.name}")
-            return false
-        }
-        log.info(LTag.APS, "$TAG: published ${weightsFile.name} (val loss=$candidateLoss)")
-        return true
-    }
+            inputSize = INPUT_SIZE,
+            outputRange = outputRange,
+            requireIncumbentBeat = true,
+            valLossTolerance = VAL_LOSS_TOLERANCE,
+            log = { log.info(LTag.APS, "$TAG: $it") },
+        ) != null
 
     private fun isCircuitOpen(now: Long): Boolean = circuitBreaker.isOpen(now)
 

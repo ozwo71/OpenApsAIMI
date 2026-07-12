@@ -4,6 +4,7 @@ import android.content.Context
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.ml.AimiNeuralModelStore
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
@@ -91,18 +92,19 @@ class BasalMlTrainingCoordinatorTest {
         // depends only on data availability; the prefs gate only runtime usage (BasalNeuralLearner). We assert the
         // training path is REACHED — deterministically, via the model-store read that trainAndMaybePublish performs
         // before training — rather than the stochastic publish result (the net is unseeded).
-        mockkObject(BasalMlModelStore)
+        mockkObject(AimiNeuralModelStore)
         try {
-            every { BasalMlModelStore.loadValid(any(), any()) } returns null
+            every { AimiNeuralModelStore.load(any(), any()) } returns null
+            every { AimiNeuralModelStore.save(any(), any()) } returns true
             every { preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled) } returns false
             every { preferences.get(BooleanKey.OApsAIMIT3cBrittleMode) } returns false
 
             coordinator.runScheduledTraining()
 
-            // Reached only if the pref-gate is gone (both heads read their incumbent before training).
-            verify(atLeast = 1) { BasalMlModelStore.loadValid(any(), any()) }
+            // Reached only if the pref-gate is gone: NeuralModelTrainer reads the incumbent before training each head.
+            verify(atLeast = 1) { AimiNeuralModelStore.load(any(), any()) }
         } finally {
-            unmockkObject(BasalMlModelStore)
+            unmockkObject(AimiNeuralModelStore)
         }
     }
 

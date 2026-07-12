@@ -182,34 +182,17 @@ object AimiSmbTrainer {
 
         Log.i(TAG, "Training on ${inputs.size} samples…")
 
-        // Simple single-pass training (K-fold is too slow here)
-        val net = AimiNeuralNetwork(
-            inputSize = INPUT_SIZE,
-            hiddenSize = 8,
-            outputSize = 1,
+        // Single-pass train → probe-validate → atomic publish via the shared pipeline (probe-finite only: SMB does
+        // not compare against an incumbent, so any finite candidate publishes — same as before).
+        val net = NeuralModelTrainer.trainAndPublish(
+            weightsFile = AimiSmbModelStore.modelFile(dir),
+            split = NeuralModelTrainer.split80_20(inputs, targets),
             config = TrainingConfig(learningRate = 0.001, epochs = 300),
-            regularizationLambda = 0.01
+            inputSize = INPUT_SIZE,
+            regularizationLambda = 0.01,
+            log = { Log.i(TAG, it) },
         )
-        // Split 80/20 for train/val
-        val splitIdx = (inputs.size * 0.8).toInt().coerceAtLeast(1)
-        val trainInputs  = inputs.subList(0, splitIdx)
-        val trainTargets = targets.subList(0, splitIdx)
-        val valInputs    = inputs.subList(splitIdx, inputs.size).takeIf { it.isNotEmpty() } ?: trainInputs
-        val valTargets   = targets.subList(splitIdx, targets.size).takeIf { it.isNotEmpty() } ?: trainTargets
-        net.trainWithValidation(trainInputs, trainTargets, valInputs, valTargets)
-
-        // Validate before committing
-        val probe = FloatArray(INPUT_SIZE) { 0f }
-        val testOut = net.predict(probe)
-        if (!testOut.all { it.isFinite() }) {
-            Log.w(TAG, "Trained model produced NaN/Inf — discarding")
-            recordFailure()
-            return
-        }
-
-        // Commit
-        val saved = AimiSmbModelStore.save(dir, net)
-        if (saved) {
+        if (net != null) {
             modelRef.set(net)
             lastTrainMs.set(System.currentTimeMillis())
             rowsAtLastTrain.set(totalRows)

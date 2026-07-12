@@ -11,11 +11,12 @@ internal object AimiSmbModelStore {
 
     private const val MODEL_FILE_NAME = "aimi_smb_model.json"
 
-    private fun mainFile(dir: File) = File(dir, MODEL_FILE_NAME)
+    /** The SMB weight file inside [dir] (exposed so the trainer can publish through the shared training pipeline). */
+    fun modelFile(dir: File): File = File(dir, MODEL_FILE_NAME)
 
     fun save(dir: File, network: AimiNeuralNetwork): Boolean =
-        AimiNeuralModelStore.save(mainFile(dir), network)
+        AimiNeuralModelStore.save(modelFile(dir), network)
 
     fun load(dir: File, expectedInputSize: Int): AimiNeuralNetwork? =
-        AimiNeuralModelStore.load(mainFile(dir), expectedInputSize)
+        AimiNeuralModelStore.load(modelFile(dir), expectedInputSize)
 }
