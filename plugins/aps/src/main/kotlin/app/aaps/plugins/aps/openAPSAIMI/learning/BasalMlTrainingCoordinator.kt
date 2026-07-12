@@ -34,7 +34,7 @@ class BasalMlTrainingCoordinator @Inject constructor(
         // 4 latent + 3 patient-mode + 3 causal). Keep in sync with BasalNeuralLearner.modelInput / the parser.
         const val BASE_FEATURE_COUNT = 6
         const val INPUT_SIZE = 16
-        private const val TRAIN_INTERVAL_MS = 6L * 60 * 60 * 1000
+        private const val TRAIN_INTERVAL_MS = 1L * 60 * 60 * 1000 // 1h — matches the 1h worker cadence; the MIN_NEW_ROWS gate still prevents retraining without new data
         private const val MIN_NEW_ROWS = 80L
         private const val BASAL_MIN_ROWS = 100
         private const val T3C_MIN_ROWS = 50

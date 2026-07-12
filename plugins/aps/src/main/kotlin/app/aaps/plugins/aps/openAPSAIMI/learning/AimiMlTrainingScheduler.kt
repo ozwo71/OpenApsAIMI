@@ -1,7 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.learning
 
 import android.content.Context
-import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
@@ -16,7 +15,7 @@ import javax.inject.Singleton
 /**
  * Central WorkManager scheduling for AIMI on-device ML trainers.
  *
- * - Basal / T3C: every 6h (battery-not-low; runs regardless of charging / device-idle)
+ * - Basal / T3C: every 1h, no constraints (runs regardless of charging / device-idle / battery) + one-time bootstrap
  * - Autodrive attention: 24h via [app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveNeuralTrainer]
  */
 @Singleton
@@ -26,16 +25,12 @@ class AimiMlTrainingScheduler @Inject constructor(
 ) {
 
     fun schedule() {
-        // Train regardless of charging / device-idle. The previous setRequiresCharging + setRequiresDeviceIdle combo
-        // almost never coincided on real phones, so this 6h worker rarely fired and the weights files were never
-        // produced — while the loop-written CSVs/state and the loop-trained SMB model always were. Keep only a
-        // battery-not-low guard (avoid heavy training on a nearly-dead battery), matching the on-loop SMB training.
-        val constraints = Constraints.Builder()
-            .setRequiresBatteryNotLow(true)
-            .build()
-
-        val basalRequest = PeriodicWorkRequestBuilder<BasalMlTrainerWorker>(6, TimeUnit.HOURS)
-            .setConstraints(constraints)
+        // Runs every 1h with NO constraints — must execute regardless of charging / device-idle / battery. The old
+        // setRequiresCharging + setRequiresDeviceIdle combo almost never coincided on real phones, so the worker never
+        // fired and the weights were never produced. WorkManager may still defer during deep Doze to a maintenance
+        // window, but there is no longer any charging/idle *requirement*. Actual retrains stay bounded by the
+        // coordinator's rate limit + min-new-rows gate, so a 1h cadence is not wasteful.
+        val basalRequest = PeriodicWorkRequestBuilder<BasalMlTrainerWorker>(1, TimeUnit.HOURS)
             .build()
 
         try {
@@ -53,10 +48,9 @@ class AimiMlTrainingScheduler @Inject constructor(
             // CSV data already exists. The coordinator no-ops it once a fresh model exists (rate limit + min-rows),
             // and bypasses the rate limit while the weights are still missing (first creation).
             val bootstrapRequest = OneTimeWorkRequestBuilder<BasalMlTrainerWorker>()
-                .setConstraints(constraints)
                 .build()
             wm.enqueueUniqueWork(WORK_BASAL_ML_BOOTSTRAP, ExistingWorkPolicy.KEEP, bootstrapRequest)
-            aapsLogger.info(LTag.APS, "AimiMlTrainingScheduler: basal/T3C trainer scheduled (6h) + bootstrap enqueued")
+            aapsLogger.info(LTag.APS, "AimiMlTrainingScheduler: basal/T3C trainer scheduled (1h, no constraints) + bootstrap enqueued")
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "AimiMlTrainingScheduler: schedule failed", e)
         }
