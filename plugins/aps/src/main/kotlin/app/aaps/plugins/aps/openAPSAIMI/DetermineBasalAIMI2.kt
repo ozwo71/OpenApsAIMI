@@ -9785,7 +9785,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         targetBG: Double, horizonMinutes: Int,
         insulinSensitivity: Double, nnPrediction: Double
     ): Double {
-        val predictions = predictGlycemia(currentBG, basalCandidate, horizonMinutes, insulinSensitivity)
+        // C2: shape the basal cost-function's glycemia projection with the EFFECTIVE learned kinetics
+        // (InsulinKineticsAuthority → tickEffectiveDia/Peak) instead of the static 300/75, so the basal optimizer
+        // predicts on how THIS patient's insulin acts. Fail-safe to the profile default when unavailable/invalid.
+        val diaMinutes = tickEffectiveDiaHours?.takeIf { it.isFinite() && it > 0.0 }?.let { (it * 60.0).roundToInt() } ?: 300
+        val timeToPeakMinutes = tickEffectivePeakMinutes?.takeIf { it.isFinite() && it > 0.0 }?.toInt() ?: 75
+        val predictions = predictGlycemia(
+            currentBG, basalCandidate, horizonMinutes, insulinSensitivity,
+            diaMinutes = diaMinutes, timeToPeakMinutes = timeToPeakMinutes,
+        )
         val predictionCost = predictions.sumOf { (it - targetBG).pow(2) }
         val nnPenalty = (basalCandidate - nnPrediction).pow(2)
         return predictionCost + 0.5 * nnPenalty  // Pondération du terme de pénalité

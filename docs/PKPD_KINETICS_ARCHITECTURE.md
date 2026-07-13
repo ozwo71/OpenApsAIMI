@@ -5,6 +5,16 @@
 **Portée :** modularité, propagation DIA/peak appris, intégration physio vs arbre causal, pertinence produit  
 **Build de référence :** `dev_OAPSAIMI` (post-merge `milos/dev`)
 
+> **Mise à jour 2026-07-13 — le refactor a atterri.** L'analyse ci-dessous décrivait en partie la *cible* ; depuis,
+> plusieurs éléments « cible » sont **en production** (commits `9e8557c61b`, `305364951a`, `8b4acdf4e1`, + C2 working tree) :
+> - **`InsulinKineticsAuthority`** existe : façade unique `resolve()` → `InsulinKineticsView.effective` — ce n'est plus une cible §10.1.
+> - **`DiaGovernor`** existe et alimente **en prod** le DIA *effectif* des courbes de prédiction (plus seulement le peak TAP-G).
+> - **`buildLearnedKineticsIobArray`** reconstruit le tableau de prédiction sur `kineticsView.effective` (DIA + peak **gouvernés**), pas les params bruts appris.
+> - **C2** : `predictGlycemia` / cost-function T3C consomme `tickEffectiveDia/Peak` (fail-safe 300/75) — dernier item roadmap comblé.
+>
+> Les **§5, §8 (validation terrain) et les verdicts §1 d'origine** restent la **photo pré-refactor**. Les lignes
+> factuelles corrigées ci-dessous sont annotées **« (MAJ 2026-07-13) »**.
+
 **Documents liés :**
 - [AIMI_INTELLIGENCE_SNAPSHOT_ROADMAP.md](AIMI_INTELLIGENCE_SNAPSHOT_ROADMAP.md) — implémentation snapshot unifié
 - [AIMI_PREDICTION_DIVERGENCE.md](AIMI_PREDICTION_DIVERGENCE.md) — divergences multi-modèle par tick
@@ -25,12 +35,14 @@ En l'état du code et des logs terrain analysés, la modulation DIA/peak est **p
 |-----------|---------|
 | Pertinence du design | ✅ Oui — variabilité inter-patient / site / lot |
 | Apprentissage actif en prod | ⚠️ Souvent **bloqué** (gate causal + contexte patient) |
-| Propagation DIA appris | ❌ Partielle — pas sur IOB comptable ni `profile.dia` |
+| Propagation DIA appris | ⚠️ Élargie (MAJ 2026-07-13) — `DiaGovernor` effectif sur prédiction + tube + T3C (C2) ; **pas** encore IOB comptable ni `profile.dia` |
 | Propagation peak appris | ⚠️ Partielle — TAP-G → `peakTime`, mais profiler/IOB sur profil |
 | Alignement arbre physiologique | ❌ Pont indirect (gates + échelles), pas déploiement homologue |
 | Impact dose observable | ⚠️ ISF fusion + SMB damp + tube-line DIA ; pas la forme IOB principale |
 
-**Dette structurelle :** trois représentations de la cinétique insuline sans façade unique (`InsulinKineticsAuthority`), et `PkPdIntegration` cumule apprentissage, persistance, fusion ISF, physio et damping.
+**Dette structurelle :** ~~trois représentations de la cinétique insuline sans façade unique~~ — la façade
+**`InsulinKineticsAuthority` existe désormais** (`resolve()` → `InsulinKineticsView.effective`, MAJ 2026-07-13) ;
+reste que `PkPdIntegration` cumule apprentissage, persistance, fusion ISF, physio et damping.
 
 ---
 
@@ -49,7 +61,8 @@ En l'état du code et des logs terrain analysés, la modulation DIA/peak est **p
 │ profile.dia (loop)   │ tube-line DIA        │ peak = profile.peakTime   │
 └──────────────────────┴──────────────────────┴───────────────────────────┘
   (*) optionnel : pref OApsAIMIPkpdPredictionKinetics (défaut ON)
-      → rebuild exponentiel AAPS avec learned DIA/peak, pas LogNormal
+      → rebuild exponentiel AAPS sur DIA/peak EFFECTIFS (kineticsView.effective : DiaGovernor + TAP-G),
+        pas les params bruts, pas LogNormal (MAJ 2026-07-13)
 ```
 
 Ces trois courbes sont **intentionnellement distinctes** historiquement, mais **non documentées** comme telles pour l'utilisateur ni pour les consommateurs internes — d'où l'impression « PKPD actif mais graphe inchangé ».
@@ -131,7 +144,11 @@ effective = blend(anchor, learned_peak, w) + trajectory_nudge
 | learned | `estimator.peakMin` | `OApsAIMIPkpdStatePeakMin` |
 | trajectory | `TrajectoryPeakBias` | prefs echo |
 
-**Asymétrie produit :** il existe un **gouverneur explicite pour le peak**, mais **aucun TAP-G pour le DIA**. Le DIA appris sert à l'apprentissage, au tube-line (`effectiveDiaH`), et optionnellement aux courbes de prédiction — pas au profil loop `profile.dia`.
+**Asymétrie produit (MAJ 2026-07-13) :** il existe un gouverneur pour le peak (TAP-G) **et désormais un `DiaGovernor`**
+(blend profil/appris, en prod via `InsulinKineticsAuthority.resolve` → `kineticsView.effective.diaHours`). Le DIA **effectif**
+alimente l'apprentissage, le tube-line (`effectiveDiaH`), **les courbes de prédiction** (`buildLearnedKineticsIobArray`) et la
+cost-function T3C (C2) — mais **pas** encore le profil loop `profile.dia` / IOB comptable, qui restent sur le profil. L'asymétrie
+résiduelle porte donc sur la **chaîne comptable IOB**, plus sur l'absence de gouverneur DIA.
 
 ---
 
@@ -143,13 +160,13 @@ effective = blend(anchor, learned_peak, w) + trajectory_nudge
 | `OapsProfileAimi.dia` | ❌ | — | — | ✅ | Jamais learned |
 | `OapsProfileAimi.peakTime` | — | blend | ✅ | prior | |
 | Courbes PKPD (`AdvancedPredictionEngine`) | ⚠️ | ⚠️ | indirect | ✅ défaut | Si `PkpdPredictionKinetics` ON |
-| `buildLearnedKineticsIobArray` | ✅ | ✅ | ❌ (peak brut appris) | fallback | Exponentiel AAPS, pas LogNormal |
+| `buildLearnedKineticsIobArray` | ✅ | ✅ | ✅ (peak effectif) | fallback | **(MAJ 2026-07-13)** Sur `kineticsView.effective` (DIA gouverné + peak TAP-G) ; kernel exponentiel AAPS, pas LogNormal |
 | Tube-line advisor | ✅ | — | — | fallback | `effectiveDiaH` |
 | SMB `adjustedDia` (executor) | ✅ base | via peak | ✅ | fallback | |
 | SMB damping (tail/stage) | via kernel | — | — | — | Magnitude pas forme IOB |
 | `InsulinActionProfiler` | ❌ | Weibull | lit `peakTime` gouverné | IOB profil | Décalage entrées |
 | `RealTimeInsulinObserver` | ❌ | — | — | `profile.dia` | |
-| `predictGlycemia` / T3C | ❌ | ❌ | ❌ | défaut 300/75 | Roadmap C2 |
+| `predictGlycemia` / T3C | ✅ | ✅ | ✅ | fail-safe 300/75 | **(MAJ 2026-07-13)** C2 fait : `tickEffectiveDia/Peak` (repli 300/75 si indispo) |
 | DynISF Plugin | ❌ | ❌ | ❌ | — | `lastPkpdScale` tick N-1 |
 | `PredictionPhysioModulation` | — | — | — | — | `fusedIsf` + facteurs |
 | JSONL / UI PKPD | ✅ | ✅ | ✅ | — | Télémétrie |
@@ -348,16 +365,16 @@ interface PhysioKineticsModulation {
 
 ### 10.4 Plan PRs (incrémental, comportement préservé)
 
-| PR | Contenu | Risque |
-|----|---------|--------|
-| PR-1 | Doc + `InsulinKineticsAuthority` read-only wrapper | Nul |
-| PR-2 | Unifier `computeRuntime` → `AimiTickContext` | ⚠️ async tick |
-| PR-3 | Centraliser `predictionIobArray()` / `effectiveDiaHours()` | Faible |
-| PR-4 | Scinder `PkPdIntegration` en 4 classes | Moyen |
-| PR-5 | Shadow `DiaGovernor` (blend profil/learned, pas prod) | Faible |
-| PR-6 | Aligner `InsulinActionProfiler` entrées sur `predictionIobArray()` | ⚠️ courbes |
+| PR | Contenu | Risque | Statut (2026-07-13) |
+|----|---------|--------|---------------------|
+| PR-1 | Doc + `InsulinKineticsAuthority` read-only wrapper | Nul | ✅ Fait — façade `resolve()` → `InsulinKineticsView` |
+| PR-2 | Unifier `computeRuntime` → `AimiTickContext` | ⚠️ async tick | ⚠️ Partiel — `AimiTickContext` en place, unification `computeRuntime` non confirmée |
+| PR-3 | Centraliser `predictionIobArray()` / `effectiveDiaHours()` | Faible | ✅ Fait — `buildLearnedKineticsIobArray` + `tickEffectiveDia/Peak` |
+| PR-4 | Scinder `PkPdIntegration` en 4 classes | Moyen | ⬜ À faire |
+| PR-5 | ~~Shadow~~ `DiaGovernor` (blend profil/learned) | Faible | ✅ En **prod** — prédiction/tube/T3C (pas encore `profile.dia`) |
+| PR-6 | Aligner `InsulinActionProfiler` entrées sur `predictionIobArray()` | ⚠️ courbes | ⬜ À faire |
 
-Roadmap alignée : **C1** snapshot autoritaire ([AIMI_PREDICTION_DIVERGENCE.md](AIMI_PREDICTION_DIVERGENCE.md)), **C2** `predictGlycemia` branché sur kinetics authority.
+Roadmap alignée : **C1** snapshot autoritaire ([AIMI_PREDICTION_DIVERGENCE.md](AIMI_PREDICTION_DIVERGENCE.md)) **✅ en prod**, **C2** `predictGlycemia` branché sur kinetics authority **✅ fait (2026-07-13)**.
 
 ---
 
