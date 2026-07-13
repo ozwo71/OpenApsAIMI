@@ -24,6 +24,10 @@ data class PredictionAuthorityApplyResult(
 
 object PredictionAuthorityApplier {
 
+    // Plausible BG bounds for the authoritative eventual (same NUMERIC_FLOOR / ceiling as the PKPD curves).
+    private const val EVENTUAL_MIN_MGDL = 39.0
+    private const val EVENTUAL_MAX_MGDL = 401.0
+
     fun fromAuthority(authority: DecisionPredictionAuthority): PredictionAuthorityView =
         PredictionAuthorityView(
             predTerminalMgdl = authority.predTerminalMgdl,
@@ -59,6 +63,22 @@ object PredictionAuthorityApplier {
                 shadowDeltaPredTerminalMgdl = if (shadowOnly) shadowDeltaPred else null,
                 source = authority.source.name,
                 reason = authority.reason,
+            )
+        }
+        // Fail-safe (global product preservation): never let an invalid authority terminal corrupt the loop. If the
+        // authoritative eventual is not finite or outside the plausible BG range, keep the raw PKPD prediction —
+        // no eventual overwrite, no curve remap.
+        if (!authority.eventualTerminalMgdl.isFinite() || authority.eventualTerminalMgdl !in EVENTUAL_MIN_MGDL..EVENTUAL_MAX_MGDL) {
+            return PredictionAuthorityApplyResult(
+                applied = false,
+                shadowOnly = false,
+                eventualMgdl = pkpdEventualBeforeApply,
+                predTerminalMgdl = pkpdPredTerminalBeforeApply,
+                predBGsRemapped = false,
+                shadowDeltaEventualMgdl = null,
+                shadowDeltaPredTerminalMgdl = null,
+                source = authority.source.name,
+                reason = "fail-safe: authority eventual ${authority.eventualTerminalMgdl} out of [$EVENTUAL_MIN_MGDL,$EVENTUAL_MAX_MGDL] — kept PKPD",
             )
         }
         var predBGsRemapped = false

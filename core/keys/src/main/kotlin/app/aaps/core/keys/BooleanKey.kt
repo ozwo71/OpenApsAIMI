@@ -342,10 +342,12 @@ enum class BooleanKey(
     OApsAIMIIntelligenceKineticsProfiler("key_aimi_intelligence_kinetics_profiler", true),
     /** C1 shadow: log authority vs PKPD deltas without applying to dose path. */
     OApsAIMIPredictionAuthorityShadow("key_aimi_prediction_authority_shadow", true),
-    /** C1 prod: apply DecisionPredictionAuthority to eventualBG, predBGs, stacking, SafetyNet. */
+    /** C1 prod: apply DecisionPredictionAuthority to eventualBG, predBGs, stacking, SafetyNet. Default ON (harmonized
+     *  in production 2026-07-12): one authoritative, physio-enriched prediction feeds the tree/Harmonia/SMB/UI/safety.
+     *  Fail-safe in PredictionAuthorityApplier falls back to raw PKPD if the authority terminal is invalid. */
     OApsAIMIPredictionAuthorityEnabled(
         key = "key_aimi_prediction_authority_enabled",
-        defaultValue = false,
+        defaultValue = true,
         dependency = OApsAIMIIntelligenceSnapshotExport,
     ),
     OApsAIMIPkpdPragmaticReliefEnabled("key_aimi_pkpd_pragmatic_relief_enabled", true),
