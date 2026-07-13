@@ -365,6 +365,10 @@ enum class BooleanKey(
     OApsAIMIAimiSmbComparatorEnabled("key_aimi_smb_comparator_enabled", false),
     /** Plateau + meaningful IOB + falling prediction → throttle SMB, bias TBR, no Red Carpet restore. */
     OApsAIMIIobSurveillanceGuard("key_aimi_iob_surveillance_guard", true),
+    /** AIMI-local effective-IOB release: lets the maxIOB production gate compare against a hypo-governed partial
+     *  release of the ledger→effective IOB gap (fast insulin → gate stops over-blocking corrections). Release-only,
+     *  θ ≤ 0.5, retracts fully to the ledger on any hypo signal. See EffectiveIobReleaseAuthority. */
+    OApsAIMIEffectiveIobReleaseEnabled("key_aimi_effective_iob_release_enabled", true),
     /**
      * When true, scenario projection + trajectory can lift Autodrive V3 SMB on credible hyper rise
      * (see docs/AIMI_HYPER_TRAJECTORY_RELEASE.md).

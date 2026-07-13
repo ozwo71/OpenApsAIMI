@@ -148,6 +148,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternDetec
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternExport
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternInputBuilder
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.safety.EffectiveIobReleaseAuthority
 import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoDeliveryAuthority
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionBasalCap
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
@@ -271,6 +272,8 @@ internal data class AimiDecisionContext(
         var physiological_context: PhysioContext? = null,
         /** IOB surveillance / anti-stacking snapshot for AIMI_Decisions.jsonl analysis */
         var iob_surveillance: IobSurveillanceExport? = null,
+        /** Effective-IOB release (maxIOB gate) decision snapshot for AIMI_Decisions.jsonl analysis */
+        var iob_release: IobReleaseExport? = null,
         /** LGS / predictive hypo safety snapshot (Phase 5 export) */
         var safety_risk: SafetyRiskExport? = null,
         /** Dual scenario curves (CLINICAL_FLOOR + SCENARIO_BEST) */
@@ -386,6 +389,21 @@ internal data class AimiDecisionContext(
         val terminal_gap_mgdl: Double,
         val trajectory_type: String?,
         val contributors: List<String>,
+    )
+
+    /**
+     * Effective-IOB release decision (maxIOB gate) for external analytics. `gate_flips_block_to_allow` marks the
+     * safety-relevant event: the ledger IOB would block production but the hypo-governed release lets it through.
+     */
+    data class IobReleaseExport(
+        val enabled: Boolean,
+        val theta: Double,
+        val iob_ledger_u: Double,
+        val iob_effective_u: Double?,
+        val iob_for_gate_u: Double,
+        val released_u: Double,
+        val gate_flips_block_to_allow: Boolean,
+        val reason: String,
     )
 
     /**
@@ -514,6 +532,18 @@ internal data class AimiDecisionContext(
                 sJson.put("summary_line", s.summary_line)
                 sJson.put("tuning_reference", s.tuning_reference)
                 adj.put("iob_surveillance", sJson)
+            }
+            adjustments.iob_release?.let { r ->
+                val rJson = org.json.JSONObject()
+                rJson.put("enabled", r.enabled)
+                rJson.put("theta", r.theta)
+                rJson.put("iob_ledger_u", r.iob_ledger_u)
+                rJson.put("iob_effective_u", r.iob_effective_u ?: org.json.JSONObject.NULL)
+                rJson.put("iob_for_gate_u", r.iob_for_gate_u)
+                rJson.put("released_u", r.released_u)
+                rJson.put("gate_flips_block_to_allow", r.gate_flips_block_to_allow)
+                rJson.put("reason", r.reason)
+                adj.put("iob_release", rJson)
             }
             adjustments.safety_risk?.let { r ->
                 val rJson = org.json.JSONObject()
@@ -1549,6 +1579,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      */
     private fun buildDecisionContextInitRtSosAndFlatShadow(ctx: AimiTickContext): AimiTickDecisionRtBootstrap {
         lastIobSurveillanceExport = null
+        lastIobReleaseExport = null
+        tickIobEffectiveU = null
+        lastPostHypoOrdinal = 0
         lastHyperTrajectoryRelease = null
         lastRecursiveBeliefSnapshot = null
         lastRecursiveAuthorityGateDecision = null
@@ -1669,6 +1702,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } else {
             ctx.iobDataArray
         }
+        // Effective-IOB "now" (learned kinetics) for the maxIOB release gate — index 0 is the current tick.
+        tickIobEffectiveU = ctx.pkpdIobDataArray?.firstOrNull()?.iob
         val iobActionProfile = InsulinActionProfiler.calculate(iobArrayForProfiler, ctx.profile, snsDominance)
         val iobTotal = iobActionProfile.iobTotal
         val iobPeakMinutes = iobActionProfile.peakMinutes
@@ -3309,6 +3344,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             is PostHypoState.ReboundSuspected -> 1
             is PostHypoState.MealConfirmed -> 2
         }
+        lastPostHypoOrdinal = postHypoOrdinal
         val ngrConfig = buildNightGrowthResistanceConfig(profile, autosens, glucoseStatus, targetBg.toDouble())
         val ngrResult = nightGrowthResistanceMode.evaluate(
             now = java.time.Instant.ofEpochMilli(dateUtil.now()),
@@ -7017,7 +7053,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (t3cState.hardSafetyBlock) {
             return blockT3cBasalFirstProduction(t3cState, "hard_safety_block")
         }
-        if (iob > maxIob) {
+        if (resolveIobForGate() > maxIob) {
             return blockT3cBasalFirstProduction(t3cState, "max_iob")
         }
         if (lastInsulinStackingEvaluation?.kind == InsulinStackingStance.Kind.SURVEILLANCE_IOB) {
@@ -7200,7 +7236,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (lastPhysiologicalTreeSnapshot?.trunk?.riskLevel == PhysiologicalRiskLevel.CRITICAL) {
             return blockHarmoniaProduction(simulation, "critical_physio_risk")
         }
-        if (iob > maxIob) {
+        if (resolveIobForGate() > maxIob) {
             return blockHarmoniaProduction(simulation, "max_iob")
         }
         if (lastInsulinStackingEvaluation?.kind == InsulinStackingStance.Kind.SURVEILLANCE_IOB) {
@@ -7942,6 +7978,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
 
         decisionCtx.adjustments.iob_surveillance = lastIobSurveillanceExport
+        decisionCtx.adjustments.iob_release = lastIobReleaseExport
         decisionCtx.adjustments.safety_risk = lastSafetyRiskExport?.toDecisionContextExport()
         decisionCtx.adjustments.scenario_projection = lastScenarioProjection?.toDecisionContextExport()
         decisionCtx.adjustments.hyper_trajectory_release = lastHyperTrajectoryRelease?.toDecisionContextExport()
@@ -9280,6 +9317,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastPatientSourceSensor: SourceSensor? = null
     /** Latest IOB surveillance snapshot for JSONL (updated each [finalizeAndCapSMB]). */
     private var lastIobSurveillanceExport: AimiDecisionContext.IobSurveillanceExport? = null
+
+    /** Current IOB (U) on effective (learned) kinetics for this tick; null when unavailable. See [resolveIobForGate]. */
+    private var tickIobEffectiveU: Double? = null
+
+    /** Post-hypo state ordinal captured this tick (0 None, 1 ReboundSuspected, 2 MealConfirmed). */
+    private var lastPostHypoOrdinal: Int = 0
+
+    /** Effective-IOB release decision snapshot for AIMI_Decisions.jsonl. See [resolveIobForGate]. */
+    private var lastIobReleaseExport: AimiDecisionContext.IobReleaseExport? = null
     private var lastSmbCapped: Double = 0.0
     private var currentThyroidEffects = app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidEffects()
     private var lastSmbFinal: Double = 0.0
@@ -15780,6 +15826,42 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 "smb=${"%.2f".format(Locale.US, lastSmbProposed)}->${"%.2f".format(Locale.US, lastSmbCapped)}->${"%.2f".format(Locale.US, diag.smbFinal)} " +
                 "tbr=${"%.2f".format(Locale.US, diag.tbrUph)} src=$lastDecisionSource"
         consoleLog.add(tickLine)
+    }
+
+    /**
+     * Effective-IOB release gate (AIMI-local). Returns the IOB the maxIOB **production** gate should compare
+     * against: the ledger IOB partially released toward the (lower) effective-kinetics IOB, throttled by hypo
+     * evidence. Returns the ledger unchanged (θ=0, no-op) whenever the feature is disabled, the effective IOB is
+     * unavailable, effective ≥ ledger, or any hypo signal fires. Caches [lastIobReleaseExport] for the JSONL.
+     * @see EffectiveIobReleaseAuthority
+     */
+    private fun resolveIobForGate(): Double {
+        val enabled = preferences.get(BooleanKey.OApsAIMIEffectiveIobReleaseEnabled)
+        val decision = EffectiveIobReleaseAuthority.evaluate(
+            EffectiveIobReleaseAuthority.Input(
+                enabled = enabled,
+                iobLedgerU = iob.toDouble(),
+                iobEffectiveU = tickIobEffectiveU,
+                postHypoAuthorityActive = lastPostHypoDeliveryAuthority.active,
+                postHypoStateOrdinal = lastPostHypoOrdinal,
+                postHypoProb = null,
+                minBgRecentMgdl = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
+            )
+        )
+        lastIobReleaseExport = AimiDecisionContext.IobReleaseExport(
+            enabled = enabled,
+            theta = decision.theta,
+            iob_ledger_u = decision.iobLedgerU,
+            iob_effective_u = decision.iobEffectiveU,
+            iob_for_gate_u = decision.iobForGateU,
+            released_u = decision.releasedU,
+            gate_flips_block_to_allow = decision.iobLedgerU > maxIob && decision.iobForGateU <= maxIob,
+            reason = decision.reasonTag,
+        )
+        if (decision.releasedU > 0.0) {
+            consoleLog.add(EffectiveIobReleaseAuthority.formatLogLine(decision))
+        }
+        return decision.iobForGateU
     }
 
     private fun logDecisionFinal(tag: String, rT: RT, bg: Double? = null, delta: Float? = null) {

@@ -167,6 +167,7 @@ résiduelle porte donc sur la **chaîne comptable IOB**, plus sur l'absence de g
 | `InsulinActionProfiler` | ❌ | Weibull | lit `peakTime` gouverné | IOB profil | Décalage entrées |
 | `RealTimeInsulinObserver` | ❌ | — | — | `profile.dia` | |
 | `predictGlycemia` / T3C | ✅ | ✅ | ✅ | fail-safe 300/75 | **(MAJ 2026-07-13)** C2 fait : `tickEffectiveDia/Peak` (repli 300/75 si indispo) |
+| Gate maxIOB production (T3c + Harmonia) | ✅ | ✅ | ✅ | fallback | **(MAJ 2026-07-13)** release effectif gouverné hypo — voir §10.5 ; `iobForGate` via `EffectiveIobReleaseAuthority` |
 | DynISF Plugin | ❌ | ❌ | ❌ | — | `lastPkpdScale` tick N-1 |
 | `PredictionPhysioModulation` | — | — | — | — | `fusedIsf` + facteurs |
 | JSONL / UI PKPD | ✅ | ✅ | ✅ | — | Télémétrie |
@@ -375,6 +376,39 @@ interface PhysioKineticsModulation {
 | PR-6 | Aligner `InsulinActionProfiler` entrées sur `predictionIobArray()` | ⚠️ courbes | ⬜ À faire |
 
 Roadmap alignée : **C1** snapshot autoritaire ([AIMI_PREDICTION_DIVERGENCE.md](AIMI_PREDICTION_DIVERGENCE.md)) **✅ en prod**, **C2** `predictGlycemia` branché sur kinetics authority **✅ fait (2026-07-13)**.
+
+### 10.5 Pont IOB comptable → gate maxIOB : release effectif gouverné par les hypos (réalisé 2026-07-13)
+
+**Limite levée.** Le gate maxIOB de **production** compare l'IOB **comptable** (profil DIA) à `maxIOB`. Pour une
+insuline rapide, le DIA effectif appris est plus court → le comptable **surestime** l'insuline restante → le gate
+**bloque des corrections d'hyper** que les courbes effectives (C1) veulent déjà. Les deux moitiés de la décision
+divergent → hypers sous-traités. C'est le **seul** consommateur qui restait sur le comptable (les courbes + T3C sont
+déjà sur l'effectif).
+
+**Mécanisme (AIMI-local, zéro cœur/pompe/NS).** `EffectiveIobReleaseAuthority` (objet pur, `safety/`) :
+
+```
+iobForGate = ledger − θ · (ledger − effectif)          θ ∈ [0, THETA_MAX = 0.5]
+gate : if (resolveIobForGate() > maxIob) → block        (T3c planT3cBasalFirstProduction + Harmonia production)
+```
+
+- **Release-only** : effectif ≥ ledger (insuline lente) → no-op, jamais moins prudent. `maxIOB` **jamais modifié**.
+- **Gouvernance hypo (arbre)** — θ replié à **0** si : `PostHypoDeliveryAuthority.active`, ou `minBgInLastMinutes < 75`.
+  Rampe 0→θmax sur plancher 75→105 mg/dL ; ×0,3 en ReboundSuspected/MealConfirmed. `postHypoProb` (UAM) : réservé v2.
+- **Boucle fermée / auto-limitant** : une hypo EST le signal de repli (θ→0) → au pire une excursion bornée puis
+  retour au comptable + cooldown via le plancher glycémique. Terrain : apprentissage bloqué ~99,5 % → effectif ≈
+  ledger → θ≈0 → **no-op la quasi-totalité du temps**.
+
+**Cohérence produit.** Aucun chemin de décision parallèle : l'arbre/Harmonia décident **quoi** doser ; le release
+n'harmonise que le check `max_iob` de la **même séquence de gardes** qui lit déjà `PostHypoDeliveryAuthority`,
+`riskLevel == CRITICAL`, `meal_conflict`, `stacking_cap`. L'IOB effectif vient de la **même** `InsulinKineticsAuthority.effective`
+(source cinétique unique) que C1/C2. La sortie Harmonia reste soumise à tout l'aval (SafetyNet, caps, block CRITICAL).
+
+**Gouvernance & observabilité.** Pref `OApsAIMIEffectiveIobReleaseEnabled` (défaut ON). JSONL : bloc `iob_release`
+(`theta, iob_ledger_u, iob_effective_u, iob_for_gate_u, released_u, gate_flips_block_to_allow, reason`) dans
+`AIMI_Decisions.jsonl` — **`gate_flips_block_to_allow: true`** = l'événement sécurité à auditer. Tests :
+`EffectiveIobReleaseAuthorityTest` (9). **v2** : brancher `postHypoProb` (prudence anticipative), étendre au gate
+prébolus T3c (L2434).
 
 ---
 
