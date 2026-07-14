@@ -1582,6 +1582,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastIobReleaseExport = null
         tickIobEffectiveU = null
         lastPostHypoOrdinal = 0
+        // Reset SMB trace each tick so a basal-only T3C row can't carry stale SMB values from a prior SMB tick
+        // (replay_quality export). The standard SMB pipeline overwrites these before use.
+        lastSmbProposed = 0.0
+        lastSmbCapped = 0.0
+        lastSmbFinal = 0.0
+        lastNgrBasalMultiplier = 1.0
         lastHyperTrajectoryRelease = null
         lastRecursiveBeliefSnapshot = null
         lastRecursiveAuthorityGateDecision = null
@@ -2603,6 +2609,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 "traj=${t3cTrajCtx.trajectoryTypeName ?: "—"} E=${t3cTrajCtx.energyBalance?.let { String.format("%.1f", it) } ?: "—"}"
         )
 
+        // T3C dependency guarantee (B): deploy the physiological tree + activity belief for the T3C decision,
+        // same as the standard path — even when the autodrive shadow tick above didn't run (autodriveEngine null).
+        // Guarded so we never rebuild twice per tick. SMB stays 0 (enforced in executeT3cBrittleMode); this only
+        // makes the BASAL decision physio-informed (consumed in executeT3cBrittleMode, workstream C).
+        if (lastPhysiologicalTreeSnapshot == null) {
+            runCatching {
+                updatePhysioLatentState(
+                    snapshot = physioAdapter.getLatestSnapshot(),
+                    sourceSensor = ctx.glucoseStatus.sourceSensor,
+                )
+            }.onFailure { aapsLogger.error(LTag.APS, "T3C physio/tree deploy failed", it) }
+        }
+
         return executeT3cBrittleMode(
             bg = ctx.glucoseStatus.glucose,
             delta = ctx.glucoseStatus.delta.toFloat(),
@@ -3360,6 +3379,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             isMealActive = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime,
             config = ngrConfig,
         )
+        // Expose the NGR nocturnal basal multiplier to the T3C engine (executeT3cBrittleMode consumes it).
+        lastNgrBasalMultiplier = ngrResult.basalMultiplier
         val endoFactors = try {
             endoAdjuster.calculateFactors(bg, delta.toDouble())
         } catch (_: Exception) {
@@ -9303,6 +9324,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastPatientModeDecision: PatientModeOrchestrator.Decision? = null
     private var lastPhysiologicalTreeSnapshot: PhysiologicalTreeSnapshot? = null
 
+    /** NGR (Night Growth Resistance) basal multiplier for THIS tick (1.0 unless NGR active in its night window).
+     *  Set in [refreshPatientStateRuntime]; consumed by [executeT3cBrittleMode] so NGR reaches the T3C basal. */
+    private var lastNgrBasalMultiplier: Double = 1.0
+
     /**
      * Physiological-context feature vector for the basal NN (record + inference), mirroring the SMB feature schema so
      * the basal model shares the tree's physiological view (latent physio + patient-mode + causal) instead of being
@@ -9742,7 +9767,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 bgNoise = glucoseStatus?.noise ?: 0.0
             )
         )
-        val enabled = enabledPref ?: (age < 18)
+        // T3C dependency: manual T3C activation implies NGR ON (nocturnal basal support) even if its own toggle is off.
+        val enabled = (enabledPref ?: (age < 18)) || t3cModeEnabled()
         val slotCap = if (age < 10) 6 else 4
         return NGRConfig(
             enabled = enabled,
@@ -14306,9 +14332,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * Fail-safe: only lowers SMB, never under a stress posture, never on explicit user actions. Basal
      * damping / HRV / RBT+Harmonia authority are deferred (docs/AIMI_ARCHITECTURE_MAP.md §11.6).
      */
+    /**
+     * T3C dependency hub: when the user has MANUALLY enabled T3C (brittle) mode, a defined whitelist of **non-SMB**
+     * assistance features is treated as ON even if their own toggle is off — so T3C basal management gets the
+     * physiological signals it needs. Read-time only: never mutates the stored pref, auto-reverts when T3C is off,
+     * and is NEVER used to enable SMB (T3C keeps SMB=0). T3C activation itself stays a manual choice.
+     */
+    private fun t3cModeEnabled(): Boolean = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
+
     private fun refreshEffortActivityBelief() {
         lastEffortAssessment = null
-        if (!preferences.get(BooleanKey.OApsAIMIEffortActivityProtection)) return
+        // Dependency: under T3C, activity awareness is required for the physio-informed basal (workstream C).
+        // Effort protection is reduce-only, so this never adds insulin.
+        if (!preferences.get(BooleanKey.OApsAIMIEffortActivityProtection) && !t3cModeEnabled()) return
         val snap = try {
             physioAdapter.getLatestSnapshot()
         } catch (_: Exception) {
@@ -14799,7 +14835,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             shortAvgDeltaAdj = shortAvgDeltaAdj,
             physioMultipliers = physioMultipliers,
             insulinActionState = insulinActionState,
-        )?.let { return it }
+        )?.let { t3cResult ->
+            // T3C returns early, before the shared decision-export tail (runAimiSnapshotMedicalJsonAndHormonitorExportStage,
+            // ~L15442). Run that export here so EVERY T3C tick is recorded in AIMI_Decisions.jsonl (empty JSONL bug).
+            // basal-NN learning already ran inside executeT3cBrittleMode (govTag "T3C") — do NOT re-run it (no logDecisionFinal).
+            runCatching {
+                runAimiSnapshotMedicalJsonAndHormonitorExportStage(ctx, profile, decisionCtx, t3cResult, pkpdRuntime)
+            }.onFailure { aapsLogger.error(LTag.APS, "T3C decision export failed", it) }
+            return t3cResult
+        }
 
         val spSignalPkpd = when (
             val outcome = runSignalPreparationPkpdRuntimePhase(
@@ -16188,9 +16232,31 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // CFRD: exacerbation (manual) and HR-based inflammation both signal acute
         // insulin resistance — raise the aggressiveness ceiling accordingly.
         val cfrdResistanceBoost = (cfrdHrInflammationBoost + if (cfrdExac) 0.45 else 0.0).coerceAtMost(0.65)
-        val aggressivenessCap   = if (cfrdMode && (cfrdExac || cfrdHrInflammationBoost >= 0.20)) 3.0 else 2.0
-        val aggressiveness = (rawAggressiveness * (1.0 + adaptiveBoost + cfrdResistanceBoost))
+        val baseAggressivenessCap = if (cfrdMode && (cfrdExac || cfrdHrInflammationBoost >= 0.20)) 3.0 else 2.0
+
+        // ── Physio-informed T3C (workstream C): the physiological tree + activity belief shape the BASAL
+        // aggressiveness (never SMB — SMB stays 0). Fail-safe: disabled / tree unavailable → unchanged.
+        // The tree is a SAFETY GATE (riskLevel is NOT directional): the ceiling is raised toward the user's
+        // configured aggressiveness ONLY when the tree says risk is LOW/MODERATE AND BG is clearly high AND the
+        // projection is upward. Activity is reduce-only + bounded: exertion → gentler basal to avoid hypo.
+        val physioInformed = preferences.get(BooleanKey.OApsAIMIT3cPhysioInformedEnabled)
+        val treeRisk = lastPhysiologicalTreeSnapshot?.trunk?.riskLevel
+        val physioPermitsHigherAggression = physioInformed &&
+            (treeRisk == PhysiologicalRiskLevel.LOW || treeRisk == PhysiologicalRiskLevel.MODERATE) &&
+            bg > activationThreshold + 20.0 &&
+            (eventualBg <= 0.0 || eventualBg > targetBg)
+        val configuredAggressiveness = preferences.get(DoubleKey.OApsAIMIT3cAggressiveness).coerceIn(0.3, 3.0)
+        val aggressivenessCap = if (physioPermitsHigherAggression)
+            maxOf(baseAggressivenessCap, configuredAggressiveness) else baseAggressivenessCap
+        val activityDampen = if (physioInformed) (lastEffortAssessment?.smbFactor?.coerceIn(0.5, 1.0) ?: 1.0) else 1.0
+        val aggressiveness = (rawAggressiveness * (1.0 + adaptiveBoost + cfrdResistanceBoost) * activityDampen)
             .coerceIn(0.3, aggressivenessCap)
+        if (physioInformed && (physioPermitsHigherAggression || activityDampen < 1.0)) {
+            consoleLog.add(
+                "🌳 T3c physio: risk=${treeRisk?.name ?: "—"} capRaised=$physioPermitsHigherAggression " +
+                    "cap=${"%.1f".format(aggressivenessCap)} activityDampen=${"%.2f".format(activityDampen)}"
+            )
+        }
 
         // CFRD: enforce higher LGS floor before feeding the anticipation engine
         val lgsForAnticipation = kotlin.math.min(
@@ -16252,10 +16318,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // ── [ML ALIGNMENT] Option 1: Apply adaptiveMult to final T3C rate ───────
         // This mirrors what setTempBasal() does on the standard path (L.1475-1478)
         // but is applied *after* the progressive ramp so the safety ramp stays intact.
-        val t3cFinalRate = if (safeRate > 0.0 && Math.abs(adaptiveMult - 1.0) > 0.01) {
-            (safeRate * adaptiveMult).coerceIn(0.0, maxBasalCap)
+        // NGR nocturnal basal boost reaches the T3C basal here (T3C dependency). Self-gating: lastNgrBasalMultiplier
+        // is 1.0 unless NGR is enabled AND in its night window AND rise conditions are met (refreshPatientStateRuntime).
+        // Boost-only [1.0, 2.0], gated by the physio-informed toggle, always re-clamped to maxBasalCap. Never SMB.
+        val ngrBasalMult = if (physioInformed) lastNgrBasalMultiplier.coerceIn(1.0, 2.0) else 1.0
+        val t3cRateMult = adaptiveMult * ngrBasalMult
+        val t3cFinalRate = if (safeRate > 0.0 && Math.abs(t3cRateMult - 1.0) > 0.01) {
+            (safeRate * t3cRateMult).coerceIn(0.0, maxBasalCap)
         } else {
             safeRate
+        }
+        if (physioInformed && ngrBasalMult > 1.0) {
+            consoleLog.add("🌙 T3c NGR nocturnal basal boost ×${"%.2f".format(ngrBasalMult)} → ${"%.2f".format(t3cFinalRate)}U/h")
         }
 
         rT.rate = t3cFinalRate

@@ -282,6 +282,10 @@ enum class BooleanKey(
     OApsAIMIhoneymoon("key_use_Aimi_honeymoon",false),
     OApsxdriponeminute(key = "key_use_Aimi_xdripOM",defaultValue = false),
     OApsAIMIT3cAdaptiveBasalEnabled("key_use_aimi_t3c_adaptive_basal", true),
+    /** T3C basal-first: let the physiological tree (risk gate) + activity belief shape the BASAL aggressiveness.
+     *  Raises the aggressiveness ceiling toward the configured value only when the tree says risk is LOW/MODERATE
+     *  and BG is clearly high; reduces (bounded) on exertion. Never enables SMB. Fail-safe when tree unavailable. */
+    OApsAIMIT3cPhysioInformedEnabled("key_aimi_t3c_physio_informed", true),
     OApsAIMIAutodriveV3EnhancedGater("key_use_aimi_autodrive_v3_enhanced_gater", false),
     OApsAIMIautoDriveActive(key = "key_use_aimi_autodrive_active", defaultValue = true),
     /**
