@@ -118,6 +118,8 @@ class UnifiedReactivityLearner @Inject constructor(
     
     private var lastAnalysisTime = 0L
     private var lastShortAnalysisTime = 0L
+    // D3: latch a confirmed rise between 30-min analyses so a mid-interval meal rise isn't lost before consumption.
+    private var pendingConfirmedRise = false
     
     init {
         load()
@@ -153,6 +155,7 @@ class UnifiedReactivityLearner @Inject constructor(
         val tir_above_250: Double,    // % Time In severe hyper > 250 mg/dL
         val tir_above_180: Double,    // % temps en hyperglycémie totale (>180)
         val hypo_count: Int,          // Nombre d'épisodes hypo < 70
+        val tir_below_70: Double,     // % temps < 70 sur 24h (charge hypo pondérée par la durée) — D1
         val cv_percent: Double,       // Coefficient de Variation (%)
         val crossing_count: Int,      // Oscillations (crossings de seuil 120)
         val mean_bg: Double,          // Glycémie moyenne
@@ -190,6 +193,7 @@ class UnifiedReactivityLearner @Inject constructor(
             val tir180_250 = (inRange180_250.toDouble() / bgReadings.size.toDouble()) * 100.0
             val tir_above_250 = (above250.toDouble() / bgReadings.size.toDouble()) * 100.0
             val tir_above_180 = (above180.toDouble() / bgReadings.size.toDouble()) * 100.0
+            val tir_below_70 = (bgReadings.count { it < 70.0 }.toDouble() / bgReadings.size.toDouble()) * 100.0
             
             // 2. Détection épisodes hypo (groupements contigus < 70)
             val hypo_count = ReactivityDaypart.countHypoEpisodes(bgReadings)
@@ -218,6 +222,7 @@ class UnifiedReactivityLearner @Inject constructor(
                 tir_above_250 = tir_above_250,
                 tir_above_180 = tir_above_180,
                 hypo_count = hypo_count,
+                tir_below_70 = tir_below_70,
                 cv_percent = cv_percent,
                 crossing_count = crossing_count,
                 mean_bg = mean,
@@ -247,20 +252,19 @@ class UnifiedReactivityLearner @Inject constructor(
         var adjustment = 1.0
         val reasons = mutableListOf<String>()
         
-        // 🔴 PRIORITÉ 1 : Hypo répétées (SÉCURITÉ ABSOLUE)
-        when {
-            perf.hypo_count >= 3 -> {
-                adjustment *= 0.80  // Réduction forte
-                reasons.add("3+ hypos → factor × 0.80")
-            }
-            perf.hypo_count == 2 -> {
-                adjustment *= 0.85  // Réduction modérée
-                reasons.add("2 hypos → factor × 0.85")
-            }
-            perf.hypo_count == 1 -> {
-                adjustment *= 0.92  // Réduction légère
-                reasons.add("1 hypo → factor × 0.92")
-            }
+        // 🔴 PRIORITÉ 1 : charge hypo pondérée par la DURÉE (D1). Un unique relevé de 5 min ne doit PAS épingler
+        // le plancher 24 h : la pénalité suit la fraction de temps < 70 (charge réelle), pas un comptage binaire.
+        val hypoBurdenPct = perf.tir_below_70
+        val hypoPenalty = when {
+            hypoBurdenPct >= 5.0 -> 0.80   // charge sévère / prolongée
+            hypoBurdenPct >= 2.0 -> 0.88
+            hypoBurdenPct >= 0.8 -> 0.94   // ~2-3 relevés contigus
+            hypoBurdenPct > 0.0  -> 0.98   // relevé isolé → quasi neutre
+            else               -> 1.0
+        }
+        if (hypoPenalty < 1.0) {
+            adjustment *= hypoPenalty
+            reasons.add("Hypo burden ${"%.1f".format(hypoBurdenPct)}% (${perf.hypo_count} ep) → factor ×${"%.2f".format(hypoPenalty)}")
         }
         
         // 🟡 PRIORITÉ 2 : Hyperglycémie prolongée
@@ -281,9 +285,9 @@ class UnifiedReactivityLearner @Inject constructor(
             // EXCEPTION : Si la montée est confirmée (isConfirmedRise), on ignore l'amorti hypo.
             val safetyDamping = when {
                 isConfirmedRise -> 1.0
-                perf.hypo_count >= 3 -> 0.50
-                perf.hypo_count == 2 -> 0.70
-                perf.hypo_count == 1 -> 0.85
+                hypoBurdenPct >= 5.0 -> 0.50
+                hypoBurdenPct >= 2.0 -> 0.70
+                hypoBurdenPct >= 0.8 -> 0.85
                 else -> 1.0
             }
             val finalHyperAdj = 1.0 + (hyperAdjustment - 1.0) * safetyDamping
@@ -297,8 +301,10 @@ class UnifiedReactivityLearner @Inject constructor(
             reasons.add("Hyper detection: adj x${"%.2f".format(finalHyperAdj)}$hypoWarning")
         }
         
-        // 🟢 PRIORITÉ 3 : Oscillations (stabilité glycémique)
-        if (perf.cv_percent > 40 || perf.crossing_count > 10) {
+        // 🟢 PRIORITÉ 3 : Oscillations (stabilité glycémique). D2 : ne pénaliser QUE si la variabilité est réellement
+        // élevée (CV ET crossings) — le comptage de crossings du seuil fixe 120 pénalisait à tort une cible ~100
+        // (glycémie 100-130 = bonne journée) tant que le CV était bas. Le `&&` neutralise ce faux positif.
+        if (perf.cv_percent > 40 && perf.crossing_count > 10) {
             adjustment *= 0.93  // Légère réduction pour amortir
             reasons.add("Variabilité élevée (CV=${perf.cv_percent.toInt()}%, Crossings=${perf.crossing_count}) → factor × 0.93")
         }
@@ -325,7 +331,7 @@ class UnifiedReactivityLearner @Inject constructor(
             // 🎯 Adaptive Learning Rate based on glycemic context
             // IMPROVEMENT: Adjust learning speed based on situation severity
             val alpha = when {
-                perf.hypo_count > 0 -> 0.80      // Very fast: Safety critical
+                hypoBurdenPct >= 2.0 -> 0.80     // Very fast: real hypo burden (safety critical)
                 perf.cv_percent > 40 -> 0.50     // Moderate: High variability
                 perf.tir_above_180 > 40 -> 0.60  // Fast: Persistent hyper
                 else -> 0.70                      // Standard: Normal conditions
@@ -346,7 +352,7 @@ class UnifiedReactivityLearner @Inject constructor(
         val riseAgainstSlowShortTerm = isConfirmedRise && shortTermFactor < 1.0
         val canReleaseFloor = belowFloorBand &&
             acceptableCv &&
-            ((perf.hypo_count == 0 && sustainedHyper) || acuteRiseHyper || acuteRiseWithGoodTir || riseAgainstSlowShortTerm)
+            ((hypoBurdenPct < 1.0 && sustainedHyper) || acuteRiseHyper || acuteRiseWithGoodTir || riseAgainstSlowShortTerm)
         if (canReleaseFloor) {
             val releaseStep = when {
                 isConfirmedRise && perf.tir_above_180 > 25 -> 0.10
@@ -362,7 +368,7 @@ class UnifiedReactivityLearner @Inject constructor(
         }
         if (globalFactor <= 0.5501) {
             floorLockReason = when {
-                perf.hypo_count > 0 -> "Recent hypo burden"
+                hypoBurdenPct >= 0.8 -> "Recent hypo burden"
                 perf.cv_percent > 40 -> "High variability (CV)"
                 perf.tir_above_180 < 25 -> "No sustained hyper pressure"
                 else -> "Awaiting stronger rise confirmation"
@@ -460,7 +466,12 @@ class UnifiedReactivityLearner @Inject constructor(
      */
     fun processIfNeeded(isConfirmedRise: Boolean = false) {
         val now = dateUtil.now()
-        
+
+        // D3: latch the confirmed rise. The 24h analysis (the ONLY consumer of the flag) runs every 30 min; without
+        // latching, a meal rise seen between two analyses never reaches computeAdjustment, so the floor-release and
+        // hypo-damping-bypass escapes never fire. Any `true` within the interval is preserved until consumed.
+        if (isConfirmedRise) pendingConfirmedRise = true
+
         // === SHORT-TERM ANALYSIS (every 10 min on last 2h) ===
         if (now - lastShortAnalysisTime >= SHORT_ANALYSIS_INTERVAL_MS) {
             val shortPerf = analyzeLast2h()
@@ -473,7 +484,8 @@ class UnifiedReactivityLearner @Inject constructor(
         // === LONG-TERM ANALYSIS (every 30 min on last 24h) ===
         if (now - lastAnalysisTime >= ANALYSIS_INTERVAL_MS) {
             val perf = analyzeLast24h() ?: return
-            computeAdjustment(perf, isConfirmedRise)
+            computeAdjustment(perf, pendingConfirmedRise)
+            pendingConfirmedRise = false
             lastAnalysisTime = now
         }
         
@@ -521,9 +533,10 @@ class UnifiedReactivityLearner @Inject constructor(
                     (bgReadings[i-1] > 120 && bgReadings[i] < 120)) crossing_count++
             }
             
+            val tir_below_70 = (bgReadings.count { it < 70.0 }.toDouble() / bgReadings.size) * 100.0
             return GlycemicPerformance(
                 tir70_180, tir70_140, tir140_180, tir180_250, tir_above_250,
-                tir_above_180, hypo_count, cv_percent, crossing_count, mean, bgReadings.size
+                tir_above_180, hypo_count, tir_below_70, cv_percent, crossing_count, mean, bgReadings.size
             )
         } catch (e: Exception) {
             log.error(LTag.APS, "UnifiedReactivityLearner: Error in 2h analysis", e)

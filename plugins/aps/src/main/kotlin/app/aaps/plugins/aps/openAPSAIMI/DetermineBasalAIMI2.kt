@@ -2499,7 +2499,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     if (recentEstTimeT3c > 0L) (System.currentTimeMillis() - recentEstTimeT3c) / 60000.0
                     else Double.MAX_VALUE
                 val hasRecentMealEstT3c = recentEstCarbsT3c > 10.0 && estAgeMinT3c in 0.0..45.0
-                val applyHypoRecoveryRaT3c = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES) < 70.0 &&
+                val applyHypoRecoveryRaT3c = postHypoRecoveryActive() &&
                     ctx.mealData.mealCOB < 0.1 &&
                     !(mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime || hasRecentMealEstT3c)
                 val t3cLatentState = updatePhysioLatentState(
@@ -4306,7 +4306,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             val autodriveMealSignals = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime ||
                 ctx.mealData.mealCOB >= 0.1 || hasRecentMealEstimate
-            val applyHypoRecoveryRaDampening = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES) < 70.0 && !autodriveMealSignals
+            val applyHypoRecoveryRaDampening = postHypoRecoveryActive() && !autodriveMealSignals
 
             val tdd24hForHtr = resolveTdd24hForExport()
                 ?: (profile.max_daily_basal * 24.0).coerceAtLeast(1.0)
@@ -14339,6 +14339,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * and is NEVER used to enable SMB (T3C keeps SMB=0). T3C activation itself stays a manual choice.
      */
     private fun t3cModeEnabled(): Boolean = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
+
+    /**
+     * Depth-scaled post-hypo protection window: a LIGHT hypo (nadir 60-70) keeps hypo-recovery dampening active for
+     * 30 min; a DEEPER hypo (nadir < 60) for 45 min. The offending reading ages out of its own lookback → protection
+     * releases by itself. Expressed with the existing recent-floor primitive (no new state). Meal/rise release stays
+     * the caller's job (e.g. `&& !autodriveMealSignals`), so a meal always hands control back to rise management.
+     */
+    private fun postHypoRecoveryActive(): Boolean =
+        minBgInLastMinutes(45) < 60.0 || minBgInLastMinutes(30) < 70.0
 
     private fun refreshEffortActivityBelief() {
         lastEffortAssessment = null
