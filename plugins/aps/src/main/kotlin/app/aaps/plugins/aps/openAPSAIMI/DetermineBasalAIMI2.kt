@@ -16176,11 +16176,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         val baseBasal = profile.current_basal
-        // In T3C, we still honor the user's configured max basal ceiling.
-        val maxBasalCap = profile.max_basal.coerceAtLeast(baseBasal)
 
         // Fetch T3C Preferences
         val activationThreshold = preferences.get(DoubleKey.OApsAIMIT3cActivationThreshold)
+
+        // Rise-management context (#1 ramp + #2 cap): a CONFIRMED high-and-rising excursion that is NOT hypo-recovery.
+        // Gated by the physio-informed toggle; never released while post-hypo protection is active (hypo-governed).
+        val t3cConfirmedRise = preferences.get(BooleanKey.OApsAIMIT3cPhysioInformedEnabled) &&
+            bg > activationThreshold + 15.0 &&
+            delta >= 2.0f &&
+            (eventualBg <= 0.0 || eventualBg > targetBg) &&
+            !postHypoRecoveryActive()
+
+        // #2 — dedicated correction ceiling: on a confirmed rise, let the TBR reach the meal-mode max basal (bounded
+        // by autodrive_max_basal), never below the steady profile.max_basal. Steady state / post-hypo keep the profile
+        // ceiling. Defaults (meal_modes/autodrive ≤ profile) → no change. Never affects SMB (T3C = TBR only).
+        val steadyBasalCap = profile.max_basal.coerceAtLeast(baseBasal)
+        val riseHardCeiling = preferences.get(DoubleKey.autodriveMaxBasal).coerceAtLeast(steadyBasalCap)
+        val riseBasalCap = preferences.get(DoubleKey.meal_modes_MaxBasal).coerceIn(steadyBasalCap, riseHardCeiling)
+        val maxBasalCap = if (t3cConfirmedRise) riseBasalCap else steadyBasalCap
+        if (t3cConfirmedRise && maxBasalCap > steadyBasalCap) {
+            consoleLog.add("🚀 T3c rise-mgmt: cap ${"%.2f".format(steadyBasalCap)}→${"%.2f".format(maxBasalCap)}U/h + ramp released")
+        }
 
         // ── CFRD (Cystic Fibrosis-Related Diabetes) adaptations ─────────────────
         val cfrdMode       = preferences.get(BooleanKey.OApsAIMIT3cCfrdMode)
@@ -16317,7 +16334,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Progressive ramp: move toward target rate without abrupt jumps.
         val targetRate = computedRate.coerceIn(0.0, maxBasalCap)
         val prevRate = if (currenttemp.duration > 0) currenttemp.rate else baseBasal
-        val maxStepUp = max(0.30, prevRate * 0.20) // +20% or +0.30 U/h per 30-min tick
+        // #1 — ramp RELEASED on a confirmed rise: reach the needed rate in ~1-2 ticks (vs ~40 min); gentle otherwise.
+        val maxStepUp = if (t3cConfirmedRise) max(1.0, prevRate * 0.50) else max(0.30, prevRate * 0.20)
         val safeRate = if (targetRate > prevRate) {
             min(targetRate, prevRate + maxStepUp)
         } else {
