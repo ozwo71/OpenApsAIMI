@@ -155,6 +155,9 @@ class AuditorOrchestrator @Inject constructor(
         callback: ((AuditorVerdict?, DecisionResult) -> Unit)? = null
     ) {
         val now = System.currentTimeMillis()
+        // Reset each tick; set again below only if the Sentinel actually runs, so early-exit dispositions
+        // (DISABLED / SKIPPED_*) don't carry a stale agreement/factor into the JSONL telemetry.
+        lastSentinelAdvice = null
         AuditorVerdictCache.noteCurrentBg(glucoseStatus?.date)
         auditorStatusLiveData.notifyUpdate()
         

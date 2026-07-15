@@ -307,7 +307,4 @@ object LocalSentinel {
             agreement = agreement
         )
     }
-    
-    // Tuple helper (Kotlin n'a pas Tuple4 natif)
-    private data class Tuple4<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
 }
