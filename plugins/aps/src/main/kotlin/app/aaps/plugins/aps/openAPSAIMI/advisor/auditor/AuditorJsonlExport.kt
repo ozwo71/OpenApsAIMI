@@ -25,6 +25,9 @@ object AuditorJsonlExport {
         val loopSmbU: Double,
         val loopTbrUph: Double?,
         val loopIntervalMin: Int,
+        val sentinelAgreement: Double? = null,
+        val sentinelSmbFactor: Double? = null,
+        val sentinelReason: String? = null,
     ) {
         fun toJsonObject(): JSONObject =
             JSONObject().apply {
@@ -34,6 +37,9 @@ object AuditorJsonlExport {
                 put("loop_tbr_uph", loopTbrUph ?: JSONObject.NULL)
                 put("loop_interval_min", loopIntervalMin)
                 put("loop_authoritative", true)
+                put("sentinel_agreement", sentinelAgreement ?: JSONObject.NULL)
+                put("sentinel_smb_factor", sentinelSmbFactor ?: JSONObject.NULL)
+                put("sentinel_reason", sentinelReason ?: JSONObject.NULL)
                 put(
                     "auditor_binding",
                     disposition == TickDisposition.SENTINEL_ONLY ||

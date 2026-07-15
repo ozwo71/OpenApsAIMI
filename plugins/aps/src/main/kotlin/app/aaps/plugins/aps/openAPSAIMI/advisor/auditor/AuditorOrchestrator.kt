@@ -113,6 +113,11 @@ class AuditorOrchestrator @Inject constructor(
      * @param effectiveProfile When non-null, trajectory history for the auditor uses time-correct IOB samples.
      * @param callback Optional callback with verdict and modulated decision
      */
+    /** Last Tier-1 Sentinel advice — coherence-agreement "gendarme" score, exposed for JSONL telemetry. */
+    @Volatile
+    var lastSentinelAdvice: LocalSentinel.SentinelAdvice? = null
+        private set
+
     fun auditDecision(
         bg: Double,
         delta: Double,
@@ -219,6 +224,7 @@ class AuditorOrchestrator @Inject constructor(
             eventualBg = eventualBg,    // Fixed: Replaced null // TODO Phase 3
             predBgsAvailable = predictionAvailable,
             iobTotal = iob.iob,
+            maxIob = maxIOB,
             iobActivity = iob.activity,
             pkpdStage = pkpdRuntime?.activity?.stage?.name,
             lastBolusAgeMin = lastBolusAge,
@@ -232,8 +238,9 @@ class AuditorOrchestrator @Inject constructor(
             modeActive = modeType != null,
             bgHistory = bgHistory
         )
-        
-        aapsLogger.info(LTag.APS, "🔍 Sentinel: tier=${sentinelAdvice.tier} score=${sentinelAdvice.score} reason=${sentinelAdvice.reason}")
+        lastSentinelAdvice = sentinelAdvice
+
+        aapsLogger.info(LTag.APS, "🔍 Sentinel: tier=${sentinelAdvice.tier} agreement=${"%.2f".format(sentinelAdvice.agreement)} reason=${sentinelAdvice.reason}")
         sentinelAdvice.details.take(3).forEach { aapsLogger.debug(LTag.APS, "  └─ $it") }
         
         // ================================================================
@@ -264,7 +271,11 @@ class AuditorOrchestrator @Inject constructor(
             onSyncDisposition(AuditorJsonlExport.TickDisposition.SENTINEL_ONLY)
             
             val combined = DualBrainHelpers.combineAdvice(sentinelAdvice, null)
-            val modulated = combined.toDecisionResult(smbProposed, tbrRate, tbrDuration, intervalMin)
+            // D1: Tier-1 Sentinel is a coherence GENDARME, not a silent modulator — respect the audit mode.
+            // AUDIT_ONLY → observe/log only, deliver the loop's UNMODULATED decision.
+            val modulated = if (getModulationMode() == DecisionModulator.ModulationMode.AUDIT_ONLY)
+                createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "Sentinel audit-only (agreement=${"%.2f".format(sentinelAdvice.agreement)})")
+            else combined.toDecisionResult(smbProposed, tbrRate, tbrDuration, intervalMin)
             aapsLogger.info(LTag.APS, "✅ ${combined.toLogString()}")
             
             callback?.invoke(null, modulated)
@@ -289,7 +300,11 @@ class AuditorOrchestrator @Inject constructor(
             AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.SKIPPED_RATE_LIMITED)
             onSyncDisposition(AuditorJsonlExport.TickDisposition.SENTINEL_RATE_LIMITED)
             val combined = DualBrainHelpers.combineAdvice(sentinelAdvice, null)
-            val modulated = combined.toDecisionResult(smbProposed, tbrRate, tbrDuration, intervalMin)
+            // D1: Tier-1 Sentinel is a coherence GENDARME, not a silent modulator — respect the audit mode.
+            // AUDIT_ONLY → observe/log only, deliver the loop's UNMODULATED decision.
+            val modulated = if (getModulationMode() == DecisionModulator.ModulationMode.AUDIT_ONLY)
+                createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "Sentinel audit-only (agreement=${"%.2f".format(sentinelAdvice.agreement)})")
+            else combined.toDecisionResult(smbProposed, tbrRate, tbrDuration, intervalMin)
             aapsLogger.info(LTag.APS, "✅ ${combined.toLogString()}")
             callback?.invoke(null, modulated)
             return

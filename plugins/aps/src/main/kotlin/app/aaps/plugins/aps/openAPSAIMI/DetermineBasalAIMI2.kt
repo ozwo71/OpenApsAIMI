@@ -8207,6 +8207,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             loopSmbU = loopSmbU,
             loopTbrUph = loopTbrUph,
             loopIntervalMin = loopIntervalMin,
+            sentinelAgreement = auditorOrchestrator.lastSentinelAdvice?.agreement,
+            sentinelSmbFactor = auditorOrchestrator.lastSentinelAdvice?.smbFactor,
+            sentinelReason = auditorOrchestrator.lastSentinelAdvice?.reason,
         )
     }
 
