@@ -388,7 +388,7 @@ class AuditorOrchestrator @Inject constructor(
                     stateManager.transitionTo(AuditorUIState.Ready(guardedVerdict.verdict.name), "Verdict received")
                     
                     // Apply modulation
-                    val modulated = DecisionModulator.applyModulation(
+                    var modulated = DecisionModulator.applyModulation(
                         originalSmb = smbProposed,
                         originalTbrRate = tbrRate,
                         originalTbrMin = tbrDuration,
@@ -398,6 +398,16 @@ class AuditorOrchestrator @Inject constructor(
                         mode = getModulationMode()
                     )
                     
+                    // Finding 2: if the external couldn't act (low-confidence → Rejected) in an acting mode, the
+                    // Tier-1 Sentinel is the net — apply its coherence regression rather than the raw dose.
+                    if (modulated is DecisionResult.Rejected &&
+                        getModulationMode() != DecisionModulator.ModulationMode.AUDIT_ONLY) {
+                        modulated = sentinelFallbackDecision(
+                            sentinelAdvice, smbProposed, tbrRate, tbrDuration, intervalMin,
+                            "External low-confidence → Sentinel floor (agreement=${"%.2f".format(sentinelAdvice.agreement)})",
+                        )
+                    }
+
                     // Clinical Validation for dose changes
                     validateClinicalDoses(modulated)
                     
@@ -415,13 +425,13 @@ class AuditorOrchestrator @Inject constructor(
                 } else {
                     aapsLogger.warn(LTag.APS, "AI Auditor: No verdict received (timeout or error)")
                     stateManager.transitionTo(AuditorUIState.Error("Timeout: No verdict received"), "External timeout")
-                    callback?.invoke(null, createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "No verdict"))
+                    callback?.invoke(null, sentinelFallbackDecision(sentinelAdvice, smbProposed, tbrRate, tbrDuration, intervalMin, "No verdict → Sentinel floor (agreement=${"%.2f".format(sentinelAdvice.agreement)})"))
                 }
                 
             } catch (e: Exception) {
                 aapsLogger.error(LTag.APS, "AI Auditor: Exception", e)
                 AuditorStatusTracker.updateStatus(AuditorStatusTracker.Status.ERROR_EXCEPTION)
-                callback?.invoke(null, createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "Exception: ${e.message}"))
+                callback?.invoke(null, sentinelFallbackDecision(sentinelAdvice, smbProposed, tbrRate, tbrDuration, intervalMin, "Exception → Sentinel floor: ${e.message}"))
             }
         }
     }
@@ -450,6 +460,25 @@ class AuditorOrchestrator @Inject constructor(
     /**
      * Get modulation mode from preferences
      */
+    /**
+     * Finding 2 — offline net: when the external LLM yields no actionable verdict on a tier-HIGH tick (timeout,
+     * exception, or low-confidence Rejected), fall back to the Tier-1 Sentinel's mode-gated coherence decision
+     * instead of passing the loop's RAW dose through. AUDIT_ONLY still observes only (unmodulated).
+     */
+    private fun sentinelFallbackDecision(
+        sentinelAdvice: LocalSentinel.SentinelAdvice,
+        smbProposed: Double,
+        tbrRate: Double?,
+        tbrDuration: Int?,
+        intervalMin: Double,
+        note: String,
+    ): DecisionResult =
+        if (getModulationMode() == DecisionModulator.ModulationMode.AUDIT_ONLY)
+            createUnmodulatedDecision(smbProposed, tbrRate, tbrDuration, intervalMin, "$note (audit-only)")
+        else
+            DualBrainHelpers.combineAdvice(sentinelAdvice, null)
+                .toDecisionResult(smbProposed, tbrRate, tbrDuration, intervalMin)
+
     private fun getModulationMode(): DecisionModulator.ModulationMode {
         val modeStr = preferences.get(StringKey.AimiAuditorMode)
         return when (modeStr) {

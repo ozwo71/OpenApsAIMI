@@ -45,7 +45,9 @@ import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAnticipation
+import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAutodriveBasalBridge
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cTrajectoryContext
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot
@@ -2486,64 +2488,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog.add("🛡️ T3c pre-bolus BLOCKED: $reason — skipping applyLegacyMealModes")
         }
 
-        // ── Fix #2: T3c DataLake Shadow Tick ───────────────────────────────────────
-        // Autodrive V3 is bypassed in T3c mode, but we still want the ML model to
-        // accumulate training data on high-resistance episodes. We run a Shadow-only
-        // tick (no commands issued) so the DataLake and OnlineLearner stay calibrated.
-        if (autodriveEngine != null) {
-            try {
-                val snapshot = physioAdapter.getLatestSnapshot()
-                val recentEstCarbsT3c = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
-                val recentEstTimeT3c = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
-                val estAgeMinT3c =
-                    if (recentEstTimeT3c > 0L) (System.currentTimeMillis() - recentEstTimeT3c) / 60000.0
-                    else Double.MAX_VALUE
-                val hasRecentMealEstT3c = recentEstCarbsT3c > 10.0 && estAgeMinT3c in 0.0..45.0
-                val applyHypoRecoveryRaT3c = postHypoRecoveryActive() &&
-                    ctx.mealData.mealCOB < 0.1 &&
-                    !(mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime || hasRecentMealEstT3c)
-                val t3cLatentState = updatePhysioLatentState(
-                    snapshot = snapshot,
-                    sourceSensor = ctx.glucoseStatus.sourceSensor,
-                )
-                val t3cShadowState = app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState.createSafe(
-                    bg = ctx.glucoseStatus.glucose,
-                    bgVelocity = (shortAvgDeltaAdj.toDouble() / 5.0),
-                    iob = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
-                    cob = ctx.mealData.mealCOB,
-                    estimatedSI = (variableSensitivity.toDouble() / 10000.0),
-                    patientWeightKg = preferences.get(app.aaps.core.keys.DoubleKey.OApsAIMIweight),
-                    physiologicalStressMask = t3cLatentState.toAttentionMask(),
-                    isNight = hourOfDay >= 23 || hourOfDay < 6,
-                    hour = hourOfDay,
-                    steps = snapshot.stepsLast15m,
-                    hr = snapshot.hrNow,
-                    rhr = snapshot.rhrResting,
-                    sourceSensor = ctx.glucoseStatus.sourceSensor,
-                    maxIOB = this.maxIob,
-                    maxSMB = this.maxSMB,
-                    highBgMaxSMB = this.maxSMBHB,
-                    applyHypoRecoveryRaDampening = applyHypoRecoveryRaT3c
-                )
-                autodriveEngine.setShadowMode(true)
-                autodriveEngine.setIsActive(false)
-                autodriveEngine.tick(
-                    currentState = t3cShadowState,
-                    profileBasal = profile.current_basal,
-                    profileIsf = profile.sens,
-                    lgsThreshold = minOf(90.0, (profile.lgsThreshold?.toDouble() ?: 70.0).coerceAtLeast(70.0)),
-                    hour = hourOfDay,
-                    steps = snapshot.stepsLast15m,
-                    hr = snapshot.hrNow,
-                    rhr = snapshot.rhrResting
-                ) // result is null (shadow mode) — only DataLake and OnlineLearner update
-                consoleLog.add("👻 [T3c_SHADOW] DataLake tick fired for V3 ML continuity.")
-            } catch (e: Exception) {
-                // Shadow tick must NEVER interfere with T3c delivery
-                aapsLogger.warn(app.aaps.core.interfaces.logging.LTag.APS, "[T3c_SHADOW] Shadow tick failed silently: ${e.message}")
-            }
+        // Autodrive under T3C: when basal-authority fusion is ON, the proposal runs inside
+        // executeT3cBrittleMode (TBR fused, SMB stripped). Otherwise keep DataLake shadow only.
+        if (!preferences.get(BooleanKey.OApsAIMIT3cAutodriveBasalAuthority)) {
+            runT3cAutodriveShadowTick(ctx, profile, shortAvgDeltaAdj)
         }
-        // ────────────────────────────────────────────────────────────────────────────
 
         // 🔮 T3c + trajectory / advanced predictions (isolated path — same engines as main loop)
         val iobRowT3c = ctx.iobDataArray.firstOrNull() ?: IobTotal(ctx.currentTime)
@@ -2622,6 +2571,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }.onFailure { aapsLogger.error(LTag.APS, "T3C physio/tree deploy failed", it) }
         }
 
+        val adBasalProposal = proposeT3cAutodriveBasalOnly(
+            ctx = ctx,
+            profile = profile,
+            shortAvgDeltaAdj = shortAvgDeltaAdj,
+            lgsThresholdMgdl = lgsT3c,
+        )
+
         return executeT3cBrittleMode(
             bg = ctx.glucoseStatus.glucose,
             delta = ctx.glucoseStatus.delta.toFloat(),
@@ -2640,6 +2596,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT = rT,
             trajectoryContext = t3cTrajCtx,
             cgmNoise = ctx.glucoseStatus.noise,
+            autodriveBasalProposal = adBasalProposal,
         )
     }
 
@@ -16145,6 +16102,103 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     /** T3c brittle mode: dynamic PI basal (basal-first isolation). */
+    /** DataLake-only Autodrive tick when T3C basal-authority fusion is off. */
+    private fun runT3cAutodriveShadowTick(
+        ctx: AimiTickContext,
+        profile: OapsProfileAimi,
+        shortAvgDeltaAdj: Float,
+    ) {
+        try {
+            val state = buildT3cAutoDriveState(ctx, shortAvgDeltaAdj) ?: return
+            val snapshot = physioAdapter.getLatestSnapshot()
+            autodriveEngine.setShadowMode(true)
+            autodriveEngine.setIsActive(false)
+            autodriveEngine.tick(
+                currentState = state,
+                profileBasal = profile.current_basal,
+                profileIsf = profile.sens,
+                lgsThreshold = minOf(90.0, (profile.lgsThreshold?.toDouble() ?: 70.0).coerceAtLeast(70.0)),
+                hour = hourOfDay,
+                steps = snapshot.stepsLast15m,
+                hr = snapshot.hrNow,
+                rhr = snapshot.rhrResting,
+            )
+            consoleLog.add("👻 [T3c_SHADOW] DataLake tick fired for V3 ML continuity.")
+        } catch (e: Exception) {
+            aapsLogger.warn(LTag.APS, "[T3c_SHADOW] Shadow tick failed silently: ${e.message}")
+        }
+    }
+
+    private fun buildT3cAutoDriveState(
+        ctx: AimiTickContext,
+        shortAvgDeltaAdj: Float,
+    ): AutoDriveState? {
+        return try {
+            val snapshot = physioAdapter.getLatestSnapshot()
+            val recentEstCarbsT3c = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
+            val recentEstTimeT3c = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
+            val estAgeMinT3c =
+                if (recentEstTimeT3c > 0L) (System.currentTimeMillis() - recentEstTimeT3c) / 60000.0
+                else Double.MAX_VALUE
+            val hasRecentMealEstT3c = recentEstCarbsT3c > 10.0 && estAgeMinT3c in 0.0..45.0
+            val applyHypoRecoveryRaT3c = postHypoRecoveryActive() &&
+                ctx.mealData.mealCOB < 0.1 &&
+                !(mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime || hasRecentMealEstT3c)
+            val t3cLatentState = updatePhysioLatentState(
+                snapshot = snapshot,
+                sourceSensor = ctx.glucoseStatus.sourceSensor,
+            )
+            AutoDriveState.createSafe(
+                bg = ctx.glucoseStatus.glucose,
+                bgVelocity = (shortAvgDeltaAdj.toDouble() / 5.0),
+                iob = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
+                cob = ctx.mealData.mealCOB,
+                estimatedSI = (variableSensitivity.toDouble() / 10000.0),
+                patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
+                physiologicalStressMask = t3cLatentState.toAttentionMask(),
+                isNight = hourOfDay >= 23 || hourOfDay < 6,
+                hour = hourOfDay,
+                steps = snapshot.stepsLast15m,
+                hr = snapshot.hrNow,
+                rhr = snapshot.rhrResting,
+                sourceSensor = ctx.glucoseStatus.sourceSensor,
+                maxIOB = this.maxIob,
+                maxSMB = this.maxSMB,
+                highBgMaxSMB = this.maxSMBHB,
+                applyHypoRecoveryRaDampening = applyHypoRecoveryRaT3c,
+            )
+        } catch (e: Exception) {
+            aapsLogger.warn(LTag.APS, "[T3c_AD_BASAL] AutoDriveState build failed: ${e.message}")
+            null
+        }
+    }
+
+    private fun proposeT3cAutodriveBasalOnly(
+        ctx: AimiTickContext,
+        profile: OapsProfileAimi,
+        shortAvgDeltaAdj: Float,
+        lgsThresholdMgdl: Double,
+    ): AutodriveEngine.BasalOnlyTbrProposal? {
+        if (!preferences.get(BooleanKey.OApsAIMIT3cAutodriveBasalAuthority)) return null
+        return try {
+            val state = buildT3cAutoDriveState(ctx, shortAvgDeltaAdj) ?: return null
+            val snapshot = physioAdapter.getLatestSnapshot()
+            autodriveEngine.proposeBasalOnlyTbr(
+                currentState = state,
+                profileBasal = profile.current_basal,
+                profileIsf = profile.sens,
+                lgsThreshold = lgsThresholdMgdl,
+                hour = hourOfDay,
+                steps = snapshot.stepsLast15m,
+                hr = snapshot.hrNow,
+                rhr = snapshot.rhrResting,
+            )
+        } catch (e: Exception) {
+            aapsLogger.warn(LTag.APS, "[T3c_AD_BASAL] proposeBasalOnlyTbr failed: ${e.message}")
+            null
+        }
+    }
+
     private fun executeT3cBrittleMode(
         bg: Double,
         delta: Float,
@@ -16163,6 +16217,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT: RT,
         trajectoryContext: T3cTrajectoryContext? = null,
         cgmNoise: Double = 0.0,
+        autodriveBasalProposal: AutodriveEngine.BasalOnlyTbrProposal? = null,
     ): RT {
         rT.reason = StringBuilder("")
         rT.deliverAt = System.currentTimeMillis()
@@ -16183,24 +16238,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Fetch T3C Preferences
         val activationThreshold = preferences.get(DoubleKey.OApsAIMIT3cActivationThreshold)
 
-        // Rise-management context (#1 ramp + #2 cap): a CONFIRMED high-and-rising excursion that is NOT hypo-recovery.
-        // Gated by the physio-informed toggle; never released while post-hypo protection is active (hypo-governed).
-        val t3cConfirmedRise = preferences.get(BooleanKey.OApsAIMIT3cPhysioInformedEnabled) &&
-            bg > activationThreshold + 15.0 &&
-            delta >= 2.0f &&
-            (eventualBg <= 0.0 || eventualBg > targetBg) &&
-            !postHypoRecoveryActive()
-
-        // #2 — dedicated correction ceiling: on a confirmed rise, let the TBR reach the meal-mode max basal (bounded
-        // by autodrive_max_basal), never below the steady profile.max_basal. Steady state / post-hypo keep the profile
-        // ceiling. Defaults (meal_modes/autodrive ≤ profile) → no change. Never affects SMB (T3C = TBR only).
+        // Rise-management / Autodrive fusion ceiling. Tree unlock (below) can open riseCap + aggressive ramp.
+        // Never affects SMB (T3C = TBR only).
         val steadyBasalCap = profile.max_basal.coerceAtLeast(baseBasal)
         val riseHardCeiling = preferences.get(DoubleKey.autodriveMaxBasal).coerceAtLeast(steadyBasalCap)
         val riseBasalCap = preferences.get(DoubleKey.meal_modes_MaxBasal).coerceIn(steadyBasalCap, riseHardCeiling)
-        val maxBasalCap = if (t3cConfirmedRise) riseBasalCap else steadyBasalCap
-        if (t3cConfirmedRise && maxBasalCap > steadyBasalCap) {
-            consoleLog.add("🚀 T3c rise-mgmt: cap ${"%.2f".format(steadyBasalCap)}→${"%.2f".format(maxBasalCap)}U/h + ramp released")
-        }
 
         // ── CFRD (Cystic Fibrosis-Related Diabetes) adaptations ─────────────────
         val cfrdMode       = preferences.get(BooleanKey.OApsAIMIT3cCfrdMode)
@@ -16312,6 +16354,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
         }
 
+        // Tree unlock: opens rise ceiling + aggressive ramp when resistance/meal/hyper evidence is present.
+        val treeUnlock = T3cAutodriveBasalBridge.evaluateTreeUnlock(
+            tree = lastPhysiologicalTreeSnapshot,
+            bg = bg,
+            delta = delta,
+            activationThreshold = activationThreshold,
+            postHypoActive = postHypoRecoveryActive(),
+            eventualBg = eventualBg.takeIf { it > 0 },
+            targetBg = targetBg,
+        )
+        val maxBasalCapForPi = if (treeUnlock.unlock) riseBasalCap else steadyBasalCap
+
         // 🧠 Predictive PI Controller — curve-augmented when anticipation strength > 0
         val computedRate = DynamicBasalController.computeT3c(
             bg = bg,
@@ -16329,21 +16383,33 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             eventualBg = if (eventualBg > 0) eventualBg else null,
             activationThreshold = activationThreshold,
             aggressiveness = aggressiveness,
-            maxBasalCap = maxBasalCap,
+            maxBasalCap = maxBasalCapForPi,
             trajectory = trajectoryContext,
             anticipationHints = t3cAnticipationHints
         )
 
-        // Progressive ramp: move toward target rate without abrupt jumps.
-        val targetRate = computedRate.coerceIn(0.0, maxBasalCap)
         val prevRate = if (currenttemp.duration > 0) currenttemp.rate else baseBasal
-        // #1 — ramp RELEASED on a confirmed rise: reach the needed rate in ~1-2 ticks (vs ~40 min); gentle otherwise.
-        val maxStepUp = if (t3cConfirmedRise) max(1.0, prevRate * 0.50) else max(0.30, prevRate * 0.20)
-        val safeRate = if (targetRate > prevRate) {
-            min(targetRate, prevRate + maxStepUp)
-        } else {
-            targetRate
+        val fusion = T3cAutodriveBasalBridge.fuse(
+            piUph = computedRate,
+            adTbrUph = autodriveBasalProposal?.tbrUph,
+            strippedSmbU = autodriveBasalProposal?.strippedSmbU ?: 0.0,
+            profileBasalUph = baseBasal,
+            steadyCapUph = steadyBasalCap,
+            riseCapUph = riseBasalCap,
+            previousRateUph = prevRate,
+            unlock = treeUnlock,
+        )
+        consoleLog.add(fusion.toLogLine())
+        if (autodriveBasalProposal != null && autodriveBasalProposal.strippedSmbU > 0.0) {
+            consoleLog.add(
+                "T3C_AD_BASAL: smb stripped ${"%.2f".format(Locale.US, autodriveBasalProposal.strippedSmbU)}U " +
+                    "(reason=${autodriveBasalProposal.reason.take(80)})"
+            )
         }
+        val maxBasalCap = fusion.maxBasalCapUph
+        val targetRate = fusion.fusedTargetUph
+        val maxStepUp = fusion.maxStepUpUph
+        val safeRate = T3cAutodriveBasalBridge.applyRamp(prevRate, targetRate, maxStepUp)
 
         // ── [ML ALIGNMENT] Option 1: Apply adaptiveMult to final T3C rate ───────
         // This mirrors what setTempBasal() does on the standard path (L.1475-1478)
@@ -16366,8 +16432,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT.duration = 30
         rT.reason.append(
             "🛡️T3c | Thresh: ${activationThreshold.toInt()} | Agg: ${"%.1f".format(aggressiveness)} (raw=${"%.1f".format(rawAggressiveness)} AML=${"%.2f".format(adaptiveMult)}) | " +
-                "ANT:${"%.2f".format(anticipationStrength)} | " +
-                "PI: ${"%.2f".format(t3cFinalRate)}U/h (target=${"%.2f".format(targetRate)} cap=${"%.2f".format(maxBasalCap)} stepUp=${"%.2f".format(maxStepUp)})"
+                "ANT:${"%.2f".format(anticipationStrength)} | unlock=${fusion.unlock} | " +
+                "PI/AD: ${"%.2f".format(t3cFinalRate)}U/h (target=${"%.2f".format(targetRate)} cap=${"%.2f".format(maxBasalCap)} stepUp=${"%.2f".format(maxStepUp)})"
         )
 
         // 🧬 Adaptive Learning Update

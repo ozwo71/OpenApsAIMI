@@ -472,6 +472,18 @@ enum class BooleanKey(
     ),
     OApsAIMIContextLLMEnabled("key_aimi_context_llm_enabled", false),  // 🤖 LLM-powered context parsing
     OApsAIMIT3cBrittleMode("key_aimi_t3c_brittle_mode", false),
+    /**
+     * T3C: fuse Autodrive V3 TBR demand into the brittle PI basal (basal-only).
+     * SMB from Autodrive is stripped (optionally converted to a bounded TBR boost). Tree unlocks ceiling + ramp.
+     * Depends on T3C brittle mode. Never enables pump SMB.
+     */
+    OApsAIMIT3cAutodriveBasalAuthority(
+        key = "key_aimi_t3c_autodrive_basal_authority",
+        defaultValue = true,
+        titleResId = R.string.pref_title_aimi_t3c_autodrive_basal_authority,
+        summaryResId = R.string.pref_summary_aimi_t3c_autodrive_basal_authority,
+        dependency = OApsAIMIT3cBrittleMode,
+    ),
     /** Cystic fibrosis-related diabetes (CFRD) adaptations in T3C mode:
      *  higher LGS safety floor, COB absorption delay, exacerbation support. */
     OApsAIMIT3cCfrdMode("key_aimi_t3c_cfrd_mode", false),

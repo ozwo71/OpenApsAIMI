@@ -74,6 +74,54 @@ class AutodriveEngine @Inject constructor(
     fun getHealthScore(): Double = autodriveAuditor.lastHealthScore
 
     /**
+     * T3C basal-only proposal: runs the full Autodrive pipeline and returns TBR demand.
+     * Restores prior engine mode afterward. Caller must strip/ignore SMB (never enact bolus).
+     *
+     * ⚠️ ASYNC IMPACT: temporarily activates Autodrive for one tick compute (learner + DataLake update).
+     */
+    fun proposeBasalOnlyTbr(
+        currentState: AutoDriveState,
+        profileBasal: Double,
+        profileIsf: Double,
+        lgsThreshold: Double,
+        hour: Int,
+        steps: Int,
+        hr: Int,
+        rhr: Int,
+        currentEpochMs: Long = System.currentTimeMillis(),
+    ): BasalOnlyTbrProposal? {
+        val previous = systemState.get()
+        return try {
+            setShadowMode(false)
+            setIsActive(true)
+            val cmd = tick(
+                currentState = currentState,
+                profileBasal = profileBasal,
+                profileIsf = profileIsf,
+                lgsThreshold = lgsThreshold,
+                hour = hour,
+                steps = steps,
+                hr = hr,
+                rhr = rhr,
+                currentEpochMs = currentEpochMs,
+            ) ?: return null
+            BasalOnlyTbrProposal(
+                tbrUph = cmd.temporaryBasalRate,
+                strippedSmbU = cmd.scheduledMicroBolus.coerceAtLeast(0.0),
+                reason = cmd.reason,
+            )
+        } finally {
+            systemState.set(previous)
+        }
+    }
+
+    data class BasalOnlyTbrProposal(
+        val tbrUph: Double,
+        val strippedSmbU: Double,
+        val reason: String,
+    )
+
+    /**
      * Point d'entrée principal à chaque Tique (5 min) depuis DetermineBasalAIMI2.
      */
     fun tick(

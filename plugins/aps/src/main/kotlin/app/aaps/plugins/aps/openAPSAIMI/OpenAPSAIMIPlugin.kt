@@ -1806,6 +1806,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             titleResId = R.string.aimi_t3c_settings_title,
             items = listOf(
                 BooleanKey.OApsAIMIT3cBrittleMode,
+                BooleanKey.OApsAIMIT3cAutodriveBasalAuthority,
                 DoubleKey.OApsAIMIT3cActivationThreshold,
                 DoubleKey.OApsAIMIT3cAggressiveness,
                 DoubleKey.OApsAIMIT3cAnticipationStrength,
