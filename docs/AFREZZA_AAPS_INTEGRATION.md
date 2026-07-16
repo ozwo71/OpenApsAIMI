@@ -104,7 +104,8 @@ Logique ViewModel (extrait conceptuel) :
 app/                    ComposeMainActivity, AppNavGraph, AppRoute
 core/data/              Sources.AfrezzaDialog, ICfgAfrezzaIobTest
 core/interfaces/        InsulinType, HardLimits, EventData, strings
-core/ui/                ElementType, ElementTypeStyle, strings
+core/interfaces/        ElementType (moved from core/ui; ElementCategory colocated)
+core/ui/                ElementTypeStyle, strings
 database/               UserEntry.Sources, SourcesExtension
 implementation/         InsulinImpl, HardLimitsImpl, UserEntryPresentationHelperImpl
 plugins/sync/           DataHandlerMobile (Wear)
