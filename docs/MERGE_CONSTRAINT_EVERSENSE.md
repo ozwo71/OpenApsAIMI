@@ -65,6 +65,20 @@ Reference: [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS-E
 
 **Post-port verify:** `:plugins:eversense:testFullDebugUnitTest`, Eversense smoke on device (E3 cal + 365 alarm).
 
+### Merge `dev` → `dev_OAPSAIMI_mergeDEV` (2026-07-16)
+
+- Upstream Nightscout `dev` at `638f23dfab` (37 commits since `d389d5e1c2`: ElementType →
+  `core.interfaces.navigation`, fullscreen permission, concentration zero-bolus guard, BolusWizard
+  source, automation icon colors, Wear tile headers, Omnipod Eros deactivation, NSCv3 leak fix).
+- **No AIMI / SMB / autoISF / determine_basal upstream changes** — nothing to port into AIMI.
+- **Conflicts (2, combine):** `gradle.properties` (TFLite `uniquePackageNames` + `ksp.incremental=false` +
+  tooling.parallel); `MainDrawer.kt` (`AppBrandIcon` + ElementType import).
+- **Transitive:** dashboard `AutomationIconRaster` + Afrezza/dashboard ElementType imports after
+  `AutomationIconData.tint` removal / ElementType package move.
+- **Eversense / fork preserved:** module + `SourceSensor` E3/365, AIMI/hormonitor, adaptive
+  `calibratedOrValue`, dashboard skin, ML/physio manifest, `KeepAliveWorker runVacuum=false`.
+- Log: [MERGE_DEV_2026-07-16.md](MERGE_DEV_2026-07-16.md).
+
 ### Merge `dev` → `dev_OAPSAIMI_mergeDEV` (2026-07-10)
 
 - Upstream Nightscout `dev` at `d389d5e1c2` (7 commits: **Plugin self registration**, automation
@@ -249,7 +263,7 @@ If a patch fails: resolve conflicts **without dropping** Eversense-specific regi
 | Area | Why it conflicts | Preserve |
 |------|------------------|----------|
 | `settings.gradle` / `plugins/settings.gradle` | upstream adds/removes modules | Gradle must keep including the Eversense module (path name as on branch) |
-| `PluginsListModule` / plugin DI graph | upstream plugin list churn | Eversense plugin binding and any `@Binds` / factory entries |
+| `PluginsListModule` / plugin DI graph | upstream plugin list churn | Per-module `*PluginsListModule` (e.g. `SourcePluginsListModule` @445 for Eversense); central `app/.../PluginsListModule` is Multibinds-only — do not re-add central `@Binds` |
 | `core/data/.../SourceSensor.kt` (and DB converters) | upstream CGM enum changes | **EVERSENSE**, **EVERSENSE_E3**, **EVERSENSE_365** (or exact names your branch uses) + DB round-trip |
 | `database/impl/.../GlucoseValue.kt`, converters | new sensors | Eversense source values must persist in DB layer |
 | `plugins/main/.../Overview*` / dashboard skins | fork-specific overview | Patch 0004-style UI (TIR label, transmitter battery) must be **re-applied** or merged manually if fork diverged |
