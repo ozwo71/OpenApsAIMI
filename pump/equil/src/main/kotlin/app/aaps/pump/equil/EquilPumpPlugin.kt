@@ -422,7 +422,7 @@ class EquilPumpPlugin @Inject constructor(
             val alarmBattery10 = preferences.get(EquilBooleanKey.AlarmBattery10)
             if (!alarmBattery10) {
                 notificationManager.post(
-                    NotificationId.FAILED_UPDATE_PROFILE,
+                    NotificationId.EQUIL_LOW_BATTERY,
                     rh.gs(R.string.equil_low_battery) + battery + "%",
                     soundRes = app.aaps.core.ui.R.raw.alarm
                 )
@@ -430,7 +430,7 @@ class EquilPumpPlugin @Inject constructor(
             } else {
                 if (battery < 5) {
                     notificationManager.post(
-                        NotificationId.FAILED_UPDATE_PROFILE,
+                        NotificationId.EQUIL_LOW_BATTERY,
                         rh.gs(R.string.equil_low_battery) + battery + "%",
                         NotificationLevel.IMPORTANT,
                         soundRes = app.aaps.core.ui.R.raw.alarm
