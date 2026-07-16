@@ -497,15 +497,37 @@
     <string name="unified_reactivity_summary">Analyzes TIR/CV%/Hypo every 6h to adapt reactivity (0.6-1.5). Replaces time-bucket reactivity. Exports to CSV in Documents/AAPS.</string>
 
     <!-- 🚨 Emergency SOS (Hypo) Module -->
-    <string name="aimi_sos_title">🚨 Emergency SOS (Hypo)</string>
+    <string name="aimi_sos_title">Emergency SOS (Hypo)</string>
     <string name="aimi_sos_enable_title">Enable Emergency SOS</string>
     <string name="aimi_sos_enable_summary">Automatically send an SMS with your location and BG if a severe hypo occurs.</string>
     <string name="aimi_sos_phone_title">Emergency Contact Number</string>
     <string name="aimi_sos_phone_summary">Phone number to send the SMS to (include country code e.g. +33...).</string>
     <string name="aimi_sos_threshold_title">Critical Hypo Threshold</string>
     <string name="aimi_sos_threshold_summary">BG below which the SOS will be triggered (mg/dL).</string>
-    <string name="aimi_sos_permissions_title">📍 Grant SMS, Call &amp; Location Permissions</string>
-    <string name="aimi_sos_permissions_summary">Tap to authorize AAPS to send SMS, make calls, and access background location for emergencies.</string>
+    <string name="aimi_sos_permissions_title">Grant SMS &amp; Location Permissions</string>
+    <string name="aimi_sos_permissions_summary">Tap to authorize AAPS to send SOS SMS and access location for emergencies. Automatic phone calls are not used.</string>
+
+    <string name="sos_log_monitoring_start">BG dropped below threshold (%1$.1f &lt; %2$.1f). Starting 30 min monitoring.</string>
+    <string name="sos_log_sending">Sending SOS SMS (BG: %1$.1f, Delta: %2$s)</string>
+    <string name="sos_log_error_send">SOS SMS send failed</string>
+
+    <string name="sos_sms_title_stale">AAPS: MISSING SENSOR DATA</string>
+    <string name="sos_sms_title_critical">SOS: CRITICAL HYPO</string>
+    <string name="sos_sms_title_recovery">SOS HYPO: RECOVERY PHASE</string>
+    <string name="sos_sms_title_low">SOS LOW BLOOD SUGAR ALERT</string>
+
+    <string name="sos_sms_label_bg">BLOOD SUGAR</string>
+    <string name="sos_sms_label_last_bg">LAST BG</string>
+    <string name="sos_sms_label_trend">TREND</string>
+    <string name="sos_sms_label_iob">ACTIVE INSULIN</string>
+    <string name="sos_sms_label_time">TIME</string>
+    <string name="sos_sms_label_pos">Pos</string>
+    <string name="sos_sms_pos_not_available">Not available</string>
+
+    <string name="sos_sms_footer_stale">\nCHECK SENSOR CONNECTION.</string>
+    <string name="sos_sms_footer_critical">\nTAKE ACTION NOW!</string>
+    <string name="sos_sms_footer_recovery">\nBLOOD SUGAR IS RISING — WAIT FOR CONFIRMATION</string>
+    <string name="sos_sms_footer_low">\nWAITING FOR RECOVERY OR USER ACTION</string>
     <string name="aimi_physio_hc_permissions_title">Health Connect permissions</string>
     <string name="aimi_physio_hc_permissions_summary">Open the screen to grant sleep, HRV, and heart rate access via Health Connect.</string>
     <string name="aimi_inflammatory_diseases_title">Inflammatory / autoimmune diseases</string>

@@ -277,6 +277,19 @@ enum class StringKey(
         ),
     ),
 
-    // 🚨 Emergency SOS (Hypo)
-    AimiEmergencySosPhone("aimi_emergency_sos_phone", ""),
+    // Emergency SOS (Hypo) — SMS-only advanced manager
+    AimiEmergencySosPhone(
+        key = "aimi_emergency_sos_phone",
+        defaultValue = "",
+        titleResId = R.string.pref_title_aimi_sos_phone,
+        summaryResId = R.string.pref_summary_aimi_sos_phone,
+        dependency = BooleanKey.AimiEmergencySosEnable,
+    ),
+    AimiEmergencySosPhone2(
+        key = "aimi_emergency_sos_phone2",
+        defaultValue = "",
+        titleResId = R.string.pref_title_aimi_sos_phone2,
+        summaryResId = R.string.pref_summary_aimi_sos_phone2,
+        dependency = BooleanKey.AimiEmergencySosEnable,
+    ),
 }

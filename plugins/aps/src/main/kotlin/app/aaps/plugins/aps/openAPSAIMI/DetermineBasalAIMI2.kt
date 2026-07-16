@@ -1663,7 +1663,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (ctx.extraDebug.isNotEmpty()) {
             rT.reason.append("${ctx.extraDebug}\n")
         }
+        // ⚠️ ASYNC IMPACT: SOS may launch IO work (location + SMS) on a process-scoped scope.
         app.aaps.plugins.aps.openAPSAIMI.sos.EmergencySosManager.evaluateSosCondition(
+            aapsLogger = aapsLogger,
             bg = ctx.glucoseStatus.glucose,
             delta = ctx.glucoseStatus.delta,
             iob = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,

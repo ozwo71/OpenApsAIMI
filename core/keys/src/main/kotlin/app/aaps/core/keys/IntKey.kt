@@ -487,7 +487,39 @@ enum class IntKey(
     // 🌀 Adaptive Kernel Bank (Cosine Gate)
     AimiCosineGateMaxPeakShift("aimi_cosine_gate_max_shift", 15, 0, 60),
 
-    // 🚨 Emergency SOS (Hypo)
-    AimiEmergencySosThreshold("aimi_emergency_sos_threshold", 55, 40, 100),
+    // Emergency SOS (Hypo) — SMS-only advanced manager
+    /** Monitoring band: BG below this starts the 30 min observation window. */
+    AimiEmergencySosThreshold(
+        key = "aimi_emergency_sos_threshold",
+        defaultValue = 70,
+        min = 55,
+        max = 200,
+        titleResId = R.string.pref_title_aimi_sos_threshold,
+        summaryResId = R.string.pref_summary_aimi_sos_threshold,
+        dependency = BooleanKey.AimiEmergencySosEnable,
+        unitType = UnitType.MGDL,
+    ),
+    /** Immediate SMS when BG falls below this (or delta ≤ −10). */
+    AimiEmergencySosImmediateThreshold(
+        key = "aimi_emergency_sos_immediate_threshold",
+        defaultValue = 55,
+        min = 40,
+        max = 200,
+        titleResId = R.string.pref_title_aimi_sos_immediate_threshold,
+        summaryResId = R.string.pref_summary_aimi_sos_immediate_threshold,
+        dependency = BooleanKey.AimiEmergencySosEnable,
+        unitType = UnitType.MGDL,
+    ),
+    /** Minutes without a valid CGM reading before a missing-data SOS SMS. */
+    AimiEmergencySosStaleThreshold(
+        key = "aimi_emergency_sos_stale_threshold",
+        defaultValue = 30,
+        min = 15,
+        max = 120,
+        titleResId = R.string.pref_title_aimi_sos_stale_threshold,
+        summaryResId = R.string.pref_summary_aimi_sos_stale_threshold,
+        dependency = BooleanKey.AimiEmergencySosEnable,
+        unitType = UnitType.MIN,
+    ),
 
 }

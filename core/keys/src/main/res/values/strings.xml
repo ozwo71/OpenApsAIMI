@@ -544,6 +544,18 @@
     <string name="pref_summary_aimi_straight_line_tube">Discrete short-horizon control on max SMB: keeps predicted minimum BG above a floor using the PKPD min curve, favors larger caps when eventual BG is high, penalizes zig-zag SMB sizing. Does not replace PKPD or safety nets. Off by default.</string>
     <string name="pref_title_aimi_t3c_autodrive_basal_authority">T3C: Autodrive basal authority</string>
     <string name="pref_summary_aimi_t3c_autodrive_basal_authority">Under T3C brittle mode, fuse Autodrive’s temporary basal demand with the T3C PI controller. SMB from Autodrive is never delivered (basal-only). The physiological tree can unlock a higher basal ceiling and faster ramp on a confirmed rise. Off disables fusion (PI-only + shadow Autodrive).</string>
+    <string name="pref_title_aimi_sos_enable">Enable Emergency SOS</string>
+    <string name="pref_summary_aimi_sos_enable">Send SMS with BG, trend, IOB and location when a severe hypo or missing CGM data is detected. SMS only (no automatic calls).</string>
+    <string name="pref_title_aimi_sos_phone">Emergency contact #1</string>
+    <string name="pref_summary_aimi_sos_phone">Primary phone number for SOS SMS (include country code, e.g. +33…).</string>
+    <string name="pref_title_aimi_sos_phone2">Emergency contact #2</string>
+    <string name="pref_summary_aimi_sos_phone2">Optional second contact. Identical numbers are deduplicated so only one SMS is sent.</string>
+    <string name="pref_title_aimi_sos_threshold">Monitoring threshold (30 min)</string>
+    <string name="pref_summary_aimi_sos_threshold">BG (mg/dL) below which the 30-minute observation window starts. Recovery requires returning above this value + 10.</string>
+    <string name="pref_title_aimi_sos_immediate_threshold">Immediate emergency threshold</string>
+    <string name="pref_summary_aimi_sos_immediate_threshold">BG (mg/dL) that triggers an immediate SOS SMS (also triggered when delta ≤ −10 mg/dL).</string>
+    <string name="pref_title_aimi_sos_stale_threshold">Missing sensor alert (minutes)</string>
+    <string name="pref_summary_aimi_sos_stale_threshold">If no valid CGM reading is seen for this many minutes, send a missing-data SOS SMS.</string>
     <string name="pref_title_aimi_undeclared_cob">Undeclared-meal COB estimation</string>
     <string name="pref_summary_aimi_undeclared_cob">Estimates virtual carbs from the glucose appearance rate (Ra), BG dynamics, patient weight/TDD and rest/activity context, then feeds them into the prediction curves so basal (TBR) anticipates an undeclared meal. Never delivers autonomous SMB. Automatically muted during exercise, hypo/post-hypo, pulmonary exacerbation and any stress/dawn false-meal suppression. Off by default.</string>
     <string name="pref_title_aimi_undeclared_cob_max_g" comment="%1$s is not used; plain title. Max grams the estimator may inject.">Undeclared COB: maximum grams</string>

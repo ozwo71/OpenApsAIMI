@@ -523,8 +523,13 @@ enum class BooleanKey(
     // 🌀 Adaptive Kernel Bank (Cosine Gate)
     AimiCosineGateEnabled("aimi_cosine_gate_enabled", true),
 
-    // 🚨 Emergency SOS (Hypo)
-    AimiEmergencySosEnable("aimi_emergency_sos_enable", false),
+    // Emergency SOS (Hypo) — SMS-only advanced manager
+    AimiEmergencySosEnable(
+        key = "aimi_emergency_sos_enable",
+        defaultValue = false,
+        titleResId = R.string.pref_title_aimi_sos_enable,
+        summaryResId = R.string.pref_summary_aimi_sos_enable,
+    ),
 
     /** On-device MLP risk models for AIMI Advisor (OREF features); trains when Advisor runs if enough rows. */
     OApsAIMIAdvisorPersonalOrefMl(

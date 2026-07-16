@@ -37,6 +37,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.Locale
 import java.util.Date
 import java.util.concurrent.locks.Condition
 import java.util.concurrent.locks.ReentrantLock
@@ -591,7 +592,8 @@ class GarminPlugin @Inject constructor(
                     .toEpochMilli()
                 val todayCount = runBlocking {
                     persistenceLayer.getStepsCountFromTimeToTime(midnight, now)
-                        .count { it.device == device }
+                        // Device label may vary ("Garmin", "Garmin Connect", …); match family.
+                        .count { it.device.startsWith("Garmin") }
                 }
                 if (todayCount == 0) {
                     aapsLogger.info(LTag.GARMIN, "[GarminHTTP] no records today, storing initial total=$totalSteps")
@@ -784,10 +786,19 @@ class GarminPlugin @Inject constructor(
                     GlucoseUnit.MMOL -> jo.addProperty("units_hint", "mmol")
                 }
                 jo.addProperty("iob", loopHub.insulinOnboard + loopHub.insulinBasalOnboard)
-                loopHub.temporaryBasal.also {
-                    if (!it.isNaN()) {
-                        val temporaryBasalRateInPercent = (it * 100.0).toInt()
-                        jo.addProperty("tbr", temporaryBasalRateInPercent)
+                // Nightscout-style watch payload: "U/h/%" so the face can show absolute rate + percent.
+                // temporaryBasal is a factor (1.0 = 100%); NaN → omit property (watch keeps last value).
+                loopHub.temporaryBasal.also { tbrFactor ->
+                    if (!tbrFactor.isNaN()) {
+                        val safeFactor = if (tbrFactor.isFinite()) tbrFactor else 0.0
+                        val profileBasal = loopHub.currentProfile?.getBasal() ?: 0.0
+                        val rateUph = profileBasal * safeFactor
+                        val percent = (safeFactor * 100.0).toInt()
+                        if (rateUph != 0.0 || percent != 0) {
+                            jo.addProperty("tbr", String.format(Locale.US, "%.1f/%d", rateUph, percent))
+                        } else {
+                            jo.addProperty("tbr", "0")
+                        }
                     }
                 }
                 jo.addProperty("cob", loopHub.carbsOnboard)
