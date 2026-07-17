@@ -8,6 +8,7 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoAggressiveRiseExit
 import app.aaps.plugins.aps.openAPSAIMI.safety.SafetyRiskExportSnapshot
 import org.json.JSONArray
 import org.json.JSONObject
@@ -38,6 +39,12 @@ internal object RecursiveBeliefAuthorityGate {
         val safetyRiskExport: SafetyRiskExportSnapshot?,
         val chaos: RbtChaosEvaluator.Result? = null,
         val episode: RbtEpisodeMemory.EpisodeState? = null,
+        /** Current BG (mg/dL) for post-hypo aggressive-rise exit. */
+        val bgMgdl: Double? = null,
+        /** Profile / effective target (mg/dL). */
+        val targetBgMgdl: Double? = null,
+        /** 5‑minute delta (mg/dL). */
+        val deltaMgdl5m: Double? = null,
     )
 
     data class Decision(
@@ -90,10 +97,18 @@ internal object RecursiveBeliefAuthorityGate {
         val postHypoProb = latentState?.postHypoReboundProb ?: 0.0
         val transientResistanceProb = latentState?.transientResistanceProb ?: 0.0
         val patientModeDecision = input.patientModeDecision
-        val predictiveHypoMealBypass = shouldBypassPredictiveHypoForMeal(input)
+        val aggressiveRiseExit = PostHypoAggressiveRiseExit.shouldExit(
+            bgMgdl = input.bgMgdl ?: Double.NaN,
+            targetBgMgdl = input.targetBgMgdl ?: Double.NaN,
+            deltaMgdl5m = input.deltaMgdl5m ?: Double.NaN,
+        )
+        val predictiveHypoMealBypass = shouldBypassPredictiveHypoForMeal(input, aggressiveRiseExit)
         val hyperReleaseSuppressed =
             input.patternSnapshot?.suppressHyperRelease == true ||
                 input.phaseOutput?.policy?.capsHtrRelease() == true
+        if (aggressiveRiseExit) {
+            reasonCodes += PostHypoAggressiveRiseExit.REASON_CODE
+        }
 
         if (!input.predictionAvailable) {
             reasonCodes += "PRED_MISSING"
@@ -112,21 +127,33 @@ internal object RecursiveBeliefAuthorityGate {
                 maxAllowedAuthority = ReleaseAuthority.SOFT
             }
         }
-        if (input.episode?.kind == RbtEpisodeMemory.EpisodeKind.POST_HYPO_REBOUND) {
+        // Post-hypo episode soft-cap skipped on aggressive rise exit (act normally).
+        if (input.episode?.kind == RbtEpisodeMemory.EpisodeKind.POST_HYPO_REBOUND && !aggressiveRiseExit) {
             reasonCodes += "EPISODE_POST_HYPO"
             if (maxAllowedAuthority == ReleaseAuthority.HARD) {
                 maxAllowedAuthority = ReleaseAuthority.SOFT
             }
         }
         if (input.safetyRiskExport?.predictiveHypoSuppressed == true) {
-            if (predictiveHypoMealBypass) {
-                reasonCodes += "PREDICTIVE_HYPO_MEAL_BYPASS"
-                if (maxAllowedAuthority == ReleaseAuthority.HARD) {
-                    maxAllowedAuthority = ReleaseAuthority.SOFT
+            when {
+                predictiveHypoMealBypass -> {
+                    reasonCodes += "PREDICTIVE_HYPO_MEAL_BYPASS"
+                    if (maxAllowedAuthority == ReleaseAuthority.HARD) {
+                        maxAllowedAuthority = ReleaseAuthority.SOFT
+                    }
                 }
-            } else {
-                reasonCodes += "PREDICTIVE_HYPO"
-                maxAllowedAuthority = ReleaseAuthority.NONE
+                // Aggressive post-hypo rise: keep SOFT release (not shadow NONE) so meal/HTR can act
+                // before meal-bypass confirmation catches up (typically 1–2 ticks later).
+                aggressiveRiseExit -> {
+                    reasonCodes += "PREDICTIVE_HYPO_AGGRESSIVE_RISE"
+                    if (maxAllowedAuthority == ReleaseAuthority.HARD) {
+                        maxAllowedAuthority = ReleaseAuthority.SOFT
+                    }
+                }
+                else -> {
+                    reasonCodes += "PREDICTIVE_HYPO"
+                    maxAllowedAuthority = ReleaseAuthority.NONE
+                }
             }
         }
         if (hyperReleaseSuppressed) {
@@ -137,7 +164,7 @@ internal object RecursiveBeliefAuthorityGate {
             reasonCodes += "SENSOR_LOW"
             maxAllowedAuthority = ReleaseAuthority.NONE
         }
-        if (postHypoProb >= POST_HYPO_BLOCK_THRESHOLD && mealProb < 0.40) {
+        if (postHypoProb >= POST_HYPO_BLOCK_THRESHOLD && mealProb < 0.40 && !aggressiveRiseExit) {
             reasonCodes += "POST_HYPO_BLOCK"
             maxAllowedAuthority = ReleaseAuthority.NONE
         }
@@ -147,7 +174,7 @@ internal object RecursiveBeliefAuthorityGate {
                 reasonCodes += "MEAL_SUPPRESS"
                 maxAllowedAuthority = ReleaseAuthority.SOFT
             }
-            if (hasDominantNonMealHypothesis(input.hypothesisState)) {
+            if (hasDominantNonMealHypothesis(input.hypothesisState) && !aggressiveRiseExit) {
                 reasonCodes += "NON_MEAL_DOM"
                 maxAllowedAuthority = ReleaseAuthority.SOFT
             }
@@ -159,15 +186,20 @@ internal object RecursiveBeliefAuthorityGate {
                 reasonCodes += "RESISTANCE_CAUTION"
                 maxAllowedAuthority = ReleaseAuthority.SOFT
             }
-            if (postHypoProb >= POST_HYPO_SOFT_THRESHOLD && mealProb < 0.50) {
+            if (postHypoProb >= POST_HYPO_SOFT_THRESHOLD && mealProb < 0.50 && !aggressiveRiseExit) {
                 reasonCodes += "POST_HYPO_CAUTION"
                 maxAllowedAuthority = ReleaseAuthority.SOFT
             }
             if ((patientModeDecision?.confidence ?: 0.0) >= 0.60) {
                 when (patientModeDecision?.mode) {
                     PatientMode.POST_HYPO_RECOVERY -> {
-                        reasonCodes += "MODE_POST_HYPO_RECOVERY"
-                        maxAllowedAuthority = ReleaseAuthority.NONE
+                        if (aggressiveRiseExit) {
+                            // Keep authority; do not veto to NONE during aggressive rise.
+                            reasonCodes += "MODE_POST_HYPO_RECOVERY_BYPASSED"
+                        } else {
+                            reasonCodes += "MODE_POST_HYPO_RECOVERY"
+                            maxAllowedAuthority = ReleaseAuthority.NONE
+                        }
                     }
                     PatientMode.DAWN_ENDOGENOUS -> {
                         reasonCodes += "MODE_DAWN_ENDOGENOUS"
@@ -289,7 +321,10 @@ internal object RecursiveBeliefAuthorityGate {
         }
     }
 
-    private fun shouldBypassPredictiveHypoForMeal(input: Input): Boolean {
+    private fun shouldBypassPredictiveHypoForMeal(
+        input: Input,
+        aggressiveRiseExit: Boolean,
+    ): Boolean {
         val safety = input.safetyRiskExport ?: return false
         if (!safety.predictiveHypoSuppressed || !safety.mealContextActive || !safety.mealRiseConfirmed) {
             return false
@@ -299,10 +334,16 @@ internal object RecursiveBeliefAuthorityGate {
 
         val latentState = input.latentState
         if (latentState?.falseMealSuppression == true) return false
-        if ((latentState?.postHypoReboundProb ?: 0.0) >= POST_HYPO_SOFT_THRESHOLD) return false
+        // Sticky post-hypo latent must not block meal-rise bypass once the aggressive-rise exit fires.
+        if (!aggressiveRiseExit &&
+            (latentState?.postHypoReboundProb ?: 0.0) >= POST_HYPO_SOFT_THRESHOLD
+        ) {
+            return false
+        }
 
         val patientModeDecision = input.patientModeDecision
-        if (patientModeDecision != null &&
+        if (!aggressiveRiseExit &&
+            patientModeDecision != null &&
             hasProtectivePatientMode(patientModeDecision.mode) &&
             patientModeDecision.mode != PatientMode.FAST_MEAL &&
             patientModeDecision.confidence >= MEAL_BYPASS_PROTECTION_CONFIDENCE

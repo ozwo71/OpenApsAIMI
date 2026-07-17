@@ -182,6 +182,78 @@ class HarmoniaDecisionEngineTest {
         assertThat(decision?.targetBasalUph).isLessThan(safeEnvironment().currentBasalUph)
     }
 
+    @Test
+    fun evaluate_h4MealRiseBridgePrefersMealSupportOverProtectiveDuringDigestion() {
+        val tree = digestionTreeWithEffort(effortActiveConfidence = 0.70)
+        assertThat(tree?.trunk?.globalState).isEqualTo(GlobalPhysiologicalState.DIGESTION_ACTIVE)
+        assertThat(tree?.branches?.activity?.confidence).isAtLeast(0.55)
+
+        val protective = HarmoniaDecisionEngine.evaluate(
+            tree = tree,
+            environment = safeEnvironment().copy(
+                cobG = 0.0,
+                mealRiseConfirmed = false,
+                targetBgMgdl = 100.0,
+                currentBgMgdl = 190.0,
+                deltaMgdl5m = 4.0,
+            ),
+        )
+        assertThat(protective?.action).isEqualTo(HarmoniaAction.PROTECTIVE_REDUCTION)
+
+        val bridged = HarmoniaDecisionEngine.evaluate(
+            tree = tree,
+            environment = safeEnvironment().copy(
+                cobG = 0.0,
+                mealRiseConfirmed = true,
+                targetBgMgdl = 100.0,
+                currentBgMgdl = 190.0,
+                deltaMgdl5m = 4.0,
+            ),
+        )
+        assertThat(bridged?.action).isEqualTo(HarmoniaAction.MEAL_SUPPORT)
+        assertThat(bridged?.rationale).contains("h4_meal_rise_bridge")
+        assertThat(bridged?.smbFactor).isGreaterThan(0.0)
+    }
+
+    @Test
+    fun evaluate_h4MealRiseBridgeDoesNotFireBelowTargetBand() {
+        val tree = digestionTreeWithEffort(effortActiveConfidence = 0.70)
+        val decision = HarmoniaDecisionEngine.evaluate(
+            tree = tree,
+            environment = safeEnvironment().copy(
+                cobG = 0.0,
+                mealRiseConfirmed = true,
+                targetBgMgdl = 100.0,
+                currentBgMgdl = 120.0, // target+20, below +30 band
+                deltaMgdl5m = 4.0,
+            ),
+        )
+        assertThat(decision?.action).isEqualTo(HarmoniaAction.PROTECTIVE_REDUCTION)
+        assertThat(decision?.rationale).doesNotContain("h4_meal_rise_bridge")
+    }
+
+    private fun digestionTreeWithEffort(effortActiveConfidence: Double): PhysiologicalTreeSnapshot? {
+        val state = stableState().copy(
+            phase = PhysiologicalPhase.MEAL_UNDECLARED,
+            mealAbsorptionPhase = MealAbsorptionPhase.FIRST_WAVE,
+            mealAbsorptionBelief = 0.78,
+            mealProb = 0.82,
+            postHypoReboundProb = 0.10,
+            causalPosterior = CausalStatePosterior(
+                fastMealProb = 0.84,
+                dominant = CausalStateId.FAST_MEAL,
+                dominantConfidence = 0.84,
+                learningQuality = 0.80,
+            ),
+        )
+        return PhysiologicalTreeBuilder.build(
+            enabled = true,
+            patientState = state,
+            patientModeDecision = PatientModeOrchestrator.evaluate(state),
+            effortActiveConfidence = effortActiveConfidence,
+        )
+    }
+
     private fun buildTree(state: PatientStateSnapshot): PhysiologicalTreeSnapshot? =
         PhysiologicalTreeBuilder.build(
             enabled = true,
@@ -201,6 +273,7 @@ class HarmoniaDecisionEngineTest {
             maxIobU = 5.0,
             sensorAgeMin = 1_500, // established sensor (~25 h), well past the warmup window
             sensorNoise = 0.1,
+            targetBgMgdl = 100.0,
         )
 
     private fun stableState(): PatientStateSnapshot =

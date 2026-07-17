@@ -151,6 +151,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternExpor
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternInputBuilder
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.safety.EffectiveIobReleaseAuthority
+import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoAggressiveRiseExit
 import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoDeliveryAuthority
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionBasalCap
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
@@ -3170,6 +3171,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     sensorAgeMin = sensorTelemetry.sensorAgeMin,
                     sensorNoise = sensorTelemetry.sensorNoise,
                     mealRiseConfirmed = harmoniaMealRiseConfirmed,
+                    targetBgMgdl = targetBg.toDouble(),
                     correctionFragilityScore = eventMemory.correctionFragilityScore,
                     postHyperExhaustionScore = eventMemory.postHyperExhaustionScore,
                     chaoticEpisodeLoad = lastRbtChaosEvaluation?.score ?: 0.0,
@@ -3928,11 +3930,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
         }
         lastRbtChaosEvaluation = chaosEval
+        val targetForPostHypoExit = profile.target_bg.takeIf { it > 0.0 }
+            ?: targetBg.toDouble().takeIf { it > 0.0 }
+            ?: 100.0
+        val aggressiveRiseExit = PostHypoAggressiveRiseExit.shouldExit(
+            bgMgdl = bg,
+            targetBgMgdl = targetForPostHypoExit,
+            deltaMgdl5m = delta.toDouble(),
+        )
+        if (aggressiveRiseExit) {
+            consoleLog.add(
+                "🚀 POST_HYPO_AGGRESSIVE_RISE_EXIT: bg=${"%.0f".format(bg)} " +
+                    "≥ target+30 (${"%.0f".format(targetForPostHypoExit + 30.0)}) Δ=${"%.1f".format(delta)} > 15 → act normally"
+            )
+        }
         RbtEpisodeMemory.tick(
             nowMs = dateUtil.now(),
             postHypoReboundProb = lastPhysioLatentState?.postHypoReboundProb ?: 0.0,
             chaosScore = chaosEval?.score ?: 0.0,
             mealProb = lastPhysioLatentState?.mealProb ?: 0.0,
+            recentNadirBgMgdl = minBgInLastMinutes(45),
+            aggressiveRiseExit = aggressiveRiseExit,
         )
         val activeEpisode = RbtEpisodeMemory.activeEpisode(dateUtil.now())
         chaosEval?.takeIf { it.active || it.caution }?.let {
@@ -3941,7 +3959,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         activeEpisode?.let {
             consoleLog.add(
                 "📖 RBT_EPISODE: ${it.kind.name} age=${"%.0f".format(it.ageMinutes(dateUtil.now()))}min " +
-                    "peak=${"%.2f".format(it.peakScore)} ticks=${it.tickCount}",
+                    "peak=${"%.2f".format(it.peakScore)} ticks=${it.tickCount}" +
+                    if (it.deepHypo) " deep" else " light",
             )
         }
         val rbtPrefs = RecursiveBeliefPreferences.from(preferences)
@@ -3959,6 +3978,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 safetyRiskExport = lastSafetyRiskExport,
                 chaos = chaosEval,
                 episode = activeEpisode,
+                bgMgdl = bg,
+                targetBgMgdl = targetForPostHypoExit,
+                deltaMgdl5m = delta.toDouble(),
             ),
         )
         lastRecursiveAuthorityGateDecision = authorityGate
@@ -12229,6 +12251,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return PostHypoState.None
         }
 
+        // Aggressive rise past target+30 with Δ>15 → clear post-hypo state (act normally).
+        val bgNow = recentBGs.firstOrNull()?.toDouble() ?: 0.0
+        val targetNow = targetBg.toDouble().takeIf { it > 0.0 } ?: 100.0
+        if (PostHypoAggressiveRiseExit.shouldExit(bgNow, targetNow, delta.toDouble())) {
+            lastHypoBelow70At = 0L
+            reason.append(
+                "🚀 POST_HYPO_AGGRESSIVE_RISE_EXIT: bg=${"%.0f".format(bgNow)} " +
+                    "target+30=${"%.0f".format(targetNow + 30.0)} Δ=${"%.1f".format(delta)} → normal\n"
+            )
+            return PostHypoState.None
+        }
+
         // Vérifier si c'est un repas (explicite ou implicite Autodrive V3)
         val inPostHypoRecoveryWindow = sinceHypoMs <= 45 * 60_000L
         val isMealContext = explicitMealMode || cob > 0.5 ||
@@ -14307,9 +14341,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * 30 min; a DEEPER hypo (nadir < 60) for 45 min. The offending reading ages out of its own lookback → protection
      * releases by itself. Expressed with the existing recent-floor primitive (no new state). Meal/rise release stays
      * the caller's job (e.g. `&& !autodriveMealSignals`), so a meal always hands control back to rise management.
+     * Aggressive rise exit ([PostHypoAggressiveRiseExit]: bg ≥ target+30 and Δ>15) also releases protection.
      */
-    private fun postHypoRecoveryActive(): Boolean =
-        minBgInLastMinutes(45) < 60.0 || minBgInLastMinutes(30) < 70.0
+    private fun postHypoRecoveryActive(): Boolean {
+        val target = targetBg.toDouble().takeIf { it > 0.0 } ?: 100.0
+        if (PostHypoAggressiveRiseExit.shouldExit(bg, target, delta.toDouble())) return false
+        return minBgInLastMinutes(45) < 60.0 || minBgInLastMinutes(30) < 70.0
+    }
 
     private fun refreshEffortActivityBelief() {
         lastEffortAssessment = null

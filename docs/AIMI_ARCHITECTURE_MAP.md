@@ -46,12 +46,14 @@ Harmonia is **not** one block. Separate what *observes*, what *decides*, and wha
    - `low_or_falling_bg` — `bg < 80 && delta <= 0`
    - `max_iob_pressure` — `iob >= maxIob * 0.92`
    - `critical_risk` — trunk risk `CRITICAL`
-2. **`chooseAction`** → one of `HarmoniaAction`:
-   - `BASAL_FIRST` — hormonalResistance / stress / insulinEffectiveness confidence ≥ 0.55
-   - `MEAL_SUPPORT` — declared/undeclared meal-rise conditions
-   - `PROTECTIVE_REDUCTION` — activity ≥ 0.55 or postActivity ≥ 0.45
+2. **`chooseAction`** → one of `HarmoniaAction` (priority order matters):
    - `STABILIZE` — fragility ≥ 0.55 or exhaustion ≥ 0.65 or chaos ≥ 0.50
+   - `MEAL_SUPPORT` — **H4 bridge** first: trunk `DIGESTION_ACTIVE` + `meal_rise_confirmed` +
+     BG > target+30 (beats activity protective); else declared/undeclared meal-rise
+   - `PROTECTIVE_REDUCTION` — activity ≥ 0.55 or postActivity ≥ 0.45
+   - `BASAL_FIRST` — hormonalResistance / stress / insulinEffectiveness confidence ≥ 0.55
    - `OBSERVE` — nothing salient (→ no production action)
+   - Env carries `targetBgMgdl` for the H4 band check.
 3. **Factor → bounded target** against a virtual pump model (caps, steps, IOB headroom):
 
    | Action | basal factor | smb factor |

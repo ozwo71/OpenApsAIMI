@@ -67,12 +67,23 @@ memory: `basal-ml-training-bugs`, `pkpd-floor-39-contamination`, `hormonitor-vie
 ### P3 — Harmonia authority: measure it, calibrate it, fix the stale labels.
 - **Problem (verified):** Harmonia has real gated authority (§0) but we **don't know how often it wins**, and the
   `PhysiologicalTree` "Lot 1 read-only" labels/comments are stale and misleading.
+- **Done 2026-07-17 (support-package KFC hyper + post-hypo sticky):**
+  1. **Aggressive post-hypo rise exit** (`PostHypoAggressiveRiseExit`: BG ≥ target+30 **and** Δ>15) clears
+     RBT `EPISODE_POST_HYPO`, bypasses `MODE_POST_HYPO_RECOVERY`, and keeps RBT at **SOFT** under
+     `PREDICTIVE_HYPO` (`PREDICTIVE_HYPO_AGGRESSIVE_RISE`) instead of shadow `NONE` — closes the 15:05–15:14
+     authority gap before meal-bypass confirmation.
+  2. **H4 meal-rise bridge (partial):** `HarmoniaDecisionEngine.chooseAction` prefers `MEAL_SUPPORT` over
+     `PROTECTIVE_REDUCTION` when trunk=`DIGESTION_ACTIVE` + `meal_rise_confirmed` + BG > target+30
+     (rationale `h4_meal_rise_bridge`). Env now carries `target_bg_mgdl`.
 - **TODO:** (1) **Measure** from Hormonitor: share of ticks with `harmonia_production.selected_for_production=true`
   vs cascade; distribution of `runtime_blocker` reasons (why Harmonia is blocked). The viewer can surface this.
   (2) ~~Rename the stale "Lot 1 / no write path" labels~~ **DONE 2026-07-10** (`PhysiologicalTree.kt` roots corrected +
   anti-hallucination note added). (3) Decide, per branch, whether Harmonia should
   win MORE (bounded, evidence-gated like the SMB reconciliation) rather than deferring to the cascade so often.
-- **Validation:** the Hormonitor viewer per-day aggregation (already built) — add a "Harmonia authority" line.
+  (4) Finish H4 remainder (veto vs `mealDeliveryPriority`, leaf→`MealCorrectionContextResolver`) — see
+  `aimi-harmonia-implementation.md` §14. (5) Device-validate exit + H4 on a meal-after-mild-hypo day.
+- **Validation:** the Hormonitor viewer per-day aggregation (already built) — add a "Harmonia authority" line;
+  log markers `POST_HYPO_AGGRESSIVE_RISE_EXIT`, `PREDICTIVE_HYPO_AGGRESSIVE_RISE`, `h4_meal_rise_bridge`.
 
 ### P4 — Sport: the single effort-belief system (`EffortActivityBelief`), activated + extended.
 - **Correction (2026-07-10):** an earlier version of this roadmap said "build a per-person exercise model" — that
@@ -133,9 +144,11 @@ memory: `basal-ml-training-bugs`, `pkpd-floor-39-contamination`, `hormonitor-vie
 | Sport: harmonized into `EffortActivityBelief` (basal wired, enabled; parallel path removed) | done, **needs device validation** |
 | Hormonitor in-app viewer (indexed, EN/FR) | done |
 | Eversense app-context AlertDialog crash | fixed |
-| Fix stale "Lot 1" tree labels | **TODO** |
+| Fix stale "Lot 1" tree labels | **DONE** (2026-07-10) |
+| Post-hypo aggressive rise exit + PREDICTIVE_HYPO SOFT | done, **needs device validation** |
+| H4 meal-rise bridge (DIGESTION → MEAL_SUPPORT vs PROTECTIVE) | **partial**, needs device validation |
 | Measure Harmonia authority share | **TODO** |
-| Per-person exercise model | **TODO** |
+| Per-person exercise model | **TODO** (superseded framing: extend `EffortActivityBelief`, not a parallel model) |
 | Wire computed-but-unused signals (e.g. Ra→predict) | **TODO** |
 | Confirm each ML head is live on device | **TODO** |
 

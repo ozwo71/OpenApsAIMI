@@ -271,4 +271,110 @@ class RecursiveBeliefAuthorityGateTest {
         assertThat(decision.effectiveAuthority).isEqualTo(ReleaseAuthority.SOFT)
         assertThat(decision.reasonCodes).contains("EPISODE_POST_HYPO")
     }
+
+    @Test
+    fun evaluate_bypasses_post_hypo_episode_and_mode_on_aggressive_rise_exit() {
+        val episode = RbtEpisodeMemory.EpisodeState(
+            kind = RbtEpisodeMemory.EpisodeKind.POST_HYPO_REBOUND,
+            startedAtMs = 1_718_000_000_000L,
+            lastSeenAtMs = 1_718_000_000_000L,
+            peakScore = 0.80,
+            tickCount = 4,
+        )
+        val decision = RecursiveBeliefAuthorityGate.evaluate(
+            RecursiveBeliefAuthorityGate.Input(
+                authorityEnabled = true,
+                requestedAuthority = ReleaseAuthority.HARD,
+                predictionAvailable = true,
+                phaseOutput = null,
+                patternSnapshot = PhysiologicalPatternSnapshot.EMPTY,
+                latentState = PhysioLatentState(
+                    mealProb = 0.86,
+                    sensorConfidence = 0.95,
+                    postHypoReboundProb = 0.70,
+                    source = "test",
+                ),
+                hypothesisState = UamHypothesisState(
+                    mealProb = 0.88,
+                    dominant = UamHypothesisId.MEAL,
+                    dominantConfidence = 0.88,
+                    suppressMealInterpretation = false,
+                ),
+                patientState = null,
+                patientModeDecision = PatientModeOrchestrator.Decision(
+                    mode = PatientMode.POST_HYPO_RECOVERY,
+                    confidence = 0.90,
+                    strategyHint = PatientStrategyHint.CONSERVATIVE_OBSERVE,
+                    mealBias = 0.20,
+                    protectionBias = 0.90,
+                    userIntentConfidence = 0.0,
+                    reasonCodes = listOf("POST_HYPO"),
+                ),
+                safetyRiskExport = null,
+                episode = episode,
+                bgMgdl = 160.0,
+                targetBgMgdl = 100.0,
+                deltaMgdl5m = 18.0,
+            ),
+        )
+
+        assertThat(decision.reasonCodes).contains("POST_HYPO_AGGRESSIVE_RISE_EXIT")
+        assertThat(decision.reasonCodes).contains("MODE_POST_HYPO_RECOVERY_BYPASSED")
+        assertThat(decision.reasonCodes).doesNotContain("EPISODE_POST_HYPO")
+        assertThat(decision.reasonCodes).doesNotContain("MODE_POST_HYPO_RECOVERY")
+        assertThat(decision.effectiveAuthority).isNotEqualTo(ReleaseAuthority.NONE)
+    }
+
+    @Test
+    fun evaluate_keeps_soft_authority_when_predictive_hypo_suppressed_on_aggressive_rise_exit() {
+        val decision = RecursiveBeliefAuthorityGate.evaluate(
+            RecursiveBeliefAuthorityGate.Input(
+                authorityEnabled = true,
+                requestedAuthority = ReleaseAuthority.HARD,
+                predictionAvailable = true,
+                phaseOutput = null,
+                patternSnapshot = PhysiologicalPatternSnapshot.EMPTY,
+                latentState = PhysioLatentState(
+                    mealProb = 0.40,
+                    sensorConfidence = 0.95,
+                    postHypoReboundProb = 0.55,
+                    source = "test",
+                ),
+                hypothesisState = null,
+                patientState = null,
+                patientModeDecision = PatientModeOrchestrator.Decision(
+                    mode = PatientMode.POST_HYPO_RECOVERY,
+                    confidence = 0.90,
+                    strategyHint = PatientStrategyHint.CONSERVATIVE_OBSERVE,
+                    mealBias = 0.20,
+                    protectionBias = 0.90,
+                    userIntentConfidence = 0.0,
+                    reasonCodes = listOf("POST_HYPO"),
+                ),
+                safetyRiskExport = SafetyRiskExportSnapshot(
+                    phase = AimiRiskPhase.DECISION,
+                    predictiveHypoSuppressed = true,
+                    safetyGate = "suppressed",
+                    haltRemainingPipeline = false,
+                    mealContextActive = false,
+                    mealRiseConfirmed = false,
+                    compositeMinMgdl = 72.0,
+                    predBgMgdl = 90.0,
+                    eventualBgMgdl = 95.0,
+                    uamTerminalMgdl = 100.0,
+                    hypoThresholdMgdl = 75.0,
+                ),
+                bgMgdl = 137.0,
+                targetBgMgdl = 100.0,
+                deltaMgdl5m = 18.0,
+            ),
+        )
+
+        assertThat(decision.reasonCodes).contains("POST_HYPO_AGGRESSIVE_RISE_EXIT")
+        assertThat(decision.reasonCodes).contains("PREDICTIVE_HYPO_AGGRESSIVE_RISE")
+        assertThat(decision.reasonCodes).doesNotContain("PREDICTIVE_HYPO")
+        assertThat(decision.reasonCodes).doesNotContain("PREDICTIVE_HYPO_MEAL_BYPASS")
+        assertThat(decision.effectiveAuthority).isEqualTo(ReleaseAuthority.SOFT)
+    }
 }
+

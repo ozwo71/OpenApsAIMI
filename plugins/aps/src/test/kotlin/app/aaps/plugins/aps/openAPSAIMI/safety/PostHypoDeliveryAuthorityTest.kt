@@ -96,4 +96,20 @@ class PostHypoDeliveryAuthorityTest {
 
         assertFalse(decision.active)
     }
+
+    @Test
+    fun inactive_whenAggressiveRiseExit_targetPlus30_andDeltaAbove15() {
+        val decision = PostHypoDeliveryAuthority.evaluate(
+            PostHypoDeliveryAuthority.Input(
+                gate = reboundGuardGate(),
+                patientMode = PatientMode.POST_HYPO_RECOVERY,
+                aggressionInput = aggressionInput(bg = 140.0, targetBg = 100.0, delta = 16.0, minBg75 = 54.0),
+            ),
+        )
+
+        assertFalse(decision.active)
+        assertEquals("post_hypo_aggressive_rise_exit", decision.reasonTag)
+        assertEquals(0.77, decision.capSmbU(0.77), 0.001)
+    }
 }
+

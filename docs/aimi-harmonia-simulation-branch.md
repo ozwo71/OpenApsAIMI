@@ -239,7 +239,7 @@ Harmonia n'a pas encore d'action dediee **yoyo** ; la stabilisation reelle est *
 ### Priorite produit (alignement vision)
 
 1. **H0** — `PostHypoProjectionCap` robuste (tick ne doit pas avorter).
-2. **H4** — Meal-rise bridge : arbre → Harmonia → harmoniser avec `MealCorrectionContextResolver` (eviter double posture contradictoire).
+2. **H4** — Meal-rise bridge : **partiel 2026-07-17** (`chooseAction` DIGESTION+meal_rise+BG>target+30 → `MEAL_SUPPORT` vs `PROTECTIVE`) ; reste harmoniser avec `MealCorrectionContextResolver`.
 3. **H5** — Stabilisation : `correctionFragilityScore` → `PROTECTIVE_REDUCTION` / plafond hausse basale.
 4. **H6** — Feuilles arbre → prompts Auditor (lecture seule) comme vraie 2e confirmation LLM.
 

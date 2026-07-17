@@ -43,6 +43,22 @@ object PostHypoDeliveryAuthority {
         if (input.gate?.tier != CorrectionAggressionGate.Tier.REBOUND_GUARD) return INACTIVE
         if (input.patientMode != PatientMode.POST_HYPO_RECOVERY) return INACTIVE
         if (CorrectionAggressionGate.hasIndependentMealEvidence(input.aggressionInput)) return INACTIVE
+        // Aggressive rise past target+30 with Δ>15 → act normally (product 2026-07-17).
+        if (
+            PostHypoAggressiveRiseExit.shouldExit(
+                bgMgdl = input.aggressionInput.bg,
+                targetBgMgdl = input.aggressionInput.targetBg,
+                deltaMgdl5m = input.aggressionInput.deltaMgdl5m,
+            )
+        ) {
+            return Decision(
+                active = false,
+                forceMealInterpretationSuppressed = false,
+                suppressMealDelivery = false,
+                maxSmbU = Double.POSITIVE_INFINITY,
+                reasonTag = PostHypoAggressiveRiseExit.REASON_CODE.lowercase(Locale.US),
+            )
+        }
         return Decision(
             active = true,
             forceMealInterpretationSuppressed = true,

@@ -234,7 +234,7 @@ Harmonia est le moteur qui **harmonise** les signaux disperses (physio, repas la
 |----------|----------------|------------|
 | Arbre deploye au tick | `PhysiologicalTreeBuilder` lit `mealProb`, causal, phase, event memory → branches `meal`, `hypoRisk`, `digestion` | **Oui** |
 | Repas latent dans l'arbre | `meal` branch : `max(mealProb, causal.mealConfidence)` ; feuille « declared vs undeclared » | **Partiel** — detection contextuelle |
-| Simulation repas non declare | `MEAL_SUPPORT` si `meal.confidence >= 0.60` **et** `delta >= 1.0` (`HarmoniaSimulation.kt`) | **Partiel** — COB non utilise dans `chooseAction` |
+| Simulation repas non declare | `MEAL_SUPPORT` si meal undeclared/declared rise **ou** H4 bridge (`DIGESTION_ACTIVE` + `meal_rise_confirmed` + BG>target+30) | **Partiel** — H4 bridge in `chooseAction` (2026-07-17); leaf→MealCorrection + production veto still open |
 | Frein post-hypo / hypo | Blockers `hypo_or_recovery`, `low_or_falling_bg` ; production bloquee si `postHypoBlock` | **Partiel** — simulation + blocage, pas action yoyo dediee |
 | Seconde verification | RBT canal `HARMONIA_PRODUCTION_BASAL_FIRST` ; production TBR si T3C/SMB inactifs | **Partiel** — basal-first residuel, pas confirmateur global |
 | Stabilisation prefs 2 h | **TPO** (`AIMI_TRANSIENT_PREFERENCE_OVERLAY.md`) — orthogonal, partage `correctionFragilityScore` | **Oui** via TPO, pas via Harmonia seule |
@@ -255,12 +255,13 @@ Les chemins **paralleles** a Harmonia restent souvent dominants sur le tick reel
 
 ### Lots recommandes (plan mis a jour)
 
-| Lot | Objectif | Changement attendu |
-|-----|----------|-------------------|
-| **H4 — Meal-rise bridge** | Fermer la boucle repas non declare | `chooseAction` consomme COB=0 + `meal_rise_confirmed` + phase ; veto production si `mealDeliveryPriority` incoherent ; feuilles → `MealCorrectionContextResolver` |
-| **H5 — Stabilisation yoyo** | Action `STABILIZE` / renforcer `PROTECTIVE_REDUCTION` | Brancher `correctionFragilityScore`, `postHyperExhaustion`, episodes RBT CHAOTIC ; rampe max hausse basale si fragilite |
-| **H6 — Harmoniseur** | Vraie 2e verification | Harmonia `CONFIRM` / `SOFTEN` sur `eventualBG` et TBR propose avant `setTempBasal` ; Auditor lit feuilles arbre (golden prompts) |
-| **H7 — Capteur tick** | Blockers sensor reels | Passer `sensorAgeMin` / `sensorNoise` reels dans l'environnement tick (aujourd'hui souvent 0 en loop) |
-| **H0 — Bug P0** | Robustesse post-hypo | `PostHypoProjectionCap` : si `ceiling < bg+5`, skip cap (eviter crash tick) |
+| Lot | Objectif | Changement attendu | Statut |
+|-----|----------|-------------------|--------|
+| **H4 — Meal-rise bridge** | Fermer la boucle repas non declare | `chooseAction` : `MEAL_SUPPORT` bat `PROTECTIVE_REDUCTION` si `DIGESTION_ACTIVE` + `meal_rise_confirmed` + BG>target+30 (`h4_meal_rise_bridge`) ; env `target_bg_mgdl` ; reste : veto production si `mealDeliveryPriority` incoherent ; feuilles → `MealCorrectionContextResolver` | **Partiel 2026-07-17** (bridge chooseAction) |
+| **H4b — Post-hypo rise exit (RBT)** | Liberer autorite sur montee agressive post-hypo | `PostHypoAggressiveRiseExit` + `PREDICTIVE_HYPO_AGGRESSIVE_RISE` → RBT SOFT (pas NONE) | **Done 2026-07-17** (device validation ouverte) |
+| **H5 — Stabilisation yoyo** | Action `STABILIZE` / renforcer `PROTECTIVE_REDUCTION` | Brancher `correctionFragilityScore`, `postHyperExhaustion`, episodes RBT CHAOTIC ; rampe max hausse basale si fragilite | Ouvert |
+| **H6 — Harmoniseur** | Vraie 2e verification | Harmonia `CONFIRM` / `SOFTEN` sur `eventualBG` et TBR propose avant `setTempBasal` ; Auditor lit feuilles arbre (golden prompts) | Ouvert |
+| **H7 — Capteur tick** | Blockers sensor reels | Passer `sensorAgeMin` / `sensorNoise` reels dans l'environnement tick (aujourd'hui souvent 0 en loop) | Partiel (telemetry wired; validate field) |
+| **H0 — Bug P0** | Robustesse post-hypo | `PostHypoProjectionCap` : si `ceiling < bg+5`, skip cap (eviter crash tick) | Ouvert |
 
 Documents a maintenir synchronises : `aimi-harmonia-simulation-branch.md` (matrice bypass), `AIMI_TRANSIENT_PREFERENCE_OVERLAY.md` (§12 TPO ↔ Harmonia).

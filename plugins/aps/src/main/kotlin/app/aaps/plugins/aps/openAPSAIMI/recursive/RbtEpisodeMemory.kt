@@ -5,11 +5,20 @@ import kotlin.math.max
 /**
  * Macro-scale episodic memory for post-hypo rebound and chaotic intervals (τ180 semantics).
  * Complements per-scale [RecursiveBeliefMemory] belief-echo rings with clinically named episodes.
+ *
+ * Post-hypo TTL is depth-scaled (aligned with [app.aaps.plugins.aps.openAPSAIMI.DetermineBasalAIMI2]
+ * post-hypo windows): LIGHT nadir (≥60) → 30 min from episode start; DEEP nadir (&lt;60) → 45 min.
+ * Aggressive rise exit ([app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoAggressiveRiseExit]) clears
+ * the post-hypo episode immediately.
  */
 object RbtEpisodeMemory {
 
     private const val POST_HYPO_START_THRESHOLD = 0.60
-    private const val POST_HYPO_TTL_MS = 90L * 60L * 1000L
+    /** Light hypo (nadir ≥ 60 mg/dL): 30 min from episode start. */
+    private const val POST_HYPO_TTL_LIGHT_MS = 30L * 60L * 1000L
+    /** Deep hypo (nadir &lt; 60 mg/dL): 45 min from episode start. */
+    private const val POST_HYPO_TTL_DEEP_MS = 45L * 60L * 1000L
+    private const val DEEP_HYPO_NADIR_MGDL = 60.0
     private const val CHAOS_START_THRESHOLD = 0.72
     private const val CHAOS_TTL_MS = 45L * 60L * 1000L
     private const val MEAL_EXTEND_POST_HYPO_MEAL_PROB = 0.55
@@ -25,16 +34,21 @@ object RbtEpisodeMemory {
         val lastSeenAtMs: Long,
         val peakScore: Double,
         val tickCount: Int,
+        /** True when the nadir that opened the episode was &lt; 60 mg/dL. */
+        val deepHypo: Boolean = false,
     ) {
         fun ageMinutes(nowMs: Long): Double =
             ((nowMs - startedAtMs).coerceAtLeast(0L) / 60_000.0)
 
         fun isExpired(nowMs: Long): Boolean {
-            val ttl = when (kind) {
-                EpisodeKind.POST_HYPO_REBOUND -> POST_HYPO_TTL_MS
-                EpisodeKind.CHAOTIC -> CHAOS_TTL_MS
+            return when (kind) {
+                // Wall-clock from start (not lastSeen) so a sticky postHypoProb cannot refresh forever.
+                EpisodeKind.POST_HYPO_REBOUND -> {
+                    val ttl = if (deepHypo) POST_HYPO_TTL_DEEP_MS else POST_HYPO_TTL_LIGHT_MS
+                    nowMs - startedAtMs > ttl
+                }
+                EpisodeKind.CHAOTIC -> nowMs - lastSeenAtMs > CHAOS_TTL_MS
             }
-            return nowMs - lastSeenAtMs > ttl
         }
     }
 
@@ -46,10 +60,18 @@ object RbtEpisodeMemory {
         postHypoReboundProb: Double,
         chaosScore: Double,
         mealProb: Double,
+        recentNadirBgMgdl: Double? = null,
+        aggressiveRiseExit: Boolean = false,
     ): EpisodeState? {
+        if (aggressiveRiseExit && active?.kind == EpisodeKind.POST_HYPO_REBOUND) {
+            active = null
+            return null
+        }
+
         val current = active?.takeUnless { it.isExpired(nowMs) }
         val postHypoSignal = postHypoReboundProb.coerceIn(0.0, 1.0)
         val chaosSignal = chaosScore.coerceIn(0.0, 1.0)
+        val deepHypoSignal = recentNadirBgMgdl != null && recentNadirBgMgdl < DEEP_HYPO_NADIR_MGDL
 
         val candidateKind = when {
             chaosSignal >= CHAOS_START_THRESHOLD -> EpisodeKind.CHAOTIC
@@ -59,13 +81,14 @@ object RbtEpisodeMemory {
 
         active = when {
             candidateKind == null && current == null -> null
-            candidateKind == null -> current?.copy(lastSeenAtMs = nowMs)
+            candidateKind == null -> current
             current == null -> EpisodeState(
                 kind = candidateKind,
                 startedAtMs = nowMs,
                 lastSeenAtMs = nowMs,
                 peakScore = max(postHypoSignal, chaosSignal),
                 tickCount = 1,
+                deepHypo = if (candidateKind == EpisodeKind.POST_HYPO_REBOUND) deepHypoSignal else false,
             )
             current.kind == candidateKind || candidateKind == EpisodeKind.CHAOTIC -> {
                 current.copy(
@@ -73,15 +96,19 @@ object RbtEpisodeMemory {
                     lastSeenAtMs = nowMs,
                     peakScore = max(current.peakScore, max(postHypoSignal, chaosSignal)),
                     tickCount = current.tickCount + 1,
+                    deepHypo = current.deepHypo ||
+                        (candidateKind == EpisodeKind.POST_HYPO_REBOUND && deepHypoSignal),
                 )
             }
             current.kind == EpisodeKind.POST_HYPO_REBOUND &&
                 candidateKind == EpisodeKind.POST_HYPO_REBOUND &&
                 mealProb >= MEAL_EXTEND_POST_HYPO_MEAL_PROB -> {
+                // Meal context may refresh lastSeen, but expiry still uses startedAt + depth TTL.
                 current.copy(
                     lastSeenAtMs = nowMs,
                     peakScore = max(current.peakScore, postHypoSignal),
                     tickCount = current.tickCount + 1,
+                    deepHypo = current.deepHypo || deepHypoSignal,
                 )
             }
             else -> EpisodeState(
@@ -90,6 +117,7 @@ object RbtEpisodeMemory {
                 lastSeenAtMs = nowMs,
                 peakScore = max(postHypoSignal, chaosSignal),
                 tickCount = 1,
+                deepHypo = if (candidateKind == EpisodeKind.POST_HYPO_REBOUND) deepHypoSignal else false,
             )
         }
         active = active?.takeUnless { it.isExpired(nowMs) }

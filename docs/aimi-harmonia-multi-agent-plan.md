@@ -1,6 +1,6 @@
 # AIMI Harmonia / Physiological Tree - Multi-Agent Plan
 
-Status: Lots 1–3 implemented (tree + simulation + production RBT) ; Lots H4–H7 planned (meal-rise bridge, yoyo, harmonizer) — see `aimi-harmonia-implementation.md` §14
+Status: Lots 1–3 implemented (tree + simulation + production RBT) ; H4 meal-rise bridge **partial** + H4b post-hypo aggressive-rise RBT exit **done** (2026-07-17) ; H5–H7 still open — see `aimi-harmonia-implementation.md` §14 / `AIMI_ROADMAP.md` P3
 Scope: harmonize physiological context, catch undeclared meal rise via tree, stabilize BG (with TPO/RBT); production basal-first is conditional, not universal second pass
 
 ## Agent 1 - Repository Cartographer
