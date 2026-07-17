@@ -74,7 +74,8 @@ memory: `basal-ml-training-bugs`, `pkpd-floor-39-contamination`, `hormonitor-vie
      authority gap before meal-bypass confirmation.
   2. **H4 meal-rise bridge (partial):** `HarmoniaDecisionEngine.chooseAction` prefers `MEAL_SUPPORT` over
      `PROTECTIVE_REDUCTION` when trunk=`DIGESTION_ACTIVE` + `meal_rise_confirmed` + BG > target+30
-     (rationale `h4_meal_rise_bridge`). Env now carries `target_bg_mgdl`.
+     + **Δ≥0.8** (rationale `h4_meal_rise_bridge`). Falling/flat post-peak stays protective (field:
+     ~48% of ungarded flips were Δ≤0). Env now carries `target_bg_mgdl`.
 - **TODO:** (1) **Measure** from Hormonitor: share of ticks with `harmonia_production.selected_for_production=true`
   vs cascade; distribution of `runtime_blocker` reasons (why Harmonia is blocked). The viewer can surface this.
   (2) ~~Rename the stale "Lot 1 / no write path" labels~~ **DONE 2026-07-10** (`PhysiologicalTree.kt` roots corrected +

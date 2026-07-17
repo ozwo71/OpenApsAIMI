@@ -49,7 +49,7 @@ Harmonia is **not** one block. Separate what *observes*, what *decides*, and wha
 2. **`chooseAction`** → one of `HarmoniaAction` (priority order matters):
    - `STABILIZE` — fragility ≥ 0.55 or exhaustion ≥ 0.65 or chaos ≥ 0.50
    - `MEAL_SUPPORT` — **H4 bridge** first: trunk `DIGESTION_ACTIVE` + `meal_rise_confirmed` +
-     BG > target+30 (beats activity protective); else declared/undeclared meal-rise
+     BG > target+30 + Δ≥0.8 (beats activity protective; no flip on falling BG); else declared/undeclared meal-rise
    - `PROTECTIVE_REDUCTION` — activity ≥ 0.55 or postActivity ≥ 0.45
    - `BASAL_FIRST` — hormonalResistance / stress / insulinEffectiveness confidence ≥ 0.55
    - `OBSERVE` — nothing salient (→ no production action)

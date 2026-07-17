@@ -232,6 +232,37 @@ class HarmoniaDecisionEngineTest {
         assertThat(decision?.rationale).doesNotContain("h4_meal_rise_bridge")
     }
 
+    @Test
+    fun evaluate_h4MealRiseBridgeDoesNotFireOnFallingDelta() {
+        val tree = digestionTreeWithEffort(effortActiveConfidence = 0.70)
+        // Field replay (KFC peak descent): high BG + meal_rise but negative delta must stay protective.
+        val falling = HarmoniaDecisionEngine.evaluate(
+            tree = tree,
+            environment = safeEnvironment().copy(
+                cobG = 0.0,
+                mealRiseConfirmed = true,
+                targetBgMgdl = 100.0,
+                currentBgMgdl = 280.0,
+                deltaMgdl5m = -6.5,
+            ),
+        )
+        assertThat(falling?.action).isEqualTo(HarmoniaAction.PROTECTIVE_REDUCTION)
+        assertThat(falling?.rationale).doesNotContain("h4_meal_rise_bridge")
+
+        val flat = HarmoniaDecisionEngine.evaluate(
+            tree = tree,
+            environment = safeEnvironment().copy(
+                cobG = 0.0,
+                mealRiseConfirmed = true,
+                targetBgMgdl = 100.0,
+                currentBgMgdl = 280.0,
+                deltaMgdl5m = 0.3, // below H4_MIN_RISING_DELTA_MGDL (0.8)
+            ),
+        )
+        assertThat(flat?.action).isEqualTo(HarmoniaAction.PROTECTIVE_REDUCTION)
+        assertThat(flat?.rationale).doesNotContain("h4_meal_rise_bridge")
+    }
+
     private fun digestionTreeWithEffort(effortActiveConfidence: Double): PhysiologicalTreeSnapshot? {
         val state = stableState().copy(
             phase = PhysiologicalPhase.MEAL_UNDECLARED,

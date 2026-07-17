@@ -257,7 +257,7 @@ Les chemins **paralleles** a Harmonia restent souvent dominants sur le tick reel
 
 | Lot | Objectif | Changement attendu | Statut |
 |-----|----------|-------------------|--------|
-| **H4 — Meal-rise bridge** | Fermer la boucle repas non declare | `chooseAction` : `MEAL_SUPPORT` bat `PROTECTIVE_REDUCTION` si `DIGESTION_ACTIVE` + `meal_rise_confirmed` + BG>target+30 (`h4_meal_rise_bridge`) ; env `target_bg_mgdl` ; reste : veto production si `mealDeliveryPriority` incoherent ; feuilles → `MealCorrectionContextResolver` | **Partiel 2026-07-17** (bridge chooseAction) |
+| **H4 — Meal-rise bridge** | Fermer la boucle repas non declare | `chooseAction` : `MEAL_SUPPORT` bat `PROTECTIVE_REDUCTION` si `DIGESTION_ACTIVE` + `meal_rise_confirmed` + BG>target+30 + **Δ≥0.8** (`h4_meal_rise_bridge`) ; env `target_bg_mgdl` ; reste : veto production si `mealDeliveryPriority` incoherent ; feuilles → `MealCorrectionContextResolver` | **Partiel 2026-07-17** (bridge + Δ guard) |
 | **H4b — Post-hypo rise exit (RBT)** | Liberer autorite sur montee agressive post-hypo | `PostHypoAggressiveRiseExit` + `PREDICTIVE_HYPO_AGGRESSIVE_RISE` → RBT SOFT (pas NONE) | **Done 2026-07-17** (device validation ouverte) |
 | **H5 — Stabilisation yoyo** | Action `STABILIZE` / renforcer `PROTECTIVE_REDUCTION` | Brancher `correctionFragilityScore`, `postHyperExhaustion`, episodes RBT CHAOTIC ; rampe max hausse basale si fragilite | Ouvert |
 | **H6 — Harmoniseur** | Vraie 2e verification | Harmonia `CONFIRM` / `SOFTEN` sur `eventualBG` et TBR propose avant `setTempBasal` ; Auditor lit feuilles arbre (golden prompts) | Ouvert |

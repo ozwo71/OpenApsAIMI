@@ -156,6 +156,12 @@ internal object HarmoniaDecisionEngine {
      */
     private const val SENSOR_WARMUP_MAX_MIN = 120
 
+    /**
+     * H4 rising-delta floor — aligned with [declaredMealRise] (`delta >= 0.8`). Without this guard,
+     * field replay showed ~48% of H4 flips on falling BG (post-peak), which must stay protective.
+     */
+    internal const val H4_MIN_RISING_DELTA_MGDL = 0.8
+
     fun evaluate(
         tree: PhysiologicalTreeSnapshot?,
         environment: HarmoniaDecisionEnvironment?,
@@ -312,8 +318,9 @@ internal object HarmoniaDecisionEngine {
 
     /**
      * H4: when the trunk is [GlobalPhysiologicalState.DIGESTION_ACTIVE], meal-rise is confirmed,
-     * and BG is above target + [PostHypoAggressiveRiseExit.TARGET_MARGIN_MGDL], prefer
-     * [HarmoniaAction.MEAL_SUPPORT] over [HarmoniaAction.PROTECTIVE_REDUCTION].
+     * BG is above target + [PostHypoAggressiveRiseExit.TARGET_MARGIN_MGDL], and delta is still
+     * rising ([H4_MIN_RISING_DELTA_MGDL]), prefer [HarmoniaAction.MEAL_SUPPORT] over
+     * [HarmoniaAction.PROTECTIVE_REDUCTION]. Falling/flat post-peak stays protective.
      */
     internal fun prefersMealSupportOverProtective(
         tree: PhysiologicalTreeSnapshot,
@@ -322,7 +329,8 @@ internal object HarmoniaDecisionEngine {
         if (tree.trunk.globalState != GlobalPhysiologicalState.DIGESTION_ACTIVE) return false
         if (!env.mealRiseConfirmed) return false
         val target = env.targetBgMgdl ?: return false
-        if (!target.isFinite() || !env.currentBgMgdl.isFinite()) return false
+        if (!target.isFinite() || !env.currentBgMgdl.isFinite() || !env.deltaMgdl5m.isFinite()) return false
+        if (env.deltaMgdl5m < H4_MIN_RISING_DELTA_MGDL) return false
         return env.currentBgMgdl > target + PostHypoAggressiveRiseExit.TARGET_MARGIN_MGDL
     }
 
