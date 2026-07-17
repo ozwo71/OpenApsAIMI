@@ -83,6 +83,9 @@ memory: `basal-ml-training-bugs`, `pkpd-floor-39-contamination`, `hormonitor-vie
   win MORE (bounded, evidence-gated like the SMB reconciliation) rather than deferring to the cascade so often.
   (4) Finish H4 remainder (veto vs `mealDeliveryPriority`, leaf→`MealCorrectionContextResolver`) — see
   `aimi-harmonia-implementation.md` §14. (5) Device-validate exit + H4 on a meal-after-mild-hypo day.
+  (6) ~~`rbt_no_harmonia_channel` on SOFT meal rise~~ **DONE 2026-07-17**: SOFT + `MEAL_SUPPORT` +
+  `DIGESTION_ACTIVE` keeps `HARMONIA_PRODUCTION_BASAL_FIRST`; production bypasses `smb_authority_active`;
+  Harmonia `POST_HYPO` block cleared on aggressive-rise exit.
 - **Validation:** the Hormonitor viewer per-day aggregation (already built) — add a "Harmonia authority" line;
   log markers `POST_HYPO_AGGRESSIVE_RISE_EXIT`, `PREDICTIVE_HYPO_AGGRESSIVE_RISE`, `h4_meal_rise_bridge`.
 

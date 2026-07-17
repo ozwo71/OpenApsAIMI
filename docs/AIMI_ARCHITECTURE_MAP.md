@@ -89,14 +89,19 @@ an SMB release authority:
 ```
 T3C eligible                              → T3C_BASAL_FIRST            (T3C wins, absolute priority)
 else Harmonia eligible & authority==NONE  → HARMONIA_PRODUCTION_BASAL_FIRST
+else Harmonia eligible & SOFT + MEAL_SUPPORT + DIGESTION_ACTIVE
+                                          → HARMONIA_PRODUCTION_BASAL_FIRST  (soft-meal exception)
 else                                      → NONE
 ```
 
 - **`authority == NONE`** (no SMB this tick) → Harmonia can own the **basal** (basal-first).
-- **`authority != NONE`** (SMB in flight) → basal-first blocked (`smb_authority_active`), but Harmonia
-  can **modulate the SMB** (`resolveHarmoniaSmb`).
+- **`authority == SOFT` + Digestion `MEAL_SUPPORT`** → Harmonia may still own **basal** (closes
+  `rbt_no_harmonia_channel` when SMB caps crush delivery during meal rise). Production also bypasses
+  `smb_authority_active` in that case.
+- **Other `authority != NONE`** → basal-first blocked; Harmonia can **modulate the SMB** (`resolveHarmoniaSmb`).
 
-So Harmonia is *either* a basal owner *or* an SMB modulator on a given tick, never both.
+So Harmonia is *either* a basal owner *or* an SMB modulator on a given tick, never both
+(soft-meal basal exception prefers basal over SMB modulation).
 
 ---
 

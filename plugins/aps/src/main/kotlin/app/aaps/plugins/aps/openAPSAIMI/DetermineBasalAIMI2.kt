@@ -3479,10 +3479,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 hypothesisState?.suppressMealInterpretation == true ||
                     lastPhysiologicalPhaseOutput?.policy?.suppressMealLikeScenario == true
                 )
-        val harmoniaPostHypoBlock = harmoniaActive && (
-            postHypoOrdinal > 0 ||
-                lastPostHypoDeliveryAuthority.active
-            )
+        // Aggressive post-hypo rise: do not keep Harmonia in POST_HYPO block once we are acting normally
+        // (same contract as RBT episode/mode bypass). Otherwise eligible MEAL_SUPPORT never reaches
+        // basal-first and ticks log rbt_no_harmonia_channel / post_hypo during the climb.
+        val aggressiveRiseExit = PostHypoAggressiveRiseExit.shouldExit(
+            bgMgdl = bg,
+            targetBgMgdl = targetBg.toDouble(),
+            deltaMgdl5m = delta.toDouble(),
+        )
+        val harmoniaPostHypoBlock = harmoniaActive &&
+            !aggressiveRiseExit &&
+            (
+                postHypoOrdinal > 0 ||
+                    lastPostHypoDeliveryAuthority.active
+                )
         val harmoniaExerciseBlock = harmoniaActive && exerciseInsulinLockoutActive
         val harmoniaHardSafetyBlock = harmoniaActive && (
             bg < (profile.lgsThreshold?.toDouble() ?: 70.0) ||
@@ -7220,8 +7230,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (!simulation.targetBasalUph.isFinite()) {
             return blockHarmoniaProduction(simulation, "invalid_basal_demand")
         }
-        if (lastRecursiveAuthorityGateDecision?.effectiveAuthority != ReleaseAuthority.NONE) {
-            return blockHarmoniaProduction(simulation, "smb_authority_active")
+        val effectiveAuthority = lastRecursiveAuthorityGateDecision?.effectiveAuthority
+        if (effectiveAuthority != null && effectiveAuthority != ReleaseAuthority.NONE) {
+            // Mirror RBT soft-meal basal exception: DIGESTION MEAL_SUPPORT may own basal under SOFT
+            // so production is not starved by smb_authority_active while SMB caps crush delivery.
+            val softMealBasalException =
+                effectiveAuthority == ReleaseAuthority.SOFT &&
+                    sourceAction == HarmoniaAction.MEAL_SUPPORT &&
+                    simulation.branch == "DIGESTION_ACTIVE"
+            if (!softMealBasalException) {
+                return blockHarmoniaProduction(simulation, "smb_authority_active")
+            }
         }
         if ((b.rT.units ?: 0.0) > 0.0 || (b.rT.insulinReq ?: 0.0) > 0.0) {
             return blockHarmoniaProduction(simulation, "smb_already_requested")

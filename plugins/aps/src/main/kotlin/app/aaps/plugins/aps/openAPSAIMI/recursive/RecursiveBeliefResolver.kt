@@ -661,10 +661,32 @@ object RecursiveBeliefResolver {
     ): BasalFirstChannel =
         when {
             t3cBasalFirst?.eligible == true -> BasalFirstChannel.T3C_BASAL_FIRST
+            // Classic mutex: Harmonia owns basal only when RBT is not releasing SMB.
             harmoniaBasalFirst?.eligible == true && releaseAuthority == ReleaseAuthority.NONE ->
+                BasalFirstChannel.HARMONIA_PRODUCTION_BASAL_FIRST
+            // Soft meal-rise exception (H4 / DIGESTION): SOFT authority often exists for SMB, but
+            // PATTERN/LOAD caps crush delivery while Harmonia was eligible — historically logged as
+            // rbt_no_harmonia_channel. Allow basal-first MEAL_SUPPORT so TBR can still act.
+            harmoniaBasalFirst?.eligible == true &&
+                allowsHarmoniaBasalDuringSoftMealSupport(harmoniaBasalFirst, releaseAuthority) ->
                 BasalFirstChannel.HARMONIA_PRODUCTION_BASAL_FIRST
             else -> BasalFirstChannel.NONE
         }
+
+    /**
+     * When RBT is SOFT and Harmonia chose [MEAL_SUPPORT] on a [DIGESTION_ACTIVE] trunk, keep the
+     * Harmonia basal-first channel instead of forcing NONE (which surfaces as `rbt_no_harmonia_channel`).
+     * HARD stays exclusive to SMB; non-digestion MEAL_SUPPORT keeps the classic SMB-modulator path.
+     */
+    internal fun allowsHarmoniaBasalDuringSoftMealSupport(
+        harmoniaBasalFirst: HarmoniaBasalFirstResolution?,
+        releaseAuthority: ReleaseAuthority,
+    ): Boolean {
+        if (releaseAuthority != ReleaseAuthority.SOFT) return false
+        if (harmoniaBasalFirst?.eligible != true) return false
+        if (harmoniaBasalFirst.sourceAction != "MEAL_SUPPORT") return false
+        return harmoniaBasalFirst.branch == "DIGESTION_ACTIVE"
+    }
 
     private fun resolveHarmoniaSmb(
         ctx: RecursiveBeliefTickContext,
