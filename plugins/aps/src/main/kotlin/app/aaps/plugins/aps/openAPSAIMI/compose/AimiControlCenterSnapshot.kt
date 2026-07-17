@@ -236,7 +236,12 @@ private fun buildStabilityFamily(
         expertPreferenceCount = AimiBehaviorFamilyRegistry.expertCount(AimiBehaviorFamilyId.Stability),
         status = projection.status,
         details = listOf(
-            detail(R.string.oaps_aimi_smb_tail_damping_title, preferences.get(DoubleKey.OApsAIMISmbTailDamping), null),
+            // Show the value the loop actually uses (legacy ≤0.55 → neutral), so the row matches the slider.
+            detail(
+                R.string.oaps_aimi_smb_tail_damping_title,
+                PkpdSmbTailDamping.effectiveStoredValue(preferences.get(DoubleKey.OApsAIMISmbTailDamping)),
+                null,
+            ),
             detail(R.string.oaps_aimi_smb_exercise_damping_title, preferences.get(DoubleKey.OApsAIMISmbExerciseDamping), null),
             detail(R.string.oaps_aimi_smb_late_fat_damping_title, preferences.get(DoubleKey.OApsAIMISmbLateFatDamping), null),
             boolDetail(R.string.oaps_aimi_adaptive_basal_title, adaptiveBasalEnabled),

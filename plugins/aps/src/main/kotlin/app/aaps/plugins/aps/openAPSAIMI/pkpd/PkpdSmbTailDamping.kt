@@ -1,5 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.pkpd
 
+import app.aaps.core.keys.DoubleKey
+import app.aaps.core.keys.interfaces.Preferences
+
 /**
  * Shared tail-damping scale for loop math, the simplified PK/PD settings UI, and the advisors.
  *
@@ -55,6 +58,20 @@ object PkpdSmbTailDamping {
         val span = DAMPING_LIGHT - DAMPING_STRONG
         if (span <= 0.0) return 0.5f
         return ((effective - DAMPING_STRONG) / span).toFloat().coerceIn(0f, 1f)
+    }
+
+    /**
+     * One-shot Control Center / settings hygiene: persist the runtime-effective floor when the
+     * stored preference is still in the legacy zone (≤ [LEGACY_NEUTRAL_CUTOFF]). Returns true if
+     * a write occurred so the UI can refresh.
+     */
+    fun migrateLegacyStoredPreference(preferences: Preferences): Boolean {
+        val stored = preferences.get(DoubleKey.OApsAIMISmbTailDamping)
+        if (stored > LEGACY_NEUTRAL_CUTOFF) return false
+        val effective = effectiveStoredValue(stored)
+        if (stored == effective) return false
+        preferences.put(DoubleKey.OApsAIMISmbTailDamping, effective)
+        return true
     }
 
     /**

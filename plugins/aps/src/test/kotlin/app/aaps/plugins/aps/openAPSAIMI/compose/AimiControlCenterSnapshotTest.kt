@@ -87,6 +87,52 @@ class AimiControlCenterSnapshotTest {
     }
 
     @Test
+    fun `stability family shows effective tail damping and very responsive at reactive ladder end`() {
+        every { preferences.get(DoubleKey.OApsAIMISmbTailDamping) } returns 0.92
+        every { preferences.get(DoubleKey.OApsAIMISmbExerciseDamping) } returns 0.85
+        every { preferences.get(DoubleKey.OApsAIMISmbLateFatDamping) } returns 0.90
+        every { preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled) } returns true
+        every { preferences.get(BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled) } returns true
+        every { preferences.get(DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction) } returns 0.10
+
+        val snapshot = buildAimiControlCenterSnapshot(preferences)
+        val stability = snapshot.families.first { it.id == AimiBehaviorFamilyId.Stability }
+        val draft = readAimiControlCenterDraft(preferences)
+
+        assertThat(stability.levelLabelResId)
+            .isEqualTo(R.string.aimi_control_center_stability_level_very_responsive)
+        assertThat(draft.stabilityLevel).isEqualTo(4)
+        assertThat(
+            stability.details.first { it.titleResId == R.string.oaps_aimi_smb_tail_damping_title }.valueText,
+        ).isEqualTo("0.92")
+    }
+
+    @Test
+    fun `stability family maps smoother ladder end left of reactive and remaps legacy detail`() {
+        every { preferences.get(DoubleKey.OApsAIMISmbTailDamping) } returns 0.70
+        every { preferences.get(DoubleKey.OApsAIMISmbExerciseDamping) } returns 0.30
+        every { preferences.get(DoubleKey.OApsAIMISmbLateFatDamping) } returns 0.40
+        every { preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled) } returns false
+        every { preferences.get(BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled) } returns false
+        every { preferences.get(DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction) } returns 0.02
+
+        val smooth = buildAimiControlCenterSnapshot(preferences)
+        val smoothFamily = smooth.families.first { it.id == AimiBehaviorFamilyId.Stability }
+        val smoothDraft = readAimiControlCenterDraft(preferences)
+
+        every { preferences.get(DoubleKey.OApsAIMISmbTailDamping) } returns 0.20
+        val legacy = buildAimiControlCenterSnapshot(preferences)
+        val legacyFamily = legacy.families.first { it.id == AimiBehaviorFamilyId.Stability }
+
+        assertThat(smoothDraft.stabilityLevel).isAtMost(1)
+        assertThat(smoothFamily.normalizedScore).isLessThan(0.36f)
+        // Detail must show effective neutral, not the raw legacy 0.20.
+        assertThat(
+            legacyFamily.details.first { it.titleResId == R.string.oaps_aimi_smb_tail_damping_title }.valueText,
+        ).isEqualTo("0.85")
+    }
+
+    @Test
     fun `physio family can expose read only harmonia runtime without preference projection`() {
         val harmoniaRuntime = AimiHarmoniaRuntimeSnapshot(
             status = AimiHarmoniaRuntimeStatus.NativeApplied,

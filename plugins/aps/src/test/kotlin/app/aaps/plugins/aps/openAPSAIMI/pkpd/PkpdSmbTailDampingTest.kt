@@ -1,6 +1,11 @@
 package app.aaps.plugins.aps.openAPSAIMI.pkpd
 
+import app.aaps.core.keys.DoubleKey
+import app.aaps.core.keys.interfaces.Preferences
 import com.google.common.truth.Truth.assertThat
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
 import org.junit.jupiter.api.Test
 
 class PkpdSmbTailDampingTest {
@@ -38,5 +43,23 @@ class PkpdSmbTailDampingTest {
         val legacyScore = PkpdSmbTailDamping.stabilityFamilyScore(0.20)
         assertThat(legacyScore).isGreaterThan(0.4f)
         assertThat(legacyScore).isLessThan(0.8f)
+    }
+
+    @Test
+    fun migrateLegacyStoredPreference_rewritesCutoffZoneToNeutral() {
+        val preferences = mockk<Preferences>(relaxed = true)
+        every { preferences.get(DoubleKey.OApsAIMISmbTailDamping) } returns 0.20
+
+        assertThat(PkpdSmbTailDamping.migrateLegacyStoredPreference(preferences)).isTrue()
+        verify { preferences.put(DoubleKey.OApsAIMISmbTailDamping, PkpdSmbTailDamping.DAMPING_NEUTRAL) }
+    }
+
+    @Test
+    fun migrateLegacyStoredPreference_skipsValuesAlreadyInPkpdBand() {
+        val preferences = mockk<Preferences>(relaxed = true)
+        every { preferences.get(DoubleKey.OApsAIMISmbTailDamping) } returns 0.81
+
+        assertThat(PkpdSmbTailDamping.migrateLegacyStoredPreference(preferences)).isFalse()
+        verify(exactly = 0) { preferences.put(DoubleKey.OApsAIMISmbTailDamping, any<Double>()) }
     }
 }

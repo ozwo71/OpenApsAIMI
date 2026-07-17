@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +46,7 @@ import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.core.ui.compose.SliderWithButtons
 import app.aaps.core.ui.compose.preference.ProvidePreferenceTheme
 import app.aaps.plugins.aps.R
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoActiveSessionUi
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoSessionStatus
@@ -61,6 +63,12 @@ fun AimiControlCenterScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var preferenceRevision by remember { mutableIntStateOf(0) }
+    // Persist remapped legacy tail floors (≤0.55 → 0.85) so CC detail/slider/stored pref stay aligned.
+    LaunchedEffect(Unit) {
+        if (PkpdSmbTailDamping.migrateLegacyStoredPreference(preferences)) {
+            preferenceRevision++
+        }
+    }
     val currentT3cRuntime = remember(preferenceRevision) { loadLatestT3cRuntimeSnapshot() }
     val currentHarmoniaRuntime = remember(preferenceRevision) { loadLatestHarmoniaRuntimeSnapshot() }
     val currentSnapshot = remember(preferenceRevision, currentT3cRuntime, currentHarmoniaRuntime) {
