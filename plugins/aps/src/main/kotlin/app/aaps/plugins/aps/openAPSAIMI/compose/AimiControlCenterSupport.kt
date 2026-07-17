@@ -8,6 +8,7 @@ import app.aaps.core.keys.interfaces.DoublePreferenceKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.R as CoreUiR
 import app.aaps.plugins.aps.R
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
 import kotlin.math.abs
 
 internal enum class AimiAutonomyMode(@StringRes val labelResId: Int) {
@@ -261,9 +262,11 @@ private fun buildStabilityPlan(
     currentLevel: Int,
     targetLevel: Int,
 ): AimiFamilyWritebackPlan {
+    // Tail floor ladder is shared: left/smoother = stronger damping (lower floor inside PKPD band).
+    val tailFloorLadder = PkpdSmbTailDamping.STABILITY_FAMILY_FLOOR_LADDER
     val changes = when (targetLevel.coerceIn(0, 4)) {
         0 -> listOfNotNull(
-            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, listOf(0.20, 0.35, 0.50, 0.65, 0.80), currentLevel, targetLevel, R.string.oaps_aimi_smb_tail_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, tailFloorLadder, currentLevel, targetLevel, R.string.oaps_aimi_smb_tail_damping_title, null),
             ladderChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, listOf(0.30, 0.45, 0.60, 0.72, 0.85), currentLevel, targetLevel, R.string.oaps_aimi_smb_exercise_damping_title, null),
             ladderChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, listOf(0.40, 0.55, 0.70, 0.80, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_smb_late_fat_damping_title, null),
             booleanChange(preferences, BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, false, R.string.oaps_aimi_adaptive_basal_title),
@@ -271,7 +274,7 @@ private fun buildStabilityPlan(
             ladderChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, listOf(0.02, 0.04, 0.06, 0.08, 0.10), currentLevel, targetLevel, unit = null),
         )
         1 -> listOfNotNull(
-            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, listOf(0.20, 0.35, 0.50, 0.65, 0.80), currentLevel, targetLevel, R.string.oaps_aimi_smb_tail_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, tailFloorLadder, currentLevel, targetLevel, R.string.oaps_aimi_smb_tail_damping_title, null),
             ladderChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, listOf(0.30, 0.45, 0.60, 0.72, 0.85), currentLevel, targetLevel, R.string.oaps_aimi_smb_exercise_damping_title, null),
             ladderChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, listOf(0.40, 0.55, 0.70, 0.80, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_smb_late_fat_damping_title, null),
             booleanChange(preferences, BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, false, R.string.oaps_aimi_adaptive_basal_title),
@@ -279,7 +282,7 @@ private fun buildStabilityPlan(
             ladderChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, listOf(0.02, 0.04, 0.06, 0.08, 0.10), currentLevel, targetLevel, unit = null),
         )
         2 -> listOfNotNull(
-            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, listOf(0.20, 0.35, 0.50, 0.65, 0.80), currentLevel, targetLevel, R.string.oaps_aimi_smb_tail_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, tailFloorLadder, currentLevel, targetLevel, R.string.oaps_aimi_smb_tail_damping_title, null),
             ladderChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, listOf(0.30, 0.45, 0.60, 0.72, 0.85), currentLevel, targetLevel, R.string.oaps_aimi_smb_exercise_damping_title, null),
             ladderChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, listOf(0.40, 0.55, 0.70, 0.80, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_smb_late_fat_damping_title, null),
             booleanChange(preferences, BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, false, R.string.oaps_aimi_adaptive_basal_title),
@@ -287,7 +290,7 @@ private fun buildStabilityPlan(
             ladderChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, listOf(0.02, 0.04, 0.06, 0.08, 0.10), currentLevel, targetLevel, unit = null),
         )
         3 -> listOfNotNull(
-            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, listOf(0.20, 0.35, 0.50, 0.65, 0.80), currentLevel, targetLevel, R.string.oaps_aimi_smb_tail_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, tailFloorLadder, currentLevel, targetLevel, R.string.oaps_aimi_smb_tail_damping_title, null),
             ladderChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, listOf(0.30, 0.45, 0.60, 0.72, 0.85), currentLevel, targetLevel, R.string.oaps_aimi_smb_exercise_damping_title, null),
             ladderChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, listOf(0.40, 0.55, 0.70, 0.80, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_smb_late_fat_damping_title, null),
             booleanChange(preferences, BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, true, R.string.oaps_aimi_adaptive_basal_title),
@@ -295,7 +298,7 @@ private fun buildStabilityPlan(
             ladderChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, listOf(0.02, 0.04, 0.06, 0.08, 0.10), currentLevel, targetLevel, unit = null),
         )
         else -> listOfNotNull(
-            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, listOf(0.20, 0.35, 0.50, 0.65, 0.80), currentLevel, targetLevel, R.string.oaps_aimi_smb_tail_damping_title, null),
+            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, tailFloorLadder, currentLevel, targetLevel, R.string.oaps_aimi_smb_tail_damping_title, null),
             ladderChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, listOf(0.30, 0.45, 0.60, 0.72, 0.85), currentLevel, targetLevel, R.string.oaps_aimi_smb_exercise_damping_title, null),
             ladderChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, listOf(0.40, 0.55, 0.70, 0.80, 0.90), currentLevel, targetLevel, R.string.oaps_aimi_smb_late_fat_damping_title, null),
             booleanChange(preferences, BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, true, R.string.oaps_aimi_adaptive_basal_title),

@@ -209,4 +209,50 @@ class AimiControlCenterSupportTest {
 
         verify { preferences.put(DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, 0.50) }
     }
+
+    @Test
+    fun `stability smoother writeback uses pkpd band floor not legacy remapped values`() {
+        // Nearest ladder stop to 0.81 is index 2; moving left (smoother) must strengthen damping
+        // (lower floor) inside [0.70, 0.92] — never write ≤0.55 which effectiveStoredValue neuters.
+        every { preferences.get(DoubleKey.OApsAIMISmbTailDamping) } returns 0.81
+
+        val currentDraft = AimiControlCenterDraft(
+            protectionLevel = 2,
+            mealCaptureLevel = 2,
+            stabilityLevel = 2,
+            physioLevel = 1,
+            autonomyMode = AimiAutonomyMode.Observation,
+        )
+        val pending = buildAimiControlCenterPendingChanges(
+            preferences = preferences,
+            currentDraft = currentDraft,
+            targetDraft = currentDraft.copy(stabilityLevel = 0),
+        )
+
+        applyAimiControlCenterPendingChanges(preferences, pending)
+
+        verify { preferences.put(DoubleKey.OApsAIMISmbTailDamping, 0.70) }
+    }
+
+    @Test
+    fun `stability more reactive writeback raises tail floor within pkpd light band`() {
+        every { preferences.get(DoubleKey.OApsAIMISmbTailDamping) } returns 0.81
+
+        val currentDraft = AimiControlCenterDraft(
+            protectionLevel = 2,
+            mealCaptureLevel = 2,
+            stabilityLevel = 2,
+            physioLevel = 1,
+            autonomyMode = AimiAutonomyMode.Observation,
+        )
+        val pending = buildAimiControlCenterPendingChanges(
+            preferences = preferences,
+            currentDraft = currentDraft,
+            targetDraft = currentDraft.copy(stabilityLevel = 4),
+        )
+
+        applyAimiControlCenterPendingChanges(preferences, pending)
+
+        verify { preferences.put(DoubleKey.OApsAIMISmbTailDamping, 0.92) }
+    }
 }

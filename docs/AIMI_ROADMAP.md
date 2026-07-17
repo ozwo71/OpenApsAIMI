@@ -151,6 +151,7 @@ memory: `basal-ml-training-bugs`, `pkpd-floor-39-contamination`, `hormonitor-vie
 | Fix stale "Lot 1" tree labels | **DONE** (2026-07-10) |
 | Post-hypo aggressive rise exit + PREDICTIVE_HYPO SOFT | done, **needs device validation** |
 | H4 meal-rise bridge (DIGESTION → MEAL_SUPPORT vs PROTECTIVE) | **partial**, needs device validation |
+| Stability family ↔ SMB tail damping polarity (legacy ≤0.55 remapped) | **fixed 2026-07-18** (ladder 0.70–0.92) |
 | Measure Harmonia authority share | **TODO** |
 | Per-person exercise model | **TODO** (superseded framing: extend `EffortActivityBelief`, not a parallel model) |
 | Wire computed-but-unused signals (e.g. Ra→predict) | **TODO** |

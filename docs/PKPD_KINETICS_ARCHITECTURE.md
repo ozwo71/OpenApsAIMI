@@ -296,6 +296,10 @@ Colonnes : `diaH`, `peakMin`, `fusedIsf`, `profileIsf`, `tailFrac`, `smbProposed
 3. **Gate causal** — évite d'apprendre en post-hypo ou absorption incertaine.
 4. **Fusion ISF** — impact dose mesurable dans les JSONL (`PkPd_Fusion` 0,2–3,1×).
 5. **SMB tail damping** — 26 % des ticks modifient la SMB proposée.
+   **Semantics (2026-07-18):** stored `aimi_smb_tail_damping` is a multiplicative **floor** —
+   lower = stronger damping. Control Center Stability writes the PKPD band `0.70…0.92`
+   (Smoother→More reactive). Values ≤0.55 are legacy and remapped to neutral `0.85` at runtime
+   (`PkpdSmbTailDamping.effectiveStoredValue`); do not write outside the band from family UI.
 6. **`PkpdPredictionKinetics`** — chemin explicite pour courbes sur DIA/peak appris (fail-safe peak &lt; DIA/2).
 
 ### Insuffisant (propagation + conditions terrain)
