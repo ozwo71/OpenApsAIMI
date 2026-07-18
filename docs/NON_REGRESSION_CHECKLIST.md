@@ -26,6 +26,15 @@ When this fork includes (or will include) the CAPTCG Eversense BLE plugin series
 
 - [ ] **Eversense preservation reviewed** — follow [docs/MERGE_CONSTRAINT_EVERSENSE.md](MERGE_CONSTRAINT_EVERSENSE.md) (patch order, high-risk files, post-merge checks).
 
+### Fork merge constraint: Dexcom ONE+ (native CGM)
+
+When this fork includes the Dexcom ONE+ native plugin (`:plugins:dexcom_oneplus`, `DexcomOnePlusPlugin` `@IntKey(446)`), every merge from upstream `dev` must **preserve** module registration, DI, `SourceSensor.DEXCOM_ONEPLUS_NATIVE` / DB converters, and notification-reader remaps (`com.dexcom.d1plus` / `com.dexcom.dexcomone` → `AAPS-DexcomOnePlus`). Do not resolve conflicts “theirs only” on those paths without explicit review.
+
+- [ ] **Dexcom ONE+ preservation reviewed** — follow [docs/MERGE_CONSTRAINT_DEXCOM_ONEPLUS.md](MERGE_CONSTRAINT_DEXCOM_ONEPLUS.md).
+- [ ] **Smoke (scaffold / post-merge):** Config Builder lists **Dexcom ONE+**; **BYODA** (`@IntKey(440)`) still works; **Eversense** (`@IntKey(445)`) still works.
+- [ ] Prefs open Status / Start / Warm-up without crash (stub connect may show FAILED until Real BLE).
+- [ ] Native pair / warm-up / BG — only after BLE+UX land and **user device confirmation** (do not mark “working” without that). User guide: [docs/DEXCOM_ONEPLUS_USER_GUIDE.md](DEXCOM_ONEPLUS_USER_GUIDE.md). Lab matrix: [docs/DEXCOM_ONEPLUS_QA_MATRIX.md](DEXCOM_ONEPLUS_QA_MATRIX.md). Integration: [docs/DEXCOM_ONEPLUS_INTEGRATION_NOTES.md](DEXCOM_ONEPLUS_INTEGRATION_NOTES.md).
+
 ---
 
 ## 2) Critical Domain Regression Gates
@@ -150,6 +159,7 @@ Pass criteria:
 - [ ] Physio path verified
 - [ ] Hormonitor structure verified
 - [ ] Eversense merge constraint reviewed (if native plugin present on branch)
+- [ ] Dexcom ONE+ merge constraint reviewed (if native plugin present on branch)
 - [ ] Database maintenance regression gate reviewed (KeepAlive `runVacuum=false`, no auto VACUUM in `cleanupDatabase`)
 - [ ] Async/freeze checklist reviewed
 - [ ] Smoke tests passed
@@ -185,6 +195,6 @@ Release is `NO-GO` if any of the following is true:
 
 - Any checklist item above is unchecked.
 - Any OPEN freeze incident on same area/build.
-- Any known regression in AIMI, adaptive smoothie, dashboard skin switching, ML permissions, physio, hormonitor structure, or Eversense native CGM integration when that integration is part of the release branch.
+- Any known regression in AIMI, adaptive smoothie, dashboard skin switching, ML permissions, physio, hormonitor structure, Eversense native CGM, or Dexcom ONE+ native CGM integration when that integration is part of the release branch.
 
 Release is `GO` only when all gates are green and documented.

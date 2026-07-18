@@ -10,6 +10,7 @@ class SourceSensorExtensionsTest {
         assertThat(SourceSensor.DEXCOM_NATIVE_UNKNOWN.advancedFilteringSupported()).isTrue()
         assertThat(SourceSensor.DEXCOM_G6_NATIVE.advancedFilteringSupported()).isTrue()
         assertThat(SourceSensor.DEXCOM_G7_NATIVE.advancedFilteringSupported()).isTrue()
+        assertThat(SourceSensor.DEXCOM_ONEPLUS_NATIVE.advancedFilteringSupported()).isTrue()
         assertThat(SourceSensor.DEXCOM_G6_NATIVE_XDRIP.advancedFilteringSupported()).isTrue()
         assertThat(SourceSensor.DEXCOM_G7_NATIVE_XDRIP.advancedFilteringSupported()).isTrue()
         assertThat(SourceSensor.DEXCOM_G7_XDRIP.advancedFilteringSupported()).isTrue()

@@ -16,7 +16,7 @@ class NotificationParserTest {
             version = 1,
             supportedPackages = setOf(
                 "com.dexcom.g7", "com.dexcom.g6", "com.dexcom.g6.region1.mmol",
-                "com.dexcom.dexcomone", "com.dexcom.stelo", "com.camdiab.fx_alert.mmoll",
+                "com.dexcom.dexcomone", "com.dexcom.d1plus", "com.dexcom.stelo", "com.camdiab.fx_alert.mmoll",
                 "com.medtronic.diabetes.guardian", "com.medtronic.diabetes.minimedmobile.eu",
                 "com.senseonics.gen12androidapp", "com.microtech.aidexx",
                 "com.ottai.seas", "com.sinocare.cgm.ce",
@@ -25,7 +25,8 @@ class NotificationParserTest {
                 "com.dexcom.g7" to SourceSensor.DEXCOM_G7_NATIVE,
                 "com.dexcom.g6" to SourceSensor.DEXCOM_G6_NATIVE,
                 "com.dexcom.g6.region1.mmol" to SourceSensor.DEXCOM_G6_NATIVE,
-                "com.dexcom.dexcomone" to SourceSensor.DEXCOM_NATIVE_UNKNOWN,
+                "com.dexcom.dexcomone" to SourceSensor.DEXCOM_ONEPLUS_NATIVE,
+                "com.dexcom.d1plus" to SourceSensor.DEXCOM_ONEPLUS_NATIVE,
                 "com.dexcom.stelo" to SourceSensor.DEXCOM_NATIVE_UNKNOWN,
                 "com.camdiab.fx_alert.mmoll" to SourceSensor.DEXCOM_NATIVE_UNKNOWN,
                 "com.medtronic.diabetes.guardian" to SourceSensor.MM_600_SERIES,

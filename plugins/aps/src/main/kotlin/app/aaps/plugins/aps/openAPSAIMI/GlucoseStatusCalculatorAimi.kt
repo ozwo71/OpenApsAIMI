@@ -184,7 +184,8 @@ class GlucoseStatusCalculatorAimi @Inject constructor(
             a0 = features.a0,
             a1 = features.a1,
             a2 = features.a2,
-            corrSqu = features.corrR2
+            corrSqu = features.corrR2,
+            sourceSensor = head.sourceSensor
         ).asRounded()
 
         log.debug(
@@ -197,7 +198,8 @@ class GlucoseStatusCalculatorAimi @Inject constructor(
                 "combΔ=${fmt.to2Decimal(features.combinedDelta)} " +
                 "R2=${fmt.to2Decimal(features.corrR2)} " +
                 "fitMin=${fmt.to1Decimal(features.parabolaMinutes)} " +
-                "NG=$isNg"
+                "NG=$isNg " +
+                "sensor=${head.sourceSensor}"
         )
 
         return storeAndReturn(gsAimi, features)

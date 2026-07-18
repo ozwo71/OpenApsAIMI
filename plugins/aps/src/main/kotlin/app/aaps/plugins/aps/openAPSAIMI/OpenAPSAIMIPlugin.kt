@@ -1227,7 +1227,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 parabolaMinutes = 0.0,
                 a0              = 0.0,
                 a1              = 0.0,
-                a2              = 0.0
+                a2              = 0.0,
+                // Propagate CGM source (G6/G7/One+/…) so AIMI lead stays G6-only
+                sourceSensor    = gs.sourceSensor
             )
             futureActivity = Round.roundTo(futureActivity, 0.0001)
             sensorLagActivity = Round.roundTo(sensorLagActivity, 0.0001)

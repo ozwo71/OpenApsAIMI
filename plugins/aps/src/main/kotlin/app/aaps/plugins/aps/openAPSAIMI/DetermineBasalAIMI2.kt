@@ -1797,24 +1797,31 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         val gs = pack.gs!!
         val f = pack.features
-        val glucoseStatus = ctx.glucoseStatus ?: GlucoseStatusAIMI(
-            glucose = gs.glucose,
-            noise = gs.noise,
-            delta = gs.delta,
-            shortAvgDelta = gs.shortAvgDelta,
-            longAvgDelta = gs.longAvgDelta,
-            date = gs.date,
-            duraISFminutes = f?.stable5pctMinutes ?: 0.0,
-            duraISFaverage = f?.stable5pctAverage ?: 0.0,
-            parabolaMinutes = f?.parabolaMinutes ?: 0.0,
-            deltaPl = f?.delta5Prev ?: 0.0,
-            deltaPn = f?.delta5Next ?: 0.0,
-            bgAcceleration = f?.accel ?: 0.0,
-            a0 = f?.a0 ?: 0.0,
-            a1 = f?.a1 ?: 0.0,
-            a2 = f?.a2 ?: 0.0,
-            corrSqu = f?.corrR2 ?: 0.0
-        )
+        val glucoseStatus = when {
+            ctx.glucoseStatus == null -> GlucoseStatusAIMI(
+                glucose = gs.glucose,
+                noise = gs.noise,
+                delta = gs.delta,
+                shortAvgDelta = gs.shortAvgDelta,
+                longAvgDelta = gs.longAvgDelta,
+                date = gs.date,
+                duraISFminutes = f?.stable5pctMinutes ?: 0.0,
+                duraISFaverage = f?.stable5pctAverage ?: 0.0,
+                parabolaMinutes = f?.parabolaMinutes ?: 0.0,
+                deltaPl = f?.delta5Prev ?: 0.0,
+                deltaPn = f?.delta5Next ?: 0.0,
+                bgAcceleration = f?.accel ?: 0.0,
+                a0 = f?.a0 ?: 0.0,
+                a1 = f?.a1 ?: 0.0,
+                a2 = f?.a2 ?: 0.0,
+                corrSqu = f?.corrR2 ?: 0.0,
+                sourceSensor = gs.sourceSensor
+            )
+            // Enrich if caller omitted sensor but calculator pack has it (One+ / G7 / G6)
+            ctx.glucoseStatus.sourceSensor == null && gs.sourceSensor != null ->
+                ctx.glucoseStatus.copy(sourceSensor = gs.sourceSensor)
+            else -> ctx.glucoseStatus
+        }
         ensurePredictionFallback(rT, glucoseStatus.glucose)
         return AimiGlucosePackLoadOutcome.Continue(glucoseStatus, f)
     }
@@ -4412,10 +4419,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 )
             }
 
-            if (adState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G6_NATIVE) {
+            if (adState.sourceSensor == SourceSensor.DEXCOM_G6_NATIVE) {
                 consoleLog.add("🤖 SENSOR_AWARE: G6 Detected -> Engaging Lead Compensator (UKF +50% Vel).")
-            } else if (adState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G7_NATIVE) {
-                consoleLog.add("🤖 SENSOR_AWARE: One+/G7 Detected -> Fast Sensor, Real-Time Maths Engaged.")
+            } else if (adState.sourceSensor == SourceSensor.DEXCOM_ONEPLUS_NATIVE) {
+                consoleLog.add("🤖 SENSOR_AWARE: One+ Detected -> Fast Sensor, Real-Time Maths Engaged (no G6 lead).")
+            } else if (adState.sourceSensor == SourceSensor.DEXCOM_G7_NATIVE) {
+                consoleLog.add("🤖 SENSOR_AWARE: G7 Detected -> Fast Sensor, Real-Time Maths Engaged.")
             }
 
             autodriveEngine.setShadowMode(false)

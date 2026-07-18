@@ -1,0 +1,17 @@
+THIRD-PARTY NOTICE — :plugins:libkeks
+=====================================
+
+This module vendors source derived from NightscoutFoundation/xDrip (GNU GPL v3),
+pin commit 1e86d9a2a52577ed2c30fbf7b69d75fd56e6918f (tag 2026.07.15).
+
+Upstream paths:
+  - libkeks/src/main/java/jamorham/**
+  - ipluginda/src/main/java/com/eveningoutpost/dexdrip/plugin/IPluginDA.java
+
+Author markers in upstream comments: JamOrHam / jamorham.
+Full © lines often absent — see git history of the pin commit.
+
+Do not invent copyright holders. Combined OpenApsAIMI APK remains AGPL-3 with
+GPL-3 obligations for these derived parts.
+
+Also: org.bouncycastle bcpkix/bcprov (MIT-style) — via Gradle dependencies.

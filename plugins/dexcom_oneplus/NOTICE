@@ -1,0 +1,103 @@
+THIRD-PARTY / UPSTREAM NOTICE
+=============================
+Module: :plugins:dexcom_oneplus (Dexcom ONE+ native CGM driver — OpenApsAIMI fork)
+
+Status: DRAFT for Agent A1 — ready before A6 ports protocol sources.
+         Update pin / file list when code is actually copied or derived.
+         Do not invent copyright holders; unknowns are marked explicitly.
+
+This AndroidAPS / OpenApsAIMI tree is licensed under the GNU Affero General
+Public License v3 (see repository root LICENSE.txt). Portions intended for this
+module are derived from xDrip+ (GNU GPL v3). Combined distribution of this app
+remains under AGPL-3 with GPL-3 obligations respected for the derived parts.
+
+
+-------------------------------------------------------------------------------
+1. xDrip+ (Nightscout Foundation) — intended Direct / G7 / ONE+ BLE provenance
+-------------------------------------------------------------------------------
+
+Project:     xDrip+ / Nightscout xDrip
+Repository:  https://github.com/NightscoutFoundation/xDrip
+License:     GNU General Public License v3.0
+             (file LICENSE in that repository)
+Homepage:    https://jamorham.github.io/#xdrip-plus
+
+Pin candidate (A1 audit 2026-07-18; confirm/update at first A6 port):
+  Tag:     2026.07.15
+  Commit:  1e86d9a2a52577ed2c30fbf7b69d75fd56e6918f
+  URL:     https://github.com/NightscoutFoundation/xDrip/commit/1e86d9a2a52577ed2c30fbf7b69d75fd56e6918f
+
+Related historical repo (same lineage; prefer NightscoutFoundation for pins):
+  https://github.com/jamorham/xDrip-plus
+
+Copyright holders:
+  UNKNOWN as complete legal © lines — many upstream .java files have no
+  formal "Copyright (C) YEAR NAME" header.
+  Author / credit markers observed in upstream source comments include:
+    - "JamOrHam" / "jamorham" (widespread on Ob1, g5model, libkeks, plugin)
+    - "joeginley" (comment on BluetoothServices UUID definitions)
+  Publisher mention in upstream README: "Published by the Nightscout Foundation"
+  (community / publishing umbrella — not treated here as a verified sole © owner).
+
+Upstream packages expected to inform a Direct ONE+/G7 port (non-exhaustive):
+  - libkeks/src/main/java/jamorham/keks/**
+  - libkeks/src/main/java/jamorham/libkeks/**
+  - app/src/main/java/com/eveningoutpost/dexdrip/services/Ob1G5CollectionService.java
+  - app/src/main/java/com/eveningoutpost/dexdrip/g5model/Ob1G5StateMachine.java
+  - app/src/main/java/com/eveningoutpost/dexdrip/g5model/* (glucose / session / backfill / UUIDs)
+  - app/src/main/java/com/eveningoutpost/dexdrip/cgm/dex/g7/**
+  - app/src/main/java/com/eveningoutpost/dexdrip/cgm/dex/TxIdHelper.java
+  See docs/DEXCOM_ONEPLUS_LICENCE_MEMO.md for port-vs-rewrite guidance.
+
+Derived material already present (pin above; GPL-3 obligations apply):
+  - sibling module :plugins:libkeks (full jamorham.keks + IPluginDA) — see that NOTICE
+  - gatt/OnePlusBluetoothUuids.kt  ← BluetoothServices.java UUID constants
+  - session/OnePlusInvalidShortPairingCodes.kt + OnePlusSessionStart validation
+    ← TxIdHelper short pairing rules / INVALID_SHORT_PAIRING_CODES
+  - session/OnePlusSessionAuthKeks.kt — drives vendored Plugin over GATT + bondNow→createBond
+  - parse/OnePlusFastCrc16.kt, OnePlusEGlucoseTx.kt, OnePlusGlucoseParser EGV decode,
+    OnePlusCalibrationState.kt — from FastCRC16 / EGlucose* / CalibrationState
+  - parse/OnePlusTransmitterTimeTx.kt, OnePlusTransmitterTimeRx.kt ← TransmitterTimeTx/RxMessage
+  - parse/OnePlusSessionStartTx.kt, OnePlusSessionStartRx.kt ← SessionStartTx/RxMessage
+  - parse/OnePlusSessionStopTx.kt, OnePlusSessionStopRx.kt ← SessionStopTx/RxMessage
+  - parse/OnePlusBackFillTx.kt, OnePlusBackFillControlRx.kt, OnePlusBackFillStream.kt
+    ← BackFillTxMessage2 / BackFillControlRxMessage / BackFillStream (short-TxId)
+  - session/OnePlusEgvSession.kt — Control path: Time → Stop/Start → Backfill → EGlucose loop
+  - session/OnePlusBackfillSession.kt — ProbablyBackfill collect/decode glue
+
+Still incomplete vs full Ob1: full bond-state machine UX, 24h backfill option, robust
+  DexTimeKeeper persistence across process death.
+Unit-tested decode / session glue ≠ production claim. See docs/spikes/ONEPLUS_XDRIP_PIN_INVENTORY.md.
+
+
+-------------------------------------------------------------------------------
+2. Juggluco — NOT selected for v1 (Q5 = xDrip Direct)
+-------------------------------------------------------------------------------
+
+Repository:  https://github.com/j-kaltes/Juggluco
+License:     GNU General Public License v3.0 (per GitHub license metadata)
+Status:      Reference only unless product Q5 is reopened to include Juggluco.
+             Do not mix into this module without a new licence pass and NOTICE update.
+
+
+-------------------------------------------------------------------------------
+3. Other third-party libraries
+-------------------------------------------------------------------------------
+
+None added by this module yet.
+
+If A6 pulls BouncyCastle (used upstream by xDrip libkeks) or other dependencies,
+add SPDX name, version, and license text/URL blocks in this section.
+
+
+-------------------------------------------------------------------------------
+4. This fork’s original scaffold (not from xDrip)
+-------------------------------------------------------------------------------
+
+Kotlin stubs / OEM registry / driver interfaces under
+  plugins/dexcom_oneplus/src/...
+are original to the OpenApsAIMI feature work unless a file header later states
+otherwise after a port.
+
+
+End of NOTICE (draft)

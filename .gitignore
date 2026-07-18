@@ -40,3 +40,8 @@ tmpclaude-*
 .venv_onnx/
 .tmp_eversense_patches/
 eversense_upstream_patches/
+build-xdrip-pin/
+build-libkeks*.txt
+build-oneplus*.log
+build-a*.log
+build-xdrip-tree.json
