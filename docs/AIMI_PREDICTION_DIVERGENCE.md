@@ -1,7 +1,7 @@
 # AIMI — Divergence de prédiction, trajectoire et vision globale
 
-**Statut :** analyse produit / diagnostic (pas de fix livré)  
-**Date :** 2026-07-09  
+**Statut :** analyse produit + correctif terrain gaté (clamp reconcile)  
+**Date :** 2026-07-09 (maj 2026-07-18)  
 **Portée :** signalements utilisateurs (« prédictions contradictoires »), impact dose, rôle de la trajectoire, arbre/Harmonia  
 **Build de référence :** `dev_OAPSAIMI` (post F1 Red Carpet, carry-forward prébolus legacy)
 
@@ -25,7 +25,7 @@ Les signalements « prédictions AIMI fausses ou contradictoires » sont **réel
 
 **L'arbre physiologique et Harmonia ne corrompent pas les courbes de prédiction.** L'arbre exporte du contexte ; Harmonia simule/produit de la basale (Lot 1, `adds_smb_authority=false`). Le problème est en amont : **pas de snapshot autoritaire unique par tick**.
 
-**Direction produit validée (2026-07-08) :** ne pas patcher en aval (reconcile clamp). Instrumenter **B en shadow** (momentum PKPD), puis **C1** (un seul snapshot/tick), **après** validation shadow.
+**Correctif terrain (2026-07-18) :** `ClampPkpdScenarioReconcile` — réconciliation **évidence-gatée** du faux plancher PKPD **avant** SafetyNet **et** stacking, **même si** Prediction Authority est ON. Bras classiques zone-2 + bras `DIGESTION_ACTIVE` / meal-active en zone-3. Veto chute / sport / post-hypo / pathMin scénario. Marker log : `CLAMP_RECONCILE`. La racine (NUMERIC_FLOOR / C1 snapshot unique) reste la direction long terme.
 
 ---
 
@@ -199,7 +199,8 @@ Harmonia **aboutit** (décision par tick) mais peut être `BLOCKED` (HYPO_RISK, 
 
 | Phase | Action | Impact dose | Priorité |
 |-------|--------|-------------|----------|
-| **—** | ~~Option A reconcile clamp~~ | Relâche SMB hypo-dominant | **Non** (rejeté) |
+| **A′ terrain** | `ClampPkpdScenarioReconcile` (gaté ; authority ON inclus ; stacking+SafetyNet) | Relâche faux planchers meal/digestion | **Livré 2026-07-18** (à valider device) |
+| **—** | ~~Option A reconcile clamp non gaté~~ | Relâche SMB hypo-dominant | **Non** (rejeté) |
 | **B shadow** | Log momentum corrigé vs actuel (`hybrid.last`, `path_min`) à côté `PRED_DIVERGENCE` | **Zéro** | **Maintenant** |
 | **B prod** | Ré-ancrage momentum (Kalman Ra / decay) après validation shadow 2–3 sem | Corrige runaway à la source | Après B validé |
 | **C1** | Un seul `computePredictions` + cache ; brancher `ScenarioProjectionApplicator` ou équivalent | Unifie consommateurs | **Avec B prod** |

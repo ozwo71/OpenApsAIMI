@@ -57,7 +57,7 @@ Avant:
 
 Apres:
 
-- `DetermineBasalAIMI2` construit Harmonia pendant le tick reel si `AimiPhysioAssistantEnable` est actif.
+- `DetermineBasalAIMI2` construit l'arbre + Harmonia **toujours** sur le path dose (cascade native R1, 2026-07-18). `AimiPhysioAssistantEnable` ne gate plus que les multiplicateurs vitaux / extras assistant.
 - `PatientRuntimeSnapshot` transporte `physiologicalTree`.
 - `PatientStateRuntimeRepository` publie l'arbre avec le runtime patient.
 - `PatientStatePresentationBuilder` consomme le resume compact dans AIMI Context.
@@ -261,7 +261,7 @@ Les chemins **paralleles** a Harmonia restent souvent dominants sur le tick reel
 | **H4b — Post-hypo rise exit (RBT)** | Liberer autorite sur montee agressive post-hypo | `PostHypoAggressiveRiseExit` + `PREDICTIVE_HYPO_AGGRESSIVE_RISE` → RBT SOFT (pas NONE) | **Done 2026-07-17** (device validation ouverte) |
 | **H4c — Soft-meal basal channel** | Fermer `rbt_no_harmonia_channel` pendant montee | SOFT + `MEAL_SUPPORT` + `DIGESTION_ACTIVE` → canal `HARMONIA_PRODUCTION_BASAL_FIRST` ; bypass `smb_authority_active` ; clear Harmonia `POST_HYPO` block on aggressive-rise exit | **Done 2026-07-17** (device validation ouverte) |
 | **H5 — Stabilisation yoyo** | Action `STABILIZE` / renforcer `PROTECTIVE_REDUCTION` | Brancher `correctionFragilityScore`, `postHyperExhaustion`, episodes RBT CHAOTIC ; rampe max hausse basale si fragilite | Ouvert |
-| **H6 — Harmoniseur** | Vraie 2e verification | Harmonia `CONFIRM` / `SOFTEN` sur `eventualBG` et TBR propose avant `setTempBasal` ; Auditor lit feuilles arbre (golden prompts) | Ouvert |
+| **H6 — Harmoniseur** | Vraie 2e verification dans la cascade | Voir [AIMI_DECISION_CASCADE_CONTRACT.md](AIMI_DECISION_CASCADE_CONTRACT.md) + suivi [AIMI_DECISION_CASCADE_ROADMAP.md](AIMI_DECISION_CASCADE_ROADMAP.md) (phases D2 / R1–R2 arbre natif) | **Roadmap 2026-07-18** (code ouvert) |
 | **H7 — Capteur tick** | Blockers sensor reels | Passer `sensorAgeMin` / `sensorNoise` reels dans l'environnement tick (aujourd'hui souvent 0 en loop) | Partiel (telemetry wired; validate field) |
 | **H0 — Bug P0** | Robustesse post-hypo | `PostHypoProjectionCap` : si `ceiling < bg+5`, skip cap (eviter crash tick) | Ouvert |
 

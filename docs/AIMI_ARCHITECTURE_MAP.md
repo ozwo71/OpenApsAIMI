@@ -204,7 +204,10 @@ PhysiologicalTree ──▶ HarmoniaDecisionEngine.evaluate ──▶ HarmoniaDe
    activity-protection path: `basalFactor` wired to basal (§11.6 v2), enabled by default, and a short-lived
    **parallel** biometric hard-lockout + glucose brake (added 07-09) **removed**. See §11.6.
 5. **Other 07-09/10 working-tree work** (not yet reflected elsewhere in this doc): evidence-gated SMB
-   scenario reconciliation (`reconcileSmbEventualWithScenario`); pkpd hybrid **endogenous reversion** off
+   scenario reconciliation (`ClampPkpdScenarioReconcile` / always-on before stacking+SafetyNet);
+   decision cascade (Tree → Harmonia → Auditor): [AIMI_DECISION_CASCADE_CONTRACT.md](AIMI_DECISION_CASCADE_CONTRACT.md) ·
+   [AIMI_DECISION_CASCADE_ROADMAP.md](AIMI_DECISION_CASCADE_ROADMAP.md);
+   pkpd hybrid **endogenous reversion** off
    the absorbing 39 floor (`OApsAIMIPkpdEndogenousReversion`, hybrid-only → minPred hypo-protection intact);
    basal **anti-whiplash slew limiter** (`slewLimitBasalUp`); basal-ML **DI fix** (coordinator injected so the
    NN actually trains) + **label fix** (realized future BG instead of the floored `eventualBg`); Hormonitor

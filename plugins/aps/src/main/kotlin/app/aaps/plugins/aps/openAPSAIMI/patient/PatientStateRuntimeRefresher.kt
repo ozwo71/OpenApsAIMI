@@ -100,13 +100,27 @@ internal object PatientStateRuntimeRefresher {
             contextSnapshot = contextSnapshot,
         )
         val patientModeDecision = PatientModeOrchestrator.evaluate(patientState)
+        // Cascade native (R1): keep a full tree even on context-only refresh (thinner inputs OK).
+        val physiologicalTree = PhysiologicalTreeBuilder.build(
+            enabled = true,
+            patientState = patientState,
+            patientModeDecision = patientModeDecision,
+            physioLive = PhysioLiveDigest(),
+            timestampMs = nowMs,
+        )
+        val prior = PatientStateRuntimeRepository.getLatest()
+        val harmoniaDecision = HarmoniaDecisionEngine.evaluate(
+            tree = physiologicalTree,
+            environment = prior?.harmoniaDecision?.environment,
+            timestampMs = nowMs,
+        )
         val runtimeSnapshot = PatientRuntimeSnapshot(
             patientState = patientState,
             patientModeDecision = patientModeDecision,
             updatedAtMs = nowMs,
             physioLive = PhysioLiveDigest(),
-            physiologicalTree = null,
-            harmoniaDecision = null,
+            physiologicalTree = physiologicalTree,
+            harmoniaDecision = harmoniaDecision,
             refreshSource = PatientRefreshSource.CONTEXT_INTENT,
         )
         PatientStateRuntimeRepository.publishRuntime(runtimeSnapshot, loopCache = null)
@@ -133,8 +147,9 @@ internal object PatientStateRuntimeRefresher {
         )
         val patientModeDecision = PatientModeOrchestrator.evaluate(patientState)
         val physioLive = PhysioLiveDigest.from(healthSnapshot, nowMs)
+        // Always build — do not depend on a prior loop-published tree (chicken-egg killed the cascade).
         val physiologicalTree = PhysiologicalTreeBuilder.build(
-            enabled = PatientStateRuntimeRepository.getLatest()?.physiologicalTree != null,
+            enabled = true,
             patientState = patientState,
             patientModeDecision = patientModeDecision,
             physioLive = physioLive,

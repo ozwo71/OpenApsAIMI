@@ -4,6 +4,11 @@ Purpose: a precise, prioritized plan built on **verified code**, not memory or v
 checked against the current tree this session; where a prior belief was wrong it is corrected in §0. Companion
 memory: `basal-ml-training-bugs`, `pkpd-floor-39-contamination`, `hormonitor-viewer`, `harmonia-decision-not-simulation`.
 
+**Cascade décisionnelle (Tree → Harmonia → Auditor)** — contrat + roadmap de réalisation (défaut natif, arbre
+intégral, Harmonia branch-aware) :
+[AIMI_DECISION_CASCADE_CONTRACT.md](AIMI_DECISION_CASCADE_CONTRACT.md) ·
+[AIMI_DECISION_CASCADE_ROADMAP.md](AIMI_DECISION_CASCADE_ROADMAP.md).
+
 ---
 
 ## 0. Ground truth — corrections to avoid repeating hallucinations
@@ -30,7 +35,10 @@ memory: `basal-ml-training-bugs`, `pkpd-floor-39-contamination`, `hormonitor-vie
   and the basal-ML training labels. See `pkpd-floor-39-contamination`.
 - **Done this session:** anti-absorbing endogenous reversion on the **hybrid curve only** (pref
   `OApsAIMIPkpdEndogenousReversion`, default on) — leaves `minPredictedAcrossCurves` (IOB/COB/UAM/ZT) intact, so
-  hypo-protection is untouched. Evidence-gated SMB reconciliation (`reconcileSmbEventualWithScenario`).
+  hypo-protection is untouched. Evidence-gated SMB reconciliation (`ClampPkpdScenarioReconcile` /
+  `reconcileSmbEventualWithScenario`) — always applied before stacking+SafetyNet (not skipped when
+  Prediction Authority is ON); digestion/high-BG arm added so zone-3 stacking cannot crush on a
+  false floor alone.
 - **Done this session — learned insulin kinetics now shape the curves (the missing link).** The prediction curves
   computed insulin action from the **static** insulin profile (`iCfg.dia/peak`), so the adaptive PK/PD *learned*
   DIA/peak drove SMB/ISF/TAP-G but **not** the shape of `eventual`/`minPred`/the pkpd graph. Fixed by rebuilding the

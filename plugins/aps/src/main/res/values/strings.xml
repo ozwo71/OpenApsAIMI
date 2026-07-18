@@ -1566,7 +1566,7 @@
     <!-- Physiological Assistant Strings -->
     <string name="aimi_physio_title">🏥 Physiological Assistant</string>
     <string name="aimi_physio_enable_title">Enable Assistant</string>
-    <string name="aimi_physio_enable_summary">Adjusts insulin using Health Connect vitals and a 28-pattern physiological catalogue (dawn, meals, stress, recovery). Active patterns export to AIMI_Decisions.jsonl and feed RBT leaves and HTR caps.</string>
+    <string name="aimi_physio_enable_summary">Adjusts insulin using Health Connect vitals and a 28-pattern physiological catalogue (dawn, meals, stress, recovery). Does not enable or disable the physiological tree or Harmonia — those always run. Active patterns export to AIMI_Decisions.jsonl and feed RBT leaves and HTR caps.</string>
     <string name="aimi_physio_pattern_catalog_title">Physiological pattern catalogue</string>
     <string name="aimi_physio_pattern_catalog_summary">28 hysteresis-gated patterns (sleep, HRV, meals, stress, cycle). Tap for details.</string>
     <string name="aimi_physio_pattern_catalog_detail">When the assistant is enabled, each loop tick runs the pattern detector on physio + CGM context. Matches export as physiological_patterns in AIMI_Decisions.jsonl and can cap HTR or inform RBT belief leaves. Requires Health Connect permissions for sleep and HRV when those sources are enabled. See repo docs/AIMI_PHYSIOLOGICAL_PATTERN_CATALOG.md for the full list.</string>

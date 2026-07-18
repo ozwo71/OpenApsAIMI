@@ -81,6 +81,7 @@ import app.aaps.plugins.aps.openAPSAIMI.orchestration.IntelligenceSnapshotJson
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.PredictionAuthorityApplier
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.PredictionAuthorityApplyResult
 import app.aaps.plugins.aps.openAPSAIMI.ports.PkpdPort
+import app.aaps.plugins.aps.openAPSAIMI.prediction.ClampPkpdScenarioReconcile
 import app.aaps.plugins.aps.openAPSAIMI.prediction.NaiveEventualBgSignGuard
 import app.aaps.plugins.aps.openAPSAIMI.prediction.PredictionSanityResult
 import app.aaps.plugins.aps.openAPSAIMI.prediction.minPredictedAcrossCurves
@@ -209,6 +210,7 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEnvironment
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaAction
+import app.aaps.plugins.aps.openAPSAIMI.patient.GlobalPhysiologicalState
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalRiskLevel
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalTreeBuilder
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalTreeSnapshot
@@ -3119,8 +3121,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val patientModeDecision = PatientModeOrchestrator.evaluate(patientState)
         lastPatientModeDecision = patientModeDecision
         val physioLive = PhysioLiveDigest.from(enrichedSnap, nowMs)
+        // Cascade native (R1): tree always deploys on the dose path. AimiPhysioAssistantEnable only
+        // gates vitals multipliers / assistant extras — never the spine Tree→Harmonia.
         val physiologicalTree = PhysiologicalTreeBuilder.build(
-            enabled = preferences.get(BooleanKey.AimiPhysioAssistantEnable),
+            enabled = true,
             patientState = patientState,
             patientModeDecision = patientModeDecision,
             physioLive = physioLive,
@@ -9366,44 +9370,44 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // 🛡️ PERSISTENT PREBOLUS LOCKOUT (MTR Safety Patch)
     // Survives instance re-creations and app restarts by combining Memory + SharedPreferences.
     /**
-     * Réconciliation gatée du plancher pkpd au gate SMB. Le clamp zone-2 de [app.aaps.plugins.aps.openAPSAIMI.safety.SafetyNet]
-     * rabat la limite SMB dès que l'eventual pkpd repasse sous zone-1, ce qui fige la délivrance même quand le
-     * scénario borné projette une trajectoire sûre. On relâche l'eventual (vers le terminal scénario, borné à la
-     * rampe zone-2) UNIQUEMENT si toutes les conditions de sûreté sont réunies ; sinon on rend l'eventual pkpd inchangé.
-     * Seuils validés sur données terrain : sur les faux planchers ainsi relâchés, min BG réalisé ≥ 70, 0 hypo.
-     * @return l'eventual (mg/dL) à passer au gate SMB.
+     * Réconciliation gatée du plancher pkpd pour SafetyNet **et** stacking.
+     * Délègue à [ClampPkpdScenarioReconcile] (zone-2 classique + bras digestion/high-BG).
+     * Toujours appliquée — même si Prediction Authority est ON (sinon les faux planchers DIGESTION
+     * restent en `pkpd_retained` et écrasent la délivrance).
      */
-    private fun reconcileSmbEventualWithScenario(pkpdEventualMgdl: Double, targetBgMgdl: Double): Double {
-        val scenarioBest = lastScenarioProjection?.scenarioBest ?: return pkpdEventualMgdl
-        val zone1Upper = maxOf(SAFETYNET_ZONE1_FLOOR_MGDL, targetBgMgdl + SAFETYNET_ZONE1_OFFSET_MGDL)
-        val zone2Upper = maxOf(SAFETYNET_ZONE2_FLOOR_MGDL, targetBgMgdl + SAFETYNET_ZONE2_OFFSET_MGDL)
-        val pkpdWouldClamp = bg >= zone1Upper && bg < zone2Upper && pkpdEventualMgdl < zone1Upper
-        val scenarioSafe = scenarioBest.pathMinMgdl >= CLAMP_RECONCILE_SCN_PATHMIN_MGDL && !scenarioBest.pathMinHitFloor
-        val divergenceReal = scenarioBest.terminalMgdl - pkpdEventualMgdl >= CLAMP_RECONCILE_MIN_DIVERGENCE_MGDL
-        val notFalling = delta.toDouble() > CLAMP_RECONCILE_MAX_NEG_DELTA_MGDL
-        val notProtected = !sportTime && !lastPostHypoDeliveryAuthority.active
-        if (!(pkpdWouldClamp && scenarioSafe && divergenceReal && notFalling && notProtected)) return pkpdEventualMgdl
-        val reconciled = minOf(scenarioBest.terminalMgdl, zone2Upper - 1.0)
-        consoleLog.add(
-            "🩹 CLAMP_RECONCILE pkpdEv=${pkpdEventualMgdl.toInt()}→${reconciled.toInt()} " +
-                "(scnMin=${scenarioBest.pathMinMgdl.toInt()} scnBest=${scenarioBest.terminalMgdl.toInt()} Δ=${(scenarioBest.terminalMgdl - pkpdEventualMgdl).toInt()})"
+    private fun reconcileSmbEventualWithScenario(
+        pkpdEventualMgdl: Double,
+        targetBgMgdl: Double,
+        digestionOrMealActive: Boolean,
+    ): Double {
+        val scenarioBest = lastScenarioProjection?.scenarioBest
+        val result = ClampPkpdScenarioReconcile.reconcile(
+            ClampPkpdScenarioReconcile.Input(
+                bgMgdl = bg,
+                targetBgMgdl = targetBgMgdl,
+                deltaMgdl5m = delta.toDouble(),
+                pkpdEventualMgdl = pkpdEventualMgdl,
+                scenarioTerminalMgdl = scenarioBest?.terminalMgdl,
+                scenarioPathMinMgdl = scenarioBest?.pathMinMgdl,
+                scenarioPathMinHitFloor = scenarioBest?.pathMinHitFloor == true,
+                digestionOrMealActive = digestionOrMealActive,
+                sportTime = sportTime,
+                postHypoDeliveryActive = lastPostHypoDeliveryAuthority.active,
+            ),
         )
-        return reconciled
+        if (result.reconciled) {
+            consoleLog.add(
+                "🩹 CLAMP_RECONCILE pkpdEv=${pkpdEventualMgdl.toInt()}→${result.eventualMgdl.toInt()} " +
+                    "reason=${result.reason} " +
+                    "(scnMin=${scenarioBest?.pathMinMgdl?.toInt()} scnBest=${scenarioBest?.terminalMgdl?.toInt()} " +
+                    "Δ=${scenarioBest?.terminalMgdl?.minus(pkpdEventualMgdl)?.toInt()})",
+            )
+        }
+        return result.eventualMgdl
     }
 
-    companion object {
+        companion object {
         private var lastSmbTimestampMem: Long = 0L
-
-        // 🩹 Réconciliation clamp-pkpd ↔ scénario au gate SMB (voir [reconcileSmbEventualWithScenario]).
-        // Seuils validés sur données terrain (docs/AIMI_PREDICTION_DIVERGENCE.md) : faux planchers → min BG ≥ 70, 0 hypo.
-        private const val CLAMP_RECONCILE_SCN_PATHMIN_MGDL = 80.0    // le scénario doit rester ≥ ce plancher sur toute la trajectoire
-        private const val CLAMP_RECONCILE_MIN_DIVERGENCE_MGDL = 25.0 // écart mini terminal-scénario − eventual-pkpd
-        private const val CLAMP_RECONCILE_MAX_NEG_DELTA_MGDL = -3.0  // pas de relâche si le BG chute (delta ≤ ce seuil)
-        // Miroir des seuils de zone de SafetyNet — garder alignés sur SafetyNet.ZONE*_FLOOR/OFFSET.
-        private const val SAFETYNET_ZONE1_FLOOR_MGDL = 115.0
-        private const val SAFETYNET_ZONE1_OFFSET_MGDL = 20.0
-        private const val SAFETYNET_ZONE2_FLOOR_MGDL = 160.0
-        private const val SAFETYNET_ZONE2_OFFSET_MGDL = 70.0
 
         // 🩸 Limiteur de pente MONTANTE de la basale (anti-whiplash). Voir [slewLimitBasalUp].
         private const val BASAL_SLEW_UP_ABS_MIN_UPH = 1.5    // hausse mini autorisée par tick (permet de repartir de 0)
@@ -11273,12 +11277,40 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     "floor=${"%.2f".format(hyperReleaseFloorU)}U IOB=${"%.2f".format(this.iob)}/${"%.2f".format(this.maxIob)})",
             )
         }
-        val eventualForStacking = when {
-            predictionAuthorityEnabled() -> authoritativeEventualBg().takeIf { it.isFinite() && it > 1.0 }
-            this.eventualBG > 1.0 -> this.eventualBG
-            rT.eventualBG != null && rT.eventualBG!! > 1.0 -> rT.eventualBG!!
-            else -> null
+        // 🩹 Clamp reconcile BEFORE stacking + SafetyNet (always — authority ON used to skip and
+        // leave false PKPD floors crushing zone-2 SMB and zone-3 stacking).
+        val pkpdEventualForSmb =
+            cachedRiskEnvelopeDecision?.eventualTerminalMgdl?.takeIf { it.isFinite() }
+                ?: authoritativeEventualBg(this.eventualBG)
+        val mealAbsorptionActive = when (mealAbsorption?.phase) {
+            MealAbsorptionPhase.FIRST_WAVE,
+            MealAbsorptionPhase.SECOND_WAVE,
+            MealAbsorptionPhase.INTER_WAVE,
+            MealAbsorptionPhase.PEAK_CORRECTION,
+            -> true
+            else -> false
         }
+        val treeDigestionOrMeal =
+            when (lastPhysiologicalTreeSnapshot?.trunk?.globalState) {
+                GlobalPhysiologicalState.DIGESTION_ACTIVE,
+                GlobalPhysiologicalState.MEAL_PROBABLE,
+                -> true
+                else -> false
+            }
+        val digestionOrMealActive =
+            treeDigestionOrMeal || mealAbsorptionActive || mealPriorityContext
+        val decisionEventualBgForSmb = reconcileSmbEventualWithScenario(
+            pkpdEventualForSmb,
+            targetBg.toDouble(),
+            digestionOrMealActive,
+        )
+        val eventualForStacking = decisionEventualBgForSmb.takeIf { it.isFinite() && it > 1.0 }
+            ?: when {
+                predictionAuthorityEnabled() -> authoritativeEventualBg().takeIf { it.isFinite() && it > 1.0 }
+                this.eventualBG > 1.0 -> this.eventualBG
+                rT.eventualBG != null && rT.eventualBG!! > 1.0 -> rT.eventualBG!!
+                else -> null
+            }
         val rawMinPred = minPredictedAcrossCurves(rT.predBGs)
         val minPredForStacking = minPredictedBgForRbtWiring(authoritativeMinPredBg(rT, rawMinPred))
         val endogenousCounterRegulatory =
@@ -11319,14 +11351,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache.get(300_000)?.verdict?.confidence
         } catch (e: Exception) { null }
         
-        val pkpdEventualForSmb =
-            cachedRiskEnvelopeDecision?.eventualTerminalMgdl?.takeIf { it.isFinite() }
-                ?: authoritativeEventualBg(this.eventualBG)
-        val decisionEventualBgForSmb = if (predictionAuthorityEnabled()) {
-            pkpdEventualForSmb
-        } else {
-            reconcileSmbEventualWithScenario(pkpdEventualForSmb, targetBg.toDouble())
-        }
         val baseLimit = app.aaps.plugins.aps.openAPSAIMI.safety.SafetyNet.calculateSafeSmbLimit(
             bg = this.bg,
             targetBg = targetBg.toDouble(),

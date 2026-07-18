@@ -214,6 +214,10 @@ enum class DataCoherenceLevel {
 
 internal object PhysiologicalTreeBuilder {
 
+    /**
+     * @param enabled Production dose path always passes `true` (cascade native). `false` is retained
+     * only for unit tests / explicit null escape — never wire to `AimiPhysioAssistantEnable`.
+     */
     fun build(
         enabled: Boolean,
         patientState: PatientStateSnapshot,
@@ -271,7 +275,13 @@ internal object PhysiologicalTreeBuilder {
             // thinking physiology can't decide — corrected below.
             basalState = signal(true, 1.0, 0.0, "Basal root", "basal is written by Harmonia production + the AIMI cascade"),
             isfState = signal(true, 1.0, 0.0, "ISF root", "ISF fused via dynISF/pkpd; not written by the Harmonia decision"),
-            preferenceState = signal(true, 1.0, 0.0, "Existing preference surface", "uses AimiPhysioAssistantEnable as disable gate"),
+            preferenceState = signal(
+                true,
+                1.0,
+                0.0,
+                "Existing preference surface",
+                "AimiPhysioAssistantEnable gates vitals multipliers/extras only; tree deploy is always-on",
+            ),
             historicalPatternState = signal(
                 detected = state.causalPosterior.dominant != CausalStateId.UNKNOWN,
                 confidence = state.causalPosterior.dominantConfidence,

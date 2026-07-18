@@ -507,7 +507,8 @@ enum class BooleanKey(
     OApsAIMIThyroidEnabled("key_aimi_thyroid_enabled", false),
     OApsAIMIThyroidLogVerbosity("key_aimi_thyroid_debug", false),
 
-    // 🏥 AIMI Physiological Assistant (MTR)
+    // 🏥 AIMI Physiological Assistant (MTR) — vitals multipliers / assistant extras only.
+    // Does NOT gate PhysiologicalTree / Harmonia (cascade native always-on since 2026-07-18).
     AimiPhysioAssistantEnable("aimi_physio_assistant_enable", false),
     AimiPhysioSleepDataEnable("aimi_physio_sleep_enable", true),
     AimiPhysioHRVDataEnable("aimi_physio_hrv_enable", true),

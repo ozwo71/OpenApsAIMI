@@ -140,5 +140,61 @@ class PatientStateRuntimeRefresherTest {
         assertThat(refreshed).isNotNull()
         assertThat(refreshed?.refreshSource).isEqualTo(PatientRefreshSource.CONTEXT_INTENT)
         assertThat(refreshed?.patientState?.userIntent?.hasAnyIntent()).isTrue()
+        // R1: context refresh must still deploy the tree (not force null).
+        assertThat(refreshed?.physiologicalTree).isNotNull()
+        assertThat(refreshed?.physiologicalTree?.compactSummary).contains("Tree:")
+    }
+
+    @Test
+    fun refreshFromHealthSnapshot_buildsTreeEvenWithoutPriorTree() {
+        // Chicken-egg regression: old code required getLatest()?.physiologicalTree != null.
+        val nowMs = 1_718_000_100_000L
+        val cache = PatientStateLoopCache(
+            phaseOutput = null,
+            mealAbsorptionOutput = null,
+            patternSnapshot = null,
+            contextSnapshot = null,
+            sourceSensor = null,
+            correctionAggressionDecision = null,
+            chronicInflammation = null,
+            physioContext = null,
+            physioTrace = null,
+            hypothesisState = null,
+            uamConfidence = 0.0,
+        )
+        val emptyState = PatientStateEngine.build(
+            timestampMs = nowMs,
+            phaseOutput = null,
+            mealAbsorptionOutput = null,
+            patternSnapshot = null,
+            latentState = null,
+            hypothesisState = null,
+            contextSnapshot = null,
+        )
+        PatientStateRuntimeRepository.publish(
+            patientState = emptyState,
+            patientModeDecision = PatientModeOrchestrator.evaluate(emptyState),
+            updatedAtMs = nowMs,
+            physiologicalTree = null,
+            harmoniaDecision = null,
+            loopCache = cache,
+        )
+
+        val refreshed = PatientStateRuntimeRefresher.refreshFromHealthSnapshot(
+            healthSnapshot = HealthContextSnapshot(
+                stepsLast15m = 50,
+                hrNow = 72,
+                hrAvg15m = 70,
+                activityState = "IDLE",
+                timestamp = nowMs + 60_000L,
+                confidence = 0.7,
+                source = "Test",
+                isValid = true,
+            ),
+            nowMs = nowMs + 60_000L,
+        )
+
+        assertThat(refreshed?.physiologicalTree).isNotNull()
+        assertThat(refreshed?.physiologicalTree?.trunk).isNotNull()
     }
 }
