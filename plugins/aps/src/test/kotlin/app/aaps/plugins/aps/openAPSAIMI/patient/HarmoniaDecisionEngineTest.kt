@@ -233,6 +233,74 @@ class HarmoniaDecisionEngineTest {
     }
 
     @Test
+    fun evaluate_exportsDecisionBasisAlignedWithTrunkBranch() {
+        val state = stableState().copy(
+            phase = PhysiologicalPhase.DAWN_CORTISOL,
+            endogenousGlucoseDrive = 0.82,
+            transientResistanceProb = 0.70,
+            causalPosterior = CausalStatePosterior(
+                dawnEndogenousProb = 0.84,
+                stressResistanceProb = 0.62,
+                dominant = CausalStateId.DAWN_ENDOGENOUS,
+                dominantConfidence = 0.84,
+                learningQuality = 0.80,
+            ),
+        )
+        val decision = HarmoniaDecisionEngine.evaluate(
+            tree = buildTree(state),
+            environment = safeEnvironment(),
+        )
+        assertThat(decision).isNotNull()
+        assertThat(decision!!.branch).isEqualTo(decision.decisionBasis.trunkState.name)
+        assertThat(decision.decisionBasis.primaryReason).isEqualTo("resistance_or_stress")
+        assertThat(decision.decisionBasis.actionCoherentWithTrunk).isTrue()
+        assertThat(decision.toJsonObject().getJSONObject("decision_basis").getString("trunk_state"))
+            .isEqualTo(decision.branch)
+        assertThat(decision.version).isEqualTo(2)
+    }
+
+    @Test
+    fun evaluate_h4BridgeSetsPrimaryReasonAndContributingDigestion() {
+        val tree = digestionTreeWithEffort(effortActiveConfidence = 0.70)
+        val decision = HarmoniaDecisionEngine.evaluate(
+            tree = tree,
+            environment = safeEnvironment().copy(
+                cobG = 0.0,
+                mealRiseConfirmed = true,
+                targetBgMgdl = 100.0,
+                currentBgMgdl = 190.0,
+                deltaMgdl5m = 4.0,
+            ),
+        )
+        assertThat(decision?.action).isEqualTo(HarmoniaAction.MEAL_SUPPORT)
+        assertThat(decision?.decisionBasis?.primaryReason).isEqualTo("h4_meal_rise_bridge")
+        assertThat(decision?.decisionBasis?.trunkState).isEqualTo(GlobalPhysiologicalState.DIGESTION_ACTIVE)
+        assertThat(decision?.decisionBasis?.contributingBranches?.any { it.name == "digestion" }).isTrue()
+    }
+
+    @Test
+    fun trunkActionMatrix_flagsHypoMealAsIncoherent() {
+        assertThat(
+            HarmoniaDecisionEngine.isActionCoherentWithTrunk(
+                GlobalPhysiologicalState.HYPO_RISK,
+                HarmoniaAction.MEAL_SUPPORT,
+            ),
+        ).isFalse()
+        assertThat(
+            HarmoniaDecisionEngine.isActionCoherentWithTrunk(
+                GlobalPhysiologicalState.DIGESTION_ACTIVE,
+                HarmoniaAction.MEAL_SUPPORT,
+            ),
+        ).isTrue()
+        assertThat(
+            HarmoniaDecisionEngine.isActionCoherentWithTrunk(
+                GlobalPhysiologicalState.SENSOR_UNCERTAIN,
+                HarmoniaAction.BASAL_FIRST,
+            ),
+        ).isFalse()
+    }
+
+    @Test
     fun evaluate_h4MealRiseBridgeDoesNotFireOnFallingDelta() {
         val tree = digestionTreeWithEffort(effortActiveConfidence = 0.70)
         // Field replay (KFC peak descent): high BG + meal_rise but negative delta must stay protective.

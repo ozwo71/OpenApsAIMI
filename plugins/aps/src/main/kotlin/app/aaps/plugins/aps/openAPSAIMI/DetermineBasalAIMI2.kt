@@ -3187,8 +3187,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         lastHarmoniaDecision = harmoniaDecision
         if (refreshSource == PatientRefreshSource.LOOP_TICK) {
-            physiologicalTree?.compactSummary?.let { consoleLog.add(it) }
-            harmoniaDecision?.compactSummary?.let { consoleLog.add(it) }
+            physiologicalTree?.let { tree ->
+                consoleLog.add(
+                    "TREE_DEPLOYED trunk=${tree.trunk.globalState.name} " +
+                        "conf=${"%.2f".format(tree.trunk.confidence)} " +
+                        "risk=${tree.trunk.riskLevel.name}",
+                )
+                consoleLog.add(tree.compactSummary)
+            }
+            harmoniaDecision?.let { decision ->
+                consoleLog.add(decision.compactSummary)
+                if (!decision.decisionBasis.actionCoherentWithTrunk) {
+                    consoleLog.add(
+                        "HARMONIA_BRANCH_MISMATCH action=${decision.action.name} " +
+                            "trunk=${decision.decisionBasis.trunkState.name} " +
+                            "reason=${decision.decisionBasis.mismatchReason} " +
+                            "primary=${decision.decisionBasis.primaryReason}",
+                    )
+                }
+            }
         }
         val loopCache = PatientStateLoopCache(
             phaseOutput = lastPhysiologicalPhaseOutput,

@@ -107,8 +107,8 @@ Auditor LLM (si enabled) → CONFIRM/SOFTEN différé, ne rouvre pas un BLOCK
 |-------|-------|--------|------|
 | **D0** | Contrat cascade | ✅ Done | 2026-07-18 |
 | **R0** | Roadmap + index + prefs natives (ce doc) | ✅ Done | 2026-07-18 |
-| **R1** | E1 — Arbre always-on / déploiement intégral | 🔄 In progress (R1.1–R1.3 code) | 2026-07-18 |
-| **R2** | E2 — Harmonia branch-aware + export certitude | ⬜ Pending | — |
+| **R1** | E1 — Arbre always-on / déploiement intégral | ✅ Done (R1.5 log inclus) | 2026-07-18 |
+| **R2** | E2 — Harmonia branch-aware + export certitude | ✅ Done (R2.4/R2.5 UI/skip-owner ouverts) | 2026-07-18 |
 | **D1** | Spec + type `MealCertainty` (+ tests purs) | ⬜ Pending | — |
 | **D2** | H6 — Harmonizer sync + Auditor double-check aligné | ⬜ Pending | — |
 | **D3** | Authority / meal_rise dérivés de MealCertainty | ⬜ Pending | — |
@@ -142,8 +142,8 @@ Légende : ⬜ Pending · 🔄 In progress · ✅ Done (code) · 🧪 Device OK 
 | R1.1 | Séparer **build tree (always)** de **physio assistant extras** (LLM/UI) | `DetermineBasalAIMI2`, `PhysiologicalTreeBuilder`, prefs | ✅ |
 | R1.2 | Path dose ne lit plus `AimiPhysioAssistantEnable` comme kill-switch tree ; string EN clarifiée | `BooleanKey`, `strings.xml` | ✅ |
 | R1.3 | Fix refresher : CONTEXT + PHYSIO rebuild tree always (plus chicken-egg) | `PatientStateRuntimeRefresher` | ✅ |
-| R1.4 | Garantir branches effort/meal/hypo alimentées (BG/Δ/effort injectés) sur tout build loop | `PhysiologicalTreeBuilder` call sites | ⬜ (loop OK ; refresher sans BG/effort encore) |
-| R1.5 | Métrique / log : `TREE_DEPLOYED trunk=… conf=…` chaque tick | DetermineBasal / export | ⬜ |
+| R1.4 | Garantir branches effort/meal/hypo alimentées (BG/Δ/effort injectés) sur tout build loop | `PhysiologicalTreeBuilder` call sites | ✅ loop ; refresher sans BG/effort encore (OK) |
+| R1.5 | Métrique / log : `TREE_DEPLOYED trunk=… conf=…` chaque tick | DetermineBasal | ✅ |
 | R1.6 | Tests refresher tree always-on + chicken-egg | `PatientStateRuntimeRefresherTest` | ✅ |
 
 **⚠️ ASYNC IMPACT :** aucun si sync build ; attention cache runtime publish.
@@ -158,9 +158,9 @@ Légende : ⬜ Pending · 🔄 In progress · ✅ Done (code) · 🧪 Device OK 
 
 | # | Tâche | Fichiers probables | Statut |
 |---|-------|-------------------|--------|
-| R2.1 | Structurer `decisionBasis` : trunk + top branches + blockers dans sim/production export | `HarmoniaDecision.kt`, export JSON | ⬜ |
-| R2.2 | Assert / debug : action incompatible avec trunk → log `HARMONIA_BRANCH_MISMATCH` | chooseAction / planProduction | ⬜ |
-| R2.3 | Documenter matrice trunk → actions autorisées (DIGESTION→MEAL_SUPPORT, HYPO_RISK→protective/block, STABLE→stabilize…) | doc + tests table-driven | ⬜ |
+| R2.1 | Structurer `decisionBasis` : trunk + top branches + primaryReason dans sim export | `HarmoniaDecision.kt`, JSON `decision_basis` | ✅ |
+| R2.2 | Action incompatible avec trunk → log `HARMONIA_BRANCH_MISMATCH` + flag basis | chooseAction / DetermineBasal | ✅ (detect only, no override) |
+| R2.3 | Matrice trunk → actions + tests | `isActionCoherentWithTrunk` + unit tests | ✅ |
 | R2.4 | Production path : si T3C/RBT skip, exporter `skipped_owner` **sans** effacer le basis de décision sim | `planHarmoniaProductionBranch`, T3C bridge | ⬜ |
 | R2.5 | UI/Hormonitor : afficher branche finale + action (lisibilité cascade) | viewer si existe | ⬜ |
 
@@ -265,11 +265,12 @@ R0 ✅ → R1 (arbre natif) → R2 (branche Harmonia)
 | 2026-07-18 | D0 | Contrat cascade validé |
 | 2026-07-18 | R0 | Roadmap créée ; prefs natives inventoriées (`AimiPhysioAssistantEnable` = principal anti-pattern) |
 | 2026-07-18 | R1 | Tree `enabled=true` sur dose path + refresher ; pref ne gate plus que multiplicateurs/extras ; tests chicken-egg |
+| 2026-07-18 | R2 | `HarmoniaDecisionBasis` + matrice cohérence trunk/action + logs `TREE_DEPLOYED` / `HARMONIA_BRANCH_MISMATCH` |
 
 ---
 
 ## 7. Prochaine action concrète
 
-**R1.1–R1.2** : découpler le build de l’arbre de `AimiPhysioAssistantEnable` pour que Tree→Harmonia soit le chemin natif par défaut.
+**D1** : type pur `MealCertainty` + builder + tests + consommation Harmonia (un seul langage repas).
 
-Attendre confirmation « vas-y » code sur R1 avant modification runtime.
+Attendre confirmation « vas-y » avant code D1.

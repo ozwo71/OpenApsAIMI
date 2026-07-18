@@ -49,6 +49,7 @@ class HarmoniaHarmonizerTest {
             blockers = listOf("hypo_or_recovery", "critical_risk"),
             rationale = emptyList(),
             compactSummary = "blocked",
+            decisionBasis = stubBasis(GlobalPhysiologicalState.HYPO_RISK, HarmoniaAction.BLOCKED),
         )
 
         val outcome = HarmoniaHarmonizer.evaluate(
@@ -94,6 +95,7 @@ class HarmoniaHarmonizerTest {
             blockers = listOf("hypo_or_recovery"),
             rationale = emptyList(),
             compactSummary = "blocked",
+            decisionBasis = stubBasis(GlobalPhysiologicalState.HYPO_RISK, HarmoniaAction.BLOCKED),
         )
 
         val outcome = HarmoniaHarmonizer.evaluate(
@@ -175,4 +177,18 @@ class HarmoniaHarmonizerTest {
             compactSummary = "hyper",
         )
     }
+
+    private fun stubBasis(
+        trunk: GlobalPhysiologicalState,
+        action: HarmoniaAction,
+    ): HarmoniaDecisionBasis =
+        HarmoniaDecisionBasis(
+            trunkState = trunk,
+            trunkConfidence = 0.8,
+            trunkRisk = PhysiologicalRiskLevel.MODERATE,
+            primaryReason = "test",
+            contributingBranches = emptyList(),
+            actionCoherentWithTrunk = HarmoniaDecisionEngine.isActionCoherentWithTrunk(trunk, action),
+            mismatchReason = null,
+        )
 }

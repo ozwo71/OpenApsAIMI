@@ -1,8 +1,11 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
+import app.aaps.plugins.aps.openAPSAIMI.patient.GlobalPhysiologicalState
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaAction
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionBasis
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEnvironment
+import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalRiskLevel
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
@@ -124,5 +127,13 @@ class AuditorPromptSafeguardsTest {
             blockers = emptyList(),
             rationale = listOf("test"),
             compactSummary = "Harmonia sim: basal_first RESISTANCE_PROBABLE | basal 1.20U/h | smb 0.00U",
+            decisionBasis = HarmoniaDecisionBasis(
+                trunkState = GlobalPhysiologicalState.RESISTANCE_PROBABLE,
+                trunkConfidence = 0.8,
+                trunkRisk = PhysiologicalRiskLevel.MODERATE,
+                primaryReason = "resistance_or_stress",
+                contributingBranches = emptyList(),
+                actionCoherentWithTrunk = true,
+            ),
         )
 }

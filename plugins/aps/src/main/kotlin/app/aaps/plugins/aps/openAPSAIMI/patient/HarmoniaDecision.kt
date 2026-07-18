@@ -54,6 +54,49 @@ data class HarmoniaDecisionEnvironment(
         }
 }
 
+/**
+ * Explicit basis for why Harmonia chose [action] on the final tree trunk (cascade R2).
+ * Consumers (Auditor, JSONL, UI) must read this — not infer from narrative alone.
+ */
+data class HarmoniaDecisionBasis(
+    val trunkState: GlobalPhysiologicalState,
+    val trunkConfidence: Double,
+    val trunkRisk: PhysiologicalRiskLevel,
+    val primaryReason: String,
+    val contributingBranches: List<HarmoniaBranchContribution>,
+    val actionCoherentWithTrunk: Boolean,
+    val mismatchReason: String? = null,
+) {
+    fun toJsonObject(): JSONObject =
+        JSONObject().apply {
+            put("trunk_state", trunkState.name)
+            put("trunk_confidence", trunkConfidence)
+            put("trunk_risk", trunkRisk.name)
+            put("primary_reason", primaryReason)
+            put(
+                "contributing_branches",
+                JSONArray().apply {
+                    contributingBranches.forEach { put(it.toJsonObject()) }
+                },
+            )
+            put("action_coherent_with_trunk", actionCoherentWithTrunk)
+            put("mismatch_reason", mismatchReason ?: JSONObject.NULL)
+        }
+}
+
+data class HarmoniaBranchContribution(
+    val name: String,
+    val confidence: Double,
+    val role: String,
+) {
+    fun toJsonObject(): JSONObject =
+        JSONObject().apply {
+            put("name", name)
+            put("confidence", confidence)
+            put("role", role)
+        }
+}
+
 data class HarmoniaDecision(
     val timestampMs: Long,
     val branch: String,
@@ -68,7 +111,8 @@ data class HarmoniaDecision(
     val blockers: List<String>,
     val rationale: List<String>,
     val compactSummary: String,
-    val version: Int = 1,
+    val decisionBasis: HarmoniaDecisionBasis,
+    val version: Int = 2,
 ) {
     fun toJsonObject(): JSONObject =
         JSONObject().apply {
@@ -86,9 +130,10 @@ data class HarmoniaDecision(
             put("blockers", JSONArray(blockers))
             put("rationale", JSONArray(rationale))
             put("compact_summary", compactSummary)
+            put("decision_basis", decisionBasis.toJsonObject())
             put("simulation_only", true)
             put("applies_to_pump", false)
-            put("source", "harmonia_simulation_branch_v1")
+            put("source", "harmonia_simulation_branch_v2")
         }
 }
 
@@ -171,7 +216,8 @@ internal object HarmoniaDecisionEngine {
 
         val blockers = buildBlockers(tree, environment)
         val capsApplied = mutableListOf<String>()
-        val action = chooseAction(tree, environment, blockers)
+        val choice = chooseActionWithReason(tree, environment, blockers)
+        val action = choice.action
         val branch = tree.trunk.globalState.name
 
         val rawBasalFactor = when (action) {
@@ -210,15 +256,23 @@ internal object HarmoniaDecisionEngine {
         if (simulatedSmb != requestedSmb) capsApplied.add("pump_smb_or_iob_cap")
 
         val eligible = blockers.isEmpty() && action != HarmoniaAction.BLOCKED
+        val finalAction = if (eligible) action else HarmoniaAction.BLOCKED
         val safeBasal = if (eligible) simulatedBasal else environment.currentBasalUph
         val safeSmb = if (eligible) simulatedSmb else 0.0
-        val rationale = buildRationale(tree, environment, action, blockers)
-        val summary = buildSummary(action, branch, eligible, safeBasal, safeSmb, blockers)
+        val decisionBasis = buildDecisionBasis(
+            tree = tree,
+            environment = environment,
+            action = finalAction,
+            primaryReason = if (eligible) choice.primaryReason else "blocked",
+            blockers = blockers,
+        )
+        val rationale = buildRationale(tree, environment, finalAction, blockers, decisionBasis)
+        val summary = buildSummary(finalAction, branch, eligible, safeBasal, safeSmb, blockers, decisionBasis)
 
         return HarmoniaDecision(
             timestampMs = timestampMs,
             branch = branch,
-            action = if (eligible) action else HarmoniaAction.BLOCKED,
+            action = finalAction,
             eligible = eligible,
             targetBasalUph = safeBasal,
             targetSmbU = safeSmb,
@@ -229,6 +283,7 @@ internal object HarmoniaDecisionEngine {
             blockers = blockers,
             rationale = rationale,
             compactSummary = summary,
+            decisionBasis = decisionBasis,
         )
     }
 
@@ -269,28 +324,35 @@ internal object HarmoniaDecisionEngine {
             if (tree.trunk.riskLevel == PhysiologicalRiskLevel.CRITICAL) add("critical_risk")
         }
 
-    private fun chooseAction(
+    private data class ActionChoice(
+        val action: HarmoniaAction,
+        val primaryReason: String,
+    )
+
+    private fun chooseActionWithReason(
         tree: PhysiologicalTreeSnapshot,
         env: HarmoniaDecisionEnvironment,
         blockers: List<String>,
-    ): HarmoniaAction {
-        if (blockers.isNotEmpty()) return HarmoniaAction.BLOCKED
+    ): ActionChoice {
+        if (blockers.isNotEmpty()) {
+            return ActionChoice(HarmoniaAction.BLOCKED, "blockers")
+        }
 
         val fragility = env.correctionFragilityScore.coerceIn(0.0, 1.0)
         val exhaustion = env.postHyperExhaustionScore.coerceIn(0.0, 1.0)
         val chaotic = env.chaoticEpisodeLoad.coerceIn(0.0, 1.0)
         if (fragility >= 0.55 || exhaustion >= 0.65 || chaotic >= 0.50) {
-            return HarmoniaAction.STABILIZE
+            return ActionChoice(HarmoniaAction.STABILIZE, "fragility_or_chaos")
         }
 
         // H4 meal-rise bridge: digestion + confirmed rise above band beats activity/post-activity
         // PROTECTIVE_REDUCTION (which otherwise wins first and starves meal support).
         if (prefersMealSupportOverProtective(tree, env)) {
-            return HarmoniaAction.MEAL_SUPPORT
+            return ActionChoice(HarmoniaAction.MEAL_SUPPORT, "h4_meal_rise_bridge")
         }
 
         if (tree.branches.activity.confidence >= 0.55 || tree.branches.postActivity.confidence >= 0.45) {
-            return HarmoniaAction.PROTECTIVE_REDUCTION
+            return ActionChoice(HarmoniaAction.PROTECTIVE_REDUCTION, "activity_or_post_activity")
         }
 
         val mealConfidence = tree.branches.meal.confidence
@@ -303,7 +365,8 @@ internal object HarmoniaDecisionEngine {
                 mealConfidence >= 0.50 &&
                 env.deltaMgdl5m >= 0.8
         if (undeclaredMealRise || declaredMealRise) {
-            return HarmoniaAction.MEAL_SUPPORT
+            val reason = if (declaredMealRise) "declared_meal_rise" else "undeclared_meal_rise"
+            return ActionChoice(HarmoniaAction.MEAL_SUPPORT, reason)
         }
 
         if (
@@ -311,9 +374,151 @@ internal object HarmoniaDecisionEngine {
             tree.branches.stress.confidence >= 0.55 ||
             tree.branches.insulinEffectiveness.confidence >= 0.55
         ) {
-            return HarmoniaAction.BASAL_FIRST
+            return ActionChoice(HarmoniaAction.BASAL_FIRST, "resistance_or_stress")
         }
-        return HarmoniaAction.OBSERVE
+        return ActionChoice(HarmoniaAction.OBSERVE, "observe_default")
+    }
+
+    /**
+     * Trunk → allowed productive actions (BLOCKED / OBSERVE / STABILIZE always coherent).
+     * Used for mismatch detection only — does not override [chooseActionWithReason].
+     */
+    internal fun isActionCoherentWithTrunk(
+        trunk: GlobalPhysiologicalState,
+        action: HarmoniaAction,
+    ): Boolean {
+        if (
+            action == HarmoniaAction.BLOCKED ||
+            action == HarmoniaAction.OBSERVE ||
+            action == HarmoniaAction.STABILIZE
+        ) {
+            return true
+        }
+        return when (trunk) {
+            GlobalPhysiologicalState.HYPO_RISK ->
+                action == HarmoniaAction.PROTECTIVE_REDUCTION
+            GlobalPhysiologicalState.DIGESTION_ACTIVE,
+            GlobalPhysiologicalState.MEAL_PROBABLE,
+            ->
+                action == HarmoniaAction.MEAL_SUPPORT ||
+                    action == HarmoniaAction.PROTECTIVE_REDUCTION ||
+                    action == HarmoniaAction.BASAL_FIRST
+            GlobalPhysiologicalState.POST_ACTIVITY ->
+                action == HarmoniaAction.PROTECTIVE_REDUCTION ||
+                    action == HarmoniaAction.MEAL_SUPPORT
+            GlobalPhysiologicalState.RESISTANCE_PROBABLE,
+            GlobalPhysiologicalState.STRESS_PROBABLE,
+            ->
+                action == HarmoniaAction.BASAL_FIRST ||
+                    action == HarmoniaAction.PROTECTIVE_REDUCTION ||
+                    action == HarmoniaAction.MEAL_SUPPORT
+            GlobalPhysiologicalState.SENSOR_UNCERTAIN ->
+                false
+            GlobalPhysiologicalState.SENSITIVITY_INCREASED ->
+                action == HarmoniaAction.PROTECTIVE_REDUCTION
+            GlobalPhysiologicalState.SLEEP_RECOVERY ->
+                action == HarmoniaAction.PROTECTIVE_REDUCTION
+            GlobalPhysiologicalState.HYPER_RISK ->
+                action == HarmoniaAction.MEAL_SUPPORT ||
+                    action == HarmoniaAction.BASAL_FIRST ||
+                    action == HarmoniaAction.PROTECTIVE_REDUCTION
+            GlobalPhysiologicalState.STABLE,
+            GlobalPhysiologicalState.MIXED,
+            GlobalPhysiologicalState.UNKNOWN,
+            ->
+                true
+        }
+    }
+
+    private fun buildDecisionBasis(
+        tree: PhysiologicalTreeSnapshot,
+        environment: HarmoniaDecisionEnvironment,
+        action: HarmoniaAction,
+        primaryReason: String,
+        blockers: List<String>,
+    ): HarmoniaDecisionBasis {
+        val trunk = tree.trunk.globalState
+        val coherent = isActionCoherentWithTrunk(trunk, action)
+        val mismatch = if (coherent) {
+            null
+        } else {
+            "action_${action.name}_not_typical_for_trunk_${trunk.name}"
+        }
+        return HarmoniaDecisionBasis(
+            trunkState = trunk,
+            trunkConfidence = tree.trunk.confidence,
+            trunkRisk = tree.trunk.riskLevel,
+            primaryReason = primaryReason,
+            contributingBranches = contributingBranchesFor(tree, environment, action, blockers),
+            actionCoherentWithTrunk = coherent,
+            mismatchReason = mismatch,
+        )
+    }
+
+    private fun contributingBranchesFor(
+        tree: PhysiologicalTreeSnapshot,
+        env: HarmoniaDecisionEnvironment,
+        action: HarmoniaAction,
+        blockers: List<String>,
+    ): List<HarmoniaBranchContribution> {
+        val b = tree.branches
+        return buildList {
+            if (blockers.isNotEmpty()) {
+                if (b.hypoRisk.confidence >= 0.45) {
+                    add(HarmoniaBranchContribution("hypoRisk", b.hypoRisk.confidence, "blocker"))
+                }
+                if (b.sensorTrust.confidence < 0.40) {
+                    add(HarmoniaBranchContribution("sensorTrust", b.sensorTrust.confidence, "blocker"))
+                }
+            }
+            when (action) {
+                HarmoniaAction.MEAL_SUPPORT -> {
+                    add(HarmoniaBranchContribution("meal", b.meal.confidence, "driver"))
+                    if (b.digestion.detected || tree.trunk.globalState == GlobalPhysiologicalState.DIGESTION_ACTIVE) {
+                        add(
+                            HarmoniaBranchContribution(
+                                "digestion",
+                                b.digestion.confidence,
+                                if (prefersMealSupportOverProtective(tree, env)) "h4_bridge" else "context",
+                            ),
+                        )
+                    }
+                    if (b.activity.confidence >= 0.40) {
+                        add(HarmoniaBranchContribution("activity", b.activity.confidence, "competing"))
+                    }
+                }
+                HarmoniaAction.PROTECTIVE_REDUCTION -> {
+                    if (b.activity.confidence >= 0.40) {
+                        add(HarmoniaBranchContribution("activity", b.activity.confidence, "driver"))
+                    }
+                    if (b.postActivity.confidence >= 0.40) {
+                        add(HarmoniaBranchContribution("postActivity", b.postActivity.confidence, "driver"))
+                    }
+                    if (b.hypoRisk.confidence >= 0.30) {
+                        add(HarmoniaBranchContribution("hypoRisk", b.hypoRisk.confidence, "context"))
+                    }
+                }
+                HarmoniaAction.BASAL_FIRST -> {
+                    if (b.hormonalResistance.confidence >= 0.40) {
+                        add(HarmoniaBranchContribution("hormonalResistance", b.hormonalResistance.confidence, "driver"))
+                    }
+                    if (b.stress.confidence >= 0.40) {
+                        add(HarmoniaBranchContribution("stress", b.stress.confidence, "driver"))
+                    }
+                    if (b.insulinEffectiveness.confidence >= 0.40) {
+                        add(HarmoniaBranchContribution("insulinEffectiveness", b.insulinEffectiveness.confidence, "driver"))
+                    }
+                }
+                HarmoniaAction.STABILIZE -> {
+                    add(HarmoniaBranchContribution("trunk", tree.trunk.confidence, "stabilize"))
+                }
+                HarmoniaAction.BLOCKED,
+                HarmoniaAction.OBSERVE,
+                -> {
+                    add(HarmoniaBranchContribution("trunk", tree.trunk.confidence, "context"))
+                }
+            }
+        }.distinctBy { it.name }
     }
 
     /**
@@ -339,17 +544,22 @@ internal object HarmoniaDecisionEngine {
         env: HarmoniaDecisionEnvironment,
         action: HarmoniaAction,
         blockers: List<String>,
+        basis: HarmoniaDecisionBasis,
     ): List<String> =
         buildList {
             add("tree=${tree.trunk.globalState.name} conf=${pct(tree.trunk.confidence)} risk=${tree.trunk.riskLevel.name}")
             add("bg=${env.currentBgMgdl.roundToInt()} delta=${fmt(env.deltaMgdl5m)} iob=${fmt(env.iobU)}/${fmt(env.maxIobU)}")
+            add("primary_reason=${basis.primaryReason}")
             if (blockers.isNotEmpty()) {
                 add("blocked=${blockers.joinToString(",")}")
             } else {
                 add("simulation_action=${action.name.lowercase(Locale.US)}")
-                if (action == HarmoniaAction.MEAL_SUPPORT && prefersMealSupportOverProtective(tree, env)) {
+                if (basis.primaryReason == "h4_meal_rise_bridge") {
                     add("h4_meal_rise_bridge")
                 }
+            }
+            if (!basis.actionCoherentWithTrunk) {
+                add("HARMONIA_BRANCH_MISMATCH=${basis.mismatchReason}")
             }
         }
 
@@ -360,11 +570,14 @@ internal object HarmoniaDecisionEngine {
         basal: Double,
         smb: Double,
         blockers: List<String>,
+        basis: HarmoniaDecisionBasis,
     ): String {
         if (!eligible) {
             return "Harmonia sim: blocked $branch | ${blockers.joinToString(",")}"
         }
-        return "Harmonia sim: ${action.name.lowercase(Locale.US)} $branch | basal ${fmt(basal)}U/h | smb ${fmt(smb)}U"
+        val mismatch = if (!basis.actionCoherentWithTrunk) " | MISMATCH" else ""
+        return "Harmonia sim: ${action.name.lowercase(Locale.US)} $branch" +
+            " (${basis.primaryReason}) | basal ${fmt(basal)}U/h | smb ${fmt(smb)}U$mismatch"
     }
 
     private fun roundToStep(value: Double, step: Double): Double {
