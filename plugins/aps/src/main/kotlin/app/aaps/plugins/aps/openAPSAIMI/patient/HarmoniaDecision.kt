@@ -1,6 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.patient
 
-import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoAggressiveRiseExit
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -112,6 +112,7 @@ data class HarmoniaDecision(
     val rationale: List<String>,
     val compactSummary: String,
     val decisionBasis: HarmoniaDecisionBasis,
+    val mealCertainty: MealCertainty = MealCertainty.NONE,
     val version: Int = 2,
 ) {
     fun toJsonObject(): JSONObject =
@@ -131,6 +132,7 @@ data class HarmoniaDecision(
             put("rationale", JSONArray(rationale))
             put("compact_summary", compactSummary)
             put("decision_basis", decisionBasis.toJsonObject())
+            put("meal_certainty", mealCertainty.toJsonObject())
             put("simulation_only", true)
             put("applies_to_pump", false)
             put("source", "harmonia_simulation_branch_v2")
@@ -211,12 +213,31 @@ internal object HarmoniaDecisionEngine {
         tree: PhysiologicalTreeSnapshot?,
         environment: HarmoniaDecisionEnvironment?,
         timestampMs: Long = tree?.timestamp ?: 0L,
+        mealCertainty: MealCertainty? = null,
+        absorptionPhase: MealAbsorptionPhase = MealAbsorptionPhase.NONE,
+        effortVeto: Boolean = false,
+        softCorroboration: Boolean = false,
+        pkpdEventualMgdl: Double? = null,
+        scenarioTerminalMgdl: Double? = null,
+        scenarioPathMinMgdl: Double? = null,
+        scenarioPathMinHitFloor: Boolean = false,
     ): HarmoniaDecision? {
         if (tree == null || environment == null) return null
 
+        val certainty = mealCertainty ?: MealCertaintyBuilder.fromTreeAndEnvironment(
+            tree = tree,
+            env = environment,
+            absorptionPhase = absorptionPhase,
+            effortVeto = effortVeto,
+            softCorroboration = softCorroboration,
+            pkpdEventualMgdl = pkpdEventualMgdl,
+            scenarioTerminalMgdl = scenarioTerminalMgdl,
+            scenarioPathMinMgdl = scenarioPathMinMgdl,
+            scenarioPathMinHitFloor = scenarioPathMinHitFloor,
+        )
         val blockers = buildBlockers(tree, environment)
         val capsApplied = mutableListOf<String>()
-        val choice = chooseActionWithReason(tree, environment, blockers)
+        val choice = chooseActionWithReason(tree, environment, blockers, certainty)
         val action = choice.action
         val branch = tree.trunk.globalState.name
 
@@ -284,6 +305,7 @@ internal object HarmoniaDecisionEngine {
             rationale = rationale,
             compactSummary = summary,
             decisionBasis = decisionBasis,
+            mealCertainty = certainty,
         )
     }
 
@@ -333,6 +355,7 @@ internal object HarmoniaDecisionEngine {
         tree: PhysiologicalTreeSnapshot,
         env: HarmoniaDecisionEnvironment,
         blockers: List<String>,
+        mealCertainty: MealCertainty,
     ): ActionChoice {
         if (blockers.isNotEmpty()) {
             return ActionChoice(HarmoniaAction.BLOCKED, "blockers")
@@ -345,28 +368,17 @@ internal object HarmoniaDecisionEngine {
             return ActionChoice(HarmoniaAction.STABILIZE, "fragility_or_chaos")
         }
 
-        // H4 meal-rise bridge: digestion + confirmed rise above band beats activity/post-activity
-        // PROTECTIVE_REDUCTION (which otherwise wins first and starves meal support).
-        if (prefersMealSupportOverProtective(tree, env)) {
-            return ActionChoice(HarmoniaAction.MEAL_SUPPORT, "h4_meal_rise_bridge")
+        // MealCertainty HIGH (= former H4 bridge): digestion + strong rise beats activity protective.
+        if (mealCertainty.supportsMealOverProtective) {
+            return ActionChoice(HarmoniaAction.MEAL_SUPPORT, "meal_certainty_high")
         }
 
         if (tree.branches.activity.confidence >= 0.55 || tree.branches.postActivity.confidence >= 0.45) {
             return ActionChoice(HarmoniaAction.PROTECTIVE_REDUCTION, "activity_or_post_activity")
         }
 
-        val mealConfidence = tree.branches.meal.confidence
-        val undeclaredMealRise =
-            mealConfidence >= 0.55 &&
-                env.cobG < 1.0 &&
-                (env.deltaMgdl5m >= 1.0 || env.mealRiseConfirmed)
-        val declaredMealRise =
-            env.cobG >= 3.0 &&
-                mealConfidence >= 0.50 &&
-                env.deltaMgdl5m >= 0.8
-        if (undeclaredMealRise || declaredMealRise) {
-            val reason = if (declaredMealRise) "declared_meal_rise" else "undeclared_meal_rise"
-            return ActionChoice(HarmoniaAction.MEAL_SUPPORT, reason)
+        if (mealCertainty.supportsMealSupport) {
+            return ActionChoice(HarmoniaAction.MEAL_SUPPORT, "meal_certainty_med")
         }
 
         if (
@@ -479,7 +491,7 @@ internal object HarmoniaDecisionEngine {
                             HarmoniaBranchContribution(
                                 "digestion",
                                 b.digestion.confidence,
-                                if (prefersMealSupportOverProtective(tree, env)) "h4_bridge" else "context",
+                                "meal_context",
                             ),
                         )
                     }
@@ -522,22 +534,14 @@ internal object HarmoniaDecisionEngine {
     }
 
     /**
-     * H4: when the trunk is [GlobalPhysiologicalState.DIGESTION_ACTIVE], meal-rise is confirmed,
-     * BG is above target + [PostHypoAggressiveRiseExit.TARGET_MARGIN_MGDL], and delta is still
-     * rising ([H4_MIN_RISING_DELTA_MGDL]), prefer [HarmoniaAction.MEAL_SUPPORT] over
-     * [HarmoniaAction.PROTECTIVE_REDUCTION]. Falling/flat post-peak stays protective.
+     * Legacy H4 predicate — kept for tests / callers. Production chooseAction uses
+     * [MealCertainty.supportsMealOverProtective] (same geometry via [MealCertaintyBuilder]).
      */
     internal fun prefersMealSupportOverProtective(
         tree: PhysiologicalTreeSnapshot,
         env: HarmoniaDecisionEnvironment,
-    ): Boolean {
-        if (tree.trunk.globalState != GlobalPhysiologicalState.DIGESTION_ACTIVE) return false
-        if (!env.mealRiseConfirmed) return false
-        val target = env.targetBgMgdl ?: return false
-        if (!target.isFinite() || !env.currentBgMgdl.isFinite() || !env.deltaMgdl5m.isFinite()) return false
-        if (env.deltaMgdl5m < H4_MIN_RISING_DELTA_MGDL) return false
-        return env.currentBgMgdl > target + PostHypoAggressiveRiseExit.TARGET_MARGIN_MGDL
-    }
+    ): Boolean =
+        MealCertaintyBuilder.fromTreeAndEnvironment(tree, env).supportsMealOverProtective
 
     private fun buildRationale(
         tree: PhysiologicalTreeSnapshot,
@@ -554,8 +558,12 @@ internal object HarmoniaDecisionEngine {
                 add("blocked=${blockers.joinToString(",")}")
             } else {
                 add("simulation_action=${action.name.lowercase(Locale.US)}")
-                if (basis.primaryReason == "h4_meal_rise_bridge") {
+                if (
+                    basis.primaryReason == "meal_certainty_high" ||
+                    basis.primaryReason == "h4_meal_rise_bridge"
+                ) {
                     add("h4_meal_rise_bridge")
+                    add("meal_certainty_high")
                 }
             }
             if (!basis.actionCoherentWithTrunk) {

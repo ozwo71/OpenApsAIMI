@@ -209,6 +209,8 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSensorTelemetry
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEnvironment
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertaintyBuilder
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaAction
 import app.aaps.plugins.aps.openAPSAIMI.patient.GlobalPhysiologicalState
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalRiskLevel
@@ -309,6 +311,8 @@ internal data class AimiDecisionContext(
         var patient_mode: org.json.JSONObject? = null,
         /** AIMI Harmonia physiological tree, context-only in Lot 1 with no insulin authority. */
         var physiological_tree: org.json.JSONObject? = null,
+        /** Cascade meal language (Tree→Harmonia→Auditor) — meal_certainty_v1. */
+        var meal_certainty: org.json.JSONObject? = null,
         /** AIMI Harmonia simulated production branch; virtual only, never applied to the real pump. */
         var harmonia_simulation: org.json.JSONObject? = null,
         /** AIMI Harmonia production owner state; basal-first only and safety-gated. */
@@ -652,6 +656,9 @@ internal data class AimiDecisionContext(
             }
             adjustments.physiological_tree?.let { tree ->
                 adj.put("physiological_tree", tree)
+            }
+            adjustments.meal_certainty?.let { mealCertainty ->
+                adj.put("meal_certainty", mealCertainty)
             }
             adjustments.harmonia_simulation?.let { simulation ->
                 adj.put("harmonia_simulation", simulation)
@@ -1614,6 +1621,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastPatientModeDecision = null
         lastPhysiologicalTreeSnapshot = null
         lastHarmoniaDecision = null
+        lastMealCertainty = null
         lastHarmoniaProductionDecision = null
         lastAuditorTickDisposition = null
         lastAuditorLoopSnapshot = null
@@ -3156,34 +3164,56 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
             cobG = cob.toDouble(),
         )
+        val harmoniaEnvironment = physiologicalTree?.let {
+            val currentBasalForSimulation = basalaimi.toDouble().takeIf { basal -> basal.isFinite() && basal > 0.0 } ?: 1.0
+            val maxBasalForSimulation = preferences.get(DoubleKey.autodriveMaxBasal)
+                .takeIf { maxBasal -> maxBasal.isFinite() && maxBasal > 0.1 }
+                ?: maxOf(currentBasalForSimulation * 3.0, currentBasalForSimulation + 2.0, 3.0)
+            HarmoniaDecisionEnvironment(
+                currentBgMgdl = bg,
+                deltaMgdl5m = delta.toDouble(),
+                iobU = iob.toDouble(),
+                cobG = cob.toDouble(),
+                currentBasalUph = currentBasalForSimulation,
+                maxBasalUph = maxBasalForSimulation,
+                maxSmbU = maxOf(maxSMB, maxSMBHB),
+                maxIobU = maxIob,
+                sensorAgeMin = sensorTelemetry.sensorAgeMin,
+                sensorNoise = sensorTelemetry.sensorNoise,
+                mealRiseConfirmed = harmoniaMealRiseConfirmed,
+                targetBgMgdl = targetBg.toDouble(),
+                correctionFragilityScore = eventMemory.correctionFragilityScore,
+                postHyperExhaustionScore = eventMemory.postHyperExhaustionScore,
+                chaoticEpisodeLoad = lastRbtChaosEvaluation?.score ?: 0.0,
+                effectiveDiaHours = tickEffectiveDiaHours,
+                effectivePeakMinutes = tickEffectivePeakMinutes,
+            )
+        }
+        val scenarioBestForMeal = lastScenarioProjection?.scenarioBest
+        val pkpdForMeal =
+            cachedRiskEnvelopeDecision?.eventualTerminalMgdl?.takeIf { it.isFinite() }
+                ?: authoritativeEventualBg(this.eventualBG).takeIf { it.isFinite() && it > 1.0 }
+        val mealCertainty = if (physiologicalTree != null && harmoniaEnvironment != null) {
+            MealCertaintyBuilder.fromTreeAndEnvironment(
+                tree = physiologicalTree,
+                env = harmoniaEnvironment,
+                absorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
+                effortVeto = effortSuppressesUndeclaredMeal(),
+                softCorroboration = MealCertaintyBuilder.softCorroborationFromPhysio(physioLive),
+                pkpdEventualMgdl = pkpdForMeal,
+                scenarioTerminalMgdl = scenarioBestForMeal?.terminalMgdl,
+                scenarioPathMinMgdl = scenarioBestForMeal?.pathMinMgdl,
+                scenarioPathMinHitFloor = scenarioBestForMeal?.pathMinHitFloor == true,
+            )
+        } else {
+            null
+        }
+        lastMealCertainty = mealCertainty
         val harmoniaDecision = HarmoniaDecisionEngine.evaluate(
             tree = physiologicalTree,
-            environment = physiologicalTree?.let {
-                val currentBasalForSimulation = basalaimi.toDouble().takeIf { basal -> basal.isFinite() && basal > 0.0 } ?: 1.0
-                val maxBasalForSimulation = preferences.get(DoubleKey.autodriveMaxBasal)
-                    .takeIf { maxBasal -> maxBasal.isFinite() && maxBasal > 0.1 }
-                    ?: maxOf(currentBasalForSimulation * 3.0, currentBasalForSimulation + 2.0, 3.0)
-                HarmoniaDecisionEnvironment(
-                    currentBgMgdl = bg,
-                    deltaMgdl5m = delta.toDouble(),
-                    iobU = iob.toDouble(),
-                    cobG = cob.toDouble(),
-                    currentBasalUph = currentBasalForSimulation,
-                    maxBasalUph = maxBasalForSimulation,
-                    maxSmbU = maxOf(maxSMB, maxSMBHB),
-                    maxIobU = maxIob,
-                    sensorAgeMin = sensorTelemetry.sensorAgeMin,
-                    sensorNoise = sensorTelemetry.sensorNoise,
-                    mealRiseConfirmed = harmoniaMealRiseConfirmed,
-                    targetBgMgdl = targetBg.toDouble(),
-                    correctionFragilityScore = eventMemory.correctionFragilityScore,
-                    postHyperExhaustionScore = eventMemory.postHyperExhaustionScore,
-                    chaoticEpisodeLoad = lastRbtChaosEvaluation?.score ?: 0.0,
-                    effectiveDiaHours = tickEffectiveDiaHours,
-                    effectivePeakMinutes = tickEffectivePeakMinutes,
-                )
-            },
+            environment = harmoniaEnvironment,
             timestampMs = nowMs,
+            mealCertainty = mealCertainty,
         )
         lastHarmoniaDecision = harmoniaDecision
         if (refreshSource == PatientRefreshSource.LOOP_TICK) {
@@ -3194,6 +3224,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         "risk=${tree.trunk.riskLevel.name}",
                 )
                 consoleLog.add(tree.compactSummary)
+            }
+            mealCertainty?.let { mc ->
+                consoleLog.add(
+                    "MEAL_CERTAINTY level=${mc.level.name} tree=${mc.treeState.name} " +
+                        "rise=${mc.riseGeometry.name} terminals=${mc.terminalsAgree.name} " +
+                        "effortVeto=${mc.effortVeto}",
+                )
             }
             harmoniaDecision?.let { decision ->
                 consoleLog.add(decision.compactSummary)
@@ -8083,6 +8120,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 })
             }
         }
+        decisionCtx.adjustments.meal_certainty = lastMealCertainty?.toJsonObject()
         decisionCtx.adjustments.harmonia_simulation = lastHarmoniaDecision?.toJsonObject()
         decisionCtx.adjustments.harmonia_production = lastHarmoniaProductionDecision?.toJsonObject()
         decisionCtx.adjustments.t3c_runtime_ownership = lastT3cRuntimeOwnership
@@ -9362,6 +9400,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             SmbRefinementFeatureSchema.modeFeatureValues(lastPatientModeDecision) +
             SmbRefinementFeatureSchema.causalFeatureValues(lastPatientState?.causalPosterior)
     private var lastHarmoniaDecision: HarmoniaDecision? = null
+    private var lastMealCertainty: MealCertainty? = null
     private var lastHarmoniaProductionDecision: HarmoniaProductionDecision? = null
     private var lastPatientSourceSensor: SourceSensor? = null
     /** Latest IOB surveillance snapshot for JSONL (updated each [finalizeAndCapSMB]). */

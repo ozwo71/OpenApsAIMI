@@ -109,7 +109,7 @@ Auditor LLM (si enabled) → CONFIRM/SOFTEN différé, ne rouvre pas un BLOCK
 | **R0** | Roadmap + index + prefs natives (ce doc) | ✅ Done | 2026-07-18 |
 | **R1** | E1 — Arbre always-on / déploiement intégral | ✅ Done (R1.5 log inclus) | 2026-07-18 |
 | **R2** | E2 — Harmonia branch-aware + export certitude | ✅ Done (R2.4/R2.5 UI/skip-owner ouverts) | 2026-07-18 |
-| **D1** | Spec + type `MealCertainty` (+ tests purs) | ⬜ Pending | — |
+| **D1** | Spec + type `MealCertainty` (+ tests purs) | ✅ Done | 2026-07-18 |
 | **D2** | H6 — Harmonizer sync + Auditor double-check aligné | ⬜ Pending | — |
 | **D3** | Authority / meal_rise dérivés de MealCertainty | ⬜ Pending | — |
 | **D4** | Snapshot terminal dose (C1) si encore nécessaire | ⬜ Pending | — |
@@ -172,11 +172,11 @@ Légende : ⬜ Pending · 🔄 In progress · ✅ Done (code) · 🧪 Device OK 
 
 | # | Tâche | Statut |
 |---|-------|--------|
-| D1.1 | Type pur Kotlin `MealCertainty` (level, tree_state, rise_geometry, terminals_agree, effort_veto, soft_corroboration) | ⬜ |
-| D1.2 | Builder depuis tree + phases + terminaux + effort (HR = soft only) | ⬜ |
-| D1.3 | Tests purs (HIGH digestion+rise ; veto effort ; falling → not HIGH) | ⬜ |
-| D1.4 | Export JSON tick `meal_certainty` | ⬜ |
-| D1.5 | Harmonia `chooseAction` consomme `MealCertainty` (H4 bridge dérivé, plus flags parallèles) | ⬜ |
+| D1.1 | Type pur Kotlin `MealCertainty` (level, tree_state, rise_geometry, terminals_agree, effort_veto, soft_corroboration) | ✅ |
+| D1.2 | Builder depuis tree + phases + terminaux + effort (HR = soft only) | ✅ |
+| D1.3 | Tests purs (HIGH digestion+rise ; veto effort ; falling → not HIGH) | ✅ |
+| D1.4 | Export JSON tick `meal_certainty` + log `MEAL_CERTAINTY` | ✅ |
+| D1.5 | Harmonia `chooseAction` consomme `MealCertainty` (HIGH=H4, MED=meal support) | ✅ |
 
 **Validation D1 :** un seul langage meal dans JSONL ; sticky `meal_rise_confirmed` planifié en D3.
 
@@ -266,11 +266,12 @@ R0 ✅ → R1 (arbre natif) → R2 (branche Harmonia)
 | 2026-07-18 | R0 | Roadmap créée ; prefs natives inventoriées (`AimiPhysioAssistantEnable` = principal anti-pattern) |
 | 2026-07-18 | R1 | Tree `enabled=true` sur dose path + refresher ; pref ne gate plus que multiplicateurs/extras ; tests chicken-egg |
 | 2026-07-18 | R2 | `HarmoniaDecisionBasis` + matrice cohérence trunk/action + logs `TREE_DEPLOYED` / `HARMONIA_BRANCH_MISMATCH` |
+| 2026-07-18 | D1 | `MealCertainty` + Harmonia consomme HIGH/MED ; export `meal_certainty` ; sticky meal_rise encore input legacy (D3) |
 
 ---
 
 ## 7. Prochaine action concrète
 
-**D1** : type pur `MealCertainty` + builder + tests + consommation Harmonia (un seul langage repas).
+**D2** : H6 Harmonizer sync + Auditor double-check aligné sur `decision_basis` / `meal_certainty`.
 
-Attendre confirmation « vas-y » avant code D1.
+Attendre confirmation « vas-y » avant code D2.
