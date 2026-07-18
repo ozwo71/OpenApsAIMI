@@ -110,7 +110,7 @@ Auditor LLM (si enabled) → CONFIRM/SOFTEN différé, ne rouvre pas un BLOCK
 | **R1** | E1 — Arbre always-on / déploiement intégral | ✅ Done (R1.5 log inclus) | 2026-07-18 |
 | **R2** | E2 — Harmonia branch-aware + export certitude | ✅ Done (R2.4/R2.5 UI/skip-owner ouverts) | 2026-07-18 |
 | **D1** | Spec + type `MealCertainty` (+ tests purs) | ✅ Done | 2026-07-18 |
-| **D2** | H6 — Harmonizer sync + Auditor double-check aligné | ⬜ Pending | — |
+| **D2** | H6 — Harmonizer sync + Auditor double-check aligné | ✅ Done | 2026-07-18 |
 | **D3** | Authority / meal_rise dérivés de MealCertainty | ⬜ Pending | — |
 | **D4** | Snapshot terminal dose (C1) si encore nécessaire | ⬜ Pending | — |
 | **D5** | Validation device + JSONL + markers | ⬜ Pending | — |
@@ -186,11 +186,11 @@ Légende : ⬜ Pending · 🔄 In progress · ✅ Done (code) · 🧪 Device OK 
 
 | # | Tâche | Statut |
 |---|-------|--------|
-| D2.1 | Harmonizer : CONFIRM/SOFTEN/BLOCK explicites sur intention Harmonia + terminaux (sync) | ⬜ |
-| D2.2 | Auditor payload : `physiological_tree` + sim + **production** + `meal_certainty` + `decisionBasis` | ⬜ |
-| D2.3 | Golden prompts : CONFIRM si MEAL_SUPPORT + DIGESTION + rise ; SOFTEN surcorrection ; ne pas rouvrir BLOCK | ⬜ |
-| D2.4 | Cache confidence → SafetyNet soft-landing **aligné** (ne pas booster contre un BLOCK) | ⬜ |
-| D2.5 | Auditor reste **pref** (`AimiAuditorEnabled`) — absence Auditor ≠ cascade off | ⬜ |
+| D2.1 | Harmonizer : CONFIRM sur MealCertainty HIGH ; SOFTEN mismatch/fragility ; BLOCK critical | ✅ |
+| D2.2 | Auditor payload : production + `meal_certainty` + `decision_basis` + harmonizer | ✅ |
+| D2.3 | Golden prompts cascade + tests payload JSON | ✅ |
+| D2.4 | SafetyNet `allowAuditorSoftLanding` gate vs Harmonizer BLOCK | ✅ |
+| D2.5 | Auditor reste **pref** (`AimiAuditorEnabled`) — absence Auditor ≠ cascade off | ✅ |
 
 **⚠️ ASYNC IMPACT :** Auditor orchestration async — ne pas bloquer le tick pompe.
 
@@ -267,11 +267,12 @@ R0 ✅ → R1 (arbre natif) → R2 (branche Harmonia)
 | 2026-07-18 | R1 | Tree `enabled=true` sur dose path + refresher ; pref ne gate plus que multiplicateurs/extras ; tests chicken-egg |
 | 2026-07-18 | R2 | `HarmoniaDecisionBasis` + matrice cohérence trunk/action + logs `TREE_DEPLOYED` / `HARMONIA_BRANCH_MISMATCH` |
 | 2026-07-18 | D1 | `MealCertainty` + Harmonia consomme HIGH/MED ; export `meal_certainty` ; sticky meal_rise encore input legacy (D3) |
+| 2026-07-18 | D2 | Harmonizer MealCertainty CONFIRM ; Auditor payload cascade ; SafetyNet soft-landing veto |
 
 ---
 
 ## 7. Prochaine action concrète
 
-**D2** : H6 Harmonizer sync + Auditor double-check aligné sur `decision_basis` / `meal_certainty`.
+**D3** : Authority `mealEvidence` + dés-sticky `meal_rise_confirmed` dérivé de `MealCertainty`.
 
-Attendre confirmation « vas-y » avant code D2.
+Attendre confirmation « vas-y » avant code D3.

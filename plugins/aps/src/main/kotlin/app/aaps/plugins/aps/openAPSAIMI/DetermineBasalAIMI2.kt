@@ -1622,6 +1622,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastPhysiologicalTreeSnapshot = null
         lastHarmoniaDecision = null
         lastMealCertainty = null
+        lastHarmonizerOutcome = null
         lastHarmoniaProductionDecision = null
         lastAuditorTickDisposition = null
         lastAuditorLoopSnapshot = null
@@ -7689,7 +7690,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             correctionFragilityScore = lastPatientState?.eventMemory?.correctionFragilityScore ?: 0.0,
             postHyperExhaustionScore = lastPatientState?.eventMemory?.postHyperExhaustionScore ?: 0.0,
             minBgLookback75m = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
+            mealCertainty = lastMealCertainty,
         )
+        lastHarmonizerOutcome = harmonizerOutcome
         when (harmonizerOutcome?.posture) {
             HarmoniaHarmonizer.Posture.BLOCK -> {
                 finalProposedRate = b.profile.current_basal.coerceAtLeast(0.0)
@@ -7923,6 +7926,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     eventualBg = b.rT.eventualBG,
                     inPrebolusWindow = inPrebolusWindow,
                     effectiveProfile = auditorEffectiveProfile,
+                    mealCertainty = lastMealCertainty,
+                    harmoniaProduction = lastHarmoniaProductionDecision,
+                    harmonizerOutcome = lastHarmonizerOutcome,
                     onSyncDisposition = { disposition ->
                         recordAuditorSyncDisposition(
                             disposition = disposition,
@@ -9401,6 +9407,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             SmbRefinementFeatureSchema.causalFeatureValues(lastPatientState?.causalPosterior)
     private var lastHarmoniaDecision: HarmoniaDecision? = null
     private var lastMealCertainty: MealCertainty? = null
+    private var lastHarmonizerOutcome: HarmoniaHarmonizer.Outcome? = null
     private var lastHarmoniaProductionDecision: HarmoniaProductionDecision? = null
     private var lastPatientSourceSensor: SourceSensor? = null
     /** Latest IOB surveillance snapshot for JSONL (updated each [finalizeAndCapSMB]). */
@@ -11403,9 +11410,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🧠 AI Auditor Confidence (si disponible)
         // Si l'Auditor a été interrogé récemment, utiliser sa confiance
         // Sinon, passer null pour appliquer le boost par défaut
-        val auditorLastConfidence: Double? = try {
-            app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache.get(300_000)?.verdict?.confidence
-        } catch (e: Exception) { null }
+        val allowAuditorSoftLanding =
+            !HarmoniaHarmonizer.blocksAuditorSoftLanding(lastHarmonizerOutcome) &&
+                lastHarmoniaDecision?.action != HarmoniaAction.BLOCKED
+        val auditorLastConfidence: Double? = if (!allowAuditorSoftLanding) {
+            null
+        } else {
+            try {
+                app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache.get(300_000)?.verdict?.confidence
+            } catch (e: Exception) {
+                null
+            }
+        }
         
         val baseLimit = app.aaps.plugins.aps.openAPSAIMI.safety.SafetyNet.calculateSafeSmbLimit(
             bg = this.bg,
@@ -11417,7 +11433,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             maxSmbHigh = this.maxSMBHB,
             isExplicitUserAction = isExplicitUserAction,
             auditorConfidence = auditorLastConfidence,
-            mealPriorityContext = smbDeliveryPriorityContext
+            mealPriorityContext = smbDeliveryPriorityContext,
+            allowAuditorSoftLanding = allowAuditorSoftLanding,
         )
         chainBaseLimit = baseLimit
 

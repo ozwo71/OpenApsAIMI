@@ -13,6 +13,9 @@ import app.aaps.core.interfaces.stats.TirCalculator
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.plugins.aps.openAPSAIMI.activity.ActivityManager
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaHarmonizer
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaProductionDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalTreeSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import javax.inject.Inject
@@ -79,6 +82,9 @@ class AuditorDataCollector @Inject constructor(
         effectiveProfile: EffectiveProfile? = null,
         physiologicalTree: PhysiologicalTreeSnapshot? = null,
         harmoniaDecision: HarmoniaDecision? = null,
+        mealCertainty: MealCertainty? = null,
+        harmoniaProduction: HarmoniaProductionDecision? = null,
+        harmonizerOutcome: HarmoniaHarmonizer.Outcome? = null,
     ): AuditorInput {
         
         val now = dateUtil.now()
@@ -161,6 +167,9 @@ class AuditorDataCollector @Inject constructor(
             trajectory = trajectory,
             physiologicalTree = physiologicalTree,
             harmoniaDecision = harmoniaDecision,
+            mealCertainty = mealCertainty,
+            harmoniaProduction = harmoniaProduction,
+            harmonizerOutcome = harmonizerOutcome,
         )
     }
 

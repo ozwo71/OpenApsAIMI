@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.patient
 
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
@@ -176,6 +177,75 @@ class HarmoniaHarmonizerTest {
             seasons = PhysiologicalSeasons(null, null, null, null, null),
             compactSummary = "hyper",
         )
+    }
+
+    @Test
+    fun mealCertaintyHigh_confirmsMealSupportOnDigestion() {
+        val certainty = MealCertainty(
+            level = MealCertaintyLevel.HIGH,
+            treeState = MealCertaintyTreeState.DIGESTION_ACTIVE,
+            absorptionPhase = MealAbsorptionPhase.FIRST_WAVE,
+            riseGeometry = MealRiseGeometry.OK,
+            terminalsAgree = MealTerminalsAgree.OK,
+            effortVeto = false,
+            softCorroboration = false,
+            reasons = listOf("level_high_digestion_rise"),
+        )
+        val simulation = HarmoniaDecision(
+            timestampMs = 1L,
+            branch = "DIGESTION_ACTIVE",
+            action = HarmoniaAction.MEAL_SUPPORT,
+            eligible = true,
+            targetBasalUph = 1.1,
+            targetSmbU = 0.3,
+            basalFactor = 1.1,
+            smbFactor = 0.3,
+            environment = HarmoniaDecisionEnvironment(
+                currentBgMgdl = 190.0,
+                deltaMgdl5m = 3.0,
+                iobU = 1.0,
+                cobG = 0.0,
+                currentBasalUph = 1.0,
+                maxBasalUph = 5.0,
+                maxSmbU = 1.0,
+                maxIobU = 5.0,
+                mealRiseConfirmed = true,
+                targetBgMgdl = 100.0,
+            ),
+            capsApplied = emptyList(),
+            blockers = emptyList(),
+            rationale = listOf("meal_certainty_high"),
+            compactSummary = "meal",
+            decisionBasis = stubBasis(GlobalPhysiologicalState.DIGESTION_ACTIVE, HarmoniaAction.MEAL_SUPPORT),
+            mealCertainty = certainty,
+        )
+        val outcome = HarmoniaHarmonizer.evaluate(
+            tree = null,
+            simulation = simulation,
+            bgMgdl = 190.0,
+            deltaMgdl5m = 3.0,
+            profileBasalUph = 0.7,
+            proposedTbrUph = 1.1,
+            eventualBgMgdl = 200.0,
+            targetBgMgdl = 100.0,
+            correctionFragilityScore = 0.2,
+            postHyperExhaustionScore = 0.1,
+            mealCertainty = certainty,
+        )
+        assertThat(outcome?.posture).isEqualTo(HarmoniaHarmonizer.Posture.CONFIRM)
+        assertThat(outcome?.reasons).contains("meal_certainty_high_confirm")
+        assertThat(HarmoniaHarmonizer.blocksAuditorSoftLanding(outcome)).isFalse()
+    }
+
+    @Test
+    fun blocksAuditorSoftLanding_onBlockPosture() {
+        val blocked = HarmoniaHarmonizer.Outcome(
+            posture = HarmoniaHarmonizer.Posture.BLOCK,
+            tbrFactor = 0.0,
+            smbFactor = 0.0,
+            reasons = listOf("critical_physio_risk"),
+        )
+        assertThat(HarmoniaHarmonizer.blocksAuditorSoftLanding(blocked)).isTrue()
     }
 
     private fun stubBasis(

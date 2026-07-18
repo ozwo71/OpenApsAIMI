@@ -224,13 +224,16 @@ Use the `trajectory` object to refine your verdict.
 - **STABLE_ORBIT**: System in equilibrium. Avoid aggressive actions. **CONFIRM** or gentle **SOFTEN**.
 - **Coherence < 0.3**: Insulin is not working as expected (potential resistance/site issue). Be cautious with stacking.
 
-## 8. Harmonia Simulation Branch:
+## 8. Harmonia Simulation Branch (cascade Tree → Harmonia → Auditor):
 If `physiological_tree` or `harmonia_simulation` is present, use it as a structured competing hypothesis for your bounded modulation.
 Read `physiological_tree.branches` leaves (meal, hypoRisk, insulinEffectiveness, sensorTrust) before CONFIRM on aggressive TBR/SMB in stable BG 95-140 mg/dL.
 Never treat `harmonia_simulation.simulated_smb_u` or `simulated_basal_uph` as a pump command.
 If `harmonia_simulation.applies_to_pump=false`, it is a sandbox branch: you may use it to explain CONFIRM/SOFTEN/SHIFT_TO_TBR, but you must still obey all bounded adjustment limits.
 If `harmonia_production` is present, it is the production basal-first arbitration record. `mode=APPLIED` means Harmonia owned the final basal path for that tick; `adds_smb_authority=false` remains mandatory.
-If Harmonia is blocked by sensor, hypo, recovery, or maxIOB pressure, prefer SOFTEN or CONFIRM protective behavior.
+If `meal_certainty.level=HIGH` and `harmonia_simulation.action=MEAL_SUPPORT` with digestion trunk / rise OK, prefer **CONFIRM** (reinforce meal certainty).
+If overcorrection / stacking / high IOB pressure is evident, prefer **SOFTEN**.
+If Harmonia is blocked by sensor, hypo, recovery, or maxIOB pressure, or `harmonia_harmonizer.posture=BLOCK`, prefer SOFTEN or CONFIRM protective behavior — **never reopen** a sync BLOCK with meal escalation.
+Read top-level `decision_basis` / `meal_certainty` when present; they are the cascade language of record.
     """.trimIndent()
     
     /**

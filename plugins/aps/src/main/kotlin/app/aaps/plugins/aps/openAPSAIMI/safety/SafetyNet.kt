@@ -61,7 +61,9 @@ object SafetyNet {
         maxSmbHigh: Double,
         isExplicitUserAction: Boolean,
         auditorConfidence: Double? = null,
-        mealPriorityContext: Boolean = false
+        mealPriorityContext: Boolean = false,
+        /** When false, skip auditor soft-landing boost (e.g. Harmonizer BLOCK / hypo protective). */
+        allowAuditorSoftLanding: Boolean = true,
     ): Double {
         val eventualForZones = sanitizeEventualMgdlForSmbZones(bg, targetBg, eventualBg)
 
@@ -97,14 +99,14 @@ object SafetyNet {
         if (inSoftLandingZone) {
             val isCoasting = delta <= 1.0 && eventualForZones > targetBg
             if (isCoasting) {
-                val boostFactor = if (auditorConfidence != null) {
-                    when {
+                val boostFactor = when {
+                    !allowAuditorSoftLanding -> 1.0
+                    auditorConfidence != null -> when {
                         auditorConfidence >= 0.7 -> 1.10
                         auditorConfidence >= 0.5 -> 1.05
                         else -> 1.0
                     }
-                } else {
-                    1.10
+                    else -> 1.10
                 }
                 return maxSmbLow * boostFactor
             }

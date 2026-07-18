@@ -1,6 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor
 
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaHarmonizer
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaProductionDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalTreeSnapshot
 import org.json.JSONArray
 import org.json.JSONObject
@@ -74,6 +77,9 @@ data class AuditorInput(
     val trajectory: TrajectorySnapshot?,
     val physiologicalTree: PhysiologicalTreeSnapshot? = null,
     val harmoniaDecision: HarmoniaDecision? = null,
+    val mealCertainty: MealCertainty? = null,
+    val harmoniaProduction: HarmoniaProductionDecision? = null,
+    val harmonizerOutcome: HarmoniaHarmonizer.Outcome? = null,
 ) {
     fun toJSON(): JSONObject = JSONObject().apply {
         put("snapshot", snapshot.toJSON())
@@ -82,6 +88,20 @@ data class AuditorInput(
         if (trajectory != null) put("trajectory", trajectory.toJSON())
         if (physiologicalTree != null) put("physiological_tree", physiologicalTree.toJsonObject())
         if (harmoniaDecision != null) put("harmonia_simulation", harmoniaDecision.toJsonObject())
+        if (mealCertainty != null) put("meal_certainty", mealCertainty.toJsonObject())
+        if (harmoniaProduction != null) put("harmonia_production", harmoniaProduction.toJsonObject())
+        if (harmonizerOutcome != null) {
+            put(
+                "harmonia_harmonizer",
+                JSONObject().apply {
+                    put("posture", harmonizerOutcome.posture.name)
+                    put("tbr_factor", harmonizerOutcome.tbrFactor)
+                    put("smb_factor", harmonizerOutcome.smbFactor)
+                    put("reasons", JSONArray(harmonizerOutcome.reasons))
+                },
+            )
+        }
+        harmoniaDecision?.decisionBasis?.let { put("decision_basis", it.toJsonObject()) }
     }
 }
 

@@ -13,6 +13,9 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData
 import app.aaps.plugins.aps.openAPSAIMI.model.*
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaHarmonizer
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaProductionDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -151,6 +154,9 @@ class AuditorOrchestrator @Inject constructor(
         eventualBg: Double?,
         inPrebolusWindow: Boolean,
         effectiveProfile: EffectiveProfile? = null,
+        mealCertainty: MealCertainty? = null,
+        harmoniaProduction: HarmoniaProductionDecision? = null,
+        harmonizerOutcome: HarmoniaHarmonizer.Outcome? = null,
         onSyncDisposition: (AuditorJsonlExport.TickDisposition) -> Unit = {},
         callback: ((AuditorVerdict?, DecisionResult) -> Unit)? = null
     ) {
@@ -356,6 +362,9 @@ class AuditorOrchestrator @Inject constructor(
                     effectiveProfile = effectiveProfile,
                     physiologicalTree = harmoniaRuntime?.physiologicalTree,
                     harmoniaDecision = harmoniaRuntime?.harmoniaDecision,
+                    mealCertainty = mealCertainty,
+                    harmoniaProduction = harmoniaProduction,
+                    harmonizerOutcome = harmonizerOutcome,
                 )
                 
                 // Get provider

@@ -5,7 +5,15 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaAction
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionBasis
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEnvironment
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaHarmonizer
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertaintyLevel
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertaintyTreeState
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealRiseGeometry
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealTerminalsAgree
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalRiskLevel
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
@@ -64,6 +72,39 @@ class AuditorPromptSafeguardsTest {
         assertTrue(prompt.contains("harmonia_simulation"), "Prompt input must include Harmonia simulation JSON")
         assertTrue(prompt.contains("applies_to_pump"), "Prompt input must expose pump isolation")
         assertTrue(prompt.contains("false"), "Harmonia simulation must be marked as not applied to pump")
+    }
+
+    @Test
+    fun `prompt encodes cascade meal certainty and never reopen block`() {
+        val prompt = AuditorPromptBuilder.buildPrompt(createDummyInput())
+        assertTrue(prompt.contains("meal_certainty.level=HIGH"), "Prompt must teach HIGH meal CONFIRM")
+        assertTrue(prompt.contains("never reopen"), "Prompt must forbid reopening sync BLOCK")
+        assertTrue(prompt.contains("decision_basis"), "Prompt must reference decision_basis")
+    }
+
+    @Test
+    fun `auditor input json exposes meal certainty and decision basis`() {
+        val certainty = MealCertainty(
+            level = MealCertaintyLevel.HIGH,
+            treeState = MealCertaintyTreeState.DIGESTION_ACTIVE,
+            absorptionPhase = MealAbsorptionPhase.FIRST_WAVE,
+            riseGeometry = MealRiseGeometry.OK,
+            terminalsAgree = MealTerminalsAgree.OK,
+            effortVeto = false,
+            softCorroboration = false,
+        )
+        val json = createDummyInput().copy(
+            harmoniaDecision = createSimulation(),
+            mealCertainty = certainty,
+            harmonizerOutcome = HarmoniaHarmonizer.Outcome(
+                posture = HarmoniaHarmonizer.Posture.CONFIRM,
+                reasons = listOf("meal_certainty_high_confirm"),
+            ),
+        ).toJSON()
+        assertTrue(json.has("meal_certainty"))
+        assertTrue(json.has("decision_basis"))
+        assertTrue(json.has("harmonia_harmonizer"))
+        assertEquals("HIGH", json.getJSONObject("meal_certainty").getString("level"))
     }
 
     private fun createDummyInput(): AuditorInput {
