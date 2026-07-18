@@ -119,6 +119,16 @@ class ClampPkpdScenarioReconcileTest {
     }
 
     @Test
+    fun authorityUpliftedEventualAboveZone1_isThinNoOp() {
+        // D4.3: when candidate eventual already clears zone-1, Clamp must not re-write.
+        val res = ClampPkpdScenarioReconcile.reconcile(
+            baseInput(pkpdEventualMgdl = 160.0, digestionOrMealActive = true),
+        )
+        assertFalse(res.reconciled)
+        assertEquals(160.0, res.eventualMgdl, 0.001)
+    }
+
+    @Test
     fun zone2PlusDigestionUsesCombinedReason() {
         val res = ClampPkpdScenarioReconcile.reconcile(
             baseInput(digestionOrMealActive = true),

@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.patient
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.prediction.ClampPkpdScenarioReconcile
 import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoAggressiveRiseExit
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -64,7 +65,7 @@ data class MealCertainty(
             put("soft_corroboration", softCorroboration)
             put("supports_meal_over_protective", supportsMealOverProtective)
             put("supports_meal_support", supportsMealSupport)
-            put("reasons", org.json.JSONArray(reasons))
+            put("reasons", JSONArray(reasons))
             put("source", "meal_certainty_v1")
         }
 

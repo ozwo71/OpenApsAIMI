@@ -533,16 +533,6 @@ internal object HarmoniaDecisionEngine {
         }.distinctBy { it.name }
     }
 
-    /**
-     * Legacy H4 predicate — kept for tests / callers. Production chooseAction uses
-     * [MealCertainty.supportsMealOverProtective] (same geometry via [MealCertaintyBuilder]).
-     */
-    internal fun prefersMealSupportOverProtective(
-        tree: PhysiologicalTreeSnapshot,
-        env: HarmoniaDecisionEnvironment,
-    ): Boolean =
-        MealCertaintyBuilder.fromTreeAndEnvironment(tree, env).supportsMealOverProtective
-
     private fun buildRationale(
         tree: PhysiologicalTreeSnapshot,
         env: HarmoniaDecisionEnvironment,
@@ -558,10 +548,8 @@ internal object HarmoniaDecisionEngine {
                 add("blocked=${blockers.joinToString(",")}")
             } else {
                 add("simulation_action=${action.name.lowercase(Locale.US)}")
-                if (
-                    basis.primaryReason == "meal_certainty_high" ||
-                    basis.primaryReason == "h4_meal_rise_bridge"
-                ) {
+                // Stable marker retained for JSONL/tests: HIGH meal certainty bridge (ex-H4).
+                if (basis.primaryReason == "meal_certainty_high") {
                     add("h4_meal_rise_bridge")
                     add("meal_certainty_high")
                 }

@@ -6,20 +6,23 @@ import kotlin.math.min
 /**
  * Evidence-gated lift of a false-low PKPD eventual before SMB SafetyNet / IOB stacking.
  *
+ * Cascade D4.3: thin filet inside [app.aaps.plugins.aps.openAPSAIMI.orchestration.DoseTerminalSnapshotBuilder]
+ * — no-op when the candidate eventual already clears zone-1 (Authority uplift); still lifts when
+ * Authority retained a false PKPD floor. Consumers must read the dose snapshot, not call this twice.
+ *
  * Field evidence (support packages): ~28% of ticks carry eventual ≤45 while realized BG+30m never
  * reaches hypo; during [DIGESTION_ACTIVE] basal collapses (≈0.45 vs ≈4 U/h) when PKPD floors while
- * scenarioBest stays high. Prediction Authority uplift often retains PKPD; the prior reconcile ran
- * only when authority was **off**.
+ * scenarioBest stays high.
  *
  * Safety invariants (must all hold to release):
  * - scenario path stays ≥ [SCN_PATHMIN_MGDL] and did not hit the numeric floor
- * - scenario terminal leads PKPD by ≥ [MIN_DIVERGENCE_MGDL]
+ * - scenario terminal leads candidate eventual by ≥ [MIN_DIVERGENCE_MGDL]
  * - BG not falling hard (delta > [MAX_NEG_DELTA_MGDL])
  * - not sport / post-hypo delivery lock
  *
  * Release arms:
- * 1. Classic zone-2: BG in [zone1, zone2) and PKPD eventual < zone1
- * 2. Digestion / meal-active + BG ≥ zone1 and PKPD eventual < zone1 (covers zone-2 **and** zone-3
+ * 1. Classic zone-2: BG in [zone1, zone2) and candidate eventual < zone1
+ * 2. Digestion / meal-active + BG ≥ zone1 and candidate eventual < zone1 (covers zone-2 **and** zone-3
  *    stacking crush where SafetyNet already allows high SMB but `ev ≪ bg` still dampens)
  */
 object ClampPkpdScenarioReconcile {

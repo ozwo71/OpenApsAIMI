@@ -112,8 +112,8 @@ Auditor LLM (si enabled) → CONFIRM/SOFTEN différé, ne rouvre pas un BLOCK
 | **D1** | Spec + type `MealCertainty` (+ tests purs) | ✅ Done | 2026-07-18 |
 | **D2** | H6 — Harmonizer sync + Auditor double-check aligné | ✅ Done | 2026-07-18 |
 | **D3** | Authority / meal_rise dérivés de MealCertainty | ✅ Done | 2026-07-18 |
-| **D4** | Snapshot terminal dose (C1) si encore nécessaire | ⬜ Pending | — |
-| **D5** | Validation device + JSONL + markers | ⬜ Pending | — |
+| **D4** | Snapshot terminal dose (C1) si encore nécessaire | ✅ Done (code, hardened) | 2026-07-18 |
+| **D5** | Validation device + JSONL + markers | 🔄 Ready for user | 2026-07-18 |
 | **Dx** | Docs / labels stale / prefs UI cleanup | ⬜ Pending | — |
 
 Légende : ⬜ Pending · 🔄 In progress · ✅ Done (code) · 🧪 Device OK (user confirm) · ⏸ Blocked
@@ -207,28 +207,28 @@ Légende : ⬜ Pending · 🔄 In progress · ✅ Done (code) · 🧪 Device OK 
 
 ---
 
-### D4 — Snapshot terminal dose (C1) si besoin ⬜
-
-Uniquement si après R1–D3 les gates (SafetyNet/stacking/tube) restent empoisonnés par multi-terminaux.
+### D4 — Snapshot terminal dose (C1) ✅ (code)
 
 | # | Tâche | Statut |
 |---|-------|--------|
-| D4.1 | Un eventual/minPred autoritaire par tick pour tous les consumers dose | ⬜ |
-| D4.2 | Brancher ScenarioProjectionApplicator ou équivalent | ⬜ |
-| D4.3 | Clamp reconcile devient no-op ou filet fin | ⬜ |
+| D4.1 | `DoseTerminalSnapshot` eventual/minPred unique (publish **pre_rbt** + refine **late_pkpd**) | ✅ |
+| D4.2 | Applicator via `PredictionAuthorityApplier` ; RBT/V3/SafetyNet/Tube → snapshot | ✅ |
+| D4.3 | Clamp filet fin dans le builder ; pas de preview scénario ungated | ✅ |
+
+Markers / export : `DOSE_TERMINAL_SNAPSHOT [pre_rbt|late_pkpd]`, JSONL `dose_terminal_snapshot`, `TUBE-LINE-D4`, `RBT_REFINE_AFTER_DOSE_SNAPSHOT`.
 
 ---
 
-### D5 — Validation terrain ⬜
+### D5 — Validation terrain 🔄 (prêt — confirmation user)
 
-| # | Critère | Statut user |
-|---|---------|-------------|
-| D5.1 | Tree deploy rate | ⬜ |
-| D5.2 | Harmonia action ↔ trunk | ⬜ |
-| D5.3 | Meal HIGH → support sans crush faux floor | ⬜ |
-| D5.4 | Hypo réel → protective / pas meal reopen | ⬜ |
-| D5.5 | Droite → STABILIZE / Auditor SOFTEN | ⬜ |
-| D5.6 | Pref physio OFF (si encore UI) n’éteint plus la cascade | ⬜ |
+| # | Critère | Marker / JSONL à vérifier | Statut user |
+|---|---------|---------------------------|-------------|
+| D5.1 | Tree deploy rate | `TREE_DEPLOYED` / `physiological_tree` >95 % ticks BG | ⬜ |
+| D5.2 | Harmonia action ↔ trunk | `harmonia_simulation.decision_basis` / pas de `HARMONIA_BRANCH_MISMATCH` | ⬜ |
+| D5.3 | Meal HIGH → support sans crush faux floor | `meal_certainty.level=HIGH` + `DOSE_TERMINAL_SNAPSHOT` ev ≫ 45 + SMB/basal non crushed | ⬜ |
+| D5.4 | Hypo réel → protective / pas meal reopen | Harmonia PROTECTIVE / Harmonizer BLOCK ; pas de meal reopen | ⬜ |
+| D5.5 | Droite → STABILIZE / Auditor SOFTEN | action STABILIZE ; Auditor SOFTEN si enabled | ⬜ |
+| D5.6 | Pref physio OFF n’éteint plus la cascade | `TREE_DEPLOYED` toujours présent | ⬜ |
 
 **Ne jamais marquer « fully functional » sans confirmation user.**
 
@@ -269,11 +269,11 @@ R0 ✅ → R1 (arbre natif) → R2 (branche Harmonia)
 | 2026-07-18 | D1 | `MealCertainty` + Harmonia consomme HIGH/MED ; export `meal_certainty` ; sticky meal_rise encore input legacy (D3) |
 | 2026-07-18 | D2 | Harmonizer MealCertainty CONFIRM ; Auditor payload cascade ; SafetyNet soft-landing veto |
 | 2026-07-18 | D3 | Authority mealEvidence + meal_rise dérivé MealCertainty ; phase sticky retirée |
+| 2026-07-18 | D4 | Snapshot + Clamp ; puis harden : publish pre-RBT, Tube baseline restore, retrait preview ungated / dead Clamp wrapper |
+| 2026-07-18 | D5 | Checklist markers prête — **attente validation device user** |
 
 ---
 
 ## 7. Prochaine action concrète
 
-**D4** : Snapshot terminal dose (C1) si les gates restent empoisonnés — sinon **D5** validation device.
-
-Attendre confirmation « vas-y » / validation terrain avant D4.
+**D5** : installer le build et valider les critères §D5 (markers ci-dessus). Cocher uniquement après confirmation user.

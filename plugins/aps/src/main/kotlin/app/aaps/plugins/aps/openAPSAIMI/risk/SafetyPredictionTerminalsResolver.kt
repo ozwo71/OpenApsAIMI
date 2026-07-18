@@ -118,8 +118,8 @@ object SafetyPredictionTerminalsResolver {
 
     /**
      * Meal-rise confirmation for safety terminal uplift.
-     * Cascade D3: when [mealCertainty] is present, MED/HIGH is authoritative (de-sticky).
-     * Legacy path no longer treats absorption phase alone as confirmation while falling.
+     * Cascade D3: MealCertainty MED/HIGH is authoritative confirmation.
+     * NONE/LOW fall through to legacy geometry (still desticky: falling never confirms via phase alone).
      */
     internal fun isMealRiseConfirmed(
         bg: Double,
@@ -129,7 +129,7 @@ object SafetyPredictionTerminalsResolver {
         cobG: Double = 0.0,
         mealCertainty: MealCertainty? = null,
     ): Boolean {
-        mealCertainty?.let { return it.supportsMealSupport }
+        if (mealCertainty?.supportsMealSupport == true) return true
         if (!delta.isFinite() || delta < 0f) return false // falling never confirms
         // Active absorption / declared meal: require a non-falling rise (de-sticky vs phase-alone).
         if (mealAbsorptionPhase.isActive &&

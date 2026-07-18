@@ -105,6 +105,40 @@ class SafetyPredictionTerminalsResolverTest {
     }
 
     @Test
+    fun mealCertaintyNone_fallsThroughToDeclaredMealIntent() {
+        val none = MealCertainty.NONE
+        assertTrue(
+            SafetyPredictionTerminalsResolver.isMealRiseConfirmed(
+                bg = 140.0,
+                delta = 2.0f,
+                mealContext = MealSafetyContext(mealModeActive = true),
+                mealCertainty = none,
+            ),
+        )
+    }
+
+    @Test
+    fun mealCertaintyLow_doesNotShortCircuitFalseOnDeclaredMeal() {
+        val low = MealCertainty(
+            level = MealCertaintyLevel.LOW,
+            treeState = MealCertaintyTreeState.NONE,
+            absorptionPhase = MealAbsorptionPhase.NONE,
+            riseGeometry = MealRiseGeometry.WEAK,
+            terminalsAgree = MealTerminalsAgree.UNKNOWN,
+            effortVeto = false,
+            softCorroboration = false,
+        )
+        assertTrue(
+            SafetyPredictionTerminalsResolver.isMealRiseConfirmed(
+                bg = 150.0,
+                delta = 1.0f,
+                mealContext = MealSafetyContext(mealModeActive = true),
+                mealCertainty = low,
+            ),
+        )
+    }
+
+    @Test
     fun resolveFromScenario_usesFloorForSafetyAndBestForMealUplift() {
         val floor = ScenarioProjectionCurve.fromRawPoints(
             ScenarioProjectionKind.CLINICAL_FLOOR,
