@@ -111,7 +111,7 @@ Auditor LLM (si enabled) → CONFIRM/SOFTEN différé, ne rouvre pas un BLOCK
 | **R2** | E2 — Harmonia branch-aware + export certitude | ✅ Done (R2.4/R2.5 UI/skip-owner ouverts) | 2026-07-18 |
 | **D1** | Spec + type `MealCertainty` (+ tests purs) | ✅ Done | 2026-07-18 |
 | **D2** | H6 — Harmonizer sync + Auditor double-check aligné | ✅ Done | 2026-07-18 |
-| **D3** | Authority / meal_rise dérivés de MealCertainty | ⬜ Pending | — |
+| **D3** | Authority / meal_rise dérivés de MealCertainty | ✅ Done | 2026-07-18 |
 | **D4** | Snapshot terminal dose (C1) si encore nécessaire | ⬜ Pending | — |
 | **D5** | Validation device + JSONL + markers | ⬜ Pending | — |
 | **Dx** | Docs / labels stale / prefs UI cleanup | ⬜ Pending | — |
@@ -200,10 +200,10 @@ Légende : ⬜ Pending · 🔄 In progress · ✅ Done (code) · 🧪 Device OK 
 
 | # | Tâche | Statut |
 |---|-------|--------|
-| D3.1 | `DecisionPredictionAuthority.mealEvidence` inclut trunk digestion/meal / MealCertainty | ⬜ |
-| D3.2 | `meal_rise_confirmed` dérivé de MealCertainty (dés-sticky) ou déprécié | ⬜ |
-| D3.3 | H4/H4c canaux basés sur MealCertainty.HIGH (Q2) | ⬜ |
-| D3.4 | Tests + markers `CASCADE_MEAL_CERT` | ⬜ |
+| D3.1 | `DecisionPredictionAuthority.mealEvidence` inclut trunk digestion/meal / MealCertainty | ✅ |
+| D3.2 | `meal_rise_confirmed` dérivé de MealCertainty (dés-sticky phase) | ✅ |
+| D3.3 | H4/H4c déjà via MealCertainty.HIGH (D1) | ✅ |
+| D3.4 | Tests Authority + desticky + MEAL_CERTAINTY log | ✅ |
 
 ---
 
@@ -268,11 +268,12 @@ R0 ✅ → R1 (arbre natif) → R2 (branche Harmonia)
 | 2026-07-18 | R2 | `HarmoniaDecisionBasis` + matrice cohérence trunk/action + logs `TREE_DEPLOYED` / `HARMONIA_BRANCH_MISMATCH` |
 | 2026-07-18 | D1 | `MealCertainty` + Harmonia consomme HIGH/MED ; export `meal_certainty` ; sticky meal_rise encore input legacy (D3) |
 | 2026-07-18 | D2 | Harmonizer MealCertainty CONFIRM ; Auditor payload cascade ; SafetyNet soft-landing veto |
+| 2026-07-18 | D3 | Authority mealEvidence + meal_rise dérivé MealCertainty ; phase sticky retirée |
 
 ---
 
 ## 7. Prochaine action concrète
 
-**D3** : Authority `mealEvidence` + dés-sticky `meal_rise_confirmed` dérivé de `MealCertainty`.
+**D4** : Snapshot terminal dose (C1) si les gates restent empoisonnés — sinon **D5** validation device.
 
-Attendre confirmation « vas-y » avant code D3.
+Attendre confirmation « vas-y » / validation terrain avant D4.

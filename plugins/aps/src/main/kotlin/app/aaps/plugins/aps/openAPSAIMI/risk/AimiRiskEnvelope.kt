@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.risk
 
 import app.aaps.core.interfaces.aps.Predictions
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoThresholdMath
@@ -89,6 +90,7 @@ object AimiRiskEnvelopeBuilder {
         targetBgMgdl: Double = 100.0,
         minBgLookback75m: Double = Double.MAX_VALUE,
         hasIndependentMealEvidence: Boolean = true,
+        mealCertainty: MealCertainty? = null,
     ): AimiRiskEnvelope {
         val predForDecision = predictionAuthority?.predTerminalMgdl ?: predTerminal
         val eventualForDecision = predictionAuthority?.eventualTerminalMgdl ?: eventualTerminal
@@ -103,6 +105,7 @@ object AimiRiskEnvelopeBuilder {
             targetBgMgdl = targetBgMgdl,
             minBgLookback75m = minBgLookback75m,
             hasIndependentMealEvidence = hasIndependentMealEvidence,
+            mealCertainty = mealCertainty,
         )
         val composite = PredictionPathMath.compositeMinMgdl(
             bg = bg,

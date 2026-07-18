@@ -2,6 +2,8 @@ package app.aaps.plugins.aps.openAPSAIMI.risk
 
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStateId
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
+import app.aaps.plugins.aps.openAPSAIMI.patient.GlobalPhysiologicalState
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
 import app.aaps.plugins.aps.openAPSAIMI.physio.BehavioralRiskPolicy
 import app.aaps.plugins.aps.openAPSAIMI.physio.HormonalScenarioTerminalCap
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
@@ -48,6 +50,8 @@ object DecisionPredictionAuthorityResolver {
         physioPolicy: BehavioralRiskPolicy?,
         uamConfidence: Double,
         postHypoDelivery: PostHypoDeliveryAuthority.Decision = PostHypoDeliveryAuthority.INACTIVE,
+        mealCertainty: MealCertainty? = null,
+        trunkGlobalState: GlobalPhysiologicalState? = null,
     ): DecisionPredictionAuthority {
         val pkpd = pkpdEventualMgdl.takeIf { it.isFinite() } ?: bgMgdl
         val rawScenarioFloor = scenarioProjection?.clinicalFloor?.terminalMgdl?.takeIf { it.isFinite() }
@@ -118,8 +122,13 @@ object DecisionPredictionAuthorityResolver {
             trajectoryType == TrajectoryType.OPEN_DIVERGING ||
                 trajectoryType == TrajectoryType.SLOW_DRIFT
         val strongRiseProjection = scenarioBest > bgMgdl + if (causalDominant == CausalStateId.FAST_MEAL) 12.0 else 15.0
+        val treeMealEvidence =
+            trunkGlobalState == GlobalPhysiologicalState.DIGESTION_ACTIVE ||
+                trunkGlobalState == GlobalPhysiologicalState.MEAL_PROBABLE ||
+                mealCertainty?.supportsMealSupport == true
         val mealEvidence =
-            mealPhaseActive ||
+            treeMealEvidence ||
+                mealPhaseActive ||
                 mealDeliveryPriority ||
                 mealCompatibleProb >= 0.55 ||
                 causalMealConfidence >= 0.55 ||
@@ -166,6 +175,8 @@ object DecisionPredictionAuthorityResolver {
                 scenarioUpliftApplied = uplift > pkpd + 0.5,
                 falseMealSuppression = falseMealSuppression,
                 reason = "meal_evidence phase=${mealAbsorptionOutput?.phase?.name ?: "NONE"} " +
+                    "mealCert=${mealCertainty?.level?.name ?: "NONE"} " +
+                    "trunk=${trunkGlobalState?.name ?: "NONE"} " +
                     "lead=${"%.1f".format(scenarioLead)} cause=${causalDominant.name}",
             )
         }

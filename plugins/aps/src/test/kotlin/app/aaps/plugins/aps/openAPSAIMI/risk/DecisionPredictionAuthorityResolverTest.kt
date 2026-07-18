@@ -4,6 +4,12 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStateId
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
+import app.aaps.plugins.aps.openAPSAIMI.patient.GlobalPhysiologicalState
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertaintyLevel
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertaintyTreeState
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealRiseGeometry
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealTerminalsAgree
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
@@ -83,6 +89,39 @@ class DecisionPredictionAuthorityResolverTest {
     }
 
     @Test
+    fun digestionTrunkAndMealCertainty_enableMealUpliftWithoutPhase() {
+        val certainty = MealCertainty(
+            level = MealCertaintyLevel.HIGH,
+            treeState = MealCertaintyTreeState.DIGESTION_ACTIVE,
+            absorptionPhase = MealAbsorptionPhase.NONE,
+            riseGeometry = MealRiseGeometry.OK,
+            terminalsAgree = MealTerminalsAgree.OK,
+            effortVeto = false,
+            softCorroboration = false,
+        )
+        val authority = DecisionPredictionAuthorityResolver.resolve(
+            bgMgdl = 148.0,
+            pkpdEventualMgdl = 112.0,
+            scenarioProjection = scenario(floorTerminal = 104.0, bestTerminal = 184.0),
+            mealAbsorptionOutput = mealOutput(MealAbsorptionPhase.NONE, priority = false),
+            hypothesisState = UamHypothesisState(mealProb = 0.20),
+            latentState = PhysioLatentState(),
+            causalStatePosterior = null,
+            trajectoryAnalysis = trajectory(TrajectoryType.OPEN_DIVERGING),
+            physioPolicy = null,
+            uamConfidence = 0.10,
+            mealCertainty = certainty,
+            trunkGlobalState = GlobalPhysiologicalState.DIGESTION_ACTIVE,
+        )
+
+        assertEquals(DecisionPredictionSource.SCENARIO_MEAL_UPLIFT, authority.source)
+        assertTrue(authority.scenarioUpliftApplied)
+        assertTrue(authority.reason.contains("mealCert=HIGH"))
+        assertTrue(authority.reason.contains("trunk=DIGESTION_ACTIVE"))
+        assertEquals(184.0, authority.eventualTerminalMgdl, 0.001)
+    }
+
+    @Test
     fun smallScenarioGapUsesConsensusWithoutForcingMealInterpretation() {
         val authority = DecisionPredictionAuthorityResolver.resolve(
             bgMgdl = 132.0,
@@ -134,8 +173,10 @@ class DecisionPredictionAuthorityResolverTest {
 
     @Test
     fun postHypoDelivery_blocksFastMealScenarioUplift() {
+        // Stay inside rebound band (bg < target+30) so REBOUND_GUARD stays active;
+        // aggressive-rise exit / margin exit must not apply here.
         val aggressionInput = CorrectionAggressionGate.Input(
-            bg = 131.0,
+            bg = 119.0,
             targetBg = 100.0,
             deltaMgdl5m = 5.0,
             shortAvgDelta = 4.0,
@@ -157,11 +198,13 @@ class DecisionPredictionAuthorityResolverTest {
                 aggressionInput = aggressionInput,
             ),
         )
+        assertTrue(postHypo.active)
+        assertTrue(postHypo.forceMealInterpretationSuppressed)
 
         val authority = DecisionPredictionAuthorityResolver.resolve(
-            bgMgdl = 131.0,
-            pkpdEventualMgdl = 118.0,
-            scenarioProjection = scenario(floorTerminal = 112.0, bestTerminal = 163.0),
+            bgMgdl = 119.0,
+            pkpdEventualMgdl = 108.0,
+            scenarioProjection = scenario(floorTerminal = 102.0, bestTerminal = 163.0),
             mealAbsorptionOutput = mealOutput(MealAbsorptionPhase.FIRST_WAVE, priority = true),
             hypothesisState = UamHypothesisState(
                 mealProb = 0.68,
@@ -184,7 +227,7 @@ class DecisionPredictionAuthorityResolverTest {
         assertEquals(DecisionPredictionSource.SCENARIO_SUPPRESSED_NON_MEAL, authority.source)
         assertTrue(authority.falseMealSuppression)
         assertFalse(authority.scenarioUpliftApplied)
-        assertEquals(118.0, authority.eventualTerminalMgdl, 0.001)
+        assertEquals(108.0, authority.eventualTerminalMgdl, 0.001)
     }
 
     private fun scenario(

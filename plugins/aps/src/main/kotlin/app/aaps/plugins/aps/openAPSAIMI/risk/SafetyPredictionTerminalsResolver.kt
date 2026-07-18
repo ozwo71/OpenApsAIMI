@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.risk
 
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEngine
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionContext
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionEngine
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionPair
@@ -33,8 +35,11 @@ object SafetyPredictionTerminalsResolver {
         minBgLookback75m: Double = Double.MAX_VALUE,
         hasIndependentMealEvidence: Boolean = true,
         cobG: Double = 0.0,
+        mealCertainty: MealCertainty? = null,
     ): SafetyPredictionTerminals {
-        val mealRiseConfirmed = isMealRiseConfirmed(bg, delta, mealContext, cobG = cobG)
+        val mealRiseConfirmed = isMealRiseConfirmed(
+            bg, delta, mealContext, cobG = cobG, mealCertainty = mealCertainty,
+        )
         val (adjPred, adjEventual) = adjustTerminals(
             bg = bg,
             delta = delta,
@@ -73,12 +78,18 @@ object SafetyPredictionTerminalsResolver {
         minBgLookback75m: Double = Double.MAX_VALUE,
         hasIndependentMealEvidence: Boolean = true,
         cobG: Double = 0.0,
+        mealCertainty: MealCertainty? = null,
     ): SafetyPredictionTerminals {
         val floor = projection.clinicalFloor
         val best = projection.scenarioBest
         val scenarioCtx = ScenarioProjectionContext(mealContext = mealContext)
-        val mealRiseConfirmed = isMealRiseConfirmed(bg, delta, mealContext, mealAbsorptionPhase, cobG) ||
-            ScenarioProjectionEngine.isMealRiseConfirmed(bg = bg, delta = delta, ctx = scenarioCtx)
+        val mealRiseConfirmed = isMealRiseConfirmed(
+            bg, delta, mealContext, mealAbsorptionPhase, cobG, mealCertainty,
+        ) ||
+            (
+                mealCertainty == null &&
+                    ScenarioProjectionEngine.isMealRiseConfirmed(bg = bg, delta = delta, ctx = scenarioCtx)
+                )
         val floorPred = minOf(floor.pathMinMgdl, floor.terminalMgdl)
         val (adjPred, adjEventual) = adjustTerminals(
             bg = bg,
@@ -105,15 +116,28 @@ object SafetyPredictionTerminalsResolver {
         )
     }
 
+    /**
+     * Meal-rise confirmation for safety terminal uplift.
+     * Cascade D3: when [mealCertainty] is present, MED/HIGH is authoritative (de-sticky).
+     * Legacy path no longer treats absorption phase alone as confirmation while falling.
+     */
     internal fun isMealRiseConfirmed(
         bg: Double,
         delta: Float,
         mealContext: MealSafetyContext,
         mealAbsorptionPhase: MealAbsorptionPhase = MealAbsorptionPhase.NONE,
         cobG: Double = 0.0,
+        mealCertainty: MealCertainty? = null,
     ): Boolean {
-        if (mealAbsorptionPhase.isActive) return true
-        if (mealContext.hasMealIntent) return true
+        mealCertainty?.let { return it.supportsMealSupport }
+        if (!delta.isFinite() || delta < 0f) return false // falling never confirms
+        // Active absorption / declared meal: require a non-falling rise (de-sticky vs phase-alone).
+        if (mealAbsorptionPhase.isActive &&
+            delta >= HarmoniaDecisionEngine.H4_MIN_RISING_DELTA_MGDL.toFloat()
+        ) {
+            return true
+        }
+        if (mealContext.hasMealIntent && delta >= 0.5f) return true
         val rising = delta >= PredictiveHypoConstants.RISING_MODERATE_DELTA.toFloat() && bg >= 90.0
         if (!rising) return false
         if (cobG <= 0.0 && bg in 95.0..140.0 && delta < 4.0f) return false
@@ -210,10 +234,11 @@ object SafetyPredictionTerminalsResolver {
         minBgLookback75m: Double = Double.MAX_VALUE,
         hasIndependentMealEvidence: Boolean = true,
         cobG: Double = 0.0,
+        mealCertainty: MealCertainty? = null,
     ): Pair<Double, Double> {
         val mealRiseConfirmed =
             predictionAuthority?.falseMealSuppression != true &&
-                isMealRiseConfirmed(bg, delta, mealContext, mealAbsorptionPhase, cobG)
+                isMealRiseConfirmed(bg, delta, mealContext, mealAbsorptionPhase, cobG, mealCertainty)
         return adjustTerminals(
             bg = bg,
             delta = delta,

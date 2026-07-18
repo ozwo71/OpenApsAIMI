@@ -3154,17 +3154,34 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             sensorInsertionMs = resolveSensorInsertionMsCached(nowMs),
             nowMs = nowMs,
         )
-        val harmoniaMealContext = MealSafetyContext(
-            mealModeActive = mealTime || lunchTime || dinnerTime || snackTime || highCarbTime || bfastTime,
-            inferredMealSignal = inferredMealSafetyIntent(),
-        )
-        val harmoniaMealRiseConfirmed = SafetyPredictionTerminalsResolver.isMealRiseConfirmed(
-            bg = bg,
-            delta = delta,
-            mealContext = harmoniaMealContext,
-            mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
-            cobG = cob.toDouble(),
-        )
+        val scenarioBestForMeal = lastScenarioProjection?.scenarioBest
+        val pkpdForMeal =
+            cachedRiskEnvelopeDecision?.eventualTerminalMgdl?.takeIf { it.isFinite() }
+                ?: authoritativeEventualBg(this.eventualBG).takeIf { it.isFinite() && it > 1.0 }
+        // Cascade D3: MealCertainty first — meal_rise_confirmed derives from it (not sticky phase).
+        val mealCertainty = physiologicalTree?.let { tree ->
+            MealCertaintyBuilder.evaluate(
+                MealCertaintyBuilder.Input(
+                    trunkState = tree.trunk.globalState,
+                    mealBranchConfidence = tree.branches.meal.confidence,
+                    digestionDetected = tree.branches.digestion.detected,
+                    absorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
+                    bgMgdl = bg,
+                    deltaMgdl5m = delta.toDouble(),
+                    targetBgMgdl = targetBg.toDouble(),
+                    cobG = cob.toDouble(),
+                    mealRiseConfirmedLegacy = false,
+                    effortVeto = effortSuppressesUndeclaredMeal(),
+                    softCorroboration = MealCertaintyBuilder.softCorroborationFromPhysio(physioLive),
+                    pkpdEventualMgdl = pkpdForMeal,
+                    scenarioTerminalMgdl = scenarioBestForMeal?.terminalMgdl,
+                    scenarioPathMinMgdl = scenarioBestForMeal?.pathMinMgdl,
+                    scenarioPathMinHitFloor = scenarioBestForMeal?.pathMinHitFloor == true,
+                ),
+            )
+        }
+        lastMealCertainty = mealCertainty
+        val harmoniaMealRiseConfirmed = mealCertainty?.supportsMealSupport == true
         val harmoniaEnvironment = physiologicalTree?.let {
             val currentBasalForSimulation = basalaimi.toDouble().takeIf { basal -> basal.isFinite() && basal > 0.0 } ?: 1.0
             val maxBasalForSimulation = preferences.get(DoubleKey.autodriveMaxBasal)
@@ -3190,26 +3207,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 effectivePeakMinutes = tickEffectivePeakMinutes,
             )
         }
-        val scenarioBestForMeal = lastScenarioProjection?.scenarioBest
-        val pkpdForMeal =
-            cachedRiskEnvelopeDecision?.eventualTerminalMgdl?.takeIf { it.isFinite() }
-                ?: authoritativeEventualBg(this.eventualBG).takeIf { it.isFinite() && it > 1.0 }
-        val mealCertainty = if (physiologicalTree != null && harmoniaEnvironment != null) {
-            MealCertaintyBuilder.fromTreeAndEnvironment(
-                tree = physiologicalTree,
-                env = harmoniaEnvironment,
-                absorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
-                effortVeto = effortSuppressesUndeclaredMeal(),
-                softCorroboration = MealCertaintyBuilder.softCorroborationFromPhysio(physioLive),
-                pkpdEventualMgdl = pkpdForMeal,
-                scenarioTerminalMgdl = scenarioBestForMeal?.terminalMgdl,
-                scenarioPathMinMgdl = scenarioBestForMeal?.pathMinMgdl,
-                scenarioPathMinHitFloor = scenarioBestForMeal?.pathMinHitFloor == true,
-            )
-        } else {
-            null
-        }
-        lastMealCertainty = mealCertainty
         val harmoniaDecision = HarmoniaDecisionEngine.evaluate(
             tree = physiologicalTree,
             environment = harmoniaEnvironment,
@@ -5284,6 +5281,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             physioPolicy = lastPhysiologicalPhaseOutput?.policy,
             uamConfidence = AimiUamHandler.confidenceOrZero(),
             postHypoDelivery = lastPostHypoDeliveryAuthority,
+            mealCertainty = lastMealCertainty,
+            trunkGlobalState = lastPhysiologicalTreeSnapshot?.trunk?.globalState,
         )
         lastDecisionPredictionAuthority = decisionPrediction
         consoleLog.add(DecisionPredictionAuthorityResolver.formatLogLine(decisionPrediction))
@@ -5334,6 +5333,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             targetBgMgdl = projectionInput.targetBg,
             minBgLookback75m = projectionInput.minBgLookback75m,
             hasIndependentMealEvidence = CorrectionAggressionGate.hasIndependentMealEvidence(projectionInput),
+            mealCertainty = lastMealCertainty,
         )
         consoleLog.add(AimiRiskEnvelopeBuilder.formatLogLine(cachedRiskEnvelopeDecision!!))
         reconcileSafetyRiskWithDecisionEnvelope()
@@ -8996,6 +8996,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             minBgLookback75m = projectionInput.minBgLookback75m,
             hasIndependentMealEvidence = CorrectionAggressionGate.hasIndependentMealEvidence(projectionInput),
             cobG = cob.toDouble(),
+            mealCertainty = lastMealCertainty,
         )
         lastSafetyTerminalsForRbt = safetyTerminals
         val lgsTh = HypoThresholdMath.computeHypoThreshold(
