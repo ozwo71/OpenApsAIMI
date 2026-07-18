@@ -211,11 +211,11 @@ Légende : ⬜ Pending · 🔄 In progress · ✅ Done (code) · 🧪 Device OK 
 
 | # | Tâche | Statut |
 |---|-------|--------|
-| D4.1 | `DoseTerminalSnapshot` eventual/minPred unique (publish **pre_rbt** + refine **late_pkpd**) | ✅ |
-| D4.2 | Applicator via `PredictionAuthorityApplier` ; RBT/V3/SafetyNet/Tube → snapshot | ✅ |
-| D4.3 | Clamp filet fin dans le builder ; pas de preview scénario ungated | ✅ |
+| D4.1 | `DoseTerminalSnapshot` eventual/minPred unique (`pre_rbt` / `pre_v3_rbt` / `late_pkpd`) | ✅ |
+| D4.2 | Applicator via `PredictionAuthorityApplier` ; RBT/V3 drink pre-delivery snapshot | ✅ |
+| D4.3 | Clamp filet fin + lift **minPred** avec pathMin sûr ; Tube skip `late_pkpd` | ✅ |
 
-Markers / export : `DOSE_TERMINAL_SNAPSHOT [pre_rbt|late_pkpd]`, JSONL `dose_terminal_snapshot`, `TUBE-LINE-D4`, `RBT_REFINE_AFTER_DOSE_SNAPSHOT`.
+Markers : `DOSE_TERMINAL_SNAPSHOT [pre_rbt|pre_v3_rbt|late_pkpd]`, JSONL `dose_terminal_snapshot`, `TUBE-LINE-D4`, `RBT_REFINE_AFTER_DOSE_SNAPSHOT`.
 
 ---
 
@@ -269,7 +269,7 @@ R0 ✅ → R1 (arbre natif) → R2 (branche Harmonia)
 | 2026-07-18 | D1 | `MealCertainty` + Harmonia consomme HIGH/MED ; export `meal_certainty` ; sticky meal_rise encore input legacy (D3) |
 | 2026-07-18 | D2 | Harmonizer MealCertainty CONFIRM ; Auditor payload cascade ; SafetyNet soft-landing veto |
 | 2026-07-18 | D3 | Authority mealEvidence + meal_rise dérivé MealCertainty ; phase sticky retirée |
-| 2026-07-18 | D4 | Snapshot + Clamp ; puis harden : publish pre-RBT, Tube baseline restore, retrait preview ungated / dead Clamp wrapper |
+| 2026-07-18 | D4 | Snapshot + Clamp ; harden ; notes : `pre_v3_rbt` après refresh meal, minPred lift, Tube skip late |
 | 2026-07-18 | D5 | Checklist markers prête — **attente validation device user** |
 
 ---

@@ -1519,7 +1519,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastPredictionAuthorityApplyResult = null
         lastDoseTerminalSnapshot = null
         tubeDoseBaseline = null
-        lastTubeBasalCapScale = null
+        tubeAppliedFromDoseSnapshotThisTick = false
         isConfirmedHighRiseThisTick = false
         correctionAggressionDecision = null
         mealAdvisorOneShotThisTick = false
@@ -3710,8 +3710,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         val rawMinPred = minPredictedAcrossCurves(rT.predBGs)
         val hypoIgnored = htr.hypoMinPredIgnored
-        // Pre-Authority: prefer scenario/meal-certainty preview via authoritative* helpers
-        // so RBT stacking is not crushed by a raw PKPD floor when meal evidence is already clear.
+        // Dose snapshot / Authority terminals (published pre_rbt or pre_v3_rbt before this resolve).
         val previewMinPred = authoritativeMinPredBg(rT, rawMinPred)
         val minPredForStacking = if (hypoIgnored && previewMinPred != null) {
             val dev = bg - targetBg
@@ -4495,6 +4494,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 )
             }
             val cbfShieldDeltaU = adCommand?.scheduledMicroBolus?.takeIf { !v3CommandSafe && it > 0.01 }
+            // V3 refreshed meal/physio after the tick-level pre_rbt publish — rebuild MealCertainty
+            // and re-publish gated terminals so RBT stacking + deliver see post-refresh evidence.
+            refreshPatientStateRuntime(
+                nowMs = dateUtil.now(),
+                healthSnapshot = snapshot,
+                sourceSensor = ctx.glucoseStatus.sourceSensor,
+                refreshSource = PatientRefreshSource.PHYSIO_SIGNAL,
+            )
+            val preV3Eventual =
+                this.eventualBG.takeIf { it.isFinite() && it > 1.0 }
+                    ?: rT.eventualBG?.takeIf { it.isFinite() && it > 1.0 }
+                    ?: bg
+            val preV3MinPred = minPredictedAcrossCurves(rT.predBGs) ?: preV3Eventual
+            publishDoseTerminalAuthorityAndSnapshot(
+                rT = rT,
+                profile = profile,
+                mealData = ctx.mealData,
+                pkpdEventualMgdl = preV3Eventual,
+                pkpdPredTerminalMgdl = preV3MinPred,
+                targetBgMgdl = targetBg.toDouble(),
+                stageTag = "pre_v3_rbt",
+            )
             val rbtCommit = resolveAndWireRbtLiveTick(
                 ctx = ctx,
                 profile = profile,
@@ -9246,11 +9267,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     )
 
     private var tubeDoseBaseline: TubeDoseBaseline? = null
-    private var lastTubeBasalCapScale: Double? = null
+    /** True after Tube has been applied from a pre-delivery snapshot this tick. */
+    private var tubeAppliedFromDoseSnapshotThisTick: Boolean = false
 
     /**
-     * Single Tube advise driven by [lastDoseTerminalSnapshot]. Restores SMB+basal from the first
-     * captured baseline so re-publish (early → late PKPD) never double-trims or sticks at 0.05.
+     * Tube advise driven by [lastDoseTerminalSnapshot].
+     * - Applied on pre-delivery publishes (`pre_rbt`, `pre_v3_rbt`) from a frozen baseline.
+     * - Skipped on `late_pkpd` so mid-tick SMB/basal caps are not wiped after V3/RBT delivery.
      */
     private fun applyTubeAdvisorFromDoseSnapshot(
         profile: OapsProfileAimi,
@@ -9260,6 +9283,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ) {
         val snap = lastDoseTerminalSnapshot ?: return
         if (!preferences.get(BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled)) return
+        if (stageTag == "late_pkpd") {
+            consoleLog.add("📐 TUBE-LINE-D4[$stageTag]: skip (caps frozen after pre-delivery publish)")
+            return
+        }
         val dia = tickEffectiveDiaHours?.takeIf { it.isFinite() && it > 0.0 } ?: return
         val isf = variableSensitivity.toDouble().takeIf { it.isFinite() && it > 1.0 } ?: return
         if (tubeDoseBaseline == null) {
@@ -9276,7 +9303,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         profile.current_basal = baseline.currentBasal
         profile.max_daily_basal = baseline.maxDailyBasal
         lastTubeAdvisorSmbCapScale = null
-        lastTubeBasalCapScale = null
         try {
             val tubeOut = straightLineTubeAdvisor.advise(
                 StraightLineTubeAdvisor.Input(
@@ -9297,7 +9323,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 this.maxSMBHB = 0.05
                 lastTubeAdvisorSmbCapScale = 0.0
                 if (tubeOut.basalCapScale < 0.999) {
-                    lastTubeBasalCapScale = tubeOut.basalCapScale
                     profile.current_basal = baseline.currentBasal * tubeOut.basalCapScale
                     profile.max_daily_basal = baseline.maxDailyBasal * tubeOut.basalCapScale
                 }
@@ -9309,7 +9334,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     this.maxSMBHB = (baseline.maxSmbHb * tubeOut.smbCapScale).coerceAtLeast(0.05)
                 }
                 if (tubeOut.basalCapScale < 0.999) {
-                    lastTubeBasalCapScale = tubeOut.basalCapScale
                     profile.current_basal = baseline.currentBasal * tubeOut.basalCapScale
                     profile.max_daily_basal = baseline.maxDailyBasal * tubeOut.basalCapScale
                 }
@@ -9318,6 +9342,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         "basal×${"%.3f".format(tubeOut.basalCapScale)} | ${tubeOut.reason}",
                 )
             }
+            tubeAppliedFromDoseSnapshotThisTick = true
         } catch (e: Exception) {
             consoleError.add("📐 TUBE-LINE-D4[$stageTag]: ${e.message}")
         }
@@ -9402,7 +9427,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         applyTubeAdvisorFromDoseSnapshot(profile, mealData, targetBgMgdl, stageTag)
     }
 
-    /** Re-merge RBT HTR after a late snapshot so stacking caps track gated terminals. */
+    /**
+     * Re-merge RBT HTR after late PKPD snapshot for finalize/SafetyNet consumers.
+     * Does not re-deliver V3 SMB (pump path already used pre_v3_rbt / pre_rbt terminals).
+     */
     private fun refineRbtMergeAfterDoseSnapshot(rT: RT) {
         if (!rbtResolvedThisTick) return
         val prev = lastRbtLiveCommitResult ?: return

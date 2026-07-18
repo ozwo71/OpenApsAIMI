@@ -77,18 +77,18 @@ class DoseTerminalSnapshotTest {
     }
 
     @Test
-    fun authorityRetainsPkpdFloor_thinClampLiftsEventual() {
+    fun authorityRetainsPkpdFloor_thinClampLiftsEventualAndMinPred() {
         val snap = DoseTerminalSnapshotBuilder.build(
             authority = authority(
                 eventual = 39.0,
-                predTerminal = 85.0,
+                predTerminal = 39.0,
                 pkpd = 39.0,
                 source = DecisionPredictionSource.PKPD_ONLY,
                 uplift = false,
             ),
             applyResult = applyResult(
                 eventual = 39.0,
-                predTerminal = 85.0,
+                predTerminal = 39.0,
                 source = "PKPD_ONLY",
             ),
             authorityEnabled = true,
@@ -98,8 +98,25 @@ class DoseTerminalSnapshotTest {
         )
         assertTrue(snap.clampReconciled)
         assertTrue(snap.eventualMgdl > 39.5)
-        assertEquals(85.0, snap.minPredMgdl, 0.001)
+        // Safe scenario pathMin (95) lifts minPred so stacking is not floor-poisoned.
+        assertEquals(95.0, snap.minPredMgdl, 0.001)
+        assertTrue(snap.minPredMgdl <= snap.eventualMgdl)
         assertTrue(snap.source.contains("CLAMP_"))
+    }
+
+    @Test
+    fun authorityMealUplift_withSafePathMin_liftsMinPredEvenWithoutClamp() {
+        val snap = DoseTerminalSnapshotBuilder.build(
+            authority = authority(eventual = 184.0, predTerminal = 39.0, pkpd = 39.0),
+            applyResult = applyResult(eventual = 184.0, predTerminal = 39.0),
+            authorityEnabled = true,
+            fallbackEventualMgdl = 39.0,
+            fallbackMinPredMgdl = 39.0,
+            clampInput = clampInput(pkpdEventual = 39.0),
+        )
+        assertTrue(snap.authorityApplied)
+        assertEquals(184.0, snap.eventualMgdl, 0.001)
+        assertEquals(95.0, snap.minPredMgdl, 0.001)
     }
 
     @Test
@@ -114,8 +131,9 @@ class DoseTerminalSnapshotTest {
         )
         assertFalse(snap.authorityApplied)
         assertTrue(snap.clampReconciled)
-        assertEquals(40.0, snap.minPredMgdl, 0.001)
         assertTrue(snap.eventualMgdl > 39.5)
+        // Clamp release also lifts minPred via safe scenario pathMin (95).
+        assertEquals(95.0, snap.minPredMgdl, 0.001)
     }
 
     @Test
