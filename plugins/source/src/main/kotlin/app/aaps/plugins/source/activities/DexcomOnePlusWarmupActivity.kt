@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,15 +25,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.AapsTopAppBar
+import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.source.R
 import app.aaps.plugins.source.compose.DexcomOnePlusUiLabels
 import app.aaps.plugins.source.compose.DexcomOnePlusWarmupCountdown
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.delay
 import java.text.DateFormat
 import java.util.Date
@@ -47,11 +51,15 @@ import java.util.Date
 @AndroidEntryPoint
 class DexcomOnePlusWarmupActivity : AppCompatActivity() {
 
+    @Inject lateinit var preferences: Preferences
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            AapsTheme {
-                DexcomOnePlusWarmupScreen(onBack = { finish() })
+            CompositionLocalProvider(LocalPreferences provides preferences) {
+                AapsTheme {
+                    DexcomOnePlusWarmupScreen(onBack = { finish() })
+                }
             }
         }
     }

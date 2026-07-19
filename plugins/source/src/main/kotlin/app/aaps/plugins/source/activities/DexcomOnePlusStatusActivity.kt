@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,9 +27,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.AapsTopAppBar
+import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.source.DexcomOnePlusPlugin
@@ -46,21 +49,24 @@ import kotlinx.coroutines.delay
 class DexcomOnePlusStatusActivity : AppCompatActivity() {
 
     @Inject lateinit var dexcomOnePlusPlugin: DexcomOnePlusPlugin
+    @Inject lateinit var preferences: Preferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         dexcomOnePlusPlugin.syncDriverFromPrefs()
         setContent {
-            AapsTheme {
-                DexcomOnePlusStatusScreen(
-                    onBack = { finish() },
-                    onOpenStart = {
-                        startActivity(Intent(this, DexcomOnePlusStartActivity::class.java))
-                    },
-                    onOpenWarmup = {
-                        startActivity(Intent(this, DexcomOnePlusWarmupActivity::class.java))
-                    },
-                )
+            CompositionLocalProvider(LocalPreferences provides preferences) {
+                AapsTheme {
+                    DexcomOnePlusStatusScreen(
+                        onBack = { finish() },
+                        onOpenStart = {
+                            startActivity(Intent(this, DexcomOnePlusStartActivity::class.java))
+                        },
+                        onOpenWarmup = {
+                            startActivity(Intent(this, DexcomOnePlusWarmupActivity::class.java))
+                        },
+                    )
+                }
             }
         }
     }

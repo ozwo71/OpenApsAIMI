@@ -28,6 +28,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -41,9 +42,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.core.os.HandlerCompat
 import android.os.Looper
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.AapsTopAppBar
+import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.core.ui.compose.clearFocusOnTap
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriver
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
@@ -63,6 +66,7 @@ import javax.inject.Inject
 class DexcomOnePlusStartActivity : AppCompatActivity() {
 
     @Inject lateinit var dexcomOnePlusPlugin: DexcomOnePlusPlugin
+    @Inject lateinit var preferences: Preferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,18 +75,20 @@ class DexcomOnePlusStartActivity : AppCompatActivity() {
         val driver = OnePlusCgmDrivers.default()
         driver.setContext(applicationContext)
         setContent {
-            AapsTheme {
-                DexcomOnePlusStartScreen(
-                    onBack = { finish() },
-                    onEnsureDriver = {
-                        dexcomOnePlusPlugin.syncDriverFromPrefs()
-                        OnePlusCgmDrivers.default()
-                    },
-                    onStarted = {
-                        startActivity(Intent(this, DexcomOnePlusWarmupActivity::class.java))
-                        finish()
-                    },
-                )
+            CompositionLocalProvider(LocalPreferences provides preferences) {
+                AapsTheme {
+                    DexcomOnePlusStartScreen(
+                        onBack = { finish() },
+                        onEnsureDriver = {
+                            dexcomOnePlusPlugin.syncDriverFromPrefs()
+                            OnePlusCgmDrivers.default()
+                        },
+                        onStarted = {
+                            startActivity(Intent(this, DexcomOnePlusWarmupActivity::class.java))
+                            finish()
+                        },
+                    )
+                }
             }
         }
     }
