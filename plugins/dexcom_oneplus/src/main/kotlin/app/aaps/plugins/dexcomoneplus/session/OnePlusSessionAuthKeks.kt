@@ -15,6 +15,8 @@ import java.security.InvalidParameterException
  * - initial `aNext` after `amConnected` (CCCD already enabled by GATT connect)
  * - Auth indication → `receivedResponse` → `aNext` only when true
  * - ExtraData notify → `receivedData` → `aNext` only when buffer full (true)
+ * - Success only when Ob1 would enter GET_DATA (`aNext` length==1), **not** when the
+ *   shared key first becomes computable (that is mid-handshake after Round3 / AuthRequest)
  *
  * ⚠️ ASYNC IMPACT: blocks caller (bleExecutor) on [OnePlusGattClient.awaitKeksNotify] and optional
  * bond wait. Do not call from main.
@@ -22,7 +24,7 @@ import java.security.InvalidParameterException
 class OnePlusSessionAuthKeks(
     private val gatt: OnePlusGattClient,
     private val stepTimeoutMs: Long = 15_000L,
-    /** Many 20-byte ExtraData chunks per 160-byte round (×3) plus Auth challenge steps. */
+    /** Many 20-byte ExtraData chunks per 160-byte round (×3) plus Auth challenge / AuthStatus. */
     private val maxSteps: Int = 96,
     private val bondWaitMs: Long = 45_000L,
 ) : OnePlusSessionAuth {
@@ -41,9 +43,8 @@ class OnePlusSessionAuthKeks(
         // Ob1: first doNext after Auth CCCD setup (connect already enabled CCCDs).
         emitANext(plugin)?.let { return it }
 
+        var sawSharedKey = false
         repeat(maxSteps) { step ->
-            sharedKeyReady(plugin, step)?.let { return it }
-
             if (!gatt.isConnected()) {
                 return AuthResult(ok = false, message = "ONEPLUS_AUTH: GATT disconnected")
             }
@@ -90,15 +91,25 @@ class OnePlusSessionAuthKeks(
                 emitANext(plugin)?.let { return it }
             }
 
-            sharedKeyReady(plugin, step)?.let { return it }
+            // Log key availability but do NOT finish — Ob1 still needs AuthChallenge + AuthStatus.
+            if (!sawSharedKey) {
+                val shared = plugin.getPersistence(1)
+                if (shared != null && shared.isNotEmpty()) {
+                    sawSharedKey = true
+                    Log.i(
+                        OnePlusLogMarkers.TAG,
+                        "${OnePlusLogMarkers.SESSION}: KEKS shared key available (${shared.size}b) " +
+                            "step=$step — continuing Auth challenge / AuthStatus",
+                    )
+                }
+            }
         }
 
-        val finalKey = plugin.getPersistence(1)
-        return if (finalKey != null && finalKey.isNotEmpty()) {
-            AuthResult(ok = true, message = "keks_ok")
-        } else {
-            AuthResult(ok = false, message = "ONEPLUS_AUTH: KEKS did not produce shared key in $maxSteps steps")
-        }
+        return AuthResult(
+            ok = false,
+            message = "ONEPLUS_AUTH: KEKS handshake incomplete after $maxSteps steps " +
+                "(sharedKey=$sawSharedKey; need AuthStatus→GET_DATA)",
+        )
     }
 
     /**
@@ -123,12 +134,19 @@ class OnePlusSessionAuthKeks(
         }
         return when (next.size) {
             1 -> {
-                // Ob1: length==1 → auth complete, transition to GET_DATA.
+                // Ob1: length==1 → auth complete (GET_DATA). Do not write GETDATA here —
+                // Control/EGV path owns post-auth traffic.
+                val key = plugin.getPersistence(1)
+                val keyBytes = if (key != null && key.isNotEmpty()) key.size else 0
                 Log.i(
                     OnePlusLogMarkers.TAG,
-                    "${OnePlusLogMarkers.SESSION}: KEKS aNext length=1 (auth complete)",
+                    "${OnePlusLogMarkers.SESSION}: KEKS auth complete (aNext length=1, key=${keyBytes}b)",
                 )
-                AuthResult(ok = true, message = "keks_ok")
+                if (keyBytes == 0) {
+                    AuthResult(ok = false, message = "ONEPLUS_AUTH: GET_DATA without shared key")
+                } else {
+                    AuthResult(ok = true, message = "keks_ok")
+                }
             }
             3 -> {
                 AuthResult(
@@ -138,6 +156,7 @@ class OnePlusSessionAuthKeks(
             }
             else -> {
                 // Ob1 doNext: ExtraData chunks first (NO_RESPONSE), then Auth (DEFAULT).
+                // Includes AuthChallenge (0x04) and TIME_EXTENDED after AuthStatus paths.
                 if (next.isNotEmpty()) {
                     gatt.writeExtraData(next.getOrNull(1))
                     gatt.writeAuthentication(next.getOrNull(0))
@@ -145,16 +164,6 @@ class OnePlusSessionAuthKeks(
                 null
             }
         }
-    }
-
-    private fun sharedKeyReady(plugin: Plugin, step: Int): AuthResult? {
-        val shared = plugin.getPersistence(1) ?: return null
-        if (shared.isEmpty()) return null
-        Log.i(
-            OnePlusLogMarkers.TAG,
-            "${OnePlusLogMarkers.SESSION}: KEKS shared key ready (${shared.size}b) step=$step",
-        )
-        return AuthResult(ok = true, message = "keks_ok")
     }
 
     /**
