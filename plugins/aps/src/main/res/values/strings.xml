@@ -1641,7 +1641,7 @@
     <string name="aimi_tpo_active_session_summary">Pack: %1$s · tier %2$s · %3$d min left · %4$d prefs adjusted</string>
     <string name="aimi_tpo_revert_now">Revert now</string>
     <string name="aimi_tpo_revert_confirm_title">Revert temporary protection?</string>
-    <string name="aimi_tpo_revert_confirm_body">Restores the preferences saved before this 2 h protection session. Keys you edited manually during the session are kept.</string>
+    <string name="aimi_tpo_revert_confirm_body">Restores the preferences saved before this 45 min protection session. Keys you edited manually during the session are kept.</string>
     <string name="aimi_tpo_revert_done">Temporary protection reverted.</string>
     <string name="aimi_tpo_extra_changes">+%1$d more adjustments</string>
     <string name="aimi_tpo_pack_post_hypo">Post-hypo recovery</string>
@@ -1649,14 +1649,14 @@
     <string name="aimi_tpo_pack_exhausted">Exhausted recovery</string>
     <string name="aimi_tpo_prefs_subscreen_title">Transient protection (TPO)</string>
     <string name="aimi_tpo_notification_channel_name">AIMI temporary protection</string>
-    <string name="aimi_tpo_notification_channel_description">Alerts when AIMI starts a 2-hour temporary protection session.</string>
+    <string name="aimi_tpo_notification_channel_description">Alerts when AIMI starts a 45-minute temporary protection session.</string>
     <string name="aimi_tpo_notification_channel_ended_name" comment="Android notification channel for TPO session end (prefs restored)">AIMI protection ended</string>
     <string name="aimi_tpo_notification_channel_ended_description" comment="Shown in system notification settings for the TPO end channel">Notifies when a temporary protection session ends and preferences are restored.</string>
     <string name="aimi_tpo_notification_started_title">AIMI temporary protection active</string>
     <string name="aimi_tpo_notification_started_text">%1$s · %2$d min · %3$d prefs adjusted</string>
     <string name="aimi_tpo_notification_started_tier">Tier: %1$s</string>
     <string name="aimi_tpo_notification_ended_title">AIMI temporary protection ended</string>
-    <string name="aimi_tpo_notification_ended_expired">2-hour session finished — your preferences were restored.</string>
+    <string name="aimi_tpo_notification_ended_expired">45-minute session finished — your preferences were restored.</string>
     <string name="aimi_tpo_notification_ended_manual">Protection reverted — your saved preferences were restored.</string>
     <string name="aimi_tpo_notification_ended_superseded">Previous protection replaced by a higher-priority session.</string>
     <string name="aimi_control_center_status_coherent_summary">The current managed settings already tell a coherent story. Moving this family will step the owned legacy keys from their current values toward the selected family level.</string>

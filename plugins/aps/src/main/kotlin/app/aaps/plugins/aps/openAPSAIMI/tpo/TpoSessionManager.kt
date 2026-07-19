@@ -14,7 +14,7 @@ internal class TpoSessionManager(
     private val persistence: TpoPersistence,
 ) {
     companion object {
-        const val TTL_MS = 2L * 60L * 60L * 1000L
+        const val TTL_MS = 45L * 60L * 1000L
     }
 
     fun currentSession(): TpoSessionDocument? = persistence.loadSession()

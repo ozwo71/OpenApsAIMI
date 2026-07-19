@@ -230,7 +230,7 @@ Objectif produit : l'arbre attrape le repas non declare ; Harmonia harmonise la 
 | `PatientEventMemory.correctionFragilityScore` | Arbre + TPO | Arbre lit ; **TPO applique prefs** |
 | RBT `CHAOTIC` / post-hypo episodes | Dampen SMB | Parallele RBT |
 | `PostHypoProjectionCap` | Cap rebound | Parallele safety ; **bug** si BG>plafond |
-| TPO 2 h packs | Rails prefs temporaires | **Orthogonal** — voir overlay doc |
+| TPO 45 min packs | Rails prefs temporaires | **Orthogonal** — voir overlay doc |
 
 Harmonia n'a pas encore d'action dediee **yoyo** ; la stabilisation reelle est **partagee** avec TPO et RBT. Lot **H5** (plan §14 `aimi-harmonia-implementation.md`) vise a renforcer cette branche.
 
