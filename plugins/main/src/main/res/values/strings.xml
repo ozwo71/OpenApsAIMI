@@ -278,6 +278,7 @@
     <string name="graph_legend_smb">SMB</string>
     <string name="graph_legend_scenario_floor">Floor</string>
     <string name="graph_legend_scenario_best">Scenario</string>
+    <string name="graph_scenario_near_bg_hint">Scenario near current BG (equilibrium / weak signal)</string>
     <string name="dashboard_graph_smb_toast">SMB · %1$s</string>
     <string name="dashboard_metrics_overflow_a11y">Dashboard layout options</string>
     <string name="graph_legend_tbr">TBR</string>

@@ -20,10 +20,18 @@ object ScenarioProjectionEngine {
     private const val SPIRAL_DAMPING = 0.94
     private const val ACTIVITY_RISE_CAP_FACTOR = 0.65
     private const val PHYSIO_DAMP_BLEND = 0.35
+    /** Hybrid stays within this of BG → treat as collapsed / weak metabolic signal. */
+    private const val HYBRID_COLLAPSED_MAX_DEV_MGDL = 3.5
+    /** Floor must diverge at least this much from BG to justify insulin-slope restore. */
+    private const val FLOOR_SLOPE_MIN_DEV_MGDL = 6.0
+    private const val INSULIN_SLOPE_SEED_WEIGHT = 0.38
+    private const val INSULIN_SLOPE_FINAL_WEIGHT_MIN = 0.25
+    private const val INSULIN_SLOPE_FINAL_WEIGHT_MAX = 0.45
 
     fun build(input: ScenarioProjectionInput): ScenarioProjectionPair {
         val curves = input.curves
         val ctx = input.context
+        val bg = input.bgNowMgdl
         val contributors = mutableListOf<ScenarioContributor>()
         val floorRaw = curves.iob.toMutableList()
         contributors.add(
@@ -34,19 +42,41 @@ object ScenarioProjectionEngine {
         )
 
         val bestRaw = curves.hybrid.toMutableList()
-        mergeMealAndUamSources(bestRaw, curves, ctx, contributors)
+        // When hybrid≈BG but insulin-only Floor still slopes, seed insulin motion into Scenario
+        // and skip layers that would collapse it back onto BG (physio / soft target blend).
+        val preserveInsulinSlope =
+            !ctx.mealIntent &&
+                maxAbsDevFromBg(curves.hybrid, bg) <= HYBRID_COLLAPSED_MAX_DEV_MGDL &&
+                maxAbsDevFromBg(curves.iob, bg) >= FLOOR_SLOPE_MIN_DEV_MGDL
+        if (preserveInsulinSlope) {
+            seedInsulinSlopeFromFloor(bestRaw, floorRaw, bg, contributors)
+        }
+        mergeMealAndUamSources(
+            bestRaw,
+            curves,
+            ctx,
+            contributors,
+            preserveInsulinSlope = preserveInsulinSlope,
+        )
         ctx.trajectoryAnalysis?.let { analysis ->
             if (ctx.trajectoryModulationActive || ctx.trajectoryRelevanceScore > 0.25) {
-                applyTrajectoryLayer(bestRaw, input.bgNowMgdl, input.deltaMgdlPer5, analysis, contributors)
+                applyTrajectoryLayer(
+                    bestRaw,
+                    bg,
+                    input.deltaMgdlPer5,
+                    analysis,
+                    contributors,
+                    preserveInsulinSlope = preserveInsulinSlope,
+                )
             }
         }
         if (ctx.activityProtectionMode || ctx.contextActivityActive) {
-            applyActivityLayer(bestRaw, input.bgNowMgdl, input.deltaMgdlPer5, contributors)
+            applyActivityLayer(bestRaw, bg, input.deltaMgdlPer5, contributors)
         }
-        if (ctx.physioReactivityFactor < 0.98 || ctx.physioSmbFactor < 0.98) {
+        if (!preserveInsulinSlope && (ctx.physioReactivityFactor < 0.98 || ctx.physioSmbFactor < 0.98)) {
             applyPhysioLayer(
                 bestRaw,
-                input.bgNowMgdl,
+                bg,
                 ctx.physioSmbFactor,
                 ctx.physioReactivityFactor,
                 contributors,
@@ -55,23 +85,28 @@ object ScenarioProjectionEngine {
         if (ctx.suppressMealLikeUam || ctx.scenarioBestCapAboveBgMgdl != null) {
             applyPhysiologicalPhaseLayer(
                 bestRaw,
-                input.bgNowMgdl,
+                bg,
                 ctx,
                 contributors,
+                preserveInsulinSlope = preserveInsulinSlope,
             )
         }
-        if (ctx.contextSmbFactor < 0.98f) {
-            applyContextSmbLayer(bestRaw, input.bgNowMgdl, ctx.contextSmbFactor, contributors)
+        if (!preserveInsulinSlope && ctx.contextSmbFactor < 0.98f) {
+            applyContextSmbLayer(bestRaw, bg, ctx.contextSmbFactor, contributors)
         }
-        blendTowardTarget(bestRaw, input.bgNowMgdl, ctx.targetBgMgdl, ctx.trajectoryType, contributors)
+        if (!preserveInsulinSlope) {
+            blendTowardTarget(bestRaw, bg, ctx.targetBgMgdl, ctx.trajectoryType, contributors)
+        }
         if (ctx.mealAbsorptionMemoryActive || ctx.mealAbsorptionPhase.isActive) {
             applyMealAbsorptionTerminalFloor(
                 bestRaw,
-                input.bgNowMgdl,
+                bg,
                 ctx,
                 contributors,
             )
         }
+        // Final safety: if later layers still pinned Scenario to BG while Floor slopes, restore again.
+        restoreInsulinSlopeIfCollapsed(bestRaw, floorRaw, bg, ctx.mealIntent, contributors)
 
         return ScenarioProjectionPair(
             clinicalFloor = ScenarioProjectionCurve.fromRawPoints(ScenarioProjectionKind.CLINICAL_FLOOR, floorRaw),
@@ -88,6 +123,7 @@ object ScenarioProjectionEngine {
         curves: AdvancedPredictionCurves,
         ctx: ScenarioProjectionContext,
         contributors: MutableList<ScenarioContributor>,
+        preserveInsulinSlope: Boolean = false,
     ) {
         val terminalBefore = curves.hybrid.lastOrNull() ?: bestRaw.last()
         for (i in bestRaw.indices) {
@@ -96,7 +132,12 @@ object ScenarioProjectionEngine {
             val cob = curves.cob.getOrElse(i) { candidate }
             if (ctx.mealIntent) {
                 candidate = max(candidate, max(uam, cob))
-            } else if (!ctx.suppressMealLikeUam && uam > candidate + 5.0) {
+            } else if (
+                !preserveInsulinSlope &&
+                !ctx.suppressMealLikeUam &&
+                uam > candidate + 5.0
+            ) {
+                // Skip when preserving Floor slope: flat UAM≈BG would erase the insulin seed.
                 candidate = max(candidate, uam)
             }
             bestRaw[i] = candidate
@@ -161,6 +202,7 @@ object ScenarioProjectionEngine {
         bg: Double,
         ctx: ScenarioProjectionContext,
         contributors: MutableList<ScenarioContributor>,
+        preserveInsulinSlope: Boolean = false,
     ) {
         val before = bestRaw.last()
         val capAbove = ctx.scenarioBestCapAboveBgMgdl
@@ -172,7 +214,8 @@ object ScenarioProjectionEngine {
                 }
             }
         }
-        if (ctx.suppressMealLikeUam) {
+        // Do not collapse seeded insulin slope back onto BG during hormonal UAM suppress.
+        if (ctx.suppressMealLikeUam && !preserveInsulinSlope) {
             val hormonalBlend = 0.88
             for (i in 1 until bestRaw.size) {
                 bestRaw[i] = bg + (bestRaw[i] - bg) * hormonalBlend
@@ -197,6 +240,7 @@ object ScenarioProjectionEngine {
         delta: Float,
         analysis: TrajectoryAnalysis,
         contributors: MutableList<ScenarioContributor>,
+        preserveInsulinSlope: Boolean = false,
     ) {
         val beforeTerminal = bestRaw.last()
         when (analysis.classification) {
@@ -220,6 +264,8 @@ object ScenarioProjectionEngine {
                 }
             }
             TrajectoryType.TIGHT_SPIRAL -> {
+                // Skip spiral collapse when we are preserving insulin-only slope from Floor.
+                if (preserveInsulinSlope) return
                 for (i in 1 until bestRaw.size) {
                     bestRaw[i] = bg + (bestRaw[i] - bg) * SPIRAL_DAMPING
                 }
@@ -234,6 +280,7 @@ object ScenarioProjectionEngine {
             TrajectoryType.CLOSING_CONVERGING,
             TrajectoryType.STABLE_ORBIT,
             -> {
+                if (preserveInsulinSlope) return
                 val targetPull = 0.04
                 for (i in 1 until bestRaw.size) {
                     val targetBlend = bg + (bestRaw[i] - bg) * (1.0 - targetPull * i / bestRaw.size)
@@ -251,6 +298,68 @@ object ScenarioProjectionEngine {
             TrajectoryType.UNCERTAIN,
             -> Unit
         }
+    }
+
+    private fun maxAbsDevFromBg(series: List<Double>, bg: Double): Double {
+        if (series.size < 2) return 0.0
+        return series.drop(1).maxOf { abs(it - bg) }
+    }
+
+    private fun blendSeriesTowardFloor(
+        bestRaw: MutableList<Double>,
+        floorRaw: List<Double>,
+        weight: Double,
+    ) {
+        val n = min(bestRaw.size, floorRaw.size)
+        val w = weight.coerceIn(0.0, 1.0)
+        for (i in 1 until n) {
+            bestRaw[i] = bestRaw[i] * (1.0 - w) + floorRaw[i] * w
+        }
+    }
+
+    private fun seedInsulinSlopeFromFloor(
+        bestRaw: MutableList<Double>,
+        floorRaw: List<Double>,
+        bg: Double,
+        contributors: MutableList<ScenarioContributor>,
+    ) {
+        val beforeTerminal = bestRaw.last()
+        blendSeriesTowardFloor(bestRaw, floorRaw, INSULIN_SLOPE_SEED_WEIGHT)
+        contributors.add(
+            ScenarioContributor(
+                id = ScenarioContributorId.INSULIN_SLOPE_RESTORE,
+                summary = "Seed insulin slope — hybrid≈BG floorDev=${"%.1f".format(maxAbsDevFromBg(floorRaw, bg))} " +
+                    "w=${"%.2f".format(INSULIN_SLOPE_SEED_WEIGHT)}",
+                terminalDeltaMgdl = bestRaw.last() - beforeTerminal,
+            ),
+        )
+    }
+
+    private fun restoreInsulinSlopeIfCollapsed(
+        bestRaw: MutableList<Double>,
+        floorRaw: List<Double>,
+        bg: Double,
+        mealIntent: Boolean,
+        contributors: MutableList<ScenarioContributor>,
+    ) {
+        if (mealIntent) return
+        val bestMaxDev = maxAbsDevFromBg(bestRaw, bg)
+        val floorMaxDev = maxAbsDevFromBg(floorRaw, bg)
+        if (bestMaxDev > HYBRID_COLLAPSED_MAX_DEV_MGDL) return
+        if (floorMaxDev < FLOOR_SLOPE_MIN_DEV_MGDL) return
+        val beforeTerminal = bestRaw.last()
+        val weight = ((floorMaxDev - FLOOR_SLOPE_MIN_DEV_MGDL) / 20.0)
+            .coerceIn(INSULIN_SLOPE_FINAL_WEIGHT_MIN, INSULIN_SLOPE_FINAL_WEIGHT_MAX)
+        blendSeriesTowardFloor(bestRaw, floorRaw, weight)
+        contributors.add(
+            ScenarioContributor(
+                id = ScenarioContributorId.INSULIN_SLOPE_RESTORE,
+                summary = "Restore insulin slope — scenario collapsed near BG " +
+                    "bestDev=${"%.1f".format(bestMaxDev)} floorDev=${"%.1f".format(floorMaxDev)} " +
+                    "w=${"%.2f".format(weight)}",
+                terminalDeltaMgdl = bestRaw.last() - beforeTerminal,
+            ),
+        )
     }
 
     private fun applyActivityLayer(

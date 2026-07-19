@@ -137,4 +137,29 @@ class ScenarioProjectionEngineTest {
         assertEquals(projection.clinicalFloor.pointsMgdl, projection.clinicalFloor.pointsMgdl)
         assertEquals(projection.scenarioBest.pointsMgdl.size, projection.clinicalFloor.pointsMgdl.size)
     }
+
+    @Test
+    fun collapsedHybrid_restoresInsulinSlopeFromFloor() {
+        val bg = 72.0
+        val steps = 12
+        val hybrid = List(steps) { bg }
+        val iob = List(steps) { i -> bg - i * 2.0 }
+        val projection = ScenarioProjectionEngine.build(
+            ScenarioProjectionInput(
+                bgNowMgdl = bg,
+                deltaMgdlPer5 = -1.0f,
+                curves = AdvancedPredictionCurves(
+                    iob = iob,
+                    cob = hybrid,
+                    uam = hybrid,
+                    zt = iob,
+                    hybrid = hybrid,
+                ),
+                context = ScenarioProjectionContext(),
+            ),
+        )
+        assertTrue(projection.contributors.any { it.id == ScenarioContributorId.INSULIN_SLOPE_RESTORE })
+        assertTrue(projection.scenarioBest.terminalMgdl < bg - 3.0)
+        assertTrue(projection.scenarioBest.terminalMgdl > projection.clinicalFloor.terminalMgdl)
+    }
 }

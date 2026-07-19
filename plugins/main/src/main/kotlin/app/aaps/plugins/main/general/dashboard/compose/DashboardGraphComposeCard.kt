@@ -83,6 +83,16 @@ internal fun DashboardGraphComposeCard(
         canvasRenderInput = composeState.graphRenderInput,
         graphViewModel = graphViewModel,
     )
+    val predictionsForHint by graphViewModel.predictionsFlow.collectAsStateWithLifecycle()
+    val bgReadingsForHint by graphViewModel.bgReadingsFlow.collectAsStateWithLifecycle()
+    val showScenarioNearBgHint = remember(predictionsForHint, bgReadingsForHint, useVicoGraph, showPredictionLegend) {
+        useVicoGraph &&
+            showPredictionLegend &&
+            scenarioNearBgEquilibriumHintVisible(
+                predictions = predictionsForHint,
+                currentBgMgdl = bgReadingsForHint.lastOrNull()?.value,
+            )
+    }
     val cardInnerPaddingHorizontal = dimensionResource(R.dimen.dashboard_card_inner_padding_horizontal)
     val cardInnerPaddingVertical = dimensionResource(R.dimen.dashboard_card_inner_padding_vertical)
     val graphMinHeight = dimensionResource(R.dimen.dashboard_graph_height_min)
@@ -229,6 +239,16 @@ internal fun DashboardGraphComposeCard(
                         modifier = Modifier.height(34.dp),
                     )
                 }
+            }
+            if (showScenarioNearBgHint) {
+                Text(
+                    text = stringResource(R.string.graph_scenario_near_bg_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = sectionSpacing),
+                )
             }
             val updateMessage = composeState.graphUiState.updateMessage
             if (!hideDetailedGraphStatus && updateMessage.isNotBlank()) {
