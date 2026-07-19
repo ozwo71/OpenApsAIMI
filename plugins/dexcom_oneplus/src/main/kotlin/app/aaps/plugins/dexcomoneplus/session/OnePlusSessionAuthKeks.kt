@@ -15,6 +15,7 @@ import java.security.InvalidParameterException
  * - initial `aNext` after `amConnected` (CCCD already enabled by GATT connect)
  * - Auth indication → `receivedResponse` → `aNext` only when true
  * - ExtraData notify → `receivedData` → `aNext` only when buffer full (true)
+ * - Installs xDrip guide KEKS certs ([OnePlusKeksGuideCerts]) before `amConnected`
  * - Success only when Ob1 would enter GET_DATA (`aNext` length==1), **not** when the
  *   shared key first becomes computable (that is mid-handshake after Round3 / AuthRequest)
  *
@@ -34,6 +35,8 @@ class OnePlusSessionAuthKeks(
             return AuthResult(ok = false, message = "ONEPLUS_AUTH: GATT not connected")
         }
         val plugin = Plugin.getInstance(pairingCode)
+        // Ob1: Pref keks_p1..p3 → setPersistence(8..10) before handshake (xDrip Auto Configure QR).
+        OnePlusKeksGuideCerts.install(plugin)
         plugin.amConnected()
         Log.i(
             OnePlusLogMarkers.TAG,
