@@ -32,8 +32,8 @@ When this fork includes the Dexcom ONE+ native plugin (`:plugins:dexcom_oneplus`
 
 - [ ] **Dexcom ONE+ preservation reviewed** — follow [docs/MERGE_CONSTRAINT_DEXCOM_ONEPLUS.md](MERGE_CONSTRAINT_DEXCOM_ONEPLUS.md).
 - [ ] **Smoke (scaffold / post-merge):** Config Builder lists **Dexcom ONE+**; **BYODA** (`@IntKey(440)`) still works; **Eversense** (`@IntKey(445)`) still works.
-- [ ] Prefs open Status / Start / Warm-up without crash (stub connect may show FAILED until Real BLE).
-- [ ] Native pair / warm-up / BG — only after BLE+UX land and **user device confirmation** (do not mark “working” without that). User guide: [docs/DEXCOM_ONEPLUS_USER_GUIDE.md](DEXCOM_ONEPLUS_USER_GUIDE.md). Lab matrix: [docs/DEXCOM_ONEPLUS_QA_MATRIX.md](DEXCOM_ONEPLUS_QA_MATRIX.md). Integration: [docs/DEXCOM_ONEPLUS_INTEGRATION_NOTES.md](DEXCOM_ONEPLUS_INTEGRATION_NOTES.md).
+- [ ] Prefs open Status / Start / Warm-up without crash (Stub default; Real via eng pref).
+- [ ] Native pair / warm-up / BG — only after **user device confirmation** (do not mark “working” without that). User guide: [docs/DEXCOM_ONEPLUS_USER_GUIDE.md](DEXCOM_ONEPLUS_USER_GUIDE.md). Dev onboarding: [docs/DEXCOM_ONEPLUS_DEV_ONBOARDING.md](DEXCOM_ONEPLUS_DEV_ONBOARDING.md). Integration: [docs/DEXCOM_ONEPLUS_INTEGRATION_NOTES.md](DEXCOM_ONEPLUS_INTEGRATION_NOTES.md).
 
 ---
 

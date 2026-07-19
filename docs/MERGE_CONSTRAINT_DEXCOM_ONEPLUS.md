@@ -64,13 +64,13 @@ Keep these mappings (sensor text must match enum `"AAPS-DexcomOnePlus"`):
 - [ ] BYODA `DexcomPlugin` still listed and selectable (`@IntKey(440)`).
 - [ ] Eversense still listed and selectable (`@IntKey(445)`).
 - [ ] `notification_reader_packages.json` still maps `d1plus` / `dexcomone` → `AAPS-DexcomOnePlus`.
-- [ ] Native BLE pair / warm-up / BG — only after A6+A8 and **user device confirmation**.
+- [ ] Native BLE pair / warm-up / BG — only after **user device confirmation** (eng Real path).
 
-## Status (scaffold)
+## Status
 
 | Date | Note |
 |------|------|
-| 2026-07-18 | Branch `feature/dexcom-oneplus-native`: module stub + plugin DI `@IntKey(446)` + enums + notif remap. BLE protocol not yet ported (A6). |
-| 2026-07-18 | A12: merge constraint polished; user guide + non-regression pointer added. |
-| 2026-07-18 | A1 NOTICE + A6 Real skeleton (Stub default); A13 integration notes + QA matrix. Device A3 still required before production GATT. |
-| 2026-07-18 | `:plugins:libkeks` vendored + Android GATT + `OnePlusSessionAuthKeks`; Stub still default. Device A3 still required. |
+| 2026-07-18 | Branch `feature/dexcom-oneplus-native`: module + plugin DI `@IntKey(446)` + enums + notif remap. |
+| 2026-07-18 | A12: merge constraint + user guide + non-regression pointer. |
+| 2026-07-18 | `:plugins:libkeks` + Android GATT + KEKS + EGV/SessionStart/Backfill; Stub default; Real via eng pref. |
+| 2026-07-19 | Attach-safe (no auto SessionStop); docs onboarding/changelog; UI i18n. Device A3 still required. |

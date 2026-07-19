@@ -2,9 +2,9 @@ THIRD-PARTY / UPSTREAM NOTICE
 =============================
 Module: :plugins:dexcom_oneplus (Dexcom ONE+ native CGM driver — OpenApsAIMI fork)
 
-Status: DRAFT for Agent A1 — ready before A6 ports protocol sources.
-         Update pin / file list when code is actually copied or derived.
+Status: Active NOTICE for ported / derived sources (update when new files land).
          Do not invent copyright holders; unknowns are marked explicitly.
+         Device A3 confirmation still required before any production claim.
 
 This AndroidAPS / OpenApsAIMI tree is licensed under the GNU Affero General
 Public License v3 (see repository root LICENSE.txt). Portions intended for this

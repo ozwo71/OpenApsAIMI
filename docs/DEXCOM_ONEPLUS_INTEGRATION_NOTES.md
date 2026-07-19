@@ -2,7 +2,7 @@
 
 **Branch:** `feature/dexcom-oneplus-native`  
 **Date:** 2026-07-18  
-**Claim level:** scaffold integrated — **not** device-validated native BLE
+**Claim level:** integrated end-to-end — **not** device-validated as production BLE
 
 ---
 
@@ -10,16 +10,16 @@
 
 | Layer | Status |
 |-------|--------|
-| Gradle `:plugins:dexcom_oneplus` | Included in `settings.gradle` |
+| Gradle `:plugins:dexcom_oneplus` + `:plugins:libkeks` | Included in `settings.gradle` |
 | DI `@IntKey(446)` | Between BYODA `440` and Aidex `450`; Eversense stays `445` |
 | Enums / DB / UE | `DEXCOM_ONEPLUS_NATIVE` / `AAPS-DexcomOnePlus` / `Sources.DexcomOnePlus` |
 | Notif Phase A | `d1plus` + `dexcomone` → One+ tag |
 | AIMI | `sourceSensor` wired; G6 lead **only** `DEXCOM_G6_NATIVE` |
-| Ingest | `DexcomOnePlusIngest` → PersistenceLayer; skip `WARMING` |
-| UX | Status / Start / Warm-up Compose + prefs |
-| OEM | `DeviceProfileRegistry` (unused by Real until wired) |
-| Licence | Memo + `plugins/dexcom_oneplus/NOTICE` — port OK conditional |
-| BLE | **Stub default** via `OnePlusCgmDrivers.default()`; Real = failing skeleton |
+| Ingest | `DexcomOnePlusIngest` → PersistenceLayer; skip `WARMING`; 4 min dedup |
+| UX | Status / Start / Warm-up Compose + prefs + start steps |
+| OEM | `DeviceProfileRegistry` used by Real GATT reconnect/MTU |
+| Licence | Memo + NOTICE files — port OK conditional (xDrip pin) |
+| BLE | **Stub default**; **Real** = GATT + KEKS + EGV/backfill via eng `UseRealSkeleton` |
 
 ---
 
@@ -36,11 +36,11 @@
 ## 3. Driver selection
 
 ```text
-OnePlusCgmDrivers.default()  → Stub (production path today)
-OnePlusCgmDrivers.realSkeleton() → Real skeleton (A3 spike / future swap)
+OnePlusCgmDrivers.select(false) → Stub (default)
+OnePlusCgmDrivers.select(true)  → Real (eng pref UseRealSkeleton)
 ```
 
-Plugin + ONE+ activities use `default()`. Do not flip default to Real until A3 GO + protocol port.
+Plugin `syncDriverFromPrefs()` migrates watchers. Do not flip default to Real until device A3 GO.
 
 ---
 

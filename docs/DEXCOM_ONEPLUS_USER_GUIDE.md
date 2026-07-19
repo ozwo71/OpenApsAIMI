@@ -1,8 +1,8 @@
 # Dexcom ONE+ — user guide (OpenApsAIMI)
 
 **Language:** English  
-**Branch / status:** scaffold on `feature/dexcom-oneplus-native` — native BLE session and warm-up UI are **not** production-ready until agents A6/A8 land and you confirm on device.  
-**Related:** [product fiche](DEXCOM_ONEPLUS_NATIVE_PLUGIN_PRODUCT.md) · [agent plan](DEXCOM_ONEPLUS_NATIVE_AGENT_PLAN.md) · [merge constraint](MERGE_CONSTRAINT_DEXCOM_ONEPLUS.md)
+**Branch / status:** `feature/dexcom-oneplus-native` — native Real BLE exists behind eng pref; **not** production-ready until you confirm on device.  
+**Related:** [product fiche](DEXCOM_ONEPLUS_NATIVE_PLUGIN_PRODUCT.md) · [dev onboarding](DEXCOM_ONEPLUS_DEV_ONBOARDING.md) · [changelog](DEXCOM_ONEPLUS_CHANGELOG.md) · [merge constraint](MERGE_CONSTRAINT_DEXCOM_ONEPLUS.md)
 
 Do **not** treat this guide as “fully working” until you have confirmed behaviour on a real phone and sensor.
 
@@ -59,7 +59,7 @@ During warm-up you should see:
 - Explicit message that there is **no loop BG yet** (no fake placeholder glucose)
 
 When warm-up finishes, the UI should transition to “active” and the first real BG should appear.  
-Until A8 ships, this screen may be missing even if the plugin appears in Config Builder.
+Warm-up UI is present; countdown may use a local ~30 min fallback until the sensor reports remaining time.
 
 ### 2.4 Current reality (device not yet confirmed)
 
@@ -140,7 +140,7 @@ If native fails to connect: disable the One+ native plugin, confirm GATT is down
 | Symptom | What to check |
 |---------|----------------|
 | Plugin missing in Config Builder | Branch includes `:plugins:dexcom_oneplus`; DI `@IntKey(446)`; rebuild app |
-| Plugin ON but no BG (scaffold) | Expected until A6 — use xDrip Direct or notification reader |
+| Plugin ON but no BG | Enable eng **Use Real BLE skeleton**; stop Dexcom/xDrip; complete warm-up; check logcat `DEXCOM_ONEPLUS_BG: insert complete`. Or use interim xDrip / notification reader. |
 | Pair fails / immediate disconnect | Official Dexcom or xDrip still holding BLE? Uninstall/stop them; retry |
 | Warm-up stuck past ~30 min | BLE still connected? Sensor already started elsewhere? Capture logcat `DEXCOM_ONEPLUS_*` |
 | BG stops after hours (OEM) | Re-run §4 battery checklist; Samsung “sleeping apps” |

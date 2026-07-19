@@ -47,9 +47,9 @@ Tree queried via GitHub git trees API (recursive) at the pin. App paths preferre
 
 ---
 
-## Next code step after A3 GO
+## Remaining after device A3 GO
 
-1. Wire `OnePlusGattClient` using `OnePlusBluetoothUuids` + platform GATT (Eversense-style executor).  
-2. Port `libkeks` behind `OnePlusSessionAuth` (Gradle module or in-tree sources + NOTICE).  
-3. Port EGV parse + CalibrationState → warm-up remaining.  
-4. Keep Stub as rollback; flip `UseRealSkeleton` only for spike then make Real the default after user confirm.
+1. Harden first-pair bond UX from device logs.  
+2. Optional: 24h backfill window; DexTimeKeeper persistence across process death.  
+3. Keep Stub as rollback until user confirms Real; then consider flipping default.  
+4. See [DEXCOM_ONEPLUS_CHANGELOG.md](../DEXCOM_ONEPLUS_CHANGELOG.md) for what already landed (GATT, libkeks, EGV, SessionStart, Backfill).
