@@ -48,10 +48,12 @@ class OnePlusSessionAuthKeks(
                 return AuthResult(ok = false, message = "ONEPLUS_AUTH: KEKS aNext null (state stalled)")
             }
 
-            // Ob1: [0] Auth opcode, [1] ExtraData payload.
+            // Ob1 doNext: ExtraData chunks first (NO_RESPONSE), then Auth (DEFAULT).
+            // Writing Auth before ExtraData (or without GATT serialization) yields Android
+            // status 201 ERROR_GATT_WRITE_REQUEST_BUSY on API 33+.
             if (next.isNotEmpty()) {
-                gatt.writeAuthentication(next.getOrNull(0))
                 gatt.writeExtraData(next.getOrNull(1))
+                gatt.writeAuthentication(next.getOrNull(0))
             }
 
             val notify = gatt.awaitNotify(stepTimeoutMs)

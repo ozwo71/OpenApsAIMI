@@ -8,6 +8,7 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.bluetooth.BluetoothStatusCodes
 import android.content.Context
 import android.os.Build
 import android.util.Log
@@ -18,13 +19,20 @@ import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Platform GATT client for ONE+ / G7 Direct family UUIDs.
  *
  * Auth/ExtraData for KEKS; Control for EGV (Ob1 style).
  *
- * ⚠️ ASYNC IMPACT: callbacks on binder thread; await* / connect block bleExecutor only.
+ * Mirrors Ob1/xDrip constraints:
+ * - **one outstanding GATT op** at a time (avoids Android 13+ status 201 /
+ *   [BluetoothStatusCodes.ERROR_GATT_WRITE_REQUEST_BUSY])
+ * - CCCD: ExtraData notify → Authentication **indication** before ready
+ * - ExtraData writes use [WRITE_TYPE_NO_RESPONSE]; Auth uses [WRITE_TYPE_DEFAULT]
+ *
+ * ⚠️ ASYNC IMPACT: callbacks on binder thread; await* / connect / writes block bleExecutor only.
  */
 @SuppressLint("MissingPermission")
 class OnePlusGattClientAndroid(
@@ -48,6 +56,19 @@ class OnePlusGattClientAndroid(
     private val controlQueue = LinkedBlockingQueue<ByteArray>(32)
     private val backfillQueue = LinkedBlockingQueue<ByteArray>(64)
 
+    /** Serializes writeCharacteristic / writeDescriptor from bleExecutor. */
+    private val gattOpLock = Any()
+    private val pendingOpLatch = AtomicReferenceLatch()
+    private val pendingOpStatus = AtomicInteger(BluetoothGatt.GATT_SUCCESS)
+
+    /**
+     * CCCD setup state machine (runs on binder callbacks — must not block waiting for itself).
+     * Ob1 order: ExtraData notification, then Authentication indication.
+     */
+    private enum class CccdPhase { NONE, EXTRA, AUTH, DONE }
+
+    @Volatile private var cccdPhase = CccdPhase.NONE
+
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             Log.i(
@@ -63,6 +84,7 @@ class OnePlusGattClientAndroid(
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 connected = false
                 readyLatch.fail("disconnected")
+                completePendingOp(BluetoothGatt.GATT_FAILURE)
                 authQueue.offer(ByteArray(0))
                 controlQueue.offer(ByteArray(0))
                 backfillQueue.offer(ByteArray(0))
@@ -92,14 +114,70 @@ class OnePlusGattClientAndroid(
                 readyLatch.fail("Authentication characteristic missing")
                 return
             }
-            enableCccd(g, authChar!!, indicate = false)
-            extraChar?.let { enableCccd(g, it, indicate = false) }
-            readyLatch.complete()
-            Log.i(
+            // Do not mark ready until CCCD writes complete (prevents Auth write status=201).
+            if (extraChar != null) {
+                cccdPhase = CccdPhase.EXTRA
+                if (!submitEnableCccd(g, extraChar!!, indicate = false)) {
+                    readyLatch.fail("ExtraData CCCD submit failed")
+                }
+            } else {
+                cccdPhase = CccdPhase.AUTH
+                if (!submitAuthCccd(g)) {
+                    readyLatch.fail("Auth CCCD submit failed")
+                }
+            }
+        }
+
+        override fun onDescriptorWrite(
+            g: BluetoothGatt,
+            descriptor: BluetoothGattDescriptor,
+            status: Int,
+        ) {
+            Log.d(
                 OnePlusLogMarkers.TAG,
-                "${OnePlusLogMarkers.SESSION}: gatt ready control=${controlChar != null} " +
-                    "backfill=${backfillChar != null}",
+                "${OnePlusLogMarkers.SESSION}: descriptorWrite uuid=${descriptor.uuid} status=$status phase=$cccdPhase",
             )
+            // bleExecutor-driven CCCD (Control / Backfill) uses the op latch.
+            if (cccdPhase == CccdPhase.DONE || cccdPhase == CccdPhase.NONE) {
+                completePendingOp(status)
+                return
+            }
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                readyLatch.fail("CCCD write status=$status phase=$cccdPhase")
+                cccdPhase = CccdPhase.NONE
+                return
+            }
+            when (cccdPhase) {
+                CccdPhase.EXTRA -> {
+                    cccdPhase = CccdPhase.AUTH
+                    if (!submitAuthCccd(g)) {
+                        readyLatch.fail("Auth CCCD submit failed")
+                        cccdPhase = CccdPhase.NONE
+                    }
+                }
+                CccdPhase.AUTH -> {
+                    cccdPhase = CccdPhase.DONE
+                    readyLatch.complete()
+                    Log.i(
+                        OnePlusLogMarkers.TAG,
+                        "${OnePlusLogMarkers.SESSION}: gatt ready control=${controlChar != null} " +
+                            "backfill=${backfillChar != null}",
+                    )
+                }
+                else -> Unit
+            }
+        }
+
+        override fun onCharacteristicWrite(
+            g: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            status: Int,
+        ) {
+            Log.d(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SESSION}: charWrite uuid=${characteristic.uuid} status=$status",
+            )
+            completePendingOp(status)
         }
 
         @Deprecated("Deprecated in Java")
@@ -131,6 +209,8 @@ class OnePlusGattClientAndroid(
         controlQueue.clear()
         backfillQueue.clear()
         readyLatch.reset()
+        cccdPhase = CccdPhase.NONE
+        pendingOpLatch.reset()
         if (deviceAddress.isBlank()) {
             error("ONEPLUS_GATT: device address blank — scan UI required")
         }
@@ -171,22 +251,49 @@ class OnePlusGattClientAndroid(
     override fun isConnected(): Boolean = connected && gatt != null
 
     override fun writeAuthentication(payload: ByteArray?) {
-        writeChar(authChar, payload, "Auth")
+        // Ob1: Authentication uses WRITE_TYPE_DEFAULT.
+        writeChar(
+            characteristic = authChar,
+            payload = payload,
+            label = "Auth",
+            writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT,
+        )
     }
 
     override fun writeExtraData(payload: ByteArray?) {
-        writeChar(extraChar, payload, "ExtraData")
+        if (payload == null || payload.isEmpty()) return
+        // Ob1 doNext: ExtraData in ≤20-byte chunks, WRITE_TYPE_NO_RESPONSE, short gaps.
+        var offset = 0
+        while (offset < payload.size) {
+            val end = minOf(offset + EXTRA_DATA_CHUNK, payload.size)
+            writeChar(
+                characteristic = extraChar,
+                payload = payload.copyOfRange(offset, end),
+                label = "ExtraData",
+                writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE,
+            )
+            offset = end
+            if (offset < payload.size) {
+                sleepQuiet(EXTRA_DATA_CHUNK_GAP_MS)
+            }
+        }
+        sleepQuiet(EXTRA_DATA_AFTER_MS)
     }
 
     override fun writeControl(payload: ByteArray?) {
-        writeChar(controlChar, payload, "Control")
+        writeChar(
+            characteristic = controlChar,
+            payload = payload,
+            label = "Control",
+            writeType = null,
+        )
     }
 
     override fun enableControlNotifications() {
         val g = gatt ?: error("ONEPLUS_GATT: not connected")
         val c = controlChar ?: error("ONEPLUS_GATT: Control characteristic missing")
         // Ob1 uses indications on Control.
-        enableCccd(g, c, indicate = true)
+        runBlockingDescriptorWrite(g, c, indicate = true)
         Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: Control indications enabled")
     }
 
@@ -194,7 +301,7 @@ class OnePlusGattClientAndroid(
         val g = gatt ?: error("ONEPLUS_GATT: not connected")
         val c = backfillChar ?: error("ONEPLUS_GATT: ProbablyBackfill characteristic missing")
         // Ob1 uses notifications (not indications) on ProbablyBackfill.
-        enableCccd(g, c, indicate = false)
+        runBlockingDescriptorWrite(g, c, indicate = false)
         Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: Backfill notifications enabled")
     }
 
@@ -228,48 +335,32 @@ class OnePlusGattClientAndroid(
         return if (v.isEmpty()) null else v
     }
 
-    private fun writeChar(characteristic: BluetoothGattCharacteristic?, payload: ByteArray?, label: String) {
-        if (payload == null || payload.isEmpty()) return
-        val g = gatt ?: error("ONEPLUS_GATT: not connected ($label)")
-        val c = characteristic ?: error("ONEPLUS_GATT: missing $label characteristic")
-        val writeType = if (c.properties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0) {
-            BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-        } else {
-            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val status = g.writeCharacteristic(c, payload, writeType)
-            if (status != BluetoothGatt.GATT_SUCCESS) {
-                error("ONEPLUS_GATT: write $label status=$status")
-            }
-        } else {
-            @Suppress("DEPRECATION")
-            c.value = payload
-            @Suppress("DEPRECATION")
-            c.writeType = writeType
-            @Suppress("DEPRECATION")
-            if (!g.writeCharacteristic(c)) {
-                error("ONEPLUS_GATT: write $label failed")
-            }
-        }
-        Log.d(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: wrote $label ${payload.size}b")
+    private fun submitAuthCccd(g: BluetoothGatt): Boolean {
+        val auth = authChar ?: return false
+        // Ob1 KEKS path: setupIndication(Authentication); fall back to notify if needed.
+        val indicate = auth.properties and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
+        return submitEnableCccd(g, auth, indicate = indicate)
     }
 
-    private fun enableCccd(
+    /**
+     * Non-blocking CCCD submit for the discover-time state machine (binder thread).
+     */
+    private fun submitEnableCccd(
         g: BluetoothGatt,
         characteristic: BluetoothGattCharacteristic,
         indicate: Boolean,
-    ) {
+    ): Boolean {
         g.setCharacteristicNotification(characteristic, true)
         val cccd = characteristic.getDescriptor(OnePlusBluetoothUuids.CharacteristicUpdateNotification)
-            ?: return
+            ?: return false
         val enable = if (indicate) {
             BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
         } else {
             BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            g.writeDescriptor(cccd, enable)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val status = g.writeDescriptor(cccd, enable)
+            status == BluetoothStatusCodes.SUCCESS || status == BluetoothGatt.GATT_SUCCESS
         } else {
             @Suppress("DEPRECATION")
             cccd.value = enable
@@ -278,8 +369,111 @@ class OnePlusGattClientAndroid(
         }
     }
 
+    private fun runBlockingDescriptorWrite(
+        g: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+        indicate: Boolean,
+    ) {
+        synchronized(gattOpLock) {
+            pendingOpLatch.reset()
+            pendingOpStatus.set(BluetoothGatt.GATT_SUCCESS)
+            g.setCharacteristicNotification(characteristic, true)
+            val cccd = characteristic.getDescriptor(OnePlusBluetoothUuids.CharacteristicUpdateNotification)
+                ?: error("ONEPLUS_GATT: CCCD missing")
+            val enable = if (indicate) {
+                BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+            } else {
+                BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            }
+            val submitted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val status = g.writeDescriptor(cccd, enable)
+                if (status != BluetoothStatusCodes.SUCCESS && status != BluetoothGatt.GATT_SUCCESS) {
+                    error("ONEPLUS_GATT: writeDescriptor status=$status")
+                }
+                true
+            } else {
+                @Suppress("DEPRECATION")
+                cccd.value = enable
+                @Suppress("DEPRECATION")
+                g.writeDescriptor(cccd)
+            }
+            if (!submitted) {
+                error("ONEPLUS_GATT: writeDescriptor failed")
+            }
+            if (!pendingOpLatch.await(GATT_OP_TIMEOUT_MS)) {
+                error("ONEPLUS_GATT: writeDescriptor timeout")
+            }
+            val err = pendingOpLatch.error
+            if (err != null) error("ONEPLUS_GATT: $err")
+            val status = pendingOpStatus.get()
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                error("ONEPLUS_GATT: descriptor status=$status")
+            }
+        }
+    }
+
+    private fun writeChar(
+        characteristic: BluetoothGattCharacteristic?,
+        payload: ByteArray?,
+        label: String,
+        writeType: Int?,
+    ) {
+        if (payload == null || payload.isEmpty()) return
+        val g = gatt ?: error("ONEPLUS_GATT: not connected ($label)")
+        val c = characteristic ?: error("ONEPLUS_GATT: missing $label characteristic")
+        val resolvedType = writeType ?: if (
+            c.properties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0
+        ) {
+            BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+        } else {
+            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+        }
+
+        synchronized(gattOpLock) {
+            pendingOpLatch.reset()
+            pendingOpStatus.set(BluetoothGatt.GATT_SUCCESS)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val status = g.writeCharacteristic(c, payload, resolvedType)
+                if (status != BluetoothStatusCodes.SUCCESS && status != BluetoothGatt.GATT_SUCCESS) {
+                    // 201 = ERROR_GATT_WRITE_REQUEST_BUSY — surface clearly for logcat.
+                    error("ONEPLUS_GATT: write $label status=$status")
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                c.value = payload
+                @Suppress("DEPRECATION")
+                c.writeType = resolvedType
+                @Suppress("DEPRECATION")
+                if (!g.writeCharacteristic(c)) {
+                    error("ONEPLUS_GATT: write $label failed")
+                }
+            }
+            if (!pendingOpLatch.await(GATT_OP_TIMEOUT_MS)) {
+                error("ONEPLUS_GATT: write $label timeout")
+            }
+            val err = pendingOpLatch.error
+            if (err != null) error("ONEPLUS_GATT: write $label $err")
+            val cbStatus = pendingOpStatus.get()
+            if (cbStatus != BluetoothGatt.GATT_SUCCESS) {
+                error("ONEPLUS_GATT: write $label callback status=$cbStatus")
+            }
+            Log.d(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: wrote $label ${payload.size}b")
+        }
+    }
+
+    private fun completePendingOp(status: Int) {
+        pendingOpStatus.set(status)
+        if (status != BluetoothGatt.GATT_SUCCESS) {
+            pendingOpLatch.fail("status=$status")
+        } else {
+            pendingOpLatch.complete()
+        }
+    }
+
     private fun disconnectInternal() {
         connected = false
+        cccdPhase = CccdPhase.NONE
+        completePendingOp(BluetoothGatt.GATT_FAILURE)
         // Unblock await* waiters (empty = disconnect sentinel).
         authQueue.offer(ByteArray(0))
         controlQueue.offer(ByteArray(0))
@@ -298,6 +492,14 @@ class OnePlusGattClientAndroid(
         extraChar = null
         controlChar = null
         backfillChar = null
+    }
+
+    private fun sleepQuiet(ms: Long) {
+        try {
+            Thread.sleep(ms)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
     }
 
     private class AtomicReferenceLatch {
@@ -321,5 +523,13 @@ class OnePlusGattClientAndroid(
         }
 
         fun await(timeoutMs: Long): Boolean = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+    }
+
+    companion object {
+        private const val GATT_OP_TIMEOUT_MS = 10_000L
+        private const val EXTRA_DATA_CHUNK = 20
+        private const val EXTRA_DATA_CHUNK_GAP_MS = 40L
+        /** Ob1 sleeps ~500ms after ExtraData chunks before Auth write. */
+        private const val EXTRA_DATA_AFTER_MS = 500L
     }
 }

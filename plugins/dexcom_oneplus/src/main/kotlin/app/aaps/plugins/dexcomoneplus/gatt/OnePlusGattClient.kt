@@ -5,6 +5,8 @@ package app.aaps.plugins.dexcomoneplus.gatt
  *
  * ⚠️ ASYNC IMPACT: `BluetoothGattCallback` arrives on the binder thread.
  * Sequential work (MTU, discover, CCCD, write) must run on a single bleExecutor.
+ * Platform impl must serialize GATT ops (one outstanding write/descriptor) — Android 13+
+ * returns status 201 (`ERROR_GATT_WRITE_REQUEST_BUSY`) otherwise.
  * [awaitNotify] / [awaitControlNotify] / [awaitBackfillNotify] block the caller —
  * Auth/ExtraData, Control, and ProbablyBackfill use **separate** queues.
  * [disconnect] must unblock all three. Do not block that executor with network or AIMI work.
