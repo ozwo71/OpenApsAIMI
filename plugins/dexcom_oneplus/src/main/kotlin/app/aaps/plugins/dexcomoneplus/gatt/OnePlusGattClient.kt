@@ -42,13 +42,20 @@ interface OnePlusGattClient {
     fun createBond(): Boolean
 
     /**
+     * Block until next Auth or ExtraData notification (KEKS path), with source tag.
+     * Prefer this over [awaitNotify] so KEKS can route Ob1-style.
+     */
+    fun awaitKeksNotify(timeoutMs: Long): OnePlusKeksNotify?
+
+    /**
      * Block until next Auth or ExtraData notification (KEKS path).
+     * Payload only — prefer [awaitKeksNotify] for handshake.
      */
     fun awaitNotify(timeoutMs: Long): ByteArray?
 
     /**
      * Block until next Control characteristic indication/notification (EGV path).
-     * Separate from [awaitNotify] so KEKS and EGV do not cross-consume packets.
+     * Separate from [awaitKeksNotify] so KEKS and EGV do not cross-consume packets.
      */
     fun awaitControlNotify(timeoutMs: Long): ByteArray?
 
@@ -72,6 +79,7 @@ class OnePlusGattClientUnimplemented : OnePlusGattClient {
     override fun enableBackfillNotifications() = Unit
     override fun isBonded(): Boolean = false
     override fun createBond(): Boolean = false
+    override fun awaitKeksNotify(timeoutMs: Long): OnePlusKeksNotify? = null
     override fun awaitNotify(timeoutMs: Long): ByteArray? = null
     override fun awaitControlNotify(timeoutMs: Long): ByteArray? = null
     override fun awaitBackfillNotify(timeoutMs: Long): ByteArray? = null

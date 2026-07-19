@@ -52,7 +52,8 @@ class OnePlusGattClientAndroid(
     @Volatile private var connected = false
 
     private val readyLatch = AtomicReferenceLatch()
-    private val authQueue = LinkedBlockingQueue<ByteArray>(32)
+    /** Tagged Auth/ExtraData frames for KEKS (Ob1 routes by UUID). */
+    private val keksQueue = LinkedBlockingQueue<TaggedKeksNotify>(32)
     private val controlQueue = LinkedBlockingQueue<ByteArray>(32)
     private val backfillQueue = LinkedBlockingQueue<ByteArray>(64)
 
@@ -71,6 +72,13 @@ class OnePlusGattClientAndroid(
 
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
+            if (!isCurrentGatt(g)) {
+                Log.d(
+                    OnePlusLogMarkers.TAG,
+                    "${OnePlusLogMarkers.SESSION}: ignore stale gatt state=$newState status=$status",
+                )
+                return
+            }
             Log.i(
                 OnePlusLogMarkers.TAG,
                 "${OnePlusLogMarkers.SESSION}: gatt state=$newState status=$status",
@@ -90,11 +98,13 @@ class OnePlusGattClientAndroid(
         }
 
         override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
+            if (!isCurrentGatt(g)) return
             Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: mtu=$mtu status=$status")
             g.discoverServices()
         }
 
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
+            if (!isCurrentGatt(g)) return
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 readyLatch.fail("discover status=$status")
                 return
@@ -131,6 +141,7 @@ class OnePlusGattClientAndroid(
             descriptor: BluetoothGattDescriptor,
             status: Int,
         ) {
+            if (!isCurrentGatt(g)) return
             Log.d(
                 OnePlusLogMarkers.TAG,
                 "${OnePlusLogMarkers.SESSION}: descriptorWrite uuid=${descriptor.uuid} status=$status phase=$cccdPhase",
@@ -171,6 +182,7 @@ class OnePlusGattClientAndroid(
             characteristic: BluetoothGattCharacteristic,
             status: Int,
         ) {
+            if (!isCurrentGatt(g)) return
             Log.d(
                 OnePlusLogMarkers.TAG,
                 "${OnePlusLogMarkers.SESSION}: charWrite uuid=${characteristic.uuid} status=$status",
@@ -180,6 +192,7 @@ class OnePlusGattClientAndroid(
 
         @Deprecated("Deprecated in Java")
         override fun onCharacteristicChanged(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+            if (!isCurrentGatt(g)) return
             onNotify(characteristic.uuid, characteristic.value)
         }
 
@@ -188,6 +201,7 @@ class OnePlusGattClientAndroid(
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray,
         ) {
+            if (!isCurrentGatt(g)) return
             onNotify(characteristic.uuid, value)
         }
 
@@ -195,7 +209,10 @@ class OnePlusGattClientAndroid(
             if (value == null) return
             val copy = value.copyOf()
             when (uuid) {
-                OnePlusBluetoothUuids.Authentication, OnePlusBluetoothUuids.ExtraData -> authQueue.offer(copy)
+                OnePlusBluetoothUuids.Authentication ->
+                    keksQueue.offer(TaggedKeksNotify(OnePlusKeksNotifySource.AUTHENTICATION, copy))
+                OnePlusBluetoothUuids.ExtraData ->
+                    keksQueue.offer(TaggedKeksNotify(OnePlusKeksNotifySource.EXTRA_DATA, copy))
                 OnePlusBluetoothUuids.Control -> controlQueue.offer(copy)
                 OnePlusBluetoothUuids.ProbablyBackfill -> backfillQueue.offer(copy)
             }
@@ -207,7 +224,7 @@ class OnePlusGattClientAndroid(
         // clear()+disconnectInternal() re-inserted empty sentinels so KEKS awaitNotify
         // returned immediately ("notify timeout step=0" in the same ms as Auth write).
         disconnectInternal(poisonQueues = false)
-        authQueue.clear()
+        keksQueue.clear()
         controlQueue.clear()
         backfillQueue.clear()
         readyLatch.reset()
@@ -244,7 +261,7 @@ class OnePlusGattClientAndroid(
             error("ONEPLUS_GATT: $err")
         }
         // Drop CCCD-setup noise / late disconnect sentinels before KEKS awaits Auth notifies.
-        authQueue.clear()
+        keksQueue.clear()
         controlQueue.clear()
         backfillQueue.clear()
     }
@@ -325,7 +342,13 @@ class OnePlusGattClientAndroid(
         return d.createBond()
     }
 
-    override fun awaitNotify(timeoutMs: Long): ByteArray? = pollNotify(authQueue, timeoutMs)
+    override fun awaitKeksNotify(timeoutMs: Long): OnePlusKeksNotify? {
+        val v = keksQueue.poll(timeoutMs, TimeUnit.MILLISECONDS) ?: return null
+        if (v === KEKS_DISCONNECT_SENTINEL) return null
+        return OnePlusKeksNotify(v.source, v.payload)
+    }
+
+    override fun awaitNotify(timeoutMs: Long): ByteArray? = awaitKeksNotify(timeoutMs)?.payload
 
     override fun awaitControlNotify(timeoutMs: Long): ByteArray? = pollNotify(controlQueue, timeoutMs)
 
@@ -476,6 +499,9 @@ class OnePlusGattClientAndroid(
         }
     }
 
+    /** Ignore binder callbacks from a GATT instance we already closed/replaced. */
+    private fun isCurrentGatt(g: BluetoothGatt): Boolean = g === gatt
+
     private fun disconnectInternal(poisonQueues: Boolean) {
         connected = false
         cccdPhase = CccdPhase.NONE
@@ -483,24 +509,27 @@ class OnePlusGattClientAndroid(
         if (poisonQueues) {
             poisonNotifyQueues()
         }
-        try {
-            gatt?.disconnect()
-        } catch (_: Throwable) {
-        }
-        try {
-            gatt?.close()
-        } catch (_: Throwable) {
-        }
+        // Detach before close so async DISCONNECTED on the old instance cannot fail the
+        // next connect()'s readyLatch (classic Android BLE race → ONEPLUS_GATT: disconnected).
+        val closing = gatt
         gatt = null
         device = null
         authChar = null
         extraChar = null
         controlChar = null
         backfillChar = null
+        try {
+            closing?.disconnect()
+        } catch (_: Throwable) {
+        }
+        try {
+            closing?.close()
+        } catch (_: Throwable) {
+        }
     }
 
     private fun poisonNotifyQueues() {
-        authQueue.offer(DISCONNECT_SENTINEL)
+        keksQueue.offer(KEKS_DISCONNECT_SENTINEL)
         controlQueue.offer(DISCONNECT_SENTINEL)
         backfillQueue.offer(DISCONNECT_SENTINEL)
     }
@@ -536,6 +565,12 @@ class OnePlusGattClientAndroid(
         fun await(timeoutMs: Long): Boolean = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
     }
 
+    /** Internal KEKS queue frame; [KEKS_DISCONNECT_SENTINEL] is identity-checked. */
+    private class TaggedKeksNotify(
+        val source: OnePlusKeksNotifySource,
+        val payload: ByteArray,
+    )
+
     companion object {
         private const val GATT_OP_TIMEOUT_MS = 10_000L
         private const val EXTRA_DATA_CHUNK = 20
@@ -543,7 +578,13 @@ class OnePlusGattClientAndroid(
         /** Ob1 sleeps ~500ms after ExtraData chunks before Auth write. */
         private const val EXTRA_DATA_AFTER_MS = 500L
 
-        /** Identity sentinel for await* unblock on disconnect (not content-empty). */
+        /** Identity sentinel for Control/Backfill await* unblock on disconnect. */
         private val DISCONNECT_SENTINEL = ByteArray(0)
+
+        /** Identity sentinel for KEKS await* unblock on disconnect. */
+        private val KEKS_DISCONNECT_SENTINEL = TaggedKeksNotify(
+            OnePlusKeksNotifySource.AUTHENTICATION,
+            ByteArray(0),
+        )
     }
 }
