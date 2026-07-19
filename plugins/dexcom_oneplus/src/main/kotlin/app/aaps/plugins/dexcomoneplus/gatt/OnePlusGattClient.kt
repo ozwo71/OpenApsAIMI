@@ -9,7 +9,8 @@ package app.aaps.plugins.dexcomoneplus.gatt
  * returns status 201 (`ERROR_GATT_WRITE_REQUEST_BUSY`) otherwise.
  * [awaitNotify] / [awaitControlNotify] / [awaitBackfillNotify] block the caller —
  * Auth/ExtraData, Control, and ProbablyBackfill use **separate** queues.
- * [disconnect] must unblock all three. Do not block that executor with network or AIMI work.
+ * [disconnect] must unblock all three via an identity disconnect sentinel (not any empty
+ * byte array). Do not block that executor with network or AIMI work.
  */
 interface OnePlusGattClient {
     fun connect(deviceAddress: String)

@@ -85,9 +85,7 @@ class OnePlusGattClientAndroid(
                 connected = false
                 readyLatch.fail("disconnected")
                 completePendingOp(BluetoothGatt.GATT_FAILURE)
-                authQueue.offer(ByteArray(0))
-                controlQueue.offer(ByteArray(0))
-                backfillQueue.offer(ByteArray(0))
+                poisonNotifyQueues()
             }
         }
 
@@ -205,6 +203,10 @@ class OnePlusGattClientAndroid(
     }
 
     override fun connect(deviceAddress: String) {
+        // Close any prior GATT without poisoning queues — then clear. Previously
+        // clear()+disconnectInternal() re-inserted empty sentinels so KEKS awaitNotify
+        // returned immediately ("notify timeout step=0" in the same ms as Auth write).
+        disconnectInternal(poisonQueues = false)
         authQueue.clear()
         controlQueue.clear()
         backfillQueue.clear()
@@ -224,7 +226,6 @@ class OnePlusGattClientAndroid(
         } catch (_: Throwable) {
             error("ONEPLUS_GATT: invalid address")
         }
-        disconnectInternal()
         device = remote
         gatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             remote.connectGatt(appContext, false, callback, BluetoothDevice.TRANSPORT_LE)
@@ -234,18 +235,22 @@ class OnePlusGattClientAndroid(
         }
         val ok = readyLatch.await(profile.connectTimeoutMs)
         if (!ok) {
-            disconnectInternal()
+            disconnectInternal(poisonQueues = true)
             error("ONEPLUS_GATT: connect/discover timeout ${profile.connectTimeoutMs}ms")
         }
         val err = readyLatch.error
         if (err != null) {
-            disconnectInternal()
+            disconnectInternal(poisonQueues = true)
             error("ONEPLUS_GATT: $err")
         }
+        // Drop CCCD-setup noise / late disconnect sentinels before KEKS awaits Auth notifies.
+        authQueue.clear()
+        controlQueue.clear()
+        backfillQueue.clear()
     }
 
     override fun disconnect() {
-        disconnectInternal()
+        disconnectInternal(poisonQueues = true)
     }
 
     override fun isConnected(): Boolean = connected && gatt != null
@@ -320,19 +325,20 @@ class OnePlusGattClientAndroid(
         return d.createBond()
     }
 
-    override fun awaitNotify(timeoutMs: Long): ByteArray? {
-        val v = authQueue.poll(timeoutMs, TimeUnit.MILLISECONDS) ?: return null
-        return if (v.isEmpty()) null else v
-    }
+    override fun awaitNotify(timeoutMs: Long): ByteArray? = pollNotify(authQueue, timeoutMs)
 
-    override fun awaitControlNotify(timeoutMs: Long): ByteArray? {
-        val v = controlQueue.poll(timeoutMs, TimeUnit.MILLISECONDS) ?: return null
-        return if (v.isEmpty()) null else v
-    }
+    override fun awaitControlNotify(timeoutMs: Long): ByteArray? = pollNotify(controlQueue, timeoutMs)
 
-    override fun awaitBackfillNotify(timeoutMs: Long): ByteArray? {
-        val v = backfillQueue.poll(timeoutMs, TimeUnit.MILLISECONDS) ?: return null
-        return if (v.isEmpty()) null else v
+    override fun awaitBackfillNotify(timeoutMs: Long): ByteArray? = pollNotify(backfillQueue, timeoutMs)
+
+    /**
+     * Only the identity [DISCONNECT_SENTINEL] means "stop waiting".
+     * Do not treat any empty [ByteArray] as disconnect — that raced with connect().
+     */
+    private fun pollNotify(queue: LinkedBlockingQueue<ByteArray>, timeoutMs: Long): ByteArray? {
+        val v = queue.poll(timeoutMs, TimeUnit.MILLISECONDS) ?: return null
+        if (v === DISCONNECT_SENTINEL) return null
+        return v
     }
 
     private fun submitAuthCccd(g: BluetoothGatt): Boolean {
@@ -470,14 +476,13 @@ class OnePlusGattClientAndroid(
         }
     }
 
-    private fun disconnectInternal() {
+    private fun disconnectInternal(poisonQueues: Boolean) {
         connected = false
         cccdPhase = CccdPhase.NONE
         completePendingOp(BluetoothGatt.GATT_FAILURE)
-        // Unblock await* waiters (empty = disconnect sentinel).
-        authQueue.offer(ByteArray(0))
-        controlQueue.offer(ByteArray(0))
-        backfillQueue.offer(ByteArray(0))
+        if (poisonQueues) {
+            poisonNotifyQueues()
+        }
         try {
             gatt?.disconnect()
         } catch (_: Throwable) {
@@ -492,6 +497,12 @@ class OnePlusGattClientAndroid(
         extraChar = null
         controlChar = null
         backfillChar = null
+    }
+
+    private fun poisonNotifyQueues() {
+        authQueue.offer(DISCONNECT_SENTINEL)
+        controlQueue.offer(DISCONNECT_SENTINEL)
+        backfillQueue.offer(DISCONNECT_SENTINEL)
     }
 
     private fun sleepQuiet(ms: Long) {
@@ -531,5 +542,8 @@ class OnePlusGattClientAndroid(
         private const val EXTRA_DATA_CHUNK_GAP_MS = 40L
         /** Ob1 sleeps ~500ms after ExtraData chunks before Auth write. */
         private const val EXTRA_DATA_AFTER_MS = 500L
+
+        /** Identity sentinel for await* unblock on disconnect (not content-empty). */
+        private val DISCONNECT_SENTINEL = ByteArray(0)
     }
 }
