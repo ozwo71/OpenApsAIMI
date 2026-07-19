@@ -20,17 +20,34 @@ object DeviceProfileRegistry {
         preferredMtu = 517,
         useForegroundService = true,
         aggressiveReconnect = false,
+        postCloseSettleMs = 2_000L,
+        scanHandoffMs = 500L,
+        preConnectScanMs = 2_000L,
+        requestMtuOnConnect = true,
+        useGattRefresh = true,
+        autoConnectFromAttempt = 2,
+        postDiscoverDelayMs = 0L,
     )
 
-    /** Samsung S22–S24 — slightly more patient connect / reconnect. */
+    /**
+     * Samsung S22–S25 — patient connect / reconnect (status 147 / 133 common).
+     * Aligns with Ob1: longer settle, rescan, defer MTU, autoConnect fallback.
+     */
     val SamsungDefault: OemDeviceProfile = OemDeviceProfile(
         id = OemProfileId.SAMSUNG,
         connectTimeoutMs = 45_000L,
         connectRetryCount = 5,
-        connectRetryDelayMs = 3_000L,
+        connectRetryDelayMs = 10_000L,
         preferredMtu = 517,
         useForegroundService = true,
         aggressiveReconnect = true,
+        postCloseSettleMs = 5_000L,
+        scanHandoffMs = 500L,
+        preConnectScanMs = 4_000L,
+        requestMtuOnConnect = false,
+        useGattRefresh = true,
+        autoConnectFromAttempt = 2,
+        postDiscoverDelayMs = 1_000L,
     )
 
     /** Unknown OEM — conservative timeouts, safer MTU, FGS on. */
@@ -42,6 +59,13 @@ object DeviceProfileRegistry {
         preferredMtu = 185,
         useForegroundService = true,
         aggressiveReconnect = true,
+        postCloseSettleMs = 3_000L,
+        scanHandoffMs = 500L,
+        preConnectScanMs = 3_000L,
+        requestMtuOnConnect = false,
+        useGattRefresh = true,
+        autoConnectFromAttempt = 2,
+        postDiscoverDelayMs = 0L,
     )
 
     fun byId(id: OemProfileId): OemDeviceProfile = when (id) {
@@ -70,7 +94,9 @@ object DeviceProfileRegistry {
             "$LOG_MARKER id=${profile.id} manufacturer=$manufacturer model=$model " +
                 "override=$override connectTimeoutMs=${profile.connectTimeoutMs} " +
                 "retry=${profile.connectRetryCount} mtu=${profile.preferredMtu} " +
-                "fgs=${profile.useForegroundService} aggressiveReconnect=${profile.aggressiveReconnect}"
+                "fgs=${profile.useForegroundService} aggressiveReconnect=${profile.aggressiveReconnect} " +
+                "settleMs=${profile.postCloseSettleMs} preScanMs=${profile.preConnectScanMs} " +
+                "mtuOnConnect=${profile.requestMtuOnConnect} autoConnectFrom=${profile.autoConnectFromAttempt}",
         )
         return profile
     }

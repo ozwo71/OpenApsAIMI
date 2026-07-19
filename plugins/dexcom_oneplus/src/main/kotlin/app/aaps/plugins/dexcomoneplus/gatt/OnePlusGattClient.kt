@@ -13,7 +13,11 @@ package app.aaps.plugins.dexcomoneplus.gatt
  * byte array). Do not block that executor with network or AIMI work.
  */
 interface OnePlusGattClient {
-    fun connect(deviceAddress: String)
+    /**
+     * Connect + discover + Auth/Extra CCCD until ready.
+     * @param autoConnect Ob1 CONNECT path — true after hard-connect failures on flaky stacks
+     */
+    fun connect(deviceAddress: String, autoConnect: Boolean = false)
     fun disconnect()
     fun isConnected(): Boolean
 
@@ -66,7 +70,7 @@ interface OnePlusGattClient {
 }
 
 class OnePlusGattClientUnimplemented : OnePlusGattClient {
-    override fun connect(deviceAddress: String) {
+    override fun connect(deviceAddress: String, autoConnect: Boolean) {
         error("ONEPLUS_GATT_UNIMPLEMENTED: await A3 GO + A1-pinned Direct port")
     }
 

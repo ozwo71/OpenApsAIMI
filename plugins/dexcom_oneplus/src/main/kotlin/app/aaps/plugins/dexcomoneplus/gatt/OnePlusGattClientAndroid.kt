@@ -11,6 +11,9 @@ import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothStatusCodes
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
 import app.aaps.plugins.dexcomoneplus.oem.DeviceProfileRegistry
@@ -50,7 +53,11 @@ class OnePlusGattClientAndroid(
     @Volatile private var controlChar: BluetoothGattCharacteristic? = null
     @Volatile private var backfillChar: BluetoothGattCharacteristic? = null
     @Volatile private var connected = false
+    /** True while an optional post-ready MTU request is in flight (do not re-discover). */
+    @Volatile private var pendingPostReadyMtu = false
+    @Volatile private var lastCloseElapsedMs = 0L
 
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val readyLatch = AtomicReferenceLatch()
     /** Tagged Auth/ExtraData frames for KEKS (Ob1 routes by UUID). */
     private val keksQueue = LinkedBlockingQueue<TaggedKeksNotify>(32)
@@ -85,13 +92,22 @@ class OnePlusGattClientAndroid(
             )
             if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
                 connected = true
-                val mtu = profile.preferredMtu.coerceIn(23, 517)
-                if (!g.requestMtu(mtu)) {
+                try {
+                    g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
+                } catch (_: Throwable) {
+                }
+                if (profile.requestMtuOnConnect) {
+                    val mtu = profile.preferredMtu.coerceIn(23, 517)
+                    if (!g.requestMtu(mtu)) {
+                        g.discoverServices()
+                    }
+                } else {
+                    // Ob1-like: skip MTU on connect (Samsung status 147/fragile link).
                     g.discoverServices()
                 }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 connected = false
-                readyLatch.fail("disconnected")
+                readyLatch.fail("disconnected status=$status")
                 completePendingOp(BluetoothGatt.GATT_FAILURE)
                 poisonNotifyQueues()
             }
@@ -100,6 +116,10 @@ class OnePlusGattClientAndroid(
         override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
             if (!isCurrentGatt(g)) return
             Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: mtu=$mtu status=$status")
+            if (pendingPostReadyMtu) {
+                pendingPostReadyMtu = false
+                return
+            }
             g.discoverServices()
         }
 
@@ -109,30 +129,16 @@ class OnePlusGattClientAndroid(
                 readyLatch.fail("discover status=$status")
                 return
             }
-            val service = g.getService(OnePlusBluetoothUuids.CgmService)
-            if (service == null) {
-                readyLatch.fail("CGM service missing")
-                return
-            }
-            authChar = service.getCharacteristic(OnePlusBluetoothUuids.Authentication)
-            extraChar = service.getCharacteristic(OnePlusBluetoothUuids.ExtraData)
-            controlChar = service.getCharacteristic(OnePlusBluetoothUuids.Control)
-            backfillChar = service.getCharacteristic(OnePlusBluetoothUuids.ProbablyBackfill)
-            if (authChar == null) {
-                readyLatch.fail("Authentication characteristic missing")
-                return
-            }
-            // Do not mark ready until CCCD writes complete (prevents Auth write status=201).
-            if (extraChar != null) {
-                cccdPhase = CccdPhase.EXTRA
-                if (!submitEnableCccd(g, extraChar!!, indicate = false)) {
-                    readyLatch.fail("ExtraData CCCD submit failed")
-                }
+            val delayMs = profile.postDiscoverDelayMs
+            if (delayMs > 0L) {
+                Log.d(
+                    OnePlusLogMarkers.TAG,
+                    "${OnePlusLogMarkers.SESSION}: post-discover settle ${delayMs}ms",
+                )
+                // Never sleep on the binder thread — schedule CCCD after Ob1-style pause.
+                mainHandler.postDelayed({ beginCccdSetup(g) }, delayMs)
             } else {
-                cccdPhase = CccdPhase.AUTH
-                if (!submitAuthCccd(g)) {
-                    readyLatch.fail("Auth CCCD submit failed")
-                }
+                beginCccdSetup(g)
             }
         }
 
@@ -172,6 +178,7 @@ class OnePlusGattClientAndroid(
                         "${OnePlusLogMarkers.SESSION}: gatt ready control=${controlChar != null} " +
                             "backfill=${backfillChar != null}",
                     )
+                    maybeRequestMtuAfterReady(g)
                 }
                 else -> Unit
             }
@@ -219,16 +226,18 @@ class OnePlusGattClientAndroid(
         }
     }
 
-    override fun connect(deviceAddress: String) {
+    override fun connect(deviceAddress: String, autoConnect: Boolean) {
         // Close any prior GATT without poisoning queues — then clear. Previously
         // clear()+disconnectInternal() re-inserted empty sentinels so KEKS awaitNotify
         // returned immediately ("notify timeout step=0" in the same ms as Auth write).
         disconnectInternal(poisonQueues = false)
+        awaitPostCloseSettle()
         keksQueue.clear()
         controlQueue.clear()
         backfillQueue.clear()
         readyLatch.reset()
         cccdPhase = CccdPhase.NONE
+        pendingPostReadyMtu = false
         pendingOpLatch.reset()
         if (deviceAddress.isBlank()) {
             error("ONEPLUS_GATT: device address blank — scan UI required")
@@ -238,22 +247,40 @@ class OnePlusGattClientAndroid(
         if (!adapter.isEnabled) {
             error("ONEPLUS_GATT: Bluetooth disabled")
         }
+        val handoff = profile.scanHandoffMs.coerceAtLeast(0L)
+        if (handoff > 0L) {
+            Log.d(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SESSION}: scan→connect handoff ${handoff}ms",
+            )
+            sleepQuiet(handoff)
+        }
         val remote: BluetoothDevice = try {
             adapter.getRemoteDevice(deviceAddress)
         } catch (_: Throwable) {
             error("ONEPLUS_GATT: invalid address")
         }
         device = remote
+        Log.i(
+            OnePlusLogMarkers.TAG,
+            "${OnePlusLogMarkers.SESSION}: connectGatt autoConnect=$autoConnect " +
+                "mtuOnConnect=${profile.requestMtuOnConnect}",
+        )
         gatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            remote.connectGatt(appContext, false, callback, BluetoothDevice.TRANSPORT_LE)
+            remote.connectGatt(appContext, autoConnect, callback, BluetoothDevice.TRANSPORT_LE)
         } else {
             @Suppress("DEPRECATION")
-            remote.connectGatt(appContext, false, callback)
+            remote.connectGatt(appContext, autoConnect, callback)
         }
-        val ok = readyLatch.await(profile.connectTimeoutMs)
+        val timeout = if (autoConnect) {
+            profile.connectTimeoutMs.coerceAtLeast(60_000L)
+        } else {
+            profile.connectTimeoutMs
+        }
+        val ok = readyLatch.await(timeout)
         if (!ok) {
             disconnectInternal(poisonQueues = true)
-            error("ONEPLUS_GATT: connect/discover timeout ${profile.connectTimeoutMs}ms")
+            error("ONEPLUS_GATT: connect/discover timeout ${timeout}ms")
         }
         val err = readyLatch.error
         if (err != null) {
@@ -362,6 +389,74 @@ class OnePlusGattClientAndroid(
         val v = queue.poll(timeoutMs, TimeUnit.MILLISECONDS) ?: return null
         if (v === DISCONNECT_SENTINEL) return null
         return v
+    }
+
+    private fun beginCccdSetup(g: BluetoothGatt) {
+        if (!isCurrentGatt(g)) return
+        val service = g.getService(OnePlusBluetoothUuids.CgmService)
+        if (service == null) {
+            readyLatch.fail("CGM service missing")
+            return
+        }
+        authChar = service.getCharacteristic(OnePlusBluetoothUuids.Authentication)
+        extraChar = service.getCharacteristic(OnePlusBluetoothUuids.ExtraData)
+        controlChar = service.getCharacteristic(OnePlusBluetoothUuids.Control)
+        backfillChar = service.getCharacteristic(OnePlusBluetoothUuids.ProbablyBackfill)
+        if (authChar == null) {
+            readyLatch.fail("Authentication characteristic missing")
+            return
+        }
+        if (extraChar != null) {
+            cccdPhase = CccdPhase.EXTRA
+            if (!submitEnableCccd(g, extraChar!!, indicate = false)) {
+                readyLatch.fail("ExtraData CCCD submit failed")
+            }
+        } else {
+            cccdPhase = CccdPhase.AUTH
+            if (!submitAuthCccd(g)) {
+                readyLatch.fail("Auth CCCD submit failed")
+            }
+        }
+    }
+
+    private fun maybeRequestMtuAfterReady(g: BluetoothGatt) {
+        if (profile.requestMtuOnConnect) return
+        val mtu = profile.preferredMtu.coerceIn(23, 517)
+        if (mtu <= 23) return
+        pendingPostReadyMtu = true
+        if (!g.requestMtu(mtu)) {
+            pendingPostReadyMtu = false
+        } else {
+            Log.d(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SESSION}: post-ready requestMtu=$mtu",
+            )
+        }
+    }
+
+    private fun awaitPostCloseSettle() {
+        val settle = profile.postCloseSettleMs.coerceAtLeast(0L)
+        if (settle <= 0L || lastCloseElapsedMs <= 0L) return
+        val elapsed = SystemClock.elapsedRealtime() - lastCloseElapsedMs
+        val remaining = settle - elapsed
+        if (remaining > 0L) {
+            Log.d(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SESSION}: post-close settle ${remaining}ms (floor=${settle}ms)",
+            )
+            sleepQuiet(remaining)
+        }
+    }
+
+    private fun refreshGatt(g: BluetoothGatt?) {
+        if (!profile.useGattRefresh || g == null) return
+        try {
+            val method = BluetoothGatt::class.java.getMethod("refresh")
+            val ok = method.invoke(g) as? Boolean ?: false
+            Log.d(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: gatt.refresh()=$ok")
+        } catch (t: Throwable) {
+            Log.d(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: gatt.refresh unavailable: ${t.message}")
+        }
     }
 
     private fun submitAuthCccd(g: BluetoothGatt): Boolean {
@@ -505,6 +600,8 @@ class OnePlusGattClientAndroid(
     private fun disconnectInternal(poisonQueues: Boolean) {
         connected = false
         cccdPhase = CccdPhase.NONE
+        pendingPostReadyMtu = false
+        mainHandler.removeCallbacksAndMessages(null)
         completePendingOp(BluetoothGatt.GATT_FAILURE)
         if (poisonQueues) {
             poisonNotifyQueues()
@@ -518,6 +615,7 @@ class OnePlusGattClientAndroid(
         extraChar = null
         controlChar = null
         backfillChar = null
+        refreshGatt(closing)
         try {
             closing?.disconnect()
         } catch (_: Throwable) {
@@ -525,6 +623,9 @@ class OnePlusGattClientAndroid(
         try {
             closing?.close()
         } catch (_: Throwable) {
+        }
+        if (closing != null) {
+            lastCloseElapsedMs = SystemClock.elapsedRealtime()
         }
     }
 

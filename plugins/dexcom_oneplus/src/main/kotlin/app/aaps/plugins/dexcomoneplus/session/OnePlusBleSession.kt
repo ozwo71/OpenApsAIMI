@@ -47,6 +47,11 @@ class OnePlusBleSessionSkeleton(
      * Reconnect attempts always pass false.
      */
     private val requestNewSensorStart: Boolean = true,
+    /**
+     * Ob1-style pre-connect: LE rescan / handoff before [OnePlusGattClient.connect].
+     * Runs on bleExecutor; must not touch UI. Default no-op (tests / stub).
+     */
+    private val beforeConnect: (deviceAddress: String, attempt: Int) -> Unit = { _, _ -> },
 ) : OnePlusBleSession {
 
     @Volatile
@@ -177,7 +182,19 @@ class OnePlusBleSessionSkeleton(
         emitWarmup()
 
         try {
-            gatt.connect(deviceAddress)
+            beforeConnect(deviceAddress, attempt)
+        } catch (t: Throwable) {
+            Log.w(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SESSION}: beforeConnect failed: ${t.message}",
+            )
+        }
+        if (!running) return CycleOutcome.Stopped
+
+        val useAutoConnect =
+            profile.autoConnectFromAttempt >= 0 && attempt >= profile.autoConnectFromAttempt
+        try {
+            gatt.connect(deviceAddress, autoConnect = useAutoConnect)
         } catch (t: Throwable) {
             val msg = t.message ?: "ONEPLUS_GATT_FAILED"
             Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: $msg attempt=$attempt", t)

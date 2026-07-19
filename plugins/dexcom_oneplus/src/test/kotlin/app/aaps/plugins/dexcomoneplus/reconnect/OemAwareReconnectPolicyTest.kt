@@ -21,6 +21,9 @@ class OemAwareReconnectPolicyTest {
     fun `aggressive profile scales delay`() {
         val profile = DeviceProfileRegistry.SamsungDefault
         assertThat(profile.aggressiveReconnect).isTrue()
+        assertThat(profile.connectRetryDelayMs).isEqualTo(10_000L)
+        assertThat(profile.requestMtuOnConnect).isFalse()
+        assertThat(profile.autoConnectFromAttempt).isEqualTo(2)
         assertThat(policy.nextDelayMs(0, profile)).isEqualTo(profile.connectRetryDelayMs)
         assertThat(policy.nextDelayMs(2, profile)).isEqualTo(profile.connectRetryDelayMs * 3)
     }
