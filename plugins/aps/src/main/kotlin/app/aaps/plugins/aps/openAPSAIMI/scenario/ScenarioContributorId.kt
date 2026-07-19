@@ -18,4 +18,6 @@ enum class ScenarioContributorId {
     PHYSIOLOGICAL_PHASE,
     CONTEXT_MODULE,
     TARGET_BLEND,
+    /** Hybrid≈BG while insulin-only Floor still slopes — restore/seed insulin path into Scenario. */
+    INSULIN_SLOPE_RESTORE,
 }

@@ -138,6 +138,7 @@ object RecursiveBeliefMr7TestHelper {
             ScenarioContributorId.PHYSIOLOGICAL_PHASE,
             ScenarioContributorId.CONTEXT_MODULE,
             ScenarioContributorId.TARGET_BLEND,
+            ScenarioContributorId.INSULIN_SLOPE_RESTORE,
         ).map { ScenarioContributor(id = it, summary = "coverage", terminalDeltaMgdl = 8.0) }
         val hybrid = listOf(120.0, 150.0, 320.0)
         val floorHybrid = listOf(80.0, 85.0, 90.0)
