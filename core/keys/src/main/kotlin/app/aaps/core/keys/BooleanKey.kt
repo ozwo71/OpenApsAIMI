@@ -546,7 +546,7 @@ enum class BooleanKey(
         R.string.pref_title_aimi_advisor_llm_rich_oref,
         R.string.pref_summary_aimi_advisor_llm_rich_oref,
     ),
-    /** Transient Preference Overlay — temporary protection prefs (2 h). */
+    /** Transient Preference Overlay — temporary protection prefs (45 min). */
     OApsAIMITpoEnabled(
         "key_aimi_tpo_enabled",
         true,

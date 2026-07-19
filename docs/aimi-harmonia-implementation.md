@@ -237,7 +237,7 @@ Harmonia est le moteur qui **harmonise** les signaux disperses (physio, repas la
 | Simulation repas non declare | `MEAL_SUPPORT` si meal undeclared/declared rise **ou** H4 bridge (`DIGESTION_ACTIVE` + `meal_rise_confirmed` + BG>target+30) | **Partiel** — H4 bridge in `chooseAction` (2026-07-17); leaf→MealCorrection + production veto still open |
 | Frein post-hypo / hypo | Blockers `hypo_or_recovery`, `low_or_falling_bg` ; production bloquee si `postHypoBlock` | **Partiel** — simulation + blocage, pas action yoyo dediee |
 | Seconde verification | RBT canal `HARMONIA_PRODUCTION_BASAL_FIRST` ; production TBR si T3C/SMB inactifs | **Partiel** — basal-first residuel, pas confirmateur global |
-| Stabilisation prefs 2 h | **TPO** (`AIMI_TRANSIENT_PREFERENCE_OVERLAY.md`) — orthogonal, partage `correctionFragilityScore` | **Oui** via TPO, pas via Harmonia seule |
+| Stabilisation prefs 45 min | **TPO** (`AIMI_TRANSIENT_PREFERENCE_OVERLAY.md`) — orthogonal, partage `correctionFragilityScore` | **Oui** via TPO, pas via Harmonia seule |
 
 ### Ecarts critiques (correction trop / pas assez)
 

@@ -7,7 +7,7 @@
 | # | Décision |
 |---|----------|
 | 1 | **Périmètre v1 = trio** : `POST_HYPO_RECOVERY`, `POOR_SLEEP_WINDOW`, `EXHAUSTED_RECOVERY` |
-| 2 | **TTL fixe = 2 h** pour tous les packs (pas de table adaptive v1) |
+| 2 | **TTL fixe = 45 min** pour tous les packs (pas de table adaptive v1) |
 | 3 | **Autonome, sans mode shadow** : application réelle des prefs + **revert garanti** vers l’état d’avant session |
 | 4 | **Whitelist clés v1** : réutiliser les clés déjà gouvernées par `TuningContextEngine` + familles **Protection** / **Stability** du Control Center |
 | 5 | **Double confirmation** : trigger algo **+** validation LLM structurée (stack Advisor / `AiCoachingService` existante) |
@@ -24,7 +24,7 @@ Après un hypo, une nuit courte ou un cycle hyper→hypo épuisant, les **mêmes
 
 - Ajuste **temporairement** un sous-ensemble whitelisté de préférences AIMI.
 - **Ne modifie pas** le profil pompe ni les clés hors AIMI.
-- **Revient automatiquement** à l’état capturé au début de session (2 h).
+- **Revient automatiquement** à l’état capturé au début de session (45 min).
 - Laisse l’utilisateur **annuler manuellement** ou **conserver** une clé qu’il a retouchée pendant la session.
 
 TPO est **orthogonal à RTB** : RTB arbitre l’insuline au tick ; TPO élargit ou resserre les **rails de prefs** pendant une fenêtre clinique connue.
@@ -117,7 +117,7 @@ flowchart TB
   "status": "ACTIVE",
   "started_at_ms": 1718534400000,
   "expires_at_ms": 1718541600000,
-  "ttl_ms": 7200000,
+  "ttl_ms": 2700000,
   "trigger": {
     "algo_confidence": 0.78,
     "reason_codes": ["CAUSAL_POST_HYPO", "REBOUND_GUARD"],
@@ -160,7 +160,7 @@ stateDiagram-v2
     Idle --> PendingLlm: algo proposal
     PendingLlm --> Active: LLM CONFIRM + apply
     PendingLlm --> Idle: LLM VETO / timeout block
-    Active --> Expired: TTL 2h
+    Active --> Expired: TTL 45min
     Active --> Reverted: user Revert now
     Active --> Superseded: higher priority pack
     Expired --> Idle: auto restore baseline
@@ -188,7 +188,7 @@ stateDiagram-v2
 3. LLM validation (§7) → `CONFIRM` requis si LLM enabled
 4. Snapshot baseline → apply overlay → persist JSON → log AdvisorHistory → notification utilisateur (non bloquante)
 
-### 4.2 Expiration (2 h)
+### 4.2 Expiration (45 min)
 
 - `onTick` : si `now >= expires_at_ms` → revert auto + status `EXPIRED`
 - Notification discrète : « Protection temporaire terminée — préférences restaurées »
@@ -344,7 +344,7 @@ Légende : **↓** decrease / **↑** increase / **OFF** boolean false / **—**
 **Clés volontairement hors packs v1** (même si dans registry) :
 
 - MealCapture managed (HTR, max basal, prebolus, hyper dev) — risque de retarder capture repas pendant recovery **sauf** meal factors expert déjà dans hypo guard
-- Stability managed booleans (`T3cAdaptiveBasal`, `DynIsfTrajectoryTuning`) — toggles structurels, pas overlay 2 h
+- Stability managed booleans (`T3cAdaptiveBasal`, `DynIsfTrajectoryTuning`) — toggles structurels, pas overlay 45 min
 - Physio / Autonomy — jamais overlay automatique
 - Toute clé expert governance (18+ hold/decay) — AIMI Lab, revert trop risqué
 
@@ -428,7 +428,7 @@ Nouveau : `TpoLlmValidator` — prompt dédié, **ne modifie jamais la dose**.
 |-----------|-------|
 | Whitelist stricte | Refus apply si clé ∉ §9.2 |
 | Single session | Max 1 ACTIVE |
-| TTL max | 2 h — pas d’extension auto v1 |
+| TTL max | 45 min — pas d’extension auto v1 |
 | Profil pompe | **Jamais** touché |
 | Dawn guard | Block `POOR_SLEEP` si `DAWN_ENDOGENOUS` confidence ≥ 0.60 |
 | Meal guard | Block `POST_HYPO` si `FAST_MEAL` / `PROLONGED_MEAL` confidence ≥ 0.65 et `cob >= 5` |
@@ -637,7 +637,7 @@ Pas de slider pour activer un pack manuellement v1 — triggers automatiques uni
 | Sleep debt 0.62, dawn faible | POOR_SLEEP session |
 | Hyper 220 → hypo 72 → exhaustion scores | EXHAUSTED STRONG |
 | User edit MaxSMB mid-session | revert preserve user value |
-| TTL 2 h | baseline restored |
+| TTL 45 min | baseline restored |
 
 ### 12.3 Non-régression
 
@@ -663,7 +663,7 @@ Pas de slider pour activer un pack manuellement v1 — triggers automatiques uni
 | Couche | Autorité | Horizon | Stabilisation |
 |--------|----------|---------|---------------|
 | **Harmonia** (arbre + sim + production RBT) | Contexte ; TBR basal-first **conditionnel** (si T3C/SMB idle) | Tick courant | `PROTECTIVE_REDUCTION`, blockers hypo ; pas d'action yoyo dédiée |
-| **TPO** (cet overlay) | Deltas **prefs** 2 h | Session post-épisode | Rails Max SMB, damping, tube… après hypo/sommeil/épuisement |
+| **TPO** (cet overlay) | Deltas **prefs** 45 min | Session post-épisode | Rails Max SMB, damping, tube… après hypo/sommeil/épuisement |
 | **RBT / chaos** | SMB demand, canaux basal-first | Tick + mémoire épisodes | Dampen post-hypo, meal suppress |
 | **Safety terminals** | `meal_rise_confirmed`, terminals | Tick | Bypass Harmonia — uplift ou cap projections |
 
