@@ -106,7 +106,10 @@ class OnePlusBleSessionSkeleton(
                 )
             }
 
-            val wantSessionStart = requestNewSensorStart && attempt == 0
+            val wantSessionStart = OnePlusSessionStartPolicy.wantSessionStartOnAttempt(
+                requestNewSensorStart = requestNewSensorStart,
+                attempt = attempt,
+            )
             val outcome = runConnectionCycle(
                 deviceAddress = deviceAddress,
                 pairingCode = normalized,

@@ -30,6 +30,7 @@ import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.source.R
+import app.aaps.plugins.source.compose.DexcomOnePlusUiLabels
 import app.aaps.plugins.source.compose.DexcomOnePlusWarmupCountdown
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
@@ -61,6 +62,7 @@ class DexcomOnePlusWarmupActivity : AppCompatActivity() {
 private fun DexcomOnePlusWarmupScreen(onBack: () -> Unit) {
     val driver = remember { OnePlusCgmDrivers.default() }
     var state by remember { mutableStateOf(driver.warmupState()) }
+    var sessionUp by remember { mutableStateOf(driver.isSessionUp()) }
     var localFallbackEndsAt by remember { mutableStateOf<Long?>(null) }
     var remainingMs by remember { mutableStateOf<Long?>(null) }
     var usingLocalFallback by remember { mutableStateOf(false) }
@@ -69,6 +71,7 @@ private fun DexcomOnePlusWarmupScreen(onBack: () -> Unit) {
         while (true) {
             val now = System.currentTimeMillis()
             state = driver.warmupState()
+            sessionUp = driver.isSessionUp()
             if (DexcomOnePlusWarmupCountdown.shouldStartLocalFallback(state) && localFallbackEndsAt == null) {
                 // Local fallback ONLY if remainingMs (and endsAt) are null — documented above.
                 localFallbackEndsAt = now + DexcomOnePlusWarmupCountdown.LOCAL_FALLBACK_DURATION_MS
@@ -118,7 +121,7 @@ private fun DexcomOnePlusWarmupScreen(onBack: () -> Unit) {
                 style = MaterialTheme.typography.titleLarge,
             )
             Text(
-                text = stringResource(R.string.dexcom_oneplus_warmup_phase, state.phase.name),
+                text = stringResource(R.string.dexcom_oneplus_warmup_phase, DexcomOnePlusUiLabels.phaseLabel(state.phase)),
                 style = MaterialTheme.typography.bodyLarge,
             )
             when (state.phase) {
@@ -133,7 +136,7 @@ private fun DexcomOnePlusWarmupScreen(onBack: () -> Unit) {
                     Text(
                         text = stringResource(
                             R.string.dexcom_oneplus_warmup_failed,
-                            state.message ?: stringResource(R.string.dexcom_oneplus_status_message_none),
+                            DexcomOnePlusUiLabels.userMessage(state.message),
                         ),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.error,
@@ -168,7 +171,13 @@ private fun DexcomOnePlusWarmupScreen(onBack: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(
-                text = stringResource(R.string.dexcom_oneplus_warmup_ble_stub),
+                text = stringResource(
+                    if (sessionUp) {
+                        R.string.dexcom_oneplus_warmup_session_up
+                    } else {
+                        R.string.dexcom_oneplus_warmup_session_down
+                    },
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

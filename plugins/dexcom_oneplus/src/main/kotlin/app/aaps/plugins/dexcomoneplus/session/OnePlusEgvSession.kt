@@ -21,7 +21,7 @@ import app.aaps.plugins.dexcomoneplus.warmup.OnePlusWarmupClock
  * Post-KEKS Control / EGV path (xDrip Ob1 `GET_DATA`).
  *
  * Sequence: enable Control indications → TransmitterTime (0x24) → optional
- * SessionStop (0x28) if restarting an active session → SessionStart (0x26) →
+ * SessionStart (0x26) via [OnePlusSessionStartPolicy] (never auto SessionStop) →
  * short BackFill (0x59) → write [OnePlusEGlucoseTx] (0x4e) → parse EGV1/EGV2.
  *
  * ⚠️ ASYNC IMPACT: Blocks the calling thread (intended: single bleExecutor).
@@ -232,31 +232,33 @@ class OnePlusEgvSession(
     }
 
     /**
-     * Safe attach / start policy (Dexcom recovery):
-     * - Session already running → **attach only** (no SessionStop 0x28, no SessionStart).
-     * - No session + [requestNewSensorStart] → SessionStart 0x26 only.
-     *
-     * Automatic Stop→Start was removed: stopping the transmitter session can make the
-     * same sensor unrecoverable in the official Dexcom app.
+     * Apply [OnePlusSessionStartPolicy] after TransmitterTime (Dexcom-safe attach).
      */
     private fun maybeSessionStartAfterTimeSync(shouldContinue: () -> Boolean) {
-        if (sessionAlreadyInProgress) {
-            Log.i(
-                OnePlusLogMarkers.TAG,
-                "${OnePlusLogMarkers.SESSION}: attach existing transmitter session — " +
-                    "skip SessionStop/SessionStart (Dexcom-safe)",
+        when (
+            OnePlusSessionStartPolicy.decide(
+                requestNewSensorStart = requestNewSensorStart,
+                sessionAlreadyInProgress = sessionAlreadyInProgress,
             )
-            sessionStartAttempted = true
-            return
+        ) {
+            OnePlusSessionStartPolicy.Action.AttachOnly -> {
+                Log.i(
+                    OnePlusLogMarkers.TAG,
+                    "${OnePlusLogMarkers.SESSION}: attach existing transmitter session — " +
+                        "skip SessionStop/SessionStart (Dexcom-safe)",
+                )
+                sessionStartAttempted = true
+            }
+            OnePlusSessionStartPolicy.Action.EgvOnly -> {
+                Log.i(
+                    OnePlusLogMarkers.TAG,
+                    "${OnePlusLogMarkers.SESSION}: no transmitter session and requestNewSensorStart=false — EGV only",
+                )
+            }
+            OnePlusSessionStartPolicy.Action.SessionStart -> {
+                performSessionStart(reason = "requestNewSensorStart", shouldContinue = shouldContinue)
+            }
         }
-        if (!requestNewSensorStart) {
-            Log.i(
-                OnePlusLogMarkers.TAG,
-                "${OnePlusLogMarkers.SESSION}: no transmitter session and requestNewSensorStart=false — EGV only",
-            )
-            return
-        }
-        performSessionStart(reason = "requestNewSensorStart", shouldContinue = shouldContinue)
     }
 
     /**

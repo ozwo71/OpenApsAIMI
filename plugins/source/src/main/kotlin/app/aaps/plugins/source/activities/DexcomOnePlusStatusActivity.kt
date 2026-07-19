@@ -33,6 +33,7 @@ import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.source.DexcomOnePlusPlugin
 import app.aaps.plugins.source.R
+import app.aaps.plugins.source.compose.DexcomOnePlusUiLabels
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.delay
@@ -107,7 +108,7 @@ private fun DexcomOnePlusStatusScreen(
             verticalArrangement = Arrangement.spacedBy(AapsSpacing.large),
         ) {
             Text(
-                text = stringResource(R.string.dexcom_oneplus_status_phase, phaseLabel(state.phase)),
+                text = stringResource(R.string.dexcom_oneplus_status_phase, DexcomOnePlusUiLabels.phaseLabel(state.phase)),
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
@@ -124,7 +125,7 @@ private fun DexcomOnePlusStatusScreen(
             Text(
                 text = stringResource(
                     R.string.dexcom_oneplus_status_message,
-                    state.message ?: stringResource(R.string.dexcom_oneplus_status_message_none),
+                    DexcomOnePlusUiLabels.userMessage(state.message),
                 ),
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -144,11 +145,3 @@ private fun DexcomOnePlusStatusScreen(
     }
 }
 
-@Composable
-private fun phaseLabel(phase: OnePlusWarmupState.Phase): String = when (phase) {
-    OnePlusWarmupState.Phase.IDLE -> stringResource(R.string.dexcom_oneplus_phase_idle)
-    OnePlusWarmupState.Phase.PAIRING -> stringResource(R.string.dexcom_oneplus_phase_pairing)
-    OnePlusWarmupState.Phase.WARMING -> stringResource(R.string.dexcom_oneplus_phase_warming)
-    OnePlusWarmupState.Phase.READY -> stringResource(R.string.dexcom_oneplus_phase_ready)
-    OnePlusWarmupState.Phase.FAILED -> stringResource(R.string.dexcom_oneplus_phase_failed)
-}

@@ -29,7 +29,7 @@ interface OnePlusGattClient {
      */
     fun enableBackfillNotifications()
 
-    /** True when the remote device is Android-bonded ([BluetoothDevice.BOND_BONDED]). */
+    /** True when the remote device is Android-bonded (`BluetoothDevice.BOND_BONDED`). */
     fun isBonded(): Boolean
 
     /**

@@ -22,7 +22,6 @@
     <string name="dexcom_oneplus_warmup_summary">~30 minute warm-up countdown</string>
     <string name="dexcom_oneplus_nav_back">Back</string>
     <string name="dexcom_oneplus_permissions_hint">Before pairing: allow nearby Bluetooth devices (and notifications if prompted). Keep the phone near the sensor during start and warm-up.</string>
-    <string name="dexcom_oneplus_scan_stub_hint">Device scan is not wired yet (BLE session stub). Enter the sensor pairing code to exercise the start → warm-up flow.</string>
     <string name="dexcom_oneplus_scan_hint">Scan for nearby ONE+ / G7-family sensors (names starting with DXC / Dex, or FEBC advertisement). Keep the phone near the sensor. Stop other Dexcom / xDrip apps first.</string>
     <string name="dexcom_oneplus_scan_start">Scan</string>
     <string name="dexcom_oneplus_scan_stop">Stop</string>
@@ -57,13 +56,21 @@
     <string name="dexcom_oneplus_phase_ready">Active</string>
     <string name="dexcom_oneplus_phase_failed">Failed</string>
     <string name="dexcom_oneplus_warmup_heading">Sensor starting</string>
-    <string name="dexcom_oneplus_warmup_phase" comment="%1$s=Phase enum name. Example: WARMING">Phase: %1$s</string>
+    <string name="dexcom_oneplus_warmup_phase" comment="%1$s=localized phase label. Example: Warming up">Phase: %1$s</string>
     <string name="dexcom_oneplus_warmup_countdown" comment="%1$s=mm:ss remaining. Example: 29:45">Time remaining: %1$s</string>
     <string name="dexcom_oneplus_warmup_countdown_unknown">—</string>
     <string name="dexcom_oneplus_warmup_ends_at" comment="%1$s=localized time. Example: 3:45 PM">Estimated end: %1$s</string>
     <string name="dexcom_oneplus_warmup_local_fallback_note">Showing a local ~30 min timer because the sensor did not provide remaining time yet.</string>
     <string name="dexcom_oneplus_warmup_no_loop_bg">No loop glucose yet — wait until warm-up finishes.</string>
-    <string name="dexcom_oneplus_warmup_ble_stub">BLE link state will appear here once the native session is ported.</string>
+    <string name="dexcom_oneplus_warmup_session_up">Bluetooth session active — keep the phone near the sensor.</string>
+    <string name="dexcom_oneplus_warmup_session_down">Bluetooth session not active. Use Connect / follow if needed.</string>
+    <string name="dexcom_oneplus_msg_pairing">Pairing with sensor…</string>
+    <string name="dexcom_oneplus_msg_auth_ok">Authenticated — starting glucose session…</string>
+    <string name="dexcom_oneplus_msg_tx_session">Sensor session detected on transmitter.</string>
+    <string name="dexcom_oneplus_msg_session_down">Session ended or disconnected.</string>
+    <string name="dexcom_oneplus_error_auth_bond">Authentication or Bluetooth pairing failed. Accept the system pairing prompt and retry.</string>
+    <string name="dexcom_oneplus_error_connection">Connection or sensor session error. Check logcat (DEXCOM_ONEPLUS) and retry.</string>
+    <string name="dexcom_oneplus_status_message_generic">See status details in logcat if problems persist.</string>
     <string name="dexcom_oneplus_warmup_done">Warm-up complete — source active</string>
     <string name="dexcom_oneplus_warmup_failed" comment="%1$s=error detail. Example: BLE session not ported">Warm-up failed: %1$s</string>
     <string name="glimp">Glimp</string>

@@ -126,7 +126,9 @@ class DexcomOnePlusPlugin @Inject constructor(
 
     /**
      * Watcher callback thread is not guaranteed (stub: caller thread; Real may use bleExecutor).
-     * GV mapping stays on the callback thread; [PersistenceLayer.insertCgmSourceData] runs on [ioScope] (IO).
+     *
+     * ⚠️ ASYNC IMPACT: GV mapping on the callback thread; [PersistenceLayer.insertCgmSourceData]
+     * runs on [ioScope] (IO). Do not block the BLE executor from this callback.
      */
     override fun onGlucose(sample: OnePlusGlucoseSample) {
         if (DexcomOnePlusIngest.isWarmupBlockingIngest(warmupPhase)) {

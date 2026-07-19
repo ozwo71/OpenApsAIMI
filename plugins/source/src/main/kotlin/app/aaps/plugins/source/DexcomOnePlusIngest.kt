@@ -26,7 +26,7 @@ internal object DexcomOnePlusIngest {
     private val recentSequences = LinkedHashSet<Long>()
 
     /**
-     * Block PersistenceLayer inserts only while the protocol/UI reports [WARMING].
+     * Block PersistenceLayer inserts only while the protocol/UI reports `WARMING`.
      * PAIRING / IDLE must not block — otherwise attach-to-ready sensors never ingest.
      */
     fun isWarmupBlockingIngest(phase: OnePlusWarmupState.Phase): Boolean =
