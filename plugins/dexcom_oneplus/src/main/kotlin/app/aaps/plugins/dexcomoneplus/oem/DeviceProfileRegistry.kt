@@ -11,7 +11,7 @@ object DeviceProfileRegistry {
 
     const val LOG_MARKER = "DEXCOM_ONEPLUS_OEM_PROFILE"
 
-    /** Pixel 6/7/8 family — generally predictable BLE stack. */
+    /** Pixel 6/7/8 family — Juggluco never requestMtu before discover on Dex path. */
     val PixelDefault: OemDeviceProfile = OemDeviceProfile(
         id = OemProfileId.PIXEL,
         connectTimeoutMs = 30_000L,
@@ -23,7 +23,7 @@ object DeviceProfileRegistry {
         postCloseSettleMs = 2_000L,
         scanHandoffMs = 500L,
         preConnectScanMs = 2_000L,
-        requestMtuOnConnect = true,
+        requestMtuOnConnect = false,
         useGattRefresh = true,
         autoConnectFromAttempt = 2,
         postDiscoverDelayMs = 0L,

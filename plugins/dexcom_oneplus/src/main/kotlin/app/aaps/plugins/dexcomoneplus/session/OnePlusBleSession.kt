@@ -215,73 +215,74 @@ class OnePlusBleSessionSkeleton(
         if (!running) return CycleOutcome.Stopped
 
         val wakeLock = acquireAuthWakeLock()
-        val authResult = try {
-            auth.authenticate(pairingCode, savedSharedKeyProvider())
-        } finally {
-            releaseWakeLock(wakeLock)
-        }
-        if (!authResult.ok) {
-            val msg = authResult.message ?: "ONEPLUS_AUTH_FAILED"
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: $msg attempt=$attempt")
-            if (msg.contains("bond failure", ignoreCase = true) ||
-                msg.contains("key refresh", ignoreCase = true) ||
-                msg.contains("Missing QR", ignoreCase = true)
-            ) {
-                // Stale shared key / cert path — force full KEKS next attempt.
+        try {
+            val authResult = auth.authenticate(pairingCode, savedSharedKeyProvider())
+            if (!authResult.ok) {
+                val msg = authResult.message ?: "ONEPLUS_AUTH_FAILED"
+                Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: $msg attempt=$attempt")
+                if (msg.contains("bond failure", ignoreCase = true) ||
+                    msg.contains("key refresh", ignoreCase = true) ||
+                    msg.contains("Missing QR", ignoreCase = true)
+                ) {
+                    // Stale shared key / cert path — force full KEKS next attempt.
+                    try {
+                        onAuthInvalidate()
+                    } catch (_: Throwable) {
+                    }
+                }
+                onError(msg, false)
+                warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.FAILED, message = msg)
+                emitWarmup()
+                return if (running) CycleOutcome.RetryableFailure else CycleOutcome.Stopped
+            }
+
+            authResult.sharedKey?.let { key ->
                 try {
-                    onAuthInvalidate()
-                } catch (_: Throwable) {
+                    onAuthSuccess(deviceAddress, key)
+                } catch (t: Throwable) {
+                    Log.w(
+                        OnePlusLogMarkers.TAG,
+                        "${OnePlusLogMarkers.SESSION}: onAuthSuccess persist failed: ${t.message}",
+                    )
                 }
             }
-            onError(msg, false)
-            warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.FAILED, message = msg)
+
+            // Do NOT invent a 30 min WARMING clock here — that blocked ingest even when the
+            // transmitter was already producing Ok EGVs. Protocol (TransmitterTime / EGV) sets phase.
+            warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.PAIRING, message = "auth_ok")
+            up = true
             emitWarmup()
-            return if (running) CycleOutcome.RetryableFailure else CycleOutcome.Stopped
-        }
+            onSession(true, if (attempt == 0) "session_up" else "session_reconnected")
+            Log.i(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SESSION}: up attempt=$attempt newStart=$requestNewSensorStart — Control/EGV",
+            )
 
-        authResult.sharedKey?.let { key ->
+            val egv = OnePlusEgvSession(
+                gatt = gatt,
+                onWarmup = { state ->
+                    warmup = state
+                    emitWarmup()
+                },
+                onGlucose = onGlucose,
+                onError = onError,
+                requestNewSensorStart = requestNewSensorStart,
+            )
             try {
-                onAuthSuccess(deviceAddress, key)
+                egv.run(shouldContinue = { running && gatt.isConnected() })
             } catch (t: Throwable) {
-                Log.w(
-                    OnePlusLogMarkers.TAG,
-                    "${OnePlusLogMarkers.SESSION}: onAuthSuccess persist failed: ${t.message}",
-                )
+                if (!running) return CycleOutcome.Stopped
+                val msg = t.message ?: "ONEPLUS_CONTROL_FAILED"
+                Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: $msg", t)
+                onError(msg, false)
+                return CycleOutcome.RetryableFailure
             }
+
+            return if (running) CycleOutcome.EgvExited else CycleOutcome.Stopped
+        } finally {
+            // Juggluco holds wake for the whole connection; we keep it through first EGV cycle.
+            releaseWakeLock(wakeLock)
         }
-
-        // Do NOT invent a 30 min WARMING clock here — that blocked ingest even when the
-        // transmitter was already producing Ok EGVs. Protocol (TransmitterTime / EGV) sets phase.
-        warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.PAIRING, message = "auth_ok")
-        up = true
-        emitWarmup()
-        onSession(true, if (attempt == 0) "session_up" else "session_reconnected")
-        Log.i(
-            OnePlusLogMarkers.TAG,
-            "${OnePlusLogMarkers.SESSION}: up attempt=$attempt newStart=$requestNewSensorStart — Control/EGV",
-        )
-
-        val egv = OnePlusEgvSession(
-            gatt = gatt,
-            onWarmup = { state ->
-                warmup = state
-                emitWarmup()
-            },
-            onGlucose = onGlucose,
-            onError = onError,
-            requestNewSensorStart = requestNewSensorStart,
-        )
-        try {
-            egv.run(shouldContinue = { running && gatt.isConnected() })
-        } catch (t: Throwable) {
-            if (!running) return CycleOutcome.Stopped
-            val msg = t.message ?: "ONEPLUS_CONTROL_FAILED"
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: $msg", t)
-            onError(msg, false)
-            return CycleOutcome.RetryableFailure
-        }
-
-        return if (running) CycleOutcome.EgvExited else CycleOutcome.Stopped
     }
 
     private fun acquireAuthWakeLock(): PowerManager.WakeLock? {
@@ -359,7 +360,10 @@ class OnePlusBleSessionSkeleton(
     }
 
     companion object {
-        /** Cover full KEKS + bond prompt window (Juggluco uses an unbounded wake lock). */
-        private const val AUTH_WAKE_LOCK_MS = 120_000L
+        /**
+         * Cover KEKS + bond prompt + first Control/EGV cycle.
+         * Juggluco uses an unbounded wake lock for the whole connection; we bound it.
+         */
+        private const val AUTH_WAKE_LOCK_MS = 600_000L
     }
 }

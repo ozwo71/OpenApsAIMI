@@ -18,18 +18,18 @@ import app.aaps.plugins.dexcomoneplus.parse.OnePlusTransmitterTimeTx
 import app.aaps.plugins.dexcomoneplus.warmup.OnePlusWarmupClock
 
 /**
- * Post-KEKS Control / EGV path (xDrip Ob1 `GET_DATA`).
+ * Post-KEKS Control / EGV path (xDrip Ob1 `GET_DATA` + Juggluco fast ask).
  *
- * Sequence: enable Control indications → TransmitterTime (0x24) → optional
- * SessionStart (0x26) via [OnePlusSessionStartPolicy] (never auto SessionStop) →
- * short BackFill (0x59) → write [OnePlusEGlucoseTx] (0x4e) → parse EGV1/EGV2.
+ * Sequence: enable Control **NOTIFY** (INDICATE fallback) → write [OnePlusEGlucoseTx]
+ * (`0x4e`) **immediately** → TransmitterTime (`0x24`) → optional SessionStart (`0x26`) →
+ * short BackFill (`0x59`) → continuous EGV loop.
  *
  * ⚠️ ASYNC IMPACT: Blocks the calling thread (intended: single bleExecutor).
  * [shouldContinue] must flip false and [OnePlusGattClient.disconnect] must run
  * (typically from [OnePlusBleSession.stop]) so [OnePlusGattClient.awaitControlNotify]
  * unblocks. Do not call AIMI / UI work from this loop; only invoke callbacks.
  *
- * Provenance: Ob1G5StateMachine.doGetData + SessionStart/EGlucose at pin
+ * Provenance: Juggluco `getdatacmd` + Ob1G5StateMachine SessionStart/EGlucose at pin
  * `1e86d9a2a52577ed2c30fbf7b69d75fd56e6918f` (GPL-3.0).
  */
 class OnePlusEgvSession(
@@ -82,15 +82,18 @@ class OnePlusEgvSession(
             return
         }
 
+        // Juggluco: ask glucose (0x4E) as soon as Control CCCD is up — before Ob1 housekeeping.
+        var lastWriteMs = 0L
+        writeEgvRequest(preferShort = true)
+        lastWriteMs = System.currentTimeMillis()
+
         syncTransmitterTime(shouldContinue)
         maybeSessionStartAfterTimeSync(shouldContinue)
         performBackfill(shouldContinue)
 
-        var lastWriteMs = 0L
-        writeEgvRequest(preferShort = true)
-        lastWriteMs = System.currentTimeMillis()
         var preferShort = true
         var consecutiveTimeouts = 0
+        var triedIndicateFallback = false
 
         while (shouldContinue() && gatt.isConnected()) {
             val now = System.currentTimeMillis()
@@ -109,6 +112,23 @@ class OnePlusEgvSession(
                 )
                 // After a few short-form misses, try CRC form once (Ob1 length 3).
                 if (consecutiveTimeouts >= 2) preferShort = false
+                // Silent NOTIFY accept but no traffic → Ob1 INDICATE (Bugbot medium).
+                if (consecutiveTimeouts >= 2 && !triedIndicateFallback) {
+                    triedIndicateFallback = true
+                    try {
+                        Log.w(
+                            OnePlusLogMarkers.TAG,
+                            "${OnePlusLogMarkers.SESSION}: Control quiet after NOTIFY — try INDICATE",
+                        )
+                        gatt.enableControlIndications()
+                        Thread.sleep(CCCD_SETTLE_MS)
+                    } catch (t: Throwable) {
+                        Log.w(
+                            OnePlusLogMarkers.TAG,
+                            "${OnePlusLogMarkers.SESSION}: Control INDICATE fallback failed: ${t.message}",
+                        )
+                    }
+                }
                 writeEgvRequest(preferShort = preferShort)
                 lastWriteMs = System.currentTimeMillis()
                 continue
@@ -137,6 +157,8 @@ class OnePlusEgvSession(
             Thread.currentThread().interrupt()
             return false
         }
+        // Fast ask first (Juggluco), then Ob1 housekeeping.
+        writeEgvRequest(preferShort = true)
         syncTransmitterTime(shouldContinue = { true })
         maybeSessionStartAfterTimeSync(shouldContinue = { true })
         performBackfill(shouldContinue = { true })
@@ -144,7 +166,7 @@ class OnePlusEgvSession(
         var deliveredGlucose = false
         for (round in 0 until maxRounds) {
             val preferShort = round % 2 == 0
-            writeEgvRequest(preferShort = preferShort)
+            if (round > 0) writeEgvRequest(preferShort = preferShort)
             val packet = gatt.awaitControlNotify(stepTimeoutMs) ?: continue
             gotPacket = true
             if (OnePlusSessionStartRx.parse(packet) != null) continue

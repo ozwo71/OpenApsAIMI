@@ -14,10 +14,11 @@ import java.security.InvalidParameterException
  * Pump loop mirrors Ob1 `Ob1G5StateMachine.doNext` + Juggluco reconnect short-auth:
  * - Install guide certs + optional saved shared key (persistence channel 2)
  * - When bonded + saved key, libkeks skips Round1–3 (`aNext` → RequestAuth)
+ * - Bond via [OnePlusGattClient.awaitBondComplete] (CCCD teardown while BONDING)
  * - Success only when Ob1 would enter GET_DATA (`aNext` length==1)
  *
- * ⚠️ ASYNC IMPACT: blocks caller (bleExecutor) on [OnePlusGattClient.awaitKeksNotify] and optional
- * bond wait. Do not call from main.
+ * ⚠️ ASYNC IMPACT: blocks caller (bleExecutor) on [OnePlusGattClient.awaitKeksNotify] and
+ * [OnePlusGattClient.awaitBondComplete]. Do not call from main.
  */
 class OnePlusSessionAuthKeks(
     private val gatt: OnePlusGattClient,
@@ -204,29 +205,12 @@ class OnePlusSessionAuthKeks(
                 Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: createBond returned false")
                 return false
             }
-            awaitBonded(bondWaitMs)
+            // Juggluco: BroadcastReceiver + CCCD teardown/restore (not a bare isBonded poll).
+            gatt.awaitBondComplete(bondWaitMs)
         } catch (t: Throwable) {
             Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: createBond ${t.message}", t)
             false
         }
-    }
-
-    private fun awaitBonded(timeoutMs: Long): Boolean {
-        val end = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < end) {
-            if (gatt.isBonded()) {
-                Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: Android bond complete")
-                return true
-            }
-            if (!gatt.isConnected()) return false
-            try {
-                Thread.sleep(200L)
-            } catch (_: InterruptedException) {
-                Thread.currentThread().interrupt()
-                return false
-            }
-        }
-        return gatt.isBonded()
     }
 
     companion object {

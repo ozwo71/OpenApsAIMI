@@ -9,7 +9,10 @@ import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothStatusCodes
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -76,6 +79,41 @@ class OnePlusGattClientAndroid(
     private enum class CccdPhase { NONE, EXTRA, AUTH, DONE }
 
     @Volatile private var cccdPhase = CccdPhase.NONE
+
+    /** Juggluco-style bond wait — counted down from [bondReceiver] on BOND_BONDED. */
+    @Volatile private var bondCompleteLatch: CountDownLatch? = null
+    @Volatile private var bondReceiverRegistered = false
+    /** True after Auth/Extra CCCD teardown until restored — forces restore even on early bonded. */
+    @Volatile private var keksCccdTornDown = false
+    /** Set from bond receiver; consumed on bleExecutor under [gattOpLock]. */
+    @Volatile private var requestKeksTeardown = false
+
+    private val bondReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != BluetoothDevice.ACTION_BOND_STATE_CHANGED) return
+            val d = readBondIntentDevice(intent) ?: return
+            val current = device
+            if (current == null || !d.address.equals(current.address, ignoreCase = true)) return
+            val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
+            when (state) {
+                BluetoothDevice.BOND_BONDING -> {
+                    Log.i(
+                        OnePlusLogMarkers.TAG,
+                        "${OnePlusLogMarkers.SESSION}: BOND_BONDING — request KEKS CCCD teardown (Juggluco)",
+                    )
+                    // Do not touch GATT from the receiver thread — bleExecutor performs teardown.
+                    requestKeksTeardown = true
+                }
+                BluetoothDevice.BOND_BONDED -> {
+                    Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: BOND_BONDED (receiver)")
+                    bondCompleteLatch?.countDown()
+                }
+                BluetoothDevice.BOND_NONE -> {
+                    Log.w(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: BOND_NONE during wait")
+                }
+            }
+        }
+    }
 
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
@@ -154,7 +192,7 @@ class OnePlusGattClientAndroid(
                 OnePlusLogMarkers.TAG,
                 "${OnePlusLogMarkers.SESSION}: descriptorWrite uuid=${descriptor.uuid} status=$status phase=$cccdPhase",
             )
-            // bleExecutor-driven CCCD (Control / Backfill) uses the op latch.
+            // bleExecutor-driven CCCD (Control / Backfill / bond teardown) uses the op latch.
             if (cccdPhase == CccdPhase.DONE || cccdPhase == CccdPhase.NONE) {
                 completePendingOp(status)
                 return
@@ -343,7 +381,23 @@ class OnePlusGattClientAndroid(
     override fun enableControlNotifications() {
         val g = gatt ?: error("ONEPLUS_GATT: not connected")
         val c = controlChar ?: error("ONEPLUS_GATT: Control characteristic missing")
-        // Ob1 uses indications on Control.
+        // Juggluco Dex path: Control NOTIFY then immediate 0x4E. Ob1 uses indications —
+        // try notify first, fall back to indicate if the stack rejects it.
+        try {
+            runBlockingDescriptorWrite(g, c, indicate = false)
+            Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: Control notifications enabled")
+        } catch (t: Throwable) {
+            Log.w(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SESSION}: Control NOTIFY failed (${t.message}) — INDICATE fallback",
+            )
+            enableControlIndications()
+        }
+    }
+
+    override fun enableControlIndications() {
+        val g = gatt ?: error("ONEPLUS_GATT: not connected")
+        val c = controlChar ?: error("ONEPLUS_GATT: Control characteristic missing")
         runBlockingDescriptorWrite(g, c, indicate = true)
         Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: Control indications enabled")
     }
@@ -363,13 +417,100 @@ class OnePlusGattClientAndroid(
 
     override fun createBond(): Boolean {
         val d = device ?: error("ONEPLUS_GATT: no device for bond")
+        ensureBondReceiverRegistered()
+        // Arm latch BEFORE createBond so a fast BOND_BONDED cannot be missed
+        // (Bugbot: race between createBond() and awaitBondComplete latch assign).
+        if (bondCompleteLatch == null) {
+            bondCompleteLatch = CountDownLatch(1)
+        }
         if (d.bondState == BluetoothDevice.BOND_BONDED) {
             Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: already bonded")
+            bondCompleteLatch?.countDown()
             return true
         }
         // Juggluco: createBond(TRANSPORT_LE) via reflection — critical on Samsung.
         Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: createBond TRANSPORT_LE")
         return createBondLe(d)
+    }
+
+    override fun awaitBondComplete(timeoutMs: Long): Boolean {
+        ensureBondReceiverRegistered()
+        val latch = bondCompleteLatch ?: CountDownLatch(1).also { bondCompleteLatch = it }
+
+        // Already bonded (including race where BOND_BONDED arrived before this call).
+        if (isBonded()) {
+            Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: Android bond already complete")
+            return finishBondWithKeksCccdRestore()
+        }
+
+        val state = try {
+            device?.bondState
+        } catch (_: Throwable) {
+            null
+        }
+        if (state == BluetoothDevice.BOND_BONDING || requestKeksTeardown) {
+            tearDownKeksCccdsBlocking()
+        }
+
+        val deadline = SystemClock.elapsedRealtime() + timeoutMs.coerceAtLeast(1L)
+        var bonded = false
+        try {
+            while (SystemClock.elapsedRealtime() < deadline) {
+                if (!isConnected()) {
+                    Log.e(
+                        OnePlusLogMarkers.TAG,
+                        "${OnePlusLogMarkers.ERROR}: GATT disconnected during bond wait",
+                    )
+                    return false
+                }
+                if (requestKeksTeardown) {
+                    tearDownKeksCccdsBlocking()
+                }
+                if (isBonded()) {
+                    bonded = true
+                    break
+                }
+                try {
+                    latch.await(200L, TimeUnit.MILLISECONDS)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return false
+                }
+            }
+            if (!bonded) {
+                bonded = isBonded()
+            }
+        } finally {
+            bondCompleteLatch = null
+        }
+
+        if (bonded && isConnected()) {
+            Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: Android bond complete — restore KEKS CCCDs")
+            return finishBondWithKeksCccdRestore()
+        }
+
+        // Timed out: still try restore so the next KEKS step is not deaf.
+        if (isConnected() && keksCccdTornDown) {
+            restoreKeksSubscriptionsAfterBond()
+        }
+        Log.e(
+            OnePlusLogMarkers.TAG,
+            "${OnePlusLogMarkers.ERROR}: bond wait timed out / not bonded after ${timeoutMs}ms",
+        )
+        return false
+    }
+
+    /** Bond OK only if KEKS CCCDs are usable again after optional Juggluco teardown. */
+    private fun finishBondWithKeksCccdRestore(): Boolean {
+        if (!keksCccdTornDown) return true
+        val restored = restoreKeksSubscriptionsAfterBond()
+        if (!restored) {
+            Log.e(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.ERROR}: bond OK but KEKS CCCD restore failed",
+            )
+        }
+        return restored
     }
 
     private fun beginPostConnect(g: BluetoothGatt) {
@@ -426,6 +567,145 @@ class OnePlusGattClientAndroid(
                 "${OnePlusLogMarkers.SESSION}: createBond(TRANSPORT_LE) unavailable: ${t.message}",
             )
             device.createBond()
+        }
+    }
+
+    private fun ensureBondReceiverRegistered() {
+        if (bondReceiverRegistered) return
+        val filter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                appContext.registerReceiver(bondReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("UnspecifiedRegisterReceiverFlag")
+                appContext.registerReceiver(bondReceiver, filter)
+            }
+            bondReceiverRegistered = true
+            Log.d(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: bond receiver registered")
+        } catch (t: Throwable) {
+            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: bond receiver ${t.message}", t)
+        }
+    }
+
+    private fun unregisterBondReceiver() {
+        if (!bondReceiverRegistered) return
+        try {
+            appContext.unregisterReceiver(bondReceiver)
+        } catch (_: Throwable) {
+        }
+        bondReceiverRegistered = false
+        bondCompleteLatch = null
+    }
+
+    private fun readBondIntentDevice(intent: Intent): BluetoothDevice? {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+        }
+    }
+
+    /**
+     * Juggluco `bonded()` BOND_BONDING: drop Auth/Extra subscriptions on **bleExecutor**
+     * under [gattOpLock] (never from the BroadcastReceiver — avoids pendingOpLatch races).
+     */
+    private fun tearDownKeksCccdsBlocking() {
+        requestKeksTeardown = false
+        if (keksCccdTornDown) return
+        val g = gatt ?: return
+        try {
+            authChar?.let { runBlockingDescriptorDisable(g, it) }
+            extraChar?.let { runBlockingDescriptorDisable(g, it) }
+            keksCccdTornDown = true
+            Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: KEKS CCCDs torn down for bonding")
+        } catch (t: Throwable) {
+            Log.e(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.ERROR}: KEKS CCCD teardown failed: ${t.message}",
+                t,
+            )
+        }
+    }
+
+    /**
+     * After BOND_BONDED: re-enable Extra notify + Auth indication so libkeks can finish
+     * AuthStatus → GET_DATA (we do not jump to Control here — that is [OnePlusEgvSession]).
+     * @return false if enable writes failed (caller must not treat bond as auth-ready)
+     */
+    private fun restoreKeksSubscriptionsAfterBond(): Boolean {
+        val g = gatt ?: return false
+        if (!connected) {
+            keksCccdTornDown = false
+            return false
+        }
+        return try {
+            val extra = extraChar
+            if (extra != null) {
+                runBlockingDescriptorWrite(g, extra, indicate = false)
+            }
+            val auth = authChar
+            if (auth != null) {
+                val indicate = auth.properties and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
+                runBlockingDescriptorWrite(g, auth, indicate = indicate)
+            }
+            keksQueue.clear()
+            keksCccdTornDown = false
+            Log.i(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SESSION}: KEKS CCCDs restored after bond",
+            )
+            true
+        } catch (t: Throwable) {
+            Log.e(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.ERROR}: restore KEKS CCCDs after bond: ${t.message}",
+                t,
+            )
+            // Best-effort rediscover if subscriptions are dead (Juggluco rediscovers when needed).
+            try {
+                g.discoverServices()
+            } catch (_: Throwable) {
+            }
+            false
+        }
+    }
+
+    private fun runBlockingDescriptorDisable(
+        g: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+    ) {
+        synchronized(gattOpLock) {
+            pendingOpLatch.reset()
+            pendingOpStatus.set(BluetoothGatt.GATT_SUCCESS)
+            g.setCharacteristicNotification(characteristic, false)
+            val cccd = characteristic.getDescriptor(OnePlusBluetoothUuids.CharacteristicUpdateNotification)
+                ?: return
+            val disable = BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE
+            val submitted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val status = g.writeDescriptor(cccd, disable)
+                if (status != BluetoothStatusCodes.SUCCESS && status != BluetoothGatt.GATT_SUCCESS) {
+                    error("ONEPLUS_GATT: disableDescriptor status=$status")
+                }
+                true
+            } else {
+                @Suppress("DEPRECATION")
+                cccd.value = disable
+                @Suppress("DEPRECATION")
+                g.writeDescriptor(cccd)
+            }
+            if (!submitted) {
+                error("ONEPLUS_GATT: disableDescriptor failed")
+            }
+            if (!pendingOpLatch.await(GATT_OP_TIMEOUT_MS)) {
+                error("ONEPLUS_GATT: disableDescriptor timeout")
+            }
+            val err = pendingOpLatch.error
+            if (err != null) error("ONEPLUS_GATT: $err")
+            val status = pendingOpStatus.get()
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                error("ONEPLUS_GATT: disable descriptor status=$status")
+            }
         }
     }
 
@@ -661,6 +941,10 @@ class OnePlusGattClientAndroid(
         connected = false
         cccdPhase = CccdPhase.NONE
         pendingPostReadyMtu = false
+        keksCccdTornDown = false
+        requestKeksTeardown = false
+        bondCompleteLatch?.countDown()
+        unregisterBondReceiver()
         mainHandler.removeCallbacksAndMessages(null)
         completePendingOp(BluetoothGatt.GATT_FAILURE)
         if (poisonQueues) {

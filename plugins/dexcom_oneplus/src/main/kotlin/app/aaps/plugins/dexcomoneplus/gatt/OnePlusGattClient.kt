@@ -26,10 +26,16 @@ interface OnePlusGattClient {
     fun writeControl(payload: ByteArray?)
 
     /**
-     * Enable indications (preferred) / notifications on Control (EGV path).
-     * Alias intent: Ob1 `setupIndication(Control)`.
+     * Enable Control CCCD for the EGV path.
+     * Prefer **notifications** (Juggluco Dex path); fall back to indications (Ob1) if the write fails.
      */
     fun enableControlNotifications()
+
+    /**
+     * Force Control **indications** (Ob1). Used when NOTIFY CCCD succeeded but no Control
+     * traffic arrives (silent firmware/stack mismatch).
+     */
+    fun enableControlIndications()
 
     /**
      * Enable notifications on ProbablyBackfill (Ob1 `setupNotification(ProbablyBackfill)`).
@@ -41,9 +47,19 @@ interface OnePlusGattClient {
 
     /**
      * Request Android bonding (system pairing UI may appear). No-op if already bonded.
+     * Registers a bond-state receiver; pair with [awaitBondComplete].
      * @return false if createBond could not be started
      */
     fun createBond(): Boolean
+
+    /**
+     * Block until [BluetoothDevice.BOND_BONDED] (BroadcastReceiver), Juggluco-style:
+     * tear down Auth/Extra CCCDs while [BluetoothDevice.BOND_BONDING], restore after bonded.
+     *
+     * ⚠️ ASYNC IMPACT: blocks bleExecutor; receiver runs on main/binder and must not
+     * serialize against a concurrent GATT write from this thread.
+     */
+    fun awaitBondComplete(timeoutMs: Long): Boolean
 
     /**
      * Block until next Auth or ExtraData notification (KEKS path), with source tag.
@@ -80,9 +96,11 @@ class OnePlusGattClientUnimplemented : OnePlusGattClient {
     override fun writeExtraData(payload: ByteArray?) = Unit
     override fun writeControl(payload: ByteArray?) = Unit
     override fun enableControlNotifications() = Unit
+    override fun enableControlIndications() = Unit
     override fun enableBackfillNotifications() = Unit
     override fun isBonded(): Boolean = false
     override fun createBond(): Boolean = false
+    override fun awaitBondComplete(timeoutMs: Long): Boolean = false
     override fun awaitKeksNotify(timeoutMs: Long): OnePlusKeksNotify? = null
     override fun awaitNotify(timeoutMs: Long): ByteArray? = null
     override fun awaitControlNotify(timeoutMs: Long): ByteArray? = null
