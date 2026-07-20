@@ -3,6 +3,8 @@ package app.aaps.plugins.aps.openAPSAIMI.patient
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefDigest
 import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalHypothesis
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.CyclePhase
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleBelief
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -232,18 +234,20 @@ internal object PhysiologicalTreeBuilder {
         // 15-min step count. Harmonia then reads these branches to choose PROTECTIVE_REDUCTION natively.
         effortActiveConfidence: Double = 0.0,
         effortRecentConfidence: Double = 0.0,
+        /** Lot A endocrine belief — context only; does not grant dose authority. */
+        wCycleBelief: WCycleBelief? = null,
     ): PhysiologicalTreeSnapshot? {
         if (!enabled) return null
 
         val branches = buildBranches(
             patientState, patientModeDecision, physioLive, thermalBelief,
-            effortActiveConfidence, effortRecentConfidence,
+            effortActiveConfidence, effortRecentConfidence, wCycleBelief,
         )
         val trunk = buildTrunk(patientState, patientModeDecision, branches, currentBgMgdl, deltaMgdl5m)
         val roots = buildRoots(patientState)
         val leaves = buildLeaves(patientState, patientModeDecision, branches, trunk, physioLive)
         val fruits = buildFruits(patientState, trunk)
-        val seasons = buildSeasons(patientState, thermalBelief)
+        val seasons = buildSeasons(patientState, thermalBelief, wCycleBelief)
         val compactSummary = buildCompactSummary(trunk, branches)
 
         return PhysiologicalTreeSnapshot(
@@ -309,6 +313,7 @@ internal object PhysiologicalTreeBuilder {
         thermal: ThermalBeliefDigest,
         effortActiveConfidence: Double = 0.0,
         effortRecentConfidence: Double = 0.0,
+        wCycleBelief: WCycleBelief? = null,
     ): PhysiologicalBranches {
         val causal = state.causalPosterior
         val digestionActive = state.mealAbsorptionPhase.isActive || state.mealAbsorptionBelief >= 0.20
@@ -331,11 +336,13 @@ internal object PhysiologicalTreeBuilder {
             if (state.userIntent.hasStress) state.userIntent.avgConfidence else 0.0,
             thermal.inflammationIndex * 0.60,
         )
+        val wCycleHormonalConfidence = wCyclePhaseConfidence(wCycleBelief)
         val hormonalConfidence = maxOf(
             state.endogenousGlucoseDrive,
             causal.dawnEndogenousProb,
             state.thermalInflammationIndex * 0.42,
             if (thermal.hypothesis == ThermalHypothesis.CYCLE_BBT_RISE) 0.46 else 0.0,
+            wCycleHormonalConfidence,
         )
         val hypoConfidence = maxOf(
             state.postHypoReboundProb,
@@ -413,9 +420,9 @@ internal object PhysiologicalTreeBuilder {
                 detected = hormonalConfidence >= 0.30,
                 confidence = hormonalConfidence,
                 intensity = hormonalConfidence,
-                label = "Endogenous/hormonal drive",
-                reasons = listOf("endogenous=${fmt(state.endogenousGlucoseDrive)}", "causal_dawn=${fmt(causal.dawnEndogenousProb)}"),
-                safetyImpact = if (hormonalConfidence >= 0.55) "prefer causal discrimination before meal escalation" else null,
+                label = hormonalLabel(wCycleBelief),
+                reasons = hormonalReasons(state, causal, wCycleBelief),
+                safetyImpact = hormonalSafetyImpact(hormonalConfidence, wCycleBelief, hypoConfidence),
             ),
             insulinEffectiveness = signal(
                 detected = reducedEffectiveness >= 0.30,
@@ -614,16 +621,23 @@ internal object PhysiologicalTreeBuilder {
             },
         )
 
-    private fun buildSeasons(state: PatientStateSnapshot, thermal: ThermalBeliefDigest): PhysiologicalSeasons =
+    private fun buildSeasons(
+        state: PatientStateSnapshot,
+        thermal: ThermalBeliefDigest,
+        wCycleBelief: WCycleBelief? = null,
+    ): PhysiologicalSeasons =
         PhysiologicalSeasons(
             circadianPattern = when {
                 state.causalPosterior.dawnEndogenousProb >= 0.45 -> "dawn_or_endogenous"
                 state.phase.isHormonalRisk -> "hormonal_phase"
+                wCycleBelief?.enabled == true && wCycleBelief.dawnBias > 1.0 -> "wcycle_luteal_dawn"
                 else -> null
             },
             weeklyPattern = null,
-            hormonalPattern = when (thermal.hypothesis) {
-                ThermalHypothesis.CYCLE_BBT_RISE -> "cycle_bbt_rise"
+            hormonalPattern = when {
+                thermal.hypothesis == ThermalHypothesis.CYCLE_BBT_RISE -> "cycle_bbt_rise"
+                wCycleBelief?.enabled == true && wCycleBelief.phase != CyclePhase.UNKNOWN ->
+                    "wcycle_${wCycleBelief.phase.name.lowercase()}_j${wCycleBelief.dayInCycle}"
                 else -> null
             },
             recurringResistancePattern = if (state.eventMemory.postHyperExhaustionScore >= 0.45) {
@@ -637,6 +651,64 @@ internal object PhysiologicalTreeBuilder {
                 null
             },
         )
+
+    private fun wCyclePhaseConfidence(belief: WCycleBelief?): Double {
+        if (belief == null || !belief.enabled) return 0.0
+        val phaseFloor = when (belief.phase) {
+            CyclePhase.LUTEAL -> 0.58
+            CyclePhase.OVULATION -> 0.42
+            CyclePhase.MENSTRUATION -> 0.32
+            CyclePhase.FOLLICULAR -> 0.22
+            CyclePhase.UNKNOWN -> 0.0
+        }
+        // Governor-effective amp (hypo-dampened) drives intensity — not the legacy raw uplift alone.
+        val ampLift = ((belief.effectiveBasalAmp - 1.0).coerceAtLeast(0.0) / 0.30).coerceIn(0.0, 1.0)
+        return max(phaseFloor, belief.confidence * 0.85 + ampLift * 0.15)
+    }
+
+    private fun hormonalLabel(belief: WCycleBelief?): String {
+        if (belief == null || !belief.enabled || belief.phase == CyclePhase.UNKNOWN) {
+            return "Endogenous/hormonal drive"
+        }
+        return "WCycle ${belief.phase.name} J${belief.dayInCycle}"
+    }
+
+    private fun hormonalReasons(
+        state: PatientStateSnapshot,
+        causal: CausalStatePosterior,
+        belief: WCycleBelief?,
+    ): List<String> {
+        val base = listOf(
+            "endogenous=${fmt(state.endogenousGlucoseDrive)}",
+            "causal_dawn=${fmt(causal.dawnEndogenousProb)}",
+        )
+        if (belief == null || !belief.enabled) return base
+        return base + listOf(
+            "wcycle_phase=${belief.phase.name}",
+            "wcycle_day=${belief.dayInCycle}",
+            "effective_basal=${fmt(belief.effectiveBasalAmp)}",
+            "legacy_basal=${fmt(belief.legacyDoseBasalAmp)}",
+            "hypo_dampen=${fmt(belief.hypoLoadDampen)}",
+            "verneuil=${belief.verneuil.name}",
+        )
+    }
+
+    private fun hormonalSafetyImpact(
+        hormonalConfidence: Double,
+        belief: WCycleBelief?,
+        hypoConfidence: Double,
+    ): String? {
+        if (belief?.hypoGuardActive == true && belief.effectiveBasalAmp > 1.02 && hypoConfidence >= 0.35) {
+            return "luteal uplift dampened under HYPO_GUARD — prefer protect over basal bridge"
+        }
+        if (hypoConfidence >= 0.45 && hormonalConfidence >= 0.45) {
+            return "hormonal resistance with hypo risk — protective posture preferred"
+        }
+        if (hormonalConfidence >= 0.55) {
+            return "prefer causal discrimination before meal escalation"
+        }
+        return null
+    }
 
     private fun buildCompactSummary(
         trunk: PhysiologicalTrunk,

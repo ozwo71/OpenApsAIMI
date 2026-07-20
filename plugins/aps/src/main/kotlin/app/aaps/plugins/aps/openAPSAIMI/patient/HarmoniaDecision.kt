@@ -386,6 +386,11 @@ internal object HarmoniaDecisionEngine {
             tree.branches.stress.confidence >= 0.55 ||
             tree.branches.insulinEffectiveness.confidence >= 0.55
         ) {
+            // Lot A: before absolute hypo blocker (≥0.45 → BLOCKED), moderate hypo risk must not
+            // escalate to a basal bridge under luteal/hormonal resistance (Ophe-class).
+            if (tree.branches.hypoRisk.confidence >= 0.30) {
+                return ActionChoice(HarmoniaAction.PROTECTIVE_REDUCTION, "hormonal_with_hypo_risk")
+            }
             return ActionChoice(HarmoniaAction.BASAL_FIRST, "resistance_or_stress")
         }
         return ActionChoice(HarmoniaAction.OBSERVE, "observe_default")

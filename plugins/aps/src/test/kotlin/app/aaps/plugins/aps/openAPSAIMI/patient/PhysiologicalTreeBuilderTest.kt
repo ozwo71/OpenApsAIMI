@@ -4,6 +4,14 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefDigest
 import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalHypothesis
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.ContraceptiveType
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.CyclePhase
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.CycleTrackingMode
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.EndocrineApplicationMode
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.EndocrineDosePathOwner
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.ThyroidStatus
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.VerneuilStatus
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleBelief
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
@@ -173,6 +181,73 @@ class PhysiologicalTreeBuilderTest {
         assertThat(serialized).doesNotContain("tbr_uph")
         assertThat(serialized).doesNotContain("bolus_u")
     }
+
+    @Test
+    fun build_marksHormonalBranchFromWCycleLutealBelief() {
+        val belief = sampleLutealBelief(effectiveBasal = 1.22, hypoDampen = 1.0, hypoLoad = 0.0)
+        val tree = PhysiologicalTreeBuilder.build(
+            enabled = true,
+            patientState = stableState(),
+            patientModeDecision = PatientModeOrchestrator.evaluate(stableState()),
+            wCycleBelief = belief,
+        )
+        assertThat(tree?.branches?.hormonalResistance?.detected).isTrue()
+        assertThat(tree?.branches?.hormonalResistance?.label).contains("LUTEAL")
+        assertThat(tree?.branches?.hormonalResistance?.reasons?.joinToString()).contains("wcycle_phase=LUTEAL")
+        assertThat(tree?.seasons?.hormonalPattern).contains("wcycle_luteal")
+    }
+
+    @Test
+    fun build_hormonalSafetyNotesProtectWhenHypoLoadHigh() {
+        val belief = sampleLutealBelief(effectiveBasal = 1.05, hypoDampen = 0.3, hypoLoad = 0.8, hypoGuard = true)
+        val state = stableState().copy(
+            eventMemory = PatientEventMemory(recentHypoLoad = 0.70, correctionFragilityScore = 0.50),
+        )
+        val tree = PhysiologicalTreeBuilder.build(
+            enabled = true,
+            patientState = state,
+            patientModeDecision = PatientModeOrchestrator.evaluate(state),
+            wCycleBelief = belief,
+        )
+        assertThat(tree?.branches?.hormonalResistance?.safetyImpact).contains("protect")
+    }
+
+    private fun sampleLutealBelief(
+        effectiveBasal: Double,
+        hypoDampen: Double,
+        hypoLoad: Double,
+        hypoGuard: Boolean = false,
+    ): WCycleBelief =
+        WCycleBelief(
+            enabled = true,
+            phase = CyclePhase.LUTEAL,
+            dayInCycle = 21,
+            trackingMode = CycleTrackingMode.CALENDAR_VARIABLE,
+            contraceptive = ContraceptiveType.COPPER_IUD,
+            thyroid = ThyroidStatus.EUTHYROID,
+            verneuil = VerneuilStatus.ACTIVE,
+            applicationMode = EndocrineApplicationMode.APPLIED,
+            ampContraceptive = 1.0,
+            ampTrackingMode = 1.0,
+            ampCombined = 1.0,
+            dawnBias = 1.0,
+            intendedBasalAmp = 1.25,
+            intendedSmbAmp = 1.12,
+            intendedIcAmp = 1.15,
+            hypoLoad = hypoLoad,
+            hypoLoadDampen = hypoDampen,
+            hypoGuardActive = hypoGuard,
+            inflamSharedBudgetHint = 1.05,
+            effectiveBasalAmp = effectiveBasal,
+            effectiveSmbAmp = 1.0 + (1.12 - 1.0) * hypoDampen,
+            effectiveIcAmp = 1.0 + (1.15 - 1.0) * hypoDampen,
+            legacyDoseBasalAmp = 1.25,
+            legacyDoseSmbAmp = 1.12,
+            legacyDoseIcAmp = 1.15,
+            dosePathOwner = EndocrineDosePathOwner.LEGACY_DIRECT_SCALE,
+            confidence = 0.72,
+            reasons = listOf("test"),
+        )
 
     private fun buildTree(state: PatientStateSnapshot): PhysiologicalTreeSnapshot? =
         PhysiologicalTreeBuilder.build(

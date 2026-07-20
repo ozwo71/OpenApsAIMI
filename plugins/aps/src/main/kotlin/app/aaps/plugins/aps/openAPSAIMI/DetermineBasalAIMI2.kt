@@ -222,6 +222,10 @@ import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleInfo
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.CycleTrackingMode
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.EndocrineAmplitudeGovernor
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleBelief
+import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.AimiTuningContext
+import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningContextEngine
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionEngine
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionCurves
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionProfiler
@@ -312,6 +316,8 @@ internal data class AimiDecisionContext(
         var patient_mode: org.json.JSONObject? = null,
         /** AIMI Harmonia physiological tree, context-only in Lot 1 with no insulin authority. */
         var physiological_tree: org.json.JSONObject? = null,
+        /** Lot A endocrine belief (WCycle + hypo dampen) — context for tree/Harmonia/forensics. */
+        var endocrine_belief: org.json.JSONObject? = null,
         /** Cascade meal language (Tree→Harmonia→Auditor) — meal_certainty_v1. */
         var meal_certainty: org.json.JSONObject? = null,
         /** Cascade D4 / C1 — single dose-facing eventual + minPred for the tick. */
@@ -661,6 +667,9 @@ internal data class AimiDecisionContext(
             }
             adjustments.patient_mode?.let { patientMode ->
                 adj.put("patient_mode", patientMode)
+            }
+            adjustments.endocrine_belief?.let { endocrine ->
+                adj.put("endocrine_belief", endocrine)
             }
             adjustments.physiological_tree?.let { tree ->
                 adj.put("physiological_tree", tree)
@@ -1704,6 +1713,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         logLearnersHealth(rT)
         wCycleInfoForRun = null
         wCycleReasonLogged = false
+        lastWCycleBelief = null
         lastProfile = ctx.profile
         val flatBGsDetected = if (ctx.flatBGsDetected && abs(ctx.glucoseStatus.delta) > 3.0) {
             consoleLog.add("⚠️ FLAT OVERRIDE: Delta=${ctx.glucoseStatus.delta} > 3.0 -> Sensor ALIVE.")
@@ -3112,6 +3122,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val patientModeDecision = PatientModeOrchestrator.evaluate(patientState)
         lastPatientModeDecision = patientModeDecision
         val physioLive = PhysioLiveDigest.from(enrichedSnap, nowMs)
+        ensureWCycleInfo()
+        val hypoGuardActive =
+            TuningContextEngine.parseContext(preferences.get(StringKey.AimiTuningContextSelection)) ==
+                AimiTuningContext.HYPO_GUARD
+        lastWCycleBelief = EndocrineAmplitudeGovernor.from(
+            info = wCycleInfoForRun,
+            prefs = wCyclePreferences,
+            hypoLoad = eventMemory.recentHypoLoad,
+            hypoGuardActive = hypoGuardActive,
+            hourOfDay = hourOfDay,
+        )
         // Cascade native (R1): tree always deploys on the dose path. AimiPhysioAssistantEnable only
         // gates vitals multipliers / assistant extras — never the spine Tree→Harmonia.
         val physiologicalTree = PhysiologicalTreeBuilder.build(
@@ -3129,6 +3150,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 ?.takeIf { it.state == EffortActivityBelief.State.ACTIVE }?.confidence ?: 0.0,
             effortRecentConfidence = lastEffortAssessment
                 ?.takeIf { it.state == EffortActivityBelief.State.RECENT_EFFORT }?.confidence ?: 0.0,
+            wCycleBelief = lastWCycleBelief,
         )
         lastPhysiologicalTreeSnapshot = physiologicalTree
         val sensorTelemetry = HarmoniaSensorTelemetry.resolve(
@@ -8077,6 +8099,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.uam_hypotheses = lastUamHypothesisState?.toJsonObject()
         decisionCtx.adjustments.patient_state = lastPatientState?.toJsonObject()
         decisionCtx.adjustments.patient_mode = lastPatientModeDecision?.toJsonObject()
+        decisionCtx.adjustments.endocrine_belief = lastWCycleBelief?.toJsonObject()
+        // Refresh cycle phase after WCycle resolve (early physio_context often ran with null wCycle).
+        val existingPhysio = decisionCtx.adjustments.physiological_context
+        decisionCtx.adjustments.physiological_context = AimiDecisionContext.PhysioContext(
+            hormonal_cycle_phase = lastWCycleBelief?.takeIf { it.enabled }?.let {
+                "${it.phase.name}_Day${it.dayInCycle}"
+            } ?: wCycleInfoForRun?.let { "${it.phase.name}_Day${it.dayInCycle}" } ?: "Unknown",
+            physical_activity_mode = existingPhysio?.physical_activity_mode ?: "Resting",
+        )
 
         if (preferences.get(BooleanKey.OApsAIMIIntelligenceSnapshotExport)) {
             lastIntelligenceSnapshot = buildIntelligenceSnapshot(ctx, profile, pkpdRuntime)
@@ -9532,6 +9563,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var currentTIRLow: Double = 0.0
     private var lastProfile: OapsProfileAimi? = null
     private var wCycleInfoForRun: WCycleInfo? = null
+    private var lastWCycleBelief: WCycleBelief? = null
     private var wCycleReasonLogged: Boolean = false
     private var currentTIRRange: Double = 0.0
     private var currentTIRAbove: Double = 0.0
