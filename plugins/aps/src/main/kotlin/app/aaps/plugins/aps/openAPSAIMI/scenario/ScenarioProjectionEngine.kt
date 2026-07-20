@@ -27,6 +27,8 @@ object ScenarioProjectionEngine {
     private const val INSULIN_SLOPE_SEED_WEIGHT = 0.38
     private const val INSULIN_SLOPE_FINAL_WEIGHT_MIN = 0.25
     private const val INSULIN_SLOPE_FINAL_WEIGHT_MAX = 0.45
+    /** When mealIntent is on, still restore but at reduced weight (false-positive meal must not fully flatten). */
+    private const val MEAL_INTENT_RESTORE_DAMP = 0.40
 
     fun build(input: ScenarioProjectionInput): ScenarioProjectionPair {
         val curves = input.curves
@@ -44,10 +46,11 @@ object ScenarioProjectionEngine {
         val bestRaw = curves.hybrid.toMutableList()
         // When hybrid≈BG but insulin-only Floor still slopes, seed insulin motion into Scenario
         // and skip layers that would collapse it back onto BG (physio / soft target blend).
-        val preserveInsulinSlope =
+        val rawPreserveInsulinSlope =
             !ctx.mealIntent &&
                 maxAbsDevFromBg(curves.hybrid, bg) <= HYBRID_COLLAPSED_MAX_DEV_MGDL &&
                 maxAbsDevFromBg(curves.iob, bg) >= FLOOR_SLOPE_MIN_DEV_MGDL
+        val preserveInsulinSlope = InsulinSlopePreserveHysteresis.stabilize(rawPreserveInsulinSlope)
         if (preserveInsulinSlope) {
             seedInsulinSlopeFromFloor(bestRaw, floorRaw, bg, contributors)
         }
@@ -342,21 +345,26 @@ object ScenarioProjectionEngine {
         mealIntent: Boolean,
         contributors: MutableList<ScenarioContributor>,
     ) {
-        if (mealIntent) return
         val bestMaxDev = maxAbsDevFromBg(bestRaw, bg)
         val floorMaxDev = maxAbsDevFromBg(floorRaw, bg)
         if (bestMaxDev > HYBRID_COLLAPSED_MAX_DEV_MGDL) return
         if (floorMaxDev < FLOOR_SLOPE_MIN_DEV_MGDL) return
         val beforeTerminal = bestRaw.last()
-        val weight = ((floorMaxDev - FLOOR_SLOPE_MIN_DEV_MGDL) / 20.0)
+        var weight = ((floorMaxDev - FLOOR_SLOPE_MIN_DEV_MGDL) / 20.0)
             .coerceIn(INSULIN_SLOPE_FINAL_WEIGHT_MIN, INSULIN_SLOPE_FINAL_WEIGHT_MAX)
+        // False-positive mealIntent must dampen, not fully disable, the anti-flat correction.
+        if (mealIntent) {
+            weight *= MEAL_INTENT_RESTORE_DAMP
+        }
+        if (weight < 0.05) return
         blendSeriesTowardFloor(bestRaw, floorRaw, weight)
         contributors.add(
             ScenarioContributor(
                 id = ScenarioContributorId.INSULIN_SLOPE_RESTORE,
                 summary = "Restore insulin slope — scenario collapsed near BG " +
                     "bestDev=${"%.1f".format(bestMaxDev)} floorDev=${"%.1f".format(floorMaxDev)} " +
-                    "w=${"%.2f".format(weight)}",
+                    "w=${"%.2f".format(weight)}" +
+                    if (mealIntent) " mealDamp=${"%.2f".format(MEAL_INTENT_RESTORE_DAMP)}" else "",
                 terminalDeltaMgdl = bestRaw.last() - beforeTerminal,
             ),
         )
