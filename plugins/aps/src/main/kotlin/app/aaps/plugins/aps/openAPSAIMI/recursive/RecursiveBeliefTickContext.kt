@@ -72,6 +72,8 @@ data class RecursiveBeliefTickContext(
     val physioMultipliers: PhysioMultipliersMTR? = null,
     val wCycleBasalMult: Double? = null,
     val wCycleSmbMult: Double? = null,
+    /** Governor hypo load 0..1 for WCYCLE_VS_HYPO (production). */
+    val wCycleHypoLoad: Double? = null,
     val ngrSmbMult: Double? = null,
     val bgDerivShort: Double? = null,
     val insulinActivityStageOrdinal: Int? = null,

@@ -303,6 +303,9 @@ object RecursiveBeliefResolver {
         if (paradoxes.any { it.id == BeliefParadoxId.WCYCLE_VS_STABLE }) {
             authority = ReleaseAuthority.NONE; codes += "WCYCLE_STABLE"
         }
+        if (paradoxes.any { it.id == BeliefParadoxId.WCYCLE_VS_HYPO }) {
+            authority = ReleaseAuthority.NONE; codes += "WCYCLE_HYPO"
+        }
         if (paradoxes.any { it.id == BeliefParadoxId.THYROID_VS_AGGRESS }) {
             if (authority == ReleaseAuthority.HARD) authority = ReleaseAuthority.SOFT
             codes += "THYROID_GUARD"

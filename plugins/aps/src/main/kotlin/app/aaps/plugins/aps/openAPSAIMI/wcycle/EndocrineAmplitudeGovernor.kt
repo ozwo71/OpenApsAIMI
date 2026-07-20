@@ -1,10 +1,18 @@
 package app.aaps.plugins.aps.openAPSAIMI.wcycle
 
 /**
- * Builds [WCycleBelief] from adjuster output + clinical risk context.
- * Hypo-load dampen affects **effective** amps for tree/Harmonia only in Lot A.
+ * Production endocrine amplitude owner (Lots B–D).
+ *
+ * Effective amps are applied on the pump dose path — not shadow/compare.
+ * User WCycle shadow/confirm prefs still force applicationMode ≠ APPLIED → amps 1.0 at apply sites.
  */
 object EndocrineAmplitudeGovernor {
+
+    /** Hypo load at/above this forces all effective amps to 1.0 (production protect). */
+    const val HARD_UNITY_HYPO_LOAD = 0.45
+
+    /** Under HYPO_GUARD, lower threshold for hard unity. */
+    const val HARD_UNITY_HYPO_GUARD_LOAD = 0.25
 
     fun from(
         info: WCycleInfo?,
@@ -36,8 +44,11 @@ object EndocrineAmplitudeGovernor {
             else -> EndocrineApplicationMode.SHADOW
         }
 
-        val intendedBasal = info.baseBasalMultiplier * info.learnedBasalMultiplier
-        val intendedSmb = info.baseSmbMultiplier * info.learnedSmbMultiplier
+        // Dawn owned here (removed from WCycleAdjuster) so hypo-dampen can collapse luteal dawn yoyo.
+        val intendedBasal = (info.baseBasalMultiplier * info.learnedBasalMultiplier * dawnBias)
+            .coerceIn(prefs.clampMin(), prefs.clampMax())
+        val intendedSmb = (info.baseSmbMultiplier * info.learnedSmbMultiplier)
+            .coerceIn(prefs.clampMin(), prefs.clampMax())
         val intendedIc = if (info.applied) {
             info.icMultiplier
         } else {
@@ -46,12 +57,19 @@ object EndocrineAmplitudeGovernor {
         }
 
         val load = hypoLoad.coerceIn(0.0, 1.0)
-        // Stronger dampen under HYPO_GUARD: luteal uplift collapses toward 1.0 as hypo load rises.
+        val forceUnity =
+            load >= HARD_UNITY_HYPO_LOAD ||
+                (hypoGuardActive && load >= HARD_UNITY_HYPO_GUARD_LOAD)
+
         val guardFloor = if (hypoGuardActive) 0.15 else 0.0
-        val hypoDampen = (1.0 - load * (0.85 + guardFloor)).coerceIn(0.0, 1.0)
+        val hypoDampen = if (forceUnity) {
+            0.0
+        } else {
+            (1.0 - load * (0.85 + guardFloor)).coerceIn(0.0, 1.0)
+        }
 
         fun dampTowardUnity(amp: Double): Double =
-            1.0 + (amp - 1.0) * hypoDampen
+            if (forceUnity) 1.0 else 1.0 + (amp - 1.0) * hypoDampen
 
         val inflamBudget = WCycleDefaults.verneuilBump(verneuil).first
         val effectiveBasal = dampTowardUnity(intendedBasal)
@@ -74,12 +92,13 @@ object EndocrineAmplitudeGovernor {
             add("mode=${applicationMode.name}")
             add("intended_basal=${fmt(intendedBasal)}")
             add("effective_basal=${fmt(effectiveBasal)}")
-            add("legacy_basal=${fmt(info.basalMultiplier)}")
+            add("adjuster_basal=${fmt(info.basalMultiplier)}")
             add("hypo_dampen=${fmt(hypoDampen)}")
+            if (forceUnity) add("hard_unity_hypo")
             if (dawnBias > 1.0) add("dawn_bias=${fmt(dawnBias)}")
             if (inflamBudget > 1.0) add("verneuil_budget=${fmt(inflamBudget)}")
             if (hypoGuardActive) add("hypo_guard")
-            add("dose_path=${EndocrineDosePathOwner.LEGACY_DIRECT_SCALE.name}")
+            add("dose_path=${EndocrineDosePathOwner.PRODUCTION_GOVERNOR_DIRECT.name}")
         }
 
         return WCycleBelief(
@@ -108,11 +127,28 @@ object EndocrineAmplitudeGovernor {
             legacyDoseBasalAmp = info.basalMultiplier,
             legacyDoseSmbAmp = info.smbMultiplier,
             legacyDoseIcAmp = info.icMultiplier,
-            dosePathOwner = EndocrineDosePathOwner.LEGACY_DIRECT_SCALE,
+            dosePathOwner = EndocrineDosePathOwner.PRODUCTION_GOVERNOR_DIRECT,
             confidence = confidence,
             reasons = reasons,
         )
     }
 
+    /** Production amp for dose path — 1.0 unless APPLIED. */
+    fun productionAmp(belief: WCycleBelief?, axis: EndocrineAmpAxis): Double {
+        if (belief == null || !belief.enabled) return 1.0
+        if (belief.applicationMode != EndocrineApplicationMode.APPLIED) return 1.0
+        return when (axis) {
+            EndocrineAmpAxis.BASAL -> belief.effectiveBasalAmp
+            EndocrineAmpAxis.SMB -> belief.effectiveSmbAmp
+            EndocrineAmpAxis.IC -> belief.effectiveIcAmp
+        }
+    }
+
     private fun fmt(x: Double): String = String.format("%.3f", x)
+}
+
+enum class EndocrineAmpAxis {
+    BASAL,
+    SMB,
+    IC,
 }

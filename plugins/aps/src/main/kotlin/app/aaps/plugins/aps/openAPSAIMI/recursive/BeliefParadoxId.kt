@@ -13,6 +13,8 @@ enum class BeliefParadoxId {
     NGR_VS_HYPER,
     THYROID_VS_AGGRESS,
     WCYCLE_VS_STABLE,
+    /** Endocrine uplift vs hypo load — suppress SMB release (production). */
+    WCYCLE_VS_HYPO,
     SLEEP_DEBT_VS_HYPER,
     HRV_CRASH_VS_MEAL,
     RECOVERY_VS_AGGRESS,

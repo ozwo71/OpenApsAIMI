@@ -27,6 +27,8 @@ data class HarmoniaDecisionEnvironment(
     val chaoticEpisodeLoad: Double = 0.0,
     val effectiveDiaHours: Double? = null,
     val effectivePeakMinutes: Double? = null,
+    /** Production governor basal amp (1.0 = none). Used for BASAL_FIRST factor. */
+    val endocrineBasalAmp: Double = 1.0,
     val seed: Long? = null,
 ) {
     fun toJsonObject(): JSONObject =
@@ -43,6 +45,7 @@ data class HarmoniaDecisionEnvironment(
             put("pump_smb_step_u", pumpSmbStepU)
             put("sensor_age_min", sensorAgeMin)
             put("sensor_noise", sensorNoise)
+            put("endocrine_basal_amp", endocrineBasalAmp)
             put("meal_rise_confirmed", mealRiseConfirmed)
             put("target_bg_mgdl", targetBgMgdl ?: JSONObject.NULL)
             put("correction_fragility_score", correctionFragilityScore)
@@ -242,7 +245,10 @@ internal object HarmoniaDecisionEngine {
         val branch = tree.trunk.globalState.name
 
         val rawBasalFactor = when (action) {
-            HarmoniaAction.BASAL_FIRST -> 1.18
+            HarmoniaAction.BASAL_FIRST -> {
+                val endocrine = environment.endocrineBasalAmp.coerceIn(1.0, 1.25)
+                if (endocrine > 1.0) endocrine else 1.18
+            }
             HarmoniaAction.MEAL_SUPPORT -> 1.10
             HarmoniaAction.PROTECTIVE_REDUCTION -> 0.70
             HarmoniaAction.STABILIZE -> 0.85

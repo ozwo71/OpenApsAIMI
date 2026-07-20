@@ -100,7 +100,7 @@ data class WCycleBelief(
                 legacyDoseBasalAmp = 1.0,
                 legacyDoseSmbAmp = 1.0,
                 legacyDoseIcAmp = 1.0,
-                dosePathOwner = EndocrineDosePathOwner.LEGACY_DIRECT_SCALE,
+                dosePathOwner = EndocrineDosePathOwner.PRODUCTION_GOVERNOR_DIRECT,
                 confidence = 0.0,
                 reasons = listOf("wcycle_disabled"),
             )
@@ -119,6 +119,10 @@ enum class EndocrineApplicationMode {
  * Lots C–D migrate hormonal basal uplift to Harmonia production.
  */
 enum class EndocrineDosePathOwner {
+    /** @deprecated Lot A transitional — do not use on dose path. */
     LEGACY_DIRECT_SCALE,
+    /** Production: governor effective amps applied once on basal/SMB/IC. */
+    PRODUCTION_GOVERNOR_DIRECT,
+    /** Production tick where Harmonia basal-first already embedded endocrine amp in rate. */
     HARMONIA_PRODUCTION_BASAL_FIRST,
 }

@@ -60,7 +60,7 @@ class HarmoniaDecisionEngineTest {
                 legacyDoseBasalAmp = 1.25,
                 legacyDoseSmbAmp = 1.12,
                 legacyDoseIcAmp = 1.15,
-                dosePathOwner = EndocrineDosePathOwner.LEGACY_DIRECT_SCALE,
+                dosePathOwner = EndocrineDosePathOwner.PRODUCTION_GOVERNOR_DIRECT,
                 confidence = 0.72,
                 reasons = listOf("test"),
             ),

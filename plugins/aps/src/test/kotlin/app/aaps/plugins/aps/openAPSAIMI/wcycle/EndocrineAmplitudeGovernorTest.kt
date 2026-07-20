@@ -17,7 +17,7 @@ class EndocrineAmplitudeGovernorTest {
     }
 
     @Test
-    fun from_lutealWithHypoLoad_dampensEffectiveBasalTowardUnity() {
+    fun from_lutealWithSoftHypoLoad_dampensEffectiveBasalTowardUnity() {
         val prefs = mockPrefs()
         val info = lutealInfo(basal = 1.25, smb = 1.12, applied = true)
         val undamped = EndocrineAmplitudeGovernor.from(
@@ -30,19 +30,36 @@ class EndocrineAmplitudeGovernorTest {
         val dampened = EndocrineAmplitudeGovernor.from(
             info = info,
             prefs = prefs,
-            hypoLoad = 0.80,
-            hypoGuardActive = true,
+            hypoLoad = 0.20,
+            hypoGuardActive = false,
             hourOfDay = 12,
         )
         assertThat(undamped.effectiveBasalAmp).isGreaterThan(1.15)
         assertThat(dampened.effectiveBasalAmp).isLessThan(undamped.effectiveBasalAmp)
-        assertThat(dampened.hypoLoadDampen).isLessThan(1.0)
-        assertThat(dampened.legacyDoseBasalAmp).isEqualTo(1.25)
-        assertThat(dampened.dosePathOwner).isEqualTo(EndocrineDosePathOwner.LEGACY_DIRECT_SCALE)
+        assertThat(dampened.effectiveBasalAmp).isGreaterThan(1.0)
+        assertThat(dampened.dosePathOwner).isEqualTo(EndocrineDosePathOwner.PRODUCTION_GOVERNOR_DIRECT)
     }
 
     @Test
-    fun from_lutealDawnHour_setsDawnBias() {
+    fun from_highHypoLoad_forcesHardUnity() {
+        val prefs = mockPrefs()
+        val info = lutealInfo(basal = 1.25, smb = 1.12, applied = true)
+        val belief = EndocrineAmplitudeGovernor.from(
+            info = info,
+            prefs = prefs,
+            hypoLoad = 0.50,
+            hypoGuardActive = true,
+            hourOfDay = 12,
+        )
+        assertThat(belief.effectiveBasalAmp).isEqualTo(1.0)
+        assertThat(belief.effectiveSmbAmp).isEqualTo(1.0)
+        assertThat(belief.hypoLoadDampen).isEqualTo(0.0)
+        assertThat(belief.reasons.joinToString()).contains("hard_unity_hypo")
+        assertThat(belief.dosePathOwner).isEqualTo(EndocrineDosePathOwner.PRODUCTION_GOVERNOR_DIRECT)
+    }
+
+    @Test
+    fun from_lutealDawnHour_foldsDawnIntoIntendedBasal() {
         val prefs = mockPrefs()
         val info = lutealInfo(basal = 1.25, smb = 1.12, applied = true)
         val belief = EndocrineAmplitudeGovernor.from(
@@ -52,7 +69,18 @@ class EndocrineAmplitudeGovernorTest {
             hourOfDay = 5,
         )
         assertThat(belief.dawnBias).isEqualTo(1.10)
+        assertThat(belief.intendedBasalAmp).isWithin(0.001).of(1.25 * 1.10)
         assertThat(belief.reasons.joinToString()).contains("dawn_bias")
+    }
+
+    @Test
+    fun productionAmp_returnsUnityUnlessApplied() {
+        val prefs = mockPrefs()
+        every { prefs.shadow() } returns true
+        val info = lutealInfo(basal = 1.25, smb = 1.12, applied = false)
+        val belief = EndocrineAmplitudeGovernor.from(info = info, prefs = prefs, hypoLoad = 0.0)
+        assertThat(belief.applicationMode).isEqualTo(EndocrineApplicationMode.SHADOW)
+        assertThat(EndocrineAmplitudeGovernor.productionAmp(belief, EndocrineAmpAxis.BASAL)).isEqualTo(1.0)
     }
 
     private fun mockPrefs(): WCyclePreferences {
