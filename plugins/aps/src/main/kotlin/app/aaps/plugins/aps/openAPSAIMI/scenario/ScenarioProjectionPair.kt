@@ -19,8 +19,12 @@ data class ScenarioProjectionPair(
 ) {
     fun formatLogLine(): String {
         val contrib = contributors.joinToString(",") { it.id.name }
+        val bestGate = scenarioBest.gatePathMinMgdl.toInt()
+        val bestDisplay = scenarioBest.pathMinMgdl.toInt()
+        val gateSuffix =
+            if (bestGate != bestDisplay) " bestGateMin=$bestGate" else ""
         return "SCENARIO: floorT=${clinicalFloor.terminalMgdl.toInt()} bestT=${scenarioBest.terminalMgdl.toInt()} " +
-            "floorMin=${clinicalFloor.pathMinMgdl.toInt()} bestMin=${scenarioBest.pathMinMgdl.toInt()} " +
+            "floorMin=${clinicalFloor.pathMinMgdl.toInt()} bestMin=$bestDisplay$gateSuffix " +
             "gap=${(scenarioBest.terminalMgdl - clinicalFloor.terminalMgdl).toInt()} " +
             "contrib=[$contrib]"
     }

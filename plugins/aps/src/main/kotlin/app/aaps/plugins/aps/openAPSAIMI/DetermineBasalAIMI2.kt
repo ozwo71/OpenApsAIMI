@@ -134,7 +134,6 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioPhaseFusion
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.EndogenousBasalBridgePolicy
-import app.aaps.plugins.aps.openAPSAIMI.physio.EndogenousPhaseHysteresis
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionMemory
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
@@ -171,7 +170,6 @@ import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinLoadGovernor
 import app.aaps.plugins.aps.openAPSAIMI.safety.MealSafetyContext
 import app.aaps.plugins.aps.openAPSAIMI.safety.PredictiveHypoEvaluator
 import app.aaps.plugins.aps.openAPSAIMI.safety.PredictiveHypoInput
-import app.aaps.plugins.aps.openAPSAIMI.scenario.InsulinSlopePreserveHysteresis
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionApplicator
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionContext
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionEngine
@@ -400,6 +398,9 @@ internal data class AimiDecisionContext(
         val floor_path_min_mgdl: Double,
         val best_terminal_mgdl: Double,
         val best_path_min_mgdl: Double,
+        /** Pre meal-absorption-lift path-min used by Clamp / DoseTerminal gates. */
+        val best_gate_path_min_mgdl: Double,
+        val best_gate_path_min_hit_floor: Boolean,
         val terminal_gap_mgdl: Double,
         val trajectory_type: String?,
         val contributors: List<String>,
@@ -583,6 +584,8 @@ internal data class AimiDecisionContext(
                 sJson.put("floor_path_min_mgdl", s.floor_path_min_mgdl)
                 sJson.put("best_terminal_mgdl", s.best_terminal_mgdl)
                 sJson.put("best_path_min_mgdl", s.best_path_min_mgdl)
+                sJson.put("best_gate_path_min_mgdl", s.best_gate_path_min_mgdl)
+                sJson.put("best_gate_path_min_hit_floor", s.best_gate_path_min_hit_floor)
                 sJson.put("terminal_gap_mgdl", s.terminal_gap_mgdl)
                 sJson.put("trajectory_type", s.trajectory_type ?: org.json.JSONObject.NULL)
                 sJson.put("contributors", org.json.JSONArray(s.contributors))
@@ -1640,8 +1643,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         currentTickDecisionEventId = null
         lastAuditorAuditStartedAtMs = 0L
         lastPostHypoDeliveryAuthority = PostHypoDeliveryAuthority.INACTIVE
-        EndogenousPhaseHysteresis.reset()
-        InsulinSlopePreserveHysteresis.reset()
+        // Cross-tick hysteresis (InsulinSlope / Endogenous) must NOT reset here — that zeroed
+        // holdTicks every loop and made 15–20 min holds dead on arrival. reset() belongs in
+        // tests / plugin restart only.
         pendingTrajSpiralBasal = null
         val decisionCtx = AimiDecisionContext(
             event_id = "evt_${ctx.currentTime}".also { currentTickDecisionEventId = it },
@@ -3146,8 +3150,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     softCorroboration = MealCertaintyBuilder.softCorroborationFromPhysio(physioLive),
                     pkpdEventualMgdl = pkpdForMeal,
                     scenarioTerminalMgdl = scenarioBestForMeal?.terminalMgdl,
-                    scenarioPathMinMgdl = scenarioBestForMeal?.pathMinMgdl,
-                    scenarioPathMinHitFloor = scenarioBestForMeal?.pathMinHitFloor == true,
+                    scenarioPathMinMgdl = scenarioBestForMeal?.gatePathMinMgdl,
+                    scenarioPathMinHitFloor = scenarioBestForMeal?.gatePathMinHitFloor == true,
                 ),
             )
         }
@@ -8791,7 +8795,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         else if (isFreshAdvisor) advisorCarbs else 0.0
         val curves = AdvancedPredictionEngine.predictCurves(
             currentBG = bg,
-            iobArray = ctx.iobDataArray,
+            iobArray = ctx.pkpdIobDataArray ?: ctx.iobDataArray,
             finalSensitivity = sens,
             cobG = effectiveCob,
             profile = profile,
@@ -9066,6 +9070,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             floor_path_min_mgdl = clinicalFloor.pathMinMgdl,
             best_terminal_mgdl = scenarioBest.terminalMgdl,
             best_path_min_mgdl = scenarioBest.pathMinMgdl,
+            best_gate_path_min_mgdl = scenarioBest.gatePathMinMgdl,
+            best_gate_path_min_hit_floor = scenarioBest.gatePathMinHitFloor,
             terminal_gap_mgdl = scenarioBest.terminalMgdl - clinicalFloor.terminalMgdl,
             trajectory_type = trajectoryType,
             contributors = contributors.map { "${it.id.name}:${it.summary}" },
@@ -9252,8 +9258,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 deltaMgdl5m = delta.toDouble(),
                 pkpdEventualMgdl = fallbackEventualMgdl,
                 scenarioTerminalMgdl = scenarioBest?.terminalMgdl,
-                scenarioPathMinMgdl = scenarioBest?.pathMinMgdl,
-                scenarioPathMinHitFloor = scenarioBest?.pathMinHitFloor == true,
+                scenarioPathMinMgdl = scenarioBest?.gatePathMinMgdl,
+                scenarioPathMinHitFloor = scenarioBest?.gatePathMinHitFloor == true,
                 digestionOrMealActive = digestionOrMealActiveForDose(mealPriorityContext),
                 sportTime = sportTime,
                 postHypoDeliveryActive = lastPostHypoDeliveryAuthority.active,

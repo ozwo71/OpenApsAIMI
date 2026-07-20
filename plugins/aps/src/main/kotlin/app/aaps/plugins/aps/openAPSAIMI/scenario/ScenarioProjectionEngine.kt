@@ -100,7 +100,14 @@ object ScenarioProjectionEngine {
         if (!preserveInsulinSlope) {
             blendTowardTarget(bestRaw, bg, ctx.targetBgMgdl, ctx.trajectoryType, contributors)
         }
+        // Restore before meal floor so absorption lift cannot mask a collapsed hybrid.
+        restoreInsulinSlopeIfCollapsed(bestRaw, floorRaw, bg, ctx.mealIntent, contributors)
+        // Gate path-min must reflect the curve BEFORE meal-absorption lift (dose-facing safety).
+        var preLiftMin: Double? = null
+        var preLiftHitFloor: Boolean? = null
         if (ctx.mealAbsorptionMemoryActive || ctx.mealAbsorptionPhase.isActive) {
+            preLiftMin = bestRaw.filter { it.isFinite() }.minOrNull() ?: bg
+            preLiftHitFloor = preLiftMin < AimiRiskConstants.NUMERIC_FLOOR_MGDL
             applyMealAbsorptionTerminalFloor(
                 bestRaw,
                 bg,
@@ -113,7 +120,12 @@ object ScenarioProjectionEngine {
 
         return ScenarioProjectionPair(
             clinicalFloor = ScenarioProjectionCurve.fromRawPoints(ScenarioProjectionKind.CLINICAL_FLOOR, floorRaw),
-            scenarioBest = ScenarioProjectionCurve.fromRawPoints(ScenarioProjectionKind.SCENARIO_BEST, bestRaw),
+            scenarioBest = ScenarioProjectionCurve.fromRawPoints(
+                kind = ScenarioProjectionKind.SCENARIO_BEST,
+                raw = bestRaw,
+                preLiftPathMinMgdl = preLiftMin,
+                preLiftPathMinHitFloor = preLiftHitFloor,
+            ),
             contributors = contributors,
             cobPointsMgdl = clampSeriesToInts(curves.cob),
             ztPointsMgdl = clampSeriesToInts(curves.zt),
@@ -174,6 +186,11 @@ object ScenarioProjectionEngine {
         }
     }
 
+    /**
+     * During meal-absorption memory, keep the **terminal** from finishing below [bg]+floorAbove
+     * via a terminal-anchored ramp. Never rewrites t=0 and never pins the whole horizon to a
+     * constant (that fabricated flat UAM lines and poisoned dose-facing path-min gates).
+     */
     private fun applyMealAbsorptionTerminalFloor(
         bestRaw: MutableList<Double>,
         bg: Double,
@@ -182,19 +199,20 @@ object ScenarioProjectionEngine {
     ) {
         val floorAbove = ctx.mealAbsorptionBestTFloorAboveBgMgdl ?: return
         if (!floorAbove.isFinite() || floorAbove <= 0.0) return
+        if (bestRaw.size < 2) return
         val floorTerminal = bg + floorAbove
         val before = bestRaw.last()
         if (before >= floorTerminal) return
-        for (i in bestRaw.indices) {
-            if (bestRaw[i] < floorTerminal) {
-                bestRaw[i] = floorTerminal
-            }
+        val lastIndex = (bestRaw.size - 1).coerceAtLeast(1)
+        for (i in 1 until bestRaw.size) {
+            val ramp = bg + floorAbove * i.toDouble() / lastIndex.toDouble()
+            bestRaw[i] = max(bestRaw[i], ramp)
         }
         contributors.add(
             ScenarioContributor(
                 id = ScenarioContributorId.PHYSIOLOGICAL_PHASE,
                 summary = "Meal absorption bestT floor +${floorAbove.toInt()} mg/dL " +
-                    "phase=${ctx.mealAbsorptionPhase.name}",
+                    "phase=${ctx.mealAbsorptionPhase.name} (terminal ramp)",
                 terminalDeltaMgdl = bestRaw.last() - before,
             ),
         )
@@ -211,7 +229,7 @@ object ScenarioProjectionEngine {
         val capAbove = ctx.scenarioBestCapAboveBgMgdl
         if (capAbove != null && capAbove.isFinite()) {
             val cap = bg + capAbove
-            for (i in bestRaw.indices) {
+            for (i in 1 until bestRaw.size) {
                 if (bestRaw[i] > cap) {
                     bestRaw[i] = cap
                 }

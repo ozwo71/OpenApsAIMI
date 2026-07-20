@@ -87,7 +87,7 @@ applyTrajectoryAnalysis + applyContextModule
 |---------|------|
 | `scenario/ScenarioProjectionEngine.kt` | Fusion pure Kotlin |
 | `scenario/ScenarioProjectionContext.kt` | Entrées contexte tick |
-| `scenario/ScenarioProjectionCurve.kt` | Path clampé + terminal + pathMin |
+| `scenario/ScenarioProjectionCurve.kt` | Path clampé + terminal + pathMin display + gate pre-lift pathMin |
 | `scenario/ScenarioProjectionPair.kt` | Paire floor + best + contributors |
 | `scenario/ScenarioProjectionApplicator.kt` | Map vers `RT.predBGs` |
 | `risk/SafetyPredictionTerminalsResolver.kt` | `resolveFromScenario()` pour LGS |
@@ -110,13 +110,19 @@ applyTrajectoryAnalysis + applyContextModule
 
 Ordre d’application dans `ScenarioProjectionEngine` :
 
-1. **Base hybrid** PKPD  
+1. **Base hybrid** PKPD (+ seed insulin-slope si hybrid≈BG et floor incline)  
 2. **Meal / UAM** — `max(hybrid, UAM, COB)` si meal intent ; sinon uplift UAM si > hybrid + 5  
 3. **Trajectoire** — OPEN_DIVERGING / SLOW_DRIFT : bias montée ; TIGHT_SPIRAL : atténuation ; CLOSING / STABLE : blend convergence  
 4. **Activité** — protection : cap montée si effort ; coussin hypo si chute  
 5. **Physio** — damp reactivity / SMB factor  
-6. **Context module** — SMB factor clamp  
-7. **Target blend** — léger tirage vers cible (sauf diverging actif)
+6. **Phase physiologique** — cap terminal au-dessus du BG (**sans réécrire t=0**)  
+7. **Context module** — SMB factor clamp  
+8. **Target blend** — léger tirage vers cible (sauf diverging actif)  
+9. **Restore insulin-slope** (mid) si toujours collapsé près du BG  
+10. **Meal-absorption terminal ramp** — si meal memory active : rampe ancrée terminal `bg+floorAbove` (`i≥1` only). **Ne pinne jamais tout l’horizon à une constante.**  
+11. **Restore insulin-slope** (final) si encore collapsé  
+
+**Path-min dual :** `pathMinMgdl` = min display (post-lift) ; `preLiftPathMinMgdl` / `gatePathMinMgdl` = min **avant** meal ramp — c’est cette valeur qui alimente Clamp / DoseTerminal / MealCertainty.
 
 Chaque couche produit un `ScenarioContributor` auditable (id stable pour JSONL).
 
@@ -125,12 +131,12 @@ Chaque couche produit un `ScenarioContributor` auditable (id stable pour JSONL).
 ## 5. Logs production
 
 ```text
-SCENARIO: floorT=… bestT=… floorMin=… bestMin=… gap=… contrib=[…]
+SCENARIO: floorT=… bestT=… floorMin=… bestMin=… [bestGateMin=…] gap=… contrib=[…]
 PRED_PIPE: … bestT=… floorT=… floorMin=… th=…
 RISK_SAFETY_EARLY: … bestT=… floorT=…
 ```
 
-Export JSONL : `adjustments.scenario_projection` + `adjustments.safety_risk`.
+Export JSONL : `adjustments.scenario_projection` (`best_path_min_mgdl` display + `best_gate_path_min_mgdl` safety) + `adjustments.safety_risk`.
 
 ---
 
@@ -142,6 +148,9 @@ Export JSONL : `adjustments.scenario_projection` + `adjustments.safety_risk`.
 | OPEN_DIVERGING contributor | idem |
 | Activity protection cap | idem |
 | Hormonal phase — UAM suppressed | idem |
+| Meal absorption — terminal ramp (no whole-path pin) | idem |
+| Gate path-min blocks false-safe Clamp | idem |
+| Physio cap leaves t=0 = BG | idem |
 | resolveFromScenario composite | `SafetyPredictionTerminalsResolverTest` |
 
 Commande :

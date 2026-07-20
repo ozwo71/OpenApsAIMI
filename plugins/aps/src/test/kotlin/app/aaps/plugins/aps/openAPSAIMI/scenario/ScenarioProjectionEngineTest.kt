@@ -1,7 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.scenario
 
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionCurves
+import app.aaps.plugins.aps.openAPSAIMI.prediction.ClampPkpdScenarioReconcile
 import app.aaps.plugins.aps.openAPSAIMI.safety.MealSafetyContext
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryMetrics
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryModulation
@@ -204,6 +206,119 @@ class ScenarioProjectionEngineTest {
         // Dampened restore declines less than full restore (terminal closer to BG).
         assertTrue(withMeal.scenarioBest.terminalMgdl > withoutMeal.scenarioBest.terminalMgdl)
         assertTrue(withMeal.scenarioBest.terminalMgdl < bg)
+    }
+
+    @Test
+    fun mealAbsorptionFloor_usesTerminalRamp_notWholePathPin() {
+        val bg = 120.0
+        val steps = 13
+        val descending = List(steps) { i -> bg - i * 4.0 } // terminal 72
+        val curves = AdvancedPredictionCurves(
+            iob = descending,
+            cob = descending,
+            uam = descending,
+            zt = descending,
+            hybrid = descending,
+        )
+        val floorAbove = 15.0
+        val projection = ScenarioProjectionEngine.build(
+            ScenarioProjectionInput(
+                bgNowMgdl = bg,
+                deltaMgdlPer5 = -2.0f,
+                curves = curves,
+                context = ScenarioProjectionContext(
+                    mealAbsorptionMemoryActive = true,
+                    mealAbsorptionPhase = MealAbsorptionPhase.FIRST_WAVE,
+                    mealAbsorptionBestTFloorAboveBgMgdl = floorAbove,
+                ),
+            ),
+        )
+        val points = projection.scenarioBest.pointsMgdl
+        assertEquals(bg.toInt(), points.first())
+        // Must not be a dead-flat constant across the horizon.
+        assertTrue(points.distinct().size > 1)
+        assertTrue(projection.scenarioBest.terminalMgdl >= bg + floorAbove - 0.5)
+        // Gate path-min is the pre-lift minimum (descending raw), not the lifted display min.
+        assertTrue(projection.scenarioBest.gatePathMinMgdl < bg)
+        assertTrue(projection.scenarioBest.gatePathMinMgdl < projection.scenarioBest.pathMinMgdl)
+        assertTrue(
+            projection.contributors.any {
+                it.id == ScenarioContributorId.PHYSIOLOGICAL_PHASE && it.summary.contains("terminal ramp")
+            },
+        )
+        // Flat-line signature bestMin == bestT must not appear on a multi-point lifted path.
+        assertTrue(projection.scenarioBest.pathMinMgdl != projection.scenarioBest.terminalMgdl || points.size <= 2)
+    }
+
+    @Test
+    fun mealAbsorptionFloor_gatePathMinBlocksFalseSafeClamp() {
+        val bg = 130.0
+        val steps = 13
+        // Pre-lift path bottoms near 70 — below Clamp SCN_PATHMIN (80).
+        val descending = List(steps) { i -> bg - i * 5.0 }
+        val curves = AdvancedPredictionCurves(
+            iob = descending,
+            cob = descending,
+            uam = descending,
+            zt = descending,
+            hybrid = descending,
+        )
+        val projection = ScenarioProjectionEngine.build(
+            ScenarioProjectionInput(
+                bgNowMgdl = bg,
+                deltaMgdlPer5 = -3.0f,
+                curves = curves,
+                context = ScenarioProjectionContext(
+                    mealAbsorptionMemoryActive = true,
+                    mealAbsorptionPhase = MealAbsorptionPhase.FIRST_WAVE,
+                    mealAbsorptionBestTFloorAboveBgMgdl = 20.0,
+                ),
+            ),
+        )
+        assertTrue(projection.scenarioBest.gatePathMinMgdl < ClampPkpdScenarioReconcile.SCN_PATHMIN_MGDL)
+        // Display min may be lifted; gates must still see the unsafe pre-lift min.
+        assertTrue(projection.scenarioBest.pathMinMgdl >= projection.scenarioBest.gatePathMinMgdl)
+        val clamp = ClampPkpdScenarioReconcile.reconcile(
+            ClampPkpdScenarioReconcile.Input(
+                bgMgdl = bg,
+                targetBgMgdl = 100.0,
+                deltaMgdl5m = 1.0,
+                pkpdEventualMgdl = 90.0,
+                scenarioTerminalMgdl = projection.scenarioBest.terminalMgdl,
+                scenarioPathMinMgdl = projection.scenarioBest.gatePathMinMgdl,
+                scenarioPathMinHitFloor = projection.scenarioBest.gatePathMinHitFloor,
+                digestionOrMealActive = true,
+                sportTime = false,
+                postHypoDeliveryActive = false,
+            ),
+        )
+        assertFalse(clamp.reconciled)
+    }
+
+    @Test
+    fun physioCap_doesNotRewritePointZero() {
+        val bg = 122.0
+        val rising = listOf(bg, 200.0, 210.0, 220.0)
+        val curves = AdvancedPredictionCurves(
+            iob = rising,
+            cob = rising,
+            uam = rising,
+            zt = rising,
+            hybrid = rising,
+        )
+        val projection = ScenarioProjectionEngine.build(
+            ScenarioProjectionInput(
+                bgNowMgdl = bg,
+                deltaMgdlPer5 = 4.0f,
+                curves = curves,
+                context = ScenarioProjectionContext(
+                    physiologicalPhase = PhysiologicalPhase.DAWN_CORTISOL,
+                    suppressMealLikeUam = true,
+                    scenarioBestCapAboveBgMgdl = 50.0,
+                ),
+            ),
+        )
+        assertEquals(bg.toInt(), projection.scenarioBest.pointsMgdl.first())
     }
 
     @Test

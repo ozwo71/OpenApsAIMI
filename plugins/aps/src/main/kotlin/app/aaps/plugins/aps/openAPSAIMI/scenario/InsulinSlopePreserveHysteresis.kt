@@ -7,6 +7,9 @@ package app.aaps.plugins.aps.openAPSAIMI.scenario
  *
  * Same companion-object pattern as `MealAbsorptionPhaseHysteresis` / `EndogenousPhaseHysteresis`.
  * Lives outside the pure fusion math; [ScenarioProjectionEngine.build] calls [stabilize].
+ *
+ * Do **not** call [reset] from the per-tick loop — that zeroes [holdTicksRemaining] every invoke
+ * and makes the cross-tick hold dead. Reset only from tests or plugin/loop restart.
  */
 object InsulinSlopePreserveHysteresis {
 
