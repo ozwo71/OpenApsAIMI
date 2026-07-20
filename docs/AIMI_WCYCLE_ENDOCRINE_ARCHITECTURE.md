@@ -9,7 +9,7 @@ Status: **Lots A–D production** (governor owns dose amps; no shadow decision p
 | `WCycleAdjuster` | Phase/day/base multipliers only (estimator) — **no dawn**, no dose apply |
 | `EndocrineAmplitudeGovernor` | **Sole** soft hormonal amp owner: dawn + hypo dampen + hard unity |
 | `PhysiologicalTree.hormonalResistance` | Belief for Harmonia posture |
-| `HarmoniaDecisionEngine` | BASAL_FIRST uses `endocrineBasalAmp`; PROTECTIVE if hypoRisk ≥ 0.30 |
+| `HarmoniaDecisionEngine` | BASAL_FIRST: `endocrineBasalAmp` null→1.18 posture; APPLIED amp (incl. 1.0 unity) honored — no 1.18 fallback; PROTECTIVE if hypoRisk ≥ 0.30 |
 | `setTempBasal` / SMB / IC | Apply `productionAmp(belief)` once; skip basal amp if Harmonia already owns rate |
 | RBT `WCYCLE_VS_HYPO` / `WCYCLE_VS_STABLE` | Force `ReleaseAuthority.NONE` |
 | Safety / LGS / Harmonizer↓ | Absolute veto |

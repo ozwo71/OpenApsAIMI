@@ -27,8 +27,13 @@ data class HarmoniaDecisionEnvironment(
     val chaoticEpisodeLoad: Double = 0.0,
     val effectiveDiaHours: Double? = null,
     val effectivePeakMinutes: Double? = null,
-    /** Production governor basal amp (1.0 = none). Used for BASAL_FIRST factor. */
-    val endocrineBasalAmp: Double = 1.0,
+    /**
+     * Production governor basal amp when WCycle is APPLIED.
+     * - `null` = WCycle not governing → BASAL_FIRST keeps posture factor 1.18 (stress/dawn).
+     * - `1.0` = governor hard unity / no uplift → must NOT fall back to 1.18.
+     * - `>1.0` = use governor amp (capped).
+     */
+    val endocrineBasalAmp: Double? = null,
     val seed: Long? = null,
 ) {
     fun toJsonObject(): JSONObject =
@@ -45,7 +50,7 @@ data class HarmoniaDecisionEnvironment(
             put("pump_smb_step_u", pumpSmbStepU)
             put("sensor_age_min", sensorAgeMin)
             put("sensor_noise", sensorNoise)
-            put("endocrine_basal_amp", endocrineBasalAmp)
+            put("endocrine_basal_amp", endocrineBasalAmp ?: JSONObject.NULL)
             put("meal_rise_confirmed", mealRiseConfirmed)
             put("target_bg_mgdl", targetBgMgdl ?: JSONObject.NULL)
             put("correction_fragility_score", correctionFragilityScore)
@@ -245,9 +250,11 @@ internal object HarmoniaDecisionEngine {
         val branch = tree.trunk.globalState.name
 
         val rawBasalFactor = when (action) {
-            HarmoniaAction.BASAL_FIRST -> {
-                val endocrine = environment.endocrineBasalAmp.coerceIn(1.0, 1.25)
-                if (endocrine > 1.0) endocrine else 1.18
+            HarmoniaAction.BASAL_FIRST -> when (val endocrine = environment.endocrineBasalAmp) {
+                // WCycle not APPLIED: keep generic resistance posture boost (stress/dawn).
+                null -> 1.18
+                // Governor APPLIED (including hard unity 1.0): never invent a 1.18 fallback.
+                else -> endocrine.coerceIn(1.0, 1.25)
             }
             HarmoniaAction.MEAL_SUPPORT -> 1.10
             HarmoniaAction.PROTECTIVE_REDUCTION -> 0.70

@@ -224,6 +224,7 @@ import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.CycleTrackingMode
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.EndocrineAmplitudeGovernor
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.EndocrineAmpAxis
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.EndocrineApplicationMode
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.EndocrineDosePathOwner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleBelief
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.AimiTuningContext
@@ -3211,10 +3212,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 chaoticEpisodeLoad = lastRbtChaosEvaluation?.score ?: 0.0,
                 effectiveDiaHours = tickEffectiveDiaHours,
                 effectivePeakMinutes = tickEffectivePeakMinutes,
-                endocrineBasalAmp = EndocrineAmplitudeGovernor.productionAmp(
-                    lastWCycleBelief,
-                    EndocrineAmpAxis.BASAL,
-                ),
+                endocrineBasalAmp = lastWCycleBelief
+                    ?.takeIf {
+                        it.enabled && it.applicationMode == EndocrineApplicationMode.APPLIED
+                    }
+                    ?.effectiveBasalAmp,
             )
         }
         val harmoniaDecision = HarmoniaDecisionEngine.evaluate(
