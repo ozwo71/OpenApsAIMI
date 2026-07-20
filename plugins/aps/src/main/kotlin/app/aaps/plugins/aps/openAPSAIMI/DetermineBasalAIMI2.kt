@@ -223,6 +223,8 @@ import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.CycleTrackingMode
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.EndocrineAmplitudeGovernor
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.EndocrineAmpAxis
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.EndocrineDosePathOwner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleBelief
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.AimiTuningContext
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningContextEngine
@@ -3209,6 +3211,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 chaoticEpisodeLoad = lastRbtChaosEvaluation?.score ?: 0.0,
                 effectiveDiaHours = tickEffectiveDiaHours,
                 effectivePeakMinutes = tickEffectivePeakMinutes,
+                endocrineBasalAmp = EndocrineAmplitudeGovernor.productionAmp(
+                    lastWCycleBelief,
+                    EndocrineAmpAxis.BASAL,
+                ),
             )
         }
         val harmoniaDecision = HarmoniaDecisionEngine.evaluate(
@@ -3775,7 +3781,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         lastInsulinStackingEvaluation = stackingEval
         ensureWCycleInfo()
-        val wCycle = wCycleInfoForRun
         val extended = buildRbtExtendedSignals(
             rT = rT,
             profile = profile,
@@ -3902,8 +3907,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             tier1Hypo = bg < (profile.lgsThreshold ?: 70),
             bgHistoryMgdl = bgHistory,
             physioMultipliers = lastFusedPhysioMultipliers,
-            wCycleBasalMult = wCycle?.basalMultiplier?.takeIf { wCycle.applied },
-            wCycleSmbMult = wCycle?.smbMultiplier?.takeIf { wCycle.applied },
+            wCycleBasalMult = EndocrineAmplitudeGovernor.productionAmp(lastWCycleBelief, EndocrineAmpAxis.BASAL)
+                .takeIf { it != 1.0 },
+            wCycleSmbMult = EndocrineAmplitudeGovernor.productionAmp(lastWCycleBelief, EndocrineAmpAxis.SMB)
+                .takeIf { it != 1.0 },
+            wCycleHypoLoad = lastWCycleBelief?.hypoLoad,
             bgDerivShort = bgDerivShort,
             insulinActivityStageOrdinal = extended.insulinActivityStageOrdinal,
             autodriveV3GateOpen = autodriveGateOpen,
@@ -4812,10 +4820,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog.add(context.getString(R.string.autosens_ratio_log, sensitivityRatioLocal))
         }
         basal = profile.current_basal / sensitivityRatioLocal
-        val wCycle = wCycleInfoForRun
-        if (wCycle != null && wCycle.applied) {
-            basal *= wCycle.basalMultiplier.toDouble()
-        }
+        // Endocrine amp applied once in setTempBasal / Harmonia production — not here (avoids double scale).
         basal = roundBasal(basal)
         if (basal != profileCurrentBasal) {
             consoleLog.add(context.getString(R.string.console_adjust_basal, profileCurrentBasal, basal))
@@ -6256,7 +6261,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         bgi: Double,
         sensitivityRatio: Double,
     ): AimiWCycleCsfCarbImpactStage {
-        val icMult = wCycleFacade.getIcMultiplier()
+        val icMult = EndocrineAmplitudeGovernor.productionAmp(
+            lastWCycleBelief,
+            EndocrineAmpAxis.IC,
+        )
         val adjustedCR = profile.carb_ratio / icMult
 
         val csf = sens / adjustedCR
@@ -11253,22 +11261,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append(" | 🧬AdaptiveBasal: ${"%.2f".format(effectiveMultiplier)}x (${"%.2f".format(originalBeforeScaling)}->${"%.2f".format(rate)}U/h)")
         }
 
-        // 6) Ajustements cycle féminin (conserve un cap)
+        // 6) Endocrine governor (production) — skip if Harmonia basal-first already embedded amp in rate
         val wCycleInfo = ensureWCycleInfo()
         if (wCycleInfo != null) {
             appendWCycleReason(rT.reason, wCycleInfo)
         }
-        if (bgNow > hypoGuard) {
-            if (wCycleInfo != null && wCycleInfo.applied) {
+        val harmoniaOwnedBasal = lastHarmoniaProductionDecision?.selectedForProduction == true
+        if (bgNow > hypoGuard && !harmoniaOwnedBasal) {
+            val endocrineBasalAmp = EndocrineAmplitudeGovernor.productionAmp(
+                lastWCycleBelief,
+                EndocrineAmpAxis.BASAL,
+            )
+            if (endocrineBasalAmp != 1.0) {
                 val pre = rate
-                val scaled = rate * wCycleInfo.basalMultiplier
+                val scaled = rate * endocrineBasalAmp
                 val limit = if (bypassSafety) profile.max_basal else maxSafe
                 rate = scaled.coerceIn(0.0, limit)
                 val need = if (pre > 0.0) rate / pre else null
                 updateWCycleLearner(need, null)
-                // 🔁 log "post-application" avec la mesure d'écart réellement appliquée
-                val profile = lastProfile
-                if (profile != null) {
+                val profileForLog = lastProfile
+                if (profileForLog != null) {
                     wCycleFacade.infoAndLog(
                         mapOf(
                             "trackingMode" to wCyclePreferences.trackingMode().name,
@@ -11279,14 +11291,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                             "delta5" to delta.toDouble(),
                             "iob" to iob.toDouble(),
                             "tdd24h" to (tdd24HrsPerHour * 24f).toDouble(),
-                            "isfProfile" to profile.sens,
+                            "isfProfile" to profileForLog.sens,
                             "dynIsf" to variableSensitivity.toDouble(),
-                            "needBasalScale" to need
+                            "needBasalScale" to need,
+                            "endocrineBasalAmp" to endocrineBasalAmp,
                         )
                     )
                 }
             }
             rate = if (bypassSafety) rate.coerceAtMost(profile.max_basal) else rate.coerceAtMost(maxSafe)
+        } else if (harmoniaOwnedBasal && lastWCycleBelief != null) {
+            lastWCycleBelief = lastWCycleBelief?.copy(
+                dosePathOwner = EndocrineDosePathOwner.HARMONIA_PRODUCTION_BASAL_FIRST,
+            )
         }
 
         rT.reason.append(context.getString(R.string.temp_basal_pose, "%.2f".format(rate), duration))
@@ -12324,13 +12341,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         val wCycleInfo = ensureWCycleInfo()
         if (wCycleInfo != null) {
-            if (wCycleInfo.applied) {
+            val endocrineSmbAmp = EndocrineAmplitudeGovernor.productionAmp(
+                lastWCycleBelief,
+                EndocrineAmpAxis.SMB,
+            )
+            if (endocrineSmbAmp != 1.0) {
                 val pre = smbToGive
-                smbToGive = (smbToGive * wCycleInfo.smbMultiplier.toFloat()).coerceAtLeast(0f)
+                smbToGive = (smbToGive * endocrineSmbAmp.toFloat()).coerceAtLeast(0f)
                 val need = if (pre > 0f) (smbToGive / pre).toDouble() else null
                 updateWCycleLearner(null, need)
 
-// 🔁 log "post-application" avec la mesure d'écart réellement appliquée
                 val profile = lastProfile
                 if (profile != null) {
                     wCycleFacade.infoAndLog(
@@ -12345,7 +12365,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                             "tdd24h" to (tdd24HrsPerHour * 24f).toDouble(),
                             "isfProfile" to profile.sens,
                             "dynIsf" to variableSensitivity.toDouble(),
-                            "needSmbScale" to need
+                            "needSmbScale" to need,
+                            "endocrineSmbAmp" to endocrineSmbAmp,
                         )
                     )
                 }

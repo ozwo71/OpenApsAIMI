@@ -1,42 +1,44 @@
 # AIMI WCycle Endocrine Architecture
 
-Status: **Lot A implemented** (belief + tree + Harmonia posture + JSONL).  
-Dose-path owner migration (Lots B–D) is **not** applied yet — legacy `rate *= wCycle` / SMB scale remain until Lot C.
+Status: **Lots A–D production** (governor owns dose amps; no shadow decision path).
 
-## Problem
+## Authority (production)
 
-WCycle was a parallel post-decision scaler. The physiological tree’s `hormonalResistance` ignored menstrual phase/day/amplitude. Harmonia therefore could not see luteal uplift vs hypo load, and Stability/HYPO_GUARD writebacks silently disabled T3C adaptive basal.
+| Layer | Role |
+|-------|------|
+| `WCycleAdjuster` | Phase/day/base multipliers only (estimator) — **no dawn**, no dose apply |
+| `EndocrineAmplitudeGovernor` | **Sole** soft hormonal amp owner: dawn + hypo dampen + hard unity |
+| `PhysiologicalTree.hormonalResistance` | Belief for Harmonia posture |
+| `HarmoniaDecisionEngine` | BASAL_FIRST uses `endocrineBasalAmp`; PROTECTIVE if hypoRisk ≥ 0.30 |
+| `setTempBasal` / SMB / IC | Apply `productionAmp(belief)` once; skip basal amp if Harmonia already owns rate |
+| RBT `WCYCLE_VS_HYPO` / `WCYCLE_VS_STABLE` | Force `ReleaseAuthority.NONE` |
+| Safety / LGS / Harmonizer↓ | Absolute veto |
 
-## Authority layers (target)
+## Production rules (no shadow decisions)
 
-| Layer | Role | Lot A |
-|-------|------|-------|
-| `WCycleAdjuster` | Legacy dose multipliers (still applied) | Unchanged |
-| `EndocrineAmplitudeGovernor` | Single belief + hypo-dampen math for tree/Harmonia | **Live** |
-| `PhysiologicalTree.hormonalResistance` | Encodes phase + effective amp + hypo dampen | **Live** |
-| `HarmoniaDecisionEngine` | Posture: BASAL_FIRST vs PROTECTIVE when hypoRisk high | **Live** |
-| Harmonia production / direct scale | Dose uplift owner | Lot C (not yet) |
-| Safety / LGS / Harmonizer↓ | Absolute veto | Unchanged |
+1. Dose path reads **governor effective amps** only (`EndocrineAmplitudeGovernor.productionAmp`).
+2. User WCycle shadow/confirm prefs → `applicationMode ≠ APPLIED` → production amp = **1.0** (opt-out, not a decision shadow).
+3. Hard unity: `hypoLoad ≥ 0.45` or (`HYPO_GUARD` and `hypoLoad ≥ 0.25`) → effective amps = 1.0.
+4. Luteal dawn (+10% 04–07h) lives in the governor and is hypo-dampened (closes dawn yoyo under hypo load).
+5. No parallel `× wCycle.basalMultiplier` on the pump path.
+6. RBT leaf mults fed from governor effective amps (not raw adjuster).
 
-## Lot A artifacts
+## Adaptive basal
 
-- `WCycleBelief` — full endocrine snapshot (intended vs legacy-applied vs governor-effective)
-- `EndocrineAmplitudeGovernor.from(...)` — hypo-load dampen, inflam budget visibility, application mode
-- Tree + seasons consume `WCycleBelief`
-- JSONL: `adjustments.endocrine_belief`
-- `physio_context.cycle_phase` refreshed after WCycle resolve (was always `Unknown` when exported early)
-- Adaptive basal: default remains `true`; one-shot upgrade re-enable; Stability family no longer forces OFF
+- Default `OApsAIMIT3cAdaptiveBasalEnabled = true`.
+- One-shot upgrade re-enable if Stability/HYPO_GUARD writeback had forced OFF.
+- Stability family levels no longer force adaptive basal OFF.
 
-## Invariants (Lot A)
+## JSONL
 
-1. Governor does **not** change pump doses in Lot A.
-2. Tree remains context/modulation — not a dose owner.
-3. When `hypoRisk ≥ 0.45` and hormonal resistance would otherwise pick BASAL_FIRST → **PROTECTIVE_REDUCTION**.
-4. Safety still zeros SMB before legacy WCycle SMB scale.
-5. Adaptive basal re-enable is **one-shot**; user may disable again afterward.
+- `adjustments.endocrine_belief` — full belief + `dose_path_owner`
+- `physio_context.cycle_phase` refreshed after WCycle resolve
+- Tree `hormonal_resistance` reasons include phase / effective / legacy adjuster baseline
 
-## Later lots
+## Invariants
 
-- **B:** `WCYCLE_VS_HYPO` RBT paradox; shadow-compare governor vs legacy
-- **C:** Hormonal basal uplift only via Harmonia production channel
-- **D:** Remove parallel `rate *= wCycle`; close H5 dawn yoyo
+1. At most one soft endocrine scale per dose axis per tick.
+2. Safety zeroes SMB before endocrine SMB amp.
+3. `bgNow ≤ hypoGuard` → no basal endocrine uplift in `setTempBasal`.
+4. `WCYCLE_VS_HYPO` → no SMB release authority.
+5. Tree never owns insulin; governor + Harmonia production + legacy cascade share named channels only.

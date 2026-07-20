@@ -72,6 +72,16 @@ object RecursiveBeliefParadox {
         ) {
             out += paradox(BeliefParadoxId.WCYCLE_VS_STABLE, false, "SUPPRESS_RELEASE_STABLE_ORBIT")
         }
+        val wCycleUplift = (ctx.wCycleBasalMult ?: 1.0) != 1.0 || (ctx.wCycleSmbMult ?: 1.0) != 1.0
+        val wCycleHypoConflict =
+            wCycleUplift && (
+                ctx.tier1Hypo ||
+                    (ctx.minPredictedBgMgdl != null && ctx.minPredictedBgMgdl < 90.0 && !ctx.hypoMinPredIgnored) ||
+                    (ctx.wCycleHypoLoad ?: 0.0) >= 0.25
+                )
+        if (wCycleHypoConflict) {
+            out += paradox(BeliefParadoxId.WCYCLE_VS_HYPO, false, "SUPPRESS_RELEASE_WCYCLE_HYPO")
+        }
         val patterns = ctx.physiologicalPatterns
         if (patterns?.suppressHyperRelease == true &&
             ((ctx.htrResult?.active == true) || (ctx.v3SmbU ?: 0.0) > 0.3)
