@@ -589,6 +589,15 @@ class MainApp : Application(), HasAndroidInjector, Configuration.Provider {
         if (preferences.get(IntKey.OverviewSbatWarning) == 25) preferences.put(IntKey.OverviewSbatWarning, 40)
         if (preferences.get(IntKey.OverviewSbatCritical) == 5) preferences.put(IntKey.OverviewSbatCritical, 20)
 
+        // AIMI Lot A: Stability/HYPO_GUARD writeback used to force adaptive basal OFF. One-shot re-enable
+        // on upgrade so the product default (true) is restored; user can disable again afterward.
+        if (!config.AAPSCLIENT && !preferences.get(BooleanNonKey.AimiAdaptiveBasalReenabledOnUpgrade)) {
+            if (!preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)) {
+                preferences.put(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, true)
+            }
+            preferences.put(BooleanNonKey.AimiAdaptiveBasalReenabledOnUpgrade, true)
+        }
+
         val keys: Map<String, *> = sp.getAll()
         // Migrate ActivityMonitor
         for ((key, value) in keys) {

@@ -47,4 +47,10 @@ enum class BooleanNonKey(
     // set on the next launch, the previous VACUUM died below the JVM (native abort / OOM) — used to
     // break the boot-crash loop. Transient device state, not a user setting → not exportable.
     VacuumInProgress("vacuum_in_progress", false, exportable = false),
+
+    /**
+     * One-shot: after AIMI endocrine Lot A upgrade, re-enable T3C adaptive basal if Stability/HYPO_GUARD
+     * writeback had forced it off. User may disable again afterward.
+     */
+    AimiAdaptiveBasalReenabledOnUpgrade("aimi_adaptive_basal_reenabled_on_upgrade", false, exportable = false),
 }

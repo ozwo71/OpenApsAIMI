@@ -2,10 +2,77 @@ package app.aaps.plugins.aps.openAPSAIMI.patient
 
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.ContraceptiveType
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.CyclePhase
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.CycleTrackingMode
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.EndocrineApplicationMode
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.EndocrineDosePathOwner
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.ThyroidStatus
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.VerneuilStatus
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleBelief
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
 class HarmoniaDecisionEngineTest {
+
+    @Test
+    fun evaluate_prefersProtectiveWhenHormonalResistanceAndHypoRisk() {
+        val state = stableState().copy(
+            endogenousGlucoseDrive = 0.70,
+            eventMemory = PatientEventMemory(
+                recentHypoLoad = 0.35,
+                correctionFragilityScore = 0.20,
+            ),
+            causalPosterior = CausalStatePosterior(
+                dawnEndogenousProb = 0.60,
+                dominant = CausalStateId.DAWN_ENDOGENOUS,
+                dominantConfidence = 0.60,
+                learningQuality = 0.70,
+            ),
+        )
+        val tree = PhysiologicalTreeBuilder.build(
+            enabled = true,
+            patientState = state,
+            patientModeDecision = PatientModeOrchestrator.evaluate(state),
+            wCycleBelief = WCycleBelief(
+                enabled = true,
+                phase = CyclePhase.LUTEAL,
+                dayInCycle = 21,
+                trackingMode = CycleTrackingMode.CALENDAR_VARIABLE,
+                contraceptive = ContraceptiveType.COPPER_IUD,
+                thyroid = ThyroidStatus.EUTHYROID,
+                verneuil = VerneuilStatus.ACTIVE,
+                applicationMode = EndocrineApplicationMode.APPLIED,
+                ampContraceptive = 1.0,
+                ampTrackingMode = 1.0,
+                ampCombined = 1.0,
+                dawnBias = 1.0,
+                intendedBasalAmp = 1.25,
+                intendedSmbAmp = 1.12,
+                intendedIcAmp = 1.15,
+                hypoLoad = 0.35,
+                hypoLoadDampen = 0.70,
+                hypoGuardActive = true,
+                inflamSharedBudgetHint = 1.05,
+                effectiveBasalAmp = 1.18,
+                effectiveSmbAmp = 1.08,
+                effectiveIcAmp = 1.10,
+                legacyDoseBasalAmp = 1.25,
+                legacyDoseSmbAmp = 1.12,
+                legacyDoseIcAmp = 1.15,
+                dosePathOwner = EndocrineDosePathOwner.LEGACY_DIRECT_SCALE,
+                confidence = 0.72,
+                reasons = listOf("test"),
+            ),
+        )
+        val decision = HarmoniaDecisionEngine.evaluate(
+            tree = tree,
+            environment = safeEnvironment().copy(currentBgMgdl = 145.0, deltaMgdl5m = 0.0),
+        )
+
+        assertThat(decision?.action).isEqualTo(HarmoniaAction.PROTECTIVE_REDUCTION)
+        assertThat(decision?.decisionBasis?.primaryReason).isEqualTo("hormonal_with_hypo_risk")
+    }
 
     @Test
     fun evaluate_returnsBasalFirstForResistanceWithoutPumpAuthority() {
