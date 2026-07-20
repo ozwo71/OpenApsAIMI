@@ -9,15 +9,18 @@ import android.content.Context
 import android.util.Log
 import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusBluetoothUuids
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusAdvCandidate
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusStoredSession
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Platform LE scanner for Dexcom ONE+ / G7-family ADV.
  *
- * Soft filters (xDrip Ob1 Direct family):
- * - Local name starting with `DXC` / `Dex`, and/or
+ * Soft filters (xDrip Ob1 + Juggluco `isG7`):
+ * - Local name `DXCM` / `DX02` / `DX01` / `DXC*` / `Dex*`, and/or
  * - Advertisement includes service UUID FEBC ([OnePlusBluetoothUuids.Advertisement]).
+ * - Optional [sessionHint] sticky-matches last MAC / ADV name / serial.
  *
  * Unfiltered LE scan (Eversense-style) so transmitters without name still appear if UUID matches.
  *
@@ -26,6 +29,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 @SuppressLint("MissingPermission")
 class OnePlusBleScannerAndroid(
     context: Context,
+    /** Optional stored session for Juggluco-style candidate ranking / sticky match. */
+    @Volatile var sessionHint: OnePlusStoredSession? = null,
 ) : OnePlusBleScanner {
 
     private val appContext = context.applicationContext
@@ -91,25 +96,26 @@ class OnePlusBleScannerAndroid(
         val hasAdvUuid = result.scanRecord?.serviceUuids?.any {
             it.uuid == OnePlusBluetoothUuids.Advertisement
         } == true
-        if (!nameMatches(name) && !hasAdvUuid) return
+        val hint = sessionHint
+        val candidate = OnePlusAdvCandidate.isCandidate(name, address, hint)
+        if (!candidate && !hasAdvUuid && !nameMatches(name)) return
+        // When we have a sticky session, drop weak unrelated FEBC noise unless name/MAC matches.
+        if (hint != null && !candidate && hasAdvUuid && !nameMatches(name)) return
 
         val hit = OnePlusScanResult(address = address, name = name, rssi = result.rssi)
         val previous = seen.put(address, hit)
         if (previous == null || previous.rssi != hit.rssi || previous.name != hit.name) {
+            val score = OnePlusAdvCandidate.rankScore(name, address, hit.rssi, hint)
             Log.d(
                 OnePlusLogMarkers.TAG,
-                "${OnePlusLogMarkers.SCAN}: device name=${name ?: "?"} rssi=${hit.rssi} addr=***${address.takeLast(5)}",
+                "${OnePlusLogMarkers.SCAN}: device name=${name ?: "?"} rssi=${hit.rssi} " +
+                    "score=$score addr=***${address.takeLast(5)}",
             )
             listener?.onDevice(hit)
         }
     }
 
     companion object {
-        fun nameMatches(name: String?): Boolean {
-            if (name.isNullOrBlank()) return false
-            val n = name.trim()
-            return n.startsWith("DXC", ignoreCase = true) ||
-                n.startsWith("Dex", ignoreCase = true)
-        }
+        fun nameMatches(name: String?): Boolean = OnePlusAdvCandidate.nameMatchesSoft(name)
     }
 }

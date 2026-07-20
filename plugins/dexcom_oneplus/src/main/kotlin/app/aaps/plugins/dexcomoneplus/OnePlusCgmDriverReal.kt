@@ -3,6 +3,9 @@ package app.aaps.plugins.dexcomoneplus
 import android.content.Context
 import android.util.Log
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClientAndroid
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusAdvCandidate
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorIdentity
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
 import app.aaps.plugins.dexcomoneplus.oem.DeviceProfileRegistry
 import app.aaps.plugins.dexcomoneplus.oem.OemDeviceProfile
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
@@ -45,11 +48,27 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
     @Volatile
     private var profile: OemDeviceProfile = DeviceProfileRegistry.GenericFallback
 
+    @Volatile
+    private var sensorStore: OnePlusSensorStore? = null
+
+    /** Last ADV name seen for [connect] target — persisted on auth success. */
+    @Volatile
+    private var pendingDeviceName: String? = null
+
     override fun setContext(context: Context) {
         val app = context.applicationContext
         this.context = app
-        scanner = OnePlusBleScannerAndroid(app)
+        val store = OnePlusSensorStore(app)
+        sensorStore = store
+        scanner = OnePlusBleScannerAndroid(app, sessionHint = store.load())
         profile = DeviceProfileRegistry.resolve()
+    }
+
+    fun sensorStore(): OnePlusSensorStore? = sensorStore
+
+    fun saveIdentity(identity: OnePlusSensorIdentity) {
+        sensorStore?.saveIdentity(identity)
+        (scanner as? OnePlusBleScannerAndroid)?.sessionHint = sensorStore?.load()
     }
 
     override fun addWatcher(watcher: OnePlusGlucoseWatcher) {
@@ -76,6 +95,16 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
             "${OnePlusLogMarkers.SESSION}: connect requested (Real GATT+KEKS+EGV)",
         )
         scanner.stopScan()
+        sensorStore?.saveIdentity(
+            OnePlusSensorIdentity(
+                pin = pairingCode,
+                serial = sensorStore?.load()?.identity?.serial,
+                gtin = sensorStore?.load()?.identity?.gtin,
+                rawGs1 = sensorStore?.load()?.identity?.rawGs1,
+            ),
+        )
+        sensorStore?.saveLastMac(deviceAddress)
+        (scanner as? OnePlusBleScannerAndroid)?.sessionHint = sensorStore?.load()
         bleExecutor.execute {
             try {
                 ensureSession().startWithPairingCode(deviceAddress, pairingCode)
@@ -92,6 +121,18 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
                 }
             }
         }
+    }
+
+    fun connect(
+        deviceAddress: String,
+        pairingCode: String,
+        advertisedName: String?,
+    ) {
+        pendingDeviceName = advertisedName
+        if (!advertisedName.isNullOrBlank()) {
+            sensorStore?.saveLastDeviceName(advertisedName)
+        }
+        connect(deviceAddress, pairingCode)
     }
 
     override fun disconnect() {
@@ -125,6 +166,7 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
         val ctx = context ?: error("ONEPLUS_SESSION: setContext required")
         val gatt = OnePlusGattClientAndroid(ctx, profile)
         val auth = OnePlusSessionAuthKeks(gatt)
+        val store = sensorStore
         val created = OnePlusBleSessionSkeleton(
             gatt = gatt,
             auth = auth,
@@ -136,6 +178,22 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
             // SessionStart only if transmitter has no session; never auto SessionStop.
             requestNewSensorStart = true,
             beforeConnect = { address, attempt -> prepareConnect(address, attempt) },
+            savedSharedKeyProvider = { store?.load()?.sharedKey },
+            onAuthSuccess = { address, key ->
+                store?.saveLastMac(address)
+                store?.saveSharedKey(key)
+                pendingDeviceName?.let { store?.saveLastDeviceName(it) }
+                (scanner as? OnePlusBleScannerAndroid)?.sessionHint = store?.load()
+            },
+            onAuthInvalidate = {
+                store?.clearSharedKey()
+                (scanner as? OnePlusBleScannerAndroid)?.sessionHint = store?.load()
+                Log.i(
+                    OnePlusLogMarkers.TAG,
+                    "${OnePlusLogMarkers.SESSION}: cleared persisted KEKS shared key",
+                )
+            },
+            appContext = ctx,
         )
         session = created
         return created
@@ -158,13 +216,17 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
             "${OnePlusLogMarkers.SCAN}: pre-connect rescan ${scanMs}ms attempt=$attempt",
         )
         try {
+            val hint = sensorStore?.load()
             scanner.startScan { hit ->
-                if (hit.address.uppercase() == target) {
+                val macMatch = hit.address.uppercase() == target
+                val nameMatch = OnePlusAdvCandidate.isCandidate(hit.name, hit.address, hint)
+                if (macMatch || (nameMatch && hint?.lastMac.isNullOrBlank())) {
                     if (seen.compareAndSet(false, true)) {
                         Log.i(
                             OnePlusLogMarkers.TAG,
-                            "${OnePlusLogMarkers.SCAN}: pre-connect ADV rssi=${hit.rssi}",
+                            "${OnePlusLogMarkers.SCAN}: pre-connect ADV name=${hit.name} rssi=${hit.rssi}",
                         )
+                        if (!hit.name.isNullOrBlank()) pendingDeviceName = hit.name
                         latch.countDown()
                     }
                 }

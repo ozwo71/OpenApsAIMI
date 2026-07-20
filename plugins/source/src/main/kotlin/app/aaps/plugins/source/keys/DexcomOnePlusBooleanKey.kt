@@ -26,7 +26,7 @@ enum class DexcomOnePlusBooleanKey(
      */
     UseRealSkeleton(
         key = "dexcom_oneplus_use_real_skeleton",
-        defaultValue = false,
+        defaultValue = true,
         titleResId = R.string.dexcom_oneplus_use_real_skeleton,
         summaryResId = R.string.dexcom_oneplus_use_real_skeleton_summary,
         engineeringModeOnly = true,

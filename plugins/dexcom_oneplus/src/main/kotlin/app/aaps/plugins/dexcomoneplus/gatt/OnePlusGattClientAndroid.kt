@@ -96,14 +96,16 @@ class OnePlusGattClientAndroid(
                     g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
                 } catch (_: Throwable) {
                 }
-                if (profile.requestMtuOnConnect) {
-                    val mtu = profile.preferredMtu.coerceIn(23, 517)
-                    if (!g.requestMtu(mtu)) {
-                        g.discoverServices()
-                    }
+                // Juggluco: wait out BOND_BONDING before discoverServices.
+                val bond = g.device?.bondState ?: BluetoothDevice.BOND_NONE
+                if (bond == BluetoothDevice.BOND_BONDING) {
+                    Log.i(
+                        OnePlusLogMarkers.TAG,
+                        "${OnePlusLogMarkers.SESSION}: wait BOND_BONDING before discover",
+                    )
+                    scheduleDiscoverWhenBondReady(g)
                 } else {
-                    // Ob1-like: skip MTU on connect (Samsung status 147/fragile link).
-                    g.discoverServices()
+                    beginPostConnect(g)
                 }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 connected = false
@@ -365,8 +367,66 @@ class OnePlusGattClientAndroid(
             Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: already bonded")
             return true
         }
-        Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: createBond requested")
-        return d.createBond()
+        // Juggluco: createBond(TRANSPORT_LE) via reflection — critical on Samsung.
+        Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: createBond TRANSPORT_LE")
+        return createBondLe(d)
+    }
+
+    private fun beginPostConnect(g: BluetoothGatt) {
+        if (profile.requestMtuOnConnect) {
+            val mtu = profile.preferredMtu.coerceIn(23, 517)
+            if (!g.requestMtu(mtu)) {
+                g.discoverServices()
+            }
+        } else {
+            // Ob1-like: skip MTU on connect (Samsung status 147/fragile link).
+            g.discoverServices()
+        }
+    }
+
+    private fun scheduleDiscoverWhenBondReady(g: BluetoothGatt) {
+        val deadline = SystemClock.elapsedRealtime() + BOND_BONDING_WAIT_MS
+        fun tick() {
+            if (!isCurrentGatt(g) || !connected) return
+            val state = try {
+                g.device?.bondState
+            } catch (_: Throwable) {
+                null
+            }
+            if (state == null || state != BluetoothDevice.BOND_BONDING) {
+                beginPostConnect(g)
+                return
+            }
+            if (SystemClock.elapsedRealtime() >= deadline) {
+                readyLatch.fail("bond stuck in BOND_BONDING")
+                return
+            }
+            mainHandler.postDelayed({ tick() }, 100L)
+        }
+        mainHandler.post { tick() }
+    }
+
+    private fun createBondLe(device: BluetoothDevice): Boolean {
+        return try {
+            val intType = Int::class.javaPrimitiveType ?: Integer.TYPE
+            val method = device.javaClass.getMethod("createBond", intType)
+            val ok = method.invoke(device, BluetoothDevice.TRANSPORT_LE) as Boolean
+            if (!ok) {
+                Log.w(
+                    OnePlusLogMarkers.TAG,
+                    "${OnePlusLogMarkers.SESSION}: createBond(TRANSPORT_LE) returned false — fallback",
+                )
+                device.createBond()
+            } else {
+                true
+            }
+        } catch (t: Throwable) {
+            Log.w(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SESSION}: createBond(TRANSPORT_LE) unavailable: ${t.message}",
+            )
+            device.createBond()
+        }
     }
 
     override fun awaitKeksNotify(timeoutMs: Long): OnePlusKeksNotify? {
@@ -676,6 +736,7 @@ class OnePlusGattClientAndroid(
         private const val GATT_OP_TIMEOUT_MS = 10_000L
         private const val EXTRA_DATA_CHUNK = 20
         private const val EXTRA_DATA_CHUNK_GAP_MS = 40L
+        private const val BOND_BONDING_WAIT_MS = 45_000L
         /** Ob1 sleeps ~500ms after ExtraData chunks before Auth write. */
         private const val EXTRA_DATA_AFTER_MS = 500L
 

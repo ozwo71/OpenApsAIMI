@@ -6,10 +6,12 @@ import org.junit.jupiter.api.Test
 class OnePlusBleScannerAndroidTest {
 
     @Test
-    fun `nameMatches accepts DXC and Dex prefixes`() {
+    fun `nameMatches accepts DXC Dex and DX02 family prefixes`() {
         assertThat(OnePlusBleScannerAndroid.nameMatches("DXCM12")).isTrue()
         assertThat(OnePlusBleScannerAndroid.nameMatches("dxc01")).isTrue()
         assertThat(OnePlusBleScannerAndroid.nameMatches("DexcomONE")).isTrue()
+        assertThat(OnePlusBleScannerAndroid.nameMatches("DX02aS")).isTrue()
+        assertThat(OnePlusBleScannerAndroid.nameMatches("DX01xx")).isTrue()
     }
 
     @Test

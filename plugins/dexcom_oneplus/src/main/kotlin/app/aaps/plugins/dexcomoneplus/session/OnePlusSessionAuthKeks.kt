@@ -11,13 +11,10 @@ import java.security.InvalidParameterException
  * KEKS (libkeks) handshake driver over [OnePlusGattClient].
  *
  * Provenance: NightscoutFoundation/xDrip libkeks at A1 pin (GPL-3.0) via `:plugins:libkeks`.
- * Pump loop mirrors Ob1 `Ob1G5StateMachine.doNext`:
- * - initial `aNext` after `amConnected` (CCCD already enabled by GATT connect)
- * - Auth indication → `receivedResponse` → `aNext` only when true
- * - ExtraData notify → `receivedData` → `aNext` only when buffer full (true)
- * - Installs xDrip guide KEKS certs ([OnePlusKeksGuideCerts]) before `amConnected`
- * - Success only when Ob1 would enter GET_DATA (`aNext` length==1), **not** when the
- *   shared key first becomes computable (that is mid-handshake after Round3 / AuthRequest)
+ * Pump loop mirrors Ob1 `Ob1G5StateMachine.doNext` + Juggluco reconnect short-auth:
+ * - Install guide certs + optional saved shared key (persistence channel 2)
+ * - When bonded + saved key, libkeks skips Round1–3 (`aNext` → RequestAuth)
+ * - Success only when Ob1 would enter GET_DATA (`aNext` length==1)
  *
  * ⚠️ ASYNC IMPACT: blocks caller (bleExecutor) on [OnePlusGattClient.awaitKeksNotify] and optional
  * bond wait. Do not call from main.
@@ -30,17 +27,29 @@ class OnePlusSessionAuthKeks(
     private val bondWaitMs: Long = 45_000L,
 ) : OnePlusSessionAuth {
 
-    override fun authenticate(pairingCode: String): AuthResult {
+    override fun authenticate(pairingCode: String, savedSharedKey: ByteArray?): AuthResult {
         if (!gatt.isConnected()) {
             return AuthResult(ok = false, message = "ONEPLUS_AUTH: GATT not connected")
         }
         val plugin = Plugin.getInstance(pairingCode)
         // Ob1: Pref keks_p1..p3 → setPersistence(8..10) before handshake (xDrip Auto Configure QR).
         OnePlusKeksGuideCerts.install(plugin)
+
+        val preload = savedSharedKey?.takeIf { it.size == 16 }
+        if (preload != null) {
+            plugin.setPersistence(2, preload.copyOf())
+            Log.i(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SESSION}: KEKS saved shared key preloaded " +
+                    "bonded=${gatt.isBonded()} (short-auth path if RoundStart)",
+            )
+        }
+
         plugin.amConnected()
         Log.i(
             OnePlusLogMarkers.TAG,
-            "${OnePlusLogMarkers.SESSION}: KEKS amConnected bonded=${gatt.isBonded()}",
+            "${OnePlusLogMarkers.SESSION}: KEKS amConnected bonded=${gatt.isBonded()} " +
+                "preload=${preload != null}",
         )
 
         // Ob1: first doNext after Auth CCCD setup (connect already enabled CCCDs).
@@ -148,7 +157,7 @@ class OnePlusSessionAuthKeks(
                 if (keyBytes == 0) {
                     AuthResult(ok = false, message = "ONEPLUS_AUTH: GET_DATA without shared key")
                 } else {
-                    AuthResult(ok = true, message = "keks_ok")
+                    AuthResult(ok = true, message = "keks_ok", sharedKey = key!!.copyOf())
                 }
             }
             3 -> {

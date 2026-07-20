@@ -1,5 +1,7 @@
 package app.aaps.plugins.dexcomoneplus.session
 
+import android.content.Context
+import android.os.PowerManager
 import android.util.Log
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseSample
 import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
@@ -52,6 +54,14 @@ class OnePlusBleSessionSkeleton(
      * Runs on bleExecutor; must not touch UI. Default no-op (tests / stub).
      */
     private val beforeConnect: (deviceAddress: String, attempt: Int) -> Unit = { _, _ -> },
+    /** Juggluco-style reconnect: preload 16-byte KEKS shared key when available. */
+    private val savedSharedKeyProvider: () -> ByteArray? = { null },
+    /** Persist MAC + shared key after successful auth. */
+    private val onAuthSuccess: (deviceAddress: String, sharedKey: ByteArray) -> Unit = { _, _ -> },
+    /** Clear persisted shared key when short-auth / bond path is invalidated. */
+    private val onAuthInvalidate: () -> Unit = {},
+    /** Optional app context for PARTIAL_WAKE_LOCK during connect/auth (Juggluco). */
+    private val appContext: Context? = null,
 ) : OnePlusBleSession {
 
     @Volatile
@@ -204,14 +214,40 @@ class OnePlusBleSessionSkeleton(
 
         if (!running) return CycleOutcome.Stopped
 
-        val authResult = auth.authenticate(pairingCode)
+        val wakeLock = acquireAuthWakeLock()
+        val authResult = try {
+            auth.authenticate(pairingCode, savedSharedKeyProvider())
+        } finally {
+            releaseWakeLock(wakeLock)
+        }
         if (!authResult.ok) {
             val msg = authResult.message ?: "ONEPLUS_AUTH_FAILED"
             Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: $msg attempt=$attempt")
+            if (msg.contains("bond failure", ignoreCase = true) ||
+                msg.contains("key refresh", ignoreCase = true) ||
+                msg.contains("Missing QR", ignoreCase = true)
+            ) {
+                // Stale shared key / cert path — force full KEKS next attempt.
+                try {
+                    onAuthInvalidate()
+                } catch (_: Throwable) {
+                }
+            }
             onError(msg, false)
             warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.FAILED, message = msg)
             emitWarmup()
             return if (running) CycleOutcome.RetryableFailure else CycleOutcome.Stopped
+        }
+
+        authResult.sharedKey?.let { key ->
+            try {
+                onAuthSuccess(deviceAddress, key)
+            } catch (t: Throwable) {
+                Log.w(
+                    OnePlusLogMarkers.TAG,
+                    "${OnePlusLogMarkers.SESSION}: onAuthSuccess persist failed: ${t.message}",
+                )
+            }
         }
 
         // Do NOT invent a 30 min WARMING clock here — that blocked ingest even when the
@@ -246,6 +282,28 @@ class OnePlusBleSessionSkeleton(
         }
 
         return if (running) CycleOutcome.EgvExited else CycleOutcome.Stopped
+    }
+
+    private fun acquireAuthWakeLock(): PowerManager.WakeLock? {
+        val ctx = appContext ?: return null
+        return try {
+            val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
+            pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "OpenApsAIMI::DexcomOnePlusAuth").apply {
+                setReferenceCounted(false)
+                acquire(AUTH_WAKE_LOCK_MS)
+            }
+        } catch (t: Throwable) {
+            Log.w(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: wakeLock ${t.message}")
+            null
+        }
+    }
+
+    private fun releaseWakeLock(lock: PowerManager.WakeLock?) {
+        if (lock == null) return
+        try {
+            if (lock.isHeld) lock.release()
+        } catch (_: Throwable) {
+        }
     }
 
     private fun fail(message: String, fatal: Boolean) {
@@ -298,5 +356,10 @@ class OnePlusBleSessionSkeleton(
         RetryableFailure,
         Stopped,
         Fatal,
+    }
+
+    companion object {
+        /** Cover full KEKS + bond prompt window (Juggluco uses an unbounded wake lock). */
+        private const val AUTH_WAKE_LOCK_MS = 120_000L
     }
 }

@@ -3,6 +3,7 @@ package app.aaps.plugins.source.activities
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.os.Looper
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.clickable
@@ -41,7 +42,6 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.core.os.HandlerCompat
-import android.os.Looper
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
@@ -49,7 +49,13 @@ import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.core.ui.compose.clearFocusOnTap
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriver
+import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverReal
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusAdvCandidate
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusGs1ApplicatorParser
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorIdentity
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusStoredSession
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerAndroid
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanResult
 import app.aaps.plugins.dexcomoneplus.session.OnePlusSessionStart
@@ -60,7 +66,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
 /**
- * Sensor start: BLE permissions, LE scan (DXC/FEBC), pairing code, connect → warm-up.
+ * Sensor start: BLE permissions, LE scan (DX02/FEBC), applicator GS1 / PIN, connect → warm-up.
  */
 @AndroidEntryPoint
 class DexcomOnePlusStartActivity : AppCompatActivity() {
@@ -70,7 +76,6 @@ class DexcomOnePlusStartActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Align Stub/Real with eng pref and keep plugin watcher on the active driver.
         dexcomOnePlusPlugin.syncDriverFromPrefs()
         val driver = OnePlusCgmDrivers.default()
         driver.setContext(applicationContext)
@@ -104,13 +109,31 @@ private fun DexcomOnePlusStartScreen(
     val context = LocalContext.current
     val activity = context as? Activity
     val mainHandler = remember { HandlerCompat.createAsync(Looper.getMainLooper()) }
-    val scanner = remember { OnePlusBleScannerAndroid(context.applicationContext) }
+    val sensorStore = remember { OnePlusSensorStore(context.applicationContext) }
+    val storedSession = remember { sensorStore.load() }
+    val scanner = remember {
+        OnePlusBleScannerAndroid(context.applicationContext, sessionHint = storedSession)
+    }
     val focusManager = LocalFocusManager.current
 
-    var pairingCode by remember { mutableStateOf("") }
+    var applicatorInput by remember {
+        mutableStateOf(storedSession?.identity?.rawGs1 ?: storedSession?.identity?.pin.orEmpty())
+    }
+    var parsedIdentity by remember {
+        mutableStateOf(
+            storedSession?.identity
+                ?: OnePlusGs1ApplicatorParser.parse(applicatorInput),
+        )
+    }
     var errorText by remember { mutableStateOf<String?>(null) }
     var scanning by remember { mutableStateOf(false) }
-    var selected by remember { mutableStateOf<OnePlusScanResult?>(null) }
+    var selected by remember {
+        mutableStateOf<OnePlusScanResult?>(
+            storedSession?.lastMac?.let { mac ->
+                OnePlusScanResult(address = mac, name = storedSession.lastDeviceName, rssi = 0)
+            },
+        )
+    }
     val devices = remember { mutableStateListOf<OnePlusScanResult>() }
 
     val codeRequired = stringResource(R.string.dexcom_oneplus_pairing_code_required)
@@ -118,6 +141,7 @@ private fun DexcomOnePlusStartScreen(
     val permissionsNeeded = stringResource(R.string.dexcom_oneplus_permissions_needed)
     val deviceRequired = stringResource(R.string.dexcom_oneplus_device_required)
     val realSkeletonRequired = stringResource(R.string.dexcom_oneplus_real_skeleton_required)
+    val serialNone = stringResource(R.string.dexcom_oneplus_applicator_serial_none)
 
     DisposableEffect(Unit) {
         onDispose {
@@ -170,6 +194,40 @@ private fun DexcomOnePlusStartScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )
+            OutlinedTextField(
+                value = applicatorInput,
+                onValueChange = { text ->
+                    applicatorInput = text
+                    parsedIdentity = OnePlusGs1ApplicatorParser.parse(text)
+                    errorText = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.dexcom_oneplus_applicator_gs1_label)) },
+                supportingText = {
+                    val identity = parsedIdentity
+                    if (identity != null) {
+                        Text(
+                            stringResource(
+                                R.string.dexcom_oneplus_applicator_parsed,
+                                identity.pin,
+                                identity.serial ?: serialNone,
+                            ),
+                        )
+                    } else {
+                        Text(stringResource(R.string.dexcom_oneplus_applicator_gs1_hint))
+                    }
+                },
+                singleLine = false,
+                minLines = 2,
+                isError = errorText != null && parsedIdentity == null,
+            )
+            storedSession?.lastMac?.let { mac ->
+                Text(
+                    text = stringResource(R.string.dexcom_oneplus_last_mac_hint, mac),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(
                 text = stringResource(R.string.dexcom_oneplus_scan_hint),
                 style = MaterialTheme.typography.bodySmall,
@@ -187,11 +245,14 @@ private fun DexcomOnePlusStartScreen(
                             return@OutlinedButton
                         }
                         devices.clear()
-                        selected = null
+                        scanner.sessionHint = sensorStore.load()
                         scanner.startScan { hit ->
                             mainHandler.post {
                                 val idx = devices.indexOfFirst { it.address == hit.address }
                                 if (idx >= 0) devices[idx] = hit else devices.add(hit)
+                                autoSelectBest(devices, scanner.sessionHint)?.let { best ->
+                                    selected = best
+                                }
                             }
                         }
                         scanning = true
@@ -227,7 +288,11 @@ private fun DexcomOnePlusStartScreen(
                     .heightIn(max = AapsSpacing.xxLarge * 9),
                 verticalArrangement = Arrangement.spacedBy(AapsSpacing.small),
             ) {
-                items(devices, key = { it.address }) { device ->
+                val hint = scanner.sessionHint
+                val ranked = devices.sortedByDescending {
+                    OnePlusAdvCandidate.rankScore(it.name, it.address, it.rssi, hint)
+                }
+                items(ranked, key = { it.address }) { device ->
                     val selectedHere = selected?.address == device.address
                     Column(
                         modifier = Modifier
@@ -259,21 +324,6 @@ private fun DexcomOnePlusStartScreen(
                     }
                 }
             }
-            OutlinedTextField(
-                value = pairingCode,
-                onValueChange = {
-                    pairingCode = it.filter { ch -> ch.isDigit() }.take(OnePlusSessionStart.EXPECTED_CODE_LENGTH)
-                    errorText = null
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.dexcom_oneplus_pairing_code_label)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                isError = errorText != null,
-                supportingText = errorText?.let { msg ->
-                    { Text(msg) }
-                },
-            )
             if (!OnePlusCgmDrivers.useRealSkeleton) {
                 Text(
                     text = stringResource(R.string.dexcom_oneplus_real_skeleton_hint),
@@ -287,11 +337,13 @@ private fun DexcomOnePlusStartScreen(
                         errorText = realSkeletonRequired
                         return@Button
                     }
-                    val code = OnePlusSessionStart.normalizePairingCode(pairingCode)
-                    if (code.isEmpty()) {
+                    val identity = parsedIdentity
+                        ?: OnePlusGs1ApplicatorParser.parse(applicatorInput)
+                    if (identity == null) {
                         errorText = codeRequired
                         return@Button
                     }
+                    val code = OnePlusSessionStart.normalizePairingCode(identity.pin)
                     if (!OnePlusSessionStart.isValidPairingCode(code)) {
                         errorText = codeInvalid
                         return@Button
@@ -308,15 +360,44 @@ private fun DexcomOnePlusStartScreen(
                     }
                     scanner.stopScan()
                     scanning = false
+                    sensorStore.saveIdentity(identity.copy(pin = code))
+                    sensorStore.saveLastMac(address)
+                    selected?.name?.let { sensorStore.saveLastDeviceName(it) }
                     val activeDriver = onEnsureDriver()
                     activeDriver.setContext(context.applicationContext)
-                    activeDriver.connect(deviceAddress = address, pairingCode = code)
+                    (activeDriver as? OnePlusCgmDriverReal)?.saveIdentity(identity.copy(pin = code))
+                    if (activeDriver is OnePlusCgmDriverReal) {
+                        activeDriver.connect(
+                            deviceAddress = address,
+                            pairingCode = code,
+                            advertisedName = selected?.name,
+                        )
+                    } else {
+                        activeDriver.connect(deviceAddress = address, pairingCode = code)
+                    }
                     onStarted()
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(stringResource(R.string.dexcom_oneplus_connect_follow))
             }
+            errorText?.let { msg ->
+                Text(
+                    text = msg,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
         }
+    }
+}
+
+private fun autoSelectBest(
+    devices: List<OnePlusScanResult>,
+    session: OnePlusStoredSession?,
+): OnePlusScanResult? {
+    if (devices.isEmpty()) return null
+    return devices.maxByOrNull {
+        OnePlusAdvCandidate.rankScore(it.name, it.address, it.rssi, session)
     }
 }
