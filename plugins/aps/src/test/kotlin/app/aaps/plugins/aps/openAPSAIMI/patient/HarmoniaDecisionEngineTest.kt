@@ -95,9 +95,62 @@ class HarmoniaDecisionEngineTest {
 
         assertThat(decision?.eligible).isTrue()
         assertThat(decision?.action).isEqualTo(HarmoniaAction.BASAL_FIRST)
+        assertThat(decision?.basalFactor).isWithin(0.001).of(1.18)
         assertThat(decision?.targetSmbU).isEqualTo(0.0)
         assertThat(decision?.toJsonObject()?.getBoolean("applies_to_pump")).isFalse()
         assertThat(decision?.compactSummary).contains("Harmonia sim:")
+    }
+
+    @Test
+    fun evaluate_basalFirstHonorsGovernorHardUnityWithoutFallback118() {
+        val state = stableState().copy(
+            phase = PhysiologicalPhase.DAWN_CORTISOL,
+            endogenousGlucoseDrive = 0.82,
+            causalPosterior = CausalStatePosterior(
+                dawnEndogenousProb = 0.84,
+                dominant = CausalStateId.DAWN_ENDOGENOUS,
+                dominantConfidence = 0.84,
+                learningQuality = 0.80,
+            ),
+            eventMemory = PatientEventMemory(recentHypoLoad = 0.10),
+        )
+        val decision = HarmoniaDecisionEngine.evaluate(
+            tree = buildTree(state),
+            environment = safeEnvironment().copy(
+                currentBasalUph = 1.0,
+                endocrineBasalAmp = 1.0,
+            ),
+        )
+
+        assertThat(decision?.action).isEqualTo(HarmoniaAction.BASAL_FIRST)
+        assertThat(decision?.basalFactor).isEqualTo(1.0)
+        assertThat(decision?.targetBasalUph).isWithin(0.001).of(1.0)
+    }
+
+    @Test
+    fun evaluate_basalFirstUsesGovernorAmpWhenAboveUnity() {
+        val state = stableState().copy(
+            phase = PhysiologicalPhase.DAWN_CORTISOL,
+            endogenousGlucoseDrive = 0.82,
+            causalPosterior = CausalStatePosterior(
+                dawnEndogenousProb = 0.84,
+                dominant = CausalStateId.DAWN_ENDOGENOUS,
+                dominantConfidence = 0.84,
+                learningQuality = 0.80,
+            ),
+            eventMemory = PatientEventMemory(recentHypoLoad = 0.10),
+        )
+        val decision = HarmoniaDecisionEngine.evaluate(
+            tree = buildTree(state),
+            environment = safeEnvironment().copy(
+                currentBasalUph = 1.0,
+                endocrineBasalAmp = 1.22,
+            ),
+        )
+
+        assertThat(decision?.action).isEqualTo(HarmoniaAction.BASAL_FIRST)
+        assertThat(decision?.basalFactor).isWithin(0.001).of(1.22)
+        assertThat(decision?.targetBasalUph).isWithin(0.001).of(1.20) // pump step 0.05
     }
 
     @Test
