@@ -70,11 +70,33 @@ class GlucoseDeduplicatorTest {
     }
 
     @Test
-    fun `value change within window is accepted`() {
+    fun `value change within window is accepted after min gap`() {
         val d = GlucoseDeduplicator(configWith("p" to 5), MemStore())
         d.process("p", 0L, bg)
+        // Below BgQualityCheck DOUBLED (20s) + floor → reject.
+        assertThat(d.process("p", 5_000L, bgNext)).isFalse()
+        // Safe gap (≥21s) with new value → accept; interval unchanged.
         assertThat(d.process("p", 30_000L, bgNext)).isTrue()
         assertThat(d.currentIntervalMs("p")).isEqualTo(min5)
+    }
+
+    @Test
+    fun `value change under min accept gap is rejected - protects loop from DOUBLED`() {
+        val d = GlucoseDeduplicator(configWith("p" to 5), MemStore())
+        d.process("p", 0L, bg)
+        assertThat(d.process("p", 1_000L, bgNext)).isFalse()
+        assertThat(d.process("p", GlucoseDeduplicator.MIN_ACCEPT_GAP_MS - 1, bgNext)).isFalse()
+        assertThat(d.process("p", GlucoseDeduplicator.MIN_ACCEPT_GAP_MS, bgNext)).isTrue()
+    }
+
+    @Test
+    fun `migrated state without last glucose rejects short-gap until long-gap reseed`() {
+        val store = MemStore()
+        store.data = """[{"p":"p","t":0,"i":${min5},"pi":0,"c":0}]""" // no "v"
+        val d = GlucoseDeduplicator(configWith("p" to 5), store)
+        assertThat(d.process("p", 30_000L, bg)).isFalse()
+        assertThat(d.process("p", 4 * min1, bg)).isTrue()
+        assertThat(d.process("p", 4 * min1 + 30_000L, bg)).isFalse()
     }
 
     @Test
@@ -107,10 +129,12 @@ class GlucoseDeduplicatorTest {
     }
 
     @Test
-    fun `short-gap value change does not drop interval`() {
+    fun `short-gap value change under min gap is rejected and does not drop interval`() {
         val d = GlucoseDeduplicator(configWith("p" to 5), MemStore())
         d.process("p", 0L, bg)
-        assertThat(d.process("p", 1_000L, bgNext)).isTrue()
+        assertThat(d.process("p", 1_000L, bgNext)).isFalse()
+        assertThat(d.currentIntervalMs("p")).isEqualTo(min5)
+        assertThat(d.process("p", 30_000L, bgNext)).isTrue()
         assertThat(d.currentIntervalMs("p")).isEqualTo(min5)
     }
 
