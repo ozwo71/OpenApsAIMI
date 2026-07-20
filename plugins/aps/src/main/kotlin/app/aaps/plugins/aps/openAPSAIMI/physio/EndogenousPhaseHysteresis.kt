@@ -2,6 +2,9 @@ package app.aaps.plugins.aps.openAPSAIMI.physio
 
 /**
  * Prevents 5-minute flip-flop from dawn/endogenous hormonal phases into MEAL_UNDECLARED / OFF.
+ *
+ * Do **not** call [reset] from the per-tick loop — that zeroes the hold every invoke and makes
+ * the cross-tick hold dead. Reset only from tests or plugin/loop restart.
  */
 object EndogenousPhaseHysteresis {
 

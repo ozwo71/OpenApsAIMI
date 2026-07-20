@@ -90,6 +90,8 @@ import app.aaps.plugins.aps.openAPS.TddStatus
 import app.aaps.plugins.aps.openAPSAIMI.ISF.DynIsfTrajectoryTuning
 import app.aaps.plugins.aps.openAPSAIMI.ISF.IsfAdjustmentEngine
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
+import app.aaps.plugins.aps.openAPSAIMI.physio.EndogenousPhaseHysteresis
+import app.aaps.plugins.aps.openAPSAIMI.scenario.InsulinSlopePreserveHysteresis
 import dagger.android.HasAndroidInjector
 import org.json.JSONObject
 import java.util.Calendar
@@ -226,6 +228,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
     override suspend fun onStart() {
         super.onStart()
+        // Fresh cross-tick hysteresis for a new plugin lifetime (not per APS tick).
+        EndogenousPhaseHysteresis.reset()
+        InsulinSlopePreserveHysteresis.reset()
         migrateClassicAutodriveToV3()
         preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey::class.java)
         preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey::class.java)
