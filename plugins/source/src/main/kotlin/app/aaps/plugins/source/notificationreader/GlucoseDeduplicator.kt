@@ -1,5 +1,6 @@
 package app.aaps.plugins.source.notificationreader
 
+import app.aaps.plugins.source.notificationreader.GlucoseDeduplicator.Companion.MIN_ACCEPT_GAP_MS
 import app.aaps.plugins.source.notificationreader.GlucoseDeduplicator.Companion.SNAP_UP_CONSECUTIVE
 import app.aaps.plugins.source.notificationreader.GlucoseDeduplicator.Companion.snapGapToKnownIntervalMs
 import org.json.JSONArray
@@ -12,10 +13,15 @@ import org.json.JSONObject
  * producing duplicate readings. This class enforces a per-package interval window for
  * **same-value** reposts: any reading with the same mg/dL within that window is rejected.
  *
- * **Value-aware accept:** if the parsed glucose **changed** within the window, the reading is
- * accepted so AAPS does not lag behind an already-updated notification shade. Short-gap
- * value changes do **not** participate in interval snap-up (seed remains a hard floor) so the
- * historical Dexcom “transition glitch → 1-min mode” bug cannot return.
+ * **Value-aware accept (guarded):** if the parsed glucose **changed** within the sensor window
+ * but the gap is still ≥ [MIN_ACCEPT_GAP_MS] (just above `BgQualityCheck`’s 20s DOUBLED
+ * threshold), the reading is accepted so AAPS does not lag behind an already-updated
+ * notification shade. Gaps under [MIN_ACCEPT_GAP_MS] are always rejected — even on value
+ * change — so Dexcom transition glitches cannot insert two GVs a few seconds apart and force
+ * CLOSED_LOOP_LGS / max IOB 0.
+ *
+ * Short-gap accepts (value change ≥ [MIN_ACCEPT_GAP_MS]) do **not** participate in interval
+ * snap-up (seed remains a hard floor).
  *
  * Adaptation:
  *  - **Snap up** (longer interval) — requires [SNAP_UP_CONSECUTIVE] consecutive gaps that snap to the
@@ -68,9 +74,13 @@ class GlucoseDeduplicator(
         val sameValue = state.lastGlucoseMgdl != null && state.lastGlucoseMgdl == glucoseMgdl
 
         if (gap < threshold) {
+            // Absolute floor vs BgQualityCheck DOUBLED (≤20s) — reject even on value change.
+            if (gap < MIN_ACCEPT_GAP_MS) return false
+            // Migrated / incomplete state without "v": treat as time-only until a long-gap re-seed.
+            if (state.lastGlucoseMgdl == null) return false
             // Same-value repost inside the sensor window → duplicate noise.
             if (sameValue) return false
-            // Notification already shows a new BG: accept without adapting interval from this short gap.
+            // Notification already shows a new BG after a safe gap: accept without adapting interval.
             state.lastAcceptedTimestamp = now
             state.lastGlucoseMgdl = glucoseMgdl
             persist()
@@ -151,6 +161,13 @@ class GlucoseDeduplicator(
 
         const val DEFAULT_INTERVAL_MS = 5 * 60_000L
         const val SNAP_UP_CONSECUTIVE = 3
+
+        /**
+         * Hard floor for any accept after the first reading for a package.
+         * Must stay **above** `BgQualityCheck` DOUBLED window (20s) so two notification
+         * inserts cannot force LGS / max IOB 0.
+         */
+        const val MIN_ACCEPT_GAP_MS = 21_000L
 
         /**
          * Snap a measured gap to the nearest known sensor interval using fixed thresholds.
