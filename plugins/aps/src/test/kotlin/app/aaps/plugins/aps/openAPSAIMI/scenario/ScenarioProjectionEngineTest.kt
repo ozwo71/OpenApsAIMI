@@ -8,10 +8,17 @@ import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryModulation
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryAnalysis
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryType
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
 class ScenarioProjectionEngineTest {
+
+    @BeforeEach
+    fun resetHysteresis() {
+        InsulinSlopePreserveHysteresis.reset()
+    }
 
     private fun flatCurves(bg: Double, terminal: Double): AdvancedPredictionCurves {
         val series = listOf(bg, terminal)
@@ -21,6 +28,18 @@ class ScenarioProjectionEngineTest {
             uam = listOf(bg, bg + 20.0),
             zt = series,
             hybrid = listOf(bg, 39.0),
+        )
+    }
+
+    private fun collapsedCurves(bg: Double, steps: Int = 12): AdvancedPredictionCurves {
+        val hybrid = List(steps) { bg }
+        val iob = List(steps) { i -> bg - i * 2.0 }
+        return AdvancedPredictionCurves(
+            iob = iob,
+            cob = hybrid,
+            uam = hybrid,
+            zt = iob,
+            hybrid = hybrid,
         )
     }
 
@@ -141,25 +160,59 @@ class ScenarioProjectionEngineTest {
     @Test
     fun collapsedHybrid_restoresInsulinSlopeFromFloor() {
         val bg = 72.0
-        val steps = 12
-        val hybrid = List(steps) { bg }
-        val iob = List(steps) { i -> bg - i * 2.0 }
         val projection = ScenarioProjectionEngine.build(
             ScenarioProjectionInput(
                 bgNowMgdl = bg,
                 deltaMgdlPer5 = -1.0f,
-                curves = AdvancedPredictionCurves(
-                    iob = iob,
-                    cob = hybrid,
-                    uam = hybrid,
-                    zt = iob,
-                    hybrid = hybrid,
-                ),
+                curves = collapsedCurves(bg),
                 context = ScenarioProjectionContext(),
             ),
         )
         assertTrue(projection.contributors.any { it.id == ScenarioContributorId.INSULIN_SLOPE_RESTORE })
         assertTrue(projection.scenarioBest.terminalMgdl < bg - 3.0)
         assertTrue(projection.scenarioBest.terminalMgdl > projection.clinicalFloor.terminalMgdl)
+    }
+
+    @Test
+    fun mealIntent_dampensRestoreInsteadOfBailing() {
+        val bg = 72.0
+        val withoutMeal = ScenarioProjectionEngine.build(
+            ScenarioProjectionInput(
+                bgNowMgdl = bg,
+                deltaMgdlPer5 = -1.0f,
+                curves = collapsedCurves(bg),
+                context = ScenarioProjectionContext(),
+            ),
+        )
+        InsulinSlopePreserveHysteresis.reset()
+        val withMeal = ScenarioProjectionEngine.build(
+            ScenarioProjectionInput(
+                bgNowMgdl = bg,
+                deltaMgdlPer5 = -1.0f,
+                curves = collapsedCurves(bg),
+                context = ScenarioProjectionContext(
+                    mealContext = MealSafetyContext(inferredMealSignal = true),
+                ),
+            ),
+        )
+        assertTrue(withMeal.contributors.any { it.id == ScenarioContributorId.INSULIN_SLOPE_RESTORE })
+        assertTrue(
+            withMeal.contributors.any {
+                it.id == ScenarioContributorId.INSULIN_SLOPE_RESTORE && it.summary.contains("mealDamp")
+            },
+        )
+        // Dampened restore declines less than full restore (terminal closer to BG).
+        assertTrue(withMeal.scenarioBest.terminalMgdl > withoutMeal.scenarioBest.terminalMgdl)
+        assertTrue(withMeal.scenarioBest.terminalMgdl < bg)
+    }
+
+    @Test
+    fun preserveHysteresis_holdsAcrossBriefGeometryDrop() {
+        InsulinSlopePreserveHysteresis.reset()
+        assertTrue(InsulinSlopePreserveHysteresis.stabilize(true))
+        repeat(InsulinSlopePreserveHysteresis.HOLD_TICKS_DEFAULT) {
+            assertTrue(InsulinSlopePreserveHysteresis.stabilize(false))
+        }
+        assertFalse(InsulinSlopePreserveHysteresis.stabilize(false))
     }
 }
