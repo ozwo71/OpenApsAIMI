@@ -11,6 +11,30 @@ class OnePlusAdvCandidateTest {
         assertThat(OnePlusAdvCandidate.isG7FamilyName("DX01xx")).isTrue()
         assertThat(OnePlusAdvCandidate.isG7FamilyName("DXCMab")).isTrue()
         assertThat(OnePlusAdvCandidate.isG7FamilyName("DexcomONE")).isFalse()
+        assertThat(OnePlusAdvCandidate.isG7FamilyName("Dexcom65")).isFalse()
+    }
+
+    @Test
+    fun nameMatchesSoft_rejectsG6MarketingNames() {
+        assertThat(OnePlusAdvCandidate.nameMatchesSoft("DX02aS")).isTrue()
+        assertThat(OnePlusAdvCandidate.nameMatchesSoft("Dexcom65")).isFalse()
+        assertThat(OnePlusAdvCandidate.nameMatchesSoft("DexcomONE")).isFalse()
+    }
+
+    @Test
+    fun isCandidate_rejectsDexcom65UnlessStickyMac() {
+        assertThat(
+            OnePlusAdvCandidate.isCandidate("Dexcom65", "F2:08:F3:22:6B:77", session = null),
+        ).isFalse()
+        val sticky = OnePlusStoredSession(
+            identity = OnePlusSensorIdentity(pin = "1234"),
+            lastMac = "F2:08:F3:22:6B:77",
+            lastDeviceName = "Dexcom65",
+        )
+        // Sticky MAC still matches (reconnect to stored device) — UI should not offer it for ONE+.
+        assertThat(
+            OnePlusAdvCandidate.isCandidate("Dexcom65", "F2:08:F3:22:6B:77", sticky),
+        ).isTrue()
     }
 
     @Test

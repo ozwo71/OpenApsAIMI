@@ -15,6 +15,8 @@ object DexcomOnePlusUiLabels {
     fun phaseLabel(phase: OnePlusWarmupState.Phase): String = when (phase) {
         OnePlusWarmupState.Phase.IDLE -> stringResource(R.string.dexcom_oneplus_phase_idle)
         OnePlusWarmupState.Phase.PAIRING -> stringResource(R.string.dexcom_oneplus_phase_pairing)
+        OnePlusWarmupState.Phase.CONNECTING -> stringResource(R.string.dexcom_oneplus_phase_connecting)
+        OnePlusWarmupState.Phase.RECONNECTING -> stringResource(R.string.dexcom_oneplus_phase_reconnecting)
         OnePlusWarmupState.Phase.WARMING -> stringResource(R.string.dexcom_oneplus_phase_warming)
         OnePlusWarmupState.Phase.READY -> stringResource(R.string.dexcom_oneplus_phase_ready)
         OnePlusWarmupState.Phase.FAILED -> stringResource(R.string.dexcom_oneplus_phase_failed)

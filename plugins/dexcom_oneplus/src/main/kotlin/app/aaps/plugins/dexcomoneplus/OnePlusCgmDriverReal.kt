@@ -1,9 +1,9 @@
 package app.aaps.plugins.dexcomoneplus
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClientAndroid
-import app.aaps.plugins.dexcomoneplus.identity.OnePlusAdvCandidate
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorIdentity
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
 import app.aaps.plugins.dexcomoneplus.oem.DeviceProfileRegistry
@@ -12,15 +12,14 @@ import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerAndroid
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerStub
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanListener
+import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanResult
 import app.aaps.plugins.dexcomoneplus.session.OnePlusBleSession
 import app.aaps.plugins.dexcomoneplus.session.OnePlusBleSessionSkeleton
+import app.aaps.plugins.dexcomoneplus.session.OnePlusConnectPrep
 import app.aaps.plugins.dexcomoneplus.session.OnePlusSessionAuthKeks
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Real driver: LE scan + GATT + KEKS + Control EGV loop.
@@ -54,6 +53,13 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
     /** Last ADV name seen for [connect] target — persisted on auth success. */
     @Volatile
     private var pendingDeviceName: String? = null
+
+    /**
+     * `SystemClock.elapsedRealtime()` of the ADV sighting handed off from the UI for the [connect]
+     * target (0 = none). Lets [prepareConnect] skip the blind re-scan when the sensor was just seen.
+     */
+    @Volatile
+    private var pendingAdvSightingElapsedMs: Long = 0L
 
     override fun setContext(context: Context) {
         val app = context.applicationContext
@@ -95,6 +101,8 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
             "${OnePlusLogMarkers.SESSION}: connect requested (Real GATT+KEKS+EGV)",
         )
         scanner.stopScan()
+        // Stop any in-flight reconnect loop (may still be targeting a previous MAC).
+        session?.stop("superseded")
         sensorStore?.saveIdentity(
             OnePlusSensorIdentity(
                 pin = pairingCode,
@@ -104,6 +112,11 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
             ),
         )
         sensorStore?.saveLastMac(deviceAddress)
+        // Fresh (re)pairing from the UI: drop any stale KEKS shared key so attempt 0 runs full
+        // J-PAKE instead of a short-auth that the transmitter rejects (field: stale preload →
+        // auth=2 → a wasted connect cycle + FAILED). A successful auth re-persists a new key, so
+        // silent reconnects inside the session loop still short-auth.
+        sensorStore?.clearSharedKey()
         (scanner as? OnePlusBleScannerAndroid)?.sessionHint = sensorStore?.load()
         bleExecutor.execute {
             try {
@@ -123,14 +136,20 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
         }
     }
 
+    /**
+     * UI entry point: hands off the freshest ADV [sighting] (name + `seenElapsedMs`) so
+     * [prepareConnect] can connect in-window without a blind re-scan.
+     */
     fun connect(
         deviceAddress: String,
         pairingCode: String,
-        advertisedName: String?,
+        sighting: OnePlusScanResult?,
     ) {
-        pendingDeviceName = advertisedName
-        if (!advertisedName.isNullOrBlank()) {
-            sensorStore?.saveLastDeviceName(advertisedName)
+        val name = sighting?.name
+        pendingDeviceName = name
+        pendingAdvSightingElapsedMs = sighting?.seenElapsedMs ?: 0L
+        if (!name.isNullOrBlank()) {
+            sensorStore?.saveLastDeviceName(name)
         }
         connect(deviceAddress, pairingCode)
     }
@@ -200,54 +219,69 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
     }
 
     /**
-     * Ob1 / Samsung recovery: LE-scan until the target MAC advertises (or timeout).
-     * When [OemDeviceProfile.requireAdvBeforeConnect] is set, missing ADV aborts **only on
-     * attempt 0** (reduces status 147). Later attempts connect anyway by known MAC —
-     * Juggluco reconnect style; evening logs showed ADV-hard-fail burning all retries.
+     * Ob1 / Samsung recovery before the GATT `connect`, returning [OnePlusConnectPrep]
+     * (whether a **fresh ADV** is in hand → session does a fast direct connect).
      *
-     * ⚠️ ASYNC IMPACT: blocks bleExecutor; scan callbacks on binder trip the latch.
+     * 1. **Handoff fast-path:** if the UI (or a prior in-window rescan) saw this MAC within
+     *    [ADV_HANDOFF_FRESH_MS], connect immediately — no blind re-scan. This is what removes the
+     *    ~8 s wasted scan + the ~48 s autoConnect park seen in the field log.
+     * 2. Otherwise LE-scan via [OnePlusBleScanner.awaitTargetMac] (private ScanCallback so UI
+     *    [stopScan] cannot cancel it). A hit → fresh; a miss with
+     *    [OemDeviceProfile.requireAdvBeforeConnect] on attempt 0 (and no UI selection) → defer.
+     *
+     * ⚠️ ASYNC IMPACT: blocks bleExecutor; binder delivers ADV into awaitTargetMac.
      */
-    private fun prepareConnect(deviceAddress: String, attempt: Int) {
-        val scanMs = profile.preConnectScanMs
-        if (scanMs <= 0L) return
+    private fun prepareConnect(deviceAddress: String, attempt: Int): OnePlusConnectPrep {
         val target = deviceAddress.uppercase()
-        val seen = AtomicBoolean(false)
-        val latch = CountDownLatch(1)
-        val hardRequireAdv = profile.requireAdvBeforeConnect && attempt == 0
+        val sightingAgeMs =
+            if (pendingAdvSightingElapsedMs > 0L) {
+                SystemClock.elapsedRealtime() - pendingAdvSightingElapsedMs
+            } else {
+                Long.MAX_VALUE
+            }
+        if (sightingAgeMs in 0..ADV_HANDOFF_FRESH_MS) {
+            Log.i(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SCAN}: pre-connect handoff — fresh ADV ${sightingAgeMs}ms old, " +
+                    "skip rescan (attempt=$attempt mac=***${target.takeLast(5)})",
+            )
+            return OnePlusConnectPrep(advFresh = true)
+        }
+
+        val scanMs = profile.preConnectScanMs
+        if (scanMs <= 0L) return OnePlusConnectPrep(advFresh = false)
+        // UI Connect just selected this ADV → don't hard-fail if re-scan misses briefly.
+        val uiJustSelected = !pendingDeviceName.isNullOrBlank()
+        val hardRequireAdv =
+            profile.requireAdvBeforeConnect && attempt == 0 && !uiJustSelected
         Log.i(
             OnePlusLogMarkers.TAG,
-            "${OnePlusLogMarkers.SCAN}: pre-connect rescan ${scanMs}ms attempt=$attempt " +
-                "requireAdv=${profile.requireAdvBeforeConnect} hardRequire=$hardRequireAdv",
+            "${OnePlusLogMarkers.SCAN}: pre-connect awaitTargetMac ${scanMs}ms attempt=$attempt " +
+                "requireAdv=${profile.requireAdvBeforeConnect} hardRequire=$hardRequireAdv " +
+                "uiJustSelected=$uiJustSelected",
         )
         try {
-            val hint = sensorStore?.load()
-            scanner.startScan { hit ->
-                val macMatch = hit.address.uppercase() == target
-                val nameMatch = OnePlusAdvCandidate.isCandidate(hit.name, hit.address, hint)
-                if (macMatch || (nameMatch && hint?.lastMac.isNullOrBlank())) {
-                    if (seen.compareAndSet(false, true)) {
-                        Log.i(
-                            OnePlusLogMarkers.TAG,
-                            "${OnePlusLogMarkers.SCAN}: pre-connect ADV name=${hit.name} rssi=${hit.rssi}",
-                        )
-                        if (!hit.name.isNullOrBlank()) pendingDeviceName = hit.name
-                        latch.countDown()
-                    }
-                }
-            }
-            val found = latch.await(scanMs, TimeUnit.MILLISECONDS)
-            if (!found) {
-                if (hardRequireAdv) {
-                    throw IllegalStateException(
-                        "ONEPLUS_SCAN: ADV not seen in ${scanMs}ms — defer connect (keep screen on, sensor close)",
-                    )
-                }
-                Log.w(
+            val hit = scanner.awaitTargetMac(target, scanMs)
+            if (hit != null) {
+                Log.i(
                     OnePlusLogMarkers.TAG,
-                    "${OnePlusLogMarkers.SCAN}: pre-connect ADV not seen in ${scanMs}ms — connect anyway " +
-                        "(attempt=$attempt known MAC)",
+                    "${OnePlusLogMarkers.SCAN}: pre-connect ADV name=${hit.name} " +
+                        "rssi=${hit.rssi} mac=***${target.takeLast(5)}",
+                )
+                if (!hit.name.isNullOrBlank()) pendingDeviceName = hit.name
+                return OnePlusConnectPrep(advFresh = true)
+            }
+            if (hardRequireAdv) {
+                throw IllegalStateException(
+                    "ONEPLUS_SCAN: ADV not seen in ${scanMs}ms — defer connect (keep screen on, sensor close)",
                 )
             }
+            Log.w(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SCAN}: pre-connect ADV not seen in ${scanMs}ms — connect anyway " +
+                    "(attempt=$attempt known MAC uiJustSelected=$uiJustSelected)",
+            )
+            return OnePlusConnectPrep(advFresh = false)
         } catch (t: IllegalStateException) {
             throw t
         } catch (t: Throwable) {
@@ -258,11 +292,7 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
                     t,
                 )
             }
-        } finally {
-            try {
-                scanner.stopScan()
-            } catch (_: Throwable) {
-            }
+            return OnePlusConnectPrep(advFresh = false)
         }
     }
 
@@ -270,4 +300,13 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
         Executors.newSingleThreadExecutor { r ->
             Thread(r, "OnePlusBleExecutor").apply { isDaemon = true }
         }
+
+    private companion object {
+        /**
+         * Max age of a handed-off ADV sighting still treated as "fresh" (skip rescan, direct
+         * connect). G7/ONE+ advertises in short windows, so a sighting older than this may already
+         * be quiet and a direct connect would miss the window.
+         */
+        const val ADV_HANDOFF_FRESH_MS = 6_000L
+    }
 }

@@ -14,6 +14,14 @@ interface OnePlusBleScanner {
     fun startScan(listener: OnePlusScanListener)
     fun stopScan()
     fun isScanning(): Boolean
+
+    /**
+     * Block until [address] is seen in ADV (or timeout). Uses a **private** LE [ScanCallback]
+     * so UI [stopScan] cannot cancel it.
+     *
+     * ⚠️ ASYNC IMPACT: blocks caller; binder delivers results.
+     */
+    fun awaitTargetMac(address: String, timeoutMs: Long): OnePlusScanResult? = null
 }
 
 /**

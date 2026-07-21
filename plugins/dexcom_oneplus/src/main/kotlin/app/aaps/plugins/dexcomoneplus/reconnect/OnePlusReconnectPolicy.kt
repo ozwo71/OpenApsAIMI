@@ -20,8 +20,19 @@ class OemAwareReconnectPolicy : OnePlusReconnectPolicy {
     override fun nextDelayMs(attempt: Int, profile: OemDeviceProfile): Long {
         val base = profile.connectRetryDelayMs.coerceAtLeast(0L)
         if (!profile.aggressiveReconnect) return base
-        // Mild linear backoff when OEM profile asks for denser reconnects.
-        val factor = (attempt + 1).coerceAtLeast(1)
-        return base * factor
+        // First reconnect is quick — the sensor advertises in short windows, so a fast retry
+        // catches the next one instead of parking for the full base delay (field: Samsung sat
+        // 20 s idle after an auth=2 wipe before the full J-PAKE could run). Then grow linearly,
+        // but cap so late attempts don't stretch to minute-scale gaps.
+        val delay = if (attempt <= 1) FIRST_RETRY_MS else base * (attempt - 1)
+        return delay.coerceAtMost(MAX_RECONNECT_DELAY_MS)
+    }
+
+    companion object {
+        /** Delay before the first reconnect attempt (catch the next ADV window fast). */
+        const val FIRST_RETRY_MS = 3_000L
+
+        /** Upper bound on any reconnect backoff. */
+        const val MAX_RECONNECT_DELAY_MS = 30_000L
     }
 }

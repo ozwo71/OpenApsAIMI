@@ -150,6 +150,16 @@ private fun DexcomOnePlusWarmupScreen(onBack: () -> Unit) {
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
+                OnePlusWarmupState.Phase.CONNECTING,
+                OnePlusWarmupState.Phase.RECONNECTING -> {
+                    // Link is being (re)established — reassure, don't show a fake countdown or the
+                    // terminal red FAILED that used to flash between retries.
+                    Text(
+                        text = stringResource(R.string.dexcom_oneplus_warmup_connecting_note),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 else -> {
                     val countdown = remainingMs?.let { DexcomOnePlusWarmupCountdown.formatMmSs(it) }
                         ?: stringResource(R.string.dexcom_oneplus_warmup_countdown_unknown)

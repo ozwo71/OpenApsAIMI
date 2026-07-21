@@ -5,6 +5,10 @@ package app.aaps.plugins.dexcomoneplus.identity
  *
  * Juggluco `isG7`: local name starts with `DX` + (`CM`|`02`|`01`).
  * Once a device name is known from a successful session, prefer exact match.
+ *
+ * Do **not** treat marketing names like `Dexcom65` / `DexcomONE` as ONE+ candidates —
+ * field logs showed pre-connect latching on a G6-style `Dexcom65` while the real
+ * transmitter was `DX02aS`.
  */
 object OnePlusAdvCandidate {
 
@@ -19,19 +23,17 @@ object OnePlusAdvCandidate {
             rest.equals("01", ignoreCase = true)
     }
 
-    /** Broader soft filter used during open scan (includes Dex* marketing names). */
-    fun nameMatchesSoft(name: String?): Boolean {
-        if (name.isNullOrBlank()) return false
-        val n = name.trim()
-        return isG7FamilyName(n) ||
-            n.startsWith("DXC", ignoreCase = true) ||
-            n.startsWith("Dex", ignoreCase = true)
-    }
+    /**
+     * Open-scan name filter: G7/ONE+ family only (`DX02` / `DX01` / `DXCM`).
+     * Intentionally excludes `Dex*` marketing names (G6 / phone companions).
+     */
+    fun nameMatchesSoft(name: String?): Boolean = isG7FamilyName(name)
 
     /**
      * Whether this ADV should be offered / preferred for [session].
      * - Exact stored ADV name wins (reconnect sticky).
-     * - Else G7-family name, optionally preferring serial substring when known.
+     * - Stored MAC wins even if name is missing/odd.
+     * - Else G7-family name only.
      */
     fun isCandidate(
         name: String?,
@@ -48,14 +50,14 @@ object OnePlusAdvCandidate {
         ) {
             return true
         }
-        if (!nameMatchesSoft(name)) return false
+        if (!isG7FamilyName(name)) return false
         val serial = session?.identity?.serial
         if (!serial.isNullOrBlank() && !name.isNullOrBlank()) {
             // Prefer ADV that embeds serial characters when present; do not hard-reject
             // when serial encoding in ADV is opaque (G7 often uses short DX02* names).
             if (name.contains(serial, ignoreCase = true)) return true
         }
-        return isG7FamilyName(name) || nameMatchesSoft(name)
+        return true
     }
 
     fun rankScore(

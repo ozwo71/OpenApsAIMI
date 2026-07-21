@@ -142,10 +142,15 @@ private fun DexcomOnePlusStartScreen(
     val deviceRequired = stringResource(R.string.dexcom_oneplus_device_required)
     val realSkeletonRequired = stringResource(R.string.dexcom_oneplus_real_skeleton_required)
     val serialNone = stringResource(R.string.dexcom_oneplus_applicator_serial_none)
+    var connectRequested by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         onDispose {
-            scanner.stopScan()
+            // Do not stopScan after Connect — StartActivity dispose races Warmup navigation and
+            // was killing the driver's pre-connect LE scan on the shared scanner (ADV miss).
+            if (!connectRequested) {
+                scanner.stopScan()
+            }
         }
     }
 
@@ -360,6 +365,7 @@ private fun DexcomOnePlusStartScreen(
                     }
                     scanner.stopScan()
                     scanning = false
+                    connectRequested = true
                     sensorStore.saveIdentity(identity.copy(pin = code))
                     sensorStore.saveLastMac(address)
                     selected?.name?.let { sensorStore.saveLastDeviceName(it) }
@@ -367,10 +373,13 @@ private fun DexcomOnePlusStartScreen(
                     activeDriver.setContext(context.applicationContext)
                     (activeDriver as? OnePlusCgmDriverReal)?.saveIdentity(identity.copy(pin = code))
                     if (activeDriver is OnePlusCgmDriverReal) {
+                        // Hand off the freshest live sighting (carries seenElapsedMs) so the driver
+                        // connects in-window instead of blindly re-scanning.
+                        val sighting = devices.firstOrNull { it.address == address } ?: selected
                         activeDriver.connect(
                             deviceAddress = address,
                             pairingCode = code,
-                            advertisedName = selected?.name,
+                            sighting = sighting,
                         )
                     } else {
                         activeDriver.connect(deviceAddress = address, pairingCode = code)

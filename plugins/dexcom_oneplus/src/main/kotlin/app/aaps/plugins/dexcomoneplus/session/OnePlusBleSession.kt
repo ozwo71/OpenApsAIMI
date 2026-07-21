@@ -29,6 +29,14 @@ interface OnePlusBleSession {
 }
 
 /**
+ * Outcome of the pre-connect step (`beforeConnect`).
+ *
+ * @param advFresh a recent ADV sighting for the target MAC is in hand (UI handoff or in-window
+ *   rescan hit) → prefer a fast direct connect (`autoConnect=false`) over the OEM autoConnect park.
+ */
+data class OnePlusConnectPrep(val advFresh: Boolean = false)
+
+/**
  * Session: pairing validation → GATT connect → KEKS auth → Control/EGV loop, with OEM
  * reconnect retries after GATT drop / connect-auth failure.
  *
@@ -51,9 +59,11 @@ class OnePlusBleSessionSkeleton(
     private val requestNewSensorStart: Boolean = true,
     /**
      * Ob1-style pre-connect: LE rescan / handoff before [OnePlusGattClient.connect].
-     * Runs on bleExecutor; must not touch UI. Default no-op (tests / stub).
+     * Runs on bleExecutor; must not touch UI. Returns [OnePlusConnectPrep] (ADV freshness).
+     * Default no-op (tests / stub).
      */
-    private val beforeConnect: (deviceAddress: String, attempt: Int) -> Unit = { _, _ -> },
+    private val beforeConnect: (deviceAddress: String, attempt: Int) -> OnePlusConnectPrep =
+        { _, _ -> OnePlusConnectPrep() },
     /** Juggluco-style reconnect: preload 16-byte KEKS shared key when available. */
     private val savedSharedKeyProvider: () -> ByteArray? = { null },
     /** Persist MAC + shared key after successful auth. */
@@ -143,6 +153,7 @@ class OnePlusBleSessionSkeleton(
                     } catch (_: Throwable) {
                     }
                     onSession(false, "egv_loop_exit")
+                    enterReconnecting("egv_loop_exit")
                     Log.i(
                         OnePlusLogMarkers.TAG,
                         "${OnePlusLogMarkers.SESSION}: down reason=egv_loop_exit → reconnect",
@@ -188,10 +199,14 @@ class OnePlusBleSessionSkeleton(
         requestNewSensorStart: Boolean,
         attempt: Int,
     ): CycleOutcome {
-        warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.PAIRING, message = "pairing_attempt_$attempt")
+        // CONNECTING (first attempt) / RECONNECTING (retry) — never PAIRING here, so the UI can tell
+        // "establishing link" from the terminal FAILED it used to flash between retries.
+        val connectingPhase =
+            if (attempt == 0) OnePlusWarmupState.Phase.CONNECTING else OnePlusWarmupState.Phase.RECONNECTING
+        warmup = OnePlusWarmupState(phase = connectingPhase, message = "connect_attempt_$attempt")
         emitWarmup()
 
-        try {
+        val prep = try {
             beforeConnect(deviceAddress, attempt)
         } catch (t: Throwable) {
             val msg = t.message ?: "ONEPLUS_BEFORE_CONNECT_FAILED"
@@ -200,20 +215,31 @@ class OnePlusBleSessionSkeleton(
                 "${OnePlusLogMarkers.ERROR}: beforeConnect failed: $msg attempt=$attempt",
             )
             onError(msg, false)
-            warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.FAILED, message = msg)
-            emitWarmup()
+            enterReconnecting(msg)
             return if (running) CycleOutcome.RetryableFailure else CycleOutcome.Stopped
         }
         if (!running) return CycleOutcome.Stopped
 
-        val useAutoConnect =
-            profile.autoConnectFromAttempt >= 0 && attempt >= profile.autoConnectFromAttempt
+        // Fresh ADV in hand → fast direct connect (fail-fast status 133 → quick retry). Otherwise fall
+        // back to the OEM autoConnect policy (Samsung parks a background connect when the sensor is
+        // quiet — that park cost ~48 s in the field log; the handoff avoids it when a sighting exists).
+        val useAutoConnect = when {
+            prep.advFresh -> false
+            profile.autoConnectFromAttempt < 0 -> false
+            else -> attempt >= profile.autoConnectFromAttempt
+        }
+        Log.i(
+            OnePlusLogMarkers.TAG,
+            "${OnePlusLogMarkers.SESSION}: connect decision advFresh=${prep.advFresh} " +
+                "autoConnect=$useAutoConnect attempt=$attempt profile=${profile.id}",
+        )
         try {
             gatt.connect(deviceAddress, autoConnect = useAutoConnect)
         } catch (t: Throwable) {
             val msg = t.message ?: "ONEPLUS_GATT_FAILED"
             Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: $msg attempt=$attempt", t)
             onError(msg, false)
+            enterReconnecting(msg)
             return if (running) CycleOutcome.RetryableFailure else CycleOutcome.Stopped
         }
 
@@ -238,8 +264,10 @@ class OnePlusBleSessionSkeleton(
                     }
                 }
                 onError(msg, false)
-                warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.FAILED, message = msg)
-                emitWarmup()
+                // Retryable: the loop will re-attempt (short-auth reject wipes the key → full J-PAKE
+                // next). Show RECONNECTING, NOT FAILED — the old FAILED flash made the user abandon
+                // during the reconnect delay (field log 23:18:40).
+                enterReconnecting(msg)
                 return if (running) CycleOutcome.RetryableFailure else CycleOutcome.Stopped
             }
 
@@ -282,6 +310,7 @@ class OnePlusBleSessionSkeleton(
                 val msg = t.message ?: "ONEPLUS_CONTROL_FAILED"
                 Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: $msg", t)
                 onError(msg, false)
+                enterReconnecting(msg)
                 return CycleOutcome.RetryableFailure
             }
 
@@ -312,6 +341,15 @@ class OnePlusBleSessionSkeleton(
             if (lock.isHeld) lock.release()
         } catch (_: Throwable) {
         }
+    }
+
+    /**
+     * Transient / retryable transition. UI shows RECONNECTING (never terminal FAILED) so the user
+     * keeps waiting through the reconnect delay. Terminal failure stays in [fail].
+     */
+    private fun enterReconnecting(message: String?) {
+        warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.RECONNECTING, message = message)
+        emitWarmup()
     }
 
     private fun fail(message: String, fatal: Boolean) {

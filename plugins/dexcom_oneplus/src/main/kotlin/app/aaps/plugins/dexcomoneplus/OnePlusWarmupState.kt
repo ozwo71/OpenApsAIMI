@@ -14,6 +14,12 @@ data class OnePlusWarmupState(
     enum class Phase {
         IDLE,
         PAIRING,
+
+        /** GATT connect / service discovery in progress (first attempt). */
+        CONNECTING,
+
+        /** Transient failure — retry loop is actively re-establishing (NOT terminal). */
+        RECONNECTING,
         WARMING,
         READY,
         FAILED,

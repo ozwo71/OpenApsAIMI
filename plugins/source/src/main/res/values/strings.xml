@@ -57,6 +57,8 @@
     <string name="dexcom_oneplus_session_down">Down</string>
     <string name="dexcom_oneplus_phase_idle">Idle</string>
     <string name="dexcom_oneplus_phase_pairing">Pairing</string>
+    <string name="dexcom_oneplus_phase_connecting">Connecting</string>
+    <string name="dexcom_oneplus_phase_reconnecting">Reconnecting</string>
     <string name="dexcom_oneplus_phase_warming">Warming up</string>
     <string name="dexcom_oneplus_phase_ready">Active</string>
     <string name="dexcom_oneplus_phase_failed">Failed</string>
@@ -66,6 +68,7 @@
     <string name="dexcom_oneplus_warmup_countdown_unknown">—</string>
     <string name="dexcom_oneplus_warmup_ends_at" comment="%1$s=localized time. Example: 3:45 PM">Estimated end: %1$s</string>
     <string name="dexcom_oneplus_warmup_local_fallback_note">Showing a local ~30 min timer because the sensor did not provide remaining time yet.</string>
+    <string name="dexcom_oneplus_warmup_connecting_note">Establishing the Bluetooth link — keep the app open and stay close to the sensor. This can take up to a minute.</string>
     <string name="dexcom_oneplus_warmup_no_loop_bg">No loop glucose yet — wait until warm-up finishes.</string>
     <string name="dexcom_oneplus_warmup_session_up">Bluetooth session active — keep the phone near the sensor.</string>
     <string name="dexcom_oneplus_warmup_session_down">Bluetooth session not active. Use Connect / follow if needed.</string>
