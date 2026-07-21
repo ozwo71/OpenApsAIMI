@@ -12,28 +12,27 @@ import app.aaps.plugins.dexcomoneplus.parse.OnePlusGlucoseParser
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusSessionStartRx
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusSessionStartTx
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusSessionStopRx
-import app.aaps.plugins.dexcomoneplus.parse.OnePlusSessionStopTx
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusTransmitterTimeRx
-import app.aaps.plugins.dexcomoneplus.parse.OnePlusTransmitterTimeTx
 import app.aaps.plugins.dexcomoneplus.warmup.OnePlusWarmupClock
 
 /**
- * Post-KEKS Control / EGV path (xDrip Ob1 `GET_DATA` order).
+ * Post-KEKS Control / EGV path aligned with Juggluco `getdatacmd` + xDrip Ob1 `doGetData` (G7).
  *
- * Sequence: enable Control **NOTIFY** (INDICATE fallback) → TransmitterTime (`0x24`) →
- * await `0x25` → optional SessionStart (`0x26`) → [OnePlusEGlucoseTx] (`0x4e`) →
- * short BackFill (`0x59`) → continuous EGV loop.
+ * Sequence: enable Control **NOTIFY** (INDICATE fallback) → [OnePlusEGlucoseTx] (`0x4e`) →
+ * continuous EGV loop → optional BackFill (`0x59`) once dex time is known from EGV.
+ * SessionStart (`0x26`) only reactively if EGV reports Stopped (never auto SessionStop).
  *
- * Do **not** write `0x4e` before TransmitterTime: on ONE+ the dual Control write
- * (`0x4e` then immediate `0x24`) can yield zero notifies then peer GATT status=19.
+ * Do **not** write TransmitterTime (`0x24`) before/with the first `0x4e`: Juggluco never
+ * sends `0x24` on ONE+/G7; Ob1 queues TimeTx *after* glucose. Dual/early `0x24` correlated
+ * with peer GATT status=19 on Samsung.
  *
  * ⚠️ ASYNC IMPACT: Blocks the calling thread (intended: single bleExecutor).
  * [shouldContinue] must flip false and [OnePlusGattClient.disconnect] must run
  * (typically from [OnePlusBleSession.stop]) so [OnePlusGattClient.awaitControlNotify]
  * unblocks. Do not call AIMI / UI work from this loop; only invoke callbacks.
  *
- * Provenance: Ob1G5StateMachine SessionStart/EGlucose at pin
- * `1e86d9a2a52577ed2c30fbf7b69d75fd56e6918f` (GPL-3.0); Juggluco `getdatacmd` for EGV form.
+ * Provenance: Juggluco DexGattCallback.getdatacmd + Ob1G5StateMachine.doGetData
+ * `1e86d9a2a52577ed2c30fbf7b69d75fd56e6918f` (GPL-3.0).
  */
 class OnePlusEgvSession(
     private val gatt: OnePlusGattClient,
@@ -41,9 +40,8 @@ class OnePlusEgvSession(
     private val onGlucose: (OnePlusGlucoseSample) -> Unit = {},
     private val onError: (String, Boolean) -> Unit = { _, _ -> },
     /**
-     * When true and transmitter has **no** session: send SessionStartTx (0x26).
-     * Never auto SessionStop. Also sent once if EGV reports Stopped / SensorStopped
-     * (sensor already stopped — Start is non-destructive).
+     * When true, allow SessionStartTx (0x26) if EGV reports Stopped / SensorStopped.
+     * Never auto SessionStop. Dex time for Start comes from EGV session age when available.
      */
     private val requestNewSensorStart: Boolean = false,
 ) {
@@ -51,13 +49,12 @@ class OnePlusEgvSession(
     @Volatile
     private var sessionStartAttempted = false
 
-    /** Last transmitter time (seconds). Filled by TransmitterTimeRx / SessionStartRx. */
+    /** Last transmitter time (seconds). Filled from EGV session age / TimeRx / SessionStartRx. */
     @Volatile
     private var lastDexTimeSeconds: Int = 0
 
-    /** True when TransmitterTimeRx reported an active sensor session. */
     @Volatile
-    private var sessionAlreadyInProgress: Boolean = false
+    private var backfillAttempted = false
 
     /**
      * Continuous Control/EGV loop until [shouldContinue] is false or GATT drops.
@@ -85,27 +82,10 @@ class OnePlusEgvSession(
             return
         }
 
-        // Ob1 order: TransmitterTime → SessionStart (if needed) → then EGV ask.
-        // Writing 0x4E before 0x24 caused peer GATT status=19 with zero Control notifies.
-        syncTransmitterTime(shouldContinue)
-        if (!shouldContinue() || !gatt.isConnected()) {
-            Log.i(
-                OnePlusLogMarkers.TAG,
-                "${OnePlusLogMarkers.SESSION}: Control/EGV abort after TransmitterTime " +
-                    "(connected=${gatt.isConnected()})",
-            )
-            return
-        }
-        maybeSessionStartAfterTimeSync(shouldContinue)
-        if (!shouldContinue() || !gatt.isConnected()) {
-            Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: Control/EGV abort after SessionStart")
-            return
-        }
-
+        // Juggluco getdatacmd / Ob1 doGetData (G7): Control CCCD → 0x4E only.
         var lastWriteMs = 0L
         writeEgvRequest(preferShort = true)
         lastWriteMs = System.currentTimeMillis()
-        performBackfill(shouldContinue)
 
         var preferShort = true
         var consecutiveTimeouts = 0
@@ -145,6 +125,17 @@ class OnePlusEgvSession(
                         )
                     }
                 }
+                // After prolonged silence with new-sensor request: try SessionStart once (no 0x24).
+                if (consecutiveTimeouts >= 3 &&
+                    requestNewSensorStart &&
+                    !sessionStartAttempted &&
+                    gatt.isConnected()
+                ) {
+                    performSessionStart(reason = "egv_timeout_new_start", shouldContinue = shouldContinue)
+                    writeEgvRequest(preferShort = preferShort)
+                    lastWriteMs = System.currentTimeMillis()
+                    continue
+                }
                 writeEgvRequest(preferShort = preferShort)
                 lastWriteMs = System.currentTimeMillis()
                 continue
@@ -173,13 +164,8 @@ class OnePlusEgvSession(
             Thread.currentThread().interrupt()
             return false
         }
-        // Ob1 order: time sync → SessionStart → EGV (same as [run]).
-        syncTransmitterTime(shouldContinue = { true })
-        if (!gatt.isConnected()) return false
-        maybeSessionStartAfterTimeSync(shouldContinue = { true })
-        if (!gatt.isConnected()) return false
+        // Juggluco/xDrip GET_DATA: 0x4E first (same as [run]).
         writeEgvRequest(preferShort = true)
-        performBackfill(shouldContinue = { true })
         var gotPacket = false
         var deliveredGlucose = false
         for (round in 0 until maxRounds) {
@@ -208,58 +194,8 @@ class OnePlusEgvSession(
         return deliveredGlucose || gotPacket
     }
 
-    /**
-     * Ob1-style GET_TIME before SessionStart so dexTime is non-zero when possible.
-     * ⚠️ ASYNC IMPACT: blocks bleExecutor on Control write + await.
-     */
-    private fun syncTransmitterTime(shouldContinue: () -> Boolean) {
-        if (!gatt.isConnected() || !shouldContinue()) return
-        try {
-            gatt.writeControl(OnePlusTransmitterTimeTx.request())
-            Log.i(
-                OnePlusLogMarkers.TAG,
-                "${OnePlusLogMarkers.SESSION}: wrote TransmitterTimeTx opcode=0x24",
-            )
-        } catch (t: Throwable) {
-            val msg = t.message ?: "ONEPLUS_TIME_WRITE_FAILED"
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: $msg", t)
-            onError(msg, false)
-            return
-        }
-
-        val packet = gatt.awaitControlNotify(TRANSMITTER_TIME_TIMEOUT_MS)
-        if (packet == null) {
-            if (!gatt.isConnected()) {
-                Log.e(
-                    OnePlusLogMarkers.TAG,
-                    "${OnePlusLogMarkers.ERROR}: TransmitterTimeRx aborted — GATT disconnected " +
-                        "(peer close / status 19 typical after wrong Control order)",
-                )
-                onError("ONEPLUS_EGV_PEER_DISCONNECT", false)
-            } else {
-                Log.w(
-                    OnePlusLogMarkers.TAG,
-                    "${OnePlusLogMarkers.SESSION}: TransmitterTimeRx timeout — continuing without dexTime",
-                )
-            }
-            return
-        }
-
-        val rx = OnePlusTransmitterTimeRx.parse(packet)
-        if (rx == null) {
-            Log.i(
-                OnePlusLogMarkers.TAG,
-                "${OnePlusLogMarkers.SESSION}: TransmitterTime await got non-0x25; handling as Control",
-            )
-            handleControlPacket(packet, shouldContinue)
-            return
-        }
-        applyTransmitterTime(rx)
-    }
-
     private fun applyTransmitterTime(rx: OnePlusTransmitterTimeRx) {
         lastDexTimeSeconds = rx.currentTimeSeconds
-        sessionAlreadyInProgress = rx.sessionInProgress()
         val age = rx.sessionAgeSeconds()
         Log.i(
             OnePlusLogMarkers.TAG,
@@ -277,91 +213,6 @@ class OnePlusEgvSession(
                 )
                 onWarmup(warmup)
             }
-        }
-    }
-
-    /**
-     * Apply [OnePlusSessionStartPolicy] after TransmitterTime (Dexcom-safe attach).
-     */
-    private fun maybeSessionStartAfterTimeSync(shouldContinue: () -> Boolean) {
-        when (
-            OnePlusSessionStartPolicy.decide(
-                requestNewSensorStart = requestNewSensorStart,
-                sessionAlreadyInProgress = sessionAlreadyInProgress,
-            )
-        ) {
-            OnePlusSessionStartPolicy.Action.AttachOnly -> {
-                Log.i(
-                    OnePlusLogMarkers.TAG,
-                    "${OnePlusLogMarkers.SESSION}: attach existing transmitter session — " +
-                        "skip SessionStop/SessionStart (Dexcom-safe)",
-                )
-                sessionStartAttempted = true
-            }
-            OnePlusSessionStartPolicy.Action.EgvOnly -> {
-                Log.i(
-                    OnePlusLogMarkers.TAG,
-                    "${OnePlusLogMarkers.SESSION}: no transmitter session and requestNewSensorStart=false — EGV only",
-                )
-            }
-            OnePlusSessionStartPolicy.Action.SessionStart -> {
-                performSessionStart(reason = "requestNewSensorStart", shouldContinue = shouldContinue)
-            }
-        }
-    }
-
-    /**
-     * @return true if SessionStopRx reported OK (or we got a clear stop acceptance)
-     */
-    private fun performSessionStop(shouldContinue: () -> Boolean): Boolean {
-        if (!gatt.isConnected() || !shouldContinue()) return false
-        val payload = OnePlusSessionStopTx.build(stopTimeDexSeconds = lastDexTimeSeconds)
-        try {
-            gatt.writeControl(payload)
-            Log.i(
-                OnePlusLogMarkers.TAG,
-                "${OnePlusLogMarkers.SESSION}: wrote SessionStopTx opcode=0x28 " +
-                    "dexTime=$lastDexTimeSeconds",
-            )
-        } catch (t: Throwable) {
-            val msg = t.message ?: "ONEPLUS_SESSION_STOP_WRITE_FAILED"
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: $msg", t)
-            onError(msg, false)
-            return false
-        }
-
-        val packet = gatt.awaitControlNotify(SESSION_STOP_TIMEOUT_MS)
-        if (packet == null) {
-            Log.w(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: SessionStopRx timeout")
-            return false
-        }
-
-        val rx = OnePlusSessionStopRx.parse(packet)
-        if (rx == null) {
-            Log.i(
-                OnePlusLogMarkers.TAG,
-                "${OnePlusLogMarkers.SESSION}: SessionStop await got non-0x29; handling as Control",
-            )
-            handleControlPacket(packet, shouldContinue)
-            return false
-        }
-
-        if (rx.transmitterTime != 0) {
-            lastDexTimeSeconds = rx.transmitterTime
-        }
-        return if (rx.isOkay()) {
-            Log.i(
-                OnePlusLogMarkers.TAG,
-                "${OnePlusLogMarkers.SESSION}: SessionStopRx OK stop=${rx.sessionStopTime} " +
-                    "txTime=${rx.transmitterTime}",
-            )
-            true
-        } else {
-            Log.w(
-                OnePlusLogMarkers.TAG,
-                "${OnePlusLogMarkers.SESSION}: SessionStopRx status=${rx.status} received=${rx.received}",
-            )
-            false
         }
     }
 
@@ -514,12 +365,16 @@ class OnePlusEgvSession(
         if (parsed.calibration == OnePlusCalibrationState.Stopped ||
             parsed.calibration == OnePlusCalibrationState.SensorStopped
         ) {
-            if (!sessionStartAttempted && shouldContinue()) {
+            if (requestNewSensorStart && !sessionStartAttempted && shouldContinue()) {
                 performSessionStart(
                     reason = "calibration=${parsed.calibration.name}",
                     shouldContinue = shouldContinue,
                 )
             }
+        }
+
+        parsed.sessionAgeSeconds?.takeIf { it > 0 }?.let { age ->
+            lastDexTimeSeconds = age
         }
 
         val warmup = OnePlusCalibrationMapper.toWarmupState(
@@ -537,6 +392,7 @@ class OnePlusEgvSession(
                     "cal=${parsed.calibration.name} op=0x${parsed.opcode.toString(16)}",
             )
             onGlucose(sample)
+            maybeBackfillAfterEgv(shouldContinue)
         } else {
             Log.i(
                 OnePlusLogMarkers.TAG,
@@ -544,6 +400,14 @@ class OnePlusEgvSession(
                     "age=${parsed.ageSeconds} sessionAge=${parsed.sessionAgeSeconds}",
             )
         }
+    }
+
+    /** Juggluco askbackfill after first glucose when dex time is known. */
+    private fun maybeBackfillAfterEgv(shouldContinue: () -> Boolean) {
+        if (backfillAttempted) return
+        if (lastDexTimeSeconds < 1) return
+        backfillAttempted = true
+        performBackfill(shouldContinue)
     }
 
     companion object {
@@ -554,6 +418,5 @@ class OnePlusEgvSession(
         const val SESSION_STOP_TIMEOUT_MS: Long = 15_000L
         /** xDrip `SessionStopTxMessage.postExecuteGuardTime`. */
         const val SESSION_STOP_GUARD_MS: Long = 1_000L
-        const val TRANSMITTER_TIME_TIMEOUT_MS: Long = 15_000L
     }
 }

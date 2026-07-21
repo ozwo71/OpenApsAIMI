@@ -201,8 +201,9 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
 
     /**
      * Ob1 / Samsung recovery: LE-scan until the target MAC advertises (or timeout).
-     * When [OemDeviceProfile.requireAdvBeforeConnect] is set, missing ADV aborts the attempt
-     * (RetryableFailure) instead of a blind connectGatt that often yields status 147.
+     * When [OemDeviceProfile.requireAdvBeforeConnect] is set, missing ADV aborts **only on
+     * attempt 0** (reduces status 147). Later attempts connect anyway by known MAC —
+     * Juggluco reconnect style; evening logs showed ADV-hard-fail burning all retries.
      *
      * ⚠️ ASYNC IMPACT: blocks bleExecutor; scan callbacks on binder trip the latch.
      */
@@ -212,10 +213,11 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
         val target = deviceAddress.uppercase()
         val seen = AtomicBoolean(false)
         val latch = CountDownLatch(1)
+        val hardRequireAdv = profile.requireAdvBeforeConnect && attempt == 0
         Log.i(
             OnePlusLogMarkers.TAG,
             "${OnePlusLogMarkers.SCAN}: pre-connect rescan ${scanMs}ms attempt=$attempt " +
-                "requireAdv=${profile.requireAdvBeforeConnect}",
+                "requireAdv=${profile.requireAdvBeforeConnect} hardRequire=$hardRequireAdv",
         )
         try {
             val hint = sensorStore?.load()
@@ -235,21 +237,22 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
             }
             val found = latch.await(scanMs, TimeUnit.MILLISECONDS)
             if (!found) {
-                if (profile.requireAdvBeforeConnect) {
+                if (hardRequireAdv) {
                     throw IllegalStateException(
                         "ONEPLUS_SCAN: ADV not seen in ${scanMs}ms — defer connect (keep screen on, sensor close)",
                     )
                 }
                 Log.w(
                     OnePlusLogMarkers.TAG,
-                    "${OnePlusLogMarkers.SCAN}: pre-connect ADV not seen in ${scanMs}ms — connect anyway",
+                    "${OnePlusLogMarkers.SCAN}: pre-connect ADV not seen in ${scanMs}ms — connect anyway " +
+                        "(attempt=$attempt known MAC)",
                 )
             }
         } catch (t: IllegalStateException) {
             throw t
         } catch (t: Throwable) {
             Log.w(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: pre-connect ${t.message}")
-            if (profile.requireAdvBeforeConnect) {
+            if (hardRequireAdv) {
                 throw IllegalStateException(
                     "ONEPLUS_SCAN: pre-connect failed — ${t.message}",
                     t,

@@ -15,9 +15,10 @@ class DeviceProfileRegistryTest {
     }
 
     @Test
-    fun samsung_requiresAdvAndAutoConnectFromStart() {
+    fun samsung_requiresAdvOnFirstAttemptAndAutoConnectFromStart() {
         val s = DeviceProfileRegistry.SamsungDefault
         assertThat(s.autoConnectFromAttempt).isEqualTo(0)
+        // Hard ADV gate only on attempt 0 (driver); flag still true for Samsung.
         assertThat(s.requireAdvBeforeConnect).isTrue()
         assertThat(s.preConnectScanMs).isAtLeast(8_000L)
     }

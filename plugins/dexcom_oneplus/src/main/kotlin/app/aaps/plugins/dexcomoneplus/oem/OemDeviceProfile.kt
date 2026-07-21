@@ -45,8 +45,8 @@ data class OemDeviceProfile(
     /** Optional pause after services discovered before CCCD (Ob1 Samsung pairing workaround). */
     val postDiscoverDelayMs: Long = 0L,
     /**
-     * When true and [preConnectScanMs] > 0, refuse connect if the target ADV was not seen —
-     * avoids Samsung GATT status 147 from blind connectGatt.
+     * When true and [preConnectScanMs] > 0, abort connect on ADV miss for **attempt 0 only**
+     * (see driver). Later attempts connect by known MAC after a best-effort scan.
      */
     val requireAdvBeforeConnect: Boolean = false,
 )
