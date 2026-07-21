@@ -194,10 +194,15 @@ class OnePlusBleSessionSkeleton(
         try {
             beforeConnect(deviceAddress, attempt)
         } catch (t: Throwable) {
-            Log.w(
+            val msg = t.message ?: "ONEPLUS_BEFORE_CONNECT_FAILED"
+            Log.e(
                 OnePlusLogMarkers.TAG,
-                "${OnePlusLogMarkers.SESSION}: beforeConnect failed: ${t.message}",
+                "${OnePlusLogMarkers.ERROR}: beforeConnect failed: $msg attempt=$attempt",
             )
+            onError(msg, false)
+            warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.FAILED, message = msg)
+            emitWarmup()
+            return if (running) CycleOutcome.RetryableFailure else CycleOutcome.Stopped
         }
         if (!running) return CycleOutcome.Stopped
 

@@ -53,6 +53,16 @@ interface OnePlusGattClient {
     fun createBond(): Boolean
 
     /**
+     * Drop the Android OS bond via hidden [BluetoothDevice.removeBond] (Juggluco-style).
+     * Used when KEKS AuthStatus rejects (`authenticated != 1`) while the phone is still bonded —
+     * otherwise the next reconnect short-auths / stalls with sensor `bonded=1`.
+     *
+     * ⚠️ ASYNC IMPACT: may drop the GATT link; caller should treat as reconnect trigger.
+     * @return true if already unbonded or removeBond returned true
+     */
+    fun removeBond(): Boolean
+
+    /**
      * Block until [BluetoothDevice.BOND_BONDED] (BroadcastReceiver), Juggluco-style:
      * tear down Auth/Extra CCCDs while [BluetoothDevice.BOND_BONDING], restore after bonded.
      *
@@ -100,6 +110,7 @@ class OnePlusGattClientUnimplemented : OnePlusGattClient {
     override fun enableBackfillNotifications() = Unit
     override fun isBonded(): Boolean = false
     override fun createBond(): Boolean = false
+    override fun removeBond(): Boolean = false
     override fun awaitBondComplete(timeoutMs: Long): Boolean = false
     override fun awaitKeksNotify(timeoutMs: Long): OnePlusKeksNotify? = null
     override fun awaitNotify(timeoutMs: Long): ByteArray? = null

@@ -18,19 +18,22 @@ import app.aaps.plugins.dexcomoneplus.parse.OnePlusTransmitterTimeTx
 import app.aaps.plugins.dexcomoneplus.warmup.OnePlusWarmupClock
 
 /**
- * Post-KEKS Control / EGV path (xDrip Ob1 `GET_DATA` + Juggluco fast ask).
+ * Post-KEKS Control / EGV path (xDrip Ob1 `GET_DATA` order).
  *
- * Sequence: enable Control **NOTIFY** (INDICATE fallback) → write [OnePlusEGlucoseTx]
- * (`0x4e`) **immediately** → TransmitterTime (`0x24`) → optional SessionStart (`0x26`) →
+ * Sequence: enable Control **NOTIFY** (INDICATE fallback) → TransmitterTime (`0x24`) →
+ * await `0x25` → optional SessionStart (`0x26`) → [OnePlusEGlucoseTx] (`0x4e`) →
  * short BackFill (`0x59`) → continuous EGV loop.
+ *
+ * Do **not** write `0x4e` before TransmitterTime: on ONE+ the dual Control write
+ * (`0x4e` then immediate `0x24`) can yield zero notifies then peer GATT status=19.
  *
  * ⚠️ ASYNC IMPACT: Blocks the calling thread (intended: single bleExecutor).
  * [shouldContinue] must flip false and [OnePlusGattClient.disconnect] must run
  * (typically from [OnePlusBleSession.stop]) so [OnePlusGattClient.awaitControlNotify]
  * unblocks. Do not call AIMI / UI work from this loop; only invoke callbacks.
  *
- * Provenance: Juggluco `getdatacmd` + Ob1G5StateMachine SessionStart/EGlucose at pin
- * `1e86d9a2a52577ed2c30fbf7b69d75fd56e6918f` (GPL-3.0).
+ * Provenance: Ob1G5StateMachine SessionStart/EGlucose at pin
+ * `1e86d9a2a52577ed2c30fbf7b69d75fd56e6918f` (GPL-3.0); Juggluco `getdatacmd` for EGV form.
  */
 class OnePlusEgvSession(
     private val gatt: OnePlusGattClient,
@@ -82,13 +85,26 @@ class OnePlusEgvSession(
             return
         }
 
-        // Juggluco: ask glucose (0x4E) as soon as Control CCCD is up — before Ob1 housekeeping.
+        // Ob1 order: TransmitterTime → SessionStart (if needed) → then EGV ask.
+        // Writing 0x4E before 0x24 caused peer GATT status=19 with zero Control notifies.
+        syncTransmitterTime(shouldContinue)
+        if (!shouldContinue() || !gatt.isConnected()) {
+            Log.i(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SESSION}: Control/EGV abort after TransmitterTime " +
+                    "(connected=${gatt.isConnected()})",
+            )
+            return
+        }
+        maybeSessionStartAfterTimeSync(shouldContinue)
+        if (!shouldContinue() || !gatt.isConnected()) {
+            Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: Control/EGV abort after SessionStart")
+            return
+        }
+
         var lastWriteMs = 0L
         writeEgvRequest(preferShort = true)
         lastWriteMs = System.currentTimeMillis()
-
-        syncTransmitterTime(shouldContinue)
-        maybeSessionStartAfterTimeSync(shouldContinue)
         performBackfill(shouldContinue)
 
         var preferShort = true
@@ -157,10 +173,12 @@ class OnePlusEgvSession(
             Thread.currentThread().interrupt()
             return false
         }
-        // Fast ask first (Juggluco), then Ob1 housekeeping.
-        writeEgvRequest(preferShort = true)
+        // Ob1 order: time sync → SessionStart → EGV (same as [run]).
         syncTransmitterTime(shouldContinue = { true })
+        if (!gatt.isConnected()) return false
         maybeSessionStartAfterTimeSync(shouldContinue = { true })
+        if (!gatt.isConnected()) return false
+        writeEgvRequest(preferShort = true)
         performBackfill(shouldContinue = { true })
         var gotPacket = false
         var deliveredGlucose = false
@@ -211,10 +229,19 @@ class OnePlusEgvSession(
 
         val packet = gatt.awaitControlNotify(TRANSMITTER_TIME_TIMEOUT_MS)
         if (packet == null) {
-            Log.w(
-                OnePlusLogMarkers.TAG,
-                "${OnePlusLogMarkers.SESSION}: TransmitterTimeRx timeout — continuing without dexTime",
-            )
+            if (!gatt.isConnected()) {
+                Log.e(
+                    OnePlusLogMarkers.TAG,
+                    "${OnePlusLogMarkers.ERROR}: TransmitterTimeRx aborted — GATT disconnected " +
+                        "(peer close / status 19 typical after wrong Control order)",
+                )
+                onError("ONEPLUS_EGV_PEER_DISCONNECT", false)
+            } else {
+                Log.w(
+                    OnePlusLogMarkers.TAG,
+                    "${OnePlusLogMarkers.SESSION}: TransmitterTimeRx timeout — continuing without dexTime",
+                )
+            }
             return
         }
 

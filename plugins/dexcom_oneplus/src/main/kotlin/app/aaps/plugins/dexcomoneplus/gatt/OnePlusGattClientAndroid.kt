@@ -433,6 +433,35 @@ class OnePlusGattClientAndroid(
         return createBondLe(d)
     }
 
+    override fun removeBond(): Boolean {
+        val d = device ?: return false
+        val state = try {
+            d.bondState
+        } catch (_: Throwable) {
+            return false
+        }
+        if (state == BluetoothDevice.BOND_NONE) {
+            Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: removeBond no-op (already BOND_NONE)")
+            return true
+        }
+        return try {
+            val method = d.javaClass.getMethod("removeBond")
+            val ok = method.invoke(d) as Boolean
+            Log.i(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SESSION}: removeBond (hidden API) result=$ok wasState=$state",
+            )
+            ok
+        } catch (t: Throwable) {
+            Log.e(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.ERROR}: removeBond unavailable: ${t.message}",
+                t,
+            )
+            false
+        }
+    }
+
     override fun awaitBondComplete(timeoutMs: Long): Boolean {
         ensureBondReceiverRegistered()
         val latch = bondCompleteLatch ?: CountDownLatch(1).also { bondCompleteLatch = it }

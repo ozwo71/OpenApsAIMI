@@ -17,9 +17,11 @@ import java.security.InvalidParameterException
  * - Bond via [OnePlusGattClient.awaitBondComplete] (CCCD teardown while BONDING)
  * - Success only when Ob1 would enter GET_DATA (`aNext` length==1)
  *
- * Juggluco recovery (ChallengeReply): if AuthStatus `authenticated != 1` on the short-auth
- * path, wipe the shared key and fail with [AuthResult.invalidateSharedKey] so the session
- * reconnects into full J-PAKE — never stall in KEKS `Unknown` waiting for more notifies.
+ * Juggluco recovery (ChallengeReply): if AuthStatus `authenticated != 1`, wipe persisted key
+ * ([AuthResult.invalidateSharedKey]) and clear in-memory [Context.savedKey] / singleton so the
+ * next attempt runs full J-PAKE. Soft recovery: do **not** [OnePlusGattClient.removeBond] on the
+ * first short-auth reject (preload path) — forced unbond correlated with ADV blackout on Samsung.
+ * Unbond only after a full J-PAKE AuthStatus reject while still OS-bonded, or on bond=3.
  *
  * ⚠️ ASYNC IMPACT: blocks caller (bleExecutor) on [OnePlusGattClient.awaitKeksNotify] and
  * [OnePlusGattClient.awaitBondComplete]. Do not call from main.
@@ -36,7 +38,12 @@ class OnePlusSessionAuthKeks(
         if (!gatt.isConnected()) {
             return AuthResult(ok = false, message = "ONEPLUS_AUTH: GATT not connected")
         }
+        // Drop singleton KEKS state left by a prior ChallengeReply / getPersistence —
+        // otherwise RoundStart still sees context.savedKey and short-auths (auth=2) even when
+        // AAPS preload=false (seen on Samsung after reconnect).
+        forceFreshKeksInstance(pairingCode)
         val plugin = Plugin.getInstance(pairingCode)
+        plugin.context.reset()
         // Ob1: Pref keks_p1..p3 → setPersistence(8..10) before handshake (xDrip Auto Configure QR).
         OnePlusKeksGuideCerts.install(plugin)
 
@@ -49,39 +56,56 @@ class OnePlusSessionAuthKeks(
                 "${OnePlusLogMarkers.SESSION}: KEKS saved shared key preloaded " +
                     "bonded=${gatt.isBonded()} (short-auth path if RoundStart)",
             )
+        } else {
+            Log.i(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SESSION}: KEKS full J-PAKE path " +
+                    "(no preload, in-memory key cleared) bonded=${gatt.isBonded()}",
+            )
         }
 
         plugin.amConnected()
         Log.i(
             OnePlusLogMarkers.TAG,
             "${OnePlusLogMarkers.SESSION}: KEKS amConnected bonded=${gatt.isBonded()} " +
-                "preload=${usedShortAuthPreload}",
+                "preload=${usedShortAuthPreload} savedKeyInCtx=${plugin.context.savedKey != null}",
         )
 
         // Ob1: first doNext after Auth CCCD setup (connect already enabled CCCDs).
-        emitANext(plugin)?.let { return it }
+        emitANext(plugin)?.let { return finalizeAuthResult(it, plugin) }
 
         var sawSharedKey = false
         repeat(maxSteps) { step ->
             if (!gatt.isConnected()) {
-                return AuthResult(ok = false, message = "ONEPLUS_AUTH: GATT disconnected")
+                return finalizeAuthResult(
+                    AuthResult(ok = false, message = "ONEPLUS_AUTH: GATT disconnected"),
+                    plugin,
+                )
             }
 
             val notify = gatt.awaitKeksNotify(stepTimeoutMs)
-                ?: return AuthResult(ok = false, message = "ONEPLUS_AUTH: notify timeout step=$step")
+                ?: return finalizeAuthResult(
+                    AuthResult(ok = false, message = "ONEPLUS_AUTH: notify timeout step=$step"),
+                    plugin,
+                )
 
             if (plugin.bondNow(notify.payload)) {
                 val bondOk = requestAndroidBond()
                 if (!bondOk) {
-                    return AuthResult(
-                        ok = false,
-                        message = "ONEPLUS_AUTH: Android bond required / timed out — accept pairing prompt",
+                    return finalizeAuthResult(
+                        AuthResult(
+                            ok = false,
+                            message = "ONEPLUS_AUTH: Android bond required / timed out — accept pairing prompt",
+                        ),
+                        plugin,
                     )
                 }
             }
 
             if (notify.source == OnePlusKeksNotifySource.AUTHENTICATION) {
-                evaluateAuthStatus(notify.payload, usedShortAuthPreload)?.let { return it }
+                evaluateAuthStatus(notify.payload, usedShortAuthPreload)?.let {
+                    return finalizeAuthResult(it, plugin)
+                }
             }
 
             val shouldEmit = try {
@@ -90,17 +114,26 @@ class OnePlusSessionAuthKeks(
                     OnePlusKeksNotifySource.EXTRA_DATA -> plugin.receivedData(notify.payload)
                 }
             } catch (se: SecurityException) {
-                return AuthResult(ok = false, message = "ONEPLUS_AUTH: ${se.message}")
+                return finalizeAuthResult(
+                    AuthResult(ok = false, message = "ONEPLUS_AUTH: ${se.message}"),
+                    plugin,
+                )
             } catch (ipe: InvalidParameterException) {
-                return AuthResult(
-                    ok = false,
-                    message = "ONEPLUS_AUTH: ${ipe.message}",
-                    invalidateSharedKey = ipe.message?.contains("Missing QR", ignoreCase = true) == true,
+                return finalizeAuthResult(
+                    AuthResult(
+                        ok = false,
+                        message = "ONEPLUS_AUTH: ${ipe.message}",
+                        invalidateSharedKey = ipe.message?.contains("Missing QR", ignoreCase = true) == true,
+                    ),
+                    plugin,
                 )
             } catch (npe: NullPointerException) {
-                return AuthResult(
-                    ok = false,
-                    message = "ONEPLUS_AUTH: KEKS NPE ${npe.message} (incomplete round state)",
+                return finalizeAuthResult(
+                    AuthResult(
+                        ok = false,
+                        message = "ONEPLUS_AUTH: KEKS NPE ${npe.message} (incomplete round state)",
+                    ),
+                    plugin,
                 )
             }
 
@@ -110,33 +143,60 @@ class OnePlusSessionAuthKeks(
                     "${OnePlusLogMarkers.SESSION}: KEKS emit after ${notify.source} " +
                         "${notify.payload.size}b step=$step",
                 )
-                emitANext(plugin)?.let { return it }
+                emitANext(plugin)?.let { return finalizeAuthResult(it, plugin) }
             }
 
-            // Log key availability but do NOT finish — Ob1 still needs AuthChallenge + AuthStatus.
-            if (!sawSharedKey) {
-                val shared = plugin.getPersistence(1)
-                if (shared != null && shared.isNotEmpty()) {
-                    sawSharedKey = true
-                    Log.i(
-                        OnePlusLogMarkers.TAG,
-                        "${OnePlusLogMarkers.SESSION}: KEKS shared key available (${shared.size}b) " +
-                            "step=$step — continuing Auth challenge / AuthStatus",
-                    )
-                }
+            // Only probe persistence after auth is progressing — getPersistence(1) can *create*
+            // context.savedKey via getShortSharedKey and poison the next RoundStart.
+            if (!sawSharedKey && plugin.context.savedKey != null) {
+                sawSharedKey = true
+                Log.i(
+                    OnePlusLogMarkers.TAG,
+                    "${OnePlusLogMarkers.SESSION}: KEKS context.savedKey present " +
+                        "(${plugin.context.savedKey!!.size}b) step=$step",
+                )
             }
         }
 
-        return AuthResult(
-            ok = false,
-            message = "ONEPLUS_AUTH: KEKS handshake incomplete after $maxSteps steps " +
-                "(sharedKey=$sawSharedKey; need AuthStatus→GET_DATA)",
+        return finalizeAuthResult(
+            AuthResult(
+                ok = false,
+                message = "ONEPLUS_AUTH: KEKS handshake incomplete after $maxSteps steps " +
+                    "(sharedKey=$sawSharedKey; need AuthStatus→GET_DATA)",
+            ),
+            plugin,
         )
     }
 
     /**
-     * Juggluco ChallengeReply: `auth != 1` on short-auth → wipe key and force full J-PAKE next.
-     * libkeks only treats authenticated==1 as success; auth=2 + sensor bonded stalls in Unknown.
+     * libkeks [Plugin.setPersistence] channel 3/4 nulls the singleton so the next
+     * [Plugin.getInstance] allocates a clean Context (no leftover savedKey / Round3).
+     */
+    private fun forceFreshKeksInstance(pairingCode: String) {
+        try {
+            val stale = Plugin.getInstance(pairingCode)
+            stale.context.reset()
+            stale.setPersistence(3, ByteArray(0))
+        } catch (_: Throwable) {
+            // Best-effort — getInstance below still runs.
+        }
+    }
+
+    /** On failure, wipe in-memory KEKS key so the next attempt cannot short-auth on garbage. */
+    private fun finalizeAuthResult(result: AuthResult, plugin: Plugin): AuthResult {
+        if (!result.ok) {
+            try {
+                plugin.context.reset()
+            } catch (_: Throwable) {
+            }
+        }
+        return result
+    }
+
+    /**
+     * Juggluco ChallengeReply: `auth != 1` → wipe key and force full J-PAKE next.
+     * Soft path (short-auth / preload): keep OS bond — removeBond after auth=2 caused ADV silence.
+     * Hard path (full J-PAKE still rejected while bonded, or bond=3): then removeBond.
      */
     private fun evaluateAuthStatus(
         payload: ByteArray,
@@ -150,6 +210,7 @@ class OnePlusSessionAuthKeks(
         )
 
         if (status.needsKeyRefresh) {
+            dropOsBondIfPresent("bond=3 key refresh")
             return AuthResult(
                 ok = false,
                 message = "ONEPLUS_AUTH: KEKS bond failure / key refresh required (bond=3)",
@@ -158,15 +219,25 @@ class OnePlusSessionAuthKeks(
         }
 
         if (!status.isAuthenticated) {
-            // Short-auth with stale/wrong key (typical Samsung log: auth=2 bonded=1).
-            // Also fail fast on full-pair AuthStatus ≠1 rather than waiting for notify timeout.
+            // Short-auth with stale/wrong key (typical Samsung: auth=2 bonded=1 after EGV drop).
+            // Soft recovery: wipe key only → next connect full J-PAKE while bond may remain.
+            // Hard recovery: full J-PAKE already failed with local bond → removeBond.
             val viaShort = usedShortAuthPreload
+            if (viaShort) {
+                Log.i(
+                    OnePlusLogMarkers.TAG,
+                    "${OnePlusLogMarkers.SESSION}: soft key refresh after short-auth " +
+                        "auth=${status.authenticated} — keep OS bond, full J-PAKE next",
+                )
+            } else {
+                dropOsBondIfPresent("full-pair auth=${status.authenticated}")
+            }
             Log.e(
                 OnePlusLogMarkers.TAG,
                 "${OnePlusLogMarkers.ERROR}: AuthStatus rejected authenticated=${status.authenticated} " +
                     "(need ${OnePlusAuthStatusRx.AUTHENTICATED_OK}) " +
-                    if (viaShort) "— Juggluco-style short-auth key refresh"
-                    else "— auth failed",
+                    if (viaShort) "— soft short-auth key refresh (no removeBond)"
+                    else "— full-pair auth failed",
             )
             return AuthResult(
                 ok = false,
@@ -179,10 +250,8 @@ class OnePlusSessionAuthKeks(
             )
         }
 
-        // authenticated==1 but sensor not bonded — request Android bond (Ob1 / Juggluco gap).
-        if (!status.sensorReportsBonded && !gatt.isBonded()) {
-            requestAndroidBond()
-        }
+        // auth==1: do NOT createBond here. Ob1/Juggluco bond only on inbound TIME_EXTENDED
+        // (bondNow). Early createBond on bonded=2 caused GATT status=19 before Pairing write.
         return null
     }
 
@@ -254,5 +323,25 @@ class OnePlusSessionAuthKeks(
             Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: createBond ${t.message}", t)
             false
         }
+    }
+
+    /**
+     * Hard recovery only: drop OS bond after full-pair AuthStatus reject or bond=3.
+     * Not used on first short-auth reject (see [evaluateAuthStatus] soft path).
+     *
+     * ⚠️ ASYNC IMPACT: [OnePlusGattClient.removeBond] may disconnect GATT and silence ADV briefly.
+     */
+    private fun dropOsBondIfPresent(reason: String) {
+        if (!gatt.isBonded()) return
+        val ok = try {
+            gatt.removeBond()
+        } catch (t: Throwable) {
+            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: removeBond $reason ${t.message}", t)
+            false
+        }
+        Log.i(
+            OnePlusLogMarkers.TAG,
+            "${OnePlusLogMarkers.SESSION}: Juggluco-style removeBond after $reason ok=$ok",
+        )
     }
 }

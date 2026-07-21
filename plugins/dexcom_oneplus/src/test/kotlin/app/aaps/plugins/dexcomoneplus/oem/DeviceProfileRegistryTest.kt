@@ -13,4 +13,12 @@ class DeviceProfileRegistryTest {
         assertThat(DeviceProfileRegistry.SamsungDefault.requestMtuOnConnect).isFalse()
         assertThat(DeviceProfileRegistry.GenericFallback.requestMtuOnConnect).isFalse()
     }
+
+    @Test
+    fun samsung_requiresAdvAndAutoConnectFromStart() {
+        val s = DeviceProfileRegistry.SamsungDefault
+        assertThat(s.autoConnectFromAttempt).isEqualTo(0)
+        assertThat(s.requireAdvBeforeConnect).isTrue()
+        assertThat(s.preConnectScanMs).isAtLeast(8_000L)
+    }
 }

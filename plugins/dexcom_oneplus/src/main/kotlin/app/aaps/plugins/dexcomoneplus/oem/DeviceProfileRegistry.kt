@@ -31,7 +31,7 @@ object DeviceProfileRegistry {
 
     /**
      * Samsung S22–S25 — patient connect / reconnect (status 147 / 133 common).
-     * Aligns with Ob1: longer settle, rescan, defer MTU, autoConnect fallback.
+     * Field logs: blind autoConnect=false without fresh ADV → 147; success needed ADV + autoConnect.
      */
     val SamsungDefault: OemDeviceProfile = OemDeviceProfile(
         id = OemProfileId.SAMSUNG,
@@ -41,13 +41,14 @@ object DeviceProfileRegistry {
         preferredMtu = 517,
         useForegroundService = true,
         aggressiveReconnect = true,
-        postCloseSettleMs = 5_000L,
+        postCloseSettleMs = 6_000L,
         scanHandoffMs = 500L,
-        preConnectScanMs = 4_000L,
+        preConnectScanMs = 8_000L,
         requestMtuOnConnect = false,
         useGattRefresh = true,
-        autoConnectFromAttempt = 2,
+        autoConnectFromAttempt = 0,
         postDiscoverDelayMs = 1_000L,
+        requireAdvBeforeConnect = true,
     )
 
     /** Unknown OEM — conservative timeouts, safer MTU, FGS on. */
@@ -96,7 +97,8 @@ object DeviceProfileRegistry {
                 "retry=${profile.connectRetryCount} mtu=${profile.preferredMtu} " +
                 "fgs=${profile.useForegroundService} aggressiveReconnect=${profile.aggressiveReconnect} " +
                 "settleMs=${profile.postCloseSettleMs} preScanMs=${profile.preConnectScanMs} " +
-                "mtuOnConnect=${profile.requestMtuOnConnect} autoConnectFrom=${profile.autoConnectFromAttempt}",
+                "mtuOnConnect=${profile.requestMtuOnConnect} autoConnectFrom=${profile.autoConnectFromAttempt} " +
+                "requireAdv=${profile.requireAdvBeforeConnect}",
         )
         return profile
     }

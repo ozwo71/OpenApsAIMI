@@ -23,7 +23,9 @@ class OemAwareReconnectPolicyTest {
         assertThat(profile.aggressiveReconnect).isTrue()
         assertThat(profile.connectRetryDelayMs).isEqualTo(10_000L)
         assertThat(profile.requestMtuOnConnect).isFalse()
-        assertThat(profile.autoConnectFromAttempt).isEqualTo(2)
+        assertThat(profile.autoConnectFromAttempt).isEqualTo(0)
+        assertThat(profile.requireAdvBeforeConnect).isTrue()
+        assertThat(profile.preConnectScanMs).isEqualTo(8_000L)
         assertThat(policy.nextDelayMs(0, profile)).isEqualTo(profile.connectRetryDelayMs)
         assertThat(policy.nextDelayMs(2, profile)).isEqualTo(profile.connectRetryDelayMs * 3)
     }
