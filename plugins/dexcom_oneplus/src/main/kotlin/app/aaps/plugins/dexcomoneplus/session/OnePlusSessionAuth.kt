@@ -21,17 +21,26 @@ data class AuthResult(
     val message: String? = null,
     /** 16-byte KEKS shared key when [ok] — persist for reconnect short-auth. */
     val sharedKey: ByteArray? = null,
+    /**
+     * Juggluco-style: wipe persisted shared key before the next attempt
+     * (short-auth rejected / bond failure / missing certs).
+     */
+    val invalidateSharedKey: Boolean = false,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is AuthResult) return false
-        return ok == other.ok && message == other.message && sharedKey.contentEquals(other.sharedKey)
+        return ok == other.ok &&
+            message == other.message &&
+            sharedKey.contentEquals(other.sharedKey) &&
+            invalidateSharedKey == other.invalidateSharedKey
     }
 
     override fun hashCode(): Int {
         var result = ok.hashCode()
         result = 31 * result + (message?.hashCode() ?: 0)
         result = 31 * result + (sharedKey?.contentHashCode() ?: 0)
+        result = 31 * result + invalidateSharedKey.hashCode()
         return result
     }
 }

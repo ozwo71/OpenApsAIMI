@@ -220,11 +220,13 @@ class OnePlusBleSessionSkeleton(
             if (!authResult.ok) {
                 val msg = authResult.message ?: "ONEPLUS_AUTH_FAILED"
                 Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: $msg attempt=$attempt")
-                if (msg.contains("bond failure", ignoreCase = true) ||
+                if (authResult.invalidateSharedKey ||
+                    msg.contains("bond failure", ignoreCase = true) ||
                     msg.contains("key refresh", ignoreCase = true) ||
-                    msg.contains("Missing QR", ignoreCase = true)
+                    msg.contains("Missing QR", ignoreCase = true) ||
+                    msg.contains("short-auth rejected", ignoreCase = true)
                 ) {
-                    // Stale shared key / cert path — force full KEKS next attempt.
+                    // Stale shared key / cert path — force full KEKS next attempt (Juggluco resetCerts).
                     try {
                         onAuthInvalidate()
                     } catch (_: Throwable) {
