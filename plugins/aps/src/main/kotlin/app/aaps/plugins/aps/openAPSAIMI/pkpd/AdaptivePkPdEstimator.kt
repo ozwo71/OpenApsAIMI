@@ -78,11 +78,14 @@ class AdaptivePkPdEstimator(
         val err = (-deltaMgDlPer5) - expectedDropPer5
         val tailFactor = 1.0 + cfg.tailWeight * max(0.0, (windowMin - p0.peakMin) / max(1.0, p0.peakMin))
         val diaAdj = cfg.lr * tailFactor * sign(err) * min(1.0, abs(err) / 10.0)
-        val tpAdj = cfg.lr * 0.5 * sign(err) * min(1.0, abs(err) / 10.0)
-        val reg = 0.002
+        // Wave3 F2: drop ×0.5 so NORMAL 5 min/day rate cap can bind on clean ticks.
+        val tpAdj = cfg.lr * sign(err) * min(1.0, abs(err) / 10.0)
+        val diaReg = 0.002
+        // Peak soft-reg weaker so sustained |peak−anchor| can reach ~±20 (was ±5 at reg=0.002).
+        val peakReg = 0.001
 
-        val diaAdjReg = diaAdj - reg * (p0.diaHrs - cfg.anchorDiaHrs)
-        val tpAdjReg = tpAdj - reg * (p0.peakMin - cfg.anchorPeakMin)
+        val diaAdjReg = diaAdj - diaReg * (p0.diaHrs - cfg.anchorDiaHrs)
+        val tpAdjReg = tpAdj - peakReg * (p0.peakMin - cfg.anchorPeakMin)
 
         val now = epochMin
         val minutesPerDay = 60.0 * 24.0

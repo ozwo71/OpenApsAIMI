@@ -197,7 +197,7 @@ fun PkpdSimpleSettingsContent(
     PkpdPresetChipRow(
         selectedPreset = selectedPreset,
         onPresetSelected = { selectedPreset = it },
-        showCustom = true,
+        showCustom = false,
         onApplyPreset = { preset ->
             if (preset == PkpdInsulinPreset.CUSTOM) {
                 selectedPreset = PkpdInsulinPreset.CUSTOM
@@ -226,15 +226,16 @@ fun PkpdSimpleSettingsContent(
         },
     )
 
+    // Same polarity as corrections: left = cautious (less delivery), right = allow more.
     PkpdLabeledSlider(
         title = stringResource(R.string.aimi_pkpd_tail_prudence_title),
         summary = stringResource(R.string.aimi_pkpd_tail_prudence_summary),
-        value = PkpdTailPrudence.readLevel(preferences),
+        value = PkpdTailPrudence.readUiLevel(preferences),
         valueRange = 0.0..1.0,
         leftLabel = stringResource(R.string.aimi_pkpd_tail_left),
         rightLabel = stringResource(R.string.aimi_pkpd_tail_right),
         onValueChange = {
-            PkpdTailPrudence.applyLevel(preferences, it)
+            PkpdTailPrudence.applyUiLevel(preferences, it)
             onPreferenceRevisionBump()
         },
     )
@@ -365,7 +366,7 @@ fun PkpdAdvancedSettingsContent(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        syncPkpdLearnedStateToBounds(preferences)
+                        resetPkpdLearnedStateToInitial(preferences)
                         onPreferenceRevisionBump()
                         showResetConfirm = false
                         scope.launch { snackbarHostState.showSnackbar(syncDoneMessage) }

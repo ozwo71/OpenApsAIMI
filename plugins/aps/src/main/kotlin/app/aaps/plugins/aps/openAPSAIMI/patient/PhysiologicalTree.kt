@@ -236,6 +236,8 @@ internal object PhysiologicalTreeBuilder {
         effortRecentConfidence: Double = 0.0,
         /** Lot A endocrine belief — context only; does not grant dose authority. */
         wCycleBelief: WCycleBelief? = null,
+        /** Wave3 F4 — body kinetics evidence for leaves (not a dosing command). */
+        bodyKinetics: BodyKineticsDigest = BodyKineticsDigest.EMPTY,
     ): PhysiologicalTreeSnapshot? {
         if (!enabled) return null
 
@@ -245,7 +247,7 @@ internal object PhysiologicalTreeBuilder {
         )
         val trunk = buildTrunk(patientState, patientModeDecision, branches, currentBgMgdl, deltaMgdl5m)
         val roots = buildRoots(patientState)
-        val leaves = buildLeaves(patientState, patientModeDecision, branches, trunk, physioLive)
+        val leaves = buildLeaves(patientState, patientModeDecision, branches, trunk, physioLive, bodyKinetics)
         val fruits = buildFruits(patientState, trunk)
         val seasons = buildSeasons(patientState, thermalBelief, wCycleBelief)
         val compactSummary = buildCompactSummary(trunk, branches)
@@ -556,11 +558,14 @@ internal object PhysiologicalTreeBuilder {
         branches: PhysiologicalBranches,
         trunk: PhysiologicalTrunk,
         physioLive: PhysioLiveDigest,
+        bodyKinetics: BodyKineticsDigest = BodyKineticsDigest.EMPTY,
     ): PhysiologicalLeaves {
         val safetyNotes = buildList {
             if (branches.hypoRisk.confidence >= 0.45) add("Hypo/post-hypo context: hard safety remains dominant")
             if (branches.sensorTrust.confidence < 0.45) add("Sensor uncertainty: prefer degraded interpretation over guessing")
             if (state.falseMealSuppression) add("False-meal suppression is active")
+            if (bodyKinetics.peakHeavy) add("Insulin kinetics PEAK: avoid stacking meal escalation")
+            if (bodyKinetics.tailHeavy) add("Insulin kinetics TAIL: late active insulin — stacking prudence")
         }
         val advisorHints = buildList {
             if (trunk.globalState == GlobalPhysiologicalState.MIXED) add("Review family balance before changing individual preferences")
@@ -576,11 +581,15 @@ internal object PhysiologicalTreeBuilder {
             add("Harmonia is read-only in Lot 1")
             add("Do not infer free insulin doses from the tree")
             if (branches.insulinEffectiveness.confidence >= 0.55) add("Dirty physiology context may explain delayed correction")
+            if (bodyKinetics.reason != "empty") add("Body kinetics: ${bodyKinetics.reason}")
         }
         val contextNotes = buildList {
             add("Patient mode=${mode.mode.name} strategy=${mode.strategyHint.name}")
             if (physioLive.stepsLast15m > 0 || physioLive.hrNowBpm > 0) {
                 add("Live body: steps15=${physioLive.stepsLast15m} hr=${physioLive.hrNowBpm}")
+            }
+            if (bodyKinetics.reason != "empty") {
+                add("Kinetics: ${bodyKinetics.reason}")
             }
         }
         return PhysiologicalLeaves(

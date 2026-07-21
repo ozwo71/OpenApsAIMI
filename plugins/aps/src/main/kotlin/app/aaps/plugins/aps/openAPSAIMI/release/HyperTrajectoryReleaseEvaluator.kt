@@ -68,6 +68,7 @@ object HyperTrajectoryReleaseEvaluator {
             targetBgMgdl = input.targetBgMgdl,
             highBgPreferenceMgdl = input.highBgPreferenceMgdl,
             tier = classification.tier,
+            deltaMgdlPer5 = input.deltaMgdlPer5,
         )
 
         val risk = input.behavioralRisk

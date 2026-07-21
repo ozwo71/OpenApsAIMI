@@ -19,8 +19,8 @@ private fun Preferences.putClamped(key: DoubleKey, value: Double) {
 }
 
 /**
- * Writes initial PK/PD parameters and learning bounds, then aligns learned state
- * so the loop immediately uses values consistent with the preset.
+ * Writes initial PK/PD parameters and learning bounds, then **reclamps** learned state
+ * into the new envelope (preserves learning; does not wipe to initial).
  */
 fun applyPkpdInsulinPreset(preferences: Preferences, preset: PkpdInsulinPreset) {
     if (preset == PkpdInsulinPreset.CUSTOM) return
@@ -58,24 +58,49 @@ fun applyPkpdInsulinPreset(preferences: Preferences, preset: PkpdInsulinPreset) 
         PkpdInsulinPreset.CUSTOM -> Unit
     }
     PkpdLearningPace.NORMAL.applyTo(preferences)
+    // Neutral center on both sliders — same polarity: left cautious, right more delivery.
     PkpdCorrectionPrudence.applyLevel(preferences, 0.5)
     PkpdTailPrudence.applyLevel(preferences, 0.5)
-    syncPkpdLearnedStateToBounds(preferences)
+    reclampPkpdLearnedStateToBounds(preferences)
 }
 
 /**
- * Clamps [DoubleKey.OApsAIMIPkpdStateDiaH] / [DoubleKey.OApsAIMIPkpdStatePeakMin] to
- * current initial + bounds (and key limits).
+ * Reclamps existing learned DIA/peak into current bounds (preserves learning).
  */
-fun syncPkpdLearnedStateToBounds(preferences: Preferences) {
+fun reclampPkpdLearnedStateToBounds(preferences: Preferences) {
+    val bDiaLo = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMinH)
+    val bDiaHi = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMaxH)
+    val bPeakLo = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMin)
+    val bPeakHi = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax)
+    val dia = preferences.get(DoubleKey.OApsAIMIPkpdStateDiaH).coerceIn(bDiaLo, bDiaHi)
+    val peak = preferences.get(DoubleKey.OApsAIMIPkpdStatePeakMin).coerceIn(bPeakLo, bPeakHi)
+    preferences.putClamped(DoubleKey.OApsAIMIPkpdStateDiaH, dia)
+    preferences.putClamped(DoubleKey.OApsAIMIPkpdStatePeakMin, peak)
+}
+
+/**
+ * Explicit reset: learned state → initial × bounds (wipes adaptation).
+ * Prefer [reclampPkpdLearnedStateToBounds] on routine preset changes.
+ */
+fun resetPkpdLearnedStateToInitial(preferences: Preferences) {
     val diaInit = preferences.get(DoubleKey.OApsAIMIPkpdInitialDiaH)
     val peakInit = preferences.get(DoubleKey.OApsAIMIPkpdInitialPeakMin)
     val bDiaLo = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMinH)
     val bDiaHi = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMaxH)
     val bPeakLo = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMin)
     val bPeakHi = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax)
-    val dia = diaInit.coerceIn(bDiaLo, bDiaHi)
-    val peak = peakInit.coerceIn(bPeakLo, bPeakHi)
-    preferences.putClamped(DoubleKey.OApsAIMIPkpdStateDiaH, dia)
-    preferences.putClamped(DoubleKey.OApsAIMIPkpdStatePeakMin, peak)
+    preferences.putClamped(DoubleKey.OApsAIMIPkpdStateDiaH, diaInit.coerceIn(bDiaLo, bDiaHi))
+    preferences.putClamped(DoubleKey.OApsAIMIPkpdStatePeakMin, peakInit.coerceIn(bPeakLo, bPeakHi))
+}
+
+/**
+ * @deprecated Use [reclampPkpdLearnedStateToBounds] or [resetPkpdLearnedStateToInitial].
+ * Kept as reset alias for any leftover call sites.
+ */
+@Deprecated(
+    message = "Use reclampPkpdLearnedStateToBounds (preserve) or resetPkpdLearnedStateToInitial (wipe)",
+    replaceWith = ReplaceWith("resetPkpdLearnedStateToInitial(preferences)"),
+)
+fun syncPkpdLearnedStateToBounds(preferences: Preferences) {
+    resetPkpdLearnedStateToInitial(preferences)
 }

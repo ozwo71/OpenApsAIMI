@@ -27,6 +27,8 @@ data class HarmoniaDecisionEnvironment(
     val chaoticEpisodeLoad: Double = 0.0,
     val effectiveDiaHours: Double? = null,
     val effectivePeakMinutes: Double? = null,
+    /** Wave3 F4 — conscious body kinetics (PEAK/TAIL), not a second dose brain. */
+    val bodyKinetics: BodyKineticsDigest = BodyKineticsDigest.EMPTY,
     /**
      * Production governor basal amp when WCycle is APPLIED.
      * - `null` = WCycle not governing → BASAL_FIRST keeps posture factor 1.18 (stress/dawn).
@@ -58,6 +60,7 @@ data class HarmoniaDecisionEnvironment(
             put("chaotic_episode_load", chaoticEpisodeLoad)
             effectiveDiaHours?.let { put("effective_dia_h", it) }
             effectivePeakMinutes?.let { put("effective_peak_min", it) }
+            put("body_kinetics", bodyKinetics.toJsonObject())
             put("seed", seed ?: JSONObject.NULL)
         }
 }
@@ -390,7 +393,16 @@ internal object HarmoniaDecisionEngine {
             return ActionChoice(HarmoniaAction.PROTECTIVE_REDUCTION, "activity_or_post_activity")
         }
 
+        // Wave3 F4: MED meal support is softened when body kinetics are PEAK/TAIL heavy —
+        // insulin already acting; do not escalate meal SMB on weak meal certainty alone.
         if (mealCertainty.supportsMealSupport) {
+            val kinetics = env.bodyKinetics
+            if (kinetics.peakHeavy || kinetics.tailHeavy) {
+                return ActionChoice(
+                    HarmoniaAction.STABILIZE,
+                    "meal_certainty_med_kinetics_${if (kinetics.peakHeavy) "peak" else "tail"}",
+                )
+            }
             return ActionChoice(HarmoniaAction.MEAL_SUPPORT, "meal_certainty_med")
         }
 
