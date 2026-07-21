@@ -36,7 +36,8 @@ import java.util.concurrent.atomic.AtomicInteger
  * - **one outstanding GATT op** at a time (avoids Android 13+ status 201 /
  *   [BluetoothStatusCodes.ERROR_GATT_WRITE_REQUEST_BUSY])
  * - CCCD: ExtraData notify → Authentication **indication** before ready
- * - ExtraData writes use [WRITE_TYPE_NO_RESPONSE]; Auth uses [WRITE_TYPE_DEFAULT]
+ * - ExtraData writes use [WRITE_TYPE_NO_RESPONSE]; Auth and **Control** use [WRITE_TYPE_DEFAULT]
+ *   (Control write-with-response is required by ONE+; no-response → peer status 19 after auth)
  *
  * ⚠️ ASYNC IMPACT: callbacks on binder thread; await* / connect / writes block bleExecutor only.
  */
@@ -370,11 +371,15 @@ class OnePlusGattClientAndroid(
     }
 
     override fun writeControl(payload: ByteArray?) {
+        // Control (0x4E EGlucose request, 0x59 backfill, 0x26 SessionStart) MUST be written WITH
+        // response. Juggluco forces charact[0].setWriteType(WRITE_TYPE_DEFAULT) (DexGattCallback);
+        // sending 0x4E as WRITE_TYPE_NO_RESPONSE made the ONE+ terminate the link with peer
+        // status 19 ~3 s after auth (field log 00:29:54, no EGV ever streamed).
         writeChar(
             characteristic = controlChar,
             payload = payload,
             label = "Control",
-            writeType = null,
+            writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT,
         )
     }
 
