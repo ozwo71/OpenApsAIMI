@@ -210,6 +210,7 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSensorTelemetry
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEnvironment
+import app.aaps.plugins.aps.openAPSAIMI.patient.BodyKineticsDigest
 import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
 import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertaintyBuilder
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaAction
@@ -234,6 +235,8 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionCurves
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionProfiler
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionState
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdAbsorptionGuard
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSoftFloorPathMin
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSoftFloorTelemetry
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.AutodriveEngine
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.PhysiologicalStressMaskBuilder
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey
@@ -325,6 +328,8 @@ internal data class AimiDecisionContext(
         var meal_certainty: org.json.JSONObject? = null,
         /** Cascade D4 / C1 — single dose-facing eventual + minPred for the tick. */
         var dose_terminal_snapshot: org.json.JSONObject? = null,
+        /** Wave4 H3 — soft-floor/EGP path-min (production curves + study JSON raw/soft). */
+        var pkpd_soft_floor: org.json.JSONObject? = null,
         /** AIMI Harmonia simulated production branch; virtual only, never applied to the real pump. */
         var harmonia_simulation: org.json.JSONObject? = null,
         /** AIMI Harmonia production owner state; basal-first only and safety-gated. */
@@ -682,6 +687,9 @@ internal data class AimiDecisionContext(
             }
             adjustments.dose_terminal_snapshot?.let { doseTerminal ->
                 adj.put("dose_terminal_snapshot", doseTerminal)
+            }
+            adjustments.pkpd_soft_floor?.let { softFloor ->
+                adj.put("pkpd_soft_floor", softFloor)
             }
             adjustments.harmonia_simulation?.let { simulation ->
                 adj.put("harmonia_simulation", simulation)
@@ -1534,6 +1542,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastIntelligenceSnapshot = null
         lastPredictionAuthorityApplyResult = null
         lastDoseTerminalSnapshot = null
+        lastPkpdSoftFloorTelemetry = null
         tubeDoseBaseline = null
         tubeAppliedFromDoseSnapshotThisTick = false
         isConfirmedHighRiseThisTick = false
@@ -1766,15 +1775,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 "in 30m=${"%.0f".format(iobActivityIn30Min * 100)}%"
         )
         val observerDiaHours = ctx.effectiveDiaHours?.takeIf { it.isFinite() && it > 0.0 } ?: ctx.profile.dia
-        val observerPeakMinutes = ctx.effectivePeakMinutes?.takeIf { it.isFinite() && it > 0.0 }?.toInt()
-            ?: iobPeakMinutes.toInt()
+        // Wave2 F1: minutes-to-peak from profiler (signed); never absolute effective peak.
+        val minutesToPeak = iobPeakMinutes.toInt()
         val insulinActionState = insulinObserver.update(
             currentBg = bg,
             bgDelta = delta.toDouble(),
             iobTotal = iobTotal,
             iobActivityNow = iobActivityNow,
             iobActivityIn30 = iobActivityIn30Min,
-            peakMinutesAbs = observerPeakMinutes,
+            minutesToPeak = minutesToPeak,
             diaHours = observerDiaHours,
             carbsActiveG = cob.toDouble(),
             now = dateUtil.now()
@@ -3138,6 +3147,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         // Cascade native (R1): tree always deploys on the dose path. AimiPhysioAssistantEnable only
         // gates vitals multipliers / assistant extras — never the spine Tree→Harmonia.
+        val bodyKinetics = BodyKineticsDigest.fromTick(
+            effectiveDiaHours = tickEffectiveDiaHours,
+            effectivePeakMinutes = tickEffectivePeakMinutes,
+            insulinActionState = tickInsulinActionState,
+        )
         val physiologicalTree = PhysiologicalTreeBuilder.build(
             enabled = true,
             patientState = patientState,
@@ -3154,6 +3168,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             effortRecentConfidence = lastEffortAssessment
                 ?.takeIf { it.state == EffortActivityBelief.State.RECENT_EFFORT }?.confidence ?: 0.0,
             wCycleBelief = lastWCycleBelief,
+            bodyKinetics = bodyKinetics,
         )
         lastPhysiologicalTreeSnapshot = physiologicalTree
         val sensorTelemetry = HarmoniaSensorTelemetry.resolve(
@@ -3212,6 +3227,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 chaoticEpisodeLoad = lastRbtChaosEvaluation?.score ?: 0.0,
                 effectiveDiaHours = tickEffectiveDiaHours,
                 effectivePeakMinutes = tickEffectivePeakMinutes,
+                bodyKinetics = bodyKinetics,
                 endocrineBasalAmp = lastWCycleBelief
                     ?.takeIf {
                         it.enabled && it.applicationMode == EndocrineApplicationMode.APPLIED
@@ -3231,7 +3247,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleLog.add(
                     "TREE_DEPLOYED trunk=${tree.trunk.globalState.name} " +
                         "conf=${"%.2f".format(tree.trunk.confidence)} " +
-                        "risk=${tree.trunk.riskLevel.name}",
+                        "risk=${tree.trunk.riskLevel.name} " +
+                        "kinetics=${bodyKinetics.reason}",
                 )
                 consoleLog.add(tree.compactSummary)
             }
@@ -4289,6 +4306,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             targetBgMgdl = targetBg.toDouble(),
             highBgPreferenceMgdl = preferences.get(DoubleKey.OApsAIMIHighBg),
             scenarioBestTerminalMgdl = lastScenarioProjection?.scenarioBest?.terminalMgdl,
+            deltaMgdlPer5 = delta.toDouble(),
         )
 
     /**
@@ -7159,7 +7177,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             predictedBg = predictedBg.toDouble(),
             eventualBg = eventualBG,
         )
-        val minPredCurve = minPredictedAcrossCurves(b.rT.predBGs)
+        val (minPredCurve, ignoreMinPredCurve) = resolveLgsMinPredictedCurve(b.rT)
         val lgsReason = HypoLgsBlockReason.detect(
             bgNow = bg,
             predicted = hypoPredForLgs,
@@ -7168,7 +7186,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             hypo = hypoGuard,
             delta = delta.toDouble(),
             mealContext = mealContext,
-            ignoreMinPredictedCurve = rbtIgnoreMinPredictedCurve(),
+            ignoreMinPredictedCurve = ignoreMinPredCurve,
         )
         if (lgsReason != null) {
             return blockT3cBasalFirstProduction(
@@ -7351,7 +7369,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             predictedBg = predictedBg.toDouble(),
             eventualBg = eventualBG,
         )
-        val minPredCurve = minPredictedAcrossCurves(b.rT.predBGs)
+        val (minPredCurve, ignoreMinPredCurve) = resolveLgsMinPredictedCurve(b.rT)
         val lgsReason = HypoLgsBlockReason.detect(
             bgNow = bg,
             predicted = hypoPredForLgs,
@@ -7360,7 +7378,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             hypo = hypoGuard,
             delta = delta.toDouble(),
             mealContext = mealContext,
-            ignoreMinPredictedCurve = rbtIgnoreMinPredictedCurve(),
+            ignoreMinPredictedCurve = ignoreMinPredCurve,
         )
         if (lgsReason != null) {
             return blockHarmoniaProduction(
@@ -8151,6 +8169,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         decisionCtx.adjustments.meal_certainty = lastMealCertainty?.toJsonObject()
         decisionCtx.adjustments.dose_terminal_snapshot = lastDoseTerminalSnapshot?.toJsonObject()
+        decisionCtx.adjustments.pkpd_soft_floor = lastPkpdSoftFloorTelemetry?.toJsonObject()
         decisionCtx.adjustments.harmonia_simulation = lastHarmoniaDecision?.toJsonObject()
         decisionCtx.adjustments.harmonia_production = lastHarmoniaProductionDecision?.toJsonObject()
         decisionCtx.adjustments.t3c_runtime_ownership = lastT3cRuntimeOwnership
@@ -8853,6 +8872,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             endogenousReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
         )
         lastAdvancedPredictionCurves = curves
+        recordPkpdSoftFloor(curves)
         val mealContext = buildMealSafetyContext(isExplicitAdvisorRun, iobData)
         val floorPreview = bg - 25.0
         val previewBest = PhysioPhaseFusion.previewBestTerminalMgdl(
@@ -9264,6 +9284,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return rawMinPred
     }
 
+    /**
+     * Wave1 H1: LGS PREDICTED_MIN_CURVE must use dose-facing minPred (snapshot), not raw
+     * curve floor 39. Ignore raw floor when snapshot already lifted it.
+     */
+    private fun resolveLgsMinPredictedCurve(rT: RT): Pair<Double?, Boolean> {
+        val rawMinPred = minPredictedAcrossCurves(rT.predBGs)
+        val doseMinPred = authoritativeMinPredBg(rT, rawMinPred)
+        val snapshotLiftedFloor =
+            lastDoseTerminalSnapshot?.plateauFloorLifted == true ||
+                (
+                    rawMinPred != null &&
+                        doseMinPred != null &&
+                        rawMinPred <= DoseTerminalSnapshot.FLOOR_ARTEFACT_NEAR_MGDL &&
+                        doseMinPred > rawMinPred + 5.0
+                    )
+        val ignoreMinPredictedCurve = rbtIgnoreMinPredictedCurve() || snapshotLiftedFloor
+        return doseMinPred to ignoreMinPredictedCurve
+    }
+
     /** Clamp digestion arm: tree / absorption / meal-priority only — not MealCertainty alone. */
     private fun digestionOrMealActiveForDose(
         mealPriorityContext: Boolean = false,
@@ -9532,6 +9571,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastRbtLiveCommitResult = refreshed
     }
     private var lastAdvancedPredictionCurves: AdvancedPredictionCurves? = null
+    /** Wave4 H3 — last soft-floor path-min telemetry (JSON study + production curves). */
+    private var lastPkpdSoftFloorTelemetry: PkpdSoftFloorTelemetry? = null
     private var lastSafetyTerminalsForRbt: SafetyPredictionTerminals? = null
     private var lastHyperTrajectoryRelease: HyperTrajectoryReleaseResult? = null
     private var lastRecursiveBeliefSnapshot: RecursiveBeliefSnapshot? = null
@@ -9976,6 +10017,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 patientWeightKg = patientWeightKgProvider(),
                 physioLatentState = physioLatentStateProvider(),
                 estimatedRaMgdlPerMin = estimatedRaProvider()?.takeIf { it.isFinite() && it > 0.0 },
+                allowLearning = false,
             )
             return if (rt != null) {
                 PkpdPort.Snapshot(
@@ -10010,7 +10052,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                                                     uamConfidence = AimiUamHandler.confidenceOrZero(),
                                                     patientWeightKg = patientWeightKgProvider(),
                                                     physioLatentState = physioLatentStateProvider(),
-                                                    estimatedRaMgdlPerMin = estimatedRaProvider()?.takeIf { it.isFinite() && it > 0.0 })
+                                                    estimatedRaMgdlPerMin = estimatedRaProvider()?.takeIf { it.isFinite() && it > 0.0 },
+                                                    allowLearning = false)
 
             val damping = SmbDampingUsecase.run(
                 rt,
@@ -11098,7 +11141,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 predictedBg = predictedBg.toDouble(),
                 eventualBg = eventualBG,
             )
-            val minPredCurve = minPredictedAcrossCurves(rT.predBGs)
+            val (minPredCurve, ignoreMinPredCurve) = resolveLgsMinPredictedCurve(rT)
             val lgsReason = HypoLgsBlockReason.detect(
                 bgNow = bg,
                 predicted = hypoPredForLgs,
@@ -11107,7 +11150,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 hypo = hypoGuard,
                 delta = delta.toDouble(),
                 mealContext = effectiveMealContext,
-                ignoreMinPredictedCurve = rbtIgnoreMinPredictedCurve(),
+                ignoreMinPredictedCurve = ignoreMinPredCurve,
             )
             if (lgsReason != null) {
                 val lgsLine = when (lgsReason) {
@@ -11794,8 +11837,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              val throttleDiaHours = tickEffectiveDiaHours?.takeIf { it.isFinite() && it > 0.0 }
                  ?: lastProfile?.dia
                  ?: 6.0
-             val throttlePeakMinutes = tickEffectivePeakMinutes?.takeIf { it.isFinite() && it > 0.0 }?.toInt()
-                 ?: tickInsulinActionState?.timeToPeakMin?.takeIf { it > 0 }
+             // Wave2 F1: minutes remaining to peak — prefer prior observer state / PAI, not absolute peak.
+             val minutesToPeak = tickInsulinActionState?.timeToPeakMin?.takeIf { it > 0 }
                  ?: 0
              val actionState = tickInsulinActionState ?: insulinObserver.update(
                  currentBg = this.bg,
@@ -11803,7 +11846,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                  iobTotal = this.iob.toDouble(),
                  iobActivityNow = this.iobActivityNow,
                  iobActivityIn30 = 0.0,
-                 peakMinutesAbs = throttlePeakMinutes,
+                 minutesToPeak = minutesToPeak,
                  diaHours = throttleDiaHours,
                  carbsActiveG = this.cob.toDouble(),
                  now = dateUtil.now()
@@ -13664,6 +13707,33 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val pathBounds: PredictionPathBounds,
     )
 
+    /**
+     * Wave4 H3 — record soft-floor/EGP path-min after [AdvancedPredictionEngine.predictCurves].
+     * Physics are already on insulin curves; JSON keeps raw vs soft for study.
+     */
+    private fun recordPkpdSoftFloor(
+        curves: AdvancedPredictionCurves,
+    ): PkpdSoftFloorTelemetry {
+        val endoEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion)
+        val telemetry = PkpdSoftFloorPathMin.fromCurves(
+            curves = curves,
+            endogenousReversionEnabled = endoEnabled,
+        )
+        lastPkpdSoftFloorTelemetry = telemetry
+        consoleLog.add(PkpdSoftFloorPathMin.formatLogLine(telemetry))
+        return telemetry
+    }
+
+    /** When EGP soft-floor applied, lift floor-band points so path-min / graphs match production. */
+    private fun applySoftFloorToPredSeries(
+        series: List<Int>,
+        telemetry: PkpdSoftFloorTelemetry,
+    ): List<Int> {
+        val soft = telemetry.softPathMinMgdl ?: return series
+        if (!telemetry.applied) return series
+        return PkpdSoftFloorPathMin.liftFloorBandPoints(series, soft)
+    }
+
     private fun computePkpdPredictions(
         currentBg: Double,
         iobArray: Array<IobTotal>,
@@ -13706,6 +13776,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val flat = List(48) { currentBg }
             AdvancedPredictionCurves(flat, flat, flat, flat, flat)
         }
+        lastAdvancedPredictionCurves = curves
+        val softFloor = recordPkpdSoftFloor(curves)
 
         val pathBounds = PredictionPathMath.boundsFromPredictions(
             Predictions().apply {
@@ -13724,10 +13796,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         fun sanitizeInts(points: List<Double>): List<Int> =
             points.map { round(min(401.0, max(39.0, it)), 0).toInt() }
-        val iobInts = sanitizeInts(curves.iob)
-        val cobInts = sanitizeInts(curves.cob)
-        val uamInts = sanitizeInts(curves.uam)
-        val ztInts = sanitizeInts(curves.zt)
+        val iobInts = applySoftFloorToPredSeries(sanitizeInts(curves.iob), softFloor)
+        val cobInts = applySoftFloorToPredSeries(sanitizeInts(curves.cob), softFloor)
+        val uamInts = applySoftFloorToPredSeries(sanitizeInts(curves.uam), softFloor)
+        val ztInts = applySoftFloorToPredSeries(sanitizeInts(curves.zt), softFloor)
         val hybridInts = sanitizeInts(curves.hybrid)
         rT.predBGs = Predictions().apply {
             IOB = iobInts
@@ -14930,14 +15002,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 cobG = effectiveCOB, profile = profile, delta = delta.toDouble(),
                 endogenousReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
             )
+            lastAdvancedPredictionCurves = curves
+            val softFloor = recordPkpdSoftFloor(curves)
             fun sanitizeCurve(points: List<Double>): List<Int> =
                 points.mapNotNull {
                     if (it.isNaN()) null else round(kotlin.math.min(401.0, kotlin.math.max(39.0, it)), 0).toInt()
                 }
-            val iobInts = sanitizeCurve(curves.iob)
-            val cobInts = sanitizeCurve(curves.cob)
-            val uamInts = sanitizeCurve(curves.uam)
-            val ztInts = sanitizeCurve(curves.zt)
+            val iobInts = applySoftFloorToPredSeries(sanitizeCurve(curves.iob), softFloor)
+            val cobInts = applySoftFloorToPredSeries(sanitizeCurve(curves.cob), softFloor)
+            val uamInts = applySoftFloorToPredSeries(sanitizeCurve(curves.uam), softFloor)
+            val ztInts = applySoftFloorToPredSeries(sanitizeCurve(curves.zt), softFloor)
             val hybridInts = sanitizeCurve(curves.hybrid)
             val intsPredictions = hybridInts
             lastPredictionSize = intsPredictions.size

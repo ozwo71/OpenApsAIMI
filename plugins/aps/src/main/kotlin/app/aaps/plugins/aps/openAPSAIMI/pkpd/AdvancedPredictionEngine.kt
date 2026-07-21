@@ -4,6 +4,7 @@ import app.aaps.core.data.configuration.Constants
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import kotlin.math.abs
+import kotlin.math.min
 
 /**
  * Provides a unified prediction model that mirrors the same parameters used during SMB/basal decisions.
@@ -15,11 +16,10 @@ object AdvancedPredictionEngine {
     private const val CARB_ABSORPTION_MINUTES = 180.0
     private const val STEP_MINUTES = 5
 
-    // 🩸 Réversion endogène anti-absorbante (hybrid/eventual UNIQUEMENT — n'affecte pas IOB/COB/UAM/ZT, donc
-    // pas minPredictedAcrossCurves ni la protection hypo). Sans terme de production endogène (EGP), la courbe
-    // hybride décline sur 4 h jusqu'au plancher 39 et y reste (plancher absorbant) → eventual = 39 sur ~24 %
-    // des ticks alors que le BG réel ne touche jamais l'hypo. Quand l'insuline est épuisée et la courbe sous la
-    // baseline, on laisse la contre-régulation ramener l'eventual vers un bas-normal (≈80), pas la remonter haut.
+    // 🩸 Réversion endogène anti-absorbante (EGP). Sans ce terme, les courbes déclinent jusqu'au
+    // plancher absorbant 39 et y restent alors que le BG réel ne touche pas l'hypo.
+    // Wave4 H3: même physique sur IOB/COB/UAM/ZT **et** hybrid (une vérité graphe + path-min + dose).
+    // Gate: |impact insuline/pas| négligeable + sous baseline → dérive lente vers ≈80.
     private const val ENDO_REVERSION_BASELINE_MGDL = 80.0
     private const val ENDO_REVERSION_RATE = 0.06            // fraction du gap comblée par pas de 5 min (lent)
     private const val ENDO_INSULIN_NEGLIGIBLE_MGDL = 0.3    // |impact insuline/pas| en dessous = insuline épuisée
@@ -118,6 +118,9 @@ object AdvancedPredictionEngine {
         var lastZt = currentBG
         var lastHybrid = currentBG
         var uamMomentum = deviation * modulation.uamMomentumFactor
+        var rawInsulinPathMin = Double.POSITIVE_INFINITY
+        var softInsulinPathMin = Double.POSITIVE_INFINITY
+        var endoAppliedOnInsulin = false
 
         repeat(steps) { stepIndex ->
             val minutesInFuture = (stepIndex + 1) * STEP_MINUTES
@@ -137,19 +140,32 @@ object AdvancedPredictionEngine {
             lastUam = (lastUam - insulinImpact * iobDampingFactor + uamMomentum)
                 .coerceIn(NUMERIC_FLOOR, NUMERIC_CEILING)
             uamMomentum *= momentumDecay
+
+            // Pre-EGP insulin-only path-min (study / raw JSON).
+            rawInsulinPathMin = min(rawInsulinPathMin, min(lastIob, min(lastCob, lastUam)))
+
+            val insulinNegligible = abs(insulinImpact) < ENDO_INSULIN_NEGLIGIBLE_MGDL
+            if (endogenousReversionEnabled && insulinNegligible) {
+                val beforeIob = lastIob
+                val beforeCob = lastCob
+                val beforeUam = lastUam
+                lastIob = applyEndogenousReversion(lastIob)
+                lastCob = applyEndogenousReversion(lastCob)
+                lastUam = applyEndogenousReversion(lastUam)
+                if (lastIob > beforeIob + 1e-6 || lastCob > beforeCob + 1e-6 || lastUam > beforeUam + 1e-6) {
+                    endoAppliedOnInsulin = true
+                }
+            }
             lastZt = lastIob
+
             lastHybrid = (lastHybrid - insulinImpact * iobDampingFactor + carbImpact + hybridMomentum)
                 .coerceIn(NUMERIC_FLOOR, NUMERIC_CEILING)
-            // 🩸 Réversion endogène (EGP) : insuline épuisée + sous baseline → dérive lente vers le bas-normal,
-            // pour que l'eventual ne reste pas collé au plancher absorbant 39. Hybrid seul (voir consts).
-            if (endogenousReversionEnabled &&
-                abs(insulinImpact) < ENDO_INSULIN_NEGLIGIBLE_MGDL &&
-                lastHybrid < ENDO_REVERSION_BASELINE_MGDL
-            ) {
-                lastHybrid = (lastHybrid + (ENDO_REVERSION_BASELINE_MGDL - lastHybrid) * ENDO_REVERSION_RATE)
-                    .coerceAtMost(ENDO_REVERSION_BASELINE_MGDL)
+            if (endogenousReversionEnabled && insulinNegligible) {
+                lastHybrid = applyEndogenousReversion(lastHybrid)
             }
             hybridMomentum *= momentumDecay
+
+            softInsulinPathMin = min(softInsulinPathMin, min(lastIob, min(lastCob, min(lastUam, lastZt))))
 
             iobSeries.add(lastIob)
             cobSeries.add(lastCob)
@@ -158,12 +174,23 @@ object AdvancedPredictionEngine {
             hybridSeries.add(lastHybrid)
         }
 
+        val rawMin = rawInsulinPathMin.takeIf { it.isFinite() }
+        val softMin = softInsulinPathMin.takeIf { it.isFinite() }
         return AdvancedPredictionCurves(
             iob = iobSeries,
             cob = cobSeries,
             uam = uamSeries,
             zt = ztSeries,
             hybrid = hybridSeries,
+            insulinPathMinRawMgdl = rawMin,
+            insulinPathMinSoftMgdl = softMin,
+            endogenousReversionOnInsulinCurves = endoAppliedOnInsulin,
         )
+    }
+
+    private fun applyEndogenousReversion(value: Double): Double {
+        if (!value.isFinite() || value >= ENDO_REVERSION_BASELINE_MGDL) return value
+        return (value + (ENDO_REVERSION_BASELINE_MGDL - value) * ENDO_REVERSION_RATE)
+            .coerceAtMost(ENDO_REVERSION_BASELINE_MGDL)
     }
 }

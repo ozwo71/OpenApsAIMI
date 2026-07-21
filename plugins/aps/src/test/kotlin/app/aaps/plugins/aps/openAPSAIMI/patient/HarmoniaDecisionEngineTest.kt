@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.patient
 
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.ContraceptiveType
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.CyclePhase
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.CycleTrackingMode
@@ -455,6 +456,54 @@ class HarmoniaDecisionEngineTest {
         )
         assertThat(flat?.action).isEqualTo(HarmoniaAction.PROTECTIVE_REDUCTION)
         assertThat(flat?.rationale).doesNotContain("h4_meal_rise_bridge")
+    }
+
+    @Test
+    fun evaluate_medMealCertainty_softens_when_peakHeavy() {
+        val tree = digestionTreeWithEffort(effortActiveConfidence = 0.0)
+        val medMeal = MealCertainty(
+            level = MealCertaintyLevel.MED,
+            treeState = MealCertaintyTreeState.DIGESTION_ACTIVE,
+            absorptionPhase = MealAbsorptionPhase.FIRST_WAVE,
+            riseGeometry = MealRiseGeometry.OK,
+            terminalsAgree = MealTerminalsAgree.OK,
+            effortVeto = false,
+            softCorroboration = false,
+            reasons = listOf("test_med"),
+        )
+        val peakHeavy = BodyKineticsDigest(
+            effectiveDiaHours = 6.0,
+            effectivePeakMinutes = 55.0,
+            activityStage = ActivityStage.PEAK,
+            peakHeavy = true,
+            tailHeavy = false,
+            residualEffect = 0.7,
+            reason = "PEAK peakHeavy",
+        )
+        val softened = HarmoniaDecisionEngine.evaluate(
+            tree = tree,
+            environment = safeEnvironment().copy(
+                currentBgMgdl = 160.0,
+                deltaMgdl5m = 1.5,
+                bodyKinetics = peakHeavy,
+            ),
+            mealCertainty = medMeal,
+        )
+        assertThat(softened?.action).isEqualTo(HarmoniaAction.STABILIZE)
+        assertThat(softened?.decisionBasis?.primaryReason).contains("meal_certainty_med_kinetics_peak")
+
+        val highMeal = medMeal.copy(level = MealCertaintyLevel.HIGH)
+        val highStillMeal = HarmoniaDecisionEngine.evaluate(
+            tree = tree,
+            environment = safeEnvironment().copy(
+                currentBgMgdl = 160.0,
+                deltaMgdl5m = 1.5,
+                bodyKinetics = peakHeavy,
+            ),
+            mealCertainty = highMeal,
+        )
+        assertThat(highStillMeal?.action).isEqualTo(HarmoniaAction.MEAL_SUPPORT)
+        assertThat(highStillMeal?.decisionBasis?.primaryReason).isEqualTo("meal_certainty_high")
     }
 
     private fun digestionTreeWithEffort(effortActiveConfidence: Double): PhysiologicalTreeSnapshot? {

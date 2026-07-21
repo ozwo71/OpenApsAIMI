@@ -131,6 +131,7 @@ class PkPdIntegration(private val preferences: Preferences) {
             )
         }
         val learningContextClean = causalStatePosterior?.learningContextClean() ?: true
+        val causalLearningAllowed = CausalKineticsModulator.modulate(causalStatePosterior).learningAllowed
         logPkpdLearningSkipReason(
             bg = bg,
             iobU = iobU,
@@ -138,10 +139,10 @@ class PkPdIntegration(private val preferences: Preferences) {
             deltaMgDlPer5 = deltaMgDlPer5,
             exerciseFlag = exerciseFlag,
             causalStatePosterior = causalStatePosterior,
-            learningContextClean = learningContextClean,
+            learningContextClean = learningContextClean && causalLearningAllowed,
             consoleLog = consoleLog,
         )
-        if (allowLearning && learningContextClean) {
+        if (allowLearning && learningContextClean && causalLearningAllowed) {
             estimator.update(
                 epochMin = epochMin,
                 bg = bg,
@@ -151,6 +152,8 @@ class PkPdIntegration(private val preferences: Preferences) {
                 windowMin = learningWindowMin,
                 exerciseFlag = exerciseFlag
             )
+        } else if (allowLearning && learningContextClean && !causalLearningAllowed) {
+            consoleLog?.add("PKPD_LEARN skip: causal_modulator_learningAllowed=false")
         }
         val params = estimator.params()
         persistStateIfNeeded(params, structural.bounds)

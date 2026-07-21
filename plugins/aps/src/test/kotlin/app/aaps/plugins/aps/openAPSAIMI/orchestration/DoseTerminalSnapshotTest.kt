@@ -120,6 +120,58 @@ class DoseTerminalSnapshotTest {
     }
 
     @Test
+    fun highFlatBg_floorArtefact_liftsMinPredWithoutScenario() {
+        val snap = DoseTerminalSnapshotBuilder.build(
+            authority = null,
+            applyResult = null,
+            authorityEnabled = false,
+            fallbackEventualMgdl = 39.0,
+            fallbackMinPredMgdl = 39.0,
+            clampInput = ClampPkpdScenarioReconcile.Input(
+                bgMgdl = 220.0,
+                targetBgMgdl = 100.0,
+                deltaMgdl5m = 0.5,
+                pkpdEventualMgdl = 39.0,
+                scenarioTerminalMgdl = null,
+                scenarioPathMinMgdl = null,
+                scenarioPathMinHitFloor = false,
+                digestionOrMealActive = false,
+                sportTime = false,
+                postHypoDeliveryActive = false,
+            ),
+        )
+        assertTrue(snap.plateauFloorLifted)
+        assertTrue(snap.minPredMgdl >= ClampPkpdScenarioReconcile.SCN_PATHMIN_MGDL - 0.001)
+        assertTrue(snap.minPredMgdl <= snap.eventualMgdl + 0.001)
+        assertTrue(snap.source.contains("PLATEAU_FLOOR_LIFT"))
+    }
+
+    @Test
+    fun fallingHard_doesNotPlateauLift() {
+        val snap = DoseTerminalSnapshotBuilder.build(
+            authority = null,
+            applyResult = null,
+            authorityEnabled = false,
+            fallbackEventualMgdl = 39.0,
+            fallbackMinPredMgdl = 39.0,
+            clampInput = ClampPkpdScenarioReconcile.Input(
+                bgMgdl = 220.0,
+                targetBgMgdl = 100.0,
+                deltaMgdl5m = -4.0,
+                pkpdEventualMgdl = 39.0,
+                scenarioTerminalMgdl = null,
+                scenarioPathMinMgdl = null,
+                scenarioPathMinHitFloor = false,
+                digestionOrMealActive = false,
+                sportTime = false,
+                postHypoDeliveryActive = false,
+            ),
+        )
+        assertFalse(snap.plateauFloorLifted)
+        assertEquals(39.0, snap.minPredMgdl, 0.001)
+    }
+
+    @Test
     fun authorityDisabled_clampCanStillLiftRawPkpd() {
         val snap = DoseTerminalSnapshotBuilder.build(
             authority = null,

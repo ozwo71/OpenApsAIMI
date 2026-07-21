@@ -68,13 +68,20 @@ object PkpdCorrectionPrudence {
 }
 
 /**
- * Maps a 0–1 prudence slider to the SMB tail damping floor.
- * Higher slider = more prudence = lower floor (0.92 → 0.70) = stronger damping = LESS tail delivery.
- * See [PkpdSmbTailDamping] for the authoritative semantics.
+ * Maps a 0–1 **storage** prudence level to the SMB tail damping floor.
+ * Higher storage level = more prudence = lower floor = stronger damping = LESS tail delivery.
+ *
+ * UI polarity (Wave1): both Simple sliders use **left = cautious, right = more delivery**.
+ * The Compose screen therefore presents `uiLevel = 1 - storageLevel` for this axis so
+ * left/right labels match [PkpdCorrectionPrudence] (left cautious, right aggressive).
+ * See [PkpdSmbTailDamping] for authoritative damping semantics.
  */
 object PkpdTailPrudence {
     fun readLevel(preferences: Preferences): Double =
         readLevelFromDamping(preferences.get(DoubleKey.OApsAIMISmbTailDamping))
+
+    /** UI level: 0 = cautious (less late SMB), 1 = allow more late SMB. */
+    fun readUiLevel(preferences: Preferences): Double = (1.0 - readLevel(preferences)).coerceIn(0.0, 1.0)
 
     internal fun readLevelFromDamping(damping: Double): Double =
         PkpdSmbTailDamping.sliderLevelFromDamping(damping)
@@ -84,6 +91,11 @@ object PkpdTailPrudence {
             DoubleKey.OApsAIMISmbTailDamping,
             dampingForLevel(level).coerceIn(DoubleKey.OApsAIMISmbTailDamping.min, DoubleKey.OApsAIMISmbTailDamping.max),
         )
+    }
+
+    /** Apply from UI level (left cautious → right allow more). */
+    fun applyUiLevel(preferences: Preferences, uiLevel: Double) {
+        applyLevel(preferences, (1.0 - uiLevel.coerceIn(0.0, 1.0)).coerceIn(0.0, 1.0))
     }
 
     internal fun dampingForLevel(level: Double): Double =

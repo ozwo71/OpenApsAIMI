@@ -124,21 +124,22 @@ fun AimiPkpdSettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
-                    PrimaryTabRow(selectedTabIndex = selectedLevel.ordinal) {
+                    PrimaryTabRow(
+                        selectedTabIndex = when (selectedLevel) {
+                            PkpdSettingsLevel.SIMPLE -> 0
+                            PkpdSettingsLevel.ADVANCED, PkpdSettingsLevel.EXPERT -> 1
+                        },
+                    ) {
                         Tab(
                             selected = selectedLevel == PkpdSettingsLevel.SIMPLE,
                             onClick = { selectedLevel = PkpdSettingsLevel.SIMPLE },
                             text = { Text(stringResource(R.string.aimi_pkpd_level_simple)) },
                         )
                         Tab(
-                            selected = selectedLevel == PkpdSettingsLevel.ADVANCED,
+                            selected = selectedLevel == PkpdSettingsLevel.ADVANCED ||
+                                selectedLevel == PkpdSettingsLevel.EXPERT,
                             onClick = { selectedLevel = PkpdSettingsLevel.ADVANCED },
                             text = { Text(stringResource(R.string.aimi_pkpd_level_advanced)) },
-                        )
-                        Tab(
-                            selected = selectedLevel == PkpdSettingsLevel.EXPERT,
-                            onClick = { selectedLevel = PkpdSettingsLevel.EXPERT },
-                            text = { Text(stringResource(R.string.aimi_pkpd_level_expert)) },
                         )
                     }
 
@@ -165,15 +166,12 @@ fun AimiPkpdSettingsScreen(
                             snackbarHostState = snackbarHostState,
                             scope = scope,
                         )
-                        PkpdSettingsLevel.ADVANCED -> PkpdAdvancedSettingsContent(
+                        PkpdSettingsLevel.ADVANCED, PkpdSettingsLevel.EXPERT -> PkpdAdvancedSettingsContent(
                             preferences = preferences,
                             preferenceRevision = preferenceRevision,
                             onPreferenceRevisionBump = { preferenceRevision++ },
                             snackbarHostState = snackbarHostState,
                             scope = scope,
-                        )
-                        PkpdSettingsLevel.EXPERT -> PkpdExpertSettingsContent(
-                            preferenceRevision = preferenceRevision,
                         )
                     }
                 }
