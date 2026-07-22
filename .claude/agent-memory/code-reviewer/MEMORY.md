@@ -72,3 +72,6 @@
 - `equil-migration.md` — detailed Equil Compose migration review (2026-03-09)
 - Earlier migration reviews (NSClient, Tidepool, Wear, SMS, Preferences, EOPatch2): see conversation
   history from 2026-03-01 and 2026-03-02.
+- `aimi-pkpd-egp-review.md` — AIMI PKPD/EGP endogenous-reversion prediction path (Guard A/B
+  review, 2026-07-22): where the physics live, the stale-baseline-constant fragility in
+  `PkpdSoftFloorPathMin`, safe cap-pattern reference, test conventions.

@@ -116,7 +116,9 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdLearningDiagnostics
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.TapPeakGovernor
+import app.aaps.plugins.aps.openAPSAIMI.compose.PkpdTailPrudence
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.TapSitePeakShift
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.TrajectoryPeakBias
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.TrajectoryPeakMismatchScorer
@@ -234,6 +236,19 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         migrateClassicAutodriveToV3()
         preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey::class.java)
         preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey::class.java)
+
+        // Diagnostic (2026-07-22): trace the simplified PK/PD "tail power" slider key to pin the
+        // reported startup reset. The startup snapshot answers "did the value survive the restart?";
+        // each runtime change is fingerprinted by its landing value (Stability ladder 0.76/0.81/0.86;
+        // migrate / applyLevel-centre 0.85; raw key default 0.5). Marker: PKPD_TAIL_TRACE.
+        logTailDampingSnapshot("startup")
+        tailDampingTraceDisposable?.dispose()
+        tailDampingTraceDisposable = rxBus.toObservable(EventPreferenceChange::class.java).subscribe(
+            { event ->
+                if (event.isChanged(DoubleKey.OApsAIMISmbTailDamping.key)) logTailDampingSnapshot("change")
+            },
+            { t -> aapsLogger.error(LTag.APS, "PKPD_TAIL_TRACE subscription error", t) },
+        )
         // Prewarm Therapy snapshot cache at plugin start to avoid first-loop default flags.
         aimiPluginIoScope.launch {
             runCatching { Therapy(persistenceLayer).updateStatesBasedOnTherapyEvents() }
@@ -320,11 +335,23 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     }
     override fun getGlucoseStatusData(allowOldData: Boolean): GlucoseStatus? =
         glucoseStatusCalculatorAimi.getGlucoseStatusData(allowOldData)
+    /** Diagnostic snapshot of the simplified PK/PD tail-power slider key ([phase] = startup|change). */
+    private fun logTailDampingSnapshot(phase: String) {
+        val raw = preferences.get(DoubleKey.OApsAIMISmbTailDamping)
+        aapsLogger.info(
+            LTag.APS,
+            "PKPD_TAIL_TRACE $phase raw=$raw effective=${PkpdSmbTailDamping.effectiveStoredValue(raw)} " +
+                "uiLevel=${PkpdTailPrudence.readUiLevel(preferences)}",
+        )
+    }
+
     override suspend fun onStop() {
         super.onStop()
 
         physioPreferenceDisposable?.dispose()
         physioPreferenceDisposable = null
+        tailDampingTraceDisposable?.dispose()
+        tailDampingTraceDisposable = null
         
         // ?? Stop AIMI Steps Manager
         try {
@@ -366,6 +393,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
     /** R?agit au switch Physio sans red?marrer l?app (planifie / annule WorkManager). */
     private var physioPreferenceDisposable: Disposable? = null
+
+    /** Diagnostic: rx subscription tracing writes to `OApsAIMISmbTailDamping` (PKPD_TAIL_TRACE). */
+    private var tailDampingTraceDisposable: Disposable? = null
 
     // ?tat EMA persistant (cl? Prefs ? cr?er si tu veux le garder entre runs)
     private var tddEma: Double? = null

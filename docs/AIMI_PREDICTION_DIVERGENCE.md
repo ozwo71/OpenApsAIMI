@@ -27,6 +27,13 @@ Les signalements « prédictions AIMI fausses ou contradictoires » sont **réel
 
 **Correctif terrain (2026-07-18) :** `ClampPkpdScenarioReconcile` — réconciliation **évidence-gatée** du faux plancher PKPD **avant** SafetyNet **et** stacking, **même si** Prediction Authority est ON. Bras classiques zone-2 + bras `DIGESTION_ACTIVE` / meal-active en zone-3. Veto chute / sport / post-hypo / pathMin scénario. Marker log : `CLAMP_RECONCILE`. La racine (NUMERIC_FLOOR / C1 snapshot unique) reste la direction long terme.
 
+**Réversion endogène (EGP) — Wave4 H3 + garde-fous terrain (2026-07-22) :** `AdvancedPredictionEngine` applique une dérive lente (`ENDO_REVERSION_RATE`) vers une baseline quand l'insuline est épuisée (`|impact/pas| < ENDO_INSULIN_NEGLIGIBLE_MGDL`), sur IOB/COB/UAM/ZT **et** hybrid, afin de décoller les courbes du plancher absorbant 39. Ce terme alimente `minPredictedAcrossCurves` → protection hypo, donc deux garde-fous sécurité issus de l'analyse du support-package `1784724586473` (24 h) :
+
+- **Guard A — ancre plafonnée par le BG courant.** L'ancre de réversion vaut `min(ENDO_REVERSION_BASELINE_MGDL, max(BG, NUMERIC_FLOOR))`. Sur un plateau bas (ex. BG=70 à plat) l'EGP ne prédit plus un rebond au-dessus de la valeur mesurée (avant : `soft`=80 alors que le BG réel restait 70) ; l'artefact plancher 39 reste corrigé dès que BG > 80.
+- **Guard B — suspension sur chute franche.** Si `delta ≤ -3 mg/dL/5 min` (aligné sur `ClampPkpdScenarioReconcile.MAX_NEG_DELTA_MGDL`), l'EGP est totalement suspendue pour le tick : le path-min de sécurité reste pessimiste pendant une vraie descente (observé : -11).
+
+Télémétrie d'étude (`AIMI_Decisions.jsonl` → `adjustments.pkpd_soft_floor`) : `raw_path_min_mgdl`, `soft_path_min_mgdl`, `delta_soft_minus_raw_mgdl`, `applied`, `suppressed_by_falling_trend`, `reason` (`egp_applied_on_insulin_curves` / `endo_suppressed_falling_trend` / `floor_but_insulin_still_active` / …). Marker log : `PKPD_SOFT_FLOOR`. **Validation terrain 24 h :** BG plancher réel 70 (aucune hypo), 116 SMB tous à BG ≥ 150, **0 SMB sous EGP+BG < 95** — la protection hypo n'a jamais été supprimée.
+
 ---
 
 ## 2. Ce que l'utilisateur voit vs ce que le code fait
