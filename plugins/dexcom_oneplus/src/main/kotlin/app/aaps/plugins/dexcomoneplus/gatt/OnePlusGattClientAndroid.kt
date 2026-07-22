@@ -131,9 +131,14 @@ class OnePlusGattClientAndroid(
             )
             if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
                 connected = true
-                try {
-                    g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
-                } catch (_: Throwable) {
+                // Juggluco's Dex/ONE+ path lets the OS negotiate the interval. Forcing HIGH
+                // (7.5 ms) correlated with peer status 19 right after the post-auth 0x4E, so this
+                // is off by default (see [OemDeviceProfile.forceHighConnectionPriority]).
+                if (profile.forceHighConnectionPriority) {
+                    try {
+                        g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
+                    } catch (_: Throwable) {
+                    }
                 }
                 // Juggluco: wait out BOND_BONDING before discoverServices.
                 val bond = g.device?.bondState ?: BluetoothDevice.BOND_NONE
@@ -548,13 +553,13 @@ class OnePlusGattClientAndroid(
     }
 
     private fun beginPostConnect(g: BluetoothGatt) {
-        if (profile.requestMtuOnConnect) {
+        if (profile.requestMtu && profile.requestMtuOnConnect) {
             val mtu = profile.preferredMtu.coerceIn(23, 517)
             if (!g.requestMtu(mtu)) {
                 g.discoverServices()
             }
         } else {
-            // Ob1-like: skip MTU on connect (Samsung status 147/fragile link).
+            // Juggluco Dex/ONE+ never requests MTU (stays at 23). Discover straight away.
             g.discoverServices()
         }
     }
@@ -794,6 +799,8 @@ class OnePlusGattClientAndroid(
     }
 
     private fun maybeRequestMtuAfterReady(g: BluetoothGatt) {
+        // Off by default for ONE+ (Juggluco Dex never requests MTU — see OemDeviceProfile.requestMtu).
+        if (!profile.requestMtu) return
         if (profile.requestMtuOnConnect) return
         val mtu = profile.preferredMtu.coerceIn(23, 517)
         if (mtu <= 23) return

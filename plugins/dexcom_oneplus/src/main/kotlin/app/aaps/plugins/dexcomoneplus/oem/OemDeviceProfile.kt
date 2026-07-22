@@ -49,6 +49,19 @@ data class OemDeviceProfile(
      * (see driver). Later attempts connect by known MAC after a best-effort scan.
      */
     val requireAdvBeforeConnect: Boolean = false,
+    /**
+     * Force `BluetoothGatt.CONNECTION_PRIORITY_HIGH` (7.5 ms interval) on connect. Juggluco's
+     * Dex / ONE+ path does **not** — an aggressive interval correlated with the transmitter
+     * terminating the link (peer status 19) right after the post-auth `0x4E`. Default off: let
+     * the OS negotiate the interval, as Juggluco does.
+     */
+    val forceHighConnectionPriority: Boolean = false,
+    /**
+     * Request a larger ATT MTU. Juggluco's Dex / ONE+ path **never** requests MTU (stays at 23,
+     * which fits an EGV frame); requesting 517→23 mid-connection is an extra exchange the ONE+
+     * dislikes. Default off. [requestMtuOnConnect] only chooses *when* to request, if this is on.
+     */
+    val requestMtu: Boolean = false,
 )
 
 enum class OemProfileId {
