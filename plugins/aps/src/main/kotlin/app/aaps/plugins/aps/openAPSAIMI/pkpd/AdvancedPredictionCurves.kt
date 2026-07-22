@@ -6,6 +6,8 @@ package app.aaps.plugins.aps.openAPSAIMI.pkpd
  *
  * Wave4 H3: when endogenous reversion is enabled, insulin-only series share EGP with hybrid.
  * [insulinPathMinRawMgdl] / [insulinPathMinSoftMgdl] support JSON study (pre-EGP vs published).
+ * Field correction 2026-07-22: Guard A caps the EGP anchor at current BG; Guard B suspends EGP on
+ * hard falls ([endogenousReversionSuppressedByTrend]).
  */
 data class AdvancedPredictionCurves(
     val iob: List<Double>,
@@ -19,6 +21,8 @@ data class AdvancedPredictionCurves(
     val insulinPathMinSoftMgdl: Double? = null,
     /** True when EGP actually raised at least one insulin-only step. */
     val endogenousReversionOnInsulinCurves: Boolean = false,
+    /** Guard B — true when EGP was suspended for this tick because BG was falling hard. */
+    val endogenousReversionSuppressedByTrend: Boolean = false,
 ) {
     val uamTerminal: Double? get() = uam.lastOrNull()?.takeIf { it.isFinite() }
     val cobTerminal: Double? get() = cob.lastOrNull()?.takeIf { it.isFinite() }

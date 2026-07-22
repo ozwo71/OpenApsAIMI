@@ -20,9 +20,20 @@ object AdvancedPredictionEngine {
     // plancher absorbant 39 et y restent alors que le BG réel ne touche pas l'hypo.
     // Wave4 H3: même physique sur IOB/COB/UAM/ZT **et** hybrid (une vérité graphe + path-min + dose).
     // Gate: |impact insuline/pas| négligeable + sous baseline → dérive lente vers ≈80.
+    //
+    // Field correction 2026-07-22 (support-package 1784724586473, 24 h) — deux garde-fous sécurité :
+    //  • Guard A : l'ancre de réversion est plafonnée par le BG courant (jamais > BG quand BG < 80),
+    //    pour ne pas *inventer* un rebond au-dessus de la valeur mesurée sur un plateau bas
+    //    (observé : BG=70 à plat → EGP prédisait 80). Corrige toujours l'artefact plancher 39.
+    //  • Guard B : réversion totalement suspendue quand le BG chute franchement (delta ≤ -3), pour
+    //    laisser le path-min de sécurité rester pessimiste pendant une vraie descente (observé : -11).
     private const val ENDO_REVERSION_BASELINE_MGDL = 80.0
     private const val ENDO_REVERSION_RATE = 0.06            // fraction du gap comblée par pas de 5 min (lent)
     private const val ENDO_INSULIN_NEGLIGIBLE_MGDL = 0.3    // |impact insuline/pas| en dessous = insuline épuisée
+
+    /** Guard B — sous ce delta (mg/dL/5 min) le BG chute franchement : on suspend l'EGP.
+     * Aligné sur [app.aaps.plugins.aps.openAPSAIMI.prediction.ClampPkpdScenarioReconcile.MAX_NEG_DELTA_MGDL]. */
+    private const val ENDO_REVERSION_FALLING_HARD_DELTA_MGDL = -3.0
 
     /**
      * Predict the BG evolution using the final ISF/sensitivity applied by the decision engine.
@@ -122,6 +133,15 @@ object AdvancedPredictionEngine {
         var softInsulinPathMin = Double.POSITIVE_INFINITY
         var endoAppliedOnInsulin = false
 
+        // Guard A — cap the reversion anchor at the current BG so EGP never predicts a rise above
+        // where the patient actually sits (still lifts the absorbing floor-39 artefact when BG > 80).
+        val endoBaseline = min(ENDO_REVERSION_BASELINE_MGDL, maxOf(currentBG, NUMERIC_FLOOR))
+        // Guard B — suspend EGP entirely while BG is falling hard: keep the safety path-min pessimistic.
+        // Fail-closed on a non-finite delta: an unknown trend suspends EGP (never lifts on garbage).
+        val endoSuppressedByFallingTrend = endogenousReversionEnabled &&
+            (!delta.isFinite() || delta <= ENDO_REVERSION_FALLING_HARD_DELTA_MGDL)
+        val endoActive = endogenousReversionEnabled && !endoSuppressedByFallingTrend
+
         repeat(steps) { stepIndex ->
             val minutesInFuture = (stepIndex + 1) * STEP_MINUTES
             val targetTime = now + (minutesInFuture * 60_000L)
@@ -145,13 +165,13 @@ object AdvancedPredictionEngine {
             rawInsulinPathMin = min(rawInsulinPathMin, min(lastIob, min(lastCob, lastUam)))
 
             val insulinNegligible = abs(insulinImpact) < ENDO_INSULIN_NEGLIGIBLE_MGDL
-            if (endogenousReversionEnabled && insulinNegligible) {
+            if (endoActive && insulinNegligible) {
                 val beforeIob = lastIob
                 val beforeCob = lastCob
                 val beforeUam = lastUam
-                lastIob = applyEndogenousReversion(lastIob)
-                lastCob = applyEndogenousReversion(lastCob)
-                lastUam = applyEndogenousReversion(lastUam)
+                lastIob = applyEndogenousReversion(lastIob, endoBaseline)
+                lastCob = applyEndogenousReversion(lastCob, endoBaseline)
+                lastUam = applyEndogenousReversion(lastUam, endoBaseline)
                 if (lastIob > beforeIob + 1e-6 || lastCob > beforeCob + 1e-6 || lastUam > beforeUam + 1e-6) {
                     endoAppliedOnInsulin = true
                 }
@@ -160,8 +180,8 @@ object AdvancedPredictionEngine {
 
             lastHybrid = (lastHybrid - insulinImpact * iobDampingFactor + carbImpact + hybridMomentum)
                 .coerceIn(NUMERIC_FLOOR, NUMERIC_CEILING)
-            if (endogenousReversionEnabled && insulinNegligible) {
-                lastHybrid = applyEndogenousReversion(lastHybrid)
+            if (endoActive && insulinNegligible) {
+                lastHybrid = applyEndogenousReversion(lastHybrid, endoBaseline)
             }
             hybridMomentum *= momentumDecay
 
@@ -185,12 +205,14 @@ object AdvancedPredictionEngine {
             insulinPathMinRawMgdl = rawMin,
             insulinPathMinSoftMgdl = softMin,
             endogenousReversionOnInsulinCurves = endoAppliedOnInsulin,
+            endogenousReversionSuppressedByTrend = endoSuppressedByFallingTrend,
         )
     }
 
-    private fun applyEndogenousReversion(value: Double): Double {
-        if (!value.isFinite() || value >= ENDO_REVERSION_BASELINE_MGDL) return value
-        return (value + (ENDO_REVERSION_BASELINE_MGDL - value) * ENDO_REVERSION_RATE)
-            .coerceAtMost(ENDO_REVERSION_BASELINE_MGDL)
+    /** Drift [value] toward [baseline] (Guard A cap) when below it; no-op once at/above baseline. */
+    private fun applyEndogenousReversion(value: Double, baseline: Double): Double {
+        if (!value.isFinite() || value >= baseline) return value
+        return (value + (baseline - value) * ENDO_REVERSION_RATE)
+            .coerceAtMost(baseline)
     }
 }

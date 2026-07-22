@@ -19,6 +19,8 @@ data class PkpdSoftFloorTelemetry(
     val hitNumericFloor: Boolean,
     val applied: Boolean,
     val endogenousReversionEnabled: Boolean,
+    /** Guard B — EGP suspended this tick because BG was falling hard. */
+    val suppressedByFallingTrend: Boolean,
     val reason: String,
 ) {
     fun toJsonObject(): JSONObject =
@@ -30,6 +32,7 @@ data class PkpdSoftFloorTelemetry(
             hybridTerminalMgdl?.let { put("hybrid_terminal_mgdl", it) }
             put("hit_numeric_floor", hitNumericFloor)
             put("endogenous_reversion_enabled", endogenousReversionEnabled)
+            put("suppressed_by_falling_trend", suppressedByFallingTrend)
             put("reason", reason)
             softPathMinMgdl?.let { soft ->
                 rawPathMinMgdl?.let { raw ->
@@ -46,7 +49,9 @@ object PkpdSoftFloorPathMin {
     /** Must match [AdvancedPredictionEngine] NUMERIC_FLOOR. */
     const val NUMERIC_FLOOR_MGDL = 39.0
 
-    /** Must match [AdvancedPredictionEngine] ENDO_REVERSION_BASELINE_MGDL. */
+    /** Absolute reversion ceiling — must match [AdvancedPredictionEngine] ENDO_REVERSION_BASELINE_MGDL.
+     * The effective cap is dynamic (Guard A: `min(this, max(currentBG, floor))`), computed in
+     * [resolveSoftPathMin] so the soft path-min never exceeds the current BG on a low plateau. */
     const val ENDO_REVERSION_BASELINE_MGDL = 80.0
 
     /**
@@ -63,11 +68,13 @@ object PkpdSoftFloorPathMin {
         val hybridTerminal = curves.hybridTerminal
         val hitFloor = raw != null && raw <= FLOOR_ARTEFACT_NEAR_MGDL
         val endoOnInsulin = curves.endogenousReversionOnInsulinCurves
+        val suppressedByTrend = curves.endogenousReversionSuppressedByTrend
 
         val soft = resolveSoftPathMin(
             raw = raw,
             publishedMin = publishedMin,
             hybridTerminal = hybridTerminal,
+            currentBgMgdl = curves.iob.firstOrNull()?.takeIf { it.isFinite() },
             endogenousReversionEnabled = endogenousReversionEnabled,
             endoOnInsulin = endoOnInsulin,
         )
@@ -81,6 +88,7 @@ object PkpdSoftFloorPathMin {
             publishedMin == null -> "no_insulin_curves"
             !endogenousReversionEnabled -> "endo_reversion_disabled"
             applied -> "egp_applied_on_insulin_curves"
+            suppressedByTrend && hitFloor -> "endo_suppressed_falling_trend"
             hitFloor && !endoOnInsulin -> "floor_but_insulin_still_active"
             hitFloor -> "floor_no_material_lift"
             else -> "raw_above_floor_band"
@@ -93,6 +101,7 @@ object PkpdSoftFloorPathMin {
             hitNumericFloor = hitFloor,
             applied = applied,
             endogenousReversionEnabled = endogenousReversionEnabled,
+            suppressedByFallingTrend = suppressedByTrend,
             reason = reason,
         )
     }
@@ -103,7 +112,8 @@ object PkpdSoftFloorPathMin {
         val hyb = telemetry.hybridTerminalMgdl?.toInt()?.toString() ?: "n/a"
         return "$LOG_PREFIX: raw=$raw soft=$soft hybT=$hyb " +
             "hitFloor=${telemetry.hitNumericFloor} applied=${telemetry.applied} " +
-            "endo=${telemetry.endogenousReversionEnabled} reason=${telemetry.reason}"
+            "endo=${telemetry.endogenousReversionEnabled} fallSuppressed=${telemetry.suppressedByFallingTrend} " +
+            "reason=${telemetry.reason}"
     }
 
     /**
@@ -127,13 +137,20 @@ object PkpdSoftFloorPathMin {
         raw: Double?,
         publishedMin: Double?,
         hybridTerminal: Double?,
+        currentBgMgdl: Double?,
         endogenousReversionEnabled: Boolean,
         endoOnInsulin: Boolean,
     ): Double? {
         if (!endogenousReversionEnabled || !endoOnInsulin) return publishedMin
+        // Guard A made explicit here (do not rely solely on the engine capping hybridTerminal):
+        // dynamic cap = min(ceiling, max(currentBG, floor)) so the soft path-min never exceeds the
+        // current BG on a low plateau. Falls back to the flat ceiling when BG is unknown.
+        val dynamicCap = currentBgMgdl
+            ?.let { min(ENDO_REVERSION_BASELINE_MGDL, max(it, NUMERIC_FLOOR_MGDL)) }
+            ?: ENDO_REVERSION_BASELINE_MGDL
         val anchor = hybridTerminal
             ?.takeIf { it.isFinite() && it > FLOOR_ARTEFACT_NEAR_MGDL }
-            ?.let { min(it, ENDO_REVERSION_BASELINE_MGDL) }
+            ?.let { min(it, dynamicCap) }
         if (anchor == null || raw == null) return publishedMin
         return max(raw, anchor)
     }
