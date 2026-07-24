@@ -18,7 +18,7 @@ import app.aaps.plugins.dexcomoneplus.warmup.OnePlusWarmupClock
 /**
  * Post-KEKS Control / EGV path aligned with Juggluco `getdatacmd` + xDrip Ob1 `doGetData` (G7).
  *
- * Sequence: enable Control **NOTIFY** (INDICATE fallback) → [OnePlusEGlucoseTx] (`0x4e`) →
+ * Sequence: enable Control **INDICATE** (NOTIFY fallback) → [OnePlusEGlucoseTx] (`0x4e`) →
  * continuous EGV loop → optional BackFill (`0x59`) once dex time is known from EGV.
  * SessionStart (`0x26`) only reactively if EGV reports Stopped (never auto SessionStop).
  *
@@ -73,7 +73,11 @@ class OnePlusEgvSession(
             return
         }
 
-        gatt.enableControlNotifications()
+        // Control is INDICATE on ONE+/G7. xDrip (same libkeks stack) does setupIndication(Control)
+        // then writes 0x4E; we previously enabled NOTIFY → transmitter accepted the request but
+        // could not deliver the EGV indication and terminated the link (peer status 19). Juggluco
+        // uses NOTIFY, but that is its native stack — libkeks/xDrip is our reference here.
+        gatt.enableControlIndications()
         // Ob1 speakSlowly() — give CCCD write time before Control write.
         try {
             Thread.sleep(CCCD_SETTLE_MS)
@@ -114,9 +118,9 @@ class OnePlusEgvSession(
                     try {
                         Log.w(
                             OnePlusLogMarkers.TAG,
-                            "${OnePlusLogMarkers.SESSION}: Control quiet after NOTIFY — try INDICATE",
+                            "${OnePlusLogMarkers.SESSION}: Control quiet after INDICATE — try NOTIFY",
                         )
-                        gatt.enableControlIndications()
+                        gatt.enableControlNotifications()
                         Thread.sleep(CCCD_SETTLE_MS)
                     } catch (t: Throwable) {
                         Log.w(
@@ -157,7 +161,8 @@ class OnePlusEgvSession(
             Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: EGV GATT not connected")
             return false
         }
-        gatt.enableControlNotifications()
+        // Control is INDICATE on ONE+/G7 (xDrip libkeks reference); NOTIFY made the peer drop.
+        gatt.enableControlIndications()
         try {
             Thread.sleep(CCCD_SETTLE_MS)
         } catch (_: InterruptedException) {

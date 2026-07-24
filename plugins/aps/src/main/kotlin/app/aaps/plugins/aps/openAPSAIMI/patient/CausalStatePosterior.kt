@@ -56,7 +56,7 @@ data class CausalStatePosterior(
         mealMargin: Double = 0.08,
     ): Boolean = mealConfidence >= minConfidence && mealConfidence >= protectiveConfidence + mealMargin
 
-    fun learningContextClean(minQuality: Double = 0.58): Boolean =
+    fun learningContextClean(minQuality: Double = LEARNING_QUALITY_MIN): Boolean =
         learningQuality >= minQuality &&
             !(dominant == CausalStateId.POST_HYPO_RECOVERY && dominantConfidence >= 0.68) &&
             !(dominant == CausalStateId.ABSORPTION_UNCERTAIN && dominantConfidence >= 0.55)
@@ -80,6 +80,15 @@ data class CausalStatePosterior(
         }
 
     companion object {
+        /**
+         * Minimum causal learning quality to allow PKPD kinetics ([AdaptivePkPdEstimator]) learning.
+         * Lowered 0.58 → 0.50 (field data 2026-07-24): a UAM-only user (COB=0) has chronic absorption
+         * uncertainty, so `learningQuality` sat < 0.58 on ~93% of ticks and DIA/peak learning ran on only
+         * ~7% (fasting windows). 0.50 restores learning on the cleaner ~17% while still excluding the
+         * noisiest ticks. Single source of truth: also used by the replay quality "unclean" flag.
+         */
+        const val LEARNING_QUALITY_MIN = 0.50
+
         val EMPTY = CausalStatePosterior(learningQuality = 1.0)
     }
 }
