@@ -100,6 +100,11 @@ class OnePlusSessionAuthKeks(
                         plugin,
                     )
                 }
+                // TIME_EXTENDED is the bond trigger and leaves libkeks in GET_DATA. It is not a
+                // response consumed by receivedResponse(GET_DATA), so advance immediately instead
+                // of waiting for a notification the transmitter will never send.
+                emitANext(plugin)?.let { return finalizeAuthResult(it, plugin) }
+                return@repeat
             }
 
             if (notify.source == OnePlusKeksNotifySource.AUTHENTICATION) {
