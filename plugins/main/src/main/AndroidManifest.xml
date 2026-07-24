@@ -22,6 +22,11 @@
             android:theme="@style/AppTheme" />
 
         <activity
+            android:name=".general.dashboard.AimiAdaptationStatusActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme.NoActionBar" />
+
+        <activity
             android:name=".general.manual.UserManualActivity"
             android:exported="false"
             android:theme="@style/AppTheme.NoActionBar" />

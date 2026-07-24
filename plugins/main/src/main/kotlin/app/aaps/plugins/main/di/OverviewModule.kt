@@ -34,9 +34,11 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.AutodriveEngine
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMIPhysioDataRepositoryMTR
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard
 import app.aaps.plugins.main.general.dashboard.AdjustmentDetailsActivity
+import app.aaps.plugins.main.general.dashboard.AimiAdaptationStatusActivity
 import app.aaps.plugins.main.general.dashboard.DashboardFragment
 import app.aaps.plugins.main.general.dashboard.DashboardModesActivity
 import app.aaps.plugins.main.general.dashboard.DashboardShellDeps
+import app.aaps.plugins.main.general.dashboard.viewmodel.AimiAdaptationStatusViewModel
 import app.aaps.plugins.main.general.dashboard.viewmodel.OverviewViewModel
 import app.aaps.plugins.main.general.overview.OverviewDataImpl
 import app.aaps.plugins.main.general.overview.OverviewEntryFragment
@@ -71,6 +73,7 @@ abstract class OverviewModule {
     @ContributesAndroidInjector abstract fun contributesDashboardFragment(): DashboardFragment
     @ContributesAndroidInjector abstract fun contributesDashboardModesActivity(): DashboardModesActivity
     @ContributesAndroidInjector abstract fun contributesAdjustmentDetailsActivity(): AdjustmentDetailsActivity
+    @ContributesAndroidInjector abstract fun contributesAimiAdaptationStatusActivity(): AimiAdaptationStatusActivity
     @ContributesAndroidInjector abstract fun graphDataInjector(): GraphData
 
     @Module
@@ -132,6 +135,14 @@ abstract class OverviewModule {
             autodriveEngine,
             aimiPhysioDataRepository,
         )
+
+        @Provides
+        fun provideAimiAdaptationStatusViewModelFactory(
+            loop: Loop,
+            rxBus: RxBus,
+            preferences: Preferences,
+        ): AimiAdaptationStatusViewModel.Factory =
+            AimiAdaptationStatusViewModel.Factory(loop, rxBus, preferences)
 
         @Provides
         fun provideDashboardShellDeps(

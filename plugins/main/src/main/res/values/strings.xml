@@ -311,5 +311,102 @@
     <string name="adaptive_smoothing_quality_dialog_ok">Adaptive smoothing confidence: OK (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
     <string name="adaptive_smoothing_quality_dialog_uncertain">Adaptive smoothing confidence: uncertain (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
     <string name="adaptive_smoothing_quality_dialog_bad">Adaptive smoothing confidence: low (R=%1$.0f, outliers=%2$d%%, compression=%3$d%%)</string>
+
+    <!-- AIMI adaptation status -->
+    <string name="aimi_adaptation_status_title">AIMI adaptation status</string>
+    <string name="aimi_adaptation_status_no_data">Waiting for AIMI adaptation status. Results will appear after an AIMI loop run.</string>
+    <string name="aimi_adaptation_status_counts" comment="%1$d=active modules, %2$d=ready modules, %3$d=waiting or learning modules, %4$d=blocked or stale modules. Example: Active 2 · Ready 1 · Waiting/learning 5 · Attention 1">Active %1$d · Ready %2$d · Waiting/learning %3$d · Attention %4$d</string>
+    <string name="dashboard_aimi_adaptation_label">Adaptation</string>
+    <string name="dashboard_aimi_adaptation_no_data">Waiting for AIMI adaptation status</string>
+    <string name="dashboard_aimi_adaptation_a11y" comment="%1$s=the localized adaptation count summary. Example: AIMI adaptation status. Active 2 · Ready 1 · Waiting/learning 5 · Attention 1">AIMI adaptation status. %1$s</string>
+
+    <string name="aimi_adaptation_module_basal_neural_governance">Basal neural governance</string>
+    <string name="aimi_adaptation_module_unified_reactivity">Unified reactivity</string>
+    <string name="aimi_adaptation_module_basal_multi_scale">Basal multi-scale learner</string>
+    <string name="aimi_adaptation_module_pkpd">Adaptive PK/PD</string>
+    <string name="aimi_adaptation_module_online_learner">Online learner</string>
+    <string name="aimi_adaptation_module_night_growth_resistance">Night growth resistance</string>
+    <string name="aimi_adaptation_module_wcycle">Cycle adaptation</string>
+    <string name="aimi_adaptation_module_peak_governor">Peak governor</string>
+    <string name="aimi_adaptation_module_dia_governor">DIA governor</string>
+
+    <string name="aimi_adaptation_phase_disabled">Disabled</string>
+    <string name="aimi_adaptation_phase_waiting">Waiting</string>
+    <string name="aimi_adaptation_phase_learning">Learning</string>
+    <string name="aimi_adaptation_phase_ready">Ready</string>
+    <string name="aimi_adaptation_phase_active">Active</string>
+    <string name="aimi_adaptation_phase_stale">Stale</string>
+    <string name="aimi_adaptation_phase_blocked">Blocked</string>
+
+    <string name="aimi_adaptation_reason_feature_disabled">Feature is disabled</string>
+    <string name="aimi_adaptation_reason_waiting_for_samples">Waiting for enough samples</string>
+    <string name="aimi_adaptation_reason_waiting_for_events">Waiting for qualifying events</string>
+    <string name="aimi_adaptation_reason_waiting_for_feedbacks">Waiting for evaluated feedback</string>
+    <string name="aimi_adaptation_reason_waiting_for_observations">Waiting for observations</string>
+    <string name="aimi_adaptation_reason_warmup">Warm-up in progress</string>
+    <string name="aimi_adaptation_reason_learning_in_progress">Learning in progress</string>
+    <string name="aimi_adaptation_reason_ready">Ready to adapt</string>
+    <string name="aimi_adaptation_reason_active">Adaptation is active</string>
+    <string name="aimi_adaptation_reason_data_stale">Adaptation data is stale</string>
+    <string name="aimi_adaptation_reason_safety_hold">Held by a safety rule</string>
+    <string name="aimi_adaptation_reason_context_blocked">Blocked by the current context</string>
+    <string name="aimi_adaptation_reason_dependency_disabled">A required dependency is disabled</string>
+    <string name="aimi_adaptation_reason_no_result">No adaptation result yet</string>
+
+    <string name="aimi_adaptation_last_update_format" comment="%1$s=localized date and time, %2$s=localized freshness. Example: Last update: 7/24/26, 23:10 · 4 min ago">Last update: %1$s · %2$s</string>
+    <string name="aimi_adaptation_freshness_now">just now</string>
+    <string name="aimi_adaptation_freshness_minutes" comment="%1$d=whole minutes since the update. Example: 4 min ago">%1$d min ago</string>
+    <string name="aimi_adaptation_freshness_hours" comment="%1$d=whole hours since the update. Example: 2 h ago">%1$d h ago</string>
+    <string name="aimi_adaptation_no_module_update">No learner update yet</string>
+    <string name="aimi_adaptation_progress_format" comment="%1$s=evidence type, %2$d=completed evidence count, %3$d=required evidence count. Example: Samples: 4 / 12">%1$s: %2$d / %3$d</string>
+    <string name="aimi_adaptation_evidence_samples">Samples</string>
+    <string name="aimi_adaptation_evidence_events">Events</string>
+    <string name="aimi_adaptation_evidence_feedbacks">Feedback</string>
+    <string name="aimi_adaptation_evidence_observations">Observations</string>
+    <string name="aimi_adaptation_metrics_title">Metrics</string>
+
+    <string name="aimi_adaptation_metric_sample_count">Samples</string>
+    <string name="aimi_adaptation_metric_short_buffer_count">Short buffer</string>
+    <string name="aimi_adaptation_metric_medium_buffer_count">Medium buffer</string>
+    <string name="aimi_adaptation_metric_fasting_sample_count">Fasting samples</string>
+    <string name="aimi_adaptation_metric_short_update_count">Short updates</string>
+    <string name="aimi_adaptation_metric_medium_update_count">Medium updates</string>
+    <string name="aimi_adaptation_metric_long_update_count">Long updates</string>
+    <string name="aimi_adaptation_metric_short_analysis_count">Short analyses</string>
+    <string name="aimi_adaptation_metric_long_analysis_count">Long analyses</string>
+    <string name="aimi_adaptation_metric_pending_prediction_count">Pending predictions</string>
+    <string name="aimi_adaptation_metric_evaluated_feedback_count">Evaluated feedback</string>
+    <string name="aimi_adaptation_metric_release_count">Exercise-release corrections</string>
+    <string name="aimi_adaptation_metric_accepted_update_count">Accepted updates</string>
+    <string name="aimi_adaptation_metric_short_multiplier">Short multiplier</string>
+    <string name="aimi_adaptation_metric_medium_multiplier">Medium multiplier</string>
+    <string name="aimi_adaptation_metric_long_multiplier">Long multiplier</string>
+    <string name="aimi_adaptation_metric_combined_multiplier">Combined multiplier</string>
+    <string name="aimi_adaptation_metric_global_factor">Global factor</string>
+    <string name="aimi_adaptation_metric_short_factor">Short factor</string>
+    <string name="aimi_adaptation_metric_segment_factor">Segment factor</string>
+    <string name="aimi_adaptation_metric_sensitivity_factor">Sensitivity factor</string>
+    <string name="aimi_adaptation_metric_last_error">Last prediction error</string>
+    <string name="aimi_adaptation_metric_dia">DIA</string>
+    <string name="aimi_adaptation_metric_peak">Peak time</string>
+    <string name="aimi_adaptation_metric_tir">Time in range</string>
+    <string name="aimi_adaptation_metric_cv">Glucose variability</string>
+    <string name="aimi_adaptation_metric_confidence">Confidence</string>
+    <string name="aimi_adaptation_metric_smb_multiplier">SMB multiplier</string>
+    <string name="aimi_adaptation_metric_basal_multiplier">Basal multiplier</string>
+    <string name="aimi_adaptation_metric_extra_iob_headroom">Extra IOB headroom</string>
+    <string name="aimi_adaptation_metric_day_in_cycle">Day in cycle</string>
+    <string name="aimi_adaptation_metric_ic_multiplier">IC multiplier</string>
+    <string name="aimi_adaptation_metric_effective_value">Effective value</string>
+    <string name="aimi_adaptation_metric_prior_value">Prior value</string>
+    <string name="aimi_adaptation_metric_learned_value">Learned value</string>
+
+    <string name="aimi_adaptation_metric_value_count" comment="%1$.0f=a whole-number count. Example: 12">%1$.0f</string>
+    <string name="aimi_adaptation_metric_value_number" comment="%1$.3f=a decimal metric value. Example: 1.025">%1$.3f</string>
+    <string name="aimi_adaptation_metric_value_hours" comment="%1$.1f=a duration in hours. Example: 6.0 h">%1$.1f h</string>
+    <string name="aimi_adaptation_metric_value_minutes" comment="%1$.0f=a duration in minutes. Example: 55 min">%1$.0f min</string>
+    <string name="aimi_adaptation_metric_value_percent" comment="%1$.1f=a percentage value. Example: 82.5%">%1$.1f%%</string>
+    <string name="aimi_adaptation_metric_value_units" comment="%1$.2f=insulin units. Example: 0.50 U">%1$.2f U</string>
+    <string name="aimi_adaptation_metric_value_mgdl" comment="%1$.1f=a glucose prediction error in mg/dL. Example: 12.5 mg/dL">%1$.1f mg/dL</string>
 </resources>
 

@@ -16,6 +16,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -47,6 +48,26 @@ class UnifiedReactivityLearner @Inject constructor(
 ) {
     internal data class BgSample(val value: Double, val timestamp: Long)
 
+    data class SegmentFactorSnapshot(
+        val daypart: ReactivityDaypart,
+        val factor: Double,
+    )
+
+    data class StatusSnapshot(
+        val globalFactor: Double,
+        val shortTermFactor: Double,
+        val combinedFactor: Double,
+        val segmentFactors: List<SegmentFactorSnapshot>,
+        val lastAnalysis: AnalysisSnapshot?,
+        val last24hSampleCount: Int,
+        val last2hSampleCount: Int,
+        val shortAnalysisCount: Long,
+        val longAnalysisCount: Long,
+        val lastShortAnalysisTime: Long,
+        val lastAnalysisTime: Long,
+        val updatedAt: Long?,
+    )
+
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val bg24hRef = AtomicReference<List<BgSample>>(emptyList())
     private val bg2hRef = AtomicReference<List<BgSample>>(emptyList())
@@ -54,6 +75,11 @@ class UnifiedReactivityLearner @Inject constructor(
     private val bg24hRefreshInFlight = AtomicBoolean(false)
     private val bg2hRefreshInFlight = AtomicBoolean(false)
     private val exerciseRefreshInFlight = AtomicBoolean(false)
+    private val shortAnalysisCount = AtomicLong(0L)
+    private val longAnalysisCount = AtomicLong(0L)
+    private val statusRef = AtomicReference<StatusSnapshot>()
+    private var last24hSampleCount = 0
+    private var last2hSampleCount = 0
     
     companion object {
         private const val ANALYSIS_INTERVAL_MS = 30 * 60 * 1000L  // 30 minutes
@@ -76,7 +102,8 @@ class UnifiedReactivityLearner @Inject constructor(
         val adjustmentReason: String,
         val floorLocked: Boolean = false,
         val floorLockReason: String = "",
-        val floorReleased: Boolean = false
+        val floorReleased: Boolean = false,
+        val totalReadings: Int = 0,
     )
     
     var lastAnalysis: AnalysisSnapshot? = null
@@ -123,6 +150,7 @@ class UnifiedReactivityLearner @Inject constructor(
     
     init {
         load()
+        publishStatus()
     }
     
     /**
@@ -402,8 +430,12 @@ class UnifiedReactivityLearner @Inject constructor(
             adjustmentReason = reasonsStr,
             floorLocked = globalFactor <= 0.5501,
             floorLockReason = floorLockReason,
-            floorReleased = floorReleased
+            floorReleased = floorReleased,
+            totalReadings = perf.total_readings,
         )
+        last24hSampleCount = perf.total_readings
+        longAnalysisCount.incrementAndGet()
+        publishStatus(now)
         
         save()
         exportToCSV(perf, reasonsStr)
@@ -477,8 +509,11 @@ class UnifiedReactivityLearner @Inject constructor(
             val shortPerf = analyzeLast2h()
             if (shortPerf != null) {
                 computeShortTermAdjustment(shortPerf)
+                last2hSampleCount = shortPerf.total_readings
+                shortAnalysisCount.incrementAndGet()
             }
             lastShortAnalysisTime = now
+            publishStatus(now)
         }
         
         // === LONG-TERM ANALYSIS (every 30 min on last 24h) ===
@@ -487,6 +522,7 @@ class UnifiedReactivityLearner @Inject constructor(
             computeAdjustment(perf, pendingConfirmedRise)
             pendingConfirmedRise = false
             lastAnalysisTime = now
+            publishStatus(now)
         }
         
         save()
@@ -699,6 +735,39 @@ class UnifiedReactivityLearner @Inject constructor(
                     segmentFactors[daypart] = 1.0
                 }
             }
+        )
+    }
+
+    fun statusSnapshot(): StatusSnapshot {
+        val snapshot = statusRef.get()
+        return snapshot.copy(segmentFactors = snapshot.segmentFactors.toList())
+    }
+
+    private fun publishStatus(observedAt: Long? = null) {
+        val currentDaypart = ReactivityDaypart.fromHour(currentHourOfDay())
+        val immutableSegments = ReactivityDaypart.entries.map { daypart ->
+            SegmentFactorSnapshot(daypart, segmentFactors[daypart] ?: globalFactor)
+        }
+        val lastEngineUpdate = maxOf(lastAnalysisTime, lastShortAnalysisTime, lastAnalysis?.timestamp ?: 0L)
+        statusRef.set(
+            StatusSnapshot(
+                globalFactor = globalFactor,
+                shortTermFactor = shortTermFactor,
+                combinedFactor = ReactivityDaypart.combineFactors(
+                    globalFactor,
+                    shortTermFactor,
+                    segmentFactors[currentDaypart] ?: globalFactor,
+                ),
+                segmentFactors = immutableSegments,
+                lastAnalysis = lastAnalysis,
+                last24hSampleCount = last24hSampleCount,
+                last2hSampleCount = last2hSampleCount,
+                shortAnalysisCount = shortAnalysisCount.get(),
+                longAnalysisCount = longAnalysisCount.get(),
+                lastShortAnalysisTime = lastShortAnalysisTime,
+                lastAnalysisTime = lastAnalysisTime,
+                updatedAt = observedAt ?: lastEngineUpdate.takeIf { it > 0L },
+            )
         )
     }
     

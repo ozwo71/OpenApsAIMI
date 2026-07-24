@@ -166,6 +166,7 @@ class OverviewViewModel(
 
     private val _statusCardState = MutableLiveData<StatusCardState>()
     val statusCardState: LiveData<StatusCardState> = _statusCardState
+    @Volatile private var latestStatusCardState: StatusCardState? = null
 
     private val _adjustmentState = MutableLiveData<AdjustmentCardState>()
     val adjustmentState: LiveData<AdjustmentCardState> = _adjustmentState
@@ -229,6 +230,14 @@ class OverviewViewModel(
             updateScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
             started = true
             subscribeToUpdates()
+            updateScope?.launch {
+                while (true) {
+                    delay(ADAPTATION_FRESHNESS_TICK_MS)
+                    updateMutex.withLock {
+                        refreshAimiAdaptationSummary()
+                    }
+                }
+            }
         }
         // Always pull latest pump/IOB/loop state on resume — [started] can already be true after a shallow
         // pause, and loop completion often emits [EventLoopUpdateGui] without [EventRefreshOverview].
@@ -420,6 +429,49 @@ class OverviewViewModel(
             updateAdjustments()
             updateGraphMessage()
         }
+    }
+
+    private data class AimiAdaptationSummary(
+        val text: String,
+        val contentDescription: String,
+        val hasAttention: Boolean,
+    )
+
+    private fun buildAimiAdaptationSummary(rt: RT?, now: Long): AimiAdaptationSummary {
+        val adaptationState = AimiAdaptationStatusPresenter.present(
+            status = rt?.aimiAdaptationStatus,
+            now = now,
+            staleAfterMs = T.mins(preferences.get(IntKey.AlertsStaleDataThreshold).toLong()).msecs(),
+        )
+        val summary = if (adaptationState.hasStatus) {
+            resourceHelper.gs(
+                R.string.aimi_adaptation_status_counts,
+                adaptationState.activeCount,
+                adaptationState.readyCount,
+                adaptationState.waitingOrLearningCount,
+                adaptationState.attentionCount,
+            )
+        } else {
+            resourceHelper.gs(R.string.dashboard_aimi_adaptation_no_data)
+        }
+        return AimiAdaptationSummary(
+            text = summary,
+            contentDescription = resourceHelper.gs(R.string.dashboard_aimi_adaptation_a11y, summary),
+            hasAttention = adaptationState.attentionCount > 0,
+        )
+    }
+
+    private fun refreshAimiAdaptationSummary() {
+        val currentState = latestStatusCardState ?: return
+        val rt = loop.lastRun?.request?.rawData() as? RT
+        val summary = buildAimiAdaptationSummary(rt, dateUtil.now())
+        val refreshedState = currentState.copy(
+            aimiAdaptationSummary = summary.text,
+            aimiAdaptationContentDescription = summary.contentDescription,
+            aimiAdaptationHasAttention = summary.hasAttention,
+        )
+        latestStatusCardState = refreshedState
+        _statusCardState.postValue(refreshedState)
     }
 
     private suspend fun updateStatus() {
@@ -673,6 +725,7 @@ class OverviewViewModel(
         val insightFactor = "⚡ x${decimalFormatter.to1Decimal(relevance)}"
         
         val healthScore = rt?.trajectoryHealth?.toDouble()?.div(100.0) ?: autodriveEngine.getHealthScore()
+        val adaptationSummary = buildAimiAdaptationSummary(rt, now)
 
         val state = StatusCardState(
             glucoseText = glucoseText,
@@ -745,6 +798,9 @@ class OverviewViewModel(
             insightFactor = insightFactor,
             trajectoryRelevanceScore = relevance,
             aimiHealthScore = healthScore,
+            aimiAdaptationSummary = adaptationSummary.text,
+            aimiAdaptationContentDescription = adaptationSummary.contentDescription,
+            aimiAdaptationHasAttention = adaptationSummary.hasAttention,
 
             aimiPulseTitle = aimiPulseTitle,
             aimiPulseSummary = aimiPulseSummary,
@@ -755,6 +811,7 @@ class OverviewViewModel(
             adaptiveSmoothingQualityBadgeText = adaptiveSmoothingQualityBadgeText,
             adaptiveSmoothingQualityDialogMessage = adaptiveSmoothingQualityDialogMessage
         )
+        latestStatusCardState = state
         _statusCardState.postValue(state)
     }
 
@@ -1292,6 +1349,7 @@ class OverviewViewModel(
     companion object {
         private const val SAFETY_LIMITED_BG = 90.0
         private const val SAFETY_CRITICAL_BG = 70.0
+        private val ADAPTATION_FRESHNESS_TICK_MS = TimeUnit.MINUTES.toMillis(1)
         private val MODE_LOOKBACK_MS = TimeUnit.HOURS.toMillis(12)
         private val modeKeywords = listOf(
             ModeKeyword("meal", R.string.dashboard_mode_meal),
@@ -1365,6 +1423,9 @@ data class StatusCardState(
     val insightFactor: String? = null,
     val trajectoryRelevanceScore: Double? = null,
     val aimiHealthScore: Double? = null,
+    val aimiAdaptationSummary: String = "",
+    val aimiAdaptationContentDescription: String = "",
+    val aimiAdaptationHasAttention: Boolean = false,
 
     /** Narrative layer: plain-text excerpt of last APS `reason` + timing (AIMI pulse card). */
     val aimiPulseTitle: String = "",

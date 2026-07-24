@@ -73,6 +73,8 @@ class AutodriveEngine @Inject constructor(
     
     fun getHealthScore(): Double = autodriveAuditor.lastHealthScore
 
+    fun onlineLearnerStatus(): OnlineLearner.StatusSnapshot = onlineLearner.statusSnapshot()
+
     /**
      * T3C basal-only proposal: runs the full Autodrive pipeline and returns TBR demand.
      * Restores prior engine mode afterward. Caller must strip/ignore SMB (never enact bolus).

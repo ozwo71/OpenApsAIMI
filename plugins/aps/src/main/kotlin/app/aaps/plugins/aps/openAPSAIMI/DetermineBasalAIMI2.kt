@@ -77,6 +77,7 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinKineticsAuthority
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdLearningDiagnostics
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiIntelligenceSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiIntelligenceSnapshotBuilder
+import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiAdaptationStatusBuilder
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.IntelligenceSnapshotJson
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.DoseTerminalSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.DoseTerminalSnapshotBuilder
@@ -8002,6 +8003,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             govTag = "MAIN",
         )
 
+        // Refresh the earlier early-exit snapshot after main-path governance learning has completed.
+        assignAimiAdaptationStatus(finalResult)
         return finalResult
     }
 
@@ -11062,6 +11065,45 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 basalDecisionType != "none" -> basalDecisionType
                 else -> "none"
             },
+        )
+        assignAimiAdaptationStatus(rT)
+    }
+
+    private fun assignAimiAdaptationStatus(rT: RT) {
+        val now = dateUtil.now()
+        rT.aimiAdaptationStatus = AimiAdaptationStatusBuilder.build(
+            AimiAdaptationStatusBuilder.BuildInput(
+                now = now,
+                basalGovernanceEnabled = AimiAdaptationStatusBuilder.basalGovernanceEnabled(
+                    t3cBrittleModeEnabled = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode),
+                    adaptiveBasalEnabled = preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled),
+                ),
+                basalGovernance = if (::basalNeuralLearner.isInitialized) {
+                    basalNeuralLearner.getGovernanceSnapshot()
+                } else {
+                    null
+                },
+                unifiedReactivityEnabled = preferences.get(BooleanKey.OApsAIMIUnifiedReactivityEnabled),
+                unifiedReactivity = if (::unifiedReactivityLearner.isInitialized) {
+                    unifiedReactivityLearner.statusSnapshot()
+                } else {
+                    null
+                },
+                // BasalLearner.process runs on every AIMI tick; it has no independent feature switch.
+                basalLearnerEnabled = true,
+                basalLearner = if (::basalLearner.isInitialized) basalLearner.statusSnapshot() else null,
+                pkpdEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEnabled),
+                pkpd = pkpdIntegration.learningStatusSnapshot(),
+                onlineLearnerEnabled = preferences.get(BooleanKey.OApsAIMIautoDriveActive) ||
+                    preferences.get(BooleanKey.OApsAIMIT3cBrittleMode),
+                onlineLearner = autodriveEngine.onlineLearnerStatus(),
+                ngrEnabled = preferences.getIfExists(BooleanKey.OApsAIMINightGrowthEnabled) == true,
+                ngr = nightGrowthResistanceMode.latestResult(),
+                wCycleEnabled = wCyclePreferences.enabled(),
+                wCycle = wCycleInfoForRun,
+                peakGovernorEnabled = preferences.get(BooleanKey.OApsAIMIPeakGovernorEnabled),
+                diaGovernorEnabled = preferences.get(BooleanKey.OApsAIMIDiaGovernorEnabled),
+            )
         )
     }
 

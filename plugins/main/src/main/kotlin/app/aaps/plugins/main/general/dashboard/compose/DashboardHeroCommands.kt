@@ -9,11 +9,13 @@ import app.aaps.plugins.main.general.dashboard.views.CircleTopActionListener
 interface DashboardHeroCommands : CircleTopActionListener {
     fun openLoopDialogFromHero()
     fun openContextFromBadge()
+    fun onAimiAdaptationClicked()
 }
 
 object NoopDashboardHeroCommands : DashboardHeroCommands {
     override fun openLoopDialogFromHero() {}
     override fun openContextFromBadge() {}
+    override fun onAimiAdaptationClicked() {}
     override fun onAimiAdvisorClicked() {}
     override fun onAdjustClicked() {}
     override fun onAimiPreferencesClicked() {}

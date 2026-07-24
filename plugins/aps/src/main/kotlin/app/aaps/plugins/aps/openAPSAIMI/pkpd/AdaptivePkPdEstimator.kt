@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.pkpd
 
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
@@ -20,6 +21,27 @@ data class PkPdLearningConfig(
     val anchorDiaHrs: Double = 4.0,
     /** Soft regularization target for learned peak (minutes). */
     val anchorPeakMin: Double = 75.0,
+)
+
+enum class PkPdUpdateReason {
+    NOT_UPDATED,
+    ACCEPTED,
+    WINDOW_OUT_OF_RANGE,
+    IOB_TOO_LOW,
+    CARBS_ACTIVE,
+    EXERCISE,
+    RISE_TOO_FAST,
+    HYPO,
+    NEAR_HYPO_FALLING,
+    FAST_FALL,
+}
+
+data class AdaptivePkPdStatusSnapshot(
+    val params: PkPdParams,
+    val acceptedUpdateCount: Long,
+    val latestReason: PkPdUpdateReason,
+    val lastAcceptedUpdateAt: Long?,
+    val updatedAt: Long?,
 )
 
 class AdaptivePkPdEstimator(
@@ -46,6 +68,16 @@ class AdaptivePkPdEstimator(
 
     private val state = AtomicReference(initial)
     private var lastUpdateEpochMin: Long = 0
+    private val acceptedUpdateCount = AtomicLong(0L)
+    private val statusRef = AtomicReference(
+        AdaptivePkPdStatusSnapshot(
+            params = initial,
+            acceptedUpdateCount = 0L,
+            latestReason = PkPdUpdateReason.NOT_UPDATED,
+            lastAcceptedUpdateAt = null,
+            updatedAt = null,
+        )
+    )
 
     fun params(): PkPdParams = state.get()
 
@@ -58,16 +90,40 @@ class AdaptivePkPdEstimator(
         windowMin: Int,
         exerciseFlag: Boolean
     ) {
-        if (windowMin < cfg.minWindowMin || windowMin > cfg.maxWindowMin) return
-        if (iobU < cfg.minIOBForLearningU) return
+        if (windowMin < cfg.minWindowMin || windowMin > cfg.maxWindowMin) {
+            recordSkipped(epochMin, PkPdUpdateReason.WINDOW_OUT_OF_RANGE)
+            return
+        }
+        if (iobU < cfg.minIOBForLearningU) {
+            recordSkipped(epochMin, PkPdUpdateReason.IOB_TOO_LOW)
+            return
+        }
         // RELAXED: Allow learning with moderate carbs (was 5g, now 15g)
-        if (carbsActiveG > 15.0) return
-        if (exerciseFlag) return
+        if (carbsActiveG > 15.0) {
+            recordSkipped(epochMin, PkPdUpdateReason.CARBS_ACTIVE)
+            return
+        }
+        if (exerciseFlag) {
+            recordSkipped(epochMin, PkPdUpdateReason.EXERCISE)
+            return
+        }
         // RELAXED: Allow learning during slower rises (was 3.0, now 5.0)
-        if (deltaMgDlPer5 > 5.0) return
-        if (bg < HYPO_LEARN_SKIP_BG_MGDL) return
-        if (bg < HYPO_CAUTION_BG_MGDL && deltaMgDlPer5 < -1.0) return
-        if (deltaMgDlPer5 <= FAST_FALL_DELTA_MGDL5) return
+        if (deltaMgDlPer5 > 5.0) {
+            recordSkipped(epochMin, PkPdUpdateReason.RISE_TOO_FAST)
+            return
+        }
+        if (bg < HYPO_LEARN_SKIP_BG_MGDL) {
+            recordSkipped(epochMin, PkPdUpdateReason.HYPO)
+            return
+        }
+        if (bg < HYPO_CAUTION_BG_MGDL && deltaMgDlPer5 < -1.0) {
+            recordSkipped(epochMin, PkPdUpdateReason.NEAR_HYPO_FALLING)
+            return
+        }
+        if (deltaMgDlPer5 <= FAST_FALL_DELTA_MGDL5) {
+            recordSkipped(epochMin, PkPdUpdateReason.FAST_FALL)
+            return
+        }
 
         val p0 = state.get()
         val isfTddMgDlPerU = IsfTddProvider.isfTdd()
@@ -104,7 +160,34 @@ class AdaptivePkPdEstimator(
         val newTp = (p0.peakMin + tpAdjReg)
             .coerceIn(p0.peakMin - maxTpStep, p0.peakMin + maxTpStep)
             .coerceIn(bounds.peakMinMin, bounds.peakMinMax)
-        state.set(PkPdParams(newDia, newTp))
+        val newParams = PkPdParams(newDia, newTp)
+        state.set(newParams)
+        val acceptedCount = acceptedUpdateCount.incrementAndGet()
+        val updateAt = epochMin * 60_000L
+        statusRef.set(
+            AdaptivePkPdStatusSnapshot(
+                params = newParams,
+                acceptedUpdateCount = acceptedCount,
+                latestReason = PkPdUpdateReason.ACCEPTED,
+                lastAcceptedUpdateAt = updateAt,
+                updatedAt = updateAt,
+            )
+        )
+    }
+
+    fun statusSnapshot(): AdaptivePkPdStatusSnapshot = statusRef.get().copy()
+
+    private fun recordSkipped(epochMin: Long, reason: PkPdUpdateReason) {
+        val previous = statusRef.get()
+        statusRef.set(
+            AdaptivePkPdStatusSnapshot(
+                params = state.get(),
+                acceptedUpdateCount = acceptedUpdateCount.get(),
+                latestReason = reason,
+                lastAcceptedUpdateAt = previous.lastAcceptedUpdateAt,
+                updatedAt = epochMin * 60_000L,
+            )
+        )
     }
 
     private fun approximateAction(iobU: Double, p: PkPdParams): Double {
