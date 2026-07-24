@@ -37,8 +37,27 @@ interface OnePlusBleSession {
 data class OnePlusConnectPrep(val advFresh: Boolean = false)
 
 /**
+ * Pure decisions for the post-Control-loop transition, kept separate from Android BLE calls so the
+ * normal duty-cycle behavior can be unit tested.
+ */
+internal object OnePlusBleSessionCyclePolicy {
+    const val POST_COLLECTION_RECONNECT_ATTEMPT = 1
+
+    fun waitForAdvertisementAfterExit(deliveredUsableGlucose: Boolean): Boolean =
+        deliveredUsableGlucose
+
+    fun applyFailureBudget(preparedPostCollectionAdvertisement: Boolean): Boolean =
+        !preparedPostCollectionAdvertisement
+
+    fun requireFreshAdvertisementBeforeReconnect(hasSuccessfulCollection: Boolean): Boolean =
+        hasSuccessfulCollection
+}
+
+/**
  * Session: pairing validation → GATT connect → KEKS auth → Control/EGV loop, with OEM
- * reconnect retries after GATT drop / connect-auth failure.
+ * reconnect retries after GATT drop / connect-auth failure. After a successful EGV cycle, the
+ * transmitter's disconnect is treated as normal duty cycling: wait persistently for its next ADV
+ * instead of consuming the finite failure budget while the radio is asleep.
  *
  * Does **not** claim production BLE. Stub driver remains the default façade.
  */
@@ -107,21 +126,34 @@ class OnePlusBleSessionSkeleton(
         emitWarmup()
 
         var attempt = 0
+        var preparedConnect: OnePlusConnectPrep? = null
+        var hasSuccessfulCollection = false
         while (running) {
             if (attempt > 0) {
-                if (!reconnectPolicy.shouldRetry(attempt, profile)) {
+                val applyFailureBudget = OnePlusBleSessionCyclePolicy.applyFailureBudget(
+                    preparedPostCollectionAdvertisement = preparedConnect != null,
+                )
+                if (applyFailureBudget && !reconnectPolicy.shouldRetry(attempt, profile)) {
                     fail("ONEPLUS_RECONNECT_EXHAUSTED: attempts=$attempt", fatal = false)
                     return
                 }
-                val delayMs = reconnectPolicy.nextDelayMs(attempt, profile)
-                Log.i(
-                    OnePlusLogMarkers.TAG,
-                    "${OnePlusLogMarkers.RECONNECT}: attempt=$attempt delayMs=$delayMs " +
-                        "profile=${profile.id} aggressive=${profile.aggressiveReconnect}",
-                )
-                if (!sleepWhileRunning(delayMs)) {
-                    stop("cancelled")
-                    return
+                if (applyFailureBudget) {
+                    val delayMs = reconnectPolicy.nextDelayMs(attempt, profile)
+                    Log.i(
+                        OnePlusLogMarkers.TAG,
+                        "${OnePlusLogMarkers.RECONNECT}: attempt=$attempt delayMs=$delayMs " +
+                            "profile=${profile.id} aggressive=${profile.aggressiveReconnect}",
+                    )
+                    if (!sleepWhileRunning(delayMs)) {
+                        stop("cancelled")
+                        return
+                    }
+                } else {
+                    Log.i(
+                        OnePlusLogMarkers.TAG,
+                        "${OnePlusLogMarkers.RECONNECT}: fresh ADV ready — bypass retry delay " +
+                            "attempt=$attempt profile=${profile.id}",
+                    )
                 }
             } else {
                 Log.i(
@@ -140,33 +172,70 @@ class OnePlusBleSessionSkeleton(
                 pairingCode = normalized,
                 requestNewSensorStart = wantSessionStart,
                 attempt = attempt,
+                preparedConnect = preparedConnect,
             )
+            preparedConnect = null
             if (!running) return
 
             when (outcome) {
                 CycleOutcome.Stopped -> return
-                CycleOutcome.EgvExited -> {
-                    // Transient drop while still wanted — reconnect without SessionStop.
-                    up = false
-                    try {
-                        gatt.disconnect()
-                    } catch (_: Throwable) {
-                    }
-                    onSession(false, "egv_loop_exit")
-                    enterReconnecting("egv_loop_exit")
-                    Log.i(
-                        OnePlusLogMarkers.TAG,
-                        "${OnePlusLogMarkers.SESSION}: down reason=egv_loop_exit → reconnect",
+                CycleOutcome.EgvDeliveredThenExited -> {
+                    hasSuccessfulCollection = true
+                    preparedConnect = preparePostCollectionReconnect(
+                        deviceAddress = deviceAddress,
+                        reason = "egv_cycle_complete_waiting_for_adv",
                     )
-                    attempt++
+                    if (!running || preparedConnect == null) return
+                    // Attempt 1 suppresses SessionStart and reports a reconnect, while the prepared
+                    // fresh ADV bypasses both the backoff delay and a second pre-connect scan.
+                    attempt = OnePlusBleSessionCyclePolicy.POST_COLLECTION_RECONNECT_ATTEMPT
+                }
+                CycleOutcome.EgvExited -> {
+                    if (OnePlusBleSessionCyclePolicy.requireFreshAdvertisementBeforeReconnect(
+                            hasSuccessfulCollection,
+                        )
+                    ) {
+                        preparedConnect = preparePostCollectionReconnect(
+                            deviceAddress = deviceAddress,
+                            reason = "egv_loop_exit_waiting_for_adv",
+                        )
+                        if (!running || preparedConnect == null) return
+                        attempt = OnePlusBleSessionCyclePolicy.POST_COLLECTION_RECONNECT_ATTEMPT
+                    } else {
+                        // Drop before the first usable EGV: retain bounded failure retries.
+                        up = false
+                        try {
+                            gatt.disconnect()
+                        } catch (_: Throwable) {
+                        }
+                        onSession(false, "egv_loop_exit")
+                        enterReconnecting("egv_loop_exit")
+                        Log.i(
+                            OnePlusLogMarkers.TAG,
+                            "${OnePlusLogMarkers.SESSION}: down reason=egv_loop_exit → reconnect",
+                        )
+                        attempt++
+                    }
                 }
                 CycleOutcome.RetryableFailure -> {
-                    up = false
-                    try {
-                        gatt.disconnect()
-                    } catch (_: Throwable) {
+                    if (OnePlusBleSessionCyclePolicy.requireFreshAdvertisementBeforeReconnect(
+                            hasSuccessfulCollection,
+                        )
+                    ) {
+                        preparedConnect = preparePostCollectionReconnect(
+                            deviceAddress = deviceAddress,
+                            reason = "cycle_failure_waiting_for_adv",
+                        )
+                        if (!running || preparedConnect == null) return
+                        attempt = OnePlusBleSessionCyclePolicy.POST_COLLECTION_RECONNECT_ATTEMPT
+                    } else {
+                        up = false
+                        try {
+                            gatt.disconnect()
+                        } catch (_: Throwable) {
+                        }
+                        attempt++
                     }
-                    attempt++
                 }
                 CycleOutcome.Fatal -> return
             }
@@ -198,6 +267,7 @@ class OnePlusBleSessionSkeleton(
         pairingCode: String,
         requestNewSensorStart: Boolean,
         attempt: Int,
+        preparedConnect: OnePlusConnectPrep?,
     ): CycleOutcome {
         // CONNECTING (first attempt) / RECONNECTING (retry) — never PAIRING here, so the UI can tell
         // "establishing link" from the terminal FAILED it used to flash between retries.
@@ -206,7 +276,7 @@ class OnePlusBleSessionSkeleton(
         warmup = OnePlusWarmupState(phase = connectingPhase, message = "connect_attempt_$attempt")
         emitWarmup()
 
-        val prep = try {
+        val prep = preparedConnect ?: try {
             beforeConnect(deviceAddress, attempt)
         } catch (t: Throwable) {
             val msg = t.message ?: "ONEPLUS_BEFORE_CONNECT_FAILED"
@@ -293,13 +363,17 @@ class OnePlusBleSessionSkeleton(
                 "${OnePlusLogMarkers.SESSION}: up attempt=$attempt newStart=$requestNewSensorStart — Control/EGV",
             )
 
+            var deliveredUsableGlucose = false
             val egv = OnePlusEgvSession(
                 gatt = gatt,
                 onWarmup = { state ->
                     warmup = state
                     emitWarmup()
                 },
-                onGlucose = onGlucose,
+                onGlucose = { sample ->
+                    deliveredUsableGlucose = true
+                    onGlucose(sample)
+                },
                 onError = onError,
                 requestNewSensorStart = requestNewSensorStart,
             )
@@ -314,7 +388,12 @@ class OnePlusBleSessionSkeleton(
                 return CycleOutcome.RetryableFailure
             }
 
-            return if (running) CycleOutcome.EgvExited else CycleOutcome.Stopped
+            return when {
+                !running -> CycleOutcome.Stopped
+                OnePlusBleSessionCyclePolicy.waitForAdvertisementAfterExit(deliveredUsableGlucose) ->
+                    CycleOutcome.EgvDeliveredThenExited
+                else -> CycleOutcome.EgvExited
+            }
         } finally {
             // Juggluco holds wake for the whole connection; we keep it through first EGV cycle.
             releaseWakeLock(wakeLock)
@@ -348,8 +427,88 @@ class OnePlusBleSessionSkeleton(
      * keeps waiting through the reconnect delay. Terminal failure stays in [fail].
      */
     private fun enterReconnecting(message: String?) {
+        if (!running) return
         warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.RECONNECTING, message = message)
         emitWarmup()
+    }
+
+    /**
+     * Ends the current successful duty cycle and waits for the next transmitter radio window.
+     * Watcher exceptions are isolated so they cannot terminate the persistent BLE loop.
+     */
+    private fun preparePostCollectionReconnect(
+        deviceAddress: String,
+        reason: String,
+    ): OnePlusConnectPrep? {
+        if (!running) return null
+        up = false
+        try {
+            gatt.disconnect()
+        } catch (_: Throwable) {
+        }
+        if (!running) return null
+        try {
+            onSession(false, reason)
+        } catch (t: Throwable) {
+            Log.w(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SESSION}: down callback failed: ${t.message}",
+            )
+        }
+        if (!running) return null
+        try {
+            enterReconnecting("waiting_for_next_adv")
+        } catch (t: Throwable) {
+            Log.w(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.WARMUP}: waiting callback failed: ${t.message}",
+            )
+        }
+        if (!running) return null
+        Log.i(
+            OnePlusLogMarkers.TAG,
+            "${OnePlusLogMarkers.SESSION}: cycle down reason=$reason — wait persistently for next ADV",
+        )
+        return awaitFreshAdvertisement(deviceAddress)
+    }
+
+    /**
+     * A successful EGV cycle resets failure semantics. Dexcom advertises only in short windows, so
+     * repeatedly scan until the target MAC is actually visible and hand that fresh sighting directly
+     * to the next connection cycle. No blind GATT connect and no finite retry exhaustion here.
+     *
+     * ⚠️ ASYNC IMPACT: blocks bleExecutor in bounded scan calls; [stop] clears [running], so this
+     * loop exits as soon as the current bounded pre-connect scan returns.
+     */
+    private fun awaitFreshAdvertisement(deviceAddress: String): OnePlusConnectPrep? {
+        while (running) {
+            val prep = try {
+                beforeConnect(
+                    deviceAddress,
+                    OnePlusBleSessionCyclePolicy.POST_COLLECTION_RECONNECT_ATTEMPT,
+                )
+            } catch (t: Throwable) {
+                Log.w(
+                    OnePlusLogMarkers.TAG,
+                    "${OnePlusLogMarkers.SCAN}: waiting for next ADV failed: ${t.message}",
+                )
+                OnePlusConnectPrep(advFresh = false)
+            }
+            if (!running) return null
+            if (prep.advFresh) {
+                Log.i(
+                    OnePlusLogMarkers.TAG,
+                    "${OnePlusLogMarkers.SCAN}: next-cycle target ADV acquired",
+                )
+                return prep
+            }
+            Log.i(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SCAN}: target ADV absent — remain waiting",
+            )
+            if (!sleepWhileRunning(ADV_WAIT_RESTART_DELAY_MS)) return null
+        }
+        return null
     }
 
     private fun fail(message: String, fatal: Boolean) {
@@ -398,6 +557,7 @@ class OnePlusBleSessionSkeleton(
     }
 
     private enum class CycleOutcome {
+        EgvDeliveredThenExited,
         EgvExited,
         RetryableFailure,
         Stopped,
@@ -410,5 +570,6 @@ class OnePlusBleSessionSkeleton(
          * Juggluco uses an unbounded wake lock for the whole connection; we bound it.
          */
         private const val AUTH_WAKE_LOCK_MS = 600_000L
+        private const val ADV_WAIT_RESTART_DELAY_MS = 250L
     }
 }
