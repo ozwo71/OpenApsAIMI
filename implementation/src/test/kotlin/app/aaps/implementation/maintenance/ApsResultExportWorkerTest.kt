@@ -40,13 +40,15 @@ class ApsResultExportWorkerTest : TestBaseWithProfile() {
     }
 
     @Test
-    fun `not engineering mode skips export`() = runTest {
+    fun `not engineering mode drains inbox then skips export`() = runTest {
         whenever(config.isEngineeringMode()).thenReturn(false)
+        whenever(dataInbox.drain(ApsExportInbox)).thenReturn(emptyList())
 
         val result = worker().doWorkAndLog()
 
         assertIs<ListenableWorker.Result.Success>(result)
-        verify(dataInbox, never()).drain(ApsExportInbox)
+        verify(dataInbox).drain(ApsExportInbox)
+        verify(storage, never()).putFileContents(any<File>(), any())
     }
 
     @Test
