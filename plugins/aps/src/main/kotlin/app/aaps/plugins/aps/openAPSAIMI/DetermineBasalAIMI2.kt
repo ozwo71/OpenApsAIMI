@@ -10905,7 +10905,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun Double.withoutZeros(): String = DecimalFormat("0.##").format(this)
     fun round(value: Double): Int {
-        if (value.isNaN()) return 0
+        if (value.isNaN()) {
+            // Keep the fallback observable by PersistenceLayerImpl's non-finite APS-result diagnostic.
+            consoleError.add("round(): non-finite value substituted with 0 (roundNaN=NaN)")
+            return 0
+        }
         val scale = 10.0.pow(2.0)
         return (Math.round(value * scale) / scale).toInt()
     }

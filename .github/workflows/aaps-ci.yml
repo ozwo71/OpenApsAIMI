@@ -15,10 +15,10 @@ on:
           - upstream_tag
       tagName:
         description: >-
-          upstream_tag uniquement : tag exact sur github.com/nightscout/AndroidAPS (ex. 3.4.2.3).
+          upstream_tag uniquement : tag exact sur github.com/nightscout/AndroidAPS (ex. 3.4.2.4).
           En mode fork cette valeur est ignorée pour le checkout ; le JDK suit Versions.kt + jdk-map.json.
         required: true
-        default: '3.4.2.3'
+        default: '3.4.2.4'
         type: string
       buildVariant:
         description: 'Select Build Variant'
@@ -342,6 +342,8 @@ jobs:
     name: Cleanup Old Workflow Runs
     needs: build
     if: always()
+    permissions:
+      actions: write
     uses: ./.github/workflows/cleanup-workflow-runs.yml
     with:
       workflow_name: 'AAPS CI'

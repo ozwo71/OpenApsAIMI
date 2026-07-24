@@ -1322,6 +1322,21 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 currentActivity = currentActivity
             )
 
+            // Keep AIMI aligned with the upstream SMB/AutoISF crash guard: these values feed divisions in
+            // determine_basal and a non-finite/non-positive input can otherwise cascade into NaN dosing fields.
+            val invalidInputs = !oapsProfile.sens.isFinite() || oapsProfile.sens <= 0.0 ||
+                !oapsProfile.carb_ratio.isFinite() || oapsProfile.carb_ratio <= 0.0 ||
+                !autosensResult.ratio.isFinite() || autosensResult.ratio <= 0.0 ||
+                (dynIsfMode && (!oapsProfile.variable_sens.isFinite() || oapsProfile.variable_sens <= 0.0))
+            if (invalidInputs) {
+                val msg = "OpenAPS AIMI aborting: invalid ISF inputs " +
+                    "dynIsfMode=$dynIsfMode sens=${oapsProfile.sens} carb_ratio=${oapsProfile.carb_ratio} " +
+                    "autosensRatio=${autosensResult.ratio} variable_sens=${oapsProfile.variable_sens}"
+                aapsLogger.error(LTag.APS, msg)
+                rxBus.send(EventResetOpenAPSGui(msg))
+                return@withContext
+            }
+
             val microBolusAllowed = constraintsChecker.isSMBModeEnabled(ConstraintObject(tempBasalFallback.not(), aapsLogger)).also { inputConstraints.copyReasons(it) }.value()
             val flatBGsDetected = bgQualityCheck.state == BgQualityCheck.State.FLAT
 
