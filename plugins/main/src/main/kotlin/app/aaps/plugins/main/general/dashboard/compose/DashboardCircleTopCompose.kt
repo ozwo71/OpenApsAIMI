@@ -60,6 +60,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import app.aaps.core.interfaces.rx.events.AdaptiveSmoothingQualityTier
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.dashboard.GlucoseHeroRing
 import app.aaps.core.ui.dialogs.OKDialog
 import app.aaps.plugins.main.R
@@ -382,6 +383,11 @@ fun DashboardCircleTopCompose(
                 ExtendedMetricsBlock(state, Modifier.padding(top = 10.dp))
                 TirComposeBar(state, Modifier.padding(top = 10.dp))
                 InsightsBlock(state, Modifier.padding(top = 8.dp))
+                AimiAdaptationSummaryCard(
+                    state = state,
+                    commands = commands,
+                    modifier = Modifier.padding(top = AapsSpacing.medium),
+                )
             }
 
             if (extendedMetrics && preferences.get(BooleanKey.OverviewShowHybridDashboardAimiPulse)) {
@@ -767,6 +773,43 @@ private fun InsightsBlock(state: StatusCardState, modifier: Modifier = Modifier)
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+@Composable
+private fun AimiAdaptationSummaryCard(
+    state: StatusCardState,
+    commands: DashboardHeroCommands,
+    modifier: Modifier = Modifier,
+) {
+    val containerColor = if (state.aimiAdaptationHasAttention) {
+        MaterialTheme.colorScheme.errorContainer
+    } else {
+        MaterialTheme.colorScheme.secondaryContainer
+    }
+    Surface(
+        onClick = commands::onAimiAdaptationClicked,
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics {
+                contentDescription = state.aimiAdaptationContentDescription
+            },
+        shape = RoundedCornerShape(AapsSpacing.chipCornerRadius),
+        color = containerColor,
+    ) {
+        Column(
+            modifier = Modifier.padding(AapsSpacing.medium),
+            verticalArrangement = Arrangement.spacedBy(AapsSpacing.extraSmall),
+        ) {
+            Text(
+                text = stringResource(R.string.dashboard_aimi_adaptation_label),
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Text(
+                text = state.aimiAdaptationSummary,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
     }
 }
 

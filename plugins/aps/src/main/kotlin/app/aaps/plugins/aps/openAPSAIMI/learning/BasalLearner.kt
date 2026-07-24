@@ -6,6 +6,8 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.exp
@@ -28,6 +30,23 @@ class BasalLearner @Inject constructor(
     private val log: AAPSLogger,
     private val storageHelper: AimiStorageHelper
 ) {
+    data class StatusSnapshot(
+        val shortTermMultiplier: Double,
+        val mediumTermMultiplier: Double,
+        val longTermMultiplier: Double,
+        val combinedMultiplier: Double,
+        val shortBufferCount: Int,
+        val mediumBufferCount: Int,
+        val fastingSampleCount: Int,
+        val shortUpdateCount: Long,
+        val mediumUpdateCount: Long,
+        val longUpdateCount: Long,
+        val lastShortUpdate: Long,
+        val lastMediumUpdate: Long,
+        val lastLongUpdate: Long,
+        val updatedAt: Long?,
+    )
+
     private val fileName = "aimi_basal_learner.json"
     private val file by lazy { storageHelper.getAimiFile(fileName) }
 
@@ -52,6 +71,10 @@ class BasalLearner @Inject constructor(
     private var fastingSamples = 0
     private var fastingSlopeSum = 0.0
     private var fastingBgSum = 0.0
+    private val shortUpdateCount = AtomicLong(0L)
+    private val mediumUpdateCount = AtomicLong(0L)
+    private val longUpdateCount = AtomicLong(0L)
+    private val statusRef = AtomicReference<StatusSnapshot>()
 
     // === Configuration ===
     companion object {
@@ -77,6 +100,7 @@ class BasalLearner @Inject constructor(
 
     init {
         load()
+        publishStatus()
     }
 
     /**
@@ -115,12 +139,14 @@ class BasalLearner @Inject constructor(
         if (now - lastShortUpdate >= SHORT_INTERVAL_MS && shortTermBuffer.size >= 3) {
             updateShortTerm(now)
             lastShortUpdate = now
+            shortUpdateCount.incrementAndGet()
         }
 
         // === MEDIUM-TERM UPDATE (every 6 hours) ===
         if (now - lastMediumUpdate >= MEDIUM_INTERVAL_MS && mediumTermBuffer.size >= 12) {
             updateMediumTerm(now)
             lastMediumUpdate = now
+            mediumUpdateCount.incrementAndGet()
         }
 
         // === LONG-TERM UPDATE (every 24 hours, fasting-based) ===
@@ -133,6 +159,7 @@ class BasalLearner @Inject constructor(
         if (now - lastLongUpdate >= LONG_INTERVAL_MS) {
             updateLongTerm(tdd7Days, tdd30Days)
             lastLongUpdate = now
+            longUpdateCount.incrementAndGet()
             // Reset fasting accumulators
             fastingSamples = 0
             fastingSlopeSum = 0.0
@@ -140,6 +167,7 @@ class BasalLearner @Inject constructor(
         }
 
         save()
+        publishStatus(now)
     }
 
     /**
@@ -150,6 +178,7 @@ class BasalLearner @Inject constructor(
         log.info(LTag.APS, "BasalLearner: Hypo detected, reducing short-term multiplier")
         shortTermMultiplier = (shortTermMultiplier * 0.90).coerceIn(CLAMP_MIN, CLAMP_MAX)
         save()
+        publishStatus(System.currentTimeMillis())
     }
 
     /**
@@ -160,6 +189,7 @@ class BasalLearner @Inject constructor(
         log.info(LTag.APS, "BasalLearner: Persistent hyper detected, increasing short-term multiplier")
         shortTermMultiplier = (shortTermMultiplier * 1.10).coerceIn(CLAMP_MIN, CLAMP_MAX)
         save()
+        publishStatus(System.currentTimeMillis())
     }
 
     // === Private Update Functions ===
@@ -327,6 +357,30 @@ class BasalLearner @Inject constructor(
         json.put("lastMediumUpdate", lastMediumUpdate)
         json.put("lastLongUpdate", lastLongUpdate)
         storageHelper.saveFileSafe(file, json.toString())
+    }
+
+    fun statusSnapshot(): StatusSnapshot = statusRef.get()
+
+    private fun publishStatus(observedAt: Long? = null) {
+        val lastEngineUpdate = maxOf(lastShortUpdate, lastMediumUpdate, lastLongUpdate)
+        statusRef.set(
+            StatusSnapshot(
+                shortTermMultiplier = shortTermMultiplier,
+                mediumTermMultiplier = mediumTermMultiplier,
+                longTermMultiplier = longTermMultiplier,
+                combinedMultiplier = getMultiplier(),
+                shortBufferCount = shortTermBuffer.size,
+                mediumBufferCount = mediumTermBuffer.size,
+                fastingSampleCount = fastingSamples,
+                shortUpdateCount = shortUpdateCount.get(),
+                mediumUpdateCount = mediumUpdateCount.get(),
+                longUpdateCount = longUpdateCount.get(),
+                lastShortUpdate = lastShortUpdate,
+                lastMediumUpdate = lastMediumUpdate,
+                lastLongUpdate = lastLongUpdate,
+                updatedAt = observedAt ?: lastEngineUpdate.takeIf { it > 0L },
+            )
+        )
     }
 
     // === Legacy API compatibility ===

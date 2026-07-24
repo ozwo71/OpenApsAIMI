@@ -122,6 +122,7 @@ import app.aaps.plugins.aps.openAPSAIMI.compose.PkpdTailPrudence
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.TapSitePeakShift
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.TrajectoryPeakBias
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.TrajectoryPeakMismatchScorer
+import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiAdaptationStatusBuilder
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryHistoryProvider
@@ -1368,6 +1369,17 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 effective_peak_minutes = kineticsView.effective.peakMinutes,
                 extraDebug = physioMults.detailedReason
             ).also {
+                it.aimiAdaptationStatus = it.aimiAdaptationStatus?.let { status ->
+                    AimiAdaptationStatusBuilder.enrichGovernors(
+                        status = status,
+                        now = nowMsForPkpd,
+                        pkpdEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEnabled),
+                        peakGovernorEnabled = preferences.get(BooleanKey.OApsAIMIPeakGovernorEnabled),
+                        peakGovernor = peakGovernorForActivity,
+                        diaGovernorEnabled = preferences.get(BooleanKey.OApsAIMIDiaGovernorEnabled),
+                        diaGovernor = kineticsView.diaGovernor,
+                    )
+                }
                 val determineBasalResult = apsResultProvider.get().with(it)
                 
                 // ?? FCL 11.0: Force Copy Predictions via JSON (Manual Construction)

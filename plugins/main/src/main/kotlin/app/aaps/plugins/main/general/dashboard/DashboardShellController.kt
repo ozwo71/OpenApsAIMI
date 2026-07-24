@@ -1408,6 +1408,8 @@ internal class DashboardShellController(
 
             override fun openContextFromBadge() = launchContextActivity()
 
+            override fun onAimiAdaptationClicked() = launchAimiAdaptationStatusActivity()
+
             override fun onAimiAdvisorClicked() = launchAimiAdvisorActivity()
 
             override fun onAdjustClicked() {
@@ -1422,6 +1424,14 @@ internal class DashboardShellController(
                 openAdjustmentDetails()
             }
         }
+
+    private fun launchAimiAdaptationStatusActivity() {
+        try {
+            host.context.startActivity(Intent(host.context, AimiAdaptationStatusActivity::class.java))
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.CORE, "Failed to launch AIMI adaptation status: ${e.message}")
+        }
+    }
 
     private fun launchAimiAdvisorActivity() {
         try {

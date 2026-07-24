@@ -74,6 +74,8 @@ class PkPdIntegration(private val preferences: Preferences) {
         }.coerceAtLeast(0.0)
     }
 
+    fun learningStatusSnapshot(): AdaptivePkPdStatusSnapshot? = estimator?.statusSnapshot()
+
     @Synchronized
     fun computeRuntime(
         epochMillis: Long,

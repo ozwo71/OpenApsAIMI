@@ -57,6 +57,22 @@ class AdaptivePkPdEstimatorTest {
         // Mild drop (above fast-fall skip) with mismatch vs model → structural peak/DIA should move.
         estimator.update(2000, 100.0, -2.5, 1.0, 0.0, 60, false)
         assertNotEquals(initialParams, estimator.params())
+        val status = estimator.statusSnapshot()
+        assertEquals(1L, status.acceptedUpdateCount)
+        assertEquals(PkPdUpdateReason.ACCEPTED, status.latestReason)
+        assertEquals(2000L * 60_000L, status.lastAcceptedUpdateAt)
+    }
+
+    @Test
+    fun `gated updates publish truthful reason without incrementing accepted count`() {
+        val estimator = AdaptivePkPdEstimator()
+
+        estimator.update(1000, 100.0, -2.0, 0.1, 0.0, 60, false)
+
+        val status = estimator.statusSnapshot()
+        assertEquals(0L, status.acceptedUpdateCount)
+        assertEquals(PkPdUpdateReason.IOB_TOO_LOW, status.latestReason)
+        assertEquals(null, status.lastAcceptedUpdateAt)
     }
 
     @Test
