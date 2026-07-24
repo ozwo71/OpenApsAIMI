@@ -6,6 +6,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
+import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
@@ -157,7 +158,7 @@ internal object ReplayQualityExportBuilder {
                 "INFLAMMATORY_DRIFT" -> add("causal_inflammatory_drift")
                 "ABSORPTION_UNCERTAIN" -> add("causal_absorption_uncertain")
             }
-            if ((causalPosterior?.learningQuality ?: 1.0) < 0.58) add("causal_learning_unclean")
+            if ((causalPosterior?.learningQuality ?: 1.0) < CausalStatePosterior.LEARNING_QUALITY_MIN) add("causal_learning_unclean")
             if ((patientModeDecision?.mealBias ?: 0.0) >= 0.70) add("patient_mode_meal")
             if ((patientModeDecision?.protectionBias ?: 0.0) >= 0.70) add("patient_mode_protective")
             when (patientModeDecision?.mode) {
