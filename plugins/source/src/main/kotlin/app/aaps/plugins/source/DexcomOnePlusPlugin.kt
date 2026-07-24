@@ -15,6 +15,7 @@ import app.aaps.core.keys.interfaces.withActivity
 import app.aaps.core.ui.compose.icons.IcPluginByoda
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
+import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverReal
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseSample
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseWatcher
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
@@ -92,10 +93,12 @@ class DexcomOnePlusPlugin @Inject constructor(
     override suspend fun onStart() {
         super.onStart()
         syncDriverFromPrefs()
+        val autoResumeQueued = (driver as? OnePlusCgmDriverReal)?.resumeStoredSession() == true
         warmupPhase = driver.warmupState().phase
         aapsLogger.info(
             LTag.BGSOURCE,
-            "DEXCOM_ONEPLUS_SESSION: plugin start realSkeleton=${OnePlusCgmDrivers.useRealSkeleton}",
+            "DEXCOM_ONEPLUS_SESSION: plugin start " +
+                "realSkeleton=${OnePlusCgmDrivers.useRealSkeleton} autoResumeQueued=$autoResumeQueued",
         )
     }
 

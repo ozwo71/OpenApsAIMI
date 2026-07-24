@@ -21,4 +21,11 @@ class OnePlusBleScannerAndroidTest {
         assertThat(OnePlusBleScannerAndroid.nameMatches("Eversense365")).isFalse()
         assertThat(OnePlusBleScannerAndroid.nameMatches("Galaxy Watch")).isFalse()
     }
+
+    @Test
+    fun `target address is normalized for hardware scan filter`() {
+        assertThat(
+            OnePlusBleScannerAndroid.normalizeTargetAddress("da:3b:12:0d:5b:b7"),
+        ).isEqualTo("DA:3B:12:0D:5B:B7")
+    }
 }

@@ -3,6 +3,7 @@ package app.aaps.plugins.dexcomoneplus.scan
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
@@ -27,7 +28,9 @@ import java.util.concurrent.atomic.AtomicReference
  *   **without** a G6-style `Dexcom*` marketing name.
  * - Optional [sessionHint] sticky-matches last MAC / ADV name / serial.
  *
- * Unfiltered LE scan (Eversense-style) so transmitters without name still appear if UUID matches.
+ * The discovery scan remains unfiltered (Eversense-style) so nameless transmitters still appear.
+ * The known-MAC pre-connect wait uses a platform [ScanFilter], allowing delivery while the screen
+ * is off on Android/Samsung.
  *
  * ⚠️ ASYNC IMPACT: [OnePlusScanListener.onDevice] on binder thread — hop to main for Compose.
  */
@@ -105,7 +108,7 @@ class OnePlusBleScannerAndroid(
             Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: awaitTargetMac adapter unavailable")
             return null
         }
-        val target = address.uppercase()
+        val target = normalizeTargetAddress(address)
         val found = AtomicReference<OnePlusScanResult?>(null)
         val latch = CountDownLatch(1)
         val cb = object : ScanCallback() {
@@ -137,11 +140,14 @@ class OnePlusBleScannerAndroid(
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
         return try {
-            leScanner.startScan(null, settings, cb)
+            val targetFilter = ScanFilter.Builder()
+                .setDeviceAddress(target)
+                .build()
+            leScanner.startScan(listOf(targetFilter), settings, cb)
             Log.i(
                 OnePlusLogMarkers.TAG,
-                "${OnePlusLogMarkers.SCAN}: awaitTargetMac started mac=***${target.takeLast(5)} " +
-                    "timeoutMs=$timeoutMs",
+                "${OnePlusLogMarkers.SCAN}: awaitTargetMac filtered started " +
+                    "mac=***${target.takeLast(5)} timeoutMs=$timeoutMs",
             )
             latch.await(timeoutMs.coerceAtLeast(1L), TimeUnit.MILLISECONDS)
             found.get()
@@ -189,5 +195,7 @@ class OnePlusBleScannerAndroid(
 
     companion object {
         fun nameMatches(name: String?): Boolean = OnePlusAdvCandidate.nameMatchesSoft(name)
+
+        internal fun normalizeTargetAddress(address: String): String = address.uppercase()
     }
 }

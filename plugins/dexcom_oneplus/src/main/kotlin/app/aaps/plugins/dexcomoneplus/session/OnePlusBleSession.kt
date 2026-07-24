@@ -49,8 +49,11 @@ internal object OnePlusBleSessionCyclePolicy {
     fun applyFailureBudget(preparedPostCollectionAdvertisement: Boolean): Boolean =
         !preparedPostCollectionAdvertisement
 
-    fun requireFreshAdvertisementBeforeReconnect(hasSuccessfulCollection: Boolean): Boolean =
-        hasSuccessfulCollection
+    fun requireFreshAdvertisementBeforeReconnect(persistentAdvertisementMode: Boolean): Boolean =
+        persistentAdvertisementMode
+
+    fun allowConnection(restoredSessionMode: Boolean, advertisementFresh: Boolean): Boolean =
+        !restoredSessionMode || advertisementFresh
 }
 
 /**
@@ -100,6 +103,11 @@ class OnePlusBleSessionSkeleton(
     private var running = false
 
     @Volatile
+    private var cancelled = false
+
+    private val lifecycleLock = Any()
+
+    @Volatile
     private var warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.IDLE)
 
     override fun startWithPairingCode(deviceAddress: String, pairingCode: String) {
@@ -121,13 +129,29 @@ class OnePlusBleSessionSkeleton(
             )
         }
 
-        running = true
+        val startAllowed = synchronized(lifecycleLock) {
+            if (cancelled) {
+                false
+            } else {
+                running = true
+                true
+            }
+        }
+        if (!startAllowed) {
+            Log.i(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SESSION}: start ignored — session already stopped",
+            )
+            return
+        }
         warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.PAIRING, message = "pairing")
         emitWarmup()
 
         var attempt = 0
         var preparedConnect: OnePlusConnectPrep? = null
-        var hasSuccessfulCollection = false
+        // A restored session must never fall back to a blind connect while the transmitter sleeps.
+        // Explicit new-sensor setup may use its existing bounded initial-connect policy.
+        var persistentAdvertisementMode = !requestNewSensorStart
         while (running) {
             if (attempt > 0) {
                 val applyFailureBudget = OnePlusBleSessionCyclePolicy.applyFailureBudget(
@@ -180,7 +204,7 @@ class OnePlusBleSessionSkeleton(
             when (outcome) {
                 CycleOutcome.Stopped -> return
                 CycleOutcome.EgvDeliveredThenExited -> {
-                    hasSuccessfulCollection = true
+                    persistentAdvertisementMode = true
                     preparedConnect = preparePostCollectionReconnect(
                         deviceAddress = deviceAddress,
                         reason = "egv_cycle_complete_waiting_for_adv",
@@ -192,7 +216,7 @@ class OnePlusBleSessionSkeleton(
                 }
                 CycleOutcome.EgvExited -> {
                     if (OnePlusBleSessionCyclePolicy.requireFreshAdvertisementBeforeReconnect(
-                            hasSuccessfulCollection,
+                            persistentAdvertisementMode,
                         )
                     ) {
                         preparedConnect = preparePostCollectionReconnect(
@@ -219,7 +243,7 @@ class OnePlusBleSessionSkeleton(
                 }
                 CycleOutcome.RetryableFailure -> {
                     if (OnePlusBleSessionCyclePolicy.requireFreshAdvertisementBeforeReconnect(
-                            hasSuccessfulCollection,
+                            persistentAdvertisementMode,
                         )
                     ) {
                         preparedConnect = preparePostCollectionReconnect(
@@ -249,10 +273,13 @@ class OnePlusBleSessionSkeleton(
      * executor alone — callers should invoke [stop] directly (see [OnePlusCgmDriverReal.disconnect]).
      */
     override fun stop(reason: String?) {
-        running = false
-        up = false
+        synchronized(lifecycleLock) {
+            cancelled = true
+            running = false
+            up = false
+            warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.IDLE, message = reason)
+        }
         gatt.disconnect()
-        warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.IDLE, message = reason)
         emitWarmup()
         onSession(false, reason)
         Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: down reason=$reason")
@@ -289,6 +316,18 @@ class OnePlusBleSessionSkeleton(
             return if (running) CycleOutcome.RetryableFailure else CycleOutcome.Stopped
         }
         if (!running) return CycleOutcome.Stopped
+        if (!OnePlusBleSessionCyclePolicy.allowConnection(
+                restoredSessionMode = !this.requestNewSensorStart,
+                advertisementFresh = prep.advFresh,
+            )
+        ) {
+            Log.i(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SCAN}: restored session requires fresh ADV — remain waiting",
+            )
+            enterReconnecting("waiting_for_next_adv")
+            return CycleOutcome.RetryableFailure
+        }
 
         // Fresh ADV in hand → fast direct connect (fail-fast status 133 → quick retry). Otherwise fall
         // back to the OEM autoConnect policy (Samsung parks a background connect when the sensor is
@@ -318,6 +357,7 @@ class OnePlusBleSessionSkeleton(
         val wakeLock = acquireAuthWakeLock()
         try {
             val authResult = auth.authenticate(pairingCode, savedSharedKeyProvider())
+            if (!running) return CycleOutcome.Stopped
             if (!authResult.ok) {
                 val msg = authResult.message ?: "ONEPLUS_AUTH_FAILED"
                 Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: $msg attempt=$attempt")

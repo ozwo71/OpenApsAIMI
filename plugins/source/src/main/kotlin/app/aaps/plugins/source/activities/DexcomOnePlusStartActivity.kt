@@ -42,6 +42,8 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.core.os.HandlerCompat
+import app.aaps.core.data.plugin.PluginType
+import app.aaps.core.interfaces.configuration.ConfigBuilder
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
@@ -72,6 +74,7 @@ import javax.inject.Inject
 class DexcomOnePlusStartActivity : AppCompatActivity() {
 
     @Inject lateinit var dexcomOnePlusPlugin: DexcomOnePlusPlugin
+    @Inject lateinit var configBuilder: ConfigBuilder
     @Inject lateinit var preferences: Preferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -87,6 +90,13 @@ class DexcomOnePlusStartActivity : AppCompatActivity() {
                         onEnsureDriver = {
                             dexcomOnePlusPlugin.syncDriverFromPrefs()
                             OnePlusCgmDrivers.default()
+                        },
+                        onActivatePlugin = {
+                            configBuilder.performPluginSwitch(
+                                changedPlugin = dexcomOnePlusPlugin,
+                                enabled = true,
+                                type = PluginType.BGSOURCE,
+                            )
                         },
                         onStarted = {
                             startActivity(Intent(this, DexcomOnePlusWarmupActivity::class.java))
@@ -104,6 +114,7 @@ class DexcomOnePlusStartActivity : AppCompatActivity() {
 private fun DexcomOnePlusStartScreen(
     onBack: () -> Unit,
     onEnsureDriver: () -> OnePlusCgmDriver,
+    onActivatePlugin: () -> Unit,
     onStarted: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -384,6 +395,7 @@ private fun DexcomOnePlusStartScreen(
                     } else {
                         activeDriver.connect(deviceAddress = address, pairingCode = code)
                     }
+                    onActivatePlugin()
                     onStarted()
                 },
                 modifier = Modifier.fillMaxWidth(),

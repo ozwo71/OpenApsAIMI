@@ -27,7 +27,19 @@ class OnePlusBleSessionCyclePolicyTest {
         ).isFalse()
         assertThat(
             OnePlusBleSessionCyclePolicy.requireFreshAdvertisementBeforeReconnect(
-                hasSuccessfulCollection = true,
+                persistentAdvertisementMode = true,
+            ),
+        ).isTrue()
+        assertThat(
+            OnePlusBleSessionCyclePolicy.allowConnection(
+                restoredSessionMode = true,
+                advertisementFresh = false,
+            ),
+        ).isFalse()
+        assertThat(
+            OnePlusBleSessionCyclePolicy.allowConnection(
+                restoredSessionMode = true,
+                advertisementFresh = true,
             ),
         ).isTrue()
     }
@@ -46,8 +58,14 @@ class OnePlusBleSessionCyclePolicyTest {
         ).isTrue()
         assertThat(
             OnePlusBleSessionCyclePolicy.requireFreshAdvertisementBeforeReconnect(
-                hasSuccessfulCollection = false,
+                persistentAdvertisementMode = false,
             ),
         ).isFalse()
+        assertThat(
+            OnePlusBleSessionCyclePolicy.allowConnection(
+                restoredSessionMode = false,
+                advertisementFresh = false,
+            ),
+        ).isTrue()
     }
 }

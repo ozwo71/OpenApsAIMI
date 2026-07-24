@@ -6,6 +6,7 @@ import android.util.Log
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClientAndroid
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorIdentity
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusStoredSession
 import app.aaps.plugins.dexcomoneplus.oem.DeviceProfileRegistry
 import app.aaps.plugins.dexcomoneplus.oem.OemDeviceProfile
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
@@ -17,9 +18,19 @@ import app.aaps.plugins.dexcomoneplus.session.OnePlusBleSession
 import app.aaps.plugins.dexcomoneplus.session.OnePlusBleSessionSkeleton
 import app.aaps.plugins.dexcomoneplus.session.OnePlusConnectPrep
 import app.aaps.plugins.dexcomoneplus.session.OnePlusSessionAuthKeks
+import app.aaps.plugins.dexcomoneplus.session.OnePlusSessionStart
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+
+internal object OnePlusCgmDriverResumePolicy {
+    fun canResume(storedSession: OnePlusStoredSession?): Boolean =
+        storedSession?.lastMac?.isNotBlank() == true &&
+            OnePlusSessionStart.isValidPairingCode(storedSession.identity.pin) &&
+            storedSession.sharedKey?.size == SHARED_KEY_SIZE
+
+    private const val SHARED_KEY_SIZE = 16
+}
 
 /**
  * Real driver: LE scan + GATT + KEKS + Control EGV loop.
@@ -33,7 +44,10 @@ import java.util.concurrent.Executors
 class OnePlusCgmDriverReal : OnePlusCgmDriver {
 
     private val watchers = CopyOnWriteArrayList<OnePlusGlucoseWatcher>()
+    private val lifecycleLock = Any()
     private var context: Context? = null
+    private var operationGeneration = 0L
+    private var resumeQueued = false
 
     @Volatile
     private var bleExecutor: ExecutorService = newBleExecutor()
@@ -102,7 +116,18 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
         )
         scanner.stopScan()
         // Stop any in-flight reconnect loop (may still be targeting a previous MAC).
-        session?.stop("superseded")
+        val previousSession: OnePlusBleSession?
+        val generation: Long
+        val executor: ExecutorService
+        synchronized(lifecycleLock) {
+            operationGeneration++
+            generation = operationGeneration
+            previousSession = session
+            session = null
+            resumeQueued = false
+            executor = bleExecutor
+        }
+        previousSession?.stop("superseded")
         sensorStore?.saveIdentity(
             OnePlusSensorIdentity(
                 pin = pairingCode,
@@ -118,22 +143,129 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
         // silent reconnects inside the session loop still short-auth.
         sensorStore?.clearSharedKey()
         (scanner as? OnePlusBleScannerAndroid)?.sessionHint = sensorStore?.load()
-        bleExecutor.execute {
-            try {
-                ensureSession().startWithPairingCode(deviceAddress, pairingCode)
-            } catch (t: Throwable) {
-                Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: ${t.message}", t)
-                watchers.forEach {
-                    it.onError(t.message ?: "ONEPLUS_CONNECT_FAILED", fatal = false)
-                    it.onWarmup(
-                        OnePlusWarmupState(
-                            phase = OnePlusWarmupState.Phase.FAILED,
-                            message = t.message,
-                        ),
-                    )
+        try {
+            synchronized(lifecycleLock) {
+                if (generation != operationGeneration || executor !== bleExecutor) return
+                executor.execute {
+                    val created = synchronized(lifecycleLock) {
+                        if (generation != operationGeneration) return@execute
+                        createSession(
+                            requestNewSensorStart = true,
+                            generation = generation,
+                        ).also { session = it }
+                    }
+                    try {
+                        created.startWithPairingCode(deviceAddress, pairingCode)
+                    } catch (t: Throwable) {
+                        Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: ${t.message}", t)
+                        watchers.forEach {
+                            it.onError(t.message ?: "ONEPLUS_CONNECT_FAILED", fatal = false)
+                            it.onWarmup(
+                                OnePlusWarmupState(
+                                    phase = OnePlusWarmupState.Phase.FAILED,
+                                    message = t.message,
+                                ),
+                            )
+                        }
+                    }
                 }
             }
+        } catch (t: Throwable) {
+            Log.e(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.ERROR}: connect queue ${t.message}",
+                t,
+            )
         }
+    }
+
+    /**
+     * Restores an authenticated sensor after process/plugin recreation without clearing its KEKS
+     * key and without allowing SessionStart.
+     *
+     * ⚠️ ASYNC IMPACT: queues at most one resume on [bleExecutor]. The resumed session itself owns
+     * persistent ADV waiting and all later reconnects.
+     */
+    fun resumeStoredSession(): Boolean {
+        val stored = sensorStore?.load()
+        if (!OnePlusCgmDriverResumePolicy.canResume(stored)) {
+            Log.i(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.SESSION}: auto-resume skipped — stored session incomplete",
+            )
+            return false
+        }
+        val deviceAddress = stored?.lastMac ?: return false
+        val pairingCode = stored.identity.pin
+        val generation: Long
+        val executor: ExecutorService
+        synchronized(lifecycleLock) {
+            if (resumeQueued || session != null) {
+                Log.i(
+                    OnePlusLogMarkers.TAG,
+                    "${OnePlusLogMarkers.SESSION}: auto-resume already active",
+                )
+                return false
+            }
+            resumeQueued = true
+            operationGeneration++
+            generation = operationGeneration
+            executor = bleExecutor
+            // A stored device name is identity metadata, not a fresh UI ADV selection.
+            pendingDeviceName = null
+            pendingAdvSightingElapsedMs = 0L
+            (scanner as? OnePlusBleScannerAndroid)?.sessionHint = stored
+        }
+        Log.i(
+            OnePlusLogMarkers.TAG,
+            "${OnePlusLogMarkers.SESSION}: auto-resume queued mac=***${deviceAddress.takeLast(5)} " +
+                "savedKey=true newStart=false",
+        )
+        try {
+            synchronized(lifecycleLock) {
+                if (generation != operationGeneration || executor !== bleExecutor) return false
+                executor.execute {
+                    val created = synchronized(lifecycleLock) {
+                        if (generation != operationGeneration) return@execute
+                        createSession(
+                            requestNewSensorStart = false,
+                            generation = generation,
+                        ).also { session = it }
+                    }
+                    try {
+                        created.startWithPairingCode(deviceAddress, pairingCode)
+                    } catch (t: Throwable) {
+                        synchronized(lifecycleLock) {
+                            if (generation == operationGeneration && session === created) {
+                                resumeQueued = false
+                                session = null
+                            }
+                        }
+                        Log.e(
+                            OnePlusLogMarkers.TAG,
+                            "${OnePlusLogMarkers.ERROR}: auto-resume ${t.message}",
+                            t,
+                        )
+                        watchers.forEach {
+                            it.onError(t.message ?: "ONEPLUS_AUTO_RESUME_FAILED", fatal = false)
+                        }
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            synchronized(lifecycleLock) {
+                if (generation == operationGeneration) {
+                    resumeQueued = false
+                }
+            }
+            Log.e(
+                OnePlusLogMarkers.TAG,
+                "${OnePlusLogMarkers.ERROR}: auto-resume queue ${t.message}",
+                t,
+            )
+            return false
+        }
+        return true
     }
 
     /**
@@ -156,7 +288,12 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
 
     override fun disconnect() {
         // Must not queue behind a blocking Control/EGV loop on bleExecutor.
-        session?.stop("disconnect")
+        val previousSession = synchronized(lifecycleLock) {
+            operationGeneration++
+            resumeQueued = false
+            session.also { session = null }
+        }
+        previousSession?.stop("disconnect")
     }
 
     override fun shutdown() {
@@ -164,14 +301,22 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
             scanner.stopScan()
         } catch (_: Throwable) {
         }
+        val previousSession: OnePlusBleSession?
+        val previousExecutor: ExecutorService
+        synchronized(lifecycleLock) {
+            operationGeneration++
+            resumeQueued = false
+            previousSession = session
+            session = null
+            previousExecutor = bleExecutor
+            bleExecutor = newBleExecutor()
+        }
         try {
-            session?.stop("shutdown")
+            previousSession?.stop("shutdown")
         } catch (_: Throwable) {
         }
-        session = null
         watchers.clear()
-        bleExecutor.shutdownNow()
-        bleExecutor = newBleExecutor()
+        previousExecutor.shutdownNow()
         Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: shutdown")
     }
 
@@ -180,8 +325,10 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
 
     override fun isSessionUp(): Boolean = session?.isUp() == true
 
-    private fun ensureSession(): OnePlusBleSession {
-        session?.let { return it }
+    private fun createSession(
+        requestNewSensorStart: Boolean,
+        generation: Long,
+    ): OnePlusBleSession {
         val ctx = context ?: error("ONEPLUS_SESSION: setContext required")
         val gatt = OnePlusGattClientAndroid(ctx, profile)
         val auth = OnePlusSessionAuthKeks(gatt)
@@ -190,32 +337,59 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
             gatt = gatt,
             auth = auth,
             profile = profile,
-            onWarmup = { state -> watchers.forEach { it.onWarmup(state) } },
-            onSession = { up, reason -> watchers.forEach { it.onSession(up, reason) } },
-            onError = { message, fatal -> watchers.forEach { it.onError(message, fatal) } },
-            onGlucose = { sample -> watchers.forEach { it.onGlucose(sample) } },
-            // SessionStart only if transmitter has no session; never auto SessionStop.
-            requestNewSensorStart = true,
+            onWarmup = { state ->
+                ifCurrentOperation(generation) {
+                    watchers.forEach { it.onWarmup(state) }
+                }
+            },
+            onSession = { up, reason ->
+                ifCurrentOperation(generation) {
+                    watchers.forEach { it.onSession(up, reason) }
+                }
+            },
+            onError = { message, fatal ->
+                ifCurrentOperation(generation) {
+                    watchers.forEach { it.onError(message, fatal) }
+                }
+            },
+            onGlucose = { sample ->
+                ifCurrentOperation(generation) {
+                    watchers.forEach { it.onGlucose(sample) }
+                }
+            },
+            // Auto-resume always passes false; only an explicit new-sensor connect may start.
+            requestNewSensorStart = requestNewSensorStart,
             beforeConnect = { address, attempt -> prepareConnect(address, attempt) },
             savedSharedKeyProvider = { store?.load()?.sharedKey },
             onAuthSuccess = { address, key ->
-                store?.saveLastMac(address)
-                store?.saveSharedKey(key)
-                pendingDeviceName?.let { store?.saveLastDeviceName(it) }
-                (scanner as? OnePlusBleScannerAndroid)?.sessionHint = store?.load()
+                ifCurrentOperation(generation) {
+                    store?.saveLastMac(address)
+                    store?.saveSharedKey(key)
+                    pendingDeviceName?.let { store?.saveLastDeviceName(it) }
+                    (scanner as? OnePlusBleScannerAndroid)?.sessionHint = store?.load()
+                }
             },
             onAuthInvalidate = {
-                store?.clearSharedKey()
-                (scanner as? OnePlusBleScannerAndroid)?.sessionHint = store?.load()
-                Log.i(
-                    OnePlusLogMarkers.TAG,
-                    "${OnePlusLogMarkers.SESSION}: cleared persisted KEKS shared key",
-                )
+                ifCurrentOperation(generation) {
+                    store?.clearSharedKey()
+                    (scanner as? OnePlusBleScannerAndroid)?.sessionHint = store?.load()
+                    Log.i(
+                        OnePlusLogMarkers.TAG,
+                        "${OnePlusLogMarkers.SESSION}: cleared persisted KEKS shared key",
+                    )
+                }
             },
             appContext = ctx,
         )
-        session = created
         return created
+    }
+
+    private fun ifCurrentOperation(generation: Long, action: () -> Unit) {
+        synchronized(lifecycleLock) {
+            if (generation == operationGeneration) {
+                action()
+            }
+        }
     }
 
     /**
