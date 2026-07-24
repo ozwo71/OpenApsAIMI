@@ -4,7 +4,7 @@ Purpose: enforce repeatable quality gates to prevent freezes and functional regr
 
 Use this file for every merge from `dev` and every release candidate.
 
-**Latest merge log:** [MERGE_DEV_2026-07-16.md](MERGE_DEV_2026-07-16.md) (dev @ `638f23dfab` → `dev_OAPSAIMI_mergeDEV`). Previous: [MERGE_DEV_2026-07-10.md](MERGE_DEV_2026-07-10.md) (dev @ `d389d5e1c2`).
+**Latest merge log:** [MERGE_DEV_2026-07-24.md](MERGE_DEV_2026-07-24.md) (dev @ `ab88d5f1db` → `dev_OAPSAIMI_mergeDEV`). Previous: [MERGE_DEV_2026-07-16.md](MERGE_DEV_2026-07-16.md) (dev @ `638f23dfab`).
 
 ---
 
@@ -34,6 +34,7 @@ When this fork includes (or will include) the CAPTCG Eversense BLE plugin series
 - [ ] Loop behavior unchanged (no accidental SMB disabling).
 - [ ] AIMI configuration import/export keys preserved.
 - [ ] No regression on JSON/CSV writes used by AIMI workflows.
+- [ ] `docs/AIMI*.md` and `docs/aimi*.md` reviewed against merged code; current schema, permission, API, and safety claims are not stale.
 
 ### Adaptive Smoothie plugin
 - [ ] Plugin activation/state transitions unchanged.
@@ -62,7 +63,7 @@ When this fork includes (or will include) the CAPTCG Eversense BLE plugin series
 - [ ] Required structural flows/interfaces remain intact.
 - [ ] No rename/removal of expected keys or records.
 - [ ] Historical compatibility preserved for study data consumption.
-- [ ] Schema `1.2.0` additive block `patient_story` present when patient runtime is active (no breaking rename of `1.1.0` keys).
+- [ ] Current schema `1.4.0` retains the additive `patient_story` block introduced in `1.2.0` when patient runtime is active (no breaking rename of `1.1.0` keys).
 
 ---
 
@@ -149,6 +150,7 @@ Pass criteria:
 - [ ] ML JSON/CSV permissions and writes verified
 - [ ] Physio path verified
 - [ ] Hormonitor structure verified
+- [ ] AIMI-specific Markdown reviewed against merged behavior
 - [ ] Eversense merge constraint reviewed (if native plugin present on branch)
 - [ ] Database maintenance regression gate reviewed (KeepAlive `runVacuum=false`, no auto VACUUM in `cleanupDatabase`)
 - [ ] Async/freeze checklist reviewed

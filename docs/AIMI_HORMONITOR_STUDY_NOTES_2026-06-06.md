@@ -2,7 +2,8 @@
 
 **Audience:** Hormonitor study / clinical replay reviewers  
 **Branch:** `dev_OAPSAIMI`  
-**Hormonitor schema:** `1.1.0` → **`1.2.0`** → **`1.3.0`** (additive)  
+**Hormonitor schema:** `1.1.0` → **`1.2.0`** → **`1.3.0`** → **`1.4.0`** (additive)
+
 **Status:** implemented in code — field validation required before claiming production readiness
 
 ---
@@ -136,12 +137,18 @@ flowchart TB
 | Omnipod Dash | `3c2ad4ac5d` — `isConfigured()`, `teardownPodSession()`, garde activation | — |
 | Equil | **`teardownEquilSession()`** — disconnect GATT, `unBond`, `clearData` ; `stopConnecting()` réel ; garde activation stale avant re-pair | Durci sur branche (voir commit Equil BLE) |
 
+### Phase F — Causal family context (schema 1.4.0)
+
+Schema `1.4.0` keeps every `1.1.0`–`1.3.0` key and extends the additive patient/runtime
+context used by causal-family analysis. Historical readers remain supported because optional blocks
+are parsed with tolerant `opt*` accessors; `patient_story` remains the study-facing narrative root.
+
 ---
 
 ## 4. Hormonitor export — what reviewers should read
 
 **File:** `Documents/AAPS/AIMI_HORMONITOR_event_stream_v1.jsonl`  
-**Schema version:** `1.3.0` (thermal additive); `1.2.0` fields unchanged
+**Schema version:** `1.4.0` (causal-family additive); `1.2.0` patient-story and `1.3.0` thermal fields unchanged
 
 ### 4.1 Existing layers (unchanged keys, richer semantics)
 
@@ -292,7 +299,7 @@ For full tree replay, pair Hormonitor events with `AIMI_Decisions.jsonl`:
 
 ## 7. Validation checklist (study go / no-go)
 
-- [ ] `schema_version` = `1.3.0` on new installs after merge
+- [ ] `schema_version` = `1.4.0` on new installs after merge
 - [ ] Every loop event has non-empty `patient_story.patient_mode` when loop runs
 - [ ] `patient_narrative` matches dominant `patient_reason_codes`
 - [ ] `physio_live` consistent with same-tick wearable fields

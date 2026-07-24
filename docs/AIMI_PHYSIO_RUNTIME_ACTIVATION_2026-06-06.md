@@ -284,7 +284,7 @@ But :
 - à l’**ouverture / reprise** de l’écran : `healthContextRepository.fetchSnapshot()` sur IO (commit `29e42fcec6`) ;
 - suffixe *Updated … · live body signals* ou *· user context* selon la source.
 
-**Export Hormonitor — schéma `1.2.0` → `1.3.0` :**
+**Export Hormonitor — historique `1.2.0` → `1.3.0`, schéma courant `1.4.0` :**
 
 Bloc `patient_story` dans `AIMI_HORMONITOR_event_stream_v1.jsonl` :
 
@@ -297,7 +297,7 @@ Fichiers :
 
 - `plugins/aps/.../patient/PatientStateRuntimeRefresher.kt`
 - `plugins/aps/.../patient/PhysioLiveDigest.kt`
-- `plugins/aps/.../physio/AimiHormonitorStudyExporterMTR.kt` (`SCHEMA_VERSION = 1.3.0`)
+- `plugins/aps/.../physio/AimiHormonitorStudyExporterMTR.kt` (`SCHEMA_VERSION = 1.4.0`; ajout causal-family, compatible avec les blocs `1.2.0`/`1.3.0`)
 - le modèle interne sauvegardé sera naturellement recréé si la dimension d’entrée diverge.
 
 ### 3.13 Couche Thermal Belief — rythme thermique wearable (2026-06-06)

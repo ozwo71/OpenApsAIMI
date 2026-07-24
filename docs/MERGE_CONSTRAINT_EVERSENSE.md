@@ -65,6 +65,23 @@ Reference: [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS-E
 
 **Post-port verify:** `:plugins:eversense:testFullDebugUnitTest`, Eversense smoke on device (E3 cal + 365 alarm).
 
+### Merge `dev` → `dev_OAPSAIMI_mergeDEV` (2026-07-24)
+
+- Upstream Nightscout `dev` at `ab88d5f1db` (36 commits since `638f23dfab`: APS non-finite
+  guards, insulin configuration echo handling, profile sync, pump fixes, Wear BG graph complication,
+  emulator E2E seams, CI and dependency updates).
+- **Conflicts (3, reviewed individually):** `.github/workflows/aaps-ci.yml` (fork source selector +
+  upstream cleanup permission/default tag); `Versions.kt` (AIMI version retained); constraints
+  strings (fork Libre key + upstream doubled-BG LGS text retained).
+- **AIMI parity:** upstream NaN/invalid ISF input protection ported to `OpenAPSAIMIPlugin` and
+  `DetermineBasalAIMI2` without changing ML interfaces or async training contracts.
+- **Eversense / fork preserved:** `:plugins:eversense`, `EversensePlugin` @445, `SourceSensor`
+  E3/365, DB mappings and notification-reader v3 are outside the upstream diff and remain present.
+- **Other mandatory invariants preserved:** adaptive `calibratedOrValue`, dashboard ↔ original
+  Overview skin, ML/Health Connect permissions, Hormonitor schema 1.4.0, and automatic DB cleanup
+  with `runVacuum=false`.
+- Log: [MERGE_DEV_2026-07-24.md](MERGE_DEV_2026-07-24.md).
+
 ### Merge `dev` → `dev_OAPSAIMI_mergeDEV` (2026-07-16)
 
 - Upstream Nightscout `dev` at `638f23dfab` (37 commits since `d389d5e1c2`: ElementType →

@@ -15,7 +15,7 @@ Cette checklist sert à valider la couche produit récente :
 - `PatientStateRuntimeRepository` + `PatientStateRuntimeRefresher`
 - `RecursiveBeliefAuthorityGate` modulé par le mode patient
 - export `ReplayQualityExport` enrichi
-- export Hormonitor `patient_story` + `thermal_belief` (schéma `1.3.0`)
+- export Hormonitor `patient_story` + `thermal_belief` (introduits avant `1.4.0`, schéma courant)
 - affichage clinique dans `ContextActivity` (jauges + live body signals + thermal rhythm)
 
 Elle ne déclare pas le système "terminé". Elle sert à décider si la passe est assez cohérente pour une montée supervisée.
@@ -51,7 +51,7 @@ Chaque scénario de replay doit renseigner de façon cohérente :
 - `context_intent_count`
 - `context_intent_dominant`
 
-Dans **Hormonitor event stream** (`schema_version = 1.3.0`), vérifier aussi :
+Dans **Hormonitor event stream** (`schema_version = 1.4.0` actuellement ; champs compatibles `1.3.0`), vérifier aussi :
 
 - `patient_story.patient_mode`
 - `patient_story.patient_strategy_hint`
