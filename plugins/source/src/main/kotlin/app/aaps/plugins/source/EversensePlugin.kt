@@ -1,64 +1,69 @@
 ﻿package app.aaps.plugins.source
 
 import android.Manifest
-import android.content.Intent
+import android.bluetooth.BluetoothAdapter
+import android.content.BroadcastReceiver
 import android.content.Context
-import android.view.ContextThemeWrapper
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.view.ContextThemeWrapper
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
-import app.aaps.core.interfaces.configuration.Config
-import app.aaps.core.interfaces.notifications.NotificationId
-import app.aaps.core.interfaces.notifications.NotificationLevel
-import app.aaps.core.interfaces.notifications.NotificationManager
-import app.aaps.plugins.eversense.models.ActiveAlarm
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.model.TrendArrow
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.ue.Sources
+import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationId
+import app.aaps.core.interfaces.notifications.NotificationLevel
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.source.BgSource
+import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.interfaces.withActivity
+import app.aaps.core.keys.interfaces.withClick
+import app.aaps.core.ui.compose.icons.IcPluginEversense
+import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.plugins.eversense.EversenseCGMPlugin
 import app.aaps.plugins.eversense.callbacks.EversenseScanCallback
 import app.aaps.plugins.eversense.callbacks.EversenseWatcher
-import app.aaps.plugins.source.compose.BgSourceComposeContent
 import app.aaps.plugins.eversense.enums.CalibrationReadiness
 import app.aaps.plugins.eversense.enums.EversenseAlarm
 import app.aaps.plugins.eversense.enums.EversenseType
+import app.aaps.plugins.eversense.models.ActiveAlarm
 import app.aaps.plugins.eversense.models.EversenseCGMResult
 import app.aaps.plugins.eversense.models.EversenseScanResult
 import app.aaps.plugins.eversense.models.EversenseSecureState
 import app.aaps.plugins.eversense.models.EversenseState
 import app.aaps.plugins.eversense.util.StorageKeys
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
+import app.aaps.plugins.source.activities.EversenseCalibrationActivity
+import app.aaps.plugins.source.activities.EversensePlacementActivity
+import app.aaps.plugins.source.activities.EversenseStatusActivity
+import app.aaps.plugins.source.compose.BgSourceComposeContent
+import app.aaps.plugins.source.keys.EversenseIntentKey
+import app.aaps.plugins.source.keys.EversenseStringKey
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import app.aaps.core.keys.interfaces.withActivity
-import app.aaps.core.keys.interfaces.withClick
-import app.aaps.plugins.source.activities.EversenseStatusActivity
-import app.aaps.plugins.source.activities.EversenseCalibrationActivity
-import app.aaps.plugins.source.activities.EversensePlacementActivity
-import app.aaps.plugins.source.keys.EversenseIntentKey
-import app.aaps.plugins.source.keys.EversenseStringKey
-import app.aaps.core.ui.compose.icons.IcPluginEversense
-import app.aaps.core.keys.BooleanKey
-import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 
 class EversensePlugin @Inject constructor(
     rh: ResourceHelper,
@@ -88,7 +93,7 @@ class EversensePlugin @Inject constructor(
     override var sensorBatteryLevel = -1
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val dateFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -118,13 +123,39 @@ class EversensePlugin @Inject constructor(
     private var releaseForOfficialApp: Boolean = false
     @Volatile private var placementNotificationSnoozed: Boolean = false
 
+    // connectGatt() calls made while the Bluetooth radio is off never fire any callback, so the
+    // timer-based reconnect backoff in EversenseGattCallback can silently retry into a dead radio
+    // and never recover. This receiver re-triggers a reconnect the moment the adapter is confirmed
+    // back on. Uses forceReconnect() rather than connect() because Android also doesn't reliably
+    // deliver a disconnect callback when the radio powers off, so the internal "connected" flag
+    // may be stale true here.
+    private val bluetoothStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context, intent: Intent) {
+            if (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR) == BluetoothAdapter.STATE_ON) {
+                aapsLogger.info(LTag.BGSOURCE, "Bluetooth turned back on — forcing Eversense reconnect")
+                ioScope.launch {
+                    eversense.forceReconnect()
+                }
+            }
+        }
+    }
+
     init {
         eversense.setContext(context, true)
     }
 
     override suspend fun onStart() {
         super.onStart()
+        ioScope.cancel()
+        ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         eversense.addWatcher(this)
+        val btFilter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(bluetoothStateReceiver, btFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            context.registerReceiver(bluetoothStateReceiver, btFilter)
+        }
         if (hasBluetoothPermissions()) {
             aapsLogger.debug(LTag.BGSOURCE, "onStart — permissions granted, attempting auto-reconnect")
             ioScope.launch {
@@ -139,7 +170,13 @@ class EversensePlugin @Inject constructor(
 
     override suspend fun onStop() {
         super.onStop()
+        ioScope.cancel()
         eversense.removeWatcher(this)
+        try {
+            context.unregisterReceiver(bluetoothStateReceiver)
+        } catch (_: IllegalArgumentException) {
+            // Not registered — safe to ignore
+        }
     }
 
     private fun requestBluetoothPermissions() {
