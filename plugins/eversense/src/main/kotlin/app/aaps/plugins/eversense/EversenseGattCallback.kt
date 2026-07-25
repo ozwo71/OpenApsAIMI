@@ -76,6 +76,16 @@ class EversenseGattCallback(
     private var security: EversenseSecurityType = EversenseSecurityType.None
     private var cryptoUtil = EversenseCrypto365Util(preferences)
 
+    // Multi-notification response reassembly (SecureV2/365 only). Each notification is framed
+    // with a chunk header: chunk 1 = [chunkIndex=1, totalChunks, 0x01] (3 bytes), chunk 2+ =
+    // [chunkIndex, totalChunks] (2 bytes), followed by that chunk's slice of the [prefix+ciphertext]
+    // blob. Most responses fit in one chunk, but bulk historical log reads can span several —
+    // decrypting a lone chunk 1 of N>1 always fails the CCM MAC check since the auth tag covers
+    // the full ciphertext, so chunks must be buffered until the full message has arrived.
+    private var chunkAccumulator: ByteArray = ByteArray(0)
+    private var chunkTotalExpected: Int = 1
+    private var chunkNextIndex: Int = 1
+
     // FIX 2: Use AtomicReference for currentPacket to avoid the race condition where a stale
     // BLE notification could be processed against the wrong packet between assignment and write.
     var currentPacket: AtomicReference<EversenseBasePacket?> = AtomicReference(null)
@@ -110,6 +120,14 @@ class EversenseGattCallback(
         }
     }
 
+    // One-shot reconnect scheduled by scheduleReconnect(); kept as a field so repeated
+    // scheduleReconnect() calls (e.g. explicit disconnectAndScheduleReconnect + late
+    // onConnectionStateChange) cancel the previous delay instead of stacking retries.
+    private val reconnectRunnable = Runnable {
+        EversenseLogger.info(TAG, "Attempting auto-reconnect (attempt $reconnectAttempts)...")
+        plugin.connect(null)
+    }
+
     // FIX 12: Tracks consecutive authV2flow failures while using the shortcut path.
     // After SHORTCUT_FAIL_THRESHOLD failures, disallowUseShortcut() is called to force
     // a full re-auth on the next connection. This handles BLE stack resets (e.g. charger
@@ -136,8 +154,29 @@ class EversenseGattCallback(
         bluetoothGatt = null
         connected = false
         transmitterReady = false
+        resetChunkAccumulator()
         EversenseLogger.info(TAG, "GATT disconnected and closed")
     }
+
+    // disconnect() alone does NOT reliably re-trigger onConnectionStateChange(): calling
+    // bluetoothGatt.close() while its own async disconnect() is still in flight can suppress
+    // that callback from ever arriving, and all reconnect scheduling (backoff, persistent
+    // retry loop) lives inside that callback's disconnect branch. Left unrecovered, this
+    // silently strands the connection until the user notices and manually reconnects -
+    // observed in the wild via fullSync()'s own failure handler (see Eversense365Communicator).
+    // Use this instead of plain disconnect() whenever OUR code (not the Android BLE stack) is
+    // the one initiating the disconnect, so a reconnect is scheduled regardless of whether the
+    // callback fires. Treated as a clean, self-initiated disconnect (GATT_SUCCESS) for a fast
+    // 5s retry rather than backoff, since it isn't a real BLE-level failure.
+    @SuppressLint("MissingPermission")
+    fun disconnectAndScheduleReconnect() {
+        disconnect()
+        handler.post {
+            plugin.watchers.forEach { it.onConnectionChanged(false) }
+        }
+        scheduleReconnect(BluetoothGatt.GATT_SUCCESS)
+    }
+
     @SuppressLint("MissingPermission")
     fun cleanUp() {
         bluetoothGatt?.disconnect()
@@ -145,9 +184,16 @@ class EversenseGattCallback(
         bluetoothGatt = null
         connected = false
         transmitterReady = false
+        resetChunkAccumulator()
         bleExecutor.shutdownNow()
         bleExecutor = Executors.newSingleThreadExecutor()
         EversenseLogger.info(TAG, "GATT cleaned up before reconnect")
+    }
+
+    private fun resetChunkAccumulator() {
+        chunkAccumulator = ByteArray(0)
+        chunkTotalExpected = 1
+        chunkNextIndex = 1
     }
     @SuppressLint("MissingPermission")
     fun readRssi() {
@@ -233,39 +279,41 @@ class EversenseGattCallback(
                 failedConnectionAttempts = 0
             }
 
-            val storedAddress = preferences.getString(StorageKeys.REMOTE_DEVICE_KEY, null)
-            if (storedAddress != null) {
-                // Exponential backoff so AAPS reclaims the transmitter quickly after boot
-                // (when the official Eversense app temporarily holds the BLE connection)
-                // and avoids battery drain during sustained unavailability.
-                //
-                // Status 19 = transmitter actively rejected us (placement issue, not competition) —
-                // use a fixed 30 s interval so we don't spam it.
-                // Status GATT_SUCCESS = clean disconnect (we or the transmitter closed cleanly) —
-                // reconnect quickly in 5 s.
-                // All other status codes (e.g. 133 = GATT_ERROR, device busy) = backoff:
-                //   attempt 0 → 5 s, attempt 1 → 10 s, attempt 2 → 20 s, attempt 3 → 40 s,
-                //   attempt 4+ → 60 s cap.
-                val delayMs: Long = when {
-                    status == 19 -> 30_000L
-                    status == BluetoothGatt.GATT_SUCCESS -> 5_000L
-                    else -> {
-                        val attempt = reconnectAttempts++
-                        minOf(5_000L * (1L shl minOf(attempt, 4)), 60_000L)
-                    }
-                }
-                EversenseLogger.info(TAG, "Scheduling auto-reconnect in ${delayMs / 1000}s (status: $status, attempt: $reconnectAttempts)")
-                handler.postDelayed({
-                    EversenseLogger.info(TAG, "Attempting auto-reconnect (attempt $reconnectAttempts)...")
-                    plugin.connect(null)
-                }, delayMs)
-                // Also start persistent 60s retry loop in case autoConnect gives up
-                handler.removeCallbacks(persistentReconnectRunnable)
-                handler.postDelayed(persistentReconnectRunnable, 60_000L)
-            } else {
-                EversenseLogger.warning(TAG, "No stored device address — skipping auto-reconnect")
+            scheduleReconnect(status)
+        }
+    }
+
+    // Exponential backoff so AAPS reclaims the transmitter quickly after boot
+    // (when the official Eversense app temporarily holds the BLE connection)
+    // and avoids battery drain during sustained unavailability.
+    //
+    // Status 19 = transmitter actively rejected us (placement issue, not competition) —
+    // use a fixed 30 s interval so we don't spam it.
+    // Status GATT_SUCCESS = clean disconnect (we or the transmitter closed cleanly) —
+    // reconnect quickly in 5 s.
+    // All other status codes (e.g. 133 = GATT_ERROR, device busy) = backoff:
+    //   attempt 0 → 5 s, attempt 1 → 10 s, attempt 2 → 20 s, attempt 3 → 40 s,
+    //   attempt 4+ → 60 s cap.
+    private fun scheduleReconnect(status: Int) {
+        val storedAddress = preferences.getString(StorageKeys.REMOTE_DEVICE_KEY, null)
+        if (storedAddress == null) {
+            EversenseLogger.warning(TAG, "No stored device address — skipping auto-reconnect")
+            return
+        }
+        val delayMs: Long = when {
+            status == 19 -> 30_000L
+            status == BluetoothGatt.GATT_SUCCESS -> 5_000L
+            else -> {
+                val attempt = reconnectAttempts++
+                minOf(5_000L * (1L shl minOf(attempt, 4)), 60_000L)
             }
         }
+        EversenseLogger.info(TAG, "Scheduling auto-reconnect in ${delayMs / 1000}s (status: $status, attempt: $reconnectAttempts)")
+        handler.removeCallbacks(reconnectRunnable)
+        handler.postDelayed(reconnectRunnable, delayMs)
+        // Also start persistent 60s retry loop in case autoConnect gives up
+        handler.removeCallbacks(persistentReconnectRunnable)
+        handler.postDelayed(persistentReconnectRunnable, 60_000L)
     }
 
     @SuppressLint("MissingPermission")
@@ -374,6 +422,47 @@ class EversenseGattCallback(
         handleCharacteristicChanged(gatt, characteristic.value)
     }
 
+    // Returns the reassembled [prefix+ciphertext] blob once all chunks of a message have
+    // arrived, or null while still waiting on more chunks. A malformed/out-of-sequence chunk
+    // discards whatever was in progress rather than risk splicing mismatched chunks together.
+    private fun accumulateChunk(rawData: ByteArray): ByteArray? {
+        if (rawData.size < 2) {
+            EversenseLogger.warning(TAG, "Chunk too short to contain a header - size: ${rawData.size}")
+            return null
+        }
+
+        val chunkIndex = rawData[0].toInt() and 0xFF
+        val totalChunks = rawData[1].toInt() and 0xFF
+
+        if (chunkIndex == 1) {
+            // Chunk 1 header is 3 bytes: [index, total, 0x01]
+            if (rawData.size < 3) {
+                EversenseLogger.warning(TAG, "Chunk 1 too short for 3-byte header - size: ${rawData.size}")
+                return null
+            }
+            if (chunkNextIndex != 1) {
+                EversenseLogger.warning(TAG, "New chunk sequence started before previous one (chunk $chunkNextIndex/$chunkTotalExpected) completed - discarding partial data")
+            }
+            chunkAccumulator = rawData.copyOfRange(3, rawData.size)
+            chunkTotalExpected = totalChunks
+            chunkNextIndex = 2
+        } else {
+            if (chunkIndex != chunkNextIndex || totalChunks != chunkTotalExpected) {
+                EversenseLogger.warning(TAG, "Out-of-sequence chunk (got $chunkIndex/$totalChunks, expected $chunkNextIndex/$chunkTotalExpected) - discarding in-progress message")
+                resetChunkAccumulator()
+                return null
+            }
+            chunkAccumulator += rawData.copyOfRange(2, rawData.size)
+            chunkNextIndex++
+        }
+
+        if (chunkNextIndex <= chunkTotalExpected) return null
+
+        val complete = chunkAccumulator
+        resetChunkAccumulator()
+        return complete
+    }
+
     @SuppressLint("MissingPermission")
     @OptIn(ExperimentalStdlibApi::class)
     private fun handleCharacteristicChanged(gatt: BluetoothGatt, rawData: ByteArray) {
@@ -381,7 +470,7 @@ class EversenseGattCallback(
 
         var data = rawData
         if (security == EversenseSecurityType.SecureV2) {
-            data = data.drop(3).toByteArray()
+            data = accumulateChunk(rawData) ?: return
 
             if (data[0] != Eversense365Packets.AuthenticateResponseId) {
                 data = cryptoUtil.decrypt(data)

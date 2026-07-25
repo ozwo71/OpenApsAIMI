@@ -19,8 +19,11 @@ interface HardLimits {
         val MAX_DIA = doubleArrayOf(9.0, 9.0, 9.0, 9.0, 12.0)
         val MIN_DIA_INHALED = doubleArrayOf(1.5, 1.5, 1.5, 1.5, 1.5) // Inhaled insulin (e.g. Afrezza) has shorter DIA
         val MAX_DIA_INHALED = doubleArrayOf(4.0, 4.0, 4.0, 4.0, 4.0)
-        const val MIN_PEAK = 35 // mgdl
-        const val MAX_PEAK = 120 // mgdl
+        const val MIN_PEAK = 35 // minutes
+        const val MAX_PEAK = 120 // minutes
+        // Inhaled insulin (e.g. Afrezza): clinical Tmax ~35–45 min; range must include local default Peak 40.
+        const val MIN_PEAK_INHALED = 20 // minutes
+        const val MAX_PEAK_INHALED = 45 // minutes
         val MIN_IC = doubleArrayOf(2.0, 2.0, 2.0, 2.0, 0.3)
         val MAX_IC = doubleArrayOf(100.0, 100.0, 100.0, 100.0, 100.0)
         const val MIN_ISF = 2.0 // mgdl
@@ -47,6 +50,8 @@ interface HardLimits {
     fun maxDiaInhaled(): Double
     fun minPeak(): Int
     fun maxPeak(): Int
+    fun minPeakInhaled(): Int
+    fun maxPeakInhaled(): Int
     fun minIC(): Double
     fun maxIC(): Double
 

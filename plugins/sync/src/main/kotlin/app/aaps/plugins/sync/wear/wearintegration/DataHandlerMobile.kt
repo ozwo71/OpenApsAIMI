@@ -284,7 +284,11 @@ class DataHandlerMobile @Inject constructor(
             }
         }
         onEvent<EventData.ActionAfrezzaPreCheck> { handleAfrezzaPreCheck(it) }
-        onEvent<EventData.ActionAfrezzaConfirmed> { doAfrezzaBolus(it.units) }
+        onEvent<EventData.ActionAfrezzaConfirmed> {
+            // Defense-in-depth: Afrezza logging is local DB insert — a client must never reach here.
+            if (rejectIfAapsClient()) return@onEvent
+            doAfrezzaBolus(it.units)
+        }
         onEvent<EventData.ActionECarbsPreCheck> { handleECarbsPreCheck(it) }
         onEvent<EventData.ActionECarbsConfirmed> {
             // Commit the parked eCarbs through the relay (MASTER → local deliverECarbs; CLIENT → master records them).
@@ -780,10 +784,7 @@ class DataHandlerMobile @Inject constructor(
             sendError("Invalid Afrezza cartridge: ${units}U")
             return
         }
-        // Find the Afrezza ICfg from InsulinManager
-        val afrezzaPeak = InsulinType.OREF_INHALED_AFREZZA.insulinPeakTime
-        val afrezzaIcfg = insulinManager.insulins.firstOrNull { it.insulinPeakTime == afrezzaPeak }
-            ?: insulinManager.insulins.firstOrNull { InsulinType.fromPeak(it.insulinPeakTime).isInhaled }
+        val afrezzaIcfg = findAfrezzaIcfg()
         if (afrezzaIcfg == null) {
             sendError(rh.gs(app.aaps.core.ui.R.string.afrezza_not_configured))
             return
@@ -799,10 +800,22 @@ class DataHandlerMobile @Inject constructor(
         )
     }
 
-    private suspend fun doAfrezzaBolus(units: Int) {
-        val afrezzaPeak = InsulinType.OREF_INHALED_AFREZZA.insulinPeakTime
-        val afrezzaIcfg = insulinManager.insulins.firstOrNull { it.insulinPeakTime == afrezzaPeak }
+    /**
+     * Resolve Afrezza ICfg including edited peaks that no longer match the exact
+     * [InsulinType.OREF_INHALED_AFREZZA] peak but still have inhaled-shaped Peak/DIA.
+     */
+    private fun findAfrezzaIcfg() =
+        insulinManager.insulins.firstOrNull { it.insulinPeakTime == InsulinType.OREF_INHALED_AFREZZA.insulinPeakTime }
             ?: insulinManager.insulins.firstOrNull { InsulinType.fromPeak(it.insulinPeakTime).isInhaled }
+            ?: insulinManager.insulins.firstOrNull { cfg ->
+                cfg.peak in HardLimits.MIN_PEAK_INHALED..HardLimits.MAX_PEAK_INHALED &&
+                    cfg.dia < HardLimits.MIN_DIA.min() &&
+                    cfg.dia in HardLimits.MIN_DIA_INHALED[0]..HardLimits.MAX_DIA_INHALED[0]
+            }
+
+    private suspend fun doAfrezzaBolus(units: Int) {
+        if (rejectIfAapsClient()) return
+        val afrezzaIcfg = findAfrezzaIcfg()
         if (afrezzaIcfg == null) {
             sendError(rh.gs(app.aaps.core.ui.R.string.afrezza_not_configured))
             return

@@ -1551,6 +1551,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 from = this,
                 iobCobCalculator = iobCobCalculator,
                 persistenceLayer = persistenceLayer,
+                preferences = preferences,
                 aapsLogger = aapsLogger,
             )
         }
