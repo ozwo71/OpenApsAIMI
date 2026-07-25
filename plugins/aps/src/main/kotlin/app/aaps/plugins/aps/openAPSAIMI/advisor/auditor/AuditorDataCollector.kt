@@ -18,6 +18,7 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaProductionDecision
 import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalTreeSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
+import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.roundToInt
@@ -85,6 +86,8 @@ class AuditorDataCollector @Inject constructor(
         mealCertainty: MealCertainty? = null,
         harmoniaProduction: HarmoniaProductionDecision? = null,
         harmonizerOutcome: HarmoniaHarmonizer.Outcome? = null,
+        physiologicalPatterns: JSONObject? = null,
+        harmoniaSmbAuthority: JSONObject? = null,
     ): AuditorInput {
         
         val now = dateUtil.now()
@@ -170,6 +173,8 @@ class AuditorDataCollector @Inject constructor(
             mealCertainty = mealCertainty,
             harmoniaProduction = harmoniaProduction,
             harmonizerOutcome = harmonizerOutcome,
+            physiologicalPatterns = physiologicalPatterns,
+            harmoniaSmbAuthority = harmoniaSmbAuthority,
         )
     }
 

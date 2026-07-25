@@ -57,4 +57,25 @@ class PatternCapHoldTest {
         assertThat(hold.resolve(rawCapU = null, rising = true)).isNull()
         assertThat(hold.holding).isFalse()
     }
+
+    @Test
+    fun soft_meal_proposal_is_not_rehardcapped_when_pattern_flaps() {
+        val hold = PatternCapHold(holdTicks = 3)
+        assertThat(
+            hold.resolve(rawCapU = 1.20, rising = true, rawKind = PatternCapKind.SOFT),
+        ).isNull()
+        assertThat(hold.holding).isFalse()
+        // Soft flap-off must not resurrect a binding 1.20 hard hold.
+        assertThat(hold.resolve(rawCapU = null, rising = true)).isNull()
+    }
+
+    @Test
+    fun hard_cap_still_held_during_rise_when_pattern_flaps() {
+        val hold = PatternCapHold(holdTicks = 2)
+        assertThat(
+            hold.resolve(rawCapU = 0.50, rising = true, rawKind = PatternCapKind.HARD),
+        ).isEqualTo(0.50)
+        assertThat(hold.resolve(rawCapU = null, rising = true)).isEqualTo(0.50)
+        assertThat(hold.holding).isTrue()
+    }
 }

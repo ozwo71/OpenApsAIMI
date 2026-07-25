@@ -212,9 +212,11 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSensorTelemetry
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEnvironment
+import app.aaps.plugins.aps.openAPSAIMI.patient.AimiCascadeArbitrationArtifacts
 import app.aaps.plugins.aps.openAPSAIMI.patient.BodyKineticsDigest
 import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
 import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertaintyBuilder
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealRiseGeometry
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaAction
 import app.aaps.plugins.aps.openAPSAIMI.patient.GlobalPhysiologicalState
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalRiskLevel
@@ -325,7 +327,7 @@ internal data class AimiDecisionContext(
         var patient_state: org.json.JSONObject? = null,
         /** High-level patient mode and strategy derived from the shared state. */
         var patient_mode: org.json.JSONObject? = null,
-        /** AIMI Harmonia physiological tree, context-only in Lot 1 with no insulin authority. */
+        /** AIMI Harmonia physiological tree — deploys insulin intent; Harmonia arbitrates dose. */
         var physiological_tree: org.json.JSONObject? = null,
         /** Lot A endocrine belief (WCycle + hypo dampen) — context for tree/Harmonia/forensics. */
         var endocrine_belief: org.json.JSONObject? = null,
@@ -339,6 +341,8 @@ internal data class AimiDecisionContext(
         var harmonia_simulation: org.json.JSONObject? = null,
         /** AIMI Harmonia production owner state; basal-first only and safety-gated. */
         var harmonia_production: org.json.JSONObject? = null,
+        /** Harmonia SMB authority arbitration (ACCEPT / LIFT_WITHIN_ENVELOPE / REDUCE). */
+        var harmonia_smb_authority: org.json.JSONObject? = null,
         /** Unified intelligence snapshot (kinetics, causal, ISF, predictions) — intelligence_snapshot_v1. */
         var intelligence_snapshot: org.json.JSONObject? = null,
         /** Runtime ownership of T3C for this tick: native RBT, legacy fallback, or safety terminal. */
@@ -704,6 +708,9 @@ internal data class AimiDecisionContext(
             }
             adjustments.harmonia_production?.let { production ->
                 adj.put("harmonia_production", production)
+            }
+            adjustments.harmonia_smb_authority?.let { smbAuthority ->
+                adj.put("harmonia_smb_authority", smbAuthority)
             }
             adjustments.intelligence_snapshot?.let { snapshot ->
                 adj.put("intelligence_snapshot_v1", snapshot)
@@ -1656,6 +1663,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastLoadGovernorMultiplierG = 1.0
         lastPhysiologicalPhaseOutput = null
         lastPhysiologicalPatternSnapshot = null
+        AimiCascadeArbitrationArtifacts.clear()
         lastMealAbsorptionOutput = null
         lastPhysioLatentState = null
         lastEffortAssessment = null // per-tick computed; memory (lastEffortMemory) persists across ticks
@@ -3643,6 +3651,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             harmoniaExerciseBlock = harmoniaExerciseBlock,
             harmoniaHardSafetyBlock = harmoniaHardSafetyBlock,
             harmoniaBlockReason = harmoniaBlockReason,
+            insulinIntent = lastPhysiologicalTreeSnapshot?.insulinIntent?.name,
+            mealCertaintySupports = lastMealCertainty?.supportsMealSupport == true,
+            riseConfirmed = lastMealCertainty?.riseGeometry == MealRiseGeometry.OK ||
+                (delta >= 1.2f && bg >= 140.0),
             postHypoDeliverySuppressSmb =
                 lastPostHypoDeliveryAuthority.active && lastPostHypoDeliveryAuthority.suppressMealDelivery,
             postHypoOrdinal = postHypoOrdinal,
@@ -3868,7 +3880,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         patternSnapshot.dominant?.let { dominant ->
             consoleLog.add(
                 "🧬 PATTERN: dominant=$dominant conf=${"%.2f".format(patternSnapshot.dominantConfidence)} " +
-                    "cap=${patternSnapshot.smbCapU?.let { "%.2f".format(it) + "U" } ?: "none"} " +
+                    "cap=${patternSnapshot.smbCapU?.let { "%.2f".format(it) + "U" } ?: "none"}" +
+                    "${patternSnapshot.smbCapKind?.let { "/$it" } ?: ""} " +
                     "mealSupp=${patternSnapshot.suppressMealInterpretation} " +
                     "hyperSupp=${patternSnapshot.suppressHyperRelease} | ${patternSnapshot.reasonSummary}",
             )
@@ -4115,12 +4128,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val stackingCapU = lastInsulinStackingEvaluation?.takeIf {
             it.kind == InsulinStackingStance.Kind.SURVEILLANCE_IOB
         }?.smbAbsoluteCapU
+        // Soft meal proposals never bind here; PatternCapHold only re-applies HARD caps.
         val patternCapU = patternCapHold.resolve(
             rawCapU = lastPhysiologicalPatternSnapshot?.smbCapU,
             rising = delta > 0f,
+            rawKind = lastPhysiologicalPatternSnapshot?.smbCapKind,
         )
+        val softPatternProposalU = lastPhysiologicalPatternSnapshot?.softProposedCapU()
         if (patternCapHold.holding && patternCapU != null) {
-            consoleLog.add("🧷 Pattern cap hold: keeping ${"%.2f".format(patternCapU)}U during rise (pattern flapped)")
+            consoleLog.add("🧷 Pattern cap hold: keeping HARD ${"%.2f".format(patternCapU)}U during rise (pattern flapped)")
+        }
+        if (softPatternProposalU != null) {
+            consoleLog.add("🍽️ Pattern soft proposal ${"%.2f".format(softPatternProposalU)}U (Harmonia may lift within maxSMBHB)")
         }
         consoleLog.add("🪜 RBT_GATE: ${authorityGate.summary()}")
         val rbtAuthority = authorityGate.effectiveAuthority != ReleaseAuthority.NONE
@@ -4148,7 +4167,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 patternActive = lastPhysiologicalPatternSnapshot?.active
                     ?.joinToString(separator = "+") { it.id.name }
                     ?.takeIf { it.isNotEmpty() },
-                patternCapU = patternCapU,
+                patternCapU = patternCapU ?: softPatternProposalU,
             )
                 .appendStage("HTR", htr.v3SmbBeforeU, htr.v3SmbAfterU, phase = "AUTODRIVE_PRE_TERMINAL", kind = "LIFT")
                 .appendStage("RBT", htr.v3SmbAfterU, rawLifted, phase = "AUTODRIVE_PRE_TERMINAL", kind = "LIFT")
@@ -4162,6 +4181,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val after = min(traceValue, cap)
                 traceDraft = traceDraft.appendStage("IOB_SURVEILLANCE_CAP", traceValue, after, cap, "AUTODRIVE_PRE_TERMINAL", "CAP")
                 traceValue = after
+            }
+            softPatternProposalU?.let { proposal ->
+                // Telemetry only — soft meal proposal must not bind terminal pre-caps.
+                traceDraft = traceDraft.appendStage(
+                    "PATTERN_SOFT_PROPOSAL",
+                    traceValue,
+                    traceValue,
+                    proposal,
+                    "AUTODRIVE_PRE_TERMINAL",
+                    "PROPOSAL",
+                )
             }
             patternCapU?.let { cap ->
                 val after = min(traceValue, cap)
@@ -8221,12 +8251,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.scenario_projection = lastScenarioProjection?.toDecisionContextExport()
         decisionCtx.adjustments.hyper_trajectory_release = lastHyperTrajectoryRelease?.toDecisionContextExport()
         decisionCtx.adjustments.physiological_phase = physiologicalPhaseExport()
-        lastPhysiologicalPatternSnapshot?.takeIf { it.active.isNotEmpty() }?.let { patterns ->
-            decisionCtx.adjustments.physiological_patterns = PhysiologicalPatternExport.toJsonObject(patterns)
+        val patternsJson = lastPhysiologicalPatternSnapshot?.takeIf { it.active.isNotEmpty() }?.let { patterns ->
+            PhysiologicalPatternExport.toJsonObject(patterns).also {
+                decisionCtx.adjustments.physiological_patterns = it
+            }
         }
         decisionCtx.adjustments.meal_absorption_phase = mealAbsorptionPhaseExport()
         decisionCtx.adjustments.pred_divergence = lastPredDivergenceExport
         val rbtPrefs = RecursiveBeliefPreferences.from(preferences)
+        var harmoniaSmbAuthorityJson: org.json.JSONObject? = null
         lastRecursiveBeliefSnapshot?.let { snap ->
             val t3cApplied = snap.resolutions.t3cBasalFirst?.selectedForProduction == true
             val harmoniaApplied = snap.resolutions.harmoniaBasalFirst?.selectedForProduction == true
@@ -8242,7 +8275,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 authorityGate = lastRecursiveAuthorityGateDecision,
             )
             decisionCtx.adjustments.recursive_belief = UnfoldExporter.toJsonObject(export)
+            snap.resolutions.harmoniaSmb?.let { smb ->
+                harmoniaSmbAuthorityJson = org.json.JSONObject().apply {
+                    put("mode", smb.authorityMode ?: JSONObject.NULL)
+                    put("smb_u", smb.demandAfterU)
+                    put("demand_before_u", smb.demandBeforeU)
+                    put("max_smb_cap_u", smb.maxSmbCapU)
+                    put("adds_smb_authority", smb.addsSmbAuthority)
+                    put("insulin_intent", smb.insulinIntent ?: JSONObject.NULL)
+                    put("reason_codes", org.json.JSONArray(smb.reasonCodes))
+                    put("source", "harmonia_smb_authority_v1")
+                }
+                decisionCtx.adjustments.harmonia_smb_authority = harmoniaSmbAuthorityJson
+            }
         }
+        AimiCascadeArbitrationArtifacts.publish(
+            physiologicalPatterns = patternsJson,
+            harmoniaSmbAuthority = harmoniaSmbAuthorityJson,
+        )
         decisionCtx.adjustments.recursive_authority_gate = lastRecursiveAuthorityGateDecision?.toJsonObject()
         decisionCtx.adjustments.physio_latent_state = lastPhysioLatentState?.toJsonObject()
         decisionCtx.adjustments.uam_hypotheses = lastUamHypothesisState?.toJsonObject()
@@ -8276,8 +8326,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         decisionCtx.adjustments.physiological_tree = lastPhysiologicalTreeSnapshot?.toJsonObject()?.apply {
+            // Keep tree authority label honest: Harmonia arbitrates basal + SMB (not "none"/context-only).
+            put("insulin_authority", "harmonia_basal_and_smb_arbitration")
             lastIntelligenceSnapshot?.let { snap ->
-                put("insulin_authority", "context_modulation_lot2")
                 put("insulin_kinetics_context", org.json.JSONObject().apply {
                     put("effective_dia_h", snap.kinetics.effective.diaHours)
                     put("effective_peak_min", snap.kinetics.effective.peakMinutes)

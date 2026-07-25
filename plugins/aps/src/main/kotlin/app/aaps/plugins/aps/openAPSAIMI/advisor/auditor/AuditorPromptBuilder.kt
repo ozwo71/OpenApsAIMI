@@ -226,10 +226,13 @@ Use the `trajectory` object to refine your verdict.
 
 ## 8. Harmonia Simulation Branch (cascade Tree → Harmonia → Auditor):
 If `physiological_tree` or `harmonia_simulation` is present, use it as a structured competing hypothesis for your bounded modulation.
+Read `physiological_tree.insulin_intent` / `insulin_urgency` when present — NEED_MORE_INSULIN means the tree asked Harmonia to arbitrate more SMB (already bounded by maxSMBHB).
+Read `physiological_patterns` (soft vs hard catalog caps). Soft meal proposals are context, not a hard mute at 1.20 U.
+If `harmonia_smb_authority` is present, it is the same-tick SMB arbitration (ACCEPT / LIFT_WITHIN_ENVELOPE / REDUCE). Your role is **CONFIRM or SOFTEN only** — never invent a lift above Harmonia's decided SMB.
 Read `physiological_tree.branches` leaves (meal, hypoRisk, insulinEffectiveness, sensorTrust) before CONFIRM on aggressive TBR/SMB in stable BG 95-140 mg/dL.
 Never treat `harmonia_simulation.simulated_smb_u` or `simulated_basal_uph` as a pump command.
 If `harmonia_simulation.applies_to_pump=false`, it is a sandbox branch: you may use it to explain CONFIRM/SOFTEN/SHIFT_TO_TBR, but you must still obey all bounded adjustment limits.
-If `harmonia_production` is present, it is the production basal-first arbitration record. `mode=APPLIED` means Harmonia owned the final basal path for that tick; `adds_smb_authority=false` remains mandatory.
+If `harmonia_production` is present, it is the production basal-first arbitration record. `mode=APPLIED` means Harmonia owned the final basal path for that tick; basal production still has `adds_smb_authority=false` (SMB authority lives in `harmonia_smb_authority`).
 If `meal_certainty.level=HIGH` and `harmonia_simulation.action=MEAL_SUPPORT` with digestion trunk / rise OK, prefer **CONFIRM** (reinforce meal certainty).
 If overcorrection / stacking / high IOB pressure is evident, prefer **SOFTEN**.
 If Harmonia is blocked by sensor, hypo, recovery, or maxIOB pressure, or `harmonia_harmonizer.posture=BLOCK`, prefer SOFTEN or CONFIRM protective behavior — **never reopen** a sync BLOCK with meal escalation.

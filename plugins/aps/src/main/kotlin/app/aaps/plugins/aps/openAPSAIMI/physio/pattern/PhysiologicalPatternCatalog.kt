@@ -52,12 +52,15 @@ object PhysiologicalPatternCatalog {
             category = PhysiologicalPatternCategory.MEAL,
             dominantScaleMinutes = 60,
             smbCapU = 1.20,
+            // Soft proposal: Harmonia may lift within maxSMBHB / hard envelope on confirmed rise.
+            capKind = PatternCapKind.SOFT,
         ),
         PatternDefinition(
             id = PhysiologicalPatternId.MEAL_FIRST_WAVE,
             category = PhysiologicalPatternCategory.MEAL,
             dominantScaleMinutes = 15,
             smbCapU = 1.20,
+            capKind = PatternCapKind.SOFT,
         ),
         PatternDefinition(
             id = PhysiologicalPatternId.MEAL_SECOND_WAVE,

@@ -176,8 +176,9 @@ class PhysiologicalTreeBuilderTest {
         val json = buildTree(stableState())!!.toJsonObject()
         val serialized = json.toString()
 
-        assertThat(json.getString("insulin_authority")).isEqualTo("none_lot1_context_only")
-        assertThat(serialized).doesNotContain("smb_u")
+        assertThat(json.getString("insulin_authority")).isEqualTo("harmonia_basal_and_smb_arbitration")
+        assertThat(json.has("insulin_intent")).isTrue()
+        assertThat(serialized).doesNotContain("\"smb_u\"")
         assertThat(serialized).doesNotContain("tbr_uph")
         assertThat(serialized).doesNotContain("bolus_u")
     }

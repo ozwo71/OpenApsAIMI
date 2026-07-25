@@ -107,14 +107,30 @@ object PhysiologicalPatternExport {
         root.put("suppress_hyper_release", snapshot.suppressHyperRelease)
         root.put("suppress_wavelet", snapshot.suppressWaveletBoost)
         snapshot.smbCapU?.let { root.put("smb_cap_u", it) }
+        snapshot.smbCapKind?.let { root.put("smb_cap_kind", it.name) }
+        snapshot.mealPatternCap?.let { meal ->
+            root.put(
+                "meal_pattern_cap",
+                JSONObject().apply {
+                    put("proposed_cap_u", meal.proposedCapU)
+                    put("kind", meal.kind.name)
+                    put("source_id", meal.sourceId?.name ?: JSONObject.NULL)
+                },
+            )
+        }
+        snapshot.hardBindingCapU()?.let { root.put("hard_binding_cap_u", it) }
+        snapshot.softProposedCapU()?.let { root.put("soft_proposed_cap_u", it) }
         root.put("summary", snapshot.reasonSummary)
         root.put("active", JSONArray(snapshot.active.map { reading ->
+            val def = PhysiologicalPatternCatalog.definitionOf(reading.id)
             JSONObject().apply {
                 put("id", reading.id.name)
                 put("category", PhysiologicalPatternCatalog.categoryOf(reading.id).name)
                 put("confidence", reading.confidence)
                 put("reason", reading.reason)
-                put("dominant_scale_min", PhysiologicalPatternCatalog.definitionOf(reading.id).dominantScaleMinutes)
+                put("dominant_scale_min", def.dominantScaleMinutes)
+                put("cap_kind", def.capKind.name)
+                def.smbCapU?.let { put("smb_cap_u", it) }
             }
         }))
         return root

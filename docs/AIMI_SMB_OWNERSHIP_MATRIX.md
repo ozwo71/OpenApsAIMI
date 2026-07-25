@@ -46,11 +46,17 @@ Runs in the basal-finalize bundle. Order and effect on SMB:
 | Component | file:line | SMB effect | Precedence rule |
 |---|---|---|---|
 | **T3C native basal-first** (`planT3cBasalFirstProduction`) | §7372 | **No SMB** (basal-only). When it owns, Harmonia is **skipped**. | Absolute priority |
-| **Harmonia production basal-first** (`planHarmoniaProductionBranch`) | §7373 | **No SMB** (`adds_smb_authority=false`). Owns basal only. | Only if T3C not owning **and** `releaseAuthority == NONE` (§7027) |
-| **Harmonia SMB modulation** (`resolveHarmoniaSmb`, RBT) | RecursiveBeliefResolver | **Modulates** existing RBT SMB: MEAL_SUPPORT ↑ toward `maxSMB×0.30`, PROTECTIVE_REDUCTION ↓ | Only if `releaseAuthority != NONE` **and** `basalFirstChannel == NONE` (mutually exclusive with basal-first) |
+| **Harmonia production basal-first** (`planHarmoniaProductionBranch`) | §7373 | **Basal only** (`adds_smb_authority=false` on production record). | Only if T3C not owning **and** `releaseAuthority == NONE` (§7027) |
+| **Pattern catalog soft/hard** (`PhysiologicalPatternPolicy`) | pattern package | Soft meal (`MEAL_FIRST_WAVE` / `MEAL_UNDECLARED_FAST`) = **proposal 1.20**, not binding `min()`. Co-active HARD protectors (exercise, stacking, post-hypo…) still bind via `hardBindingCapU()`. | Before Harmonia SMB arbiter |
+| **Harmonia SMB authority** (`HarmoniaSmbArbiter` + RBT) | RecursiveBeliefResolver | Tree `insulin_intent` + soft proposal + rise → `ACCEPT` / `LIFT_WITHIN_ENVELOPE` / `REDUCE` within `min(mpc, maxSMBHB, IOB headroom, hard envelope)`. Never above maxSMBHB path. | Only if `releaseAuthority != NONE` **and** `basalFirstChannel == NONE` |
+| **Auditor** | AuditorOrchestrator | CONFIRM / SOFTEN only — **never lift**. External async advisory. | After finalize |
 
-So on a given tick Harmonia is **either** a basal owner **or** an SMB modulator, never both. Harmonia
-**never originates** an SMB; it only raises/caps one the RBT already authorized.
+So on a given tick Harmonia is **either** a basal owner **or** an SMB arbitrator, never both.
+Soft meal catalog proposals no longer mute MPC/HTR before arbitration. See
+[AIMI_HARMONIA_SMB_ARBITRATION.md](AIMI_HARMONIA_SMB_ARBITRATION.md).
+
+Tree deploys `insulin_intent` (`NEED_MORE_INSULIN` / `MEAL_SUPPORT` / …); label
+`insulin_authority=harmonia_basal_and_smb_arbitration`.
 
 ---
 

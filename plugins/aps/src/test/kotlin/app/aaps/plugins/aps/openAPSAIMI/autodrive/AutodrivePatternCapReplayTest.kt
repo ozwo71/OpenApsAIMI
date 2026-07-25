@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.autodrive
 
+import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PatternCapKind
 import app.aaps.plugins.aps.openAPSAIMI.quality.SmbBindingTrace
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
@@ -18,62 +19,30 @@ class AutodrivePatternCapReplayTest {
     )
 
     @Test
-    fun observed_variant_a_at_14_29_replays_pattern_safety_pkpd_throttle_and_terminal_values() {
-        val observed = SmbBindingTrace.Draft(
+    fun soft_meal_proposal_no_longer_binds_terminal_pre_caps_at_1_2() {
+        // Historical Variant A used PATTERN_CAP min→1.2 as binding. Soft meal must not.
+        val softReplay = SmbBindingTrace.replayCapsBeforeTerminalProtections(
             timestampMs = 52_152_000L,
-            originOwner = "AutodriveV3",
-            finalOwner = "AutodriveV3",
-            mpcOutputU = 2.2,
-            patternActive = "MEAL_UNDECLARED_FAST",
+            autodriveRequestU = 2.2,
             patternCapU = 1.2,
-            safetyNetBaseLimitU = 1.02,
-            pkpdBeforeU = 1.2,
-            pkpdAfterU = 1.02,
-            throttleBeforeU = 1.02,
-            throttleAfterU = 0.816,
+            patternCapKind = PatternCapKind.SOFT,
         )
-            .appendStage("PATTERN_CAP", 2.2, 1.2, 1.2, "AUTODRIVE_PRE_TERMINAL", "CAP")
-            .appendStage("SAFETY_PRECAUTIONS_PKPD", 1.2, 1.02, phase = "FINALIZE", kind = "GUARD")
-            .appendStage("SAFETY_NET", 1.02, 1.02, 1.02, "FINALIZE", "CAP")
-            .appendStage("PKPD_THROTTLE", 1.02, 0.816, phase = "FINALIZE", kind = "DAMPEN")
-            .appendStage("FINAL", 0.816, 0.816, phase = "EXPORT", kind = "OBSERVATION")
-            .build(finalU = 0.816)
-
-        assertThat(observed.bindingStage).isEqualTo("PATTERN_CAP")
-        assertThat(observed.finalU).isWithin(1e-9).of(0.816)
-        assertThat(observed.stages.map { it.afterU })
-            .containsExactly(1.2, 1.02, 1.02, 0.816, 0.816)
-            .inOrder()
+        assertThat(softReplay.afterPatternCapU).isWithin(1e-9).of(2.2)
+        assertThat(softReplay.bindingStage).isNull()
+        assertThat(softReplay.stages.single().name).isEqualTo("PATTERN_SOFT_PROPOSAL")
+        assertThat(softReplay.stages.single().kind).isEqualTo("PROPOSAL")
     }
 
     @Test
-    fun observed_variant_a_at_21_20_replays_refractory_throttle_and_red_carpet_restore() {
-        val observed = SmbBindingTrace.Draft(
+    fun hard_protective_pattern_still_binds_before_terminal_protections() {
+        val hardReplay = SmbBindingTrace.replayCapsBeforeTerminalProtections(
             timestampMs = 76_808_000L,
-            originOwner = "AutodriveV3",
-            finalOwner = "AutodriveV3",
-            mpcOutputU = 2.2,
-            patternActive = "MEAL_FIRST_WAVE",
-            patternCapU = 1.2,
-            safetyNetBaseLimitU = 0.72,
-            throttleBeforeU = 0.29,
-            throttleAfterU = 0.23,
-            redCarpetBeforeU = 0.23,
-            redCarpetAfterU = 1.2,
+            autodriveRequestU = 2.2,
+            patternCapU = 0.50,
+            patternCapKind = PatternCapKind.HARD,
         )
-            .appendStage("PATTERN_CAP", 2.2, 1.2, 1.2, "AUTODRIVE_PRE_TERMINAL", "CAP")
-            .appendStage("SAFETY_NET", 1.2, 0.72, 0.72, "FINALIZE", "CAP")
-            .appendStage("REFRACTORY", 0.72, 0.29, phase = "FINALIZE", kind = "GUARD")
-            .appendStage("PKPD_THROTTLE", 0.29, 0.23, phase = "FINALIZE", kind = "DAMPEN")
-            .appendStage("RED_CARPET", 0.23, 1.2, phase = "FINALIZE", kind = "RESTORE")
-            .appendStage("FINAL", 1.2, 1.2, phase = "EXPORT", kind = "OBSERVATION")
-            .build(finalU = 1.2)
-
-        assertThat(observed.bindingStage).isEqualTo("PATTERN_CAP")
-        assertThat(observed.finalU).isWithin(1e-9).of(1.2)
-        assertThat(observed.stages.map { it.afterU })
-            .containsExactly(1.2, 0.72, 0.29, 0.23, 1.2, 1.2)
-            .inOrder()
+        assertThat(hardReplay.afterPatternCapU).isWithin(1e-9).of(0.50)
+        assertThat(hardReplay.bindingStage).isEqualTo("PATTERN_CAP")
     }
 
     @Test
@@ -100,37 +69,27 @@ class AutodrivePatternCapReplayTest {
     }
 
     @Test
-    fun isolated_pattern_cap_counterfactual_stops_before_terminal_protections_and_is_not_a_terminal_dose_prediction() {
+    fun isolated_soft_meal_counterfactual_leaves_mpc_demand_for_harmonia_envelope() {
         autoDriveSnapshots.forEach { snapshot ->
-            val cappedBeforeTerminalProtections = SmbBindingTrace.replayCapsBeforeTerminalProtections(
+            val softBeforeTerminal = SmbBindingTrace.replayCapsBeforeTerminalProtections(
                 timestampMs = snapshot.timestampMs,
                 autodriveRequestU = 2.2,
                 patternCapU = 1.2,
+                patternCapKind = PatternCapKind.SOFT,
             )
-            val neutralizedBeforeTerminalProtections = SmbBindingTrace.replayCapsBeforeTerminalProtections(
-                timestampMs = snapshot.timestampMs,
-                autodriveRequestU = 2.2,
-                patternCapU = null,
-            )
+            val hardEnvelopeStillApplies = minOf(softBeforeTerminal.afterPatternCapU, 2.2)
 
             assertWithMessage(snapshot.label)
-                .that(cappedBeforeTerminalProtections.afterPatternCapU)
-                .isWithin(1e-9)
-                .of(1.2)
-            assertWithMessage(snapshot.label)
-                .that(cappedBeforeTerminalProtections.bindingStage)
-                .isEqualTo("PATTERN_CAP")
-            assertWithMessage(snapshot.label)
-                .that(neutralizedBeforeTerminalProtections.afterPatternCapU)
+                .that(softBeforeTerminal.afterPatternCapU)
                 .isWithin(1e-9)
                 .of(2.2)
             assertWithMessage(snapshot.label)
-                .that(neutralizedBeforeTerminalProtections.bindingStage)
+                .that(softBeforeTerminal.bindingStage)
                 .isNull()
-            assertThat(cappedBeforeTerminalProtections.stages.map { it.name })
-                .containsExactly("PATTERN_CAP")
-            assertThat(neutralizedBeforeTerminalProtections.stages.map { it.name })
-                .containsExactly("PATTERN_CAP")
+            assertWithMessage(snapshot.label)
+                .that(hardEnvelopeStillApplies)
+                .isWithin(1e-9)
+                .of(2.2)
         }
     }
 }

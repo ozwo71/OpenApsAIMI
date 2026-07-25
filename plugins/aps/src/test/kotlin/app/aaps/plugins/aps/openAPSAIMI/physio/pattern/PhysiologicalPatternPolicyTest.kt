@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test
 class PhysiologicalPatternPolicyTest {
 
     @Test
-    fun meal_active_uses_meal_cap_not_activity_min_cap() {
+    fun meal_active_publishes_soft_proposal_while_protective_hard_still_binds() {
         val snapshot = PhysiologicalPatternPolicy.aggregate(
             listOf(
                 PhysiologicalPatternReading(
@@ -28,12 +28,32 @@ class PhysiologicalPatternPolicyTest {
         )
 
         assertThat(snapshot.smbCapU).isEqualTo(1.20)
+        assertThat(snapshot.smbCapKind).isEqualTo(PatternCapKind.SOFT)
+        assertThat(snapshot.mealPatternCap?.kind).isEqualTo(PatternCapKind.SOFT)
+        // Soft meal is a proposal for Harmonia; co-active HARD protectors still bind via min().
+        assertThat(snapshot.softProposedCapU()).isEqualTo(1.20)
+        assertThat(snapshot.hardBindingCapU()).isEqualTo(0.40)
         assertThat(snapshot.suppressHyperRelease).isFalse()
         assertThat(snapshot.suppressMealInterpretation).isFalse()
     }
 
     @Test
-    fun non_meal_context_keeps_restrictive_min_cap() {
+    fun meal_soft_alone_has_no_hard_binding_cap() {
+        val snapshot = PhysiologicalPatternPolicy.aggregate(
+            listOf(
+                PhysiologicalPatternReading(
+                    id = PhysiologicalPatternId.MEAL_FIRST_WAVE,
+                    confidence = 0.80,
+                    reason = "FIRST_WAVE",
+                ),
+            ),
+        )
+        assertThat(snapshot.softProposedCapU()).isEqualTo(1.20)
+        assertThat(snapshot.hardBindingCapU()).isNull()
+    }
+
+    @Test
+    fun non_meal_context_keeps_restrictive_hard_min_cap() {
         val snapshot = PhysiologicalPatternPolicy.aggregate(
             listOf(
                 PhysiologicalPatternReading(
@@ -50,6 +70,21 @@ class PhysiologicalPatternPolicyTest {
         )
 
         assertThat(snapshot.smbCapU).isEqualTo(0.40)
+        assertThat(snapshot.smbCapKind).isEqualTo(PatternCapKind.HARD)
+        assertThat(snapshot.hardBindingCapU()).isEqualTo(0.40)
+        assertThat(snapshot.softProposedCapU()).isNull()
         assertThat(snapshot.suppressHyperRelease).isTrue()
+    }
+
+    @Test
+    fun catalog_marks_first_wave_and_undeclared_as_soft() {
+        assertThat(PhysiologicalPatternCatalog.definitionOf(PhysiologicalPatternId.MEAL_FIRST_WAVE).capKind)
+            .isEqualTo(PatternCapKind.SOFT)
+        assertThat(PhysiologicalPatternCatalog.definitionOf(PhysiologicalPatternId.MEAL_UNDECLARED_FAST).capKind)
+            .isEqualTo(PatternCapKind.SOFT)
+        assertThat(PhysiologicalPatternCatalog.definitionOf(PhysiologicalPatternId.EXERCISE_ACUTE).capKind)
+            .isEqualTo(PatternCapKind.HARD)
+        assertThat(PhysiologicalPatternCatalog.definitionOf(PhysiologicalPatternId.POOR_SLEEP_MORNING_RISE).capKind)
+            .isEqualTo(PatternCapKind.HARD)
     }
 }

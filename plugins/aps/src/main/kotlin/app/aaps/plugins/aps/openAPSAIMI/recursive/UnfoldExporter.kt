@@ -135,6 +135,9 @@ internal object UnfoldExporter {
                         reasonCodes = it.reasonCodes,
                         appliedToRbtDemand = it.appliedToRbtDemand,
                         reducesRbtDemand = it.reducesRbtDemand,
+                        authorityMode = it.authorityMode,
+                        addsSmbAuthority = it.addsSmbAuthority,
+                        insulinIntent = it.insulinIntent,
                     )
                 },
             ),
@@ -272,6 +275,9 @@ internal object UnfoldExporter {
                     put("reason_codes", JSONArray(harmonia.reasonCodes))
                     put("applied_to_rbt_demand", harmonia.appliedToRbtDemand)
                     put("reduces_rbt_demand", harmonia.reducesRbtDemand)
+                    put("authority_mode", harmonia.authorityMode ?: JSONObject.NULL)
+                    put("adds_smb_authority", harmonia.addsSmbAuthority)
+                    put("insulin_intent", harmonia.insulinIntent ?: JSONObject.NULL)
                 })
             }
         })

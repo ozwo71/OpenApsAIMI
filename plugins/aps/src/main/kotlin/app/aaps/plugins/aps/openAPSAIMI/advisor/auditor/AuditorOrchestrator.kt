@@ -13,6 +13,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusLiveData
 import app.aaps.plugins.aps.openAPSAIMI.model.*
+import app.aaps.plugins.aps.openAPSAIMI.patient.AimiCascadeArbitrationArtifacts
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaHarmonizer
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaProductionDecision
 import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
@@ -365,6 +366,8 @@ class AuditorOrchestrator @Inject constructor(
                     mealCertainty = mealCertainty,
                     harmoniaProduction = harmoniaProduction,
                     harmonizerOutcome = harmonizerOutcome,
+                    physiologicalPatterns = AimiCascadeArbitrationArtifacts.physiologicalPatterns(),
+                    harmoniaSmbAuthority = AimiCascadeArbitrationArtifacts.harmoniaSmbAuthority(),
                 )
                 
                 // Get provider

@@ -39,6 +39,12 @@ data class RbtExtendedSignals(
     val harmoniaExerciseBlock: Boolean = false,
     val harmoniaHardSafetyBlock: Boolean = false,
     val harmoniaBlockReason: String? = null,
+    /** Tree-deployed insulin intent for Harmonia SMB arbitration. */
+    val insulinIntent: String? = null,
+    /** MealCertainty MED/HIGH — required for soft-cap LIFT. */
+    val mealCertaintySupports: Boolean = false,
+    /** Confirmed rise geometry for soft meal escalation. */
+    val riseConfirmed: Boolean = false,
     /** [PostHypoDeliveryAuthority] requests zero SMB on the RBT channel. */
     val postHypoDeliverySuppressSmb: Boolean = false,
     val postHypoOrdinal: Int? = null,

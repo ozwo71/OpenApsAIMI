@@ -6,6 +6,24 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.recursive.BeliefLeafId
 
+/**
+ * Soft catalog caps are proposals for Harmonia arbitration; hard caps bind via min().
+ * See [docs/AIMI_HARMONIA_SMB_ARBITRATION.md].
+ */
+enum class PatternCapKind {
+    SOFT,
+    HARD,
+}
+
+/**
+ * Aggregated meal/protective SMB cap with explicit soft vs hard semantics.
+ */
+data class PatternCapProposal(
+    val proposedCapU: Double,
+    val kind: PatternCapKind,
+    val sourceId: PhysiologicalPatternId? = null,
+)
+
 data class PhysiologicalPatternReading(
     val id: PhysiologicalPatternId,
     val confidence: Double,
@@ -23,9 +41,37 @@ data class PhysiologicalPatternSnapshot(
     val suppressHyperRelease: Boolean,
     val suppressWaveletBoost: Boolean,
     val smbCapU: Double?,
+    val smbCapKind: PatternCapKind? = null,
+    val mealPatternCap: PatternCapProposal? = null,
     val reasonSummary: String,
 ) {
     fun capsHtrRelease(): Boolean = suppressHyperRelease
+
+    /**
+     * Binding cap for min() paths.
+     * Soft meal proposals never bind here, but any active HARD protective pattern still does —
+     * including when a meal soft proposal is the primary [smbCapU] (exercise, stacking, post-hypo…).
+     * Null [smbCapKind] on a bare [smbCapU] is treated as HARD (legacy).
+     */
+    fun hardBindingCapU(): Double? {
+        var hard: Double? = null
+        for (reading in active) {
+            if (reading.confidence < 0.35) continue
+            val def = PhysiologicalPatternCatalog.definitionOf(reading.id)
+            if (def.capKind != PatternCapKind.HARD) continue
+            val cap = def.smbCapU ?: continue
+            hard = hard?.let { minOf(it, cap) } ?: cap
+        }
+        if (smbCapKind == null || smbCapKind == PatternCapKind.HARD) {
+            smbCapU?.let { cap -> hard = hard?.let { minOf(it, cap) } ?: cap }
+        }
+        return hard
+    }
+
+    /** Soft proposal exposed to Harmonia; never a silent hard mute. */
+    fun softProposedCapU(): Double? =
+        smbCapU?.takeIf { smbCapKind == PatternCapKind.SOFT }
+            ?: mealPatternCap?.proposedCapU?.takeIf { mealPatternCap.kind == PatternCapKind.SOFT }
 
     fun credibilityScaleFor(leafId: BeliefLeafId): Double {
         var scale = 1.0
@@ -56,6 +102,8 @@ data class PhysiologicalPatternSnapshot(
             suppressHyperRelease = false,
             suppressWaveletBoost = false,
             smbCapU = null,
+            smbCapKind = null,
+            mealPatternCap = null,
             reasonSummary = "none",
         )
     }
@@ -106,6 +154,7 @@ data class PatternDefinition(
     val suppressHyperRelease: Boolean = false,
     val suppressWaveletBoost: Boolean = false,
     val smbCapU: Double? = null,
+    val capKind: PatternCapKind = PatternCapKind.HARD,
     private val mealLeafCredScale: Double = 1.0,
     private val hyperLeafCredScale: Double = 1.0,
     private val waveletCredScale: Double = 1.0,
