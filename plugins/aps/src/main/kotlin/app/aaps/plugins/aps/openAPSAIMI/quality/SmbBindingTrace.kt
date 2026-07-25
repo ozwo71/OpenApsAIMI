@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.quality
 
+import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PatternCapKind
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.min
@@ -191,23 +192,31 @@ internal data class SmbBindingTrace(
         /**
          * Isolates only the pattern-cap counterfactual. The returned value is deliberately not a
          * terminal dose prediction: SafetyNet, PKPD, refractory, throttle and Red Carpet are absent.
+         *
+         * Soft meal proposals do not bind — only [PatternCapKind.HARD] applies min().
          */
         fun replayCapsBeforeTerminalProtections(
             timestampMs: Long,
             autodriveRequestU: Double,
             patternCapU: Double?,
+            patternCapKind: PatternCapKind? = PatternCapKind.HARD,
         ): SmbBeforeTerminalProtectionsReplay {
             val request = autodriveRequestU.coerceAtLeast(0.0)
-            val afterPatternCap = patternCapU
-                ?.let { cap -> min(request, cap.coerceAtLeast(0.0)) }
-                ?: request
+            val binds = patternCapU != null && patternCapKind == PatternCapKind.HARD
+            val afterPatternCap = if (binds) {
+                min(request, patternCapU!!.coerceAtLeast(0.0))
+            } else {
+                request
+            }
+            val stageName = if (patternCapKind == PatternCapKind.SOFT) "PATTERN_SOFT_PROPOSAL" else "PATTERN_CAP"
+            val stageKind = if (binds) "CAP" else "PROPOSAL"
             val stage = SmbBindingStage(
-                name = "PATTERN_CAP",
+                name = stageName,
                 beforeU = request,
                 afterU = afterPatternCap,
                 referenceU = patternCapU,
                 phase = "AUTODRIVE_PRE_TERMINAL",
-                kind = "CAP",
+                kind = stageKind,
             )
             return SmbBeforeTerminalProtectionsReplay(
                 timestampMs = timestampMs,

@@ -80,6 +80,10 @@ data class AuditorInput(
     val mealCertainty: MealCertainty? = null,
     val harmoniaProduction: HarmoniaProductionDecision? = null,
     val harmonizerOutcome: HarmoniaHarmonizer.Outcome? = null,
+    /** Pattern catalog soft/hard proposals for this tick (advisory context). */
+    val physiologicalPatterns: JSONObject? = null,
+    /** Harmonia SMB authority decision — Auditor CONFIRM/SOFTEN only, never lift. */
+    val harmoniaSmbAuthority: JSONObject? = null,
 ) {
     fun toJSON(): JSONObject = JSONObject().apply {
         put("snapshot", snapshot.toJSON())
@@ -90,6 +94,8 @@ data class AuditorInput(
         if (harmoniaDecision != null) put("harmonia_simulation", harmoniaDecision.toJsonObject())
         if (mealCertainty != null) put("meal_certainty", mealCertainty.toJsonObject())
         if (harmoniaProduction != null) put("harmonia_production", harmoniaProduction.toJsonObject())
+        if (physiologicalPatterns != null) put("physiological_patterns", physiologicalPatterns)
+        if (harmoniaSmbAuthority != null) put("harmonia_smb_authority", harmoniaSmbAuthority)
         if (harmonizerOutcome != null) {
             put(
                 "harmonia_harmonizer",

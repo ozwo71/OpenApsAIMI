@@ -135,6 +135,9 @@ data class HarmoniaSmbResolution(
     val reasonCodes: List<String> = emptyList(),
     val appliedToRbtDemand: Boolean = false,
     val reducesRbtDemand: Boolean = false,
+    val authorityMode: String? = null,
+    val addsSmbAuthority: Boolean = false,
+    val insulinIntent: String? = null,
 )
 
 data class DoseChannelResolution(
@@ -303,4 +306,7 @@ data class HarmoniaSmbExport(
     val reasonCodes: List<String> = emptyList(),
     val appliedToRbtDemand: Boolean = false,
     val reducesRbtDemand: Boolean = false,
+    val authorityMode: String? = null,
+    val addsSmbAuthority: Boolean = false,
+    val insulinIntent: String? = null,
 )

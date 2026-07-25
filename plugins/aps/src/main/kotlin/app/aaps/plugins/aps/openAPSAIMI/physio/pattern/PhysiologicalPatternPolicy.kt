@@ -25,25 +25,33 @@ object PhysiologicalPatternPolicy {
         var suppressMeal = false
         var suppressHyper = false
         var suppressWavelet = false
-        var restrictiveCap: Double? = null
+        var restrictiveHardCap: Double? = null
 
         for (reading in active) {
             val def = PhysiologicalPatternCatalog.definitionOf(reading.id)
             if (def.suppressMealInterpretation && reading.confidence >= 0.45) suppressMeal = true
             if (def.suppressHyperRelease && reading.confidence >= 0.40) suppressHyper = true
             if (def.suppressWaveletBoost && reading.confidence >= 0.40) suppressWavelet = true
-            def.smbCapU?.let { cap ->
-                restrictiveCap = restrictiveCap?.let { min(it, cap) } ?: cap
+            // Only HARD protective caps participate in the binding restrictive min().
+            if (def.capKind == PatternCapKind.HARD) {
+                def.smbCapU?.let { cap ->
+                    restrictiveHardCap = restrictiveHardCap?.let { min(it, cap) } ?: cap
+                }
             }
         }
 
         val mealActive = active.any { isMealPatternReading(it) && it.confidence >= MEAL_ACTIVE_CONFIDENCE }
-        val smbCap = if (mealActive) {
+        val mealCap = if (mealActive) mealPatternCap(active) else null
+        val smbCap: Double?
+        val smbCapKind: PatternCapKind?
+        if (mealActive) {
             suppressMeal = false
             suppressHyper = false
-            mealPatternCap(active) ?: restrictiveCap
+            smbCap = mealCap?.proposedCapU ?: restrictiveHardCap
+            smbCapKind = mealCap?.kind ?: restrictiveHardCap?.let { PatternCapKind.HARD }
         } else {
-            restrictiveCap
+            smbCap = restrictiveHardCap
+            smbCapKind = restrictiveHardCap?.let { PatternCapKind.HARD }
         }
 
         val dominant = active.first()
@@ -57,6 +65,8 @@ object PhysiologicalPatternPolicy {
             suppressHyperRelease = suppressHyper,
             suppressWaveletBoost = suppressWavelet,
             smbCapU = smbCap,
+            smbCapKind = smbCapKind,
+            mealPatternCap = mealCap,
             reasonSummary = summary,
         )
     }
@@ -65,9 +75,26 @@ object PhysiologicalPatternPolicy {
         reading.id.category == PhysiologicalPatternCategory.MEAL &&
             reading.id != PhysiologicalPatternId.LATE_FAT_PROTEIN
 
-    private fun mealPatternCap(active: List<PhysiologicalPatternReading>): Double? =
-        active
-            .filter { isMealPatternReading(it) }
-            .mapNotNull { PhysiologicalPatternCatalog.definitionOf(it.id).smbCapU }
-            .maxOrNull()
+    /**
+     * Selects the most permissive active meal proposed cap and exposes its soft/hard kind.
+     * Soft meal caps are proposals (not binding mins); hard meal caps remain binding.
+     */
+    fun mealPatternCap(active: List<PhysiologicalPatternReading>): PatternCapProposal? {
+        var best: PatternCapProposal? = null
+        for (reading in active) {
+            if (!isMealPatternReading(reading)) continue
+            val def = PhysiologicalPatternCatalog.definitionOf(reading.id)
+            val cap = def.smbCapU ?: continue
+            val proposal = PatternCapProposal(
+                proposedCapU = cap,
+                kind = def.capKind,
+                sourceId = reading.id,
+            )
+            val current = best
+            if (current == null || proposal.proposedCapU > current.proposedCapU) {
+                best = proposal
+            }
+        }
+        return best
+    }
 }

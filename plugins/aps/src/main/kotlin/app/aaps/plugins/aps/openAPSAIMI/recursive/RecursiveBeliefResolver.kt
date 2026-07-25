@@ -1,7 +1,12 @@
 package app.aaps.plugins.aps.openAPSAIMI.recursive
 
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSmbArbiter
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSmbAuthorityDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSmbAuthorityMode
+import app.aaps.plugins.aps.openAPSAIMI.patient.InsulinIntent
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.SleepLiveDetector
+import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PatternCapKind
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternId
 import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinLoadGovernor
 import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinStackingStance
@@ -133,7 +138,7 @@ object RecursiveBeliefResolver {
                 basalFirstChannel = p0Channel,
                 t3cBasalFirst = t3cBasalFirst,
                 harmoniaBasalFirst = harmoniaBasalFirst,
-                harmoniaSmb = resolveHarmoniaSmb(ctx, ReleaseAuthority.NONE, 0.0, p0Channel),
+                harmoniaSmb = resolveHarmoniaSmb(ctx, ReleaseAuthority.NONE, 0.0, p0Channel, null),
             )
         }
 
@@ -360,10 +365,11 @@ object RecursiveBeliefResolver {
         }
         val v3 = ctx.v3SmbU ?: 0.0
         if (authority != ReleaseAuthority.NONE) {
-            val patternCap = ctx.physiologicalPatterns?.smbCapU
+            // Soft meal proposals must not mute V3 demand before Harmonia arbitration.
+            val patternHardCap = ctx.physiologicalPatterns?.hardBindingCapU()
             val v3Lift = listOfNotNull(
                 ctx.behavioralRisk?.takeIf { it.capsHtrRelease() }?.smbFloorCapU,
-                patternCap,
+                patternHardCap,
             ).minOrNull()?.let { min(v3, it) } ?: v3
             smbU = max(smbU, v3Lift)
         }
@@ -382,8 +388,11 @@ object RecursiveBeliefResolver {
         ctx.behavioralRisk?.takeIf { it.capsHtrRelease() }?.let { risk ->
             smbU = min(smbU, risk.smbFloorCapU); codes += "PHYSIO_SMB_CAP"
         }
-        ctx.physiologicalPatterns?.smbCapU?.let { cap ->
-            smbU = min(smbU, cap); codes += "PATTERN_SMB_CAP"
+        ctx.physiologicalPatterns?.hardBindingCapU()?.let { cap ->
+            smbU = min(smbU, cap); codes += "PATTERN_SMB_CAP_HARD"
+        }
+        ctx.physiologicalPatterns?.softProposedCapU()?.let {
+            codes += "PATTERN_SMB_SOFT_PROPOSAL"
         }
         if (ctx.mealAbsorption?.phase == MealAbsorptionPhase.SECOND_WAVE && ctx.deltaMgdlPer5 > 0 &&
             mealHyp.mealWaveBoostAllowed && ctx.behavioralRisk?.capsHtrRelease() != true
@@ -395,13 +404,47 @@ object RecursiveBeliefResolver {
         ) {
             smbU = max(smbU, 1.2); codes += "FIRST_WAVE"
         }
+        // HARD catalog caps re-bind after wave floors so first/second-wave boosts cannot mute them.
+        ctx.physiologicalPatterns?.hardBindingCapU()?.let { cap ->
+            if (smbU > cap + 1e-6) {
+                smbU = cap
+                codes += "PATTERN_SMB_CAP_HARD"
+            }
+        }
 
         var basalFirstChannel = selectBasalFirstChannel(t3cBasalFirst, harmoniaBasalFirst, authority)
-        var harmoniaSmb = resolveHarmoniaSmb(ctx, authority, smbU, basalFirstChannel)
+        // Harmonia SMB arbiter after MPC/HTR demand + soft proposals, before finalize clamps.
+        val authorityDecision = arbitrateHarmoniaSmbAuthority(
+            ctx = ctx,
+            demandBeforeU = smbU,
+            mpcDemandU = v3,
+            releaseAuthority = authority,
+            basalFirstChannel = basalFirstChannel,
+        )
+        if (authorityDecision.mode == HarmoniaSmbAuthorityMode.LIFT_WITHIN_ENVELOPE ||
+            authorityDecision.mode == HarmoniaSmbAuthorityMode.REDUCE
+        ) {
+            smbU = authorityDecision.smbU
+            codes += "HARMONIA_SMB_${authorityDecision.mode.name}"
+            codes += authorityDecision.reasons
+        } else if (authorityDecision.reasons.isNotEmpty()) {
+            codes += "HARMONIA_SMB_ACCEPT"
+        }
+        var harmoniaSmb = resolveHarmoniaSmb(ctx, authority, smbU, basalFirstChannel, authorityDecision)
         harmoniaSmb?.takeIf { it.eligible }?.let { resolved ->
-            smbU = resolved.demandAfterU
+            // Do not let the legacy 0.30×max meal-support target undo a LIFT already decided.
+            if (authorityDecision.mode != HarmoniaSmbAuthorityMode.LIFT_WITHIN_ENVELOPE) {
+                smbU = resolved.demandAfterU
+            }
             basalFirstChannel = selectBasalFirstChannel(t3cBasalFirst, harmoniaBasalFirst, authority)
             codes += if (resolved.reducesRbtDemand) "HARMONIA_SMB_REDUCE" else "HARMONIA_SMB_SUPPORT"
+        }
+        // Terminal HARD bind after Harmonia legacy modulation (soft proposals never enter here).
+        ctx.physiologicalPatterns?.hardBindingCapU()?.let { cap ->
+            if (smbU > cap + 1e-6) {
+                smbU = cap
+                codes += "PATTERN_SMB_CAP_HARD"
+            }
         }
         if (shouldSuppressRbtSmbDemand(ctx.extended, t3cBasalFirst, basalFirstChannel)) {
             smbU = 0.0; codes += "POST_HYPO_SMB_ARBITER"
@@ -691,16 +734,79 @@ object RecursiveBeliefResolver {
         return harmoniaBasalFirst.branch == "DIGESTION_ACTIVE"
     }
 
+    private fun arbitrateHarmoniaSmbAuthority(
+        ctx: RecursiveBeliefTickContext,
+        demandBeforeU: Double,
+        mpcDemandU: Double,
+        releaseAuthority: ReleaseAuthority,
+        basalFirstChannel: BasalFirstChannel,
+    ): HarmoniaSmbAuthorityDecision {
+        val ext = ctx.extended
+        val patterns = ctx.physiologicalPatterns
+        val softCap = patterns?.softProposedCapU()
+        val hardCap = patterns?.hardBindingCapU()
+        val catalogCapU = softCap ?: hardCap ?: patterns?.smbCapU
+        val catalogKind = when {
+            softCap != null -> PatternCapKind.SOFT
+            hardCap != null -> PatternCapKind.HARD
+            else -> patterns?.smbCapKind
+        }
+        val iobHeadroom = (ctx.maxIobU - ctx.iobU).coerceAtLeast(0.0)
+        val envelope = minOf(ctx.maxSmbEffectiveU.coerceAtLeast(0.0), iobHeadroom)
+        val intent = runCatching { InsulinIntent.valueOf(ext.insulinIntent ?: InsulinIntent.NONE.name) }
+            .getOrDefault(InsulinIntent.NONE)
+        val protectiveBlock =
+            ext.harmoniaPostHypoBlock ||
+                ext.harmoniaExerciseBlock ||
+                ext.harmoniaHardSafetyBlock ||
+                ctx.tier1Hypo ||
+                ext.postHypoDeliverySuppressSmb
+        val channelOpen =
+            releaseAuthority != ReleaseAuthority.NONE &&
+                basalFirstChannel == BasalFirstChannel.NONE &&
+                !protectiveBlock
+        if (!channelOpen) {
+            return HarmoniaSmbArbiter.decide(
+                demandBeforeU = demandBeforeU,
+                mpcDemandU = mpcDemandU,
+                catalogProposedCapU = catalogCapU,
+                catalogCapKind = catalogKind,
+                envelopeMaxU = envelope,
+                insulinIntent = intent,
+                harmoniaAction = ext.harmoniaAction,
+                riseConfirmed = false,
+                mealCertaintySupports = false,
+                protectiveBlock = protectiveBlock,
+            )
+        }
+        return HarmoniaSmbArbiter.decide(
+            demandBeforeU = demandBeforeU,
+            mpcDemandU = mpcDemandU,
+            catalogProposedCapU = catalogCapU,
+            catalogCapKind = catalogKind,
+            envelopeMaxU = envelope,
+            insulinIntent = intent,
+            harmoniaAction = ext.harmoniaAction,
+            riseConfirmed = ext.riseConfirmed || ctx.deltaMgdlPer5 >= 1.2,
+            mealCertaintySupports = ext.mealCertaintySupports,
+            protectiveBlock = false,
+        )
+    }
+
     private fun resolveHarmoniaSmb(
         ctx: RecursiveBeliefTickContext,
         releaseAuthority: ReleaseAuthority,
         currentDemandU: Double,
         basalFirstChannel: BasalFirstChannel,
+        authorityDecision: HarmoniaSmbAuthorityDecision?,
     ): HarmoniaSmbResolution? {
         val ext = ctx.extended
-        val active = ext.harmoniaActive
+        val active = ext.harmoniaActive || authorityDecision?.addsSmbAuthority == true
         val action = ext.harmoniaAction
-        val simulated = ext.harmoniaSmbDemandU ?: 0.0
+        val simulated = when (authorityDecision?.mode) {
+            HarmoniaSmbAuthorityMode.LIFT_WITHIN_ENVELOPE -> authorityDecision.smbU
+            else -> ext.harmoniaSmbDemandU ?: 0.0
+        }
         val iobHeadroom = (ctx.maxIobU - ctx.iobU).coerceAtLeast(0.0)
         val cap = minOf(
             ext.harmoniaSmbMaxU ?: ctx.maxSmbEffectiveU,
@@ -712,10 +818,14 @@ object RecursiveBeliefResolver {
         val exerciseBlock = ext.harmoniaExerciseBlock
         val mealConflict = ext.harmoniaMealConflict
         val hardSafetyBlock = ext.harmoniaHardSafetyBlock || ctx.tier1Hypo
-        val mealSupportAction = action == "MEAL_SUPPORT"
-        val protectiveReductionAction = action == "PROTECTIVE_REDUCTION"
+        val mealSupportAction = action == "MEAL_SUPPORT" ||
+            authorityDecision?.mode == HarmoniaSmbAuthorityMode.LIFT_WITHIN_ENVELOPE
+        val protectiveReductionAction = action == "PROTECTIVE_REDUCTION" ||
+            authorityDecision?.mode == HarmoniaSmbAuthorityMode.REDUCE
         val smbAction = mealSupportAction || protectiveReductionAction
-        if (!active && simulated <= 0.0 && !postHypoBlock && !exerciseBlock && !mealConflict && !hardSafetyBlock) {
+        if (!active && simulated <= 0.0 && !postHypoBlock && !exerciseBlock && !mealConflict && !hardSafetyBlock &&
+            authorityDecision == null
+        ) {
             return null
         }
 
@@ -726,25 +836,29 @@ object RecursiveBeliefResolver {
             mealConflict -> ext.harmoniaBlockReason ?: "MEAL_CONFLICT"
             basalFirstChannel != BasalFirstChannel.NONE -> "BASAL_FIRST_OWNER_${basalFirstChannel.name}"
             releaseAuthority == ReleaseAuthority.NONE -> "NO_RBT_SMB_AUTHORITY"
-            active && !ext.harmoniaDecisionEligible -> ext.harmoniaBlockReason ?: "SIMULATION_INELIGIBLE"
+            active && !ext.harmoniaDecisionEligible && authorityDecision?.addsSmbAuthority != true ->
+                ext.harmoniaBlockReason ?: "SIMULATION_INELIGIBLE"
             active && !smbAction -> "NO_SMB_ACTION"
             mealSupportAction && bounded <= 0.0 -> "NO_SMB_DEMAND"
             mealSupportAction && cap <= 0.0 -> "SMB_CAP_ZERO"
             !active -> "INACTIVE"
             else -> null
         }
-        val eligible = active &&
-            ext.harmoniaDecisionEligible &&
-            smbAction &&
+        val eligible = (
+            (active && ext.harmoniaDecisionEligible && smbAction) ||
+                authorityDecision?.addsSmbAuthority == true
+            ) &&
             releaseAuthority != ReleaseAuthority.NONE &&
             basalFirstChannel == BasalFirstChannel.NONE &&
             !hardSafetyBlock &&
             !postHypoBlock &&
             !exerciseBlock &&
             !mealConflict &&
-            (!mealSupportAction || bounded > 0.0)
+            (!mealSupportAction || bounded > 0.0 || authorityDecision?.addsSmbAuthority == true)
         val targetDemand = when {
             !eligible -> currentDemandU
+            authorityDecision?.mode == HarmoniaSmbAuthorityMode.LIFT_WITHIN_ENVELOPE ->
+                max(currentDemandU, authorityDecision.smbU.coerceAtMost(cap))
             protectiveReductionAction -> min(currentDemandU, bounded)
             else -> max(currentDemandU, bounded)
         }
@@ -752,13 +866,17 @@ object RecursiveBeliefResolver {
         val reasonCodes = buildList {
             add(if (active) "HARMONIA_ACTIVE" else "HARMONIA_INACTIVE")
             action?.let { add("HARMONIA_ACTION_$it") }
+            authorityDecision?.mode?.let { add("HARMONIA_SMB_AUTHORITY_$it") }
+            if (authorityDecision?.addsSmbAuthority == true) add("ADDS_SMB_AUTHORITY")
             if (hardSafetyBlock) add("HARMONIA_SMB_HARD_SAFETY_BLOCK")
             if (postHypoBlock) add("HARMONIA_SMB_POST_HYPO_BLOCK")
             if (exerciseBlock) add("HARMONIA_SMB_EXERCISE_BLOCK")
             if (mealConflict) add("HARMONIA_SMB_MEAL_CONFLICT")
             if (basalFirstChannel != BasalFirstChannel.NONE) add("HARMONIA_SMB_BASAL_FIRST_OWNER")
             if (releaseAuthority == ReleaseAuthority.NONE) add("HARMONIA_SMB_NO_RBT_AUTHORITY")
-            if (active && !ext.harmoniaDecisionEligible) add("HARMONIA_SMB_SIMULATION_INELIGIBLE")
+            if (active && !ext.harmoniaDecisionEligible && authorityDecision?.addsSmbAuthority != true) {
+                add("HARMONIA_SMB_SIMULATION_INELIGIBLE")
+            }
             if (active && !smbAction) add("HARMONIA_SMB_NO_ACTION")
             if (mealSupportAction && bounded <= 0.0) add("HARMONIA_SMB_NO_DEMAND")
             if (eligible && mealSupportAction) add("HARMONIA_SMB_SUPPORT_READY")
@@ -781,8 +899,11 @@ object RecursiveBeliefResolver {
             hardSafetyBlock = hardSafetyBlock,
             dominantBlocker = dominantBlocker,
             reasonCodes = reasonCodes,
-            appliedToRbtDemand = applied,
+            appliedToRbtDemand = applied || authorityDecision?.addsSmbAuthority == true,
             reducesRbtDemand = eligible && targetDemand < currentDemandU,
+            authorityMode = authorityDecision?.mode?.name,
+            addsSmbAuthority = authorityDecision?.addsSmbAuthority == true,
+            insulinIntent = authorityDecision?.insulinIntent?.name ?: ext.insulinIntent,
         )
     }
 

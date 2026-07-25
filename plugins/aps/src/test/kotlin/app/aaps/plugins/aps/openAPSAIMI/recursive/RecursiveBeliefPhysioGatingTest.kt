@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.recursive
 import app.aaps.plugins.aps.openAPSAIMI.physio.BehavioralRiskPolicy
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
+import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PatternCapKind
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternId
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternReading
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
@@ -161,7 +162,7 @@ class RecursiveBeliefPhysioGatingTest {
     }
 
     @Test
-    fun first_wave_boost_applies_after_pattern_cap() {
+    fun first_wave_boost_not_muted_by_soft_meal_proposal() {
         val scales = listOf(
             scale(15, belief = 0.84, urgency = 1.9, terminal = 258.0),
             scale(60, belief = 0.80, urgency = 2.3, terminal = 338.0),
@@ -175,6 +176,9 @@ class RecursiveBeliefPhysioGatingTest {
                 latentMealProb = 0.84,
                 uamMealProb = 0.82,
                 causalMealConfidence = 0.80,
+                insulinIntent = "NEED_MORE_INSULIN",
+                mealCertaintySupports = true,
+                riseConfirmed = true,
             ),
         ).copy(
             mealAbsorption = RecursiveBeliefMr7TestHelper.minimalCtx(delta = 18.0).mealAbsorption?.copy(
@@ -195,8 +199,9 @@ class RecursiveBeliefPhysioGatingTest {
                 suppressMealInterpretation = false,
                 suppressHyperRelease = false,
                 suppressWaveletBoost = false,
-                smbCapU = 0.40,
-                reasonSummary = "legacy cap before policy",
+                smbCapU = 1.20,
+                smbCapKind = PatternCapKind.SOFT,
+                reasonSummary = "soft meal proposal",
             ),
         )
 
@@ -205,6 +210,7 @@ class RecursiveBeliefPhysioGatingTest {
         )
 
         assertThat(snapshot.resolutions.reasonCodes).contains("FIRST_WAVE")
+        assertThat(snapshot.resolutions.reasonCodes).doesNotContain("PATTERN_SMB_CAP_HARD")
         assertThat(snapshot.resolutions.smbDemandU).isGreaterThan(1.15)
     }
 

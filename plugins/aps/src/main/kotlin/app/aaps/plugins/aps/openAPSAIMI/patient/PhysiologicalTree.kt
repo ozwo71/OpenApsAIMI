@@ -23,6 +23,13 @@ data class PhysiologicalTreeSnapshot(
     /** Raw live wearable signals (HR / steps) feeding the tree — exported as structured fields. */
     val physioLive: PhysioLiveDigest = PhysioLiveDigest(),
     val compactSummary: String,
+    /**
+     * Dose-path intent for Harmonia SMB arbitration (not a pump command).
+     * Soft meal + confirmed rise → [InsulinIntent.NEED_MORE_INSULIN].
+     */
+    val insulinIntent: InsulinIntent = InsulinIntent.NONE,
+    /** 0..1 urgency hint for NEED_MORE_INSULIN / MEAL_SUPPORT. */
+    val insulinUrgency: Double = 0.0,
     val version: Int = 1,
 ) {
     fun toJsonObject(): JSONObject =
@@ -39,7 +46,10 @@ data class PhysiologicalTreeSnapshot(
             // inside branches.activity.reasons strings, so invisible to field-level export consumers.
             put("physio_live", physioLive.toJsonObject())
             put("compact_summary", compactSummary)
-            put("insulin_authority", "none_lot1_context_only")
+            put("insulin_intent", insulinIntent.name)
+            put("insulin_urgency", insulinUrgency)
+            // Tree informs; Harmonia arbitrates basal + SMB within hard envelope (not "no authority").
+            put("insulin_authority", "harmonia_basal_and_smb_arbitration")
             put("source", "harmonia_tree_v1")
         }
 }
@@ -251,6 +261,12 @@ internal object PhysiologicalTreeBuilder {
         val fruits = buildFruits(patientState, trunk)
         val seasons = buildSeasons(patientState, thermalBelief, wCycleBelief)
         val compactSummary = buildCompactSummary(trunk, branches)
+        val insulin = resolveInsulinIntent(
+            trunk = trunk,
+            branches = branches,
+            deltaMgdl5m = deltaMgdl5m,
+            currentBgMgdl = currentBgMgdl,
+        )
 
         return PhysiologicalTreeSnapshot(
             timestamp = timestampMs,
@@ -262,7 +278,62 @@ internal object PhysiologicalTreeBuilder {
             seasons = seasons,
             physioLive = physioLive,
             compactSummary = compactSummary,
+            insulinIntent = insulin.intent,
+            insulinUrgency = insulin.urgency,
         )
+    }
+
+    private data class InsulinIntentResolved(
+        val intent: InsulinIntent,
+        val urgency: Double,
+    )
+
+    /**
+     * Deploys a clear insulin intent when digestion/meal + rise geometry say more insulin is needed.
+     * Dose amplitude remains Harmonia's job (up to maxSMBHB / hard envelope).
+     */
+    private fun resolveInsulinIntent(
+        trunk: PhysiologicalTrunk,
+        branches: PhysiologicalBranches,
+        deltaMgdl5m: Double?,
+        currentBgMgdl: Double?,
+    ): InsulinIntentResolved {
+        if (trunk.globalState == GlobalPhysiologicalState.HYPO_RISK ||
+            trunk.globalState == GlobalPhysiologicalState.SLEEP_RECOVERY ||
+            branches.hypoRisk.confidence >= 0.55
+        ) {
+            return InsulinIntentResolved(InsulinIntent.PROTECTIVE, branches.hypoRisk.confidence)
+        }
+        if (branches.activity.confidence >= 0.60 || branches.postActivity.confidence >= 0.55) {
+            return InsulinIntentResolved(InsulinIntent.PROTECTIVE, max(branches.activity.confidence, branches.postActivity.confidence))
+        }
+        val delta = deltaMgdl5m ?: 0.0
+        val bg = currentBgMgdl ?: 0.0
+        val mealLike =
+            trunk.globalState == GlobalPhysiologicalState.DIGESTION_ACTIVE ||
+                trunk.globalState == GlobalPhysiologicalState.MEAL_PROBABLE ||
+                branches.digestion.detected ||
+                branches.meal.confidence >= 0.55
+        val riseConfirmed = delta >= 1.2 && bg >= 140.0
+        if (mealLike && riseConfirmed) {
+            val urgency = max(
+                branches.meal.confidence,
+                max(branches.digestion.confidence, branches.hyperRisk.confidence),
+            ).coerceIn(0.0, 1.0)
+            return InsulinIntentResolved(InsulinIntent.NEED_MORE_INSULIN, urgency)
+        }
+        if (mealLike && delta >= 0.8) {
+            return InsulinIntentResolved(
+                InsulinIntent.MEAL_SUPPORT,
+                max(branches.meal.confidence, branches.digestion.confidence).coerceIn(0.0, 1.0),
+            )
+        }
+        if (trunk.globalState == GlobalPhysiologicalState.STABLE ||
+            trunk.globalState == GlobalPhysiologicalState.UNKNOWN
+        ) {
+            return InsulinIntentResolved(InsulinIntent.STABILIZE, 0.35)
+        }
+        return InsulinIntentResolved(InsulinIntent.NONE, 0.0)
     }
 
     private fun buildRoots(state: PatientStateSnapshot): PhysiologicalRoots =
@@ -578,8 +649,8 @@ internal object PhysiologicalTreeBuilder {
             if (branches.digestion.label == MealAbsorptionPhase.LATE_FAT.name) add("Late fat/protein absorption may explain delayed rise")
         }
         val auditorNotes = buildList {
-            add("Harmonia is read-only in Lot 1")
-            add("Do not infer free insulin doses from the tree")
+            add("Tree deploys insulin intent; Harmonia arbitrates basal+SMB within hard envelope")
+            add("Auditor may CONFIRM or SOFTEN only — never lift SMB")
             if (branches.insulinEffectiveness.confidence >= 0.55) add("Dirty physiology context may explain delayed correction")
             if (bodyKinetics.reason != "empty") add("Body kinetics: ${bodyKinetics.reason}")
         }
@@ -607,7 +678,7 @@ internal object PhysiologicalTreeBuilder {
             noActionReasons = buildList {
                 if (trunk.globalState == GlobalPhysiologicalState.SENSOR_UNCERTAIN) add("sensor_uncertain")
                 if (branches.hypoRisk.confidence >= 0.55) add("hypo_or_recovery_risk")
-                add("no_insulin_authority_in_harmonia_lot1")
+                if (trunk.globalState == GlobalPhysiologicalState.STABLE) add("stabilize_no_escalation")
             },
         )
     }

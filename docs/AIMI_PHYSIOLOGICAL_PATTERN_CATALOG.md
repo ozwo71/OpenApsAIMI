@@ -51,6 +51,9 @@ Signaux (CGM, HR, HRV, sleep, COB, IOB, context, chrono)
 | Pattern | Trigger | Notes |
 |---------|---------|-------|
 | `MEAL_*`, `LATE_FAT_PROTEIN` | Meal absorption engine | **Confirmed meal wave (≥0.70)** clears meal suppression |
+| `MEAL_FIRST_WAVE`, `MEAL_UNDECLARED_FAST` | Rise / UAM meal | **`capKind=SOFT` proposedCap 1.20 U** — Harmonia may lift within maxSMBHB; not a hard mute. See [AIMI_HARMONIA_SMB_ARBITRATION.md](AIMI_HARMONIA_SMB_ARBITRATION.md) |
+
+Protective patterns (exercise, poor sleep, stacking, endogenous…) remain **`capKind=HARD`** and still bind via `min()`.
 
 ### Stress / recovery / sleep
 
