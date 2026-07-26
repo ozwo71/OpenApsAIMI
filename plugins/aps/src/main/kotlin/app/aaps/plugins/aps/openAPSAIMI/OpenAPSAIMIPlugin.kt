@@ -2095,6 +2095,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 add(BooleanKey.OApsAIMIRecursiveBeliefShadow)
                 add(BooleanKey.OApsAIMIRecursiveBeliefAuthority)
                 add(BooleanKey.OApsAIMIRecursiveBeliefWavelet)
+                add(BooleanKey.OApsAIMITreeMealRiseFrontLoad)
+                add(BooleanKey.OApsAIMISensorConfidenceCgmFirst)
                 add(DoubleKey.OApsAIMIHyperEstablishedDevMgdl)
                 add(DoubleKey.OApsAIMIHyperDeepDevMgdl)
                 add(DoubleKey.autodriveMaxBasal)

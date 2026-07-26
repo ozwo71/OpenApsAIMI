@@ -4,6 +4,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
+import app.aaps.plugins.aps.openAPSAIMI.patient.InsulinIntent
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
@@ -31,6 +32,9 @@ internal object RecursiveBeliefAuthorityGate {
     // (mg/dL) for the rise to count as "not falling". Tunable after field monitoring.
     private const val HYPER_BYPASS_MARGIN_MGDL = 45.0
     private const val HYPER_BYPASS_MIN_DELTA_MGDL5M = 0.0
+
+    /** Front-loader: confirmed-rise delta (mg/dL/5 min), aligned with the tree's NEED_MORE_INSULIN gate. */
+    private const val HYPER_BYPASS_RISE_CONFIRM_MGDL5M = 1.2
 
     // A1b — "clear-hyper hold": when the predictive-hypo LGS halt was suppressed *because BG is
     // clearly hyperglycemic* (PredictiveHypoEvaluator hyperArtifact), there is no imminent hypo, so
@@ -62,6 +66,12 @@ internal object RecursiveBeliefAuthorityGate {
         /** A1: allow the predictive-hypo meal bypass on a corroborated, non-falling hyper even when
          *  `safety.mealRiseConfirmed` is false. Fail-safe: false → legacy behaviour. */
         val mealHyperBypassEnabled: Boolean = false,
+        /** Tree-deployed insulin intent — front-loader input (arbre déploie → Harmonia applique). */
+        val treeInsulinIntent: InsulinIntent = InsulinIntent.NONE,
+        /** 0..1 urgency accompanying the tree intent. */
+        val treeInsulinUrgency: Double = 0.0,
+        /** Front-loader opt-in: re-open a soft-overridable NONE on a corroborated meal rise. Default off. */
+        val treeMealRiseFrontLoadEnabled: Boolean = false,
     )
 
     data class Decision(
@@ -223,6 +233,17 @@ internal object RecursiveBeliefAuthorityGate {
         if (postHypoProb >= POST_HYPO_BLOCK_THRESHOLD && mealProb < 0.40 && !aggressiveRiseExit) {
             reasonCodes += "POST_HYPO_BLOCK"
             maxAllowedAuthority = ReleaseAuthority.NONE
+        }
+
+        // Tree meal-rise front-loader: the tree deployed NEED_MORE_INSULIN on a corroborated meal rise,
+        // but a *soft-overridable* veto (SENSOR_LOW / PREDICTIVE_HYPO / PHYSIO_CAP) posted NONE — most
+        // often because sensor_confidence reflects wearable availability, not CGM quality. Re-open the
+        // channel to SOFT so Harmonia can apply the early lift, WITHOUT touching genuine hypo vetoes.
+        if (maxAllowedAuthority == ReleaseAuthority.NONE &&
+            shouldFrontLoadTreeMealRise(input, reasonCodes, aggressiveRiseExit)
+        ) {
+            reasonCodes += "TREE_MEAL_RISE_FRONTLOAD"
+            maxAllowedAuthority = ReleaseAuthority.SOFT
         }
 
         if (maxAllowedAuthority != ReleaseAuthority.NONE) {
@@ -418,6 +439,13 @@ internal object RecursiveBeliefAuthorityGate {
             return false
         }
 
+        return corroboratesMeal(input)
+    }
+
+    /** Independent meal corroboration (mode / causal / latent / hypothesis) — shared by the
+     *  predictive-hypo bypass and the tree meal-rise front-loader. */
+    private fun corroboratesMeal(input: Input): Boolean {
+        val patientModeDecision = input.patientModeDecision
         val modeMeal = patientModeDecision?.mode == PatientMode.FAST_MEAL &&
             (
                 patientModeDecision.confidence >= MEAL_BYPASS_MODE_CONFIDENCE ||
@@ -427,9 +455,59 @@ internal object RecursiveBeliefAuthorityGate {
             minConfidence = MEAL_BYPASS_CAUSAL_CONFIDENCE,
             mealMargin = MEAL_BYPASS_MEAL_MARGIN,
         ) == true
-        val latentMeal = (latentState?.mealProb ?: 0.0) >= MEAL_BYPASS_LATENT_CONFIDENCE
+        val latentMeal = (input.latentState?.mealProb ?: 0.0) >= MEAL_BYPASS_LATENT_CONFIDENCE
         val hypothesisMeal = (input.hypothesisState?.mealCompatibleProb() ?: 0.0) >= MEAL_BYPASS_LATENT_CONFIDENCE
         return modeMeal || causalMeal || latentMeal || hypothesisMeal
+    }
+
+    /**
+     * Tree meal-rise front-loader (arbre déploie → Harmonia applique). Returns true when a `NONE`
+     * authority — posted only by a *soft-overridable* veto (SENSOR_LOW / PREDICTIVE_HYPO / PHYSIO_CAP) —
+     * should be re-opened to SOFT because the tree deployed `NEED_MORE_INSULIN` on a corroborated,
+     * non-free-falling meal rise. Genuine hypo/safety vetoes stay sovereign (never overridden).
+     */
+    private fun shouldFrontLoadTreeMealRise(
+        input: Input,
+        reasonCodes: Set<String>,
+        aggressiveRiseExit: Boolean,
+    ): Boolean {
+        if (!input.treeMealRiseFrontLoadEnabled) return false
+        if (input.treeInsulinIntent != InsulinIntent.NEED_MORE_INSULIN) return false
+        // Only re-open a NONE that a soft-overridable veto posted…
+        val overridable = reasonCodes.any { it == "SENSOR_LOW" || it == "PREDICTIVE_HYPO" || it == "PHYSIO_CAP" }
+        if (!overridable) return false
+        // …and never when a sovereign safety/hypo veto is present.
+        val sovereign = reasonCodes.any {
+            it == "PRED_MISSING" || it == "CHAOS_BLOCK" || it == "POST_HYPO_BLOCK" ||
+                it == "EPISODE_POST_HYPO" || it == "EPISODE_CHAOTIC"
+        }
+        if (sovereign) return false
+        val bg = input.bgMgdl ?: return false
+        val target = input.targetBgMgdl ?: return false
+        val delta = input.deltaMgdl5m ?: return false
+        // Clear hyper (excludes real low BG / isBg90 / below-threshold by construction).
+        if (bg < target + HYPER_BYPASS_MARGIN_MGDL) return false
+        // Rising, or a non-free-falling descent that still projects safely above hypo (shared predicate).
+        val safeTrajectory = delta >= HYPER_BYPASS_RISE_CONFIRM_MGDL5M ||
+            (
+                delta < 0.0 && input.safetyRiskExport != null &&
+                    HyperInstalledDroppingExemption.shouldBypass(
+                        HyperInstalledDroppingExemption.Input(
+                            enabled = true,
+                            bgMgdl = bg,
+                            targetBgMgdl = target,
+                            deltaMgdl5m = delta,
+                            hypoThresholdMgdl = input.safetyRiskExport.hypoThresholdMgdl,
+                            mealContextActive = input.safetyRiskExport.mealContextActive,
+                        ),
+                    )
+                )
+        if (!safeTrajectory) return false
+        // Sticky post-hypo latent / false-meal stay protective.
+        if (!aggressiveRiseExit && (input.latentState?.postHypoReboundProb ?: 0.0) >= POST_HYPO_SOFT_THRESHOLD) return false
+        if (input.latentState?.falseMealSuppression == true) return false
+        // Require independent meal corroboration (never front-load on level + intent alone).
+        return corroboratesMeal(input)
     }
 
     private fun hasProtectivePatientMode(mode: PatientMode): Boolean =

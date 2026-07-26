@@ -170,6 +170,7 @@ class ReplayQualityExportBuilderTest {
                 authorityEnabled = true,
                 waveletEnabled = true,
                 mealHyperBypassEnabled = true,
+                treeMealRiseFrontLoadEnabled = true,
             ),
         )
 
@@ -315,6 +316,7 @@ class ReplayQualityExportBuilderTest {
                 authorityEnabled = false,
                 waveletEnabled = false,
                 mealHyperBypassEnabled = false,
+                treeMealRiseFrontLoadEnabled = false,
             ),
         )
 

@@ -219,6 +219,7 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
 import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertaintyBuilder
 import app.aaps.plugins.aps.openAPSAIMI.patient.MealRiseGeometry
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaAction
+import app.aaps.plugins.aps.openAPSAIMI.patient.InsulinIntent
 import app.aaps.plugins.aps.openAPSAIMI.patient.GlobalPhysiologicalState
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalRiskLevel
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalTreeBuilder
@@ -3027,6 +3028,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             autonomicStress = stressMask.autonomicStress,
             inflammationRecovery = stressMask.inflammationRecovery,
             hormonalCircadian = stressMask.hormonalCircadian,
+            cgmFirstSensorConfidence = preferences.get(BooleanKey.OApsAIMISensorConfidenceCgmFirst),
         )
         lastUamHypothesisState = hypothesisState
         lastPhysioLatentState = latentState
@@ -4104,6 +4106,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 targetBgMgdl = targetForPostHypoExit,
                 deltaMgdl5m = delta.toDouble(),
                 mealHyperBypassEnabled = rbtPrefs.mealHyperBypassEnabled,
+                treeInsulinIntent = lastPhysiologicalTreeSnapshot?.insulinIntent ?: InsulinIntent.NONE,
+                treeInsulinUrgency = lastPhysiologicalTreeSnapshot?.insulinUrgency ?: 0.0,
+                treeMealRiseFrontLoadEnabled = rbtPrefs.treeMealRiseFrontLoadEnabled,
             ),
         )
         lastRecursiveAuthorityGateDecision = authorityGate

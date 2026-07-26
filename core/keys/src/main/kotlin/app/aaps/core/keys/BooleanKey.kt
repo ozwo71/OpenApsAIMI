@@ -363,6 +363,34 @@ enum class BooleanKey(
      *  downstream vetoes (sensor, post-hypo, false-meal, protective mode) still apply. Fail-safe: false
      *  → legacy behaviour. See docs/AIMI_HARMONIA_SMB_ARBITRATION.md and undeclared-meal 3-gate analysis. */
     OApsAIMIMealHyperBypassEnabled("key_aimi_meal_hyper_bypass_enabled", true),
+    /** Tree meal-rise front-loader — lets the physiological tree's deployed `NEED_MORE_INSULIN` intent
+     *  RE-OPEN a `NONE` authority that a *soft-overridable* veto (`SENSOR_LOW` / `PREDICTIVE_HYPO` /
+     *  `PHYSIO_CAP`) posted, so Harmonia can apply the early SMB lift on a corroborated meal rise
+     *  instead of waiting for established hyper. Restores **SOFT only** (never HARD), and only when: a
+     *  real meal is corroborated (mode/causal/latent/hypothesis), BG ≥ target+45, rising (Δ≥1.2) and
+     *  NOT free-falling (shared `HyperInstalledDroppingExemption` predicate). Genuine hypo vetoes stay
+     *  sovereign — never overrides `PRED_MISSING` / `CHAOS_BLOCK` / `POST_HYPO_BLOCK` / real low BG.
+     *  ⚠️ Overrides the sensor-confidence safety gate → **default OFF (opt-in)**. Fail-safe: false →
+     *  legacy behaviour. See docs/AIMI_HARMONIA_SMB_ARBITRATION.md §8. */
+    OApsAIMITreeMealRiseFrontLoad(
+        key = "key_aimi_tree_meal_rise_frontload",
+        defaultValue = false,
+        titleResId = R.string.pref_title_aimi_tree_meal_rise_frontload,
+        summaryResId = R.string.pref_summary_aimi_tree_meal_rise_frontload,
+    ),
+    /** CGM-first sensor confidence (root fix): base `sensor_confidence` on the CGM SOURCE (a
+     *  signal-quality proxy) instead of the wearable/health-context freshness snapshot. The legacy
+     *  formula weighted the watch data at 70%, so CGM trust collapsed (~0.32) without a wearable and
+     *  forced Harmonia/RBT authority to NONE all day even with a perfect CGM. When on, a native/filtered
+     *  CGM is trusted and a null/unknown source stays cautious (SOFT-eligible) instead of blocking.
+     *  Raises dosing authority → default OFF (opt-in). Fail-safe: false → legacy wearable-weighted
+     *  formula. See memory sensor-confidence-gates-harmonia. */
+    OApsAIMISensorConfidenceCgmFirst(
+        key = "key_aimi_sensor_confidence_cgm_first",
+        defaultValue = false,
+        titleResId = R.string.pref_title_aimi_sensor_confidence_cgm_first,
+        summaryResId = R.string.pref_summary_aimi_sensor_confidence_cgm_first,
+    ),
     /**
      * Lever 1 — hyper-installed dropping exemption: when BG ≫ target on a meal/deep-hyper
      * plateau, do not hard-zero SMB solely because the 5‑min delta is negative
