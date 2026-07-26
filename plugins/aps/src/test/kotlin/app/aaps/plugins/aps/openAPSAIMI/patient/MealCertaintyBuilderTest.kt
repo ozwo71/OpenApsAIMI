@@ -43,6 +43,7 @@ class MealCertaintyBuilderTest {
 
     @Test
     fun effortVeto_blocksHighAndMedWhenUndeclared() {
+        // Mild hyper + modest rise: effort veto must still pin LOW (real activity risk).
         val mc = MealCertaintyBuilder.evaluate(
             MealCertaintyBuilder.Input(
                 trunkState = GlobalPhysiologicalState.DIGESTION_ACTIVE,
@@ -58,6 +59,28 @@ class MealCertaintyBuilderTest {
         )
         assertThat(mc.level).isEqualTo(MealCertaintyLevel.LOW)
         assertThat(mc.supportsMealSupport).isFalse()
+    }
+
+    @Test
+    fun effortVeto_overriddenByStrongUndeclaredHyperRise() {
+        // 25/07 14:42 style: BG≈248 Δ≈23 FIRST_WAVE + effort_veto from postprandial HR noise.
+        val mc = MealCertaintyBuilder.evaluate(
+            MealCertaintyBuilder.Input(
+                trunkState = GlobalPhysiologicalState.DIGESTION_ACTIVE,
+                mealBranchConfidence = 1.0,
+                digestionDetected = true,
+                absorptionPhase = MealAbsorptionPhase.FIRST_WAVE,
+                bgMgdl = 248.0,
+                deltaMgdl5m = 22.7,
+                targetBgMgdl = 100.0,
+                cobG = 0.0,
+                effortVeto = true,
+            ),
+        )
+        assertThat(mc.level).isEqualTo(MealCertaintyLevel.HIGH)
+        assertThat(mc.supportsMealOverProtective).isTrue()
+        assertThat(mc.supportsMealSupport).isTrue()
+        assertThat(mc.reasons).contains("level_high_digestion_overrides_effort_veto")
     }
 
     @Test
