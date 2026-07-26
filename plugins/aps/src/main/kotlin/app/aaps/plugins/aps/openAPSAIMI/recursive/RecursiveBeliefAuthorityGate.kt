@@ -8,6 +8,7 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.safety.HyperInstalledDroppingExemption
 import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoAggressiveRiseExit
 import app.aaps.plugins.aps.openAPSAIMI.safety.SafetyRiskExportSnapshot
 import org.json.JSONArray
@@ -30,6 +31,14 @@ internal object RecursiveBeliefAuthorityGate {
     // (mg/dL) for the rise to count as "not falling". Tunable after field monitoring.
     private const val HYPER_BYPASS_MARGIN_MGDL = 45.0
     private const val HYPER_BYPASS_MIN_DELTA_MGDL5M = 0.0
+
+    // A1b — "clear-hyper hold": when the predictive-hypo LGS halt was suppressed *because BG is
+    // clearly hyperglycemic* (PredictiveHypoEvaluator hyperArtifact), there is no imminent hypo, so
+    // authority must NOT be forced to NONE. Margin matches PredictiveHypoConstants hyper-artefact
+    // margin (40). The FALLING side reuses HyperInstalledDroppingExemption's projection-gated
+    // predicate (P1) so authority and the terminal safety wall open at the exact same moment on a
+    // hyper descent; rising/flat clear-hyper holds directly. Fail-closed on unknown BG/delta.
+    private const val HYPER_HOLD_MARGIN_MGDL = 40.0
 
     data class Input(
         val authorityEnabled: Boolean,
@@ -143,9 +152,36 @@ internal object RecursiveBeliefAuthorityGate {
             }
         }
         if (input.safetyRiskExport?.predictiveHypoSuppressed == true) {
+            // A1b — the halt was *suppressed*, not triggered: it may simply mean BG is clearly hyper.
+            // In that case there is no imminent hypo, so keep SOFT release instead of denying authority
+            // (which surfaced as a phantom PREDICTIVE_HYPO → NONE). Fail-closed: unknown BG/delta → not
+            // eligible. Rising/flat clear-hyper holds directly; a hyper *descent* holds only while the
+            // shared terminal-safety predicate (HyperInstalledDroppingExemption: bg>180, ≥target+45,
+            // Δ>−15, 10-min projection ≥ hypo+40) is satisfied, so authority and the safety wall open
+            // together (P1).
+            val safety = input.safetyRiskExport
+            val bg = input.bgMgdl
+            val delta = input.deltaMgdl5m
+            val clearHyperRisingOrFlat = bg != null && delta != null &&
+                delta >= 0.0 &&
+                bg >= safety.hypoThresholdMgdl + HYPER_HOLD_MARGIN_MGDL
+            val hyperDescentSafe = bg != null && delta != null && input.targetBgMgdl != null &&
+                delta < 0.0 &&
+                HyperInstalledDroppingExemption.shouldBypass(
+                    HyperInstalledDroppingExemption.Input(
+                        enabled = true,
+                        bgMgdl = bg,
+                        targetBgMgdl = input.targetBgMgdl,
+                        deltaMgdl5m = delta,
+                        hypoThresholdMgdl = safety.hypoThresholdMgdl,
+                        mealContextActive = safety.mealContextActive,
+                    ),
+                )
+            val clearHyperNotFalling = input.mealHyperBypassEnabled &&
+                (clearHyperRisingOrFlat || hyperDescentSafe)
             when {
                 predictiveHypoMealBypass -> {
-                    reasonCodes += if (input.safetyRiskExport?.mealRiseConfirmed == true) {
+                    reasonCodes += if (safety.mealRiseConfirmed) {
                         "PREDICTIVE_HYPO_MEAL_BYPASS"
                     } else {
                         "PREDICTIVE_HYPO_MEAL_BYPASS_HYPER"
@@ -158,6 +194,14 @@ internal object RecursiveBeliefAuthorityGate {
                 // before meal-bypass confirmation catches up (typically 1–2 ticks later).
                 aggressiveRiseExit -> {
                     reasonCodes += "PREDICTIVE_HYPO_AGGRESSIVE_RISE"
+                    if (maxAllowedAuthority == ReleaseAuthority.HARD) {
+                        maxAllowedAuthority = ReleaseAuthority.SOFT
+                    }
+                }
+                // Clear hyper, not falling hard: the suppressed halt carries no imminent hypo →
+                // hold SOFT correction authority rather than forcing NONE.
+                clearHyperNotFalling -> {
+                    reasonCodes += "PREDICTIVE_HYPO_HYPER_HOLD"
                     if (maxAllowedAuthority == ReleaseAuthority.HARD) {
                         maxAllowedAuthority = ReleaseAuthority.SOFT
                     }

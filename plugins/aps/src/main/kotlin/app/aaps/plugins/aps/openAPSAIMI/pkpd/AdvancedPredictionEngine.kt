@@ -4,6 +4,7 @@ import app.aaps.core.data.configuration.Constants
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -34,6 +35,15 @@ object AdvancedPredictionEngine {
     /** Guard B — sous ce delta (mg/dL/5 min) le BG chute franchement : on suspend l'EGP.
      * Aligné sur [app.aaps.plugins.aps.openAPSAIMI.prediction.ClampPkpdScenarioReconcile.MAX_NEG_DELTA_MGDL]. */
     private const val ENDO_REVERSION_FALLING_HARD_DELTA_MGDL = -3.0
+
+    /** Hyper-reversion (2026-07-26) — root fix for the undeclared-meal false-hypo. The legacy gate only
+     * lets EGP revert once |insulinImpact| is negligible; with high IOB + long learned DIA that never
+     * happens inside the horizon, so the insulin-only path crashes to the 39 floor while real BG sits at
+     * ~200 (COB=0). When the patient is *clearly hyper now*, a projected crash to 39 is non-physiological:
+     * allow the reversion even while insulin is active. Guard A (baseline cap ≤ 80 ≤ currentBG) keeps it
+     * from ever predicting a rise, and Guard B (falling-hard) still suspends it — so this never becomes
+     * optimistic and never touches euglycemic/low BG. */
+    private const val HYPER_REVERSION_LEVEL_MGDL = 160.0
 
     /**
      * Predict the BG evolution using the final ISF/sensitivity applied by the decision engine.
@@ -77,6 +87,7 @@ object AdvancedPredictionEngine {
         horizonMinutes: Int = 240,
         modulation: PredictionPhysioModulation = PredictionPhysioModulation(),
         endogenousReversionEnabled: Boolean = false,
+        hyperReversionEnabled: Boolean = false,
     ): AdvancedPredictionCurves {
         val effectiveHorizonMinutes = maxOf(Constants.PREDICTION_GRAPH_MIN_MINUTES, horizonMinutes)
         val iobSeries = mutableListOf(currentBG)
@@ -141,6 +152,9 @@ object AdvancedPredictionEngine {
         val endoSuppressedByFallingTrend = endogenousReversionEnabled &&
             (!delta.isFinite() || delta <= ENDO_REVERSION_FALLING_HARD_DELTA_MGDL)
         val endoActive = endogenousReversionEnabled && !endoSuppressedByFallingTrend
+        // Clearly hyper now → a projected crash to the 39 floor is an artefact of the insulin-only
+        // path; allow reversion even while insulin is still active (Guards A/B remain in force).
+        val clearHyperContext = hyperReversionEnabled && currentBG >= HYPER_REVERSION_LEVEL_MGDL
 
         repeat(steps) { stepIndex ->
             val minutesInFuture = (stepIndex + 1) * STEP_MINUTES
@@ -165,7 +179,22 @@ object AdvancedPredictionEngine {
             rawInsulinPathMin = min(rawInsulinPathMin, min(lastIob, min(lastCob, lastUam)))
 
             val insulinNegligible = abs(insulinImpact) < ENDO_INSULIN_NEGLIGIBLE_MGDL
-            if (endoActive && insulinNegligible) {
+            if (endoActive && clearHyperContext) {
+                // Clear-hyper counter-regulation floor: the insulin-only path may crash to the 39
+                // artefact even though a hyperglycemic patient will be counter-regulated well before
+                // hypo. Hold the *soft* curves at the baseline anchor (≤ 80 ≤ currentBG, so never
+                // optimistic) after the raw path-min has been captured above. Suspended by Guard B on
+                // a hard fall (endoActive already gates that).
+                val beforeIob = lastIob
+                val beforeCob = lastCob
+                val beforeUam = lastUam
+                lastIob = max(lastIob, endoBaseline)
+                lastCob = max(lastCob, endoBaseline)
+                lastUam = max(lastUam, endoBaseline)
+                if (lastIob > beforeIob + 1e-6 || lastCob > beforeCob + 1e-6 || lastUam > beforeUam + 1e-6) {
+                    endoAppliedOnInsulin = true
+                }
+            } else if (endoActive && insulinNegligible) {
                 val beforeIob = lastIob
                 val beforeCob = lastCob
                 val beforeUam = lastUam
@@ -180,7 +209,9 @@ object AdvancedPredictionEngine {
 
             lastHybrid = (lastHybrid - insulinImpact * iobDampingFactor + carbImpact + hybridMomentum)
                 .coerceIn(NUMERIC_FLOOR, NUMERIC_CEILING)
-            if (endoActive && insulinNegligible) {
+            if (endoActive && clearHyperContext) {
+                lastHybrid = max(lastHybrid, endoBaseline)
+            } else if (endoActive && insulinNegligible) {
                 lastHybrid = applyEndogenousReversion(lastHybrid, endoBaseline)
             }
             hybridMomentum *= momentumDecay

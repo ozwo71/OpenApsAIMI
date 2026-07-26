@@ -354,12 +354,14 @@ enum class BooleanKey(
         defaultValue = true,
         dependency = OApsAIMIIntelligenceSnapshotExport,
     ),
-    /** Meal-rise bypass extension (A1): on strong meal corroboration during a confirmed hyper that is not
-     *  falling, let the predictive-hypo meal bypass fire even without `safety.mealRiseConfirmed`, so a
-     *  hallucinated PKPD hypo floor (≈39 mg/dL) cannot pin RBT authority to NONE on an undeclared meal.
-     *  Only ever softens HARD→SOFT; all downstream vetoes (sensor, post-hypo, false-meal, protective mode)
-     *  still apply, and real meal corroboration (mode/causal/latent/hypothesis) is still required.
-     *  See docs/AIMI_HARMONIA_SMB_ARBITRATION.md and undeclared-meal 3-gate analysis. */
+    /** Meal / hyper authority retention in a *suppressed* predictive-hypo (A1 + A1b). The
+     *  predictive-hypo flag means the LGS halt was SUPPRESSED (BG rising / clearly hyper), not that a
+     *  hypo is imminent — so the RBT authority gate must not deny correction in that state.
+     *  A1: meal-rise bypass fires on strong meal corroboration even without `safety.mealRiseConfirmed`.
+     *  A1b: "clear-hyper hold" keeps SOFT (not NONE) when BG is well above the hypo threshold and not
+     *  falling hard. Both only soften HARD→SOFT (never grant HARD, never bypass real hypo); all
+     *  downstream vetoes (sensor, post-hypo, false-meal, protective mode) still apply. Fail-safe: false
+     *  → legacy behaviour. See docs/AIMI_HARMONIA_SMB_ARBITRATION.md and undeclared-meal 3-gate analysis. */
     OApsAIMIMealHyperBypassEnabled("key_aimi_meal_hyper_bypass_enabled", true),
     /**
      * Lever 1 — hyper-installed dropping exemption: when BG ≫ target on a meal/deep-hyper
@@ -478,6 +480,17 @@ enum class BooleanKey(
         "key_aimi_pkpd_endo_reversion", true,
         titleResId = R.string.pref_title_aimi_pkpd_endo_reversion,
         summaryResId = R.string.pref_summary_aimi_pkpd_endo_reversion,
+    ),
+    /** 🩸 pkpd hyper-reversion (root fix, undeclared-meal false-hypo): when BG is clearly hyper (≥160),
+     *  let the EGP reversion lift the insulin-only path off the absorbing 39 floor even while insulin is
+     *  still active — otherwise, with high IOB + long learned DIA, the path never reverts and predicts a
+     *  false hypo at BG ~200 (COB=0). Guard A (baseline ≤ 80 ≤ currentBG) and Guard B (falling-hard
+     *  suspend) stay in force, so it never predicts a rise and never touches euglycemic/low BG.
+     *  Fail-safe: false → legacy EGP behaviour. Requires [OApsAIMIPkpdEndogenousReversion]. */
+    OApsAIMIPkpdHyperReversion(
+        key = "key_aimi_pkpd_hyper_reversion",
+        defaultValue = true,
+        dependency = OApsAIMIPkpdEndogenousReversion,
     ),
     // 🩸 pkpd predictions: shape the insulin-activity curves on the LEARNED DIA/peak, not the static profile
     OApsAIMIPkpdPredictionKinetics(
