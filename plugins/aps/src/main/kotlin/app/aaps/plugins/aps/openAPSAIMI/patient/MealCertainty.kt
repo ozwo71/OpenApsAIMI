@@ -86,6 +86,12 @@ data class MealCertainty(
 
 object MealCertaintyBuilder {
 
+    /** Deep-hyper floor (mg/dL) for effort-veto override on a strong digestion rise. */
+    internal const val EFFORT_VETO_OVERRIDE_MIN_BG_MGDL = 200.0
+
+    /** Strong 5‑min rise (mg/dL) required with an active absorption wave to override effort_veto. */
+    internal const val EFFORT_VETO_OVERRIDE_MIN_DELTA_MGDL5M = 4.0
+
     data class Input(
         val trunkState: GlobalPhysiologicalState?,
         val mealBranchConfidence: Double = 0.0,
@@ -251,15 +257,34 @@ object MealCertaintyBuilder {
                 input.bgMgdl.isFinite() &&
                 input.bgMgdl > target + PostHypoAggressiveRiseExit.TARGET_MARGIN_MGDL
 
-        val digestionHigh =
+        val digestionRiseCore =
             treeState == MealCertaintyTreeState.DIGESTION_ACTIVE &&
                 rise == MealRiseGeometry.OK &&
                 aboveMealBand &&
-                !effortBlocksMeal &&
                 terminals != MealTerminalsAgree.HYPO_CONFLICT
 
+        // Undeclared-meal hyper plateaus (e.g. 25/07 14:42): postprandial HR/steps often trip
+        // effort_veto while the trunk is already DIGESTION_ACTIVE + FIRST_WAVE with a strong rise.
+        // That pinned MealCertainty to LOW → Harmonia PROTECTIVE_REDUCTION (smb_factor=0) despite
+        // MEAL_UNDECLARED_FAST. Override only on deep hyper + strong Δ + active absorption wave;
+        // milder effort+meal cases stay LOW (see effortVeto_blocksHighAndMedWhenUndeclared).
+        val effortVetoOverriddenByStrongMealRise =
+            effortBlocksMeal &&
+                digestionRiseCore &&
+                phase.isActive &&
+                input.bgMgdl >= EFFORT_VETO_OVERRIDE_MIN_BG_MGDL &&
+                input.deltaMgdl5m >= EFFORT_VETO_OVERRIDE_MIN_DELTA_MGDL5M
+
+        val digestionHigh = digestionRiseCore && (!effortBlocksMeal || effortVetoOverriddenByStrongMealRise)
+
         if (digestionHigh) {
-            reasons.add("level_high_digestion_rise")
+            reasons.add(
+                if (effortVetoOverriddenByStrongMealRise) {
+                    "level_high_digestion_overrides_effort_veto"
+                } else {
+                    "level_high_digestion_rise"
+                },
+            )
             return MealCertaintyLevel.HIGH
         }
 
