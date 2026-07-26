@@ -1,6 +1,6 @@
 # AIMI — Harmonia SMB Arbitration (soft catalog → live lift)
 
-**Status:** implemented 2026-07-25 (no shadow mode)  
+**Status:** implemented 2026-07-25 (no shadow mode); undeclared-meal hyper handling extended 2026-07-26 (see §8)  
 **Related:** [AIMI_SMB_OWNERSHIP_MATRIX.md](AIMI_SMB_OWNERSHIP_MATRIX.md), [AIMI_DECISION_CASCADE_CONTRACT.md](AIMI_DECISION_CASCADE_CONTRACT.md), [AIMI_PHYSIOLOGICAL_PATTERN_CATALOG.md](AIMI_PHYSIOLOGICAL_PATTERN_CATALOG.md)
 
 ---
@@ -135,3 +135,86 @@ See updated [AIMI_SMB_OWNERSHIP_MATRIX.md](AIMI_SMB_OWNERSHIP_MATRIX.md) §2.
 - No Auditor lift.  
 - No deletion of the pattern catalog.  
 - No new inter-module Gradle dependencies.
+
+---
+
+## 8. Undeclared-meal hyper handling (2026-07-26)
+
+### 8.1 Problem
+
+On confirmed undeclared meals the SMB was starved in two distinct regimes, evidenced by two
+24 h support packages:
+
+- **Rise / plateau** (25/07, BG 200–248 for ~90 min): the RBT authority gate treated
+  `predictive_hypo_suppressed == true` as a hypo risk and forced authority to `NONE`
+  (`PREDICTIVE_HYPO`), so SMB was under-delivered (2.82 U where ~7.5 U was demanded).
+- **Descent** (26/07 quiche lorraine, fat/protein, peak 259 mg/dL): the rise was well handled
+  (~20 U) but as the sawtooth ticked down at BG still ~247, **two independent layers** hard-zeroed
+  SMB for 14 cycles: the authority gate collapsed to `NONE` when `meal_rise_confirmed` flipped off,
+  and the terminal safety wall fired `droppingFast* / isPrediction / isAcceleratingDown`.
+
+Root insight: `predictive_hypo_suppressed` means *the LGS halt was **suppressed*** (BG rising /
+clearly hyper — no imminent hypo), not that a hypo is imminent. Denying correction on that flag is a
+semantic inversion. And a benign post-peak descent at BG ≫ target must not be read as a freefall.
+
+### 8.2 Contract — two layers must open together
+
+Correction on a hyper descent requires **both** independent layers to open on the **same predicate**:
+
+| Layer | Where | Legacy failure | Fix |
+|-------|-------|----------------|-----|
+| **Authority (RBT)** | `RecursiveBeliefAuthorityGate` | `predictiveHypoSuppressed` → `NONE` | A1 / A1b keep **SOFT** |
+| **Terminal safety** | `DetermineBasalaimiSMB2.determineCriticalConditions` | `dropping* / isPrediction / isAcceleratingDown` → `SMB=0` | `HyperInstalledDroppingExemption` bypass |
+
+**Single source of truth** for “may shed insulin on a clear-hyper, moderate descent” =
+`HyperInstalledDroppingExemption.shouldBypass`: `bg > 180`, `bg ≥ target + 45`, `−15 < Δ < 0`,
+and a 10-min linear projection `bg + 2Δ ≥ hypoThreshold + 40`. Both layers consume it, so authority
+and the safety wall open at the exact same tick.
+
+### 8.3 Mechanisms
+
+- **A1 — meal-rise bypass** (`RecursiveBeliefAuthorityGate.shouldBypassPredictiveHypoForMeal`):
+  fires the predictive-hypo meal bypass on strong meal corroboration (mode / causal / latent /
+  hypothesis) even without `mealRiseConfirmed`; softens `HARD → SOFT`. Reasons
+  `PREDICTIVE_HYPO_MEAL_BYPASS[_HYPER]`.
+- **A1b — clear-hyper hold** (same gate): when the halt was merely suppressed, hold **SOFT** instead
+  of `NONE`. Rising/flat clear-hyper (`Δ ≥ 0`, `bg ≥ hypoThreshold + 40`) holds directly; a hyper
+  **descent** holds only while `HyperInstalledDroppingExemption.shouldBypass` is true. Reason
+  `PREDICTIVE_HYPO_HYPER_HOLD`. Flag `OApsAIMIMealHyperBypassEnabled` (default on, fail-safe).
+- **Lever 1 — hyper-installed dropping exemption** (`safety/HyperInstalledDroppingExemption.kt`,
+  wired in `determineCriticalConditions`): `bypassedByHyperDrop` now covers `droppingFast`,
+  `droppingFastAtHigh`, `droppingVeryFast`, **`isPrediction`, and `isAcceleratingDown`**. `isBg90`,
+  `isHypoBlocked`, `isBelowMinThreshold` are **never** bypassed. Flag
+  `OApsAIMIHyperDroppingExemptEnabled` (default on).
+- **effort-veto override** (`patient/MealCertainty.kt`): a strong digestion rise
+  (`bg ≥ 200 && Δ ≥ 4`, active absorption wave) overrides a postprandial HR/steps `effort_veto` that
+  would otherwise pin `MealCertainty = LOW` → `PROTECTIVE_REDUCTION`.
+- **PKPD hyper-reversion** (`pkpd/AdvancedPredictionEngine.kt`, flag `OApsAIMIPkpdHyperReversion`):
+  in clear hyper (`bg ≥ 160`, Guard B not falling-hard) the insulin-only path is held at the
+  counter-regulation baseline (≤ 80 ≤ currentBG) instead of collapsing to the absorbing 39 floor,
+  so `eventual` / `composite_min` stop hallucinating a false hypo. General robustness (a false-39
+  was not the poison of the 26/07 quiche, but occurs ~68×/24 h elsewhere).
+
+### 8.4 Guard-rails (non-negotiable)
+
+- Absolute freefall floor **−15 mg/dL/5 min** and **10-min projection ≥ hypo + 40** bound *every*
+  relaxation.  
+- `MIN_BG = 180`: below it the safety wall re-closes (a small 180→target zero tail is accepted).  
+- Every lever is `HARD → SOFT` or a conditional bypass — none grants `HARD`, none touches
+  `isBg90` / `isHypoBlocked` / `isBelowMinThreshold` / hypo LGS.
+
+### 8.5 Field validation criteria
+
+- Hyper descent (BG ≫ target, `−15 < Δ < 0`, projection safe): `reason_codes` show
+  `PREDICTIVE_HYPO_HYPER_HOLD`, `effective_authority = SOFT`, and the narrative shows
+  `SMB_HYPER_DROP_BYPASS` instead of `🛑 Safety condition … → SMB=0`.  
+- Freefall (`Δ ≤ −15`) or projection into hypo: authority returns to `NONE`, safety wall re-fires.  
+- `eventual_bg` no longer equals 39 while real BG > 180 (with `OApsAIMIPkpdHyperReversion` on).
+
+### 8.6 Still open
+
+- **Post-hypo latency**: a meal starting right after a hypo is held `NONE` for ~14 min because
+  `PostHypoAggressiveRiseExit` requires `Δ > 15`; a softer meal-rise exit is pending (validate in
+  shadow first).  
+- **PKPD Guard B coherence**: the hyper-reversion is itself suspended at `Δ ≤ −3` (Guard B) — to be
+  aligned on the shared `−15` predicate so the anti-39 floor also holds on a hyper descent.

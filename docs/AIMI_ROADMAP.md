@@ -164,6 +164,11 @@ intégral, Harmonia branch-aware) :
 | Per-person exercise model | **TODO** (superseded framing: extend `EffortActivityBelief`, not a parallel model) |
 | Wire computed-but-unused signals (e.g. Ra→predict) | **TODO** |
 | Confirm each ML head is live on device | **TODO** |
+| Undeclared-meal **rise** under-dosing (A1 meal-rise bypass, `PREDICTIVE_HYPO_MEAL_BYPASS[_HYPER]`) | done (committed `db436e0b1a`), field-validated 26/07 (rise dosed ~20 U vs 2.82 U on 25/07) — see [AIMI_HARMONIA_SMB_ARBITRATION.md](AIMI_HARMONIA_SMB_ARBITRATION.md) §8 |
+| Undeclared-meal **descent** hard-zeros — two-layer interlock (A1b clear-hyper hold + `HyperInstalledDroppingExemption` extended to `isPrediction`/`isAcceleratingDown`, shared projection-gated predicate) | **done 2026-07-26 (uncommitted)**, needs device validation on next fat/protein meal |
+| pkpd **hyper-reversion** (hold insulin-only path at counter-reg baseline ≤80 in clear hyper, kills false `eventual=39`; `OApsAIMIPkpdHyperReversion`) | **done 2026-07-26 (uncommitted)**, general robustness; needs device validation |
+| Post-hypo bypass latency (~14 min; meal right after hypo held NONE, `PostHypoAggressiveRiseExit` needs Δ>15) | **TODO** (softer meal-rise exit; validate in shadow) |
+| pkpd Guard B coherence (hyper-reversion self-suspended at Δ≤−3; align on shared −15 predicate) | **TODO** |
 
 ---
 

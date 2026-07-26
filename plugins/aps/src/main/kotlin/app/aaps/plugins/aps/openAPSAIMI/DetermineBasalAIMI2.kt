@@ -9061,6 +9061,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             profile = profile,
             delta = delta.toDouble(),
             endogenousReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
+            hyperReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdHyperReversion),
         )
         lastAdvancedPredictionCurves = curves
         recordPkpdSoftFloor(curves)
@@ -13394,10 +13395,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bypassedByHyperDrop = true,
             bypassTag = "droppingVeryFast"
         )
+        // Lever 1 (P0): on a hyper-installed descent, the dropping-fast family alone is not enough —
+        // isPrediction (emergency-brake branch, Δ<-3) and isAcceleratingDown also hard-zero the SMB
+        // while BG is still ~2-3× target. Exempt them under the SAME projection-gated predicate
+        // (HyperInstalledDroppingExemption). isBg90 is a genuine low-BG guard and is left untouched
+        // (mutually exclusive with the exemption's bg>180 anyway).
         addIfActive(
             active = isPrediction(context),
             conditionLabel = ctx.getString(R.string.condition_prediction),
             bypassedByFallback = true,
+            bypassedByHyperDrop = true,
             bypassTag = "prediction"
         )
         addIfActive(
@@ -13408,6 +13415,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         addIfActive(
             active = isAcceleratingDown(context),
             conditionLabel = ctx.getString(R.string.condition_acceleratingdown),
+            bypassedByHyperDrop = true,
             bypassTag = "acceleratingDown"
         )
 
@@ -14118,6 +14126,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 delta = delta,
                 modulation = predictionModulation,
                 endogenousReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
+                hyperReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdHyperReversion),
             )
         } catch (e: Exception) {
             consoleLog.add("Error in AdvancedPredictionEngine: ${e.message}")
@@ -15349,6 +15358,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 currentBG = bg, iobArray = iob_data_array, finalSensitivity = sens,
                 cobG = effectiveCOB, profile = profile, delta = delta.toDouble(),
                 endogenousReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
+                hyperReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdHyperReversion),
             )
             lastAdvancedPredictionCurves = curves
             val softFloor = recordPkpdSoftFloor(curves)

@@ -178,4 +178,64 @@ class AdvancedPredictionEngineTest {
         assertTrue(mealSupported.cob.last() > baseline.cob.last())
         assertTrue(mealSupported.hybrid.last() > baseline.hybrid.last())
     }
+
+    /** Bolus-tail IOB array: insulin stays materially active across the horizon (learned DIA >
+     *  horizon), replicating the undeclared-meal support package where the insulin-only path crashes. */
+    private fun bolusTailArray(): Array<IobTotal> {
+        val now = System.currentTimeMillis()
+        return (0..48).map { i ->
+            val e = mockk<IobTotal>()
+            every { e.iob } returns 13.5
+            every { e.activity } returns (0.060 * Math.exp(-i / 90.0))
+            every { e.time } returns now + i * 5 * 60_000L
+            e
+        }.toTypedArray()
+    }
+
+    private fun hyperReversionProfile(): OapsProfileAimi {
+        val profile = mockk<OapsProfileAimi>(relaxed = true)
+        every { profile.carb_ratio } returns 10.0
+        every { profile.peakTime } returns 54.0
+        return profile
+    }
+
+    private fun runHyperReversion(currentBG: Double, delta: Double, hyper: Boolean) =
+        AdvancedPredictionEngine.predictCurves(
+            currentBG = currentBG, iobArray = bolusTailArray(), finalSensitivity = 36.0,
+            cobG = 0.0, profile = hyperReversionProfile(), delta = delta, horizonMinutes = 240,
+            endogenousReversionEnabled = true, hyperReversionEnabled = hyper,
+        )
+
+    @Test
+    fun hyperReversion_holds_soft_pathmin_at_baseline_in_clear_hyper() {
+        val off = runHyperReversion(currentBG = 213.0, delta = 0.0, hyper = false)
+        val on = runHyperReversion(currentBG = 213.0, delta = 0.0, hyper = true)
+
+        // Legacy: insulin-only path crashes to the 39 artefact → false predictive hypo.
+        assertTrue(off.insulinPathMinSoftMgdl!! < 45.0)
+        assertTrue(!off.endogenousReversionOnInsulinCurves)
+        // Fix: soft path-min held at the counter-regulation baseline (≈80), above any hypo threshold.
+        assertTrue(on.insulinPathMinSoftMgdl!! >= 79.0)
+        assertTrue(on.endogenousReversionOnInsulinCurves)
+        // Never optimistic: the held floor stays well below the current BG.
+        assertTrue(on.insulinPathMinSoftMgdl!! < 213.0)
+    }
+
+    @Test
+    fun hyperReversion_no_effect_at_euglycemia() {
+        val off = runHyperReversion(currentBG = 120.0, delta = 0.0, hyper = false)
+        val on = runHyperReversion(currentBG = 120.0, delta = 0.0, hyper = true)
+
+        // BG < 160 → not clear-hyper → identical to legacy (hypo-protective behaviour untouched).
+        assertEquals(off.insulinPathMinSoftMgdl!!, on.insulinPathMinSoftMgdl!!, 1e-6)
+    }
+
+    @Test
+    fun hyperReversion_suspended_when_falling_hard() {
+        // Guard B: delta ≤ −3 suspends EGP even in clear hyper → path stays pessimistic (no hold).
+        val on = runHyperReversion(currentBG = 213.0, delta = -5.0, hyper = true)
+
+        assertTrue(on.insulinPathMinSoftMgdl!! < 45.0)
+        assertTrue(!on.endogenousReversionOnInsulinCurves)
+    }
 }
