@@ -169,6 +169,7 @@ class ReplayQualityExportBuilderTest {
                 shadowEnabled = true,
                 authorityEnabled = true,
                 waveletEnabled = true,
+                mealHyperBypassEnabled = true,
             ),
         )
 
@@ -313,6 +314,7 @@ class ReplayQualityExportBuilderTest {
                 shadowEnabled = false,
                 authorityEnabled = false,
                 waveletEnabled = false,
+                mealHyperBypassEnabled = false,
             ),
         )
 
