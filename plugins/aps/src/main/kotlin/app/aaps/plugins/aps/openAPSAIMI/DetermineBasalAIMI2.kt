@@ -170,6 +170,7 @@ import app.aaps.plugins.aps.openAPSAIMI.safety.signalTrajectoryStack
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoThresholdMath
 import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinLoadGovernor
 import app.aaps.plugins.aps.openAPSAIMI.safety.MealSafetyContext
+import app.aaps.plugins.aps.openAPSAIMI.safety.HyperInstalledDroppingExemption
 import app.aaps.plugins.aps.openAPSAIMI.safety.PredictiveHypoEvaluator
 import app.aaps.plugins.aps.openAPSAIMI.safety.PredictiveHypoInput
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionApplicator
@@ -4102,6 +4103,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 bgMgdl = bg,
                 targetBgMgdl = targetForPostHypoExit,
                 deltaMgdl5m = delta.toDouble(),
+                mealHyperBypassEnabled = rbtPrefs.mealHyperBypassEnabled,
             ),
         )
         lastRecursiveAuthorityGateDecision = authorityGate
@@ -13299,15 +13301,37 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             (context.delta >= 2.0) &&
             (context.iob < context.maxIob * 0.8)
 
+        // Lever 1: on a hyper-installed plateau (undeclared meal / deep hyper), do not hard-zero SMB
+        // solely because the sawtooth redesignation has Δ<0. The classic rise-fallback requires
+        // delta≥2 so it never fires on down-ticks — that was the dominant SMB=0 cutter on 25/07.
+        val mealClockActive = context.mealTime || context.bfastTime || context.lunchTime ||
+            context.dinnerTime || context.highCarbTime || context.snackTime
+        val hyperDropExempt = HyperInstalledDroppingExemption.shouldBypass(
+            HyperInstalledDroppingExemption.Input(
+                enabled = preferences.get(BooleanKey.OApsAIMIHyperDroppingExemptEnabled),
+                bgMgdl = context.bg,
+                targetBgMgdl = context.targetBg,
+                deltaMgdl5m = context.delta,
+                hypoThresholdMgdl = context.hypoThreshold,
+                mealContextActive = mealClockActive,
+                cobG = context.cob,
+            )
+        )
+
         fun addIfActive(
             active: Boolean,
             conditionLabel: String,
             bypassedByFallback: Boolean = false,
+            bypassedByHyperDrop: Boolean = false,
             bypassTag: String
         ) {
             if (!active) return
             if (fallback && bypassedByFallback) {
                 consoleLog.add("SMB_FALLBACK_BYPASS: $bypassTag")
+                return
+            }
+            if (hyperDropExempt && bypassedByHyperDrop) {
+                consoleLog.add("SMB_HYPER_DROP_BYPASS: $bypassTag")
                 return
             }
             conditions.add(conditionLabel)
@@ -13364,16 +13388,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         addIfActive(
             active = isDroppingFast(context),
             conditionLabel = ctx.getString(R.string.condition_droppingfast),
+            bypassedByHyperDrop = true,
             bypassTag = "droppingFast"
         )
         addIfActive(
             active = isDroppingFastAtHigh(context),
             conditionLabel = ctx.getString(R.string.condition_droppingfastathigh),
+            bypassedByHyperDrop = true,
             bypassTag = "droppingFastAtHigh"
         )
         addIfActive(
             active = isDroppingVeryFast(context),
             conditionLabel = ctx.getString(R.string.condition_droppingveryfast),
+            bypassedByHyperDrop = true,
             bypassTag = "droppingVeryFast"
         )
         addIfActive(

@@ -26,6 +26,11 @@ internal object RecursiveBeliefAuthorityGate {
     private const val MEAL_BYPASS_MEAL_MARGIN = 0.10
     private const val MEAL_BYPASS_PROTECTION_CONFIDENCE = 0.68
 
+    // A1 — hyper meal-rise bypass: how far above target BG must be, and the minimum 5-min delta
+    // (mg/dL) for the rise to count as "not falling". Tunable after field monitoring.
+    private const val HYPER_BYPASS_MARGIN_MGDL = 45.0
+    private const val HYPER_BYPASS_MIN_DELTA_MGDL5M = 0.0
+
     data class Input(
         val authorityEnabled: Boolean,
         val requestedAuthority: ReleaseAuthority,
@@ -45,6 +50,9 @@ internal object RecursiveBeliefAuthorityGate {
         val targetBgMgdl: Double? = null,
         /** 5‑minute delta (mg/dL). */
         val deltaMgdl5m: Double? = null,
+        /** A1: allow the predictive-hypo meal bypass on a corroborated, non-falling hyper even when
+         *  `safety.mealRiseConfirmed` is false. Fail-safe: false → legacy behaviour. */
+        val mealHyperBypassEnabled: Boolean = false,
     )
 
     data class Decision(
@@ -137,7 +145,11 @@ internal object RecursiveBeliefAuthorityGate {
         if (input.safetyRiskExport?.predictiveHypoSuppressed == true) {
             when {
                 predictiveHypoMealBypass -> {
-                    reasonCodes += "PREDICTIVE_HYPO_MEAL_BYPASS"
+                    reasonCodes += if (input.safetyRiskExport?.mealRiseConfirmed == true) {
+                        "PREDICTIVE_HYPO_MEAL_BYPASS"
+                    } else {
+                        "PREDICTIVE_HYPO_MEAL_BYPASS_HYPER"
+                    }
                     if (maxAllowedAuthority == ReleaseAuthority.HARD) {
                         maxAllowedAuthority = ReleaseAuthority.SOFT
                     }
@@ -326,7 +338,18 @@ internal object RecursiveBeliefAuthorityGate {
         aggressiveRiseExit: Boolean,
     ): Boolean {
         val safety = input.safetyRiskExport ?: return false
-        if (!safety.predictiveHypoSuppressed || !safety.mealContextActive || !safety.mealRiseConfirmed) {
+        if (!safety.predictiveHypoSuppressed || !safety.mealContextActive) {
+            return false
+        }
+        // A1: the legacy gate required `mealRiseConfirmed`, which short-circuits the meal corroboration
+        // below and lets a hallucinated PKPD hypo floor (≈39) pin authority to NONE on a real undeclared
+        // meal. Accept the rise as corroborated when BG sits well above target and is not falling — the
+        // actual meal evidence (mode/causal/latent/hypothesis) is still required before returning true.
+        val hyperNotFalling = input.mealHyperBypassEnabled &&
+            input.bgMgdl != null && input.targetBgMgdl != null && input.deltaMgdl5m != null &&
+            input.bgMgdl >= input.targetBgMgdl + HYPER_BYPASS_MARGIN_MGDL &&
+            input.deltaMgdl5m >= HYPER_BYPASS_MIN_DELTA_MGDL5M
+        if (!safety.mealRiseConfirmed && !hyperNotFalling) {
             return false
         }
         if (input.patternSnapshot?.suppressMealInterpretation == true) return false

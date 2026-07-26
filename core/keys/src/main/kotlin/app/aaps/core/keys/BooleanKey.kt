@@ -354,6 +354,21 @@ enum class BooleanKey(
         defaultValue = true,
         dependency = OApsAIMIIntelligenceSnapshotExport,
     ),
+    /** Meal-rise bypass extension (A1): on strong meal corroboration during a confirmed hyper that is not
+     *  falling, let the predictive-hypo meal bypass fire even without `safety.mealRiseConfirmed`, so a
+     *  hallucinated PKPD hypo floor (≈39 mg/dL) cannot pin RBT authority to NONE on an undeclared meal.
+     *  Only ever softens HARD→SOFT; all downstream vetoes (sensor, post-hypo, false-meal, protective mode)
+     *  still apply, and real meal corroboration (mode/causal/latent/hypothesis) is still required.
+     *  See docs/AIMI_HARMONIA_SMB_ARBITRATION.md and undeclared-meal 3-gate analysis. */
+    OApsAIMIMealHyperBypassEnabled("key_aimi_meal_hyper_bypass_enabled", true),
+    /**
+     * Lever 1 — hyper-installed dropping exemption: when BG ≫ target on a meal/deep-hyper
+     * plateau, do not hard-zero SMB solely because the 5‑min delta is negative
+     * (`droppingFast` / `droppingFastAtHigh` / `droppingVeryFast`). Projection-gated
+     * (10‑min linear must stay above hypo+buffer); freefall delta below -15 still vetoes.
+     * Fail-safe: false → legacy critical-safety behaviour.
+     */
+    OApsAIMIHyperDroppingExemptEnabled("key_aimi_hyper_dropping_exempt_enabled", true),
     OApsAIMIPkpdPragmaticReliefEnabled("key_aimi_pkpd_pragmatic_relief_enabled", true),
     /** When false, AIMI stops writing loop_blackbox_v1.jsonl only; hormonitor event/daily streams unchanged. */
     OApsAIMILoopBlackboxFileEnabled("key_aimi_loop_blackbox_file_enabled", true),
