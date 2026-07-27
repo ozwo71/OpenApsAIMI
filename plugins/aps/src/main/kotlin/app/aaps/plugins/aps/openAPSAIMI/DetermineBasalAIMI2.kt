@@ -9680,6 +9680,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             postHypoDelivery = lastPostHypoDeliveryAuthority,
             mealCertainty = lastMealCertainty,
             trunkGlobalState = lastPhysiologicalTreeSnapshot?.trunk?.globalState,
+            mealConfirmedEarlyReleaseEnabled = preferences.get(BooleanKey.OApsAIMIMealConfirmedEarlyRelease),
+            combinedDeltaMgdl5m = delta.toDouble(),
+            targetBgMgdl = targetBgMgdl,
+            iobU = iob.toDouble(),
+            maxIobU = maxIob,
         )
         lastDecisionPredictionAuthority = decisionPrediction
         consoleLog.add(

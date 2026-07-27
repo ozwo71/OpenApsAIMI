@@ -391,6 +391,29 @@ enum class BooleanKey(
         titleResId = R.string.pref_title_aimi_sensor_confidence_cgm_first,
         summaryResId = R.string.pref_summary_aimi_sensor_confidence_cgm_first,
     ),
+    /** Meal-confirmed early release (MCER) — root fix for the carb-blind dose-governing floor. On an
+     *  undeclared meal (COB=0) the dose-governing terminal (`predTerminalMgdl`) is the PKPD insulin-only
+     *  floor, which predicts a phantom descent while the meal/UAM path is climbing; it structurally
+     *  throttles the SMB cap (tube `minPred`), holds RBT authority at SOFT and lets the PKPD safety
+     *  zero the SMB — so a confirmed meal runs uncorrected for hours. When on, once a meal is
+     *  corroborated (mode/causal/UAM/tree) AND rising (Δ≥1.2, not free-falling) AND BG ≥ target+20, the
+     *  floor is released toward the best/UAM path (`scenarioBest.pathMin`) so the loop can dose to the
+     *  configured maxima early. It only ever RAISES the floor, never lowers it, and stays bounded by
+     *  maxSMB/maxSMBHB/maxBasal/maxIOB downstream. Tail circuit-breaker: reverts to the insulin-only
+     *  floor as soon as the post-peak tail risk appears — absorption phase `PEAK_CORRECTION` (NOT
+     *  `LATE_FAT`, which is a late rise still needing insulin), IOB headroom consumed, or the rise
+     *  breaks (Δ<0) — so it cannot set up a post-peak hypo. It is also self-limiting: the release
+     *  target is the best/UAM path minimum, which still contains insulin action, so stacked IOB pulls
+     *  that trough (and the cap) back down automatically. Genuine hypo
+     *  stays sovereign: never engages under false-meal suppression or post-hypo delivery guard.
+     *  ⚠️ Raises early dosing authority on the safety floor → **default OFF (opt-in)**. Fail-safe:
+     *  false → legacy insulin-only floor. See memory release-authority-channel-mutex-deadend. */
+    OApsAIMIMealConfirmedEarlyRelease(
+        key = "key_aimi_meal_confirmed_early_release",
+        defaultValue = false,
+        titleResId = R.string.pref_title_aimi_meal_confirmed_early_release,
+        summaryResId = R.string.pref_summary_aimi_meal_confirmed_early_release,
+    ),
     /**
      * Lever 1 — hyper-installed dropping exemption: when BG ≫ target on a meal/deep-hyper
      * plateau, do not hard-zero SMB solely because the 5‑min delta is negative
