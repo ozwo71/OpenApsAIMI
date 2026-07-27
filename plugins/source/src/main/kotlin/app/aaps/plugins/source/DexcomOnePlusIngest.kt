@@ -13,6 +13,10 @@ import kotlin.math.abs
  *
  * Dedup mirrors Ob1 `getForPreciseTimestamp(..., 4 min)` so backfill + live EGV
  * (and EGV re-poll) do not double-insert near-duplicate points.
+ *
+ * Provenance: NightscoutFoundation/xDrip `Ob1G5CollectionService.getForPreciseTimestamp`
+ * at pin `1e86d9a2a52577ed2c30fbf7b69d75fd56e6918f` (GPL-3.0). See
+ * docs/DEXCOM_ONEPLUS_ATTRIBUTION.md and plugins/dexcom_oneplus/NOTICE §1.
  */
 internal object DexcomOnePlusIngest {
 
