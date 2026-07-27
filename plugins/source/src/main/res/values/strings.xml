@@ -81,6 +81,16 @@
     <string name="dexcom_oneplus_status_message_generic">See status details in logcat if problems persist.</string>
     <string name="dexcom_oneplus_warmup_done">Warm-up complete — source active</string>
     <string name="dexcom_oneplus_warmup_failed" comment="%1$s=error detail. Example: BLE session not ported">Warm-up failed: %1$s</string>
+    <string name="dexcom_oneplus_notif_title">Dexcom ONE+</string>
+    <string name="dexcom_oneplus_notif_channel_name">Dexcom ONE+ status</string>
+    <string name="dexcom_oneplus_notif_channel_desc">Ongoing sensor connection and warm-up status.</string>
+    <string name="dexcom_oneplus_notif_pairing">Pairing…</string>
+    <string name="dexcom_oneplus_notif_connecting">Connecting to sensor…</string>
+    <string name="dexcom_oneplus_notif_reconnecting">Reconnecting…</string>
+    <string name="dexcom_oneplus_notif_warming_title">Sensor warming up</string>
+    <string name="dexcom_oneplus_notif_warming_text">Keep the phone near the sensor</string>
+    <string name="dexcom_oneplus_notif_failed_title">Warm-up interrupted</string>
+    <string name="dexcom_oneplus_notif_failed_text">Open the app to retry</string>
     <string name="glimp">Glimp</string>
     <string name="description_source_glimp">Receive BG values from Glimp.</string>
     <string name="mm640g">MM640g</string>

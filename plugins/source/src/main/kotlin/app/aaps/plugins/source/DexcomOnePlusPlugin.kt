@@ -28,6 +28,9 @@ import app.aaps.plugins.source.keys.DexcomOnePlusIntentKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -77,6 +80,13 @@ class DexcomOnePlusPlugin @Inject constructor(
     @Volatile
     private var warmupPhase: OnePlusWarmupState.Phase = OnePlusWarmupState.Phase.IDLE
 
+    private val _warmup = MutableStateFlow(OnePlusWarmupState(phase = OnePlusWarmupState.Phase.IDLE))
+
+    /** Live warm-up / session status of the native driver — feeds the ongoing notification and the dashboard ring. */
+    val warmup: StateFlow<OnePlusWarmupState> = _warmup.asStateFlow()
+
+    private val warmupNotification by lazy { DexcomOnePlusWarmupNotification(context) }
+
     override fun getPreferenceScreenContent() = PreferenceSubScreenDef(
         key = "dexcom_oneplus_settings",
         titleResId = R.string.dexcom_oneplus_native,
@@ -105,6 +115,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     override suspend fun onStop() {
         driver.removeWatcher(this)
         driver.shutdown()
+        warmupNotification.cancel()
         aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_SESSION: plugin stop")
         super.onStop()
     }
@@ -121,6 +132,8 @@ class DexcomOnePlusPlugin @Inject constructor(
 
     override fun onWarmup(state: OnePlusWarmupState) {
         warmupPhase = state.phase
+        _warmup.value = state
+        warmupNotification.update(state)
         aapsLogger.info(
             LTag.BGSOURCE,
             "DEXCOM_ONEPLUS_WARMUP: phase=${state.phase} remainingMs=${state.remainingMs} msg=${state.message}",
