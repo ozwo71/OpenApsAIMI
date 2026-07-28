@@ -10,6 +10,8 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.source.BgSource
+import app.aaps.core.interfaces.source.CgmWarmupProvider
+import app.aaps.core.interfaces.source.CgmWarmupStatus
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.withActivity
 import app.aaps.core.ui.compose.icons.IcPluginByoda
@@ -27,10 +29,15 @@ import app.aaps.plugins.source.keys.DexcomOnePlusBooleanKey
 import app.aaps.plugins.source.keys.DexcomOnePlusIntentKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -49,6 +56,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     config: Config,
     private val context: Context,
     private val persistenceLayer: PersistenceLayer,
+    private val warmupBasalGuard: DexcomOnePlusWarmupBasalGuard,
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -70,7 +78,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     rh,
     preferences,
     config,
-), BgSource, OnePlusGlucoseWatcher {
+), BgSource, OnePlusGlucoseWatcher, CgmWarmupProvider {
 
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -85,7 +93,19 @@ class DexcomOnePlusPlugin @Inject constructor(
     /** Live warm-up / session status of the native driver — feeds the ongoing notification and the dashboard ring. */
     val warmup: StateFlow<OnePlusWarmupState> = _warmup.asStateFlow()
 
+    /**
+     * Generic [CgmWarmupProvider] view derived from the single source of truth [_warmup].
+     * null while nothing is warming up / (re)connecting (READY / IDLE / FAILED).
+     */
+    override val warmupStatus: StateFlow<CgmWarmupStatus?> =
+        _warmup
+            .map { DexcomOnePlusWarmupMapper.toCgmWarmupStatus(it) }
+            .stateIn(ioScope, SharingStarted.Eagerly, DexcomOnePlusWarmupMapper.toCgmWarmupStatus(_warmup.value))
+
     private val warmupNotification by lazy { DexcomOnePlusWarmupNotification(context) }
+
+    /** Collector that drives the safety basal guard from the warm-up state (cancelled in onStop). */
+    private var warmupGuardJob: Job? = null
 
     override fun getPreferenceScreenContent() = PreferenceSubScreenDef(
         key = "dexcom_oneplus_settings",
@@ -110,9 +130,27 @@ class DexcomOnePlusPlugin @Inject constructor(
             "DEXCOM_ONEPLUS_SESSION: plugin start " +
                 "realSkeleton=${OnePlusCgmDrivers.useRealSkeleton} autoResumeQueued=$autoResumeQueued",
         )
+        // SAFETY (DRAFT — see DexcomOnePlusWarmupBasalGuard): while warm-up is active and no glucose
+        // is available, revert the pump to profile basal (option b: only cancel a high residual temp).
+        // Driven by the warm-up state on ioScope so it works in standby without any Activity; stops
+        // forcing the moment warm-up ends (status → null), letting the normal loop reclaim dosing.
+        warmupGuardJob?.cancel()
+        warmupGuardJob = ioScope.launch {
+            warmupStatus.collect { status ->
+                if (status != null) {
+                    try {
+                        warmupBasalGuard.ensureProfileBasalDuringWarmup(this@DexcomOnePlusPlugin, ioScope)
+                    } catch (t: Throwable) {
+                        aapsLogger.error(LTag.BGSOURCE, "ONEPLUS_WARMUP_BASAL guard error: ${t.message}", t)
+                    }
+                }
+            }
+        }
     }
 
     override suspend fun onStop() {
+        warmupGuardJob?.cancel()
+        warmupGuardJob = null
         driver.removeWatcher(this)
         driver.shutdown()
         warmupNotification.cancel()

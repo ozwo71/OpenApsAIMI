@@ -18,6 +18,11 @@
     <string name="dexcom_oneplus_start_title">Start sensor</string>
     <string name="dexcom_oneplus_start_summary">Apply sensor → enter code now → connect → ~30 min warm-up</string>
     <string name="dexcom_oneplus_start_steps">How to start:\n1. Apply the sensor on your body.\n2. Paste the applicator Data Matrix (GS1) or enter the 4-digit pairing code — do not wait until after warm-up.\n3. Stop Dexcom, xDrip, and Juggluco Direct (only one Bluetooth master).\n4. Allow Bluetooth, Scan, select the highlighted sensor, then Connect / follow.\n5. Accept the Android Bluetooth pairing prompt if shown.\n6. Warm-up ~30 min for a new sensor; attaching to a running sensor can deliver EGVs sooner.</string>
+    <string name="dexcom_oneplus_step_prepare">Prepare</string>
+    <string name="dexcom_oneplus_step_code">Code</string>
+    <string name="dexcom_oneplus_step_connect">Connect</string>
+    <string name="dexcom_oneplus_step_dashboard">Dashboard</string>
+    <string name="dexcom_oneplus_start_return_dashboard">After Connect you return to the dashboard. The warm-up countdown and glucose return show there and in the ongoing notification — you do not have to stay on this screen.</string>
     <string name="dexcom_oneplus_applicator_gs1_label">Applicator Data Matrix (GS1) or 4-digit PIN</string>
     <string name="dexcom_oneplus_applicator_gs1_hint">Paste the full Data Matrix text from a QR scanner, or type the 4-digit PIN. Serial is stored for reconnect matching.</string>
     <string name="dexcom_oneplus_applicator_parsed" comment="%1$s=PIN, %2$s=serial or dash. Example: PIN 1234 · serial ABCD">Parsed PIN %1$s · serial %2$s</string>

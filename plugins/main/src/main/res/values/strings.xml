@@ -274,6 +274,13 @@
     <string name="dashboard_pump_pill_sensor_a11y">Sensor age %1$s</string>
     <string name="dashboard_hero_sensor_badge_short">CGM %1$s</string>
     <string name="dashboard_hero_sensor_dialog_title">CGM</string>
+    <!-- CGM warm-up hero ring (shown on the dashboard circle-top while the active sensor is warming up / (re)connecting and no fresh glucose is available). -->
+    <string name="dashboard_warmup_label">WARM-UP</string>
+    <string name="dashboard_warmup_phase_connecting">Connecting…</string>
+    <string name="dashboard_warmup_phase_reconnecting">Reconnecting…</string>
+    <string name="dashboard_warmup_phase_pairing">Pairing…</string>
+    <string name="dashboard_warmup_ends_at" comment="%1$s = local end-of-warm-up time, e.g. 14:05. Shown under the countdown.">Ends %1$s</string>
+    <string name="dashboard_warmup_a11y">Sensor warm-up in progress</string>
     <string name="dashboard_hero_sensor_dialog_message">%1$s\n\n%2$s</string>
     <string name="graph_legend_smb">SMB</string>
     <string name="graph_legend_scenario_floor">Floor</string>

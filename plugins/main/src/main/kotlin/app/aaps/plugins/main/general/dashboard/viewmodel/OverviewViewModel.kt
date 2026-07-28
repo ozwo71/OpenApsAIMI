@@ -31,6 +31,8 @@ import app.aaps.core.interfaces.profile.EffectiveProfile
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.source.CgmWarmupProvider
+import app.aaps.core.interfaces.source.CgmWarmupStatus
 import app.aaps.core.interfaces.rx.AapsSchedulers
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMIPhysioDataRepositoryMTR
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard // 🌀 Trajectory
@@ -364,6 +366,21 @@ class OverviewViewModel(
         observePersistenceChanges(RM::class.java) { scheduleDebouncedStatusRefresh() }
         // Cannula / sensor ages on the hybrid card
         observePersistenceChanges(TE::class.java) { scheduleDebouncedStatusRefresh() }
+
+        // Generic CGM warm-up: refresh the hero when the active source starts/updates/ends a warm-up
+        // (phase change, (re)connection, or first glucose → handoff). No-op for sources that don't
+        // implement [CgmWarmupProvider]. Per-second countdown ticking is driven from the Compose layer.
+        scope.launch {
+            try {
+                (activePlugin.activeBgSource as? CgmWarmupProvider)?.warmupStatus?.collect {
+                    scheduleDebouncedStatusRefresh()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                fabricPrivacy.logException(e)
+            }
+        }
 
         // Same preference-driven refresh as overview [merge(...).onEach { scheduleUpdateGUI() }].
         scope.launch {
@@ -727,6 +744,9 @@ class OverviewViewModel(
         val healthScore = rt?.trajectoryHealth?.toDouble()?.div(100.0) ?: autodriveEngine.getHealthScore()
         val adaptationSummary = buildAimiAdaptationSummary(rt, now)
 
+        // Generic CGM warm-up status of the active source (null for sources that don't implement the provider).
+        val warmupStatus = (activePlugin.activeBgSource as? CgmWarmupProvider)?.warmupStatus?.value
+
         val state = StatusCardState(
             glucoseText = glucoseText,
             glucoseColor = DashboardCoherentGlucose.displayBgColor(
@@ -809,7 +829,8 @@ class OverviewViewModel(
 
             adaptiveSmoothingQualityTier = adaptiveSmoothingQualityTier,
             adaptiveSmoothingQualityBadgeText = adaptiveSmoothingQualityBadgeText,
-            adaptiveSmoothingQualityDialogMessage = adaptiveSmoothingQualityDialogMessage
+            adaptiveSmoothingQualityDialogMessage = adaptiveSmoothingQualityDialogMessage,
+            warmup = warmupStatus
         )
         latestStatusCardState = state
         _statusCardState.postValue(state)
@@ -1436,7 +1457,15 @@ data class StatusCardState(
     // Adaptive Smoothing Quality Badge (phase 1: informational only)
     val adaptiveSmoothingQualityTier: AdaptiveSmoothingQualityTier? = null,
     val adaptiveSmoothingQualityBadgeText: String = "",
-    val adaptiveSmoothingQualityDialogMessage: String = ""
+    val adaptiveSmoothingQualityDialogMessage: String = "",
+
+    /**
+     * Generic warm-up / (re)connection status of the active BG source, or null when the source does
+     * not report one (or is READY / IDLE / FAILED). Populated from
+     * `(activeBgSource as? CgmWarmupProvider)?.warmupStatus`. Drives the hero warm-up ring only when
+     * there is no fresh glucose to show — never references any specific CGM vendor.
+     */
+    val warmup: CgmWarmupStatus? = null
 )
 
 data class AdjustmentCardState(

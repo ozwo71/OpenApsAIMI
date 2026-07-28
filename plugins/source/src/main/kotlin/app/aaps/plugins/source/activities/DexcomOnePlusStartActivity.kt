@@ -1,19 +1,22 @@
 package app.aaps.plugins.source.activities
 
 import android.app.Activity
-import android.content.Intent
 import android.os.Bundle
 import android.os.Looper
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -36,11 +39,13 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.core.os.HandlerCompat
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.configuration.ConfigBuilder
@@ -99,7 +104,10 @@ class DexcomOnePlusStartActivity : AppCompatActivity() {
                             )
                         },
                         onStarted = {
-                            startActivity(Intent(this, DexcomOnePlusWarmupActivity::class.java))
+                            // Return to the dashboard after Connect — the warm-up countdown and
+                            // glucose return are surfaced on the dashboard ring and the ongoing
+                            // notification. The BLE session keeps running on the driver daemon; we
+                            // do NOT disconnect/shutdown here, only finish this Activity.
                             finish()
                         },
                     )
@@ -155,6 +163,17 @@ private fun DexcomOnePlusStartScreen(
     val serialNone = stringResource(R.string.dexcom_oneplus_applicator_serial_none)
     var connectRequested by remember { mutableStateOf(false) }
 
+    // Guided-flow progress for the stepper: Prepare → Code → Connect → Dashboard.
+    val hasPermissions = activity == null || OnePlusBlePermissionHelper.hasAll(activity)
+    val hasCode = parsedIdentity != null
+    val hasDevice = selected != null
+    val currentStep = when {
+        !hasPermissions -> 0
+        !hasCode         -> 1
+        !hasDevice       -> 2
+        else             -> 3
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             // Do not stopScan after Connect — StartActivity dispose races Warmup navigation and
@@ -188,6 +207,7 @@ private fun DexcomOnePlusStartScreen(
                 .clearFocusOnTap(focusManager),
             verticalArrangement = Arrangement.spacedBy(AapsSpacing.large),
         ) {
+            DexcomOnePlusStepper(currentStep = currentStep)
             Text(
                 text = stringResource(R.string.dexcom_oneplus_start_steps),
                 style = MaterialTheme.typography.bodyMedium,
@@ -347,6 +367,11 @@ private fun DexcomOnePlusStartScreen(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
+            Text(
+                text = stringResource(R.string.dexcom_oneplus_start_return_dashboard),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Button(
                 onClick = {
                     if (!OnePlusCgmDrivers.useRealSkeleton) {
@@ -407,6 +432,68 @@ private fun DexcomOnePlusStartScreen(
                     text = msg,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Compact guided-flow stepper: Prepare → Code → Connect → Dashboard. [currentStep] (0-based) marks
+ * how far the user has progressed; reached steps use the theme primary accent, upcoming ones are
+ * muted. Purely informational — it never blocks input.
+ */
+@Composable
+private fun DexcomOnePlusStepper(currentStep: Int) {
+    val labels = listOf(
+        stringResource(R.string.dexcom_oneplus_step_prepare),
+        stringResource(R.string.dexcom_oneplus_step_code),
+        stringResource(R.string.dexcom_oneplus_step_connect),
+        stringResource(R.string.dexcom_oneplus_step_dashboard),
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(AapsSpacing.small),
+    ) {
+        labels.forEachIndexed { index, label ->
+            val reached = index <= currentStep
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(AapsSpacing.small),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(AapsSpacing.chipIconSize)
+                        .background(
+                            color = if (reached) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            },
+                            shape = CircleShape,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "${index + 1}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (reached) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    textAlign = TextAlign.Center,
+                    color = if (reached) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                 )
             }
         }

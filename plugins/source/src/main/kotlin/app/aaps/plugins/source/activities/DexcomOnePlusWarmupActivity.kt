@@ -3,10 +3,13 @@ package app.aaps.plugins.source.activities
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,6 +27,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsSpacing
@@ -132,6 +141,40 @@ private fun DexcomOnePlusWarmupScreen(onBack: () -> Unit) {
                 text = stringResource(R.string.dexcom_oneplus_warmup_phase, DexcomOnePlusUiLabels.phaseLabel(state.phase)),
                 style = MaterialTheme.typography.bodyLarge,
             )
+            // Teal-spirit warm-up ring. Determinate only when the local ~30 min fallback owns the
+            // clock (known total); otherwise a full accent ring signals honest, open-ended progress.
+            val ringProgress: Float? =
+                if (state.phase == OnePlusWarmupState.Phase.WARMING && usingLocalFallback) {
+                    val remaining = remainingMs ?: 0L
+                    (1f - remaining.toFloat() / DexcomOnePlusWarmupCountdown.LOCAL_FALLBACK_DURATION_MS)
+                        .coerceIn(0f, 1f)
+                } else {
+                    null
+                }
+            val ringColor = when (state.phase) {
+                OnePlusWarmupState.Phase.READY  -> MaterialTheme.colorScheme.primary
+                OnePlusWarmupState.Phase.FAILED -> MaterialTheme.colorScheme.error
+                else                            -> MaterialTheme.colorScheme.tertiary
+            }
+            val ringCenter = when (state.phase) {
+                OnePlusWarmupState.Phase.WARMING,
+                OnePlusWarmupState.Phase.IDLE,
+                OnePlusWarmupState.Phase.PAIRING ->
+                    remainingMs?.let { DexcomOnePlusWarmupCountdown.formatMmSs(it) }
+                        ?: stringResource(R.string.dexcom_oneplus_warmup_countdown_unknown)
+                else -> DexcomOnePlusUiLabels.phaseLabel(state.phase)
+            }
+            WarmupRing(
+                progress = ringProgress,
+                ringColor = ringColor,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                Text(
+                    text = ringCenter,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
             when (state.phase) {
                 OnePlusWarmupState.Phase.READY -> {
                     Text(
@@ -161,12 +204,8 @@ private fun DexcomOnePlusWarmupScreen(onBack: () -> Unit) {
                     )
                 }
                 else -> {
-                    val countdown = remainingMs?.let { DexcomOnePlusWarmupCountdown.formatMmSs(it) }
-                        ?: stringResource(R.string.dexcom_oneplus_warmup_countdown_unknown)
-                    Text(
-                        text = stringResource(R.string.dexcom_oneplus_warmup_countdown, countdown),
-                        style = MaterialTheme.typography.headlineMedium,
-                    )
+                    // The mm:ss countdown itself is rendered inside the ring center above; here we
+                    // only add the honest end-time / local-fallback annotations.
                     val endMs = state.endsAtEpochMs ?: localFallbackEndsAt
                     if (endMs != null) {
                         val endLabel = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(endMs))
@@ -200,5 +239,52 @@ private fun DexcomOnePlusWarmupScreen(onBack: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/**
+ * Warm-up ring: a teal-spirit circular indicator sized to the shared BG-circle dimensions.
+ * A muted [trackColor] full circle sits under an accent [ringColor] arc. When [progress] is
+ * non-null the arc is determinate (0f..1f, sweeping clockwise from the top); when null the arc is a
+ * full circle, signalling open-ended (indeterminate) progress without faking a countdown fraction.
+ * [content] is centered inside the ring (typically the mm:ss countdown or the phase label).
+ */
+@Composable
+private fun WarmupRing(
+    progress: Float?,
+    ringColor: Color,
+    trackColor: Color,
+    content: @Composable () -> Unit,
+) {
+    val strokePx = with(LocalDensity.current) { AapsSpacing.bgRingStrokeWidth.toPx() }
+    Box(
+        modifier = Modifier.size(AapsSpacing.bgCircleSize),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val diameter = size.minDimension - strokePx
+            val topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
+            val arcSize = Size(diameter, diameter)
+            drawArc(
+                color = trackColor,
+                startAngle = 0f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = Stroke(width = strokePx, cap = StrokeCap.Round),
+            )
+            val sweep = if (progress == null) 360f else 360f * progress.coerceIn(0f, 1f)
+            drawArc(
+                color = ringColor,
+                startAngle = -90f,
+                sweepAngle = sweep,
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = Stroke(width = strokePx, cap = StrokeCap.Round),
+            )
+        }
+        content()
     }
 }

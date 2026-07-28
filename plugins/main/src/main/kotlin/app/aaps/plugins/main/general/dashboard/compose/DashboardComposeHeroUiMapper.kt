@@ -1,12 +1,17 @@
 package app.aaps.plugins.main.general.dashboard.compose
 
 import android.content.Context
+import android.text.format.DateFormat
 import android.util.TypedValue
 import androidx.core.content.ContextCompat
 import app.aaps.core.interfaces.rx.events.AdaptiveSmoothingQualityTier
+import app.aaps.core.interfaces.source.CgmWarmupStatus
 import app.aaps.core.ui.compose.dashboard.GlucoseHeroUiState
 import app.aaps.core.ui.views.GlucoseRingColorComputer
+import app.aaps.plugins.main.R
 import app.aaps.plugins.main.general.dashboard.viewmodel.StatusCardState
+import java.util.Date
+import java.util.Locale
 
 /**
  * Builds [GlucoseHeroUiState] for the Compose dashboard hero — logic aligned with
@@ -14,7 +19,19 @@ import app.aaps.plugins.main.general.dashboard.viewmodel.StatusCardState
  */
 internal object DashboardComposeHeroUiMapper {
 
+    /** Symbolic placeholder for the mm:ss countdown when the warm-up duration is not yet known. */
+    private const val COUNTDOWN_PENDING = "--:--"
+
     fun buildHeroState(context: Context, state: StatusCardState): GlucoseHeroUiState? {
+        // Warm-up takes over the hero only while the active source is warming up / (re)connecting AND
+        // there is no fresh glucose to show. As soon as a valid, actual reading is present the normal
+        // glucose ring wins (clean handoff). Sources that don't report warm-up leave [state.warmup] null,
+        // so this branch is never taken and the glucose path below is byte-identical to before.
+        val warmup = state.warmup
+        val hasFreshGlucose = state.glucoseMgdl != null && state.isGlucoseActual
+        if (warmup != null && warmup.active && !hasFreshGlucose) {
+            return buildWarmupHeroState(context, warmup)
+        }
         val bgMgdl = state.glucoseMgdl ?: return null
         val arcP = telemetryArcProgress(state)
         val arcC = arcP?.let { telemetryArcColor(context, it) }
@@ -83,5 +100,71 @@ internal object DashboardComposeHeroUiMapper {
     private fun resolveThemeColor(context: Context, attr: Int): Int {
         val tv = TypedValue()
         return if (context.theme.resolveAttribute(attr, tv, true)) tv.data else 0xFF888888.toInt()
+    }
+
+    /**
+     * Builds the warm-up hero: countdown mm:ss (or [COUNTDOWN_PENDING] when the duration is unknown)
+     * as the main text, an honest phase label above it, and the end time below it. Colours resolve from
+     * this module's dashboard palette / the current theme — no hard-coded ARGB, no vendor reference.
+     * The telemetry arc is left off because the contract exposes only the remaining time, not the total
+     * warm-up duration, so an elapsed/total fraction cannot be derived honestly.
+     */
+    private fun buildWarmupHeroState(context: Context, warmup: CgmWarmupStatus): GlucoseHeroUiState {
+        val now = System.currentTimeMillis()
+        // Capture the cross-module properties into locals: Kotlin cannot smart-cast public API
+        // properties declared in another module (core:interfaces) after a null check.
+        val endsAt = warmup.endsAtEpochMs
+        val remaining = warmup.remainingMs
+        val remainingMs: Long? = when {
+            endsAt != null    -> (endsAt - now).coerceAtLeast(0L)
+            remaining != null -> remaining.coerceAtLeast(0L)
+            else              -> null
+        }
+        val mainText = remainingMs?.let { formatCountdown(it) } ?: COUNTDOWN_PENDING
+        val phaseColor = ContextCompat.getColor(context, warmupPhaseColorRes(warmup.phase))
+        val subRight = warmup.endsAtEpochMs?.let { ends ->
+            context.getString(
+                R.string.dashboard_warmup_ends_at,
+                DateFormat.getTimeFormat(context).format(Date(ends)),
+            )
+        } ?: ""
+        return GlucoseHeroUiState(
+            mainText = mainText,
+            subLeftText = context.getString(warmupPhaseLabelRes(warmup.phase)),
+            subRightText = subRight,
+            noseAngleDeg = null,
+            ringColorArgb = phaseColor,
+            centerTextColorArgb = phaseColor,
+            subTextColorArgb = resolveThemeColor(context, android.R.attr.textColorSecondary),
+            surfaceColorArgb = ContextCompat.getColor(context, app.aaps.core.ui.R.color.glucose_ring_surface),
+            telemetryProgress = null,
+            telemetryColorArgb = null,
+            strokeWidthDp = 4f,
+        )
+    }
+
+    private fun formatCountdown(remainingMs: Long): String {
+        val totalSeconds = remainingMs / 1000L
+        val minutes = totalSeconds / 60L
+        val seconds = totalSeconds % 60L
+        return String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
+    }
+
+    private fun warmupPhaseColorRes(phase: CgmWarmupStatus.Phase): Int = when (phase) {
+        // Amber = "not ready / (re)connecting" (honest: no session yet).
+        CgmWarmupStatus.Phase.CONNECTING,
+        CgmWarmupStatus.Phase.RECONNECTING -> R.color.dashboard_metric_attention
+        // Teal = benign warm-up / pairing in progress.
+        CgmWarmupStatus.Phase.WARMING,
+        CgmWarmupStatus.Phase.PAIRING,
+        CgmWarmupStatus.Phase.OTHER        -> R.color.dashboard_warmup_teal
+    }
+
+    private fun warmupPhaseLabelRes(phase: CgmWarmupStatus.Phase): Int = when (phase) {
+        CgmWarmupStatus.Phase.CONNECTING   -> R.string.dashboard_warmup_phase_connecting
+        CgmWarmupStatus.Phase.RECONNECTING -> R.string.dashboard_warmup_phase_reconnecting
+        CgmWarmupStatus.Phase.PAIRING      -> R.string.dashboard_warmup_phase_pairing
+        CgmWarmupStatus.Phase.WARMING,
+        CgmWarmupStatus.Phase.OTHER        -> R.string.dashboard_warmup_label
     }
 }
