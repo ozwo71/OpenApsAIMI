@@ -563,6 +563,19 @@ enum class BooleanKey(
         summaryResId = R.string.pref_summary_aimi_t3c_autodrive_basal_authority,
         dependency = OApsAIMIT3cBrittleMode,
     ),
+    /**
+     * T3C: hyper basal floor. When BG has stayed at/above the hyper level (160 mg/dL) for a sustained
+     * window (20 min), hold the basal at the user's configured Max basal (profile max_basal) instead of
+     * letting CGM noise collapse it to zero. Basal-only (TBR). Releases automatically when BG falls back
+     * below the level. Depends on T3C brittle mode. Fail-safe: off by default.
+     */
+    OApsAIMIT3cHyperBasalFloor(
+        key = "key_aimi_t3c_hyper_basal_floor",
+        defaultValue = false,
+        titleResId = R.string.pref_title_aimi_t3c_hyper_basal_floor,
+        summaryResId = R.string.pref_summary_aimi_t3c_hyper_basal_floor,
+        dependency = OApsAIMIT3cBrittleMode,
+    ),
     /** Cystic fibrosis-related diabetes (CFRD) adaptations in T3C mode:
      *  higher LGS safety floor, COB absorption delay, exacerbation support. */
     OApsAIMIT3cCfrdMode("key_aimi_t3c_cfrd_mode", false),

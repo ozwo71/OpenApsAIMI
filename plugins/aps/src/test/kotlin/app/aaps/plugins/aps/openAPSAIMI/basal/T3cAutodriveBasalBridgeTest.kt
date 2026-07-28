@@ -91,6 +91,47 @@ class T3cAutodriveBasalBridgeTest {
     }
 
     @Test
+    fun `unlock is anticipatory - projected BG above threshold unlocks even when current BG is below`() {
+        val unlock = T3cAutodriveBasalBridge.evaluateTreeUnlock(
+            tree = tree(
+                risk = PhysiologicalRiskLevel.MODERATE,
+                global = GlobalPhysiologicalState.RESISTANCE_PROBABLE,
+                hormonalResistance = 0.7,
+                activity = 0.1,
+            ),
+            bg = 120.0,               // current BG below activationThreshold
+            delta = 2.0f,
+            activationThreshold = 130.0,
+            postHypoActive = false,
+            eventualBg = 200.0,
+            targetBg = 100.0,
+            projectedBg = 145.0,      // heading above threshold → engage now
+        )
+        assertThat(unlock.unlock).isTrue()
+    }
+
+    @Test
+    fun `unlock requires positive delta even when projected BG is high`() {
+        val decision = T3cAutodriveBasalBridge.evaluateTreeUnlock(
+            tree = tree(
+                risk = PhysiologicalRiskLevel.MODERATE,
+                global = GlobalPhysiologicalState.RESISTANCE_PROBABLE,
+                hormonalResistance = 0.7,
+                activity = 0.1,
+            ),
+            bg = 180.0,
+            delta = 0.0f,             // not rising → must stay locked
+            activationThreshold = 130.0,
+            postHypoActive = false,
+            eventualBg = 200.0,
+            targetBg = 100.0,
+            projectedBg = 200.0,
+        )
+        assertThat(decision.unlock).isFalse()
+        assertThat(decision.reason).isEqualTo("no_confirmed_rise")
+    }
+
+    @Test
     fun `applyRamp respects step up`() {
         val ramped = T3cAutodriveBasalBridge.applyRamp(1.0, 4.0, 1.5)
         assertThat(ramped).isWithin(0.01).of(2.5)

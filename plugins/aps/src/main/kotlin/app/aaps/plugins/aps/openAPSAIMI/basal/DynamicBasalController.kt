@@ -194,6 +194,19 @@ class DynamicBasalController @Inject constructor(
         }
 
         /**
+         * Kinematic BG projection shared by the T3C rise-unlock gate and [computeT3c].
+         * Parabolic (constant-accel) forecast of where BG is heading, so the unlock decision and the
+         * correction magnitude agree on the same projection. Pure; no eventualBg blending here — kept
+         * independent of the pkpd/UAM eventual so the unlock is not dragged by a floored eventual.
+         */
+        fun projectBg(bg: Double, delta: Float, shortAvgDelta: Double, accel: Double): Double {
+            val velocity = delta * 0.7f + shortAvgDelta.toFloat() * 0.3f
+            val projectionMins = if (delta >= 3.0f && delta > shortAvgDelta) 40.0 else 30.0
+            val t = projectionMins / 5.0
+            return bg + (velocity * t) + (0.5 * accel * t * t)
+        }
+
+        /**
          * Dedicated T3c Brittle Mode calculation — ISF-driven, resistance-aware.
          *
          * T3c patients have zero endogenous insulin and glucagon. The main risks are:
@@ -201,7 +214,8 @@ class DynamicBasalController @Inject constructor(
          *  2. Resistance resolving suddenly → accumulated IOB causes rapid hypoglycemia
          *
          * Strategy:
-         *  - Correction activates at 130 mg/dL (not target=100) to prevent resistance
+         *  - Correction activates once the **projected** BG exceeds `activationThreshold` (configurable,
+         *    default 100) — anticipatory: engages on where BG is heading, not current BG
          *  - ISF-driven formula (not multiplier-based) → proper correction magnitude
          *  - Adaptive horizon: 20 min at BG 130–160, 15 min above 160 (more urgent)
          *  - Resistance→sensitivity transition detection: cut basal EARLY when drop begins
@@ -249,9 +263,7 @@ class DynamicBasalController @Inject constructor(
             
             // 1. Parabolic Projection
             // USES activationThreshold instead of targetBg for engagement trigger
-            val projectionMins = if (delta >= 3.0f && delta > shortAvgDelta) 40.0 else 30.0
-            val t = projectionMins / 5.0
-            val projectedBg = bg + (velocity * t) + (0.5 * accel * t * t)
+            val projectedBg = projectBg(bg, delta, shortAvgDelta, accel)
             val effectiveProjectedBg = T3cAnticipation.blendProjectedForHyper(
                 projectedBg = projectedBg,
                 eventualBg = eventualBg,
@@ -272,8 +284,8 @@ class DynamicBasalController @Inject constructor(
             val requiredU = projectedError / effectiveIsf
             
             // 4. Multiplicateur Anti-Résistance (Glucotoxicité)
-            val resistanceFactor = if (bg > activationThreshold + 30.0) {
-                1.0 + ((bg - (activationThreshold + 30.0)) / 100.0).coerceAtMost(1.0)
+            val resistanceFactor = if (effectiveProjectedBg > activationThreshold + 30.0) {
+                1.0 + ((effectiveProjectedBg - (activationThreshold + 30.0)) / 100.0).coerceAtMost(1.0)
             } else {
                 1.0
             }

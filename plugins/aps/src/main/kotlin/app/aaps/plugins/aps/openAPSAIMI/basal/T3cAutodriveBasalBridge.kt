@@ -60,12 +60,16 @@ object T3cAutodriveBasalBridge {
         postHypoActive: Boolean,
         eventualBg: Double?,
         targetBg: Double,
+        projectedBg: Double? = null,
     ): UnlockDecision {
         if (postHypoActive) return UnlockDecision(false, "post_hypo")
+        // Anticipatory gate: engage on where BG is heading (projected), not on current BG.
+        // Fail-safe: null/invalid projection falls back to current BG.
+        val proj = projectedBg?.takeIf { it.isFinite() && it > 0.0 } ?: bg
         if (tree == null) {
             // Fail-open for rise without tree: still allow unlock on hard glycemic evidence alone.
-            val riseOnly = bg > activationThreshold + 15.0 &&
-                delta >= 2.0f &&
+            val riseOnly = proj > activationThreshold &&
+                delta > 0f &&
                 (eventualBg == null || eventualBg <= 0.0 || eventualBg > targetBg)
             return UnlockDecision(riseOnly, if (riseOnly) "rise_no_tree" else "no_tree")
         }
@@ -79,8 +83,8 @@ object T3cAutodriveBasalBridge {
         if (activityConf >= 0.55 || postActivityConf >= 0.45) {
             return UnlockDecision(false, "tree_activity")
         }
-        val rising = bg > activationThreshold + 15.0 &&
-            delta >= 1.5f &&
+        val rising = proj > activationThreshold &&
+            delta > 0f &&
             (eventualBg == null || eventualBg <= 0.0 || eventualBg > targetBg)
         if (!rising) return UnlockDecision(false, "no_confirmed_rise")
 

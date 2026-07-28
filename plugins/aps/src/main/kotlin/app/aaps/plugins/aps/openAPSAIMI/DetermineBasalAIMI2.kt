@@ -17232,6 +17232,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         // Tree unlock: opens rise ceiling + aggressive ramp when resistance/meal/hyper evidence is present.
+        // Anticipatory: gate on the projected BG (where it's heading) so the ramp engages at rise onset.
+        val unlockProjectedBg = DynamicBasalController.projectBg(bg, delta, shortAvgDelta, accel)
         val treeUnlock = T3cAutodriveBasalBridge.evaluateTreeUnlock(
             tree = lastPhysiologicalTreeSnapshot,
             bg = bg,
@@ -17240,6 +17242,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             postHypoActive = postHypoRecoveryActive(),
             eventualBg = eventualBg.takeIf { it > 0 },
             targetBg = targetBg,
+            projectedBg = unlockProjectedBg,
         )
         val maxBasalCapForPi = if (treeUnlock.unlock) riseBasalCap else steadyBasalCap
 
@@ -17305,18 +17308,39 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog.add("🌙 T3c NGR nocturnal basal boost ×${"%.2f".format(ngrBasalMult)} → ${"%.2f".format(t3cFinalRate)}U/h")
         }
 
-        rT.rate = t3cFinalRate
+        // ── T3C Hyper basal floor ───────────────────────────────────────────────
+        // Installed-hyper protection: when BG has stayed at/above the hyper level for a sustained
+        // window, CGM-noise down-ticks must not collapse the basal to ~0 (the observed whipsaw). Hold
+        // the basal at the user's configured Max basal (profile.max_basal — tunable via the standard
+        // Max basal preference), bounded by the active cap. Basal-only. Releases automatically once BG
+        // drops back below the level. Fail-safe: opt-in toggle (default off) AND a sustained-dwell
+        // requirement (minBg over the window ≥ level) so a single noise spike cannot trigger it.
+        val hyperFloorBgMgdl = 160.0   // "hyper installed" level (user-requested)
+        val hyperFloorDwellMin = 20    // sustained minutes required — makes the trigger noise-robust
+        val hyperFloorApplies = preferences.get(BooleanKey.OApsAIMIT3cHyperBasalFloor) &&
+            bg >= hyperFloorBgMgdl &&
+            minBgInLastMinutes(hyperFloorDwellMin) >= hyperFloorBgMgdl
+        val hyperFloorUph = if (hyperFloorApplies) profile.max_basal.coerceIn(0.0, maxBasalCap) else 0.0
+        val t3cFlooredRate = t3cFinalRate.coerceAtLeast(hyperFloorUph)
+        if (hyperFloorApplies && t3cFlooredRate > t3cFinalRate + 0.01) {
+            consoleLog.add(
+                "🧱 T3c hyper floor: BG≥${hyperFloorBgMgdl.toInt()} for ≥${hyperFloorDwellMin}m → basal held at maxBasal " +
+                    "${"%.2f".format(hyperFloorUph)}U/h (was ${"%.2f".format(t3cFinalRate)})"
+            )
+        }
+
+        rT.rate = t3cFlooredRate
         rT.duration = 30
         rT.reason.append(
             "🛡️T3c | Thresh: ${activationThreshold.toInt()} | Agg: ${"%.1f".format(aggressiveness)} (raw=${"%.1f".format(rawAggressiveness)} AML=${"%.2f".format(adaptiveMult)}) | " +
                 "ANT:${"%.2f".format(anticipationStrength)} | unlock=${fusion.unlock} | " +
-                "PI/AD: ${"%.2f".format(t3cFinalRate)}U/h (target=${"%.2f".format(targetRate)} cap=${"%.2f".format(maxBasalCap)} stepUp=${"%.2f".format(maxStepUp)})"
+                "PI/AD: ${"%.2f".format(t3cFlooredRate)}U/h (target=${"%.2f".format(targetRate)} cap=${"%.2f".format(maxBasalCap)} stepUp=${"%.2f".format(maxStepUp)})"
         )
 
-        // 🧬 Adaptive Learning Update
+        // 🧬 Adaptive Learning Update — learn from the actually delivered rate (post hyper-floor).
         applyBasalNeuralLearningAndTraining(
             rT = rT,
-            tbrUph = t3cFinalRate,
+            tbrUph = t3cFlooredRate,
             govTag = "T3C",
         )
         consoleLog.add(rT.reason.toString())

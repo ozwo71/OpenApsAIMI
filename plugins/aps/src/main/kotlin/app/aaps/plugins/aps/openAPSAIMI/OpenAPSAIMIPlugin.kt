@@ -1875,6 +1875,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             items = listOf(
                 BooleanKey.OApsAIMIT3cBrittleMode,
                 BooleanKey.OApsAIMIT3cAutodriveBasalAuthority,
+                BooleanKey.OApsAIMIT3cHyperBasalFloor,
                 DoubleKey.OApsAIMIT3cActivationThreshold,
                 DoubleKey.OApsAIMIT3cAggressiveness,
                 DoubleKey.OApsAIMIT3cAnticipationStrength,
