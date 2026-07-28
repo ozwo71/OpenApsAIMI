@@ -2,6 +2,7 @@ package app.aaps.plugins.source
 
 import app.aaps.core.interfaces.source.CgmWarmupStatus
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
+import app.aaps.plugins.source.compose.DexcomOnePlusWarmupCountdown
 
 /**
  * Pure mapping of the native [OnePlusWarmupState] onto the generic [CgmWarmupStatus] consumed by the
@@ -30,6 +31,13 @@ internal object DexcomOnePlusWarmupMapper {
             remainingMs = state.remainingMs,
             endsAtEpochMs = state.endsAtEpochMs,
             message = state.message,
+            // Nominal ONE+/G7 warm-up length (~30 min) so the dashboard ring fills. Only meaningful
+            // during WARMING; pre-warm-up phases (connecting/reconnecting) have no countdown total.
+            totalMs = if (mappedPhase == CgmWarmupStatus.Phase.WARMING) {
+                DexcomOnePlusWarmupCountdown.LOCAL_FALLBACK_DURATION_MS
+            } else {
+                null
+            },
         )
     }
 }

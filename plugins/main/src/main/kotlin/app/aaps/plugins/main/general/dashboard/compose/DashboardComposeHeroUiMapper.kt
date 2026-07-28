@@ -128,6 +128,15 @@ internal object DashboardComposeHeroUiMapper {
                 DateFormat.getTimeFormat(context).format(Date(ends)),
             )
         } ?: ""
+        // Determinate progress arc when the source supplies the nominal total (fills as it counts
+        // down); null → indeterminate ring (e.g. connecting, or total unknown).
+        val total = warmup.totalMs
+        val progress: Float? =
+            if (total != null && total > 0L && remainingMs != null) {
+                ((total - remainingMs).toFloat() / total).coerceIn(0f, 1f)
+            } else {
+                null
+            }
         return GlucoseHeroUiState(
             mainText = mainText,
             subLeftText = context.getString(warmupPhaseLabelRes(warmup.phase)),
@@ -137,8 +146,8 @@ internal object DashboardComposeHeroUiMapper {
             centerTextColorArgb = phaseColor,
             subTextColorArgb = resolveThemeColor(context, android.R.attr.textColorSecondary),
             surfaceColorArgb = ContextCompat.getColor(context, app.aaps.core.ui.R.color.glucose_ring_surface),
-            telemetryProgress = null,
-            telemetryColorArgb = null,
+            telemetryProgress = progress,
+            telemetryColorArgb = progress?.let { phaseColor },
             strokeWidthDp = 4f,
         )
     }

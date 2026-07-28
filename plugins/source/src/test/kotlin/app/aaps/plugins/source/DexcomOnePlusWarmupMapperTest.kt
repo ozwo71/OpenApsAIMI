@@ -2,6 +2,7 @@ package app.aaps.plugins.source
 
 import app.aaps.core.interfaces.source.CgmWarmupStatus
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
+import app.aaps.plugins.source.compose.DexcomOnePlusWarmupCountdown
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
@@ -23,6 +24,8 @@ class DexcomOnePlusWarmupMapperTest {
         assertThat(out.remainingMs).isEqualTo(1_684_000L)
         assertThat(out.endsAtEpochMs).isEqualTo(42L)
         assertThat(out.message).isEqualTo("warming")
+        // Nominal total supplied only for WARMING → determinate dashboard ring.
+        assertThat(out.totalMs).isEqualTo(DexcomOnePlusWarmupCountdown.LOCAL_FALLBACK_DURATION_MS)
     }
 
     @Test
@@ -37,6 +40,8 @@ class DexcomOnePlusWarmupMapperTest {
             assertThat(out).isNotNull()
             assertThat(out!!.active).isTrue()
             assertThat(out.phase).isEqualTo(outPhase)
+            // Pre-warm-up phases have no countdown total → indeterminate ring.
+            assertThat(out.totalMs).isNull()
         }
     }
 

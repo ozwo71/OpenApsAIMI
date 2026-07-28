@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.StateFlow
  * @param remainingMs countdown in ms if known from the protocol, else null (indeterminate).
  * @param endsAtEpochMs wall-clock end time in epoch ms if known, else null.
  * @param message optional short human-readable status.
+ * @param totalMs nominal full warm-up duration in ms if known — lets the UI draw a determinate
+ *   progress ring (fraction = (totalMs − remainingMs) / totalMs); null → indeterminate ring.
  */
 data class CgmWarmupStatus(
     val active: Boolean,
@@ -21,6 +23,7 @@ data class CgmWarmupStatus(
     val remainingMs: Long?,
     val endsAtEpochMs: Long?,
     val message: String?,
+    val totalMs: Long? = null,
 ) {
 
     enum class Phase { CONNECTING, RECONNECTING, WARMING, PAIRING, OTHER }
