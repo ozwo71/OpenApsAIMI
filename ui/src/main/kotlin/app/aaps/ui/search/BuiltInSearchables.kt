@@ -198,7 +198,14 @@ class BuiltInSearchables @Inject constructor(
             BooleanKey.AlertCarbsRequired,
             BooleanKey.AlertUrgentAsAndroidNotification,
             BooleanKey.AlertIncreaseVolume,
-            BooleanKey.AlertOverrideDoNotDisturb
+            BooleanKey.AlertOverrideDoNotDisturb,
+            BooleanKey.AlertHypo,
+            UnitDoubleKey.AlertHypoThreshold,
+            BooleanKey.AlertHyper,
+            UnitDoubleKey.AlertHyperThreshold,
+            BooleanKey.AlertRapidFall,
+            UnitDoubleKey.AlertRapidFallDrop,
+            IntKey.AlertRapidFallWindow
         ),
         icon = Icons.Default.Notifications
     )

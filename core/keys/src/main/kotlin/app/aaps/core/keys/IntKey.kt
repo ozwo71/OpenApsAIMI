@@ -416,6 +416,15 @@ enum class IntKey(
         dependency = BooleanKey.AlertPumpUnreachable,
         unitType = UnitType.MIN
     ),
+    AlertRapidFallWindow(
+        key = "alert_rapid_fall_window",
+        defaultValue = 15,
+        min = 5,
+        max = 30,
+        titleResId = R.string.pref_title_alert_rapid_fall_window,
+        dependency = BooleanKey.AlertRapidFall,
+        unitType = UnitType.MIN
+    ),
 
     AutotuneDefaultTuneDays(key = "autotune_default_tune_days", defaultValue = 5, min = 1, max = 30, titleResId = R.string.pref_title_autotune_days, summaryResId = R.string.autotune_default_tune_days_summary, unitType = UnitType.DAYS),
 

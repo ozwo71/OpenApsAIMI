@@ -121,6 +121,11 @@ enum class NotificationId(
     BG_READINGS_MISSED(URGENT, CGM),
     SENSOR_CHANGE_DETECTED(NORMAL, CGM),
 
+    // CGM — user-configured glucose value/rate alarms (source-agnostic; notification-only, never dosing)
+    BG_HYPO(URGENT, CGM),
+    BG_HYPER(IMPORTANT, CGM),
+    BG_RAPID_FALL(URGENT, CGM),
+
     // CGM — Aidex
     AIDEX_SENSOR_EXPIRED(IMPORTANT, CGM),
     AIDEX_SENSOR_ERROR(IMPORTANT, CGM),

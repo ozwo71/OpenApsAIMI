@@ -58,6 +58,16 @@
     <string name="pref_title_alert_increase_volume">Gradually increase notification volume</string>
     <string name="pref_title_alert_override_dnd">Override Do Not Disturb mode</string>
     <string name="pref_summary_alert_override_dnd">When enabled, AAPS alarms play through silent and Do Not Disturb modes (alarm stream). When disabled, alarms respect silent/DND (notification stream).</string>
+    <string name="pref_title_alert_hypo">Alert on low glucose</string>
+    <string name="pref_summary_alert_hypo">Sound an alarm when glucose is at or below the low threshold.</string>
+    <string name="pref_title_alert_hypo_threshold">Low glucose alarm threshold</string>
+    <string name="pref_title_alert_hyper">Alert on high glucose</string>
+    <string name="pref_summary_alert_hyper">Notify when glucose is at or above the high threshold.</string>
+    <string name="pref_title_alert_hyper_threshold">High glucose alarm threshold</string>
+    <string name="pref_title_alert_rapid_fall">Alert on rapid fall</string>
+    <string name="pref_summary_alert_rapid_fall">Sound an alarm when glucose drops by at least the configured amount within the configured time window.</string>
+    <string name="pref_title_alert_rapid_fall_drop">Rapid fall drop threshold</string>
+    <string name="pref_title_alert_rapid_fall_window">Rapid fall time window</string>
 
     <!-- BG Source preferences -->
     <string name="pref_title_bg_source_upload_to_ns">Upload BG data to NS</string>

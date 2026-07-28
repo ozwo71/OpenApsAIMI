@@ -1,17 +1,24 @@
 package app.aaps.implementation.alerts
 
+import app.aaps.core.data.model.GV
+import app.aaps.core.data.model.SourceSensor
+import app.aaps.core.data.model.TrendArrow
 import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.ProfileFunction
+import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.pump.PumpWithConcentration
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.smsCommunicator.SmsCommunicator
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.IntKey
+import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.implementation.alerts.keys.LocalAlertLongKey
 import app.aaps.shared.tests.TestBase
@@ -35,6 +42,7 @@ class LocalAlertUtilsImplTest : TestBase() {
     @Mock lateinit var rh: ResourceHelper
     @Mock lateinit var activePlugin: ActivePlugin
     @Mock lateinit var profileFunction: ProfileFunction
+    @Mock lateinit var profileUtil: ProfileUtil
     @Mock lateinit var smsCommunicator: SmsCommunicator
     @Mock lateinit var config: Config
     @Mock lateinit var persistenceLayer: PersistenceLayer
@@ -75,6 +83,7 @@ class LocalAlertUtilsImplTest : TestBase() {
             rh,
             activePlugin,
             profileFunction,
+            profileUtil,
             smsCommunicator,
             config,
             persistenceLayer,
@@ -314,4 +323,168 @@ class LocalAlertUtilsImplTest : TestBase() {
         val expectedEarliestAlarm = lastDataTime + T.mins(thresholdMinutes.toLong()).msecs()
         verify(preferences).put(LocalAlertLongKey.NextPumpDisconnectedAlarm, expectedEarliestAlarm)
     }
+
+    // region checkGlucoseAlerts — hypo / hyper / rapid fall (notification-only, never dosing)
+
+    private fun gv(value: Double, timestamp: Long = now) = GV(
+        timestamp = timestamp, raw = null, value = value,
+        trendArrow = TrendArrow.NONE, noise = null, sourceSensor = SourceSensor.UNKNOWN
+    )
+
+    /** Fresh last reading + non-stale threshold so the freshness guard passes. */
+    private suspend fun freshLast(value: Double) {
+        whenever(preferences.get(IntKey.AlertsStaleDataThreshold)).thenReturn(30)
+        whenever(persistenceLayer.getLastGlucoseValue()).thenReturn(gv(value, timestamp = now))
+    }
+
+    @Test // A1 — hypo fires below threshold
+    fun `hypo alarm fires when glucose at or below threshold`() = runTest {
+        freshLast(68.0)
+        whenever(preferences.get(BooleanKey.AlertHypo)).thenReturn(true)
+        whenever(preferences.get(UnitDoubleKey.AlertHypoThreshold)).thenReturn(70.0)
+        whenever(preferences.get(LocalAlertLongKey.NextHypoAlarm)).thenReturn(now - 1)
+
+        localAlertUtils.checkGlucoseAlerts()
+
+        verify(preferences).put(LocalAlertLongKey.NextHypoAlarm, now + T.mins(15).msecs())
+    }
+
+    @Test // A3 — hypo disabled: nothing
+    fun `hypo alarm does not fire when disabled`() = runTest {
+        freshLast(50.0)
+        whenever(preferences.get(BooleanKey.AlertHypo)).thenReturn(false)
+
+        localAlertUtils.checkGlucoseAlerts()
+
+        verify(preferences, never()).put(eq(LocalAlertLongKey.NextHypoAlarm), any())
+        verify(notificationManager, never()).dismiss(NotificationId.BG_HYPO)
+    }
+
+    @Test // A10 — throttle: active but within re-alarm interval → no re-post
+    fun `hypo alarm is throttled while re-alarm interval not reached`() = runTest {
+        freshLast(68.0)
+        whenever(preferences.get(BooleanKey.AlertHypo)).thenReturn(true)
+        whenever(preferences.get(UnitDoubleKey.AlertHypoThreshold)).thenReturn(70.0)
+        whenever(preferences.get(LocalAlertLongKey.NextHypoAlarm)).thenReturn(now + T.mins(5).msecs())
+
+        localAlertUtils.checkGlucoseAlerts()
+
+        verify(preferences, never()).put(eq(LocalAlertLongKey.NextHypoAlarm), any())
+    }
+
+    @Test // A2b — hypo dismissed once clearly above threshold + hysteresis
+    fun `hypo alarm dismissed when recovered beyond hysteresis`() = runTest {
+        freshLast(76.0) // threshold 70 + 5 hysteresis = 75 → 76 >= 75
+        whenever(preferences.get(BooleanKey.AlertHypo)).thenReturn(true)
+        whenever(preferences.get(UnitDoubleKey.AlertHypoThreshold)).thenReturn(70.0)
+
+        localAlertUtils.checkGlucoseAlerts()
+
+        verify(notificationManager).dismiss(NotificationId.BG_HYPO)
+        verify(preferences).put(LocalAlertLongKey.NextHypoAlarm, 0L)
+    }
+
+    @Test // A2a — still within hysteresis band: neither re-post nor dismiss
+    fun `hypo alarm held within hysteresis band`() = runTest {
+        freshLast(73.0) // above threshold 70 but below 75 → hold
+        whenever(preferences.get(BooleanKey.AlertHypo)).thenReturn(true)
+        whenever(preferences.get(UnitDoubleKey.AlertHypoThreshold)).thenReturn(70.0)
+
+        localAlertUtils.checkGlucoseAlerts()
+
+        verify(preferences, never()).put(eq(LocalAlertLongKey.NextHypoAlarm), any())
+        verify(notificationManager, never()).dismiss(NotificationId.BG_HYPO)
+    }
+
+    @Test // A4 — hyper fires at or above threshold
+    fun `hyper alarm fires when glucose at or above threshold`() = runTest {
+        freshLast(260.0)
+        whenever(preferences.get(BooleanKey.AlertHyper)).thenReturn(true)
+        whenever(preferences.get(UnitDoubleKey.AlertHyperThreshold)).thenReturn(250.0)
+        whenever(preferences.get(LocalAlertLongKey.NextHyperAlarm)).thenReturn(now - 1)
+
+        localAlertUtils.checkGlucoseAlerts()
+
+        verify(preferences).put(LocalAlertLongKey.NextHyperAlarm, now + T.mins(30).msecs())
+    }
+
+    @Test // A5 — hyper dismissed below threshold - hysteresis
+    fun `hyper alarm dismissed when recovered beyond hysteresis`() = runTest {
+        freshLast(239.0) // threshold 250 - 10 = 240 → 239 <= 240
+        whenever(preferences.get(BooleanKey.AlertHyper)).thenReturn(true)
+        whenever(preferences.get(UnitDoubleKey.AlertHyperThreshold)).thenReturn(250.0)
+
+        localAlertUtils.checkGlucoseAlerts()
+
+        verify(notificationManager).dismiss(NotificationId.BG_HYPER)
+        verify(preferences).put(LocalAlertLongKey.NextHyperAlarm, 0L)
+    }
+
+    @Test // A6 — rapid fall fires when drop over window exceeds threshold
+    fun `rapid fall alarm fires when drop exceeds threshold`() = runTest {
+        freshLast(115.0)
+        whenever(preferences.get(BooleanKey.AlertRapidFall)).thenReturn(true)
+        whenever(preferences.get(IntKey.AlertRapidFallWindow)).thenReturn(15)
+        whenever(preferences.get(UnitDoubleKey.AlertRapidFallDrop)).thenReturn(30.0)
+        whenever(preferences.get(LocalAlertLongKey.NextRapidFallAlarm)).thenReturn(now - 1)
+        whenever(persistenceLayer.getBgReadingsDataFromTime(any(), eq(true)))
+            .thenReturn(listOf(gv(150.0, now - T.mins(15).msecs()), gv(115.0, now)))
+
+        localAlertUtils.checkGlucoseAlerts()
+
+        verify(preferences).put(LocalAlertLongKey.NextRapidFallAlarm, now + T.mins(15).msecs())
+    }
+
+    @Test // A7 — drop below threshold but not flat enough to dismiss: nothing
+    fun `rapid fall alarm does not fire for a shallow drop`() = runTest {
+        freshLast(130.0)
+        whenever(preferences.get(BooleanKey.AlertRapidFall)).thenReturn(true)
+        whenever(preferences.get(IntKey.AlertRapidFallWindow)).thenReturn(15)
+        whenever(preferences.get(UnitDoubleKey.AlertRapidFallDrop)).thenReturn(30.0)
+        whenever(persistenceLayer.getBgReadingsDataFromTime(any(), eq(true)))
+            .thenReturn(listOf(gv(150.0, now - T.mins(15).msecs()), gv(130.0, now))) // drop 20
+
+        localAlertUtils.checkGlucoseAlerts()
+
+        verify(preferences, never()).put(eq(LocalAlertLongKey.NextRapidFallAlarm), any())
+    }
+
+    @Test // A8 — data gap: fewer than 2 readings in window → nothing
+    fun `rapid fall alarm skips on data gap`() = runTest {
+        freshLast(115.0)
+        whenever(preferences.get(BooleanKey.AlertRapidFall)).thenReturn(true)
+        whenever(preferences.get(IntKey.AlertRapidFallWindow)).thenReturn(15)
+        whenever(persistenceLayer.getBgReadingsDataFromTime(any(), eq(true)))
+            .thenReturn(listOf(gv(115.0, now)))
+
+        localAlertUtils.checkGlucoseAlerts()
+
+        verify(preferences, never()).put(eq(LocalAlertLongKey.NextRapidFallAlarm), any())
+    }
+
+    @Test // A9 + invariant J2 — stale data: no glucose alarm at all
+    fun `no glucose alarm fires on stale data`() = runTest {
+        whenever(preferences.get(IntKey.AlertsStaleDataThreshold)).thenReturn(30)
+        whenever(persistenceLayer.getLastGlucoseValue())
+            .thenReturn(gv(50.0, timestamp = now - T.mins(45).msecs())) // older than 30 min
+        whenever(preferences.get(BooleanKey.AlertHypo)).thenReturn(true)
+        whenever(preferences.get(UnitDoubleKey.AlertHypoThreshold)).thenReturn(70.0)
+
+        localAlertUtils.checkGlucoseAlerts()
+
+        verify(preferences, never()).put(eq(LocalAlertLongKey.NextHypoAlarm), any())
+        verify(preferences, never()).put(eq(LocalAlertLongKey.NextHyperAlarm), any())
+        verify(preferences, never()).put(eq(LocalAlertLongKey.NextRapidFallAlarm), any())
+    }
+
+    @Test // guard — no stored glucose at all → nothing
+    fun `no glucose alarm fires when there is no reading`() = runTest {
+        whenever(persistenceLayer.getLastGlucoseValue()).thenReturn(null)
+
+        localAlertUtils.checkGlucoseAlerts()
+
+        verify(preferences, never()).put(eq(LocalAlertLongKey.NextHypoAlarm), any())
+    }
+
+    // endregion
 }
