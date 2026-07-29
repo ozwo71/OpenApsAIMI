@@ -63,6 +63,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.dashboard.GlucoseHeroRing
 import app.aaps.core.ui.dialogs.OKDialog
+import app.aaps.core.ui.toast.ToastUtils
 import app.aaps.plugins.main.R
 import app.aaps.plugins.main.general.dashboard.DashboardEmbeddedComposeState
 import app.aaps.plugins.main.general.dashboard.viewmodel.OverviewViewModel
@@ -95,6 +96,12 @@ fun DashboardCircleTopCompose(
     var metricsMenuExpanded by remember { mutableStateOf(false) }
     LaunchedEffect(embeddedState.metricsPreferencesSync) {
         extendedMetrics = preferences.get(BooleanKey.OverviewDashboardExtendedMetrics)
+    }
+    // One-shot staging-promotion feedback hoisted from the view model (no Compose tree there).
+    LaunchedEffect(Unit) {
+        viewModel.promotionEvents.collect { message ->
+            ToastUtils.infoToast(context, message)
+        }
     }
 
     val simpleOneScreen = layoutProfile == DashboardHeroLayoutProfile.SimpleOneScreen
@@ -212,6 +219,26 @@ fun DashboardCircleTopCompose(
                             .size(if (simpleOneScreen) 24.dp else 28.dp),
                         update = { fl -> onAuditorHostAttached(fl) },
                     )
+                    }
+                    // Non-alarming "beginning of life" / "expires soon" subtext under the normal glucose
+                    // ring (the ring itself stays a normal glucose ring). Null → nothing rendered, so the
+                    // no-lifecycle path is unchanged.
+                    if (!warmupHeroActive) {
+                        val lifecycleSubtext = remember(state, context) {
+                            DashboardComposeHeroUiMapper.buildLifecycleSubtext(context, state)
+                        }
+                        if (lifecycleSubtext != null) {
+                            Text(
+                                text = lifecycleSubtext,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .padding(top = 2.dp)
+                                    .semantics { contentDescription = lifecycleSubtext },
+                            )
+                        }
                     }
                 }
 
@@ -398,6 +425,15 @@ fun DashboardCircleTopCompose(
                     )
                 }
             }
+
+            // New-sensor (staging) card: shown only during a dual-sensor overlap. Collect-only until the
+            // user taps Promote — the only path that swaps the loop's glucose source. Renders nothing when
+            // there is no staging sensor, so the layout is unchanged for everyone else.
+            DashboardStagingCard(
+                state = state,
+                onPromote = { viewModel.promoteStaging() },
+                modifier = Modifier.padding(top = if (simpleOneScreen) 6.dp else 8.dp),
+            )
 
             CompactMetricRow(
                 state = state,

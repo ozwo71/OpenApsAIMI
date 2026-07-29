@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.core.os.HandlerCompat
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.configuration.ConfigBuilder
+import app.aaps.core.interfaces.source.SensorSlot
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
@@ -110,6 +111,8 @@ class DexcomOnePlusStartActivity : AppCompatActivity() {
                             // do NOT disconnect/shutdown here, only finish this Activity.
                             finish()
                         },
+                        onBeginStaging = { dexcomOnePlusPlugin.beginStaging() },
+                        onStagingDriver = { dexcomOnePlusPlugin.stagingDriverForConnect() },
                     )
                 }
             }
@@ -124,6 +127,8 @@ private fun DexcomOnePlusStartScreen(
     onEnsureDriver: () -> OnePlusCgmDriver,
     onActivatePlugin: () -> Unit,
     onStarted: () -> Unit,
+    onBeginStaging: () -> Unit,
+    onStagingDriver: () -> OnePlusCgmDriverReal,
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -145,6 +150,10 @@ private fun DexcomOnePlusStartScreen(
         )
     }
     var errorText by remember { mutableStateOf<String?>(null) }
+    // Which slot the guided flow starts. PRODUCTION keeps the existing behaviour (activates the
+    // plugin + feeds the loop after warm-up). STAGING pre-soaks a second sensor collect-only — it
+    // never touches the AAPS active BG source until promoted from the status screen.
+    var slot by remember { mutableStateOf(SensorSlot.PRODUCTION) }
     var scanning by remember { mutableStateOf(false) }
     var selected by remember {
         mutableStateOf<OnePlusScanResult?>(
@@ -207,6 +216,37 @@ private fun DexcomOnePlusStartScreen(
                 .clearFocusOnTap(focusManager),
             verticalArrangement = Arrangement.spacedBy(AapsSpacing.large),
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
+            ) {
+                if (slot == SensorSlot.PRODUCTION) {
+                    Button(onClick = { }, modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.dexcom_oneplus_slot_production))
+                    }
+                    OutlinedButton(
+                        onClick = { slot = SensorSlot.STAGING; errorText = null },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(R.string.dexcom_oneplus_slot_staging))
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = { slot = SensorSlot.PRODUCTION; errorText = null },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(R.string.dexcom_oneplus_slot_production))
+                    }
+                    Button(onClick = { }, modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.dexcom_oneplus_slot_staging))
+                    }
+                }
+            }
+            Text(
+                text = stringResource(R.string.dexcom_oneplus_slot_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             DexcomOnePlusStepper(currentStep = currentStep)
             Text(
                 text = stringResource(R.string.dexcom_oneplus_start_steps),
@@ -360,7 +400,9 @@ private fun DexcomOnePlusStartScreen(
                     }
                 }
             }
-            if (!OnePlusCgmDrivers.useRealSkeleton) {
+            // The real-skeleton gate only applies to the PRODUCTION default driver; the staging driver
+            // is always the Real skeleton, so the warning is irrelevant when starting in staging.
+            if (slot == SensorSlot.PRODUCTION && !OnePlusCgmDrivers.useRealSkeleton) {
                 Text(
                     text = stringResource(R.string.dexcom_oneplus_real_skeleton_hint),
                     style = MaterialTheme.typography.bodySmall,
@@ -368,13 +410,19 @@ private fun DexcomOnePlusStartScreen(
                 )
             }
             Text(
-                text = stringResource(R.string.dexcom_oneplus_start_return_dashboard),
+                text = if (slot == SensorSlot.STAGING) {
+                    stringResource(R.string.dexcom_oneplus_staging_return_note)
+                } else {
+                    stringResource(R.string.dexcom_oneplus_start_return_dashboard)
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Button(
                 onClick = {
-                    if (!OnePlusCgmDrivers.useRealSkeleton) {
+                    // The real-skeleton gate is a PRODUCTION-only concern (the default driver may be
+                    // the Stub). The staging driver is always the Real skeleton.
+                    if (slot == SensorSlot.PRODUCTION && !OnePlusCgmDrivers.useRealSkeleton) {
                         errorText = realSkeletonRequired
                         return@Button
                     }
@@ -402,6 +450,26 @@ private fun DexcomOnePlusStartScreen(
                     scanner.stopScan()
                     scanning = false
                     connectRequested = true
+                    // Hand off the freshest live sighting (carries seenElapsedMs) so the driver
+                    // connects in-window instead of blindly re-scanning.
+                    val sighting = devices.firstOrNull { it.address == address } ?: selected
+                    if (slot == SensorSlot.STAGING) {
+                        // Staging: collect-only. Never write the production store, never activate the
+                        // plugin, never switch the AAPS active BG source — just drive scan/connect on
+                        // the dedicated staging driver and return to the dashboard.
+                        onBeginStaging()
+                        val stagingDriver = onStagingDriver()
+                        stagingDriver.setContext(context.applicationContext)
+                        stagingDriver.saveIdentity(identity.copy(pin = code))
+                        stagingDriver.connect(
+                            deviceAddress = address,
+                            pairingCode = code,
+                            sighting = sighting,
+                        )
+                        onStarted()
+                        return@Button
+                    }
+                    // Production path — unchanged.
                     sensorStore.saveIdentity(identity.copy(pin = code))
                     sensorStore.saveLastMac(address)
                     selected?.name?.let { sensorStore.saveLastDeviceName(it) }
@@ -409,9 +477,6 @@ private fun DexcomOnePlusStartScreen(
                     activeDriver.setContext(context.applicationContext)
                     (activeDriver as? OnePlusCgmDriverReal)?.saveIdentity(identity.copy(pin = code))
                     if (activeDriver is OnePlusCgmDriverReal) {
-                        // Hand off the freshest live sighting (carries seenElapsedMs) so the driver
-                        // connects in-window instead of blindly re-scanning.
-                        val sighting = devices.firstOrNull { it.address == address } ?: selected
                         activeDriver.connect(
                             deviceAddress = address,
                             pairingCode = code,
@@ -425,7 +490,13 @@ private fun DexcomOnePlusStartScreen(
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(stringResource(R.string.dexcom_oneplus_connect_follow))
+                Text(
+                    if (slot == SensorSlot.STAGING) {
+                        stringResource(R.string.dexcom_oneplus_staging_connect)
+                    } else {
+                        stringResource(R.string.dexcom_oneplus_connect_follow)
+                    },
+                )
             }
             errorText?.let { msg ->
                 Text(

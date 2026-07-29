@@ -349,9 +349,19 @@ class DexcomOnePlusPlugin @Inject constructor(
 
     /** Stop and discard the staging sensor (no effect on production). */
     fun cancelStaging() {
+        // Never tear down a promoted sensor: once promoted, the staging driver IS the loop's source
+        // (invariant I1/I5). Refuse the cancel in that case.
+        if (stagingPublishesToLoop) {
+            aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_STAGING: cancel ignored — already promoted to production")
+            return
+        }
         runCatching { stagingDriver.removeWatcher(stagingWatcher) }
         runCatching { stagingDriver.disconnect() }
         runCatching { stagingDriver.shutdown() }
+        // Clear the staging store so a re-started staging session gets a FRESH session start. Without
+        // this, a stale session_start_ms would let a new sensor reach READY without a real 12 h soak
+        // (safety-critical settle-guard bypass).
+        runCatching { stagingStore.clearAll() }
         stagingPresent = false
         stagingWarming = false
         stagingValidEgvCount = 0
@@ -373,10 +383,18 @@ class DexcomOnePlusPlugin @Inject constructor(
         if (!stagingPresent) return PromotionResult.Rejected(PromotionRejectReason.STAGING_ABSENT)
         if (stagingValidEgvCount < DexcomOnePlusStaging.STAGING_MIN_VALID_EGV)
             return PromotionResult.Rejected(PromotionRejectReason.STAGING_NO_VALID_GLUCOSE)
+        // Defense-in-depth: re-verify the REAL soak time from the trusted persisted start rather than
+        // trusting the cached _stagingState — a stale start (e.g. cancel/restage) must never authorise
+        // an under-soaked promotion onto the loop.
+        val startMs = stagingStore.loadSessionStart()
+        if (startMs <= 0L || System.currentTimeMillis() - startMs < DexcomOnePlusStaging.STAGING_MIN_SETTLE_MS)
+            return PromotionResult.Rejected(PromotionRejectReason.STAGING_NOT_SETTLED)
         if (_stagingState.value != StagingState.READY)
             return PromotionResult.Rejected(PromotionRejectReason.STAGING_NOT_SETTLED)
 
         aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_PROMOTE: staging → production (by user)")
+        // The promoted sensor is a real sensor — ensure it resumes on the Real driver after a restart.
+        preferences.put(DexcomOnePlusBooleanKey.UseRealSkeleton, true)
         // 1) Retire the old production sensor — stop its callbacks and BLE session (no more loop feed).
         runCatching { driver.removeWatcher(this) }
         runCatching { driver.disconnect() }

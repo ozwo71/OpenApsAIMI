@@ -96,6 +96,30 @@
     <string name="dexcom_oneplus_notif_warming_text">Keep the phone near the sensor</string>
     <string name="dexcom_oneplus_notif_failed_title">Warm-up interrupted</string>
     <string name="dexcom_oneplus_notif_failed_text">Open the app to retry</string>
+    <!-- Dual-sensor (staging / pre-soak) start + management -->
+    <string name="dexcom_oneplus_slot_production">Start as production</string>
+    <string name="dexcom_oneplus_slot_staging">Start in staging (pre-soak)</string>
+    <string name="dexcom_oneplus_slot_hint">Production feeds the loop after warm-up. Staging (pre-soak) warms a second sensor alongside the one you are currently using — it is collect-only and never feeds the loop until you promote it from the status screen.</string>
+    <string name="dexcom_oneplus_staging_connect">Start staging sensor</string>
+    <string name="dexcom_oneplus_staging_return_note">The staging sensor collects readings in the background and does not feed the loop. Return to the dashboard; promote it later from the ONE+ status screen once it is ready.</string>
+    <string name="dexcom_oneplus_staging_heading">Staging sensor (pre-soak)</string>
+    <string name="dexcom_oneplus_staging_state" comment="%1$s=staging state label. Example: Ready to promote">Staging state: %1$s</string>
+    <string name="dexcom_oneplus_staging_state_absent">None</string>
+    <string name="dexcom_oneplus_staging_state_warmup">Warming up</string>
+    <string name="dexcom_oneplus_staging_state_settling">Settling</string>
+    <string name="dexcom_oneplus_staging_state_ready">Ready to promote</string>
+    <string name="dexcom_oneplus_staging_none_hint">No staging sensor. Start one from Start / new sensor, then choose \"Start in staging (pre-soak)\".</string>
+    <string name="dexcom_oneplus_staging_cancel">Cancel staging</string>
+    <string name="dexcom_oneplus_staging_promote">Promote to production</string>
+    <string name="dexcom_oneplus_staging_promote_confirm_title">Promote staging sensor?</string>
+    <string name="dexcom_oneplus_staging_promote_confirm_message">This switches the loop\'s glucose source to the staging sensor and retires the sensor currently in use. This cannot be undone.</string>
+    <string name="dexcom_oneplus_staging_promote_confirm">Promote</string>
+    <string name="dexcom_oneplus_staging_promote_dismiss">Cancel</string>
+    <string name="dexcom_oneplus_staging_promote_ok">Staging sensor promoted — it now feeds the loop.</string>
+    <string name="dexcom_oneplus_staging_promote_rejected_absent">No staging sensor to promote.</string>
+    <string name="dexcom_oneplus_staging_promote_rejected_not_settled">Staging sensor has not settled long enough to promote yet.</string>
+    <string name="dexcom_oneplus_staging_promote_rejected_no_glucose">Staging sensor has not produced enough valid glucose yet.</string>
+    <string name="dexcom_oneplus_staging_promote_rejected_loop_busy">The loop is busy right now — try again in a moment.</string>
     <string name="glimp">Glimp</string>
     <string name="description_source_glimp">Receive BG values from Glimp.</string>
     <string name="mm640g">MM640g</string>

@@ -68,6 +68,40 @@ internal object DashboardComposeHeroUiMapper {
         )
     }
 
+    /** ms per hour, for lifecycle age / remaining formatting. */
+    private const val HOUR_MS = 3_600_000L
+
+    /**
+     * Non-alarming "beginning of life" / "expires soon" subtext for the production sensor, shown UNDER
+     * the normal glucose hero (the ring is untouched). Returns null when there is no lifecycle info, no
+     * fresh glucose to annotate, or the sensor is in neither its early- nor end-of-life window.
+     *
+     * - early life → "Day N · settling · Xh" (readings may be a little jumpy while the sensor settles).
+     * - end of life → "Expires in Xh" (time to prepare a new sensor).
+     */
+    fun buildLifecycleSubtext(context: Context, state: StatusCardState): String? {
+        val lifecycle = state.lifecycle ?: return null
+        val hasFreshGlucose = state.glucoseMgdl != null && state.isGlucoseActual
+        if (!hasFreshGlucose) return null
+        // Smart-cast across a module boundary is not possible; capture into locals first.
+        val ageMs = lifecycle.ageMs
+        val remainingMs = lifecycle.remainingMs
+        return when {
+            lifecycle.endOfLife && remainingMs != null -> {
+                val hours = (remainingMs / HOUR_MS).coerceAtLeast(0L).toInt()
+                context.getString(R.string.dashboard_sensor_end_of_life, hours)
+            }
+
+            lifecycle.earlyLife && ageMs != null       -> {
+                val hours = (ageMs / HOUR_MS).coerceAtLeast(0L).toInt()
+                val day = (hours / 24) + 1
+                context.getString(R.string.dashboard_sensor_early_life, day, hours)
+            }
+
+            else                                       -> null
+        }
+    }
+
     private fun telemetryArcProgress(state: StatusCardState): Float? {
         val rel = state.trajectoryRelevanceScore
         val health = state.aimiHealthScore

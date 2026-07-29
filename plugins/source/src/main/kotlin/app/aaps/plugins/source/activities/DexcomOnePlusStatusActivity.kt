@@ -11,22 +11,31 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import app.aaps.core.interfaces.source.PromotionRejectReason
+import app.aaps.core.interfaces.source.PromotionResult
+import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
@@ -40,6 +49,8 @@ import app.aaps.plugins.source.compose.DexcomOnePlusUiLabels
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 /**
  * Daily status skeleton for Dexcom ONE+ native BG source.
@@ -65,6 +76,9 @@ class DexcomOnePlusStatusActivity : AppCompatActivity() {
                         onOpenWarmup = {
                             startActivity(Intent(this, DexcomOnePlusWarmupActivity::class.java))
                         },
+                        stagingStateFlow = dexcomOnePlusPlugin.stagingState,
+                        onCancelStaging = { dexcomOnePlusPlugin.cancelStaging() },
+                        onPromote = { dexcomOnePlusPlugin.promoteStagingToProduction() },
                     )
                 }
             }
@@ -78,10 +92,24 @@ private fun DexcomOnePlusStatusScreen(
     onBack: () -> Unit,
     onOpenStart: () -> Unit,
     onOpenWarmup: () -> Unit,
+    stagingStateFlow: StateFlow<StagingState>,
+    onCancelStaging: () -> Unit,
+    onPromote: suspend () -> PromotionResult,
 ) {
     val driver = remember { OnePlusCgmDrivers.default() }
     var state by remember { mutableStateOf(driver.warmupState()) }
     var sessionUp by remember { mutableStateOf(driver.isSessionUp()) }
+    val stagingState by stagingStateFlow.collectAsState()
+    val scope = rememberCoroutineScope()
+    var showPromoteConfirm by remember { mutableStateOf(false) }
+    var promoteResultText by remember { mutableStateOf<String?>(null) }
+
+    // Promotion result → user message (resolved here so the coroutine has no Composable context).
+    val promoteOk = stringResource(R.string.dexcom_oneplus_staging_promote_ok)
+    val promoteRejectedAbsent = stringResource(R.string.dexcom_oneplus_staging_promote_rejected_absent)
+    val promoteRejectedNotSettled = stringResource(R.string.dexcom_oneplus_staging_promote_rejected_not_settled)
+    val promoteRejectedNoGlucose = stringResource(R.string.dexcom_oneplus_staging_promote_rejected_no_glucose)
+    val promoteRejectedLoopBusy = stringResource(R.string.dexcom_oneplus_staging_promote_rejected_loop_busy)
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -147,7 +175,91 @@ private fun DexcomOnePlusStatusScreen(
             ) {
                 Text(stringResource(R.string.dexcom_oneplus_warmup_open))
             }
+
+            HorizontalDivider()
+
+            // Dual-sensor (staging / pre-soak) management. The staging sensor is collect-only until
+            // the user promotes it — promotion is the ONLY action that switches the loop source.
+            Text(
+                text = stringResource(R.string.dexcom_oneplus_staging_heading),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            val stagingStateLabel = when (stagingState) {
+                StagingState.ABSENT   -> stringResource(R.string.dexcom_oneplus_staging_state_absent)
+                StagingState.WARMUP   -> stringResource(R.string.dexcom_oneplus_staging_state_warmup)
+                StagingState.SETTLING -> stringResource(R.string.dexcom_oneplus_staging_state_settling)
+                StagingState.READY    -> stringResource(R.string.dexcom_oneplus_staging_state_ready)
+            }
+            Text(
+                text = stringResource(R.string.dexcom_oneplus_staging_state, stagingStateLabel),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            if (stagingState == StagingState.ABSENT) {
+                Text(
+                    text = stringResource(R.string.dexcom_oneplus_staging_none_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                if (stagingState == StagingState.READY) {
+                    Button(
+                        onClick = { showPromoteConfirm = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.dexcom_oneplus_staging_promote))
+                    }
+                }
+                OutlinedButton(
+                    onClick = {
+                        onCancelStaging()
+                        promoteResultText = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.dexcom_oneplus_staging_cancel))
+                }
+            }
+            promoteResultText?.let { msg ->
+                Text(
+                    text = msg,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
+    }
+
+    if (showPromoteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showPromoteConfirm = false },
+            title = { Text(stringResource(R.string.dexcom_oneplus_staging_promote_confirm_title)) },
+            text = { Text(stringResource(R.string.dexcom_oneplus_staging_promote_confirm_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showPromoteConfirm = false
+                        scope.launch {
+                            promoteResultText = when (val result = onPromote()) {
+                                is PromotionResult.Ok       -> promoteOk
+                                is PromotionResult.Rejected -> when (result.reason) {
+                                    PromotionRejectReason.STAGING_ABSENT            -> promoteRejectedAbsent
+                                    PromotionRejectReason.STAGING_NOT_SETTLED       -> promoteRejectedNotSettled
+                                    PromotionRejectReason.STAGING_NO_VALID_GLUCOSE  -> promoteRejectedNoGlucose
+                                    PromotionRejectReason.LOOP_BUSY                 -> promoteRejectedLoopBusy
+                                }
+                            }
+                        }
+                    },
+                ) {
+                    Text(stringResource(R.string.dexcom_oneplus_staging_promote_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPromoteConfirm = false }) {
+                    Text(stringResource(R.string.dexcom_oneplus_staging_promote_dismiss))
+                }
+            },
+        )
     }
 }
 
