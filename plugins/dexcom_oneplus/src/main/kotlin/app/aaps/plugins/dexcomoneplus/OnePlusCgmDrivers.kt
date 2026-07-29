@@ -14,6 +14,18 @@ object OnePlusCgmDrivers {
 
     private val realInstance: OnePlusCgmDriverReal by lazy { OnePlusCgmDriverReal() }
 
+    /**
+     * Second, independent Real driver for the STAGING (pre-soak) sensor — its own BLE session,
+     * executor, scanner and namespaced sensor store, so it can run concurrently with production
+     * without sharing identity / key / ingest markers. Always Real (staging is a real second sensor);
+     * the Stub path only applies to the production default.
+     * See docs/DEXCOM_ONEPLUS_DUAL_SENSOR_STAGING_PLAN.md.
+     */
+    private val stagingInstance: OnePlusCgmDriverReal by lazy { OnePlusCgmDriverReal(storeNamespace = STAGING_NAMESPACE) }
+
+    /** SharedPreferences namespace for the staging slot's sensor store. */
+    const val STAGING_NAMESPACE = "staging"
+
     private val lock = Any()
 
     /** Production / Phase-A path — Stub unless engineering Real skeleton is enabled. */
@@ -22,6 +34,9 @@ object OnePlusCgmDrivers {
 
     /** Explicit Real skeleton (same singleton as when [useRealSkeleton] is true). */
     fun realSkeleton(): OnePlusCgmDriver = realInstance
+
+    /** The dedicated STAGING driver instance (pre-soak second sensor). */
+    fun staging(): OnePlusCgmDriverReal = stagingInstance
 
     /**
      * Atomically switch Stub ↔ Real, migrating an optional [watcher] and shutting down the

@@ -104,12 +104,19 @@ internal object DexcomOnePlusIngest {
             sourceSensor = SourceSensor.DEXCOM_ONEPLUS_NATIVE,
         )
 
-    /** Test-only: clear in-memory dedup state. */
-    internal fun clearDedupForTests() {
+    /**
+     * Reset all dedup state (in-memory windows + persistent sequence floor). Call when the loop's
+     * sensor changes — e.g. promoting a staging sensor to production — because the new sensor's EGV
+     * sequence counter restarts from a low value and must not be rejected against the old floor.
+     */
+    fun reset() {
         synchronized(lock) {
             recentTimestampsMs.clear()
             recentSequences.clear()
             lastAcceptedSequence = -1L
         }
     }
+
+    /** Test-only: clear in-memory dedup state. */
+    internal fun clearDedupForTests() = reset()
 }

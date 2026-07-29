@@ -11,8 +11,13 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.source.BgSource
-import app.aaps.core.interfaces.source.CgmWarmupProvider
+import app.aaps.core.interfaces.source.CgmSensorLifecycle
+import app.aaps.core.interfaces.source.CgmSensorStatusProvider
 import app.aaps.core.interfaces.source.CgmWarmupStatus
+import app.aaps.core.interfaces.source.PromotionRejectReason
+import app.aaps.core.interfaces.source.PromotionResult
+import app.aaps.core.interfaces.source.SensorSlot
+import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.withActivity
 import app.aaps.core.ui.compose.icons.IcPluginByoda
@@ -80,12 +85,16 @@ class DexcomOnePlusPlugin @Inject constructor(
     rh,
     preferences,
     config,
-), BgSource, OnePlusGlucoseWatcher, CgmWarmupProvider {
+), BgSource, OnePlusGlucoseWatcher, CgmSensorStatusProvider {
 
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val driver
         get() = OnePlusCgmDrivers.default()
+
+    /** Dedicated STAGING (pre-soak) driver instance — its own BLE session / store, see plan §4. */
+    private val stagingDriver: OnePlusCgmDriverReal
+        get() = OnePlusCgmDrivers.staging()
 
     @Volatile
     private var warmupPhase: OnePlusWarmupState.Phase = OnePlusWarmupState.Phase.IDLE
@@ -110,8 +119,53 @@ class DexcomOnePlusPlugin @Inject constructor(
      *  high-water mark so restarts/updates don't re-insert duplicate readings. */
     private val sensorStore by lazy { OnePlusSensorStore(context) }
 
+    /** Namespaced store for the STAGING sensor (identity / markers / session start kept separate). */
+    private val stagingStore by lazy { OnePlusSensorStore(context, OnePlusCgmDrivers.STAGING_NAMESPACE) }
+
     /** Collector that drives the safety basal guard from the warm-up state (cancelled in onStop). */
     private var warmupGuardJob: Job? = null
+
+    // ---- Dual-sensor (staging / pre-soak) state — see docs/DEXCOM_ONEPLUS_DUAL_SENSOR_STAGING_PLAN.md ----
+
+    private val _lifecycle = MutableStateFlow<CgmSensorLifecycle?>(null)
+    override val lifecycle: StateFlow<CgmSensorLifecycle?> = _lifecycle.asStateFlow()
+
+    private val _stagingWarmup = MutableStateFlow<CgmWarmupStatus?>(null)
+    override val stagingWarmupStatus: StateFlow<CgmWarmupStatus?> = _stagingWarmup.asStateFlow()
+
+    private val _stagingLifecycle = MutableStateFlow<CgmSensorLifecycle?>(null)
+    override val stagingLifecycle: StateFlow<CgmSensorLifecycle?> = _stagingLifecycle.asStateFlow()
+
+    private val _stagingState = MutableStateFlow(StagingState.ABSENT)
+    override val stagingState: StateFlow<StagingState> = _stagingState.asStateFlow()
+
+    /** A staging sensor session exists (warming/settling), collect-only until promoted. */
+    @Volatile private var stagingPresent = false
+
+    /** Staging sensor is still warming up / (re)connecting (no glucose yet). */
+    @Volatile private var stagingWarming = false
+
+    /** Count of valid staging EGVs collected (promotion gate). */
+    @Volatile private var stagingValidEgvCount = 0
+
+    /** Set true after promotion: the (formerly staging) driver now feeds the loop. */
+    @Volatile private var stagingPublishesToLoop = false
+
+    /** Recent staging readings (ts→mgdl) for QA / dashboard comparison overlay. Never published. */
+    private val stagingBuffer = ArrayDeque<Pair<Long, Double>>()
+
+    /** Watches the STAGING driver; routes glucose to a local buffer (never the loop) until promoted. */
+    private val stagingWatcher = object : OnePlusGlucoseWatcher {
+        override fun onWarmup(state: OnePlusWarmupState) = handleStagingWarmup(state)
+        override fun onGlucose(sample: OnePlusGlucoseSample) = handleStagingGlucose(sample)
+        override fun onSession(up: Boolean, reason: String?) {
+            aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_STAGING: session up=$up reason=$reason")
+        }
+
+        override fun onError(message: String, fatal: Boolean) {
+            aapsLogger.error(LTag.BGSOURCE, "DEXCOM_ONEPLUS_STAGING: error fatal=$fatal $message")
+        }
+    }
 
     override fun getPreferenceScreenContent() = PreferenceSubScreenDef(
         key = "dexcom_oneplus_settings",
@@ -141,6 +195,7 @@ class DexcomOnePlusPlugin @Inject constructor(
             emptyList()
         }
         DexcomOnePlusIngest.seed(sensorStore.loadLastIngestSequence(), recentTs)
+        refreshProductionLifecycle()
         val autoResumeQueued = (driver as? OnePlusCgmDriverReal)?.resumeStoredSession() == true
         warmupPhase = driver.warmupState().phase
         // Reconcile a warm-up notification that survived a process restart with the driver's current
@@ -175,6 +230,9 @@ class DexcomOnePlusPlugin @Inject constructor(
         warmupGuardJob = null
         driver.removeWatcher(this)
         driver.shutdown()
+        // Tear down any staging session too (independent of production).
+        runCatching { stagingDriver.removeWatcher(stagingWatcher) }
+        runCatching { stagingDriver.shutdown() }
         warmupNotification.cancel()
         aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_SESSION: plugin stop")
         super.onStop()
@@ -221,6 +279,15 @@ class DexcomOnePlusPlugin @Inject constructor(
         if (warmupPhase != OnePlusWarmupState.Phase.READY && warmupPhase != OnePlusWarmupState.Phase.IDLE) {
             onWarmup(OnePlusWarmupState(phase = OnePlusWarmupState.Phase.READY))
         }
+        ingestToLoop(sample, sensorStore)
+    }
+
+    /**
+     * Dedup + publish a reading to the loop (`insertCgmSourceData`) and persist its ingest high-water
+     * mark to [store]. Shared by the production watcher and, after promotion, the promoted staging
+     * sensor. [store] is the namespaced store of whichever sensor currently feeds the loop.
+     */
+    private fun ingestToLoop(sample: OnePlusGlucoseSample, store: OnePlusSensorStore) {
         if (!DexcomOnePlusIngest.shouldAccept(sample)) {
             aapsLogger.debug(
                 LTag.BGSOURCE,
@@ -240,8 +307,11 @@ class DexcomOnePlusPlugin @Inject constructor(
                 LTag.BGSOURCE,
                 "DEXCOM_ONEPLUS_BG: insert complete — inserted: ${result.inserted.size}, updated: ${result.updated.size}",
             )
-            // Persist the ingest high-water mark so a restart/update can't re-insert this reading.
-            sensorStore.saveLastIngest(sample.sequence, sample.timestampMs)
+            // Persist the ingest high-water mark so a restart/update can't re-insert this reading,
+            // and anchor the production sensor's lifecycle (session start) on first reading.
+            store.saveLastIngest(sample.sequence, sample.timestampMs)
+            store.saveSessionStartIfAbsent(sample.timestampMs)
+            refreshProductionLifecycle()
         }
     }
 
@@ -253,10 +323,152 @@ class DexcomOnePlusPlugin @Inject constructor(
         aapsLogger.error(LTag.BGSOURCE, "DEXCOM_ONEPLUS_ERROR: fatal=$fatal $message")
     }
 
+    // ---------------- Dual-sensor (staging / pre-soak) ----------------
+
+    /**
+     * Start watching the STAGING sensor (collect-only, never published to the loop). The caller (Start
+     * UI) then drives scan/connect on [stagingDriverForConnect]. Safe to call while production runs.
+     */
+    fun beginStaging() {
+        stagingDriver.setContext(context)
+        stagingDriver.addWatcher(stagingWatcher)
+        stagingPublishesToLoop = false
+        stagingPresent = true
+        stagingWarming = true
+        stagingValidEgvCount = 0
+        synchronized(stagingBuffer) { stagingBuffer.clear() }
+        stagingStore.saveSessionStartIfAbsent(System.currentTimeMillis())
+        _stagingWarmup.value = null
+        refreshStagingLifecycle()
+        refreshStagingState()
+        aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_STAGING: begin")
+    }
+
+    /** The STAGING driver instance, for the Start UI to run scan/connect against the new sensor. */
+    fun stagingDriverForConnect(): OnePlusCgmDriverReal = stagingDriver
+
+    /** Stop and discard the staging sensor (no effect on production). */
+    fun cancelStaging() {
+        runCatching { stagingDriver.removeWatcher(stagingWatcher) }
+        runCatching { stagingDriver.disconnect() }
+        runCatching { stagingDriver.shutdown() }
+        stagingPresent = false
+        stagingWarming = false
+        stagingValidEgvCount = 0
+        synchronized(stagingBuffer) { stagingBuffer.clear() }
+        _stagingWarmup.value = null
+        _stagingLifecycle.value = null
+        _stagingState.value = StagingState.ABSENT
+        aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_STAGING: cancelled")
+    }
+
+    /**
+     * SAFETY-CRITICAL (plan §8, pending device + maintainer/clinician gate): promote the staging
+     * sensor to production — the ONLY action that changes the loop's glucose source. Guarded on
+     * [StagingState.READY]. On success: stops the old production sensor, resets the ingest dedup floor
+     * (new EGV sequence space), migrates the staging identity into the production store (so a restart
+     * durably resumes the promoted sensor), and routes the staging driver's glucose to the loop.
+     */
+    override suspend fun promoteStagingToProduction(): PromotionResult {
+        if (!stagingPresent) return PromotionResult.Rejected(PromotionRejectReason.STAGING_ABSENT)
+        if (stagingValidEgvCount < DexcomOnePlusStaging.STAGING_MIN_VALID_EGV)
+            return PromotionResult.Rejected(PromotionRejectReason.STAGING_NO_VALID_GLUCOSE)
+        if (_stagingState.value != StagingState.READY)
+            return PromotionResult.Rejected(PromotionRejectReason.STAGING_NOT_SETTLED)
+
+        aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_PROMOTE: staging → production (by user)")
+        // 1) Retire the old production sensor — stop its callbacks and BLE session (no more loop feed).
+        runCatching { driver.removeWatcher(this) }
+        runCatching { driver.disconnect() }
+        runCatching { driver.shutdown() }
+        // 2) New sensor = different EGV sequence space → reset the persistent dedup floor.
+        DexcomOnePlusIngest.reset()
+        // 3) Durability: migrate the staging identity into the production store so a later restart
+        //    resumes the promoted sensor on the production driver. Then retire the staging store.
+        stagingStore.load()?.let { sensorStore.adopt(it, stagingStore.loadSessionStart()) }
+        stagingStore.clearAll()
+        // 4) In-session: the already-connected staging driver now feeds the loop (no gap).
+        stagingPublishesToLoop = true
+        stagingPresent = false
+        stagingWarming = false
+        stagingValidEgvCount = 0
+        synchronized(stagingBuffer) { stagingBuffer.clear() }
+        _stagingWarmup.value = null
+        _stagingLifecycle.value = null
+        _stagingState.value = StagingState.ABSENT
+        refreshProductionLifecycle()
+        return PromotionResult.Ok
+    }
+
+    private fun handleStagingWarmup(state: OnePlusWarmupState) {
+        // After promotion the staging driver behaves as production for warm-up too.
+        if (stagingPublishesToLoop) {
+            onWarmup(state)
+            return
+        }
+        stagingWarming = when (state.phase) {
+            OnePlusWarmupState.Phase.WARMING,
+            OnePlusWarmupState.Phase.CONNECTING,
+            OnePlusWarmupState.Phase.RECONNECTING,
+            OnePlusWarmupState.Phase.PAIRING -> true
+
+            else                             -> false
+        }
+        _stagingWarmup.value = DexcomOnePlusWarmupMapper.toCgmWarmupStatus(state)
+        refreshStagingState()
+        aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_STAGING: warmup phase=${state.phase}")
+    }
+
+    private fun handleStagingGlucose(sample: OnePlusGlucoseSample) {
+        // Promoted → this sensor now feeds the loop through the shared ingest path.
+        if (stagingPublishesToLoop) {
+            ingestToLoop(sample, sensorStore)
+            return
+        }
+        // Collect-only: buffer for QA / dashboard, NEVER insertCgmSourceData (invariant I2).
+        synchronized(stagingBuffer) {
+            stagingBuffer.addLast(sample.timestampMs to sample.mgdl)
+            while (stagingBuffer.size > STAGING_BUFFER_CAP) stagingBuffer.removeFirst()
+        }
+        stagingWarming = false
+        stagingValidEgvCount++
+        stagingStore.saveSessionStartIfAbsent(sample.timestampMs)
+        refreshStagingLifecycle()
+        refreshStagingState()
+        aapsLogger.debug(
+            LTag.BGSOURCE,
+            "DEXCOM_ONEPLUS_STAGING: buffered ${sample.mgdl.toInt()} count=$stagingValidEgvCount (not published)",
+        )
+    }
+
+    private fun refreshProductionLifecycle() {
+        _lifecycle.value =
+            DexcomOnePlusStaging.computeLifecycle(SensorSlot.PRODUCTION, sensorStore.loadSessionStart(), System.currentTimeMillis())
+    }
+
+    private fun refreshStagingLifecycle() {
+        _stagingLifecycle.value =
+            if (stagingPresent) DexcomOnePlusStaging.computeLifecycle(SensorSlot.STAGING, stagingStore.loadSessionStart(), System.currentTimeMillis())
+            else null
+    }
+
+    private fun refreshStagingState() {
+        _stagingState.value = DexcomOnePlusStaging.computeStagingState(
+            present = stagingPresent,
+            warming = stagingWarming,
+            sessionStartMs = stagingStore.loadSessionStart(),
+            validEgvCount = stagingValidEgvCount,
+            nowMs = System.currentTimeMillis(),
+        )
+    }
+
     companion object {
 
         /** How far back to seed the ingest dedup from the DB on start — wide enough to cover any
          *  plausible on-reconnect backfill, capped downstream by [DexcomOnePlusIngest] RECENT_CAP. */
         private const val INGEST_SEED_WINDOW_MS = 6L * 60L * 60L * 1000L
+
+        /** Staging QA buffer cap (~24 h at 5-min cadence). */
+        private const val STAGING_BUFFER_CAP = 288
     }
 }

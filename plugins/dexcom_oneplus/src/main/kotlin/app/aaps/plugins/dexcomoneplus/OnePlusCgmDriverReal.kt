@@ -41,7 +41,12 @@ internal object OnePlusCgmDriverResumePolicy {
  * [disconnect] / [shutdown] call [OnePlusBleSession.stop] directly so GATT disconnect can
  * unblock [OnePlusGattClient.awaitControlNotify]. Watchers may be off main.
  */
-class OnePlusCgmDriverReal : OnePlusCgmDriver {
+/**
+ * @param storeNamespace per-slot SharedPreferences namespace for the sensor store (null = the
+ *   original single-sensor file; "staging" = the pre-soak second sensor). Lets two driver instances
+ *   run concurrently without sharing identity / MAC / KEKS key / ingest markers.
+ */
+class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlusCgmDriver {
 
     private val watchers = CopyOnWriteArrayList<OnePlusGlucoseWatcher>()
     private val lifecycleLock = Any()
@@ -78,7 +83,7 @@ class OnePlusCgmDriverReal : OnePlusCgmDriver {
     override fun setContext(context: Context) {
         val app = context.applicationContext
         this.context = app
-        val store = OnePlusSensorStore(app)
+        val store = OnePlusSensorStore(app, storeNamespace)
         sensorStore = store
         scanner = OnePlusBleScannerAndroid(app, sessionHint = store.load())
         profile = DeviceProfileRegistry.resolve()
