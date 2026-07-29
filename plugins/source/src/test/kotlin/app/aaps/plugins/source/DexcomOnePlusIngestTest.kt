@@ -68,4 +68,25 @@ class DexcomOnePlusIngestTest {
         assertThat(DexcomOnePlusIngest.shouldAccept(a)).isTrue()
         assertThat(DexcomOnePlusIngest.shouldAccept(b)).isFalse()
     }
+
+    @Test
+    fun `seed sequence floor rejects re-reads after a restart`() {
+        // Simulate rehydration after an app update: last accepted sequence was 100.
+        DexcomOnePlusIngest.seed(lastSequence = 100L, recentTimestampsMs = emptyList())
+        // A backfilled/re-read reading at or below the floor is rejected even with a fresh timestamp.
+        assertThat(DexcomOnePlusIngest.shouldAccept(OnePlusGlucoseSample(mgdl = 100.0, timestampMs = 5_000_000L, sequence = 100L))).isFalse()
+        assertThat(DexcomOnePlusIngest.shouldAccept(OnePlusGlucoseSample(mgdl = 100.0, timestampMs = 5_000_000L, sequence = 99L))).isFalse()
+        // A genuinely new reading above the floor is accepted.
+        assertThat(DexcomOnePlusIngest.shouldAccept(OnePlusGlucoseSample(mgdl = 100.0, timestampMs = 6_000_000L, sequence = 101L))).isTrue()
+    }
+
+    @Test
+    fun `seed timestamps reject recomputed re-reads within window`() {
+        // The parser recomputes ts = now - age on each read, so a re-read after restart lands at a
+        // slightly different timestamp that DB dedup (exact match) misses. Seeding recent stored
+        // timestamps re-arms the near-duplicate window so the re-read is still dropped.
+        DexcomOnePlusIngest.seed(lastSequence = -1L, recentTimestampsMs = listOf(2_000_000L))
+        val reRead = OnePlusGlucoseSample(mgdl = 120.0, timestampMs = 2_000_000L + 30_000L) // 30 s off, no sequence
+        assertThat(DexcomOnePlusIngest.shouldAccept(reRead)).isFalse()
+    }
 }

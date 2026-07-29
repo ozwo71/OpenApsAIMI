@@ -38,16 +38,43 @@ class OnePlusSensorStore(context: Context) {
     }
 
     fun saveIdentity(identity: OnePlusSensorIdentity) {
+        // A new sensor restarts its EGV sequence counter from a low value, so the persisted ingest
+        // high-water mark (last sequence/timestamp) MUST be reset — otherwise the new sensor's early
+        // readings would be wrongly rejected as "already seen". Reset only on an actual serial change.
+        val serialChanged = identity.serial != null && identity.serial != prefs.getString(KEY_SERIAL, null)
         prefs.edit()
             .putString(KEY_PIN, identity.pin)
             .putString(KEY_SERIAL, identity.serial)
             .putString(KEY_GTIN, identity.gtin)
             .putString(KEY_RAW_GS1, identity.rawGs1)
             .apply()
+        if (serialChanged) clearLastIngest()
         Log.i(
             OnePlusLogMarkers.TAG,
-            "${OnePlusLogMarkers.SESSION}: sensor identity saved serial=${identity.serial ?: "-"}",
+            "${OnePlusLogMarkers.SESSION}: sensor identity saved serial=${identity.serial ?: "-"} serialChanged=$serialChanged",
         )
+    }
+
+    /**
+     * Persist the ingest high-water mark so a process restart / app update cannot re-insert already
+     * stored readings (which the loop rejects as duplicates). [sequence] is the monotonic per-sensor
+     * EGV counter; [timestampMs] backs the near-duplicate time window.
+     */
+    fun saveLastIngest(sequence: Long?, timestampMs: Long) {
+        prefs.edit().apply {
+            if (sequence != null) putLong(KEY_LAST_SEQ, sequence)
+            putLong(KEY_LAST_TS, timestampMs)
+        }.apply()
+    }
+
+    /** Last ingested EGV sequence, or -1 when none recorded (accept everything). */
+    fun loadLastIngestSequence(): Long = prefs.getLong(KEY_LAST_SEQ, -1L)
+
+    /** Last ingested reading timestamp (ms), or 0 when none recorded. */
+    fun loadLastIngestTimestamp(): Long = prefs.getLong(KEY_LAST_TS, 0L)
+
+    private fun clearLastIngest() {
+        prefs.edit().remove(KEY_LAST_SEQ).remove(KEY_LAST_TS).apply()
     }
 
     fun saveLastMac(address: String) {
@@ -88,5 +115,7 @@ class OnePlusSensorStore(context: Context) {
         private const val KEY_MAC = "last_mac"
         private const val KEY_DEVICE_NAME = "last_device_name"
         private const val KEY_SHARED = "shared_key_b64"
+        private const val KEY_LAST_SEQ = "last_ingest_seq"
+        private const val KEY_LAST_TS = "last_ingest_ts"
     }
 }

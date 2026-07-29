@@ -1,6 +1,7 @@
 package app.aaps.plugins.source
 
 import android.content.Context
+import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.configuration.Config
@@ -21,6 +22,7 @@ import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverReal
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseSample
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseWatcher
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
 import app.aaps.plugins.source.activities.DexcomOnePlusStartActivity
 import app.aaps.plugins.source.activities.DexcomOnePlusStatusActivity
 import app.aaps.plugins.source.activities.DexcomOnePlusWarmupActivity
@@ -104,6 +106,10 @@ class DexcomOnePlusPlugin @Inject constructor(
 
     private val warmupNotification by lazy { DexcomOnePlusWarmupNotification(context) }
 
+    /** Private SharedPreferences-backed sensor store — used here only to persist/read the ingest
+     *  high-water mark so restarts/updates don't re-insert duplicate readings. */
+    private val sensorStore by lazy { OnePlusSensorStore(context) }
+
     /** Collector that drives the safety basal guard from the warm-up state (cancelled in onStop). */
     private var warmupGuardJob: Job? = null
 
@@ -123,8 +129,24 @@ class DexcomOnePlusPlugin @Inject constructor(
     override suspend fun onStart() {
         super.onStart()
         syncDriverFromPrefs()
+        // Rehydrate the ingest dedup BEFORE any reconnect can deliver glucose, so an app update /
+        // restart cannot re-insert already-stored readings (duplicates halt the loop). Sequence floor
+        // from the sensor store + recent already-stored ONE+ timestamps from the DB.
+        val recentTs = try {
+            persistenceLayer.getBgReadingsDataFromTime(System.currentTimeMillis() - INGEST_SEED_WINDOW_MS, ascending = true)
+                .filter { it.sourceSensor == SourceSensor.DEXCOM_ONEPLUS_NATIVE }
+                .map { it.timestamp }
+        } catch (t: Throwable) {
+            aapsLogger.error(LTag.BGSOURCE, "DEXCOM_ONEPLUS_BG: ingest seed query failed: ${t.message}", t)
+            emptyList()
+        }
+        DexcomOnePlusIngest.seed(sensorStore.loadLastIngestSequence(), recentTs)
         val autoResumeQueued = (driver as? OnePlusCgmDriverReal)?.resumeStoredSession() == true
         warmupPhase = driver.warmupState().phase
+        // Reconcile a warm-up notification that survived a process restart with the driver's current
+        // state — cancels it when warm-up is already READY/IDLE (otherwise nothing clears the stale
+        // status-bar notification until the next onWarmup event, which may never arrive after restart).
+        warmupNotification.update(driver.warmupState())
         aapsLogger.info(
             LTag.BGSOURCE,
             "DEXCOM_ONEPLUS_SESSION: plugin start " +
@@ -192,6 +214,13 @@ class DexcomOnePlusPlugin @Inject constructor(
             )
             return
         }
+        // A real glucose reading means warm-up / (re)connection is over. Force READY so the lingering
+        // ongoing notification is cancelled and the basal guard released, even if the driver never
+        // emits an explicit READY event (the reported "notification stuck forever" case). Idempotent:
+        // only fires while a non-terminal warm-up phase is still showing.
+        if (warmupPhase != OnePlusWarmupState.Phase.READY && warmupPhase != OnePlusWarmupState.Phase.IDLE) {
+            onWarmup(OnePlusWarmupState(phase = OnePlusWarmupState.Phase.READY))
+        }
         if (!DexcomOnePlusIngest.shouldAccept(sample)) {
             aapsLogger.debug(
                 LTag.BGSOURCE,
@@ -211,6 +240,8 @@ class DexcomOnePlusPlugin @Inject constructor(
                 LTag.BGSOURCE,
                 "DEXCOM_ONEPLUS_BG: insert complete — inserted: ${result.inserted.size}, updated: ${result.updated.size}",
             )
+            // Persist the ingest high-water mark so a restart/update can't re-insert this reading.
+            sensorStore.saveLastIngest(sample.sequence, sample.timestampMs)
         }
     }
 
@@ -220,5 +251,12 @@ class DexcomOnePlusPlugin @Inject constructor(
 
     override fun onError(message: String, fatal: Boolean) {
         aapsLogger.error(LTag.BGSOURCE, "DEXCOM_ONEPLUS_ERROR: fatal=$fatal $message")
+    }
+
+    companion object {
+
+        /** How far back to seed the ingest dedup from the DB on start — wide enough to cover any
+         *  plausible on-reconnect backfill, capped downstream by [DexcomOnePlusIngest] RECENT_CAP. */
+        private const val INGEST_SEED_WINDOW_MS = 6L * 60L * 60L * 1000L
     }
 }

@@ -10,6 +10,7 @@ import android.content.IntentFilter
 import android.media.AudioManager
 import android.media.RingtoneManager
 import android.os.Build
+import android.os.SystemClock
 import androidx.annotation.RawRes
 import androidx.annotation.StringRes
 import androidx.core.app.NotificationCompat
@@ -166,6 +167,13 @@ class NotificationManagerImpl @Inject constructor(
             current.removeAll { it.id == id }
         }
 
+        // DND override (default on): the OS must emit the sound on a bypass-DND channel — the only
+        // path that survives Do Not Disturb / bedtime modes. In that case stamp the post time so the
+        // ramping MediaPlayer loop defers past the channel one-shot instead of double-ringing.
+        val overrideDnd = preferences.get(BooleanKey.AlertOverrideDoNotDisturb)
+        val urgentSound = level == NotificationLevel.URGENT && soundRes != null && soundRes != 0
+        val postedAt = if (urgentSound && overrideDnd) SystemClock.elapsedRealtime() else 0L
+
         val notification = AapsNotification(
             id = id,
             instanceKey = instanceKey,
@@ -175,24 +183,32 @@ class NotificationManagerImpl @Inject constructor(
             validTo = validTo,
             soundRes = soundRes,
             actions = actions,
-            validityCheck = validityCheck
+            validityCheck = validityCheck,
+            postedAtElapsedRealtime = postedAt
         )
 
         current.add(notification)
         current.sortBy { it.level.priority }
         _notifications.value = current
 
-        // Alarm tier (URGENT + sound): the system notification is silent (heads-up + vibration, no
-        // channel sound); the ramping audio is owned by AlarmSoundPlayer and driven by
-        // refreshAlarmSound() below so concurrent URGENT alarms hand off correctly. Sound is gated
-        // on URGENT — a soundRes on a lower level is intentionally ignored (only the alarm tier rings).
+        // Alarm tier (URGENT + sound). Two channels:
+        //  - override DND ON  → sound-bearing bypass-DND channel: the OS plays the alarm THROUGH Do
+        //    Not Disturb (needs policy access granted); the MediaPlayer loop below adds ramp/continuity
+        //    (deferred past the one-shot when audible).
+        //  - override DND OFF → silent channel (heads-up + vibration only); audio owned entirely by
+        //    the AlarmSoundPlayer MediaPlayer, which respects DND/silent.
+        // Sound is gated on URGENT — a soundRes on a lower level is intentionally ignored.
         if (level == NotificationLevel.URGENT && soundRes != null && soundRes != 0) {
-            alarmNotificationManager.postSilentAlarmNotification(
-                notificationKey = instanceKey,
-                title = rh.gs(app.aaps.core.ui.R.string.urgent_alarm),
-                body = text,
-                urgent = true
-            )
+            val title = rh.gs(app.aaps.core.ui.R.string.urgent_alarm)
+            if (overrideDnd) {
+                alarmNotificationManager.postSoundAlarmNotification(
+                    notificationKey = instanceKey, title = title, body = text, soundId = soundRes, urgent = true
+                )
+            } else {
+                alarmNotificationManager.postSilentAlarmNotification(
+                    notificationKey = instanceKey, title = title, body = text, urgent = true
+                )
+            }
         } else if (preferences.get(BooleanKey.AlertUrgentAsAndroidNotification) && actions.isEmpty()) {
             // No-sound visual-only path (preference-gated).
             raiseSystemNotification(notification)
@@ -332,7 +348,9 @@ class NotificationManagerImpl @Inject constructor(
 
             top.instanceKey != soundingKey -> {
                 soundingKey = top.instanceKey
-                alarmSoundPlayer.play(top.soundRes!!, AlarmSoundPlayer.OWNER_INTERNAL)
+                // postedAtElapsedRealtime > 0 (DND-override path) → defer the loop past the channel
+                // one-shot to avoid double-audio; 0 → play immediately (existing behaviour).
+                alarmSoundPlayer.play(top.soundRes!!, AlarmSoundPlayer.OWNER_INTERNAL, top.postedAtElapsedRealtime)
             }
             // else: already playing the top alarm — leave the ramp running.
         }

@@ -616,6 +616,13 @@ class ComposeMainActivity : AppCompatActivity() {
 
                             effect.group.permissions.contains(PluginStore.PERMISSION_NOTIFICATION_LISTENER)             ->
                                 startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+
+                            effect.group.permissions.contains(Manifest.permission.ACCESS_NOTIFICATION_POLICY)          ->
+                                try {
+                                    startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+                                } catch (_: ActivityNotFoundException) {
+                                    snackbarHostState.showSnackbar(getString(app.aaps.ui.R.string.permission_denied_go_to_settings))
+                                }
                         }
 
                     is PermissionsSideEffect.ShowError               ->

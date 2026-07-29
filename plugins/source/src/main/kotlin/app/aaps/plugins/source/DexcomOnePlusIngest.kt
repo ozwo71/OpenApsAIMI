@@ -30,6 +30,28 @@ internal object DexcomOnePlusIngest {
     private val recentSequences = LinkedHashSet<Long>()
 
     /**
+     * Persistent monotonic high-water mark of the last accepted EGV sequence, survived across
+     * process restarts via [seed] (rehydrated from [OnePlusSensorStore]). -1 = nothing recorded yet.
+     * Prevents an app update / restart from re-ingesting already-stored readings (which the loop
+     * rejects as duplicates), because the in-memory [recentSequences] alone is wiped on restart.
+     */
+    @Volatile
+    private var lastAcceptedSequence: Long = -1L
+
+    /**
+     * Rehydrate the dedup state after a process restart, so backfilled/re-read EGVs are not
+     * re-inserted. [lastSequence] is the persisted high-water mark (-1 if none); [recentTimestampsMs]
+     * are recent already-stored reading timestamps (from the DB) to re-seed the near-duplicate window.
+     */
+    fun seed(lastSequence: Long, recentTimestampsMs: List<Long>) {
+        synchronized(lock) {
+            lastAcceptedSequence = lastSequence
+            this.recentTimestampsMs.clear()
+            recentTimestampsMs.takeLast(RECENT_CAP).forEach { this.recentTimestampsMs.addLast(it) }
+        }
+    }
+
+    /**
      * Block PersistenceLayer inserts only while the protocol/UI reports `WARMING`.
      * PAIRING / IDLE must not block — otherwise attach-to-ready sensors never ingest.
      */
@@ -42,6 +64,11 @@ internal object DexcomOnePlusIngest {
     fun shouldAccept(sample: OnePlusGlucoseSample): Boolean {
         synchronized(lock) {
             val seq = sample.sequence
+            // Persistent floor: reject anything at or below the last accepted sequence — survives
+            // restarts, so backfill/re-reads after an app update are not re-inserted.
+            if (seq != null && lastAcceptedSequence >= 0 && seq <= lastAcceptedSequence) {
+                return false
+            }
             if (seq != null && recentSequences.contains(seq)) {
                 return false
             }
@@ -54,6 +81,7 @@ internal object DexcomOnePlusIngest {
             recentTimestampsMs.addLast(ts)
             if (seq != null) {
                 recentSequences.add(seq)
+                lastAcceptedSequence = maxOf(lastAcceptedSequence, seq)
             }
             while (recentTimestampsMs.size > RECENT_CAP) {
                 recentTimestampsMs.removeFirst()
@@ -81,6 +109,7 @@ internal object DexcomOnePlusIngest {
         synchronized(lock) {
             recentTimestampsMs.clear()
             recentSequences.clear()
+            lastAcceptedSequence = -1L
         }
     }
 }

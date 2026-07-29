@@ -129,6 +129,11 @@ class AlarmNotificationManager @Inject constructor(
         // Harmless if absent.
         mgr.deleteNotificationChannel("aaps_alarm_fullscreen")
 
+        // Delete the pre-bypassDnd override channels ("_alarm" suffix). Channel settings are locked
+        // after creation, so the DND-override channels had to be re-created under a new id
+        // ("_alarm_bypass") to carry setBypassDnd(true). Harmless if absent. See channelIdForSound().
+        for (name in SOUND_NAMES.values) mgr.deleteNotificationChannel("aaps_alarm_${name}_alarm")
+
         // Silent FSI channel for the ramp-enabled case. IMPORTANCE_HIGH keeps the heads-up
         // popup visible; vibration enabled because the user opted into ramp, not into a
         // completely-silent alert.
@@ -169,6 +174,10 @@ class AlarmNotificationManager @Inject constructor(
                     NotificationManager.IMPORTANCE_HIGH
                 ).apply {
                     setSound(uri, alarmAttrs)
+                    // The only reliable way to ring through Do Not Disturb / bedtime modes. Honored
+                    // by the OS ONLY while AAPS holds notification-policy access (ACCESS_NOTIFICATION_POLICY,
+                    // user-granted); silently ignored otherwise, so safe to always set.
+                    setBypassDnd(true)
                     group = GROUP_ID
                 }
             )
@@ -204,7 +213,10 @@ class AlarmNotificationManager @Inject constructor(
 
     private fun channelIdForSound(@RawRes soundId: Int, overrideDnd: Boolean): String {
         val name = SOUND_NAMES[soundId] ?: "error"
-        val suffix = if (overrideDnd) "alarm" else "notify"
+        // "_bypass" (was "_alarm") is a version bump: channel settings are immutable after creation,
+        // so the override channel must get a NEW id to pick up setBypassDnd(true). Old "_alarm"
+        // channels are deleted in createChannels().
+        val suffix = if (overrideDnd) "alarm_bypass" else "notify"
         return "aaps_alarm_${name}_$suffix"
     }
 
@@ -336,6 +348,63 @@ class AlarmNotificationManager @Inject constructor(
             aapsLogger.error(
                 LTag.NOTIFICATION,
                 "Failed to post silent alarm \"$title\" key=$notificationKey — POST_NOTIFICATIONS likely revoked",
+                ex
+            )
+        }
+    }
+
+    /**
+     * Post an audible alarm notification on the bypass-DND **sound-bearing** channel
+     * ([channelIdForSound] with `overrideDnd = true`). Unlike [postSilentAlarmNotification], the OS
+     * itself emits the alarm sound here — the only path that survives Do Not Disturb / bedtime modes
+     * (when notification-policy access is granted). Used by the internal URGENT path when
+     * [BooleanKey.AlertOverrideDoNotDisturb] is on; the caller's ramping MediaPlayer loop is deferred
+     * past this one-shot (via `AapsNotification.postedAtElapsedRealtime`) so they don't overlap.
+     *
+     * Tracked in [activeSoundKeys] exactly like [postSilentAlarmNotification].
+     *
+     * @param notificationKey unique-per-AAPS-notification identifier (the `AapsNotification.instanceKey`)
+     * @param soundId         raw alarm sound resource (selects the channel)
+     * @param urgent          true for URGENT-level alerts (stronger vibration)
+     */
+    fun postSoundAlarmNotification(
+        notificationKey: Int,
+        title: String,
+        body: String,
+        @RawRes soundId: Int,
+        urgent: Boolean
+    ) {
+        val channelId = channelIdForSound(soundId, overrideDnd = true)
+        val builder = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(iconsProvider.getNotificationIcon())
+            .setLargeIcon(rh.decodeResource(iconsProvider.getIcon()))
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .setContentIntent(openAppPendingIntent())
+        if (urgent) {
+            builder.setVibrate(longArrayOf(1000, 1000, 1000, 1000))
+        } else {
+            builder.setVibrate(longArrayOf(0, 100, 50, 100, 50))
+        }
+
+        val systemId = SOUND_ID_OFFSET + notificationKey
+        try {
+            // notify + add must be atomic relative to cancelAlarm/cancelSoundAlarm — see activeSoundKeys.
+            synchronized(activeSoundKeys) {
+                mgr.notify(systemId, builder.build())
+                activeSoundKeys.add(notificationKey)
+            }
+            aapsLogger.debug(LTag.NOTIFICATION, "Posted bypass-DND sound alarm key=$notificationKey: $title - $body")
+        } catch (ex: SecurityException) {
+            // POST_NOTIFICATIONS revoked at runtime (Android 13+) — see postFullScreenAlarm.
+            aapsLogger.error(
+                LTag.NOTIFICATION,
+                "Failed to post sound alarm \"$title\" key=$notificationKey — POST_NOTIFICATIONS likely revoked",
                 ex
             )
         }
