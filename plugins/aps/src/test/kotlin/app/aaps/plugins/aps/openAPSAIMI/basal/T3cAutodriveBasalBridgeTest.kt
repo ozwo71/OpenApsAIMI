@@ -55,10 +55,32 @@ class T3cAutodriveBasalBridgeTest {
     }
 
     @Test
-    fun `tree unlocks on resistance rise and vetoes on activity`() {
+    fun `glycemic rise unlocks regardless of tree activity veto and without a resistance signal`() {
+        // Self-sufficiency: a confirmed rising hyper unlocks even when the (often false-positive) activity
+        // branch is high and the tree reports no resistance signal — the tree must not throttle a real rise.
         val unlock = T3cAutodriveBasalBridge.evaluateTreeUnlock(
             tree = tree(
                 risk = PhysiologicalRiskLevel.MODERATE,
+                global = GlobalPhysiologicalState.RESISTANCE_PROBABLE,
+                hormonalResistance = 0.1, // no resistance signal
+                activity = 0.7,           // high activity — previously vetoed
+            ),
+            bg = 180.0,
+            delta = 3.0f,
+            activationThreshold = 130.0,
+            postHypoActive = false,
+            eventualBg = 200.0,
+            targetBg = 100.0,
+        )
+        assertThat(unlock.unlock).isTrue()
+        assertThat(unlock.reason).isEqualTo("glycemic_override")
+    }
+
+    @Test
+    fun `tree critical risk still vetoes unlock even on a glycemic rise`() {
+        val blocked = T3cAutodriveBasalBridge.evaluateTreeUnlock(
+            tree = tree(
+                risk = PhysiologicalRiskLevel.CRITICAL,
                 global = GlobalPhysiologicalState.RESISTANCE_PROBABLE,
                 hormonalResistance = 0.7,
                 activity = 0.1,
@@ -70,24 +92,8 @@ class T3cAutodriveBasalBridgeTest {
             eventualBg = 200.0,
             targetBg = 100.0,
         )
-        assertThat(unlock.unlock).isTrue()
-
-        val blocked = T3cAutodriveBasalBridge.evaluateTreeUnlock(
-            tree = tree(
-                risk = PhysiologicalRiskLevel.MODERATE,
-                global = GlobalPhysiologicalState.RESISTANCE_PROBABLE,
-                hormonalResistance = 0.7,
-                activity = 0.7,
-            ),
-            bg = 180.0,
-            delta = 3.0f,
-            activationThreshold = 130.0,
-            postHypoActive = false,
-            eventualBg = 200.0,
-            targetBg = 100.0,
-        )
         assertThat(blocked.unlock).isFalse()
-        assertThat(blocked.reason).isEqualTo("tree_activity")
+        assertThat(blocked.reason).isEqualTo("tree_critical")
     }
 
     @Test
