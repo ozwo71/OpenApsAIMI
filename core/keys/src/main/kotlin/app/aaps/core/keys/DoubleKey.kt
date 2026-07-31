@@ -528,10 +528,28 @@ enum class DoubleKey(
     OApsAIMIT3cAggressiveness("key_aimi_t3c_aggressiveness", 1.0, 0.5, 3.0),
     /** CFRD mode: minimum LGS threshold (mg/dL) for T3C anticipation.
      *  Impaired glucagon counter-regulation in CFRD requires a higher safety floor than standard DT1. */
-    OApsAIMIT3cCfrdLgsFloorMgdl("key_aimi_t3c_cfrd_lgs_floor", 80.0, 70.0, 95.0),
+    OApsAIMIT3cCfrdLgsFloorMgdl(
+        key = "key_aimi_t3c_cfrd_lgs_floor",
+        defaultValue = 95.0,
+        min = 70.0,
+        max = 95.0,
+        titleResId = R.string.pref_title_aimi_t3c_cfrd_lgs_floor,
+        summaryResId = R.string.pref_summary_aimi_t3c_cfrd_lgs_floor,
+        dependency = BooleanKey.OApsAIMIT3cCfrdMode,
+        unitType = UnitType.NONE,
+    ),
     /** CFRD mode: exocrine malabsorption COB delay (minutes).
      *  Shifts the COB absorption curve forward to account for delayed / irregular carbohydrate digestion. */
-    OApsAIMIT3cCfrdCobDelayMin("key_aimi_t3c_cfrd_cob_delay_min", 0.0, 0.0, 90.0),
+    OApsAIMIT3cCfrdCobDelayMin(
+        key = "key_aimi_t3c_cfrd_cob_delay_min",
+        defaultValue = 30.0,
+        min = 0.0,
+        max = 90.0,
+        titleResId = R.string.pref_title_aimi_t3c_cfrd_cob_delay,
+        summaryResId = R.string.pref_summary_aimi_t3c_cfrd_cob_delay,
+        dependency = BooleanKey.OApsAIMIT3cCfrdMode,
+        unitType = UnitType.NONE,
+    ),
     /** Undeclared-meal COB estimation: hard upper bound (grams) the estimator may inject into the
      *  prediction path. Conservative by default. Only active when [BooleanKey.OApsAIMIUndeclaredCobEnabled] is on. */
     OApsAIMIUndeclaredCobMaxG(

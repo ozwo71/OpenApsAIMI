@@ -574,17 +574,30 @@ enum class BooleanKey(
      */
     OApsAIMIT3cHyperBasalFloor(
         key = "key_aimi_t3c_hyper_basal_floor",
-        defaultValue = false,
+        defaultValue = true,
         titleResId = R.string.pref_title_aimi_t3c_hyper_basal_floor,
         summaryResId = R.string.pref_summary_aimi_t3c_hyper_basal_floor,
         dependency = OApsAIMIT3cBrittleMode,
     ),
     /** Cystic fibrosis-related diabetes (CFRD) adaptations in T3C mode:
-     *  higher LGS safety floor, COB absorption delay, exacerbation support. */
-    OApsAIMIT3cCfrdMode("key_aimi_t3c_cfrd_mode", false),
+     *  higher LGS safety floor, COB absorption delay, exacerbation support.
+     *  Default ON: T3C brittle is the intended basal-only path for CFRD; prefs are visible under T3C. */
+    OApsAIMIT3cCfrdMode(
+        key = "key_aimi_t3c_cfrd_mode",
+        defaultValue = true,
+        titleResId = R.string.pref_title_aimi_t3c_cfrd_mode,
+        summaryResId = R.string.pref_summary_aimi_t3c_cfrd_mode,
+        dependency = OApsAIMIT3cBrittleMode,
+    ),
     /** CFRD manual exacerbation flag: raises the T3C aggressiveness ceiling during
      *  active pulmonary exacerbations or corticosteroid (steroid) treatment. */
-    OApsAIMIT3cCfrdExacerbationMode("key_aimi_t3c_cfrd_exacerbation", false),
+    OApsAIMIT3cCfrdExacerbationMode(
+        key = "key_aimi_t3c_cfrd_exacerbation",
+        defaultValue = false,
+        titleResId = R.string.pref_title_aimi_t3c_cfrd_exacerbation,
+        summaryResId = R.string.pref_summary_aimi_t3c_cfrd_exacerbation,
+        dependency = OApsAIMIT3cCfrdMode,
+    ),
 
     /** Undeclared-meal COB estimation: derives a bounded virtual COB (grams) from the glucose
      *  appearance rate, BG dynamics, weight/TDD ceiling and rest/activity context, then injects it
