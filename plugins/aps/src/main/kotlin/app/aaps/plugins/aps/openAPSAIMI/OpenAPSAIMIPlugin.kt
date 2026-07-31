@@ -39,7 +39,6 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.insulin.ConcentrationHelper
-import app.aaps.core.interfaces.insulin.Insulin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.EffectiveProfile
@@ -183,7 +182,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val aimiBackupManager: AimiBackupManager, // ?? Cloud Backup Manager (Force Init)
     private val aimiMlTrainingScheduler: AimiMlTrainingScheduler,
     private val storageHelper: AimiStorageHelper,
-    private val insulin: Insulin,
     private val ch: ConcentrationHelper,
     private val trajectoryHistoryProvider: TrajectoryHistoryProvider,
     private val trajectoryGuard: TrajectoryGuard,
@@ -382,7 +380,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     override var lastAPSRun: Long = 0
     override val algorithm = APSResult.Algorithm.AIMI
     override var lastAPSResult: APSResult? = null
-    override fun supportsDynamicIsf(): Boolean = preferences.get(BooleanKey.ApsUseDynamicSensitivity)
+    override fun usingDynamicIsf(): Boolean = preferences.get(BooleanKey.ApsUseDynamicSensitivity)
+    override fun offersDynamicSensitivity(): Boolean = true
     private val pkpdIntegration = PkPdIntegration(preferences)
     private var lastPkpdScale: Double = 1.0
     // Dans votre classe principale (ou plugin), vous pouvez d?clarer :
@@ -520,7 +519,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 timeSinceLastBolus = pkpdWindowSinceDoseMinForPkpd,
                 cobNow = mealCobForPkpd,
                 effectiveProfile = profile,
-                historicalInsulinPeakMinutes = insulin.iCfg.peak.coerceAtLeast(35),
+                historicalInsulinPeakMinutes = profile.iCfg.peak.coerceAtLeast(35),
             )
             val orbit = StableOrbit.fromProfile(
                 targetBg = targetBgMgdl,
@@ -535,7 +534,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val mismatchNudge = if (geometryNudge == 0.0) {
                 TrajectoryPeakMismatchScorer.minutesNudgeFromHistoryOrZero(
                     history = history,
-                    insulinPeakMinutes = insulin.iCfg.peak.coerceAtLeast(35),
+                    insulinPeakMinutes = profile.iCfg.peak.coerceAtLeast(35),
                     lastBolusAgeMinutes = pkpdWindowSinceDoseMinForPkpd,
                     cobGrams = mealCobForPkpd,
                 )
@@ -913,9 +912,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             targetBg = hardLimits.verifyHardLimits(tempTarget.target(), app.aaps.core.ui.R.string.temp_target_value, HardLimits.LIMIT_TEMP_TARGET_BG[0], HardLimits.LIMIT_TEMP_TARGET_BG[1])
         }
         val insulinDivisor = when {
-            insulin.iCfg.peak > 65 -> 55 // rapid peak: 75
-            insulin.iCfg.peak > 50 -> 65 // ultra rapid peak: 55
-            else                   -> 45 // lyumjev peak: 45
+            profile.iCfg.peak > 65 -> 55 // rapid peak: 75
+            profile.iCfg.peak > 50 -> 65 // ultra rapid peak: 55
+            else                  -> 45 // lyumjev peak: 45
         }
 
         var autosensResult = AutosensResult()
@@ -1147,7 +1146,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             )
             val sitePeakShiftMinutes = TapSitePeakShift.minutesForSiteAge(computeCannulaSiteAgeDays())
             val peakGovernorForActivity = TapPeakGovernor.resolve(
-                insulinPeakMinutes = insulin.iCfg.peak,
+                insulinPeakMinutes = profile.iCfg.peak,
                 physioPeakShiftMinutes = physioMults.peakShiftMinutes,
                 sitePeakShiftMinutes = sitePeakShiftMinutes,
                 pkpdLearnedPeak = pkpdRuntimeForActivity?.params?.peakMin,
