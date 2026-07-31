@@ -71,7 +71,7 @@ fun AdaptiveIntPreferenceItem(
                 .padding(theme.padding)
         ) {
             TextWithSyncBadge(
-                text = stringResource(effectiveTitleResId),
+                text = titleText,
                 key = intKey,
                 style = theme.titleTextStyle,
                 // Mirror Preference's disabled styling (the switch row greys the same way) since this
@@ -114,7 +114,7 @@ fun AdaptiveIntPreferenceItem(
         }
         TextFieldPreference(
             state = state,
-            title = { PreferenceTitleWithSyncBadge(effectiveTitleResId, intKey) },
+            title = { TextWithSyncBadge(titleText, intKey) },
             textToValue = { text ->
                 text.toIntOrNull()?.coerceIn(intKey.min, intKey.max)
             },

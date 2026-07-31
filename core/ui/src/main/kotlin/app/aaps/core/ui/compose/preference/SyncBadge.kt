@@ -95,7 +95,10 @@ fun TextWithSyncBadge(
  * Preference title text with a trailing inline [SyncBadge]. Drop-in replacement for
  * `Text(stringResource(id))` in an `Adaptive*PreferenceItem` title slot; the badge only appears
  * on a client for Bidirectional keys.
+ *
+ * Uses [preferenceDisplayTitle] so keys with [titleResId] `0` (Compose-only / XML-titled prefs,
+ * common on AIMI) do not crash via [stringResource].
  */
 @Composable
 fun PreferenceTitleWithSyncBadge(titleResId: Int, key: NonPreferenceKey?) =
-    TextWithSyncBadge(stringResource(titleResId), key)
+    TextWithSyncBadge(preferenceDisplayTitle(titleResId, key?.key.orEmpty()), key)

@@ -77,7 +77,7 @@ fun AdaptiveUnitDoublePreferenceItem(
             .padding(theme.padding)
     ) {
         TextWithSyncBadge(
-            text = stringResource(effectiveTitleResId),
+            text = titleText,
             key = unitKey,
             style = theme.titleTextStyle,
             // Mirror Preference's disabled styling (the switch row greys the same way) since this

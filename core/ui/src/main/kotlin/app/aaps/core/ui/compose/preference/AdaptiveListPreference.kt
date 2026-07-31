@@ -4,12 +4,8 @@
 
 package app.aaps.core.ui.compose.preference
 
-import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Text
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import app.aaps.core.keys.interfaces.IntPreferenceKey
@@ -101,7 +97,7 @@ fun AdaptiveStringListPreferenceItem(
     ListPreference(
         state = state,
         values = values,
-        title = { PreferenceTitleWithSyncBadge(effectiveTitleResId, stringKey) },
+        title = { TextWithSyncBadge(titleText, stringKey) },
         enabled = visibility.enabled,
         summary = { Text(currentEntry) },
         dialogSummary = dialogSummary,

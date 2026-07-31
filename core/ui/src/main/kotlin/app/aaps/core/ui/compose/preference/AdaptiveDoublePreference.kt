@@ -107,7 +107,7 @@ fun AdaptiveDoublePreferenceItem(
                 .padding(theme.padding)
         ) {
             TextWithSyncBadge(
-                text = stringResource(effectiveTitleResId),
+                text = titleText,
                 key = doubleKey,
                 style = theme.titleTextStyle,
                 // Mirror Preference's disabled styling (the switch row greys the same way) since this
@@ -149,7 +149,7 @@ fun AdaptiveDoublePreferenceItem(
         }
         TextFieldPreference(
             state = state,
-            title = { PreferenceTitleWithSyncBadge(effectiveTitleResId, doubleKey) },
+            title = { TextWithSyncBadge(titleText, doubleKey) },
             textToValue = { text ->
                 text.toDoubleOrNull()?.coerceIn(doubleKey.min, doubleKey.max)
             },
