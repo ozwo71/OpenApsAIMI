@@ -370,7 +370,7 @@ enum class DoubleKey(
         dependency = BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled,
     ),
     OApsAIMISmbTailThreshold("aimi_smb_tail_threshold", 0.25, 0.0, 1.0),
-    OApsAIMISmbTailDamping("aimi_smb_tail_damping", 0.5, 0.0, 1.0),
+    OApsAIMISmbTailDamping("aimi_smb_tail_damping", 0.85, 0.0, 1.0),
     OApsAIMISmbExerciseDamping("aimi_smb_exercise_damping", 0.6, 0.0, 1.0),
     OApsAIMISmbLateFatDamping("aimi_smb_late_fat_damping", 0.7, 0.0, 1.0),
     OApsAIMIPkpdPragmaticReliefMinFactor("aimi_pkpd_pragmatic_relief_min_factor", 0.75, 0.50, 1.0),

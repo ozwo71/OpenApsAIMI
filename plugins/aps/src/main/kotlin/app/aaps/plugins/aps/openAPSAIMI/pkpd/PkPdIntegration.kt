@@ -593,15 +593,17 @@ class PkPdRuntime(
         smb: Double,
         exercise: Boolean,
         suspectedLateFatMeal: Boolean,
-        bypassDamping: Boolean = false
+        bypassDamping: Boolean = false,
+        elapsedSinceMealMin: Double = 0.0
     ): SmbDampingAudit =
-        damping.dampWithAudit(smb, tailFraction, exercise, suspectedLateFatMeal, bypassDamping, activity)
+        damping.dampWithAudit(smb, tailFraction, exercise, suspectedLateFatMeal, bypassDamping, activity, elapsedSinceMealMin)
 
     fun dampSmb(
         smb: Double,
         exercise: Boolean,
         suspectedLateFatMeal: Boolean,
-        bypassDamping: Boolean = false
+        bypassDamping: Boolean = false,
+        elapsedSinceMealMin: Double = 0.0
     ): Double =
-        damping.damp(smb, tailFraction, exercise, suspectedLateFatMeal, bypassDamping, activity)
+        damping.damp(smb, tailFraction, exercise, suspectedLateFatMeal, bypassDamping, activity, elapsedSinceMealMin)
 }

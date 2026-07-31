@@ -37,7 +37,7 @@ class SmbDampingUsecaseTest {
             lateFatMult = 1.0,
             mealBypass = false
         )
-        every { pkpdRuntime.dampSmbWithAudit(any(), any(), any(), any()) } returns audit
+        every { pkpdRuntime.dampSmbWithAudit(any(), any(), any(), any(), any()) } returns audit
 
         val input = SmbDampingUsecase.Input(
             smbDecision = 1.0,
