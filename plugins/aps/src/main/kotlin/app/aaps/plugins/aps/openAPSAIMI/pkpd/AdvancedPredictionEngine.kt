@@ -36,6 +36,11 @@ object AdvancedPredictionEngine {
      * Aligné sur [app.aaps.plugins.aps.openAPSAIMI.prediction.ClampPkpdScenarioReconcile.MAX_NEG_DELTA_MGDL]. */
     private const val ENDO_REVERSION_FALLING_HARD_DELTA_MGDL = -3.0
 
+    /** F1-B — fraction of the (BG − floor) gap the active stack must be able to cover (IOB×ISF) before the
+     *  hyper floor is treated as unsafe and suspended (only while BG is no longer rising). 1.0 = the stack
+     *  alone can reach the floor. Gated by the stack-aware Guard B toggle (default off). */
+    private const val ENDO_REVERSION_STACK_HEADROOM_FRACTION = 1.0
+
     /** Hyper-reversion (2026-07-26) — root fix for the undeclared-meal false-hypo. The legacy gate only
      * lets EGP revert once |insulinImpact| is negligible; with high IOB + long learned DIA that never
      * happens inside the horizon, so the insulin-only path crashes to the 39 floor while real BG sits at
@@ -88,6 +93,7 @@ object AdvancedPredictionEngine {
         modulation: PredictionPhysioModulation = PredictionPhysioModulation(),
         endogenousReversionEnabled: Boolean = false,
         hyperReversionEnabled: Boolean = false,
+        stackAwareGuardBEnabled: Boolean = false,
     ): AdvancedPredictionCurves {
         val effectiveHorizonMinutes = maxOf(Constants.PREDICTION_GRAPH_MIN_MINUTES, horizonMinutes)
         val iobSeries = mutableListOf(currentBG)
@@ -149,8 +155,16 @@ object AdvancedPredictionEngine {
         val endoBaseline = min(ENDO_REVERSION_BASELINE_MGDL, maxOf(currentBG, NUMERIC_FLOOR))
         // Guard B — suspend EGP entirely while BG is falling hard: keep the safety path-min pessimistic.
         // Fail-closed on a non-finite delta: an unknown trend suspends EGP (never lifts on garbage).
+        // F1-B (opt-in) — a large active stack can breach the floor even when the momentary trend is flat:
+        // if IOB×ISF exceeds the (BG − floor) gap AND BG is no longer rising (delta < 0), the floor is
+        // masking a real low, so suspend EGP on capacity too (not just on delta). The delta < 0 bound keeps
+        // it from ever backing off a genuine rise. Fail-safe: gated by stackAwareGuardBEnabled (default off).
+        val currentIob = currentEntry?.iob ?: 0.0
+        val stackCanBreachFloor = stackAwareGuardBEnabled && delta < 0.0 &&
+            effectiveSensitivity > 0.0 &&
+            currentIob * effectiveSensitivity > ENDO_REVERSION_STACK_HEADROOM_FRACTION * (currentBG - endoBaseline)
         val endoSuppressedByFallingTrend = endogenousReversionEnabled &&
-            (!delta.isFinite() || delta <= ENDO_REVERSION_FALLING_HARD_DELTA_MGDL)
+            (!delta.isFinite() || delta <= ENDO_REVERSION_FALLING_HARD_DELTA_MGDL || stackCanBreachFloor)
         val endoActive = endogenousReversionEnabled && !endoSuppressedByFallingTrend
         // Clearly hyper now → a projected crash to the 39 floor is an artefact of the insulin-only
         // path; allow reversion even while insulin is still active (Guards A/B remain in force).

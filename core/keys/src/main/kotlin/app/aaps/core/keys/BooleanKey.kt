@@ -553,6 +553,17 @@ enum class BooleanKey(
         defaultValue = true,
         dependency = OApsAIMIPkpdEndogenousReversion,
     ),
+    /** 🩸 pkpd Guard B — stack-aware floor suspension (F1-B, opt-in). The hyper floor (BG ≥ 160) holds every
+     *  prediction curve at ≥ 80; legacy Guard B only releases it on delta ≤ -3, ignoring IOB — so a large
+     *  active stack keeps the basal whipsawing on CGM noise during a hyper descent. When ON, also suspend the
+     *  floor once the stack can physiologically breach it (IOB×ISF > BG − floor) AND BG is no longer rising
+     *  (delta < 0), letting the true low surface so the basal cuts and holds. Fail-safe: false → legacy
+     *  delta-only Guard B. Requires [OApsAIMIPkpdHyperReversion]. */
+    OApsAIMIPkpdStackAwareGuardB(
+        key = "key_aimi_pkpd_stack_aware_guardb",
+        defaultValue = false,
+        dependency = OApsAIMIPkpdHyperReversion,
+    ),
     // 🩸 pkpd predictions: shape the insulin-activity curves on the LEARNED DIA/peak, not the static profile
     OApsAIMIPkpdPredictionKinetics(
         "key_aimi_pkpd_prediction_kinetics", true,
@@ -577,7 +588,8 @@ enum class BooleanKey(
      * T3C: hyper basal floor. When BG has stayed at/above the hyper level (160 mg/dL) for a sustained
      * window (20 min), hold the basal at the user's configured Max basal (profile max_basal) instead of
      * letting CGM noise collapse it to zero. Basal-only (TBR). Releases automatically when BG falls back
-     * below the level. Depends on T3C brittle mode. Fail-safe: off by default.
+     * below the level. Depends on T3C brittle mode. On by default (opt-out) — gated behind T3C brittle mode
+     * plus a sustained-dwell requirement, so a single CGM noise spike cannot trigger it.
      */
     OApsAIMIT3cHyperBasalFloor(
         key = "key_aimi_t3c_hyper_basal_floor",

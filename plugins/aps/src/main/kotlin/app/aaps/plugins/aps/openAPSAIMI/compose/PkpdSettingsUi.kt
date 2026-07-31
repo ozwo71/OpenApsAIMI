@@ -435,6 +435,11 @@ fun PkpdExpertSettingsContent(preferenceRevision: Int) {
             titleResId = R.string.oaps_aimi_pkpd_relief_enabled_title,
             summaryResId = R.string.oaps_aimi_pkpd_relief_enabled_summary,
         )
+        AdaptiveSwitchPreferenceItem(
+            booleanKey = BooleanKey.OApsAIMIPkpdStackAwareGuardB,
+            titleResId = R.string.oaps_aimi_pkpd_stack_aware_guardb_title,
+            summaryResId = R.string.oaps_aimi_pkpd_stack_aware_guardb_summary,
+        )
         AdaptiveDoublePreferenceItem(
             doubleKey = DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor,
             titleResId = R.string.oaps_aimi_pkpd_relief_factor_title,

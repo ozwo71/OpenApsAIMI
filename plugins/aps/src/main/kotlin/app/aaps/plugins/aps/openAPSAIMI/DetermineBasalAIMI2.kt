@@ -9076,6 +9076,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             delta = delta.toDouble(),
             endogenousReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
             hyperReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdHyperReversion),
+            stackAwareGuardBEnabled = preferences.get(BooleanKey.OApsAIMIPkpdStackAwareGuardB),
         )
         lastAdvancedPredictionCurves = curves
         recordPkpdSoftFloor(curves)
@@ -14146,6 +14147,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 modulation = predictionModulation,
                 endogenousReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
                 hyperReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdHyperReversion),
+                stackAwareGuardBEnabled = preferences.get(BooleanKey.OApsAIMIPkpdStackAwareGuardB),
             )
         } catch (e: Exception) {
             consoleLog.add("Error in AdvancedPredictionEngine: ${e.message}")
@@ -15378,6 +15380,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 cobG = effectiveCOB, profile = profile, delta = delta.toDouble(),
                 endogenousReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
                 hyperReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdHyperReversion),
+                stackAwareGuardBEnabled = preferences.get(BooleanKey.OApsAIMIPkpdStackAwareGuardB),
             )
             lastAdvancedPredictionCurves = curves
             val softFloor = recordPkpdSoftFloor(curves)
@@ -17313,7 +17316,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // window, CGM-noise down-ticks must not collapse the basal to ~0 (the observed whipsaw). Hold
         // the basal at the user's configured Max basal (profile.max_basal — tunable via the standard
         // Max basal preference), bounded by the active cap. Basal-only. Releases automatically once BG
-        // drops back below the level. Fail-safe: opt-in toggle (default off) AND a sustained-dwell
+        // drops back below the level. Fail-safe: on by default (opt-out) AND a sustained-dwell
         // requirement (minBg over the window ≥ level) so a single noise spike cannot trigger it.
         val hyperFloorBgMgdl = 160.0   // "hyper installed" level (user-requested)
         val hyperFloorDwellMin = 20    // sustained minutes required — makes the trigger noise-robust
