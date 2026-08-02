@@ -581,6 +581,17 @@ enum class BooleanKey(
         titleResId = R.string.pref_title_aimi_basal_channel_safety_guards,
         summaryResId = R.string.pref_summary_aimi_basal_channel_safety_guards,
     ),
+    /** 🔒 Invariants terminaux du canal basal (lot 2, opt-in). Les protections du TBR étaient posées en
+     *  amont de multiplicateurs pouvant élever le taux ×10 (`DynamicBasalController`, `AdaptiveBasal`,
+     *  ampli endocrine) : un plafond placé avant un multiplicateur ne borne pas la valeur finale. Quand ON,
+     *  trois invariants s'évaluent **après le dernier multiplicateur**, juste avant l'écriture du taux —
+     *  prédiction sous la cible, verrou post-hypo, IOB négatif sans montée — chacun en réduction seule
+     *  (`coerceAtMost` au basal profil). Les modes repas manuels sont exempts. Fail-safe: false. */
+    OApsAIMIBasalTerminalInvariants(
+        "key_aimi_basal_terminal_invariants", false,
+        titleResId = R.string.pref_title_aimi_basal_terminal_invariants,
+        summaryResId = R.string.pref_summary_aimi_basal_terminal_invariants,
+    ),
     // 🩸 pkpd predictions: shape the insulin-activity curves on the LEARNED DIA/peak, not the static profile
     OApsAIMIPkpdPredictionKinetics(
         "key_aimi_pkpd_prediction_kinetics", true,

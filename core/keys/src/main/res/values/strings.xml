@@ -673,5 +673,7 @@
     <string name="pref_summary_aimi_pkpd_prediction_kinetics">Shape the glucose prediction curves with the adaptive PK/PD learned DIA and peak instead of the fixed insulin profile, so eventual and minPred reflect how your insulin actually acts. Falls back to the profile kinetics when the learner is off or its values are out of range.</string>
     <string name="pref_title_aimi_basal_channel_safety_guards">Basal channel: honour SMB safety holds</string>
     <string name="pref_summary_aimi_basal_channel_safety_guards">When a safety rule zeroes the SMB, also block the automatic T3C/Harmonia basal channels instead of letting them take over, and keep the adaptive learner reduction on the rate they propose. Can only lower the automatic temp basal, never raise it. Manual meal modes keep their configured rate.</string>
+    <string name="pref_title_aimi_basal_terminal_invariants">Basal channel: final safety limits</string>
+    <string name="pref_summary_aimi_basal_terminal_invariants">Re-check three limits on the temp basal after every multiplier has been applied, instead of before them: hold at profile basal when both glucose and the prediction are below target, while post-hypo recovery is active, or when insulin on board is negative without a rise. Can only lower the rate, never raise it. Manual meal modes are exempt.</string>
 </resources>
 

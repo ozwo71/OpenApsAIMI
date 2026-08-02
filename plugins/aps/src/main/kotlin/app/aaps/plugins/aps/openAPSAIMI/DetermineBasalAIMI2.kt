@@ -44,6 +44,7 @@ import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
+import app.aaps.plugins.aps.openAPSAIMI.basal.BasalTerminalInvariants
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAnticipation
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAutodriveBasalBridge
@@ -11681,6 +11682,29 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 dosePathOwner = EndocrineDosePathOwner.HARMONIA_PRODUCTION_BASAL_FIRST,
             )
         }
+
+        // 🔒 Lot 2 — invariants terminaux : dernier point où le taux peut encore être borné. Tout ce qui
+        // précède (DynamicBasalController ×[0..10], AdaptiveBasal, ampli endocrine) a déjà été appliqué,
+        // donc un plafond posé ici ne peut plus être écrasé. Réduction seule.
+        val terminal = BasalTerminalInvariants.resolve(
+            BasalTerminalInvariants.Input(
+                enabled = preferences.get(BooleanKey.OApsAIMIBasalTerminalInvariants),
+                rateUph = rate,
+                profileBasalUph = profile.current_basal,
+                bgMgdl = bgNow,
+                targetBgMgdl = targetBg.toDouble(),
+                eventualBgMgdl = eventualBG.takeIf { it.isFinite() && it > 1.0 },
+                deltaMgdl5m = delta.toDouble(),
+                iobU = iobNet,
+                mealModeActive = isMealMode,
+                postHypoActive = lastPostHypoDeliveryAuthority.active,
+            )
+        )
+        if (terminal.boundBy != null) {
+            consoleLog.add("🔒 BASAL_TERMINAL[${terminal.boundBy}] ${terminal.trace}")
+            rT.reason.append(" [BASAL_TERMINAL:${terminal.boundBy} ${"%.2f".format(rate)}→${"%.2f".format(terminal.rateUph)}U/h]")
+        }
+        rate = terminal.rateUph
 
         rT.reason.append(context.getString(R.string.temp_basal_pose, "%.2f".format(rate), duration))
         rT.duration = duration

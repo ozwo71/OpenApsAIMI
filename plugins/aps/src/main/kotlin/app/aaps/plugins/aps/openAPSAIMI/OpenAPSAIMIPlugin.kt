@@ -1848,6 +1848,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 add(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)
                 add(BooleanKey.OApsAIMIBasalSlewLimitEnabled)
                 add(BooleanKey.OApsAIMIBasalChannelSafetyGuards)
+                add(BooleanKey.OApsAIMIBasalTerminalInvariants)
                 add(DoubleKey.OApsAIMIAdaptiveBasalMaxScaling)
                 add(DoubleKey.OApsAIMIGovernanceHypoRateEnter)
                 add(DoubleKey.OApsAIMIGovernanceHypoRateExit)

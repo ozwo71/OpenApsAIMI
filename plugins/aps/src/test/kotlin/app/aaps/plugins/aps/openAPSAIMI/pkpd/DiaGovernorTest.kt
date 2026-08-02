@@ -19,7 +19,10 @@ class DiaGovernorTest {
             learnedBlendWeight = 0.45,
         )
         assertTrue(r.appliedGovernor)
-        assertEquals(5.05, r.effectiveDiaHours, 0.05)
+        // blended = anchor * (1 - w) + learned * w = 6.0 * 0.55 + 4.1 * 0.45 = 5.145
+        // (l'attente historique de 5.05 correspondait à une moyenne 50/50, antérieure à la prise en
+        // compte de learnedBlendWeight).
+        assertEquals(5.145, r.effectiveDiaHours, 1e-6)
         assertEquals("LEARNED", r.dominantBranch)
     }
 
