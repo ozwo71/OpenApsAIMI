@@ -564,6 +564,23 @@ enum class BooleanKey(
         defaultValue = false,
         dependency = OApsAIMIPkpdHyperReversion,
     ),
+    /** 🛡️ Basal-channel safety guards (lot 3, opt-in). Two authority leaks let the automatic basal channel
+     *  dose while the SMB channel was deliberately held back:
+     *  1. the basal-first mutex only asks "was an SMB requested?", so an SMB **zeroed by a safety rule**
+     *     (`isCriticalSafetyCondition`, `HypoRecovery` context) *unlocks* the T3C/Harmonia basal-first
+     *     production channels instead of blocking them;
+     *  2. when those channels own the rate they force the adaptive multiplier to 1.0, discarding the
+     *     learners' protective reduction — the only damper that was still binding.
+     *  When ON, a safety-zeroed SMB blocks those channels, and their rate keeps any learner reduction
+     *  (`min(adaptiveMult, 1.0)`; amplifications above 1.0 are still discarded, so the rate can only be
+     *  lower than today, never higher). Does not touch the manual meal modes, whose TBR stays the
+     *  user-configured [app.aaps.core.keys.DoubleKey.meal_modes_MaxBasal] setpoint.
+     *  Fail-safe: false → legacy behaviour. */
+    OApsAIMIBasalChannelSafetyGuards(
+        "key_aimi_basal_channel_safety_guards", false,
+        titleResId = R.string.pref_title_aimi_basal_channel_safety_guards,
+        summaryResId = R.string.pref_summary_aimi_basal_channel_safety_guards,
+    ),
     // 🩸 pkpd predictions: shape the insulin-activity curves on the LEARNED DIA/peak, not the static profile
     OApsAIMIPkpdPredictionKinetics(
         "key_aimi_pkpd_prediction_kinetics", true,

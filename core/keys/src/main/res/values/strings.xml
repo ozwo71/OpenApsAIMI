@@ -671,5 +671,7 @@
     <string name="pref_summary_aimi_pkpd_endo_reversion">Stop the pkpd eventual prediction from sticking at the 39 mg/dL floor once insulin is spent, letting counter-regulation drift it back toward a low-normal. Affects the eventual only; the hypo-protection floor is unchanged.</string>
     <string name="pref_title_aimi_pkpd_prediction_kinetics">Prediction: learned insulin kinetics</string>
     <string name="pref_summary_aimi_pkpd_prediction_kinetics">Shape the glucose prediction curves with the adaptive PK/PD learned DIA and peak instead of the fixed insulin profile, so eventual and minPred reflect how your insulin actually acts. Falls back to the profile kinetics when the learner is off or its values are out of range.</string>
+    <string name="pref_title_aimi_basal_channel_safety_guards">Basal channel: honour SMB safety holds</string>
+    <string name="pref_summary_aimi_basal_channel_safety_guards">When a safety rule zeroes the SMB, also block the automatic T3C/Harmonia basal channels instead of letting them take over, and keep the adaptive learner reduction on the rate they propose. Can only lower the automatic temp basal, never raise it. Manual meal modes keep their configured rate.</string>
 </resources>
 

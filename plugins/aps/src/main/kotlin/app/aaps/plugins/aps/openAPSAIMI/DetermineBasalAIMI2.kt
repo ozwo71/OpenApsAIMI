@@ -41,6 +41,7 @@ import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
+import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
@@ -7308,6 +7309,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if ((b.rT.units ?: 0.0) > 0.0 || (b.rT.insulinReq ?: 0.0) > 0.0) {
             return blockT3cBasalFirstProduction(t3cState, "smb_already_requested")
         }
+        if (basalChannelSafetyGuardsActive() && smbZeroedBySafetyThisTick()) {
+            basalChannelGuardBlockedT3cCount++
+            return blockT3cBasalFirstProduction(t3cState, "smb_zeroed_by_safety")
+        }
         if (exerciseInsulinLockoutActive || t3cState.exerciseBlock) {
             return blockT3cBasalFirstProduction(t3cState, "exercise_lockout")
         }
@@ -7499,6 +7504,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         if ((b.rT.units ?: 0.0) > 0.0 || (b.rT.insulinReq ?: 0.0) > 0.0) {
             return blockHarmoniaProduction(simulation, "smb_already_requested")
+        }
+        if (basalChannelSafetyGuardsActive() && smbZeroedBySafetyThisTick()) {
+            basalChannelGuardBlockedHarmoniaCount++
+            return blockHarmoniaProduction(simulation, "smb_zeroed_by_safety")
         }
         if (exerciseInsulinLockoutActive) {
             return blockHarmoniaProduction(simulation, "exercise_lockout")
@@ -7862,14 +7871,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             finalProposedRate = t3cNativePlan.rateUph
             finalDuration = t3cNativePlan.durationMin
             finalOverrideSafetyLimits = false
-            finalAdaptiveMultiplier = 1.0
+            finalAdaptiveMultiplier = basalFirstAdaptiveMultiplier()
             lastDecisionSource = t3cNativePlan.decisionSource
             b.rT.reason.append("; 🌳T3C_NATIVE_BASAL_FIRST")
         } else if (harmoniaProductionPlan != null) {
             finalProposedRate = harmoniaProductionPlan.rateUph
             finalDuration = harmoniaProductionPlan.durationMin
             finalOverrideSafetyLimits = false
-            finalAdaptiveMultiplier = 1.0
+            finalAdaptiveMultiplier = basalFirstAdaptiveMultiplier()
             lastDecisionSource = harmoniaProductionPlan.decisionSource
             b.rT.reason.append("; 🌿HARMONIA_PRODUCTION_BASAL_FIRST")
         }
@@ -9917,6 +9926,43 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * pose pas) ni les prébolus des modes manuels (chemin applyLegacyMealModes, hors Red Carpet).
      */
     private var criticalSafetyZeroedThisTick: Boolean = false
+
+    /** 🛡️ Lot 3 — nombre de fois que le garde-fou a bloqué chaque canal basal-first (télémétrie). */
+    private var basalChannelGuardBlockedT3cCount: Int = 0
+    private var basalChannelGuardBlockedHarmoniaCount: Int = 0
+
+    /** 🛡️ Lot 3 — garde-fous du canal basal, voir [BooleanKey.OApsAIMIBasalChannelSafetyGuards]. */
+    private fun basalChannelSafetyGuardsActive(): Boolean =
+        preferences.get(BooleanKey.OApsAIMIBasalChannelSafetyGuards)
+
+    /**
+     * `true` quand le canal basal-first doit être bloqué parce que le SMB de ce tick a été mis à zéro par
+     * une **règle de sécurité** ([criticalSafetyZeroedThisTick] ou `lastContextSuppressSmb`), et non
+     * simplement « pas demandé ». Règle pure dans
+     * [app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards.shouldBlockBasalFirst].
+     */
+    private fun smbZeroedBySafetyThisTick(): Boolean =
+        BasalChannelSafetyGuards.smbZeroedBySafety(criticalSafetyZeroedThisTick, lastContextSuppressSmb)
+
+    /**
+     * Multiplicateur adaptatif conservé quand un plan basal-first (T3C natif / Harmonia production) possède
+     * le taux. Historiquement forcé à `1.0`, ce qui jetait la réduction protectrice des learners — le seul
+     * amortisseur qui liait encore. Règle pure dans
+     * [app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier].
+     */
+    private fun basalFirstAdaptiveMultiplier(): Double {
+        val kept = BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(
+            guardsEnabled = basalChannelSafetyGuardsActive(),
+            adaptiveMult = adaptiveMult,
+        )
+        if (kept < 1.0) {
+            consoleLog.add(
+                "🛡️ BASAL_FIRST_GOV: adaptiveMult conservé à ${"%.2f".format(Locale.US, kept)}x (legacy forçait 1.00x)"
+            )
+        }
+        return kept
+    }
+
     private var correctionAggressionDecision: CorrectionAggressionGate.Decision? = null
     private var lastPostHypoDeliveryAuthority: PostHypoDeliveryAuthority.Decision =
         PostHypoDeliveryAuthority.INACTIVE
