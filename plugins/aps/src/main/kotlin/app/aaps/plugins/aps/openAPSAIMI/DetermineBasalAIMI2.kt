@@ -8398,8 +8398,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         val medicalJson = decisionCtx.toMedicalJson()
-        consoleLog.add("AIMI_SNAPSHOT: $medicalJson")
-
+        // NB: do NOT push medicalJson into consoleLog — consoleLog is serialized into the NS deviceStatus
+        // (suggested + enacted, twice per document); this multi-hundred-KB blob makes the deviceStatus
+        // multi-MB and OOMs any client re-parsing it on receive (DeviceStatusMapper.toString). The full
+        // snapshot is already persisted locally on the next line (AIMI_Decisions.jsonl), so the NS copy
+        // was pure redundancy. Keep it out of consoleLog.
         appendAimiDecisionsJsonlLine(medicalJson)
 
         AimiLoopTelemetry.enterPhase(AimiLoopPhase.EXPORT, hormonitorStudyExporter)
