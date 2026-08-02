@@ -91,12 +91,17 @@ class DynamicBasalControllerProjectedErrorTest {
         assertTrue(projected.rate / 0.6 > 5.0, "hyper montante doit rester corrigée, obtenu ${projected.rate / 0.6}")
     }
 
-    @Test fun projectedNeverExceedsLegacyWhenRising() {
-        // Pour toute montée, la formulation projetée est au plus aussi agressive que l'ancienne
-        // (horizon 60 min ⇒ gain dérivé 0,6 contre 1,8).
+    @Test fun projectedNeverExceedsLegacy_overTheWholeDomainIncludingFalls() {
+        // Invariant de sécurité du lot 1, vérifié en montée ET en descente.
+        //
+        // En descente, la projection seule freinerait MOINS que l'ancienne formulation (gain dérivé 0,6
+        // contre 1,8) : sur une hyper qui redescend vite, l'ancien signal tombait à 0 là où le projeté
+        // demanderait encore ~1,8× le profil. Le contrôleur retient donc le minimum des deux.
+        // Régression détectée par le harnais de rejeu (lot 5) sur 10 ticks réels, pas par ce test —
+        // qui ne couvrait initialement que d >= 0.
         var bg = 80.0
         while (bg <= 260.0) {
-            var d = 0.0
+            var d = -6.0
             while (d <= 6.0) {
                 val legacy = DynamicBasalController.compute(input(bg = bg, target = 110.0, delta = d))
                 val projected = DynamicBasalController.compute(

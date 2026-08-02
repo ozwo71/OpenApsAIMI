@@ -86,13 +86,19 @@ class DynamicBasalController @Inject constructor(
         // écart. Le gain dérivé n'est plus un réglage libre : il vaut `P_WEIGHT * horizon`, ce qui le rend
         // dimensionnellement cohérent avec le gain proportionnel. À glycémie stable le résultat est
         // identique à l'ancien ; seule l'influence de la pente est ramenée à une valeur physiologique.
+        // ⚠️ Asymétrie montée/descente. La projection réduit l'influence de la pente de 1,8 à 0,6 par
+        // mg/dL/5min : bénéfique en **montée** (c'est le défaut corrigé), mais en **descente** elle
+        // freinerait *moins* que l'ancienne formulation — sur une hyper qui redescend vite, l'ancien
+        // signal tombait à 0 là où le projeté demanderait encore ~1,8× le profil. On retient donc le
+        // **minimum** des deux : jamais plus agressif que le comportement historique, sur tout le domaine.
         val derivativeError = velocity * 12.0
+        val legacySignal = (proportionalError * P_WEIGHT) + (derivativeError * D_WEIGHT)
         val totalErrorSignal = if (projectionHorizonMin != null && projectionHorizonMin > 0.0) {
             val steps = projectionHorizonMin / 5.0
             val projectedBg = bg + velocity * steps
-            (projectedBg - targetBg) * P_WEIGHT
+            min((projectedBg - targetBg) * P_WEIGHT, legacySignal)
         } else {
-            (proportionalError * P_WEIGHT) + (derivativeError * D_WEIGHT)
+            legacySignal
         }
 
         // 4. Sigmoid Mapping
@@ -207,11 +213,14 @@ class DynamicBasalController @Inject constructor(
             // 🎯 Lot 1 — même refonte que [calculateDynamicRate] : erreur projetée au lieu d'un couple
             // (P, D) dont le gain dérivé valait 36× le gain proportionnel. Voir le commentaire détaillé
             // dans [calculateDynamicRate].
+            val legacyMultiplier = 1.0 + (proportionalError * 0.05) + (velocity * 12.0 * 0.15)
+            // Voir [calculateDynamicRate] : minimum des deux formulations, pour ne jamais freiner moins
+            // que l'ancienne sur une descente.
             var multiplier = if (horizon != null && horizon > 0.0) {
                 val projectedBg = input.bg + velocity * (horizon / 5.0)
-                1.0 + (projectedBg - input.targetBg) * 0.05
+                min(1.0 + (projectedBg - input.targetBg) * 0.05, legacyMultiplier)
             } else {
-                1.0 + (proportionalError * 0.05) + (velocity * 12.0 * 0.15)
+                legacyMultiplier
             }
             
             // Scale and constrain

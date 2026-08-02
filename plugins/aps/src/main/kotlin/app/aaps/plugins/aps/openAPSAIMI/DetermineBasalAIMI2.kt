@@ -1089,6 +1089,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val sensorInsertionMsRef = AtomicReference<Long?>(null)
     private val sensorInsertionRefreshInFlight = AtomicBoolean(false)
     @Volatile private var lastBasalLearnerHypoNotifyMs: Long = 0L
+    @Volatile private var lastBasalLearnerHyperNotifyMs: Long = 0L
     private val stepsSnapshotRef = AtomicReference<List<SC>>(emptyList())
     private val stepsRefreshInFlight = AtomicBoolean(false)
     private val heartRatesSnapshotRef = AtomicReference<List<HR>>(emptyList())
@@ -1362,6 +1363,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (nowMs - lastBasalLearnerHypoNotifyMs < 30 * 60_000L) return
         lastBasalLearnerHypoNotifyMs = nowMs
         basalLearner.onHypoDetected()
+    }
+
+    /**
+     * Pendant symétrique de [notifyBasalLearnerHypoIfNeeded] : une hyperglycémie qui dure doit elle aussi
+     * être apprise, sinon le learner ne reçoit que des signaux à la baisse.
+     * `onPersistentHyper` existait dans [BasalLearner] mais n'avait **aucun appelant** — l'événement hypo
+     * se déclenchait, l'événement hyper jamais, ce qui rendait l'apprentissage structurellement asymétrique.
+     *
+     * Critère « persistant » : le **minimum** des 60 dernières minutes reste au-dessus de
+     * [PERSISTENT_HYPER_BG_MGDL], donc la glycémie n'est pas redescendue une seule fois sous le seuil sur
+     * la fenêtre — un pic transitoire ne suffit pas. Même cadence que le versant hypo (une fois / 30 min).
+     *
+     * La garde post-hypo est appliquée dans [BasalLearner.onPersistentHyper] : un rebond consécutif à une
+     * hypo ne doit pas entraîner à la hausse, c'est précisément ce que la fenêtre d'exclusion écarte.
+     */
+    private fun notifyBasalLearnerPersistentHyperIfNeeded(nowMs: Long) {
+        if (bg <= PERSISTENT_HYPER_BG_MGDL) return
+        if (minBgInLastMinutes(PERSISTENT_HYPER_LOOKBACK_MINUTES) <= PERSISTENT_HYPER_BG_MGDL) return
+        if (nowMs - lastBasalLearnerHyperNotifyMs < 30 * 60_000L) return
+        lastBasalLearnerHyperNotifyMs = nowMs
+        basalLearner.onPersistentHyper()
     }
 
     private fun stepsCountsCached(now: Long): List<SC> {
@@ -7691,6 +7713,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             isFastingTime = isNight && !anyMealActive
         )
         notifyBasalLearnerHypoIfNeeded(b.ctx.currentTime)
+        notifyBasalLearnerPersistentHyperIfNeeded(b.ctx.currentTime)
 
         // 📊 Expose BasalLearner state in rT for visibility
         consoleLog.add("📊 BASAL_LEARNER:")
@@ -10174,6 +10197,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         /** Fenêtre pour [minBgInLastMinutes] : min BG &lt; 70 dans cette durée → amortissement Ra post-hypo (AutoDrive V3). */
         private const val AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES = 75
+
+        /** Seuil et fenêtre de l'hyperglycémie « persistante » qui entraîne le [BasalLearner] à la hausse. */
+        private const val PERSISTENT_HYPER_BG_MGDL = 180.0
+        private const val PERSISTENT_HYPER_LOOKBACK_MINUTES = 60
 
         /**
          * Durée (ms) pendant laquelle une demande de prébolus legacy est considérée « en vol ».
