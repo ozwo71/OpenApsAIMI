@@ -206,7 +206,15 @@ enum class NotificationId(
     /** AIMI AI Decision Auditor — new insight available (in-app + optional system notification). */
     AIMI_AUDITOR_INSIGHT(INFO, LOOP),
     /** Bolus succeeded but the accompanying carbs could not be persisted — the user must re-enter them. */
-    CARBS_STORE_FAILED(URGENT, PUMP);
+    CARBS_STORE_FAILED(URGENT, PUMP),
+
+    /**
+     * The AAPS directory can no longer be reached, so the Dexcom ONE+ engineering marker file
+     * cannot be checked. Distinct from a merely absent marker file, which stays silent. Appended
+     * last on purpose — the system notification id is the ordinal, so inserting mid-enum would
+     * renumber every entry after it.
+     */
+    DEXCOM_ONEPLUS_DIR_ACCESS_LOST(NORMAL, SYSTEM);
 
     companion object {
 

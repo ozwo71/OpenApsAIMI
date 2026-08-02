@@ -35,6 +35,24 @@ User guide: [DEXCOM_ONEPLUS_USER_GUIDE.md](DEXCOM_ONEPLUS_USER_GUIDE.md)
 | DB converters | `database/persistence/.../SourceSensorExtension.kt` **both ways** | |
 | Notif follower | `plugins/source/src/main/assets/notification_reader_packages.json` | Phase A remap |
 | Strings EN | `plugins/source/.../values/strings.xml` | `dexcom_oneplus_native`, `dexcom_oneplus_short`, `description_source_dexcom_oneplus_native` |
+| Engineering gate | `plugins/source/.../DexcomOnePlusAvailability.kt` + `DexcomOnePlusPlugin.specialShowInListCondition()` | Marker-file gate, see below |
+| Gate notification | `NotificationId.DEXCOM_ONEPLUS_DIR_ACCESS_LOST` (append last — id is the ordinal) + `ComposeMainActivity.handleNotificationAction` | Opens the AAPS directory picker |
+
+### Engineering availability gate
+
+ONE+ is offered **only** when the marker file `Documents/AAPS/extra/engineering_oneplus` exists
+(exact name, no extension, contents never read). This reuses the project's `extra`-directory marker
+convention but has its own evaluator, because `Config.isEnabled(ExternalOptions)` caches for the
+process lifetime and cannot tell "file absent" from "AAPS directory unreachable".
+
+- Single source of truth: `DexcomOnePlusAvailabilityProvider` (`:plugins:source`). It also owns the
+  only copy of the `engineering_oneplus` literal (`ONE_PLUS_ACCESS_FILE_NAME`).
+- Single filter point: `PluginBase.showInList` → `ActivePlugin.getSpecificPluginsVisibleInList`,
+  which Config Builder, Setup Wizard, search and Quick Launch all read.
+- Marker absent → hidden, silent. Directory unreachable / SAF grant lost → hidden **and** a
+  restore-access notification, posted once per loss.
+- `specialEnableCondition` is deliberately **not** gated: an already-selected ONE+ keeps running.
+  BGSOURCE has no `fallbackIfNotVisible` (only SENSITIVITY does) — do not add one here.
 
 ### Notification reader packages (Phase A)
 
@@ -60,7 +78,8 @@ Keep these mappings (sensor text must match enum `"AAPS-DexcomOnePlus"`):
 
 ## Post-merge smoke (do not mark “working” without user confirm)
 
-- [ ] Config Builder lists **Dexcom ONE+** (`DexcomOnePlusPlugin` / IntKey 446).
+- [ ] With `Documents/AAPS/extra/engineering_oneplus` present, Config Builder lists **Dexcom ONE+** (`DexcomOnePlusPlugin` / IntKey 446).
+- [ ] Without that file, Dexcom ONE+ is absent from Config Builder and no permission notification is shown.
 - [ ] BYODA `DexcomPlugin` still listed and selectable (`@IntKey(440)`).
 - [ ] Eversense still listed and selectable (`@IntKey(445)`).
 - [ ] `notification_reader_packages.json` still maps `d1plus` / `dexcomone` → `AAPS-DexcomOnePlus`.

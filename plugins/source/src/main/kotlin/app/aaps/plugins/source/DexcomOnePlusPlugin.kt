@@ -64,6 +64,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     private val context: Context,
     private val persistenceLayer: PersistenceLayer,
     private val warmupBasalGuard: DexcomOnePlusWarmupBasalGuard,
+    private val availabilityProvider: DexcomOnePlusAvailabilityProvider,
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -166,6 +167,21 @@ class DexcomOnePlusPlugin @Inject constructor(
             aapsLogger.error(LTag.BGSOURCE, "DEXCOM_ONEPLUS_STAGING: error fatal=$fatal $message")
         }
     }
+
+    /**
+     * ONE+ is only offered when the engineering marker file is present in the AAPS `extra`
+     * directory — see [DexcomOnePlusAvailabilityProvider], the single place that decides this.
+     *
+     * `showInList` is the project's own availability mechanism: it is what
+     * `app.aaps.core.interfaces.plugin.ActivePlugin.getSpecificPluginsVisibleInList` filters on, so
+     * hiding here removes ONE+ from Config Builder, the Setup Wizard, search and Quick Launch
+     * alike — it cannot be newly selected anywhere.
+     *
+     * Deliberately NOT wired into `specialEnableCondition`: an already-selected ONE+ must keep
+     * feeding glucose exactly as before. BGSOURCE has no `fallbackIfNotVisible` (only SENSITIVITY
+     * does), which is the existing framework behaviour and is left untouched here.
+     */
+    override fun specialShowInListCondition(): Boolean = availabilityProvider.isAvailable()
 
     override fun getPreferenceScreenContent() = PreferenceSubScreenDef(
         key = "dexcom_oneplus_settings",

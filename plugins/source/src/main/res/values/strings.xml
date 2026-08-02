@@ -13,6 +13,8 @@
     <string name="dexcom_oneplus_short">ONE+</string>
     <string name="description_source_dexcom_oneplus_native">Native Dexcom ONE+ Bluetooth in AAPS. Apply the sensor, enter the pairing code immediately, then wait ~30 min warm-up before loop glucose.</string>
     <string name="dexcom_oneplus_plugin_summary">Status, connect with pairing code, and warm-up</string>
+    <string name="dexcom_oneplus_aaps_directory_access_lost">Access to the AAPS folder has been lost. Open Maintenance, select the Documents/AAPS folder and grant permission again.</string>
+    <string name="dexcom_oneplus_aaps_directory_select">Select folder</string>
     <string name="dexcom_oneplus_status_title">ONE+ status</string>
     <string name="dexcom_oneplus_status_summary">Session phase and connection status</string>
     <string name="dexcom_oneplus_start_title">Start sensor</string>

@@ -1082,19 +1082,22 @@ class ComposeMainActivity : AppCompatActivity() {
 
     private fun handleNotificationAction(notificationId: NotificationId, navController: NavController) {
         when (notificationId) {
-            NotificationId.IDENTIFICATION_NOT_SET  ->
+            NotificationId.IDENTIFICATION_NOT_SET         ->
                 navController.navigate(AppRoute.PreferenceScreen.createRoute("data_choice_setting", StringKey.MaintenanceIdentification.key))
 
-            NotificationId.MASTER_PASSWORD_NOT_SET ->
+            NotificationId.MASTER_PASSWORD_NOT_SET        ->
                 navController.navigate(AppRoute.PreferenceScreen.createRoute("protection", StringKey.ProtectionMasterPassword.key))
 
-            NotificationId.AAPS_DIR_NOT_SELECTED   ->
+            // Both are "restore access to the AAPS directory", so both open the directory picker —
+            // the same control Maintenance offers, one tap closer.
+            NotificationId.AAPS_DIR_NOT_SELECTED,
+            NotificationId.DEXCOM_ONEPLUS_DIR_ACCESS_LOST ->
                 try {
                     accessTree?.launch(null)
                 } catch (_: Exception) {
                 }
 
-            else                                   -> Unit
+            else                                          -> Unit
         }
     }
 
