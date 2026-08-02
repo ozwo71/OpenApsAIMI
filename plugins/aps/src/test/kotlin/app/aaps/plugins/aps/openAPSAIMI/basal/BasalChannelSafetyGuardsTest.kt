@@ -31,7 +31,7 @@ class BasalChannelSafetyGuardsTest {
     @Test fun guardsOff_neverBlocks_soLegacyBehaviourIsPreserved() {
         assertFalse(
             BasalChannelSafetyGuards.shouldBlockBasalFirst(
-                guardsEnabled = false, criticalSafetyZeroed = true, contextSuppressSmb = true
+                guardsEnabled = false, criticalSafetyZeroed = true, contextSuppressSmb = true, mealModeActive = false
             )
         )
     }
@@ -39,7 +39,7 @@ class BasalChannelSafetyGuardsTest {
     @Test fun guardsOn_blocksWhenSmbWasHeldBackForSafety() {
         assertTrue(
             BasalChannelSafetyGuards.shouldBlockBasalFirst(
-                guardsEnabled = true, criticalSafetyZeroed = true, contextSuppressSmb = false
+                guardsEnabled = true, criticalSafetyZeroed = true, contextSuppressSmb = false, mealModeActive = false
             )
         )
     }
@@ -49,7 +49,16 @@ class BasalChannelSafetyGuardsTest {
         // et il ne doit pas être bloqué ici.
         assertFalse(
             BasalChannelSafetyGuards.shouldBlockBasalFirst(
-                guardsEnabled = true, criticalSafetyZeroed = false, contextSuppressSmb = false
+                guardsEnabled = true, criticalSafetyZeroed = false, contextSuppressSmb = false, mealModeActive = false
+            )
+        )
+    }
+
+    @Test fun mealMode_isNeverBlocked_evenUnderASafetyHold() {
+        // Un mode repas déclaré doit appliquer sa basale sur toute sa durée : les garde-fous s'effacent.
+        assertFalse(
+            BasalChannelSafetyGuards.shouldBlockBasalFirst(
+                guardsEnabled = true, criticalSafetyZeroed = true, contextSuppressSmb = true, mealModeActive = true
             )
         )
     }
@@ -57,16 +66,16 @@ class BasalChannelSafetyGuardsTest {
     // ---------------------------------------------------------------- basalFirstAdaptiveMultiplier
 
     @Test fun guardsOff_forcesOne_asBefore() {
-        assertEquals(1.0, BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(guardsEnabled = false, adaptiveMult = 0.70))
+        assertEquals(1.0, BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(guardsEnabled = false, adaptiveMult = 0.70, mealModeActive = false))
     }
 
     @Test fun guardsOn_keepsProtectiveReduction() {
-        assertEquals(0.70, BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(guardsEnabled = true, adaptiveMult = 0.70))
+        assertEquals(0.70, BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(guardsEnabled = true, adaptiveMult = 0.70, mealModeActive = false))
     }
 
     @Test fun guardsOn_stillDiscardsAmplification() {
         // Une amplification du learner ne doit jamais franchir le plan basal-first.
-        assertEquals(1.0, BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(guardsEnabled = true, adaptiveMult = 1.48))
+        assertEquals(1.0, BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(guardsEnabled = true, adaptiveMult = 1.48, mealModeActive = false))
     }
 
     @Test fun guardsOn_neverRaisesTheRateVersusLegacy() {
@@ -74,16 +83,16 @@ class BasalChannelSafetyGuardsTest {
         // donc le taux ne peut que baisser par rapport au comportement actuel, jamais monter.
         var mult = 0.05
         while (mult <= 3.0) {
-            val kept = BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(guardsEnabled = true, adaptiveMult = mult)
+            val kept = BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(guardsEnabled = true, adaptiveMult = mult, mealModeActive = false)
             assertTrue(kept <= 1.0, "adaptiveMult=$mult a produit $kept > 1.0")
             mult += 0.05
         }
     }
 
     @Test fun degenerateMultipliers_failSafeToOne() {
-        assertEquals(1.0, BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(guardsEnabled = true, adaptiveMult = 0.0))
-        assertEquals(1.0, BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(guardsEnabled = true, adaptiveMult = -1.0))
-        assertEquals(1.0, BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(guardsEnabled = true, adaptiveMult = Double.NaN))
+        assertEquals(1.0, BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(guardsEnabled = true, adaptiveMult = 0.0, mealModeActive = false))
+        assertEquals(1.0, BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(guardsEnabled = true, adaptiveMult = -1.0, mealModeActive = false))
+        assertEquals(1.0, BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(guardsEnabled = true, adaptiveMult = Double.NaN, mealModeActive = false))
     }
 
     // ---------------------------------------------------------------- rejeu de ticks réels
@@ -92,8 +101,8 @@ class BasalChannelSafetyGuardsTest {
         // Tick réel : BG 104, cible 115, IOB 0,12, PI-Fallback Mult=5,03x, HARMONIA_PRODUCTION_BASAL_FIRST,
         // TBR finale 5,00 U/h sur un profil 0,5-0,6 U/h. Le learner neural défendait à 0,70x, mais le plan
         // basal-first forçait adaptiveMult a 1,0 et jetait cette réduction.
-        val legacy = BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(guardsEnabled = false, adaptiveMult = 0.70)
-        val guarded = BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(guardsEnabled = true, adaptiveMult = 0.70)
+        val legacy = BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(guardsEnabled = false, adaptiveMult = 0.70, mealModeActive = false)
+        val guarded = BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(guardsEnabled = true, adaptiveMult = 0.70, mealModeActive = false)
         assertEquals(1.0, legacy)
         assertEquals(0.70, guarded)
         assertEquals(5.00, 5.00 * legacy, 1e-9)
@@ -105,12 +114,23 @@ class BasalChannelSafetyGuardsTest {
         // isCriticalSafetyCondition ; le canal basal-first ne doit alors plus s'ouvrir.
         assertTrue(
             BasalChannelSafetyGuards.shouldBlockBasalFirst(
-                guardsEnabled = true, criticalSafetyZeroed = true, contextSuppressSmb = false
+                guardsEnabled = true, criticalSafetyZeroed = true, contextSuppressSmb = false, mealModeActive = false
             )
         )
         assertFalse(
             BasalChannelSafetyGuards.shouldBlockBasalFirst(
-                guardsEnabled = false, criticalSafetyZeroed = true, contextSuppressSmb = false
+                guardsEnabled = false, criticalSafetyZeroed = true, contextSuppressSmb = false, mealModeActive = false
+            )
+        )
+    }
+
+    @Test fun mealMode_appliesItsBasalUndamped() {
+        // Exclusion explicite : pendant un mode repas déclaré, la basale configurée doit s'appliquer telle
+        // quelle, même si un learner voulait la réduire.
+        assertEquals(
+            1.0,
+            BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(
+                guardsEnabled = true, adaptiveMult = 0.70, mealModeActive = true
             )
         )
     }

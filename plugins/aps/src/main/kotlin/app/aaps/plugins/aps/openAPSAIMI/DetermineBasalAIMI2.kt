@@ -1688,6 +1688,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // holdTicks every loop and made 15–20 min holds dead on arrival. reset() belongs in
         // tests / plugin restart only.
         pendingTrajSpiralBasal = null
+        // 🔭 Lot 0 — l'export JSONL doit avoir lieu sur TOUS les chemins de sortie du tick, pas seulement
+        // sur les deux qui appellent explicitement le stage. On repart d'un état non exporté à chaque tick.
+        aimiDecisionExportedThisTick = false
+        pendingDecisionCtxForExport = null
         val decisionCtx = AimiDecisionContext(
             event_id = "evt_${ctx.currentTime}".also { currentTickDecisionEventId = it },
             timestamp = ctx.currentTime,
@@ -1753,6 +1757,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } else {
             ctx.flatBGsDetected
         }
+        pendingDecisionCtxForExport = decisionCtx
         return AimiTickDecisionRtBootstrap(decisionCtx, rT, flatBGsDetected)
     }
 
@@ -8413,6 +8418,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // snapshot is already persisted locally on the next line (AIMI_Decisions.jsonl), so the NS copy
         // was pure redundancy. Keep it out of consoleLog.
         appendAimiDecisionsJsonlLine(medicalJson)
+        // 🔭 Lot 0 — marque le tick comme exporté pour que l'enveloppe [runDetermineBasalTick] ne double
+        // pas la ligne sur les deux chemins qui appellent déjà ce stage.
+        aimiDecisionExportedThisTick = true
 
         AimiLoopTelemetry.enterPhase(AimiLoopPhase.EXPORT, hormonitorStudyExporter)
         try {
@@ -9927,6 +9935,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      */
     private var criticalSafetyZeroedThisTick: Boolean = false
 
+    /** 🔭 Lot 0 — `true` dès qu'une ligne `AIMI_Decisions.jsonl` a été écrite pour le tick courant. */
+    private var aimiDecisionExportedThisTick: Boolean = false
+
+    /** 🔭 Lot 0 — contexte de décision du tick, conservé pour l'export des sorties anticipées. */
+    private var pendingDecisionCtxForExport: AimiDecisionContext? = null
+
     /** 🛡️ Lot 3 — nombre de fois que le garde-fou a bloqué chaque canal basal-first (télémétrie). */
     private var basalChannelGuardBlockedT3cCount: Int = 0
     private var basalChannelGuardBlockedHarmoniaCount: Int = 0
@@ -9935,14 +9949,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun basalChannelSafetyGuardsActive(): Boolean =
         preferences.get(BooleanKey.OApsAIMIBasalChannelSafetyGuards)
 
+    /** Mode repas manuel déclaré (l'un des six). Même expression que les [MealSafetyContext] du tick. */
+    private fun manualMealModeActive(): Boolean =
+        mealTime || lunchTime || dinnerTime || snackTime || highCarbTime || bfastTime
+
     /**
      * `true` quand le canal basal-first doit être bloqué parce que le SMB de ce tick a été mis à zéro par
      * une **règle de sécurité** ([criticalSafetyZeroedThisTick] ou `lastContextSuppressSmb`), et non
-     * simplement « pas demandé ». Règle pure dans
+     * simplement « pas demandé ». Les modes repas manuels sont exclus : leur basale doit s'appliquer.
+     * Règle pure dans
      * [app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards.shouldBlockBasalFirst].
      */
     private fun smbZeroedBySafetyThisTick(): Boolean =
-        BasalChannelSafetyGuards.smbZeroedBySafety(criticalSafetyZeroedThisTick, lastContextSuppressSmb)
+        BasalChannelSafetyGuards.shouldBlockBasalFirst(
+            guardsEnabled = true, // le gate de préférence est évalué par l'appelant
+            criticalSafetyZeroed = criticalSafetyZeroedThisTick,
+            contextSuppressSmb = lastContextSuppressSmb,
+            mealModeActive = manualMealModeActive(),
+        )
 
     /**
      * Multiplicateur adaptatif conservé quand un plan basal-first (T3C natif / Harmonia production) possède
@@ -9954,6 +9978,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val kept = BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(
             guardsEnabled = basalChannelSafetyGuardsActive(),
             adaptiveMult = adaptiveMult,
+            mealModeActive = manualMealModeActive(),
         )
         if (kept < 1.0) {
             consoleLog.add(
@@ -15628,7 +15653,53 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      *
      * @see app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiDetermineBasalTickOrchestrator
      */
+    /**
+     * 🔭 Lot 0 — enveloppe d'export. [runDetermineBasalTickInner] possède **quatorze** points de sortie
+     * (abort glucose, verrou exercice, modes repas manuels, T3C, stale, halt LGS TIER1, Meal Advisor,
+     * HARD_BRAKE, compression/drift, meal-hyper boost, arrêt basal hypo, TBR précoce repas, MAX_IOB, plus
+     * la queue principale) et seuls **deux** appelaient le stage d'export : les douze autres décidaient,
+     * dosaient et entraînaient les learners sans laisser la moindre ligne dans `AIMI_Decisions.jsonl`.
+     *
+     * Ce biais n'était pas neutre : il portait précisément sur les descentes basses (HARD_BRAKE exige
+     * `bg < targetBg + 10`, l'arrêt hypo `bg < 85`, le halt LGS `bg < seuil`) et sur les décisions au
+     * basal le plus élevé (les 30 premières minutes de tout mode repas manuel, qui posent la TBR à
+     * `meal_modes_MaxBasal`). Toute statistique de fréquence tirée du JSONL héritait de cette censure.
+     *
+     * L'export reste **idempotent** : les deux sites historiques positionnent
+     * [aimiDecisionExportedThisTick], et cette enveloppe ne fait que rattraper les sorties qui n'ont rien
+     * écrit. Un échec d'export ne doit jamais compromettre la décision, d'où le `runCatching`.
+     */
     internal fun runDetermineBasalTick(ctx: AimiTickContext): RT {
+        val result = runDetermineBasalTickInner(ctx)
+        exportAimiDecisionIfNotYetExported(ctx, result)
+        return result
+    }
+
+    /**
+     * Filet de rattrapage de l'export JSONL, appelé une fois par tick depuis [runDetermineBasalTick].
+     *
+     * Utilise [cachedPkpdRuntime] plutôt que la variable locale du tick : sur une sortie anticipée le
+     * runtime pkpd local peut ne pas encore exister, et le champ porte alors la dernière valeur connue
+     * (ou `null`, que le stage accepte).
+     */
+    private fun exportAimiDecisionIfNotYetExported(ctx: AimiTickContext, finalResult: RT) {
+        if (aimiDecisionExportedThisTick) return
+        val decisionCtx = pendingDecisionCtxForExport ?: return
+        runCatching {
+            runAimiSnapshotMedicalJsonAndHormonitorExportStage(
+                ctx = ctx,
+                profile = ctx.profile,
+                decisionCtx = decisionCtx,
+                finalResult = finalResult,
+                pkpdRuntime = cachedPkpdRuntime,
+            )
+        }.onFailure { e ->
+            consoleError.add("AIMI decision export (early-exit path) failed: ${e.message}")
+            aapsLogger.error(LTag.APS, "AIMI decision export (early-exit path) failed", e)
+        }
+    }
+
+    private fun runDetermineBasalTickInner(ctx: AimiTickContext): RT {
         val profile = ctx.profile
         val (
             originalProfile,

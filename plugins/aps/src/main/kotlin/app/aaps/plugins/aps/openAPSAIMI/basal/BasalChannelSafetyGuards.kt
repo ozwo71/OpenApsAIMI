@@ -33,6 +33,10 @@ object BasalChannelSafetyGuards {
     /**
      * `true` quand un canal basal-first doit être bloqué parce que le SMB a été retenu pour sécurité.
      *
+     * **Les modes repas manuels sont exclus** : quand un mode est déclaré, l'utilisateur a explicitement
+     * demandé que la basale du mode soit appliquée sur toute sa durée, et les garde-fous ne doivent pas
+     * s'y opposer.
+     *
      * Volontairement **indépendant** du mode Basal-First : celui-ci route vers le basal de façon
      * délibérée, ce n'est pas un refus de sécurité et il ne doit pas être bloqué ici.
      */
@@ -40,7 +44,10 @@ object BasalChannelSafetyGuards {
         guardsEnabled: Boolean,
         criticalSafetyZeroed: Boolean,
         contextSuppressSmb: Boolean,
-    ): Boolean = guardsEnabled && smbZeroedBySafety(criticalSafetyZeroed, contextSuppressSmb)
+        mealModeActive: Boolean,
+    ): Boolean = guardsEnabled &&
+        !mealModeActive &&
+        smbZeroedBySafety(criticalSafetyZeroed, contextSuppressSmb)
 
     /**
      * Multiplicateur adaptatif à conserver quand un plan basal-first possède le taux.
@@ -48,11 +55,19 @@ object BasalChannelSafetyGuards {
      * Ne garde que les **réductions** : les amplifications au-dessus de 1.0 restent écartées, exactement
      * comme dans le comportement historique. Le taux résultant est donc toujours **inférieur ou égal** à
      * celui d'aujourd'hui — jamais supérieur.
+     *
+     * **Neutre (1.0) pendant un mode repas manuel** : la basale du mode doit être appliquée telle que
+     * configurée, sans amortissement par les learners.
      */
-    fun basalFirstAdaptiveMultiplier(guardsEnabled: Boolean, adaptiveMult: Double): Double = when {
-        !guardsEnabled                -> 1.0
-        !adaptiveMult.isFinite()      -> 1.0
-        adaptiveMult <= 0.0           -> 1.0
-        else                          -> min(adaptiveMult, 1.0)
+    fun basalFirstAdaptiveMultiplier(
+        guardsEnabled: Boolean,
+        adaptiveMult: Double,
+        mealModeActive: Boolean,
+    ): Double = when {
+        !guardsEnabled           -> 1.0
+        mealModeActive           -> 1.0
+        !adaptiveMult.isFinite() -> 1.0
+        adaptiveMult <= 0.0      -> 1.0
+        else                     -> min(adaptiveMult, 1.0)
     }
 }
