@@ -575,9 +575,9 @@ enum class BooleanKey(
      *  (`min(adaptiveMult, 1.0)`; amplifications above 1.0 are still discarded, so the rate can only be
      *  lower than today, never higher). Does not touch the manual meal modes, whose TBR stays the
      *  user-configured [app.aaps.core.keys.DoubleKey.meal_modes_MaxBasal] setpoint.
-     *  Fail-safe: false → legacy behaviour. */
+     *  Défaut ON : actif en production, désactivable si besoin. */
     OApsAIMIBasalChannelSafetyGuards(
-        "key_aimi_basal_channel_safety_guards", false,
+        "key_aimi_basal_channel_safety_guards", true,
         titleResId = R.string.pref_title_aimi_basal_channel_safety_guards,
         summaryResId = R.string.pref_summary_aimi_basal_channel_safety_guards,
     ),
@@ -586,9 +586,21 @@ enum class BooleanKey(
      *  ampli endocrine) : un plafond placé avant un multiplicateur ne borne pas la valeur finale. Quand ON,
      *  trois invariants s'évaluent **après le dernier multiplicateur**, juste avant l'écriture du taux —
      *  prédiction sous la cible, verrou post-hypo, IOB négatif sans montée — chacun en réduction seule
-     *  (`coerceAtMost` au basal profil). Les modes repas manuels sont exempts. Fail-safe: false. */
+     *  (`coerceAtMost` au basal profil). Les modes repas manuels sont exempts. Défaut ON : actif en production,
+     *  désactivable si besoin ; chaque verdict est exporté dans `adjustments.basal_terminal`. */
+    /** 🎯 Contrôleur basal en erreur projetée (lot 1). Le couple (P, D) historique combinait un gain de
+     *  0,05 par mg/dL d'écart avec un gain de 1,8 par mg/dL/5min de pente — un rapport de 36:1 qui rendait
+     *  le terme proportionnel incapable de freiner le terme dérivé : le moteur demandait 5 à 8× le basal
+     *  profil alors que la glycémie était sous la cible. Quand ON, la glycémie est projetée sur l'horizon
+     *  d'action de l'insuline et un **seul** écart est mesuré ; le gain dérivé devient `gain_P × horizon`.
+     *  À glycémie stable le résultat est inchangé. Défaut ON : actif en production. */
+    OApsAIMIBasalProjectedError(
+        "key_aimi_basal_projected_error", true,
+        titleResId = R.string.pref_title_aimi_basal_projected_error,
+        summaryResId = R.string.pref_summary_aimi_basal_projected_error,
+    ),
     OApsAIMIBasalTerminalInvariants(
-        "key_aimi_basal_terminal_invariants", false,
+        "key_aimi_basal_terminal_invariants", true,
         titleResId = R.string.pref_title_aimi_basal_terminal_invariants,
         summaryResId = R.string.pref_summary_aimi_basal_terminal_invariants,
     ),

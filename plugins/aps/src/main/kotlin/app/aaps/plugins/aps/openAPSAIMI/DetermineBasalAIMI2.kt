@@ -341,6 +341,8 @@ internal data class AimiDecisionContext(
         var dose_terminal_snapshot: org.json.JSONObject? = null,
         /** Wave4 H3 — soft-floor/EGP path-min (production curves + study JSON raw/soft). */
         var pkpd_soft_floor: org.json.JSONObject? = null,
+        /** Lot 2 — invariants terminaux du canal basal: taux avant/apres et invariant liant. */
+        var basal_terminal: org.json.JSONObject? = null,
         /** AIMI Harmonia simulated production branch; virtual only, never applied to the real pump. */
         var harmonia_simulation: org.json.JSONObject? = null,
         /** AIMI Harmonia production owner state; basal-first only and safety-gated. */
@@ -706,6 +708,9 @@ internal data class AimiDecisionContext(
             }
             adjustments.pkpd_soft_floor?.let { softFloor ->
                 adj.put("pkpd_soft_floor", softFloor)
+            }
+            adjustments.basal_terminal?.let { terminal ->
+                adj.put("basal_terminal", terminal)
             }
             adjustments.harmonia_simulation?.let { simulation ->
                 adj.put("harmonia_simulation", simulation)
@@ -7162,6 +7167,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             minutesSinceLastChange = bundle.minutesSinceLastChange,
             pumpCaps = bundle.pumpCaps,
             auditorConfidence = auditorConfidence,
+            projectionHorizonMin = DynamicBasalController.PROJECTION_HORIZON_MIN
+                .takeIf { preferences.get(BooleanKey.OApsAIMIBasalProjectedError) },
         )
         val helpers = BasalDecisionEngine.Helpers(
             calculateRate = { basalValue, currentBasalValue, multiplier, label ->
@@ -8373,6 +8380,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.meal_certainty = lastMealCertainty?.toJsonObject()
         decisionCtx.adjustments.dose_terminal_snapshot = lastDoseTerminalSnapshot?.toJsonObject()
         decisionCtx.adjustments.pkpd_soft_floor = lastPkpdSoftFloorTelemetry?.toJsonObject()
+        decisionCtx.adjustments.basal_terminal = lastBasalTerminalTelemetry
         decisionCtx.adjustments.harmonia_simulation = lastHarmoniaDecision?.toJsonObject()
         decisionCtx.adjustments.harmonia_production = lastHarmoniaProductionDecision?.toJsonObject()
         decisionCtx.adjustments.t3c_runtime_ownership = lastT3cRuntimeOwnership
@@ -9935,6 +9943,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * pose pas) ni les prébolus des modes manuels (chemin applyLegacyMealModes, hors Red Carpet).
      */
     private var criticalSafetyZeroedThisTick: Boolean = false
+
+    /** 🔒 Lot 2 — dernier verdict des invariants terminaux du tick, exporté en JSON structuré. */
+    private var lastBasalTerminalTelemetry: org.json.JSONObject? = null
 
     /** 🔭 Lot 0 — `true` dès qu'une ligne `AIMI_Decisions.jsonl` a été écrite pour le tick courant. */
     private var aimiDecisionExportedThisTick: Boolean = false
@@ -11560,7 +11571,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bg = bgNow,
             targetBg = profile.target_bg.toDouble(),
             delta = delta.toDouble(),
-            shortAvgDelta = shortAvgDelta.toDouble()
+            shortAvgDelta = shortAvgDelta.toDouble(),
+            projectionHorizonMin = DynamicBasalController.PROJECTION_HORIZON_MIN
+                .takeIf { preferences.get(BooleanKey.OApsAIMIBasalProjectedError) },
         )
         var rateAdjustment = dynamicState.finalRate.coerceAtLeast(0.0)
         
@@ -11700,6 +11713,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 postHypoActive = lastPostHypoDeliveryAuthority.active,
             )
         )
+        lastBasalTerminalTelemetry = org.json.JSONObject().apply {
+            put("enabled", preferences.get(BooleanKey.OApsAIMIBasalTerminalInvariants))
+            put("rate_in_uph", rate)
+            put("rate_out_uph", terminal.rateUph)
+            put("bound_by", terminal.boundBy ?: org.json.JSONObject.NULL)
+            put("trace", terminal.trace)
+            put("profile_basal_uph", profile.current_basal)
+            put("bg_mgdl", bgNow)
+            put("target_bg_mgdl", targetBg.toDouble())
+            put("eventual_bg_mgdl", eventualBG.takeIf { it.isFinite() && it > 1.0 } ?: org.json.JSONObject.NULL)
+            put("delta_mgdl_5m", delta.toDouble())
+            put("iob_u", iobNet)
+            put("meal_mode_active", isMealMode)
+            put("post_hypo_active", lastPostHypoDeliveryAuthority.active)
+        }
         if (terminal.boundBy != null) {
             consoleLog.add("🔒 BASAL_TERMINAL[${terminal.boundBy}] ${terminal.trace}")
             rT.reason.append(" [BASAL_TERMINAL:${terminal.boundBy} ${"%.2f".format(rate)}→${"%.2f".format(terminal.rateUph)}U/h]")
