@@ -68,12 +68,12 @@
     },
     {
       "package": "com.dexcom.dexcomone",
-      "sensor": "AAPS-Dexcom",
+      "sensor": "AAPS-DexcomOnePlus",
       "intervalMinutes": 5
     },
     {
       "package": "com.dexcom.d1plus",
-      "sensor": "AAPS-Dexcom",
+      "sensor": "AAPS-DexcomOnePlus",
       "intervalMinutes": 5
     },
     {

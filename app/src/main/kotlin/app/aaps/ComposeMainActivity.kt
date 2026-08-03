@@ -607,15 +607,15 @@ class ComposeMainActivity : AppCompatActivity() {
                                     }
                                 )
 
-                            effect.group.permissions.contains(Manifest.permission.USE_FULL_SCREEN_INTENT)              ->
-                                startActivity(
-                                    Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
-                                        data = "package:$packageName".toUri()
-                                    }
-                                )
-
                             effect.group.permissions.contains(PluginStore.PERMISSION_NOTIFICATION_LISTENER)             ->
                                 startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+
+                            effect.group.permissions.contains(Manifest.permission.ACCESS_NOTIFICATION_POLICY)          ->
+                                try {
+                                    startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+                                } catch (_: ActivityNotFoundException) {
+                                    snackbarHostState.showSnackbar(getString(app.aaps.ui.R.string.permission_denied_go_to_settings))
+                                }
                         }
 
                     is PermissionsSideEffect.ShowError               ->
@@ -872,6 +872,7 @@ class ComposeMainActivity : AppCompatActivity() {
                 preferences = preferences,
                 rh = rh,
                 builtInSearchables = builtInSearchables,
+                configBuilder = configBuilder,
                 prefFileList = prefFileList,
                 persistenceLayer = persistenceLayer,
                 visibilityContext = visibilityContext,
@@ -1074,19 +1075,22 @@ class ComposeMainActivity : AppCompatActivity() {
 
     private fun handleNotificationAction(notificationId: NotificationId, navController: NavController) {
         when (notificationId) {
-            NotificationId.IDENTIFICATION_NOT_SET  ->
+            NotificationId.IDENTIFICATION_NOT_SET         ->
                 navController.navigate(AppRoute.PreferenceScreen.createRoute("data_choice_setting", StringKey.MaintenanceIdentification.key))
 
-            NotificationId.MASTER_PASSWORD_NOT_SET ->
+            NotificationId.MASTER_PASSWORD_NOT_SET        ->
                 navController.navigate(AppRoute.PreferenceScreen.createRoute("protection", StringKey.ProtectionMasterPassword.key))
 
-            NotificationId.AAPS_DIR_NOT_SELECTED   ->
+            // Both are "restore access to the AAPS directory", so both open the directory picker —
+            // the same control Maintenance offers, one tap closer.
+            NotificationId.AAPS_DIR_NOT_SELECTED,
+            NotificationId.DEXCOM_ONEPLUS_DIR_ACCESS_LOST ->
                 try {
                     accessTree?.launch(null)
                 } catch (_: Exception) {
                 }
 
-            else                                   -> Unit
+            else                                          -> Unit
         }
     }
 

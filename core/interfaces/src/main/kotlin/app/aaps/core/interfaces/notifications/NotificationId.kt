@@ -121,6 +121,11 @@ enum class NotificationId(
     BG_READINGS_MISSED(URGENT, CGM),
     SENSOR_CHANGE_DETECTED(NORMAL, CGM),
 
+    // CGM — user-configured glucose value/rate alarms (source-agnostic; notification-only, never dosing)
+    BG_HYPO(URGENT, CGM),
+    BG_HYPER(IMPORTANT, CGM),
+    BG_RAPID_FALL(URGENT, CGM),
+
     // CGM — Aidex
     AIDEX_SENSOR_EXPIRED(IMPORTANT, CGM),
     AIDEX_SENSOR_ERROR(IMPORTANT, CGM),
@@ -172,6 +177,7 @@ enum class NotificationId(
     TIME_OR_TIMEZONE_CHANGE(NORMAL, SYSTEM),
     NEW_VERSION_DETECTED(NORMAL, SYSTEM),
     VERSION_EXPIRE(IMPORTANT, SYSTEM),
+    INSULIN_MIGRATION_DEFAULT_USED(IMPORTANT, SYSTEM),
     IDENTIFICATION_NOT_SET(NORMAL, SYSTEM),
     MASTER_PASSWORD_NOT_SET(IMPORTANT, SYSTEM),
     AAPS_DIR_NOT_SELECTED(NORMAL, SYSTEM),
@@ -198,7 +204,17 @@ enum class NotificationId(
     SCENE_CHAIN_ERROR(IMPORTANT, AUTOMATION, allowMultiple = true),
 
     /** AIMI AI Decision Auditor — new insight available (in-app + optional system notification). */
-    AIMI_AUDITOR_INSIGHT(INFO, LOOP);
+    AIMI_AUDITOR_INSIGHT(INFO, LOOP),
+    /** Bolus succeeded but the accompanying carbs could not be persisted — the user must re-enter them. */
+    CARBS_STORE_FAILED(URGENT, PUMP),
+
+    /**
+     * The AAPS directory can no longer be reached, so the Dexcom ONE+ engineering marker file
+     * cannot be checked. Distinct from a merely absent marker file, which stays silent. Appended
+     * last on purpose — the system notification id is the ordinal, so inserting mid-enum would
+     * renumber every entry after it.
+     */
+    DEXCOM_ONEPLUS_DIR_ACCESS_LOST(NORMAL, SYSTEM);
 
     companion object {
 

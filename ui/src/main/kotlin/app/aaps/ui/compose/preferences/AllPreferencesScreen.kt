@@ -28,6 +28,7 @@ import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.launch
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.autotune.Autotune
+import app.aaps.core.interfaces.configuration.ConfigBuilder
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -57,6 +58,7 @@ import app.aaps.ui.search.BuiltInSearchables
  * @param activePlugin ActivePlugin instance for accessing plugins by interface
  * @param rh ResourceHelper instance
  * @param builtInSearchables BuiltInSearchables instance (single source of truth for built-in screens)
+ * @param configBuilder ConfigBuilder for the synced-selection gate (client APS visibility)
  * @param onBackClick Callback when back button is clicked
  * @param onOpenLegacyXmlPreferences Opens the classic PreferenceFragment (XML) screen — same data as before Compose migration
  */
@@ -66,6 +68,7 @@ fun AllPreferencesScreen(
     activePlugin: ActivePlugin,
     rh: ResourceHelper,
     builtInSearchables: BuiltInSearchables,
+    configBuilder: ConfigBuilder,
     onBackClick: () -> Unit,
     onOpenLegacyXmlPreferences: () -> Unit
 ) {
@@ -104,22 +107,30 @@ fun AllPreferencesScreen(
         // 2. Safety plugin (always enabled)
         getPreferenceContentIfEnabled(activePlugin.activeSafety as PluginBase)?.let { add(it) }
 
-        // 3. BG Source plugin
-        getPreferenceContentIfEnabled(activePlugin.activeBgSource as PluginBase)?.let { add(it) }
+        // 3. BG Source plugin — master only: on a client the collector runs on the master and can't
+        // be changed or configured locally (mirrors the Configuration screen's category gate)
+        if (!config.AAPSCLIENT) {
+            getPreferenceContentIfEnabled(activePlugin.activeBgSource as PluginBase)?.let { add(it) }
+        }
 
         // 4. LOOP type plugins (enabled only if APS is configured)
         activePlugin.getSpecificPluginsList(PluginType.LOOP).forEach { plugin ->
             getPreferenceContentIfEnabled(plugin, config.APS)?.let { add(it) }
         }
 
-        // 5. APS plugin (enabled only if APS is configured)
-        (activePlugin.activeAPS as? PluginBase)?.let { getPreferenceContentIfEnabled(it, config.APS)?.let { pref -> add(pref) } }
+        // 5. APS plugin — on a master when APS is configured; also on a client when the APS selection
+        // syncs (its settings are Bidirectional-synced, so they are editable from the client)
+        val apsAvailable = config.APS || (config.AAPSCLIENT && PluginType.APS in configBuilder.syncedSelectionTypes)
+        (activePlugin.activeAPS as? PluginBase)?.let { getPreferenceContentIfEnabled(it, apsAvailable)?.let { pref -> add(pref) } }
 
         // 6. Sensitivity plugin
         getPreferenceContentIfEnabled(activePlugin.activeSensitivity as PluginBase)?.let { add(it) }
 
-        // 7. Pump plugin
-        getPreferenceContentIfEnabled(activePlugin.activePumpInternal as PluginBase)?.let { add(it) }
+        // 7. Pump plugin — master only: on a client the pump is virtual and its settings come from
+        // the master (mirrors the Configuration screen's category gate)
+        if (!config.AAPSCLIENT) {
+            getPreferenceContentIfEnabled(activePlugin.activePumpInternal as PluginBase)?.let { add(it) }
+        }
 
         // 8. Overview plugin (Compose-applicable settings)
         getPreferenceContentIfEnabled(activePlugin.activeOverview as PluginBase)?.let { add(it) }

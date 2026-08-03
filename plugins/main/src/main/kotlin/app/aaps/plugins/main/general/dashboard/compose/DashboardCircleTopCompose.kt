@@ -63,10 +63,12 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.dashboard.GlucoseHeroRing
 import app.aaps.core.ui.dialogs.OKDialog
+import app.aaps.core.ui.toast.ToastUtils
 import app.aaps.plugins.main.R
 import app.aaps.plugins.main.general.dashboard.DashboardEmbeddedComposeState
 import app.aaps.plugins.main.general.dashboard.viewmodel.OverviewViewModel
 import app.aaps.plugins.main.general.dashboard.viewmodel.StatusCardState
+import kotlinx.coroutines.delay
 import java.util.Locale
 
 /**
@@ -95,6 +97,12 @@ fun DashboardCircleTopCompose(
     LaunchedEffect(embeddedState.metricsPreferencesSync) {
         extendedMetrics = preferences.get(BooleanKey.OverviewDashboardExtendedMetrics)
     }
+    // One-shot staging-promotion feedback hoisted from the view model (no Compose tree there).
+    LaunchedEffect(Unit) {
+        viewModel.promotionEvents.collect { message ->
+            ToastUtils.infoToast(context, message)
+        }
+    }
 
     val simpleOneScreen = layoutProfile == DashboardHeroLayoutProfile.SimpleOneScreen
     val heroSize = if (simpleOneScreen) {
@@ -102,7 +110,23 @@ fun DashboardCircleTopCompose(
     } else {
         dimensionResource(R.dimen.dashboard_glucose_hero_min_side)
     }
-    val heroState = remember(state, context) {
+    // Warm-up hero: active source is warming up / (re)connecting and no fresh glucose to show.
+    // Mirrors the gate in [DashboardComposeHeroUiMapper.buildHeroState] so the countdown ticks and the
+    // a11y / delta handling stay in sync. Null for any source that doesn't report warm-up → no effect.
+    val warmupHeroActive = state.warmup?.active == true &&
+        (state.glucoseMgdl == null || !state.isGlucoseActual)
+    // Drive a 1 s recompute of the mm:ss countdown only while the warm-up ring is shown; otherwise the
+    // tick stays 0 and the hero memoization is byte-identical to before.
+    val warmupSecondTick = remember { mutableStateOf(0L) }
+    LaunchedEffect(warmupHeroActive) {
+        if (warmupHeroActive) {
+            while (true) {
+                warmupSecondTick.value = System.currentTimeMillis() / 1000L
+                delay(1000L)
+            }
+        }
+    }
+    val heroState = remember(state, context, warmupSecondTick.value) {
         DashboardComposeHeroUiMapper.buildHeroState(context, state)
     }
     val cardPaddingH = if (simpleOneScreen) 10.dp else 12.dp
@@ -131,7 +155,7 @@ fun DashboardCircleTopCompose(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.width(heroSize),
                 ) {
-                    if (simpleOneScreen && heroState != null && state.deltaText.isNotBlank()) {
+                    if (simpleOneScreen && heroState != null && !warmupHeroActive && state.deltaText.isNotBlank()) {
                         Text(
                             text = state.deltaText,
                             style = MaterialTheme.typography.titleSmall,
@@ -148,13 +172,22 @@ fun DashboardCircleTopCompose(
                         contentAlignment = Alignment.TopStart,
                     ) {
                     if (heroState != null) {
+                        // In the simple layout the delta is drawn above the ring, so the phase/delta
+                        // sub-label is normally cleared. During warm-up we keep it — it carries the
+                        // honest phase (WARM-UP / Reconnecting…) and no delta is drawn above.
                         val ringState =
-                            if (simpleOneScreen) heroState.copy(subLeftText = "") else heroState
+                            if (simpleOneScreen && !warmupHeroActive) heroState.copy(subLeftText = "") else heroState
+                        val heroContentDescription = if (warmupHeroActive) {
+                            state.warmup?.message?.takeIf { it.isNotBlank() }
+                                ?: stringResource(R.string.dashboard_warmup_a11y)
+                        } else {
+                            state.contentDescription
+                        }
                         GlucoseHeroRing(
                             state = ringState,
                             modifier = Modifier
                                 .fillMaxSize()
-                                .semantics { contentDescription = state.contentDescription }
+                                .semantics { contentDescription = heroContentDescription }
                                 .clickable { commands.openLoopDialogFromHero() },
                         )
                     } else {
@@ -186,6 +219,26 @@ fun DashboardCircleTopCompose(
                             .size(if (simpleOneScreen) 24.dp else 28.dp),
                         update = { fl -> onAuditorHostAttached(fl) },
                     )
+                    }
+                    // Non-alarming "beginning of life" / "expires soon" subtext under the normal glucose
+                    // ring (the ring itself stays a normal glucose ring). Null → nothing rendered, so the
+                    // no-lifecycle path is unchanged.
+                    if (!warmupHeroActive) {
+                        val lifecycleSubtext = remember(state, context) {
+                            DashboardComposeHeroUiMapper.buildLifecycleSubtext(context, state)
+                        }
+                        if (lifecycleSubtext != null) {
+                            Text(
+                                text = lifecycleSubtext,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .padding(top = 2.dp)
+                                    .semantics { contentDescription = lifecycleSubtext },
+                            )
+                        }
                     }
                 }
 
@@ -372,6 +425,15 @@ fun DashboardCircleTopCompose(
                     )
                 }
             }
+
+            // New-sensor (staging) card: shown only during a dual-sensor overlap. Collect-only until the
+            // user taps Promote — the only path that swaps the loop's glucose source. Renders nothing when
+            // there is no staging sensor, so the layout is unchanged for everyone else.
+            DashboardStagingCard(
+                state = state,
+                onPromote = { viewModel.promoteStaging() },
+                modifier = Modifier.padding(top = if (simpleOneScreen) 6.dp else 8.dp),
+            )
 
             CompactMetricRow(
                 state = state,

@@ -8,6 +8,7 @@ data class RecursiveBeliefPreferences(
     val authorityEnabled: Boolean,
     val waveletEnabled: Boolean,
     val mealHyperBypassEnabled: Boolean,
+    val treeMealRiseFrontLoadEnabled: Boolean,
 ) {
     companion object {
         fun from(preferences: Preferences): RecursiveBeliefPreferences =
@@ -16,6 +17,7 @@ data class RecursiveBeliefPreferences(
                 authorityEnabled = preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority),
                 waveletEnabled = preferences.get(BooleanKey.OApsAIMIRecursiveBeliefWavelet),
                 mealHyperBypassEnabled = preferences.get(BooleanKey.OApsAIMIMealHyperBypassEnabled),
+                treeMealRiseFrontLoadEnabled = preferences.get(BooleanKey.OApsAIMITreeMealRiseFrontLoad),
             )
 
         /** Active when shadow (JSONL + SHADOW leaves) or live authority is on. */

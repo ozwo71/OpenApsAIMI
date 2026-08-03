@@ -354,6 +354,12 @@ fun PkpdAdvancedSettingsContent(
         )
     }
 
+    AdaptiveSwitchPreferenceItem(
+        booleanKey = BooleanKey.OApsAIMIPkpdStackAwareGuardB,
+        titleResId = R.string.oaps_aimi_pkpd_stack_aware_guardb_title,
+        summaryResId = R.string.oaps_aimi_pkpd_stack_aware_guardb_summary,
+    )
+
     OutlinedButton(onClick = { showResetConfirm = true }) {
         Text(stringResource(R.string.aimi_pkpd_reset_to_profile_action))
     }

@@ -11,6 +11,42 @@ import org.junit.jupiter.api.Test
 
 class PhysioLatentStateBuilderTest {
 
+    // Gate thresholds this feeds: RBT SENSOR_BLOCK_THRESHOLD = 0.45, Harmonia SENSOR_UNCERTAIN < 0.40.
+    private val block = 0.45
+
+    @Test
+    fun sensorConfidence_legacy_collapses_on_null_source_no_wearable() {
+        // Legacy (wearable-weighted): null CGM source + low health-context snapshot → below the 0.45
+        // block → SENSOR_LOW forces authority NONE all day. This is the reported failure.
+        val legacy = PhysioLatentStateBuilder.buildSensorConfidence(
+            snapshotConfidence = 0.31, sourceSensor = null, cgmFirst = false,
+        )
+        assertThat(legacy).isLessThan(block)
+    }
+
+    @Test
+    fun sensorConfidence_cgmFirst_clears_block_on_null_source() {
+        // CGM-first: a null/unknown source stays cautious but clears the 0.45 block → SOFT-eligible
+        // (not fully blocked) even with no wearable data.
+        val cgmFirst = PhysioLatentStateBuilder.buildSensorConfidence(
+            snapshotConfidence = 0.31, sourceSensor = null, cgmFirst = true,
+        )
+        assertThat(cgmFirst).isAtLeast(block)
+        // And it is strictly higher than legacy for the same inputs (decoupled from wearable).
+        val legacy = PhysioLatentStateBuilder.buildSensorConfidence(0.31, null, false)
+        assertThat(cgmFirst).isGreaterThan(legacy)
+    }
+
+    @Test
+    fun sensorConfidence_cgmFirst_barely_moves_with_wearable_availability() {
+        // Health-context is only a minor (20%) modifier now: swinging it 0→1 must not flip the gate
+        // for a null source (stays SOFT-band, never the old 0.32→collapse).
+        val noWear = PhysioLatentStateBuilder.buildSensorConfidence(0.0, null, cgmFirst = true)
+        val fullWear = PhysioLatentStateBuilder.buildSensorConfidence(1.0, null, cgmFirst = true)
+        assertThat(noWear).isAtLeast(0.40) // never collapses below Harmonia's SENSOR_UNCERTAIN
+        assertThat(fullWear - noWear).isLessThan(0.25) // wearable is a minor modifier, not the driver
+    }
+
     @Test
     fun build_caps_meal_probability_when_false_meal_suppression_is_active() {
         val hypothesisState = UamHypothesisStateBuilder.build(

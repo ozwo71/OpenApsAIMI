@@ -5,7 +5,6 @@
 package app.aaps.core.ui.compose.preference
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -18,6 +17,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.UnitType
+import app.aaps.core.keys.decimalPlaces
 import app.aaps.core.keys.interfaces.DoublePreferenceKey
 import app.aaps.core.keys.interfaces.VisibilityContext
 import app.aaps.core.keys.decimalPlaces
@@ -27,7 +27,6 @@ import app.aaps.core.keys.unitLabelResId
 import app.aaps.core.keys.valueResId
 import kotlin.math.abs
 import app.aaps.core.ui.R
-import app.aaps.core.ui.compose.ExcludeFromJacocoGeneratedReport
 import app.aaps.core.ui.compose.LocalPreferences
 import java.text.DecimalFormat
 
@@ -36,6 +35,8 @@ import java.text.DecimalFormat
  *
  * @param titleResId Optional title resource ID. If 0 or not provided, uses doubleKey.titleResId
  * @param visibilityContext Optional context for evaluating runtime visibility/enabled conditions
+ *
+ * @see AdaptiveDoublePreferencePreview
  */
 @Composable
 fun AdaptiveDoublePreferenceItem(
@@ -105,16 +106,14 @@ fun AdaptiveDoublePreferenceItem(
                 .fillMaxWidth()
                 .padding(theme.padding)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = titleText,
-                    style = theme.titleTextStyle,
-                    // Mirror Preference's disabled styling (the switch row greys the same way) since this
-                    // slider branch builds its own row instead of going through Preference.
-                    color = theme.titleColor.let { if (visibility.enabled) it else it.copy(alpha = theme.disabledOpacity) }
-                )
-                SyncBadge(doubleKey, Modifier.padding(start = 6.dp))
-            }
+            TextWithSyncBadge(
+                text = titleText,
+                key = doubleKey,
+                style = theme.titleTextStyle,
+                // Mirror Preference's disabled styling (the switch row greys the same way) since this
+                // slider branch builds its own row instead of going through Preference.
+                color = theme.titleColor.let { if (visibility.enabled) it else it.copy(alpha = theme.disabledOpacity) }
+            )
             if (summary != null) {
                 Text(
                     text = summary,
@@ -150,28 +149,12 @@ fun AdaptiveDoublePreferenceItem(
         }
         TextFieldPreference(
             state = state,
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(titleText)
-                    SyncBadge(doubleKey, Modifier.padding(start = 6.dp))
-                }
-            },
+            title = { TextWithSyncBadge(titleText, doubleKey) },
             textToValue = { text ->
                 text.toDoubleOrNull()?.coerceIn(doubleKey.min, doubleKey.max)
             },
             enabled = visibility.enabled,
             summary = { Text(summaryText) }
-        )
-    }
-}
-
-@ExcludeFromJacocoGeneratedReport
-@Preview(showBackground = true)
-@Composable
-private fun AdaptiveDoublePreferencePreview() {
-    PreviewTheme {
-        AdaptiveDoublePreferenceItem(
-            doubleKey = DoubleKey.OverviewInsulinButtonIncrement1
         )
     }
 }

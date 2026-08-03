@@ -55,10 +55,32 @@ class T3cAutodriveBasalBridgeTest {
     }
 
     @Test
-    fun `tree unlocks on resistance rise and vetoes on activity`() {
+    fun `glycemic rise unlocks regardless of tree activity veto and without a resistance signal`() {
+        // Self-sufficiency: a confirmed rising hyper unlocks even when the (often false-positive) activity
+        // branch is high and the tree reports no resistance signal — the tree must not throttle a real rise.
         val unlock = T3cAutodriveBasalBridge.evaluateTreeUnlock(
             tree = tree(
                 risk = PhysiologicalRiskLevel.MODERATE,
+                global = GlobalPhysiologicalState.RESISTANCE_PROBABLE,
+                hormonalResistance = 0.1, // no resistance signal
+                activity = 0.7,           // high activity — previously vetoed
+            ),
+            bg = 180.0,
+            delta = 3.0f,
+            activationThreshold = 130.0,
+            postHypoActive = false,
+            eventualBg = 200.0,
+            targetBg = 100.0,
+        )
+        assertThat(unlock.unlock).isTrue()
+        assertThat(unlock.reason).isEqualTo("glycemic_override")
+    }
+
+    @Test
+    fun `tree critical risk still vetoes unlock even on a glycemic rise`() {
+        val blocked = T3cAutodriveBasalBridge.evaluateTreeUnlock(
+            tree = tree(
+                risk = PhysiologicalRiskLevel.CRITICAL,
                 global = GlobalPhysiologicalState.RESISTANCE_PROBABLE,
                 hormonalResistance = 0.7,
                 activity = 0.1,
@@ -70,24 +92,49 @@ class T3cAutodriveBasalBridgeTest {
             eventualBg = 200.0,
             targetBg = 100.0,
         )
-        assertThat(unlock.unlock).isTrue()
+        assertThat(blocked.unlock).isFalse()
+        assertThat(blocked.reason).isEqualTo("tree_critical")
+    }
 
-        val blocked = T3cAutodriveBasalBridge.evaluateTreeUnlock(
+    @Test
+    fun `unlock is anticipatory - projected BG above threshold unlocks even when current BG is below`() {
+        val unlock = T3cAutodriveBasalBridge.evaluateTreeUnlock(
             tree = tree(
                 risk = PhysiologicalRiskLevel.MODERATE,
                 global = GlobalPhysiologicalState.RESISTANCE_PROBABLE,
                 hormonalResistance = 0.7,
-                activity = 0.7,
+                activity = 0.1,
             ),
-            bg = 180.0,
-            delta = 3.0f,
+            bg = 120.0,               // current BG below activationThreshold
+            delta = 2.0f,
             activationThreshold = 130.0,
             postHypoActive = false,
             eventualBg = 200.0,
             targetBg = 100.0,
+            projectedBg = 145.0,      // heading above threshold → engage now
         )
-        assertThat(blocked.unlock).isFalse()
-        assertThat(blocked.reason).isEqualTo("tree_activity")
+        assertThat(unlock.unlock).isTrue()
+    }
+
+    @Test
+    fun `unlock requires positive delta even when projected BG is high`() {
+        val decision = T3cAutodriveBasalBridge.evaluateTreeUnlock(
+            tree = tree(
+                risk = PhysiologicalRiskLevel.MODERATE,
+                global = GlobalPhysiologicalState.RESISTANCE_PROBABLE,
+                hormonalResistance = 0.7,
+                activity = 0.1,
+            ),
+            bg = 180.0,
+            delta = 0.0f,             // not rising → must stay locked
+            activationThreshold = 130.0,
+            postHypoActive = false,
+            eventualBg = 200.0,
+            targetBg = 100.0,
+            projectedBg = 200.0,
+        )
+        assertThat(decision.unlock).isFalse()
+        assertThat(decision.reason).isEqualTo("no_confirmed_rise")
     }
 
     @Test

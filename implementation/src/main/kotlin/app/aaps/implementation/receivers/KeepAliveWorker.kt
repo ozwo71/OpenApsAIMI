@@ -149,6 +149,7 @@ class KeepAliveWorker @AssistedInject constructor(
         dstHelper.dstCheck()
         localAlertUtils.shortenSnoozeInterval()
         localAlertUtils.checkStaleBGAlert()
+        localAlertUtils.checkGlucoseAlerts()
         checkPump()
         checkAPS()
         maintenance.deleteLogs(30)

@@ -32,4 +32,14 @@ interface LocalAlertUtils {
      * Overview notification with sound, Therapy event
      */
     suspend fun checkStaleBGAlert()
+
+    /**
+     * Check the current glucose against the user-configured value/rate alarms
+     * (low / high / rapid fall) and raise or dismiss notifications accordingly.
+     *
+     * Source-agnostic (reads the last stored glucose, so it works for any CGM source) and
+     * notification-only — it never affects dosing or the loop. Skips silently when data is stale
+     * (the stale-data alarm owns that case).
+     */
+    suspend fun checkGlucoseAlerts()
 }

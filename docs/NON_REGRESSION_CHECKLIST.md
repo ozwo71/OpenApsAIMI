@@ -4,7 +4,7 @@ Purpose: enforce repeatable quality gates to prevent freezes and functional regr
 
 Use this file for every merge from `dev` and every release candidate.
 
-**Latest merge log:** [MERGE_DEV_2026-07-24.md](MERGE_DEV_2026-07-24.md) (dev @ `ab88d5f1db` → `dev_OAPSAIMI_mergeDEV`). Previous: [MERGE_DEV_2026-07-16.md](MERGE_DEV_2026-07-16.md) (dev @ `638f23dfab`).
+**Latest merge log:** [MERGE_DEV_2026-08-03.md](MERGE_DEV_2026-08-03.md) (`dev` @ `fa2d2c78a5` → `feature/dexcom-oneplus-native`). Previous: [MERGE_DEV_2026-07-31.md](MERGE_DEV_2026-07-31.md) (`milos/dev` @ `88d31b816d` → `feature/dexcom-oneplus-native`), [MERGE_DEV_2026-07-16.md](MERGE_DEV_2026-07-16.md) (dev @ `638f23dfab` → `dev_OAPSAIMI_mergeDEV`).
 
 ---
 
@@ -16,15 +16,38 @@ Use this file for every merge from `dev` and every release candidate.
 - [ ] For each conflict, decision recorded: keep ours / keep theirs / combine.
 - [ ] If conflict touches async code, mark with `ASYNC IMPACT`.
 
+- [ ] **Safety tag** created on the pre-merge commit (`git tag premerge-dev-<date> HEAD`) — enables the two
+      baselines below and a clean rollback.
+- [ ] **Invariant baseline captured before the merge and re-run after**, output diffed (fork markers: module
+      includes, `SourceSensor`, `@IntKey` registrations, AIMI file count, `calibratedOrValue`,
+      `dashboardOverview` / `SkinDescriptionProvider`, manifest ML/physio permissions, `patient_story`,
+      `runVacuum = false`, `drain()`, notification-reader mappings). Any diff other than line-number shifts
+      must be explained.
+- [ ] **Failing tests attributed before being accepted.** A red test is only "pre-existing" once the *same*
+      task has been run on the pre-merge tag in a separate worktree (`git worktree add --detach <dir>
+      premerge-dev-<date>`, copy `local.properties`, `./gradlew -p <dir> <task>`) and shows the identical
+      failure set. Otherwise treat it as a merge regression.
+
 Notes:
 - No opportunistic refactor during merge conflict resolution.
 - Keep method signatures and contracts unchanged unless explicitly required.
+- Verify gradle results by **exit code on a redirected log**, never through a pipe (`| tail` reports the
+  pipe's status, so a FAILED run looks green).
 
 ### Fork merge constraint: Eversense (native CGM patches)
 
 When this fork includes (or will include) the CAPTCG Eversense BLE plugin series, every merge from upstream `dev` must **preserve** module registration, DI, `SourceSensor` / DB mappings, and Config-related changes. Do not resolve conflicts “theirs only” on those paths without explicit review.
 
 - [ ] **Eversense preservation reviewed** — follow [docs/MERGE_CONSTRAINT_EVERSENSE.md](MERGE_CONSTRAINT_EVERSENSE.md) (patch order, high-risk files, post-merge checks).
+
+### Fork merge constraint: Dexcom ONE+ (native CGM)
+
+When this fork includes the Dexcom ONE+ native plugin (`:plugins:dexcom_oneplus`, `DexcomOnePlusPlugin` `@IntKey(446)`), every merge from upstream `dev` must **preserve** module registration, DI, `SourceSensor.DEXCOM_ONEPLUS_NATIVE` / DB converters, and notification-reader remaps (`com.dexcom.d1plus` / `com.dexcom.dexcomone` → `AAPS-DexcomOnePlus`). Do not resolve conflicts “theirs only” on those paths without explicit review.
+
+- [ ] **Dexcom ONE+ preservation reviewed** — follow [docs/MERGE_CONSTRAINT_DEXCOM_ONEPLUS.md](MERGE_CONSTRAINT_DEXCOM_ONEPLUS.md).
+- [ ] **Smoke (scaffold / post-merge):** Config Builder lists **Dexcom ONE+**; **BYODA** (`@IntKey(440)`) still works; **Eversense** (`@IntKey(445)`) still works.
+- [ ] Prefs open Status / Start / Warm-up without crash (Stub default; Real via eng pref).
+- [ ] Native pair / warm-up / BG — only after **user device confirmation** (do not mark “working” without that). User guide: [docs/DEXCOM_ONEPLUS_USER_GUIDE.md](DEXCOM_ONEPLUS_USER_GUIDE.md). Dev onboarding: [docs/DEXCOM_ONEPLUS_DEV_ONBOARDING.md](DEXCOM_ONEPLUS_DEV_ONBOARDING.md). Integration: [docs/DEXCOM_ONEPLUS_INTEGRATION_NOTES.md](DEXCOM_ONEPLUS_INTEGRATION_NOTES.md).
 
 ---
 
@@ -34,7 +57,6 @@ When this fork includes (or will include) the CAPTCG Eversense BLE plugin series
 - [ ] Loop behavior unchanged (no accidental SMB disabling).
 - [ ] AIMI configuration import/export keys preserved.
 - [ ] No regression on JSON/CSV writes used by AIMI workflows.
-- [ ] `docs/AIMI*.md` and `docs/aimi*.md` reviewed against merged code; current schema, permission, API, and safety claims are not stale.
 
 ### Adaptive Smoothie plugin
 - [ ] Plugin activation/state transitions unchanged.
@@ -63,7 +85,24 @@ When this fork includes (or will include) the CAPTCG Eversense BLE plugin series
 - [ ] Required structural flows/interfaces remain intact.
 - [ ] No rename/removal of expected keys or records.
 - [ ] Historical compatibility preserved for study data consumption.
-- [ ] Current schema `1.4.0` retains the additive `patient_story` block introduced in `1.2.0` when patient runtime is active (no breaking rename of `1.1.0` keys).
+- [ ] Schema `1.2.0` additive block `patient_story` present when patient runtime is active (no breaking rename of `1.1.0` keys).
+
+### AIMI documentation consistency (fork-specific `.md`)
+
+Our AIMI docs are part of the contract: a merge that renames or deletes a symbol they reference is a
+documentation regression even when the build is green.
+
+- [ ] Every `` `*.kt` `` reference in [AIMI_ARCHITECTURE_MAP.md](AIMI_ARCHITECTURE_MAP.md),
+      [AIMI_ROADMAP.md](AIMI_ROADMAP.md) and the merge-constraint docs still resolves to an existing file:
+      ```bash
+      grep -ohE '`[A-Za-z0-9_/.:-]+\.kt`' docs/AIMI_ARCHITECTURE_MAP.md docs/AIMI_ROADMAP.md \
+        docs/NON_REGRESSION_CHECKLIST.md docs/MERGE_CONSTRAINT_EVERSENSE.md \
+        docs/MERGE_CONSTRAINT_DEXCOM_ONEPLUS.md | tr -d '`' | sort -u | while read -r p; do
+          find . -name "$(basename "$p")" -not -path '*/build/*' -not -path './.git/*' | grep -q . || echo "MISSING: $p"
+        done
+      ```
+- [ ] Behaviour claims still true for paths the merge touched (AIMI decision cascade, physio, hormonitor export).
+- [ ] New merge log added under `docs/MERGE_DEV_<date>.md` and the **Latest merge log** pointer above updated.
 
 ---
 
@@ -93,8 +132,8 @@ When this fork includes (or will include) the CAPTCG Eversense BLE plugin series
 
 Upstream once ran **inline `VACUUM`** inside `cleanupDatabase()`; `KeepAliveWorker` triggered it daily while the loop was active → crashes / OOM. Re-verify after every merge touching DB or workers.
 
-- [ ] **`KeepAliveWorker.databaseCleanup`** calls `cleanupDatabase(..., runVacuum = false)` only (daily retention trim, no VACUUM). File: `app/.../receivers/KeepAliveWorker.kt`.
-- [ ] **`AppRepository.cleanupDatabase`** does **not** run `VACUUM` unless `runVacuum == true` (comment documents SQLITE_NOMEM risk). Default path: `PRAGMA optimize` + deletes + `wal_checkpoint(TRUNCATE)` only. File: `database/impl/.../AppRepository.kt`.
+- [ ] **`KeepAliveWorker.databaseCleanup`** calls `cleanupDatabase(..., runVacuum = false)` only (daily retention trim, no VACUUM). File: `implementation/src/main/kotlin/app/aaps/implementation/receivers/KeepAliveWorker.kt`.
+- [ ] **`AppRepository.cleanupDatabase`** does **not** run `VACUUM` unless `runVacuum == true` (comment documents SQLITE_NOMEM risk). Default path: `PRAGMA optimize` + deletes + `wal_checkpoint(TRUNCATE)` only. File: `database/impl/src/main/kotlin/app/aaps/database/AppRepository.kt`.
 - [ ] **Startup DB maintenance** uses `MainApp.maintainDatabaseIfDue()` → `maintainDatabaseAtStartup()` (**no automatic VACUUM** at launch; full VACUUM only via manual `runVacuum=true`). Key `LongNonKey.LastVacuumRun`, timeout 2 min, `catch (Throwable)`.
 - [ ] **Manual maintenance only:** `runVacuum = true` only from explicit UI (e.g. `MaintenanceViewModel`, NS client cleanup dialog), with `DatabaseMaintenanceCoordinator` around compaction in `AppRepository`.
 - [ ] **Merge conflicts:** resolving `AppRepository.kt` / `KeepAliveWorker.kt` / `PersistenceLayer.kt` did not re-inline `VACUUM` into the automatic cleanup path. See [MERGE_DEV_2026-05-20.md](MERGE_DEV_2026-05-20.md) (AppRepository combine note).
@@ -150,8 +189,10 @@ Pass criteria:
 - [ ] ML JSON/CSV permissions and writes verified
 - [ ] Physio path verified
 - [ ] Hormonitor structure verified
-- [ ] AIMI-specific Markdown reviewed against merged behavior
+- [ ] AIMI `.md` documentation consistency verified (references resolve, merge log added)
+- [ ] AIMI/SMB/AutoISF parity reviewed (upstream APS changes ported or explicitly declined)
 - [ ] Eversense merge constraint reviewed (if native plugin present on branch)
+- [ ] Dexcom ONE+ merge constraint reviewed (if native plugin present on branch)
 - [ ] Database maintenance regression gate reviewed (KeepAlive `runVacuum=false`, no auto VACUUM in `cleanupDatabase`)
 - [ ] Async/freeze checklist reviewed
 - [ ] Smoke tests passed
@@ -187,6 +228,6 @@ Release is `NO-GO` if any of the following is true:
 
 - Any checklist item above is unchecked.
 - Any OPEN freeze incident on same area/build.
-- Any known regression in AIMI, adaptive smoothie, dashboard skin switching, ML permissions, physio, hormonitor structure, or Eversense native CGM integration when that integration is part of the release branch.
+- Any known regression in AIMI, adaptive smoothie, dashboard skin switching, ML permissions, physio, hormonitor structure, Eversense native CGM, or Dexcom ONE+ native CGM integration when that integration is part of the release branch.
 
 Release is `GO` only when all gates are green and documented.

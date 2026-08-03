@@ -75,4 +75,52 @@ class SmbDampingTest {
         )
         assertEquals(0.6, result, 0.01)
     }
+
+    // B2 — at meal onset (elapsed 0) the late-fat multiplier must equal the *preference* floor (0.7),
+    // NOT the old hardcoded 0.85 that ignored the user setting.
+    @Test
+    fun `late fat uses preference floor at meal onset`() {
+        val audit = damping.dampWithAudit(
+            smbU = 1.0,
+            iobTailFrac = 0.0,
+            exercise = false,
+            suspectedLateFatMeal = true,
+            bypassDamping = false,
+            activity = createActivity(),
+            elapsedSinceMealMin = 0.0
+        )
+        assertEquals(0.70, audit.lateFatMult, 1e-9)
+        assertEquals(0.70, audit.out, 1e-9)
+    }
+
+    // B1+F5 — the time ladder must actually depend on elapsed. Past 4h the rise has faded, so the
+    // multiplier ramps toward neutral (0.95) instead of being pinned at a constant.
+    @Test
+    fun `late fat ramps toward neutral after four hours`() {
+        val mid = damping.dampWithAudit(
+            1.0, 0.0, false, suspectedLateFatMeal = true,
+            bypassDamping = false, activity = createActivity(), elapsedSinceMealMin = 120.0
+        )
+        assertEquals(0.825, mid.lateFatMult, 1e-9) // 0.7 + (0.95-0.7)*0.5
+
+        val late = damping.dampWithAudit(
+            1.0, 0.0, false, suspectedLateFatMeal = true,
+            bypassDamping = false, activity = createActivity(), elapsedSinceMealMin = 300.0
+        )
+        assertEquals(0.95, late.lateFatMult, 1e-9) // clamped at 4h
+    }
+
+    // F6 — damp() and dampWithAudit() must agree (single implementation).
+    @Test
+    fun `damp matches dampWithAudit out`() {
+        val direct = damping.damp(
+            1.0, 0.3, exercise = true, suspectedLateFatMeal = true,
+            bypassDamping = false, activity = createActivity(), elapsedSinceMealMin = 90.0
+        )
+        val audited = damping.dampWithAudit(
+            1.0, 0.3, exercise = true, suspectedLateFatMeal = true,
+            bypassDamping = false, activity = createActivity(), elapsedSinceMealMin = 90.0
+        )
+        assertEquals(audited.out, direct, 1e-9)
+    }
 }

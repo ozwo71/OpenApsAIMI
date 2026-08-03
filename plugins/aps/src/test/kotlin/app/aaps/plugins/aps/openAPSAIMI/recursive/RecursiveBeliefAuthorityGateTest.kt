@@ -9,6 +9,7 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStrategyHint
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStateId
+import app.aaps.plugins.aps.openAPSAIMI.patient.InsulinIntent
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.risk.AimiRiskPhase
 import app.aaps.plugins.aps.openAPSAIMI.safety.SafetyRiskExportSnapshot
@@ -570,5 +571,131 @@ class RecursiveBeliefAuthorityGateTest {
         assertThat(decision.reasonCodes).doesNotContain("PREDICTIVE_HYPO_MEAL_BYPASS")
         assertThat(decision.effectiveAuthority).isEqualTo(ReleaseAuthority.SOFT)
     }
+
+    // ---- Tree meal-rise front-loader (arbre déploie NEED_MORE_INSULIN → Harmonia applique) ----
+
+    @Test
+    fun frontload_reopens_soft_when_sensor_low_clobbered_corroborated_meal_rise() {
+        // sensor_confidence low (SENSOR_LOW → NONE), tree deployed NEED_MORE_INSULIN, corroborated rise,
+        // BG≫target, flag ON → authority re-opened to SOFT so Harmonia can apply the early lift.
+        val decision = RecursiveBeliefAuthorityGate.evaluate(frontLoadInput())
+
+        assertThat(decision.reasonCodes).contains("SENSOR_LOW")
+        assertThat(decision.reasonCodes).contains("TREE_MEAL_RISE_FRONTLOAD")
+        assertThat(decision.effectiveAuthority).isEqualTo(ReleaseAuthority.SOFT)
+    }
+
+    @Test
+    fun frontload_never_grants_hard() {
+        val decision = RecursiveBeliefAuthorityGate.evaluate(frontLoadInput(requested = ReleaseAuthority.HARD))
+        // Restored to SOFT only, never HARD.
+        assertThat(decision.effectiveAuthority).isEqualTo(ReleaseAuthority.SOFT)
+    }
+
+    @Test
+    fun frontload_disabled_stays_none() {
+        val decision = RecursiveBeliefAuthorityGate.evaluate(frontLoadInput(flag = false))
+        assertThat(decision.reasonCodes).doesNotContain("TREE_MEAL_RISE_FRONTLOAD")
+        assertThat(decision.effectiveAuthority).isEqualTo(ReleaseAuthority.NONE)
+    }
+
+    @Test
+    fun frontload_not_applied_without_need_more_insulin_intent() {
+        val decision = RecursiveBeliefAuthorityGate.evaluate(frontLoadInput(intent = InsulinIntent.MEAL_SUPPORT))
+        assertThat(decision.reasonCodes).doesNotContain("TREE_MEAL_RISE_FRONTLOAD")
+        assertThat(decision.effectiveAuthority).isEqualTo(ReleaseAuthority.NONE)
+    }
+
+    @Test
+    fun frontload_not_applied_without_meal_corroboration() {
+        // No independent meal evidence (low mealProb, non-meal dominant hypothesis) → stays NONE.
+        val decision = RecursiveBeliefAuthorityGate.evaluate(frontLoadInput(mealProb = 0.10))
+        assertThat(decision.reasonCodes).doesNotContain("TREE_MEAL_RISE_FRONTLOAD")
+        assertThat(decision.effectiveAuthority).isEqualTo(ReleaseAuthority.NONE)
+    }
+
+    @Test
+    fun frontload_never_overrides_prediction_missing() {
+        // PRED_MISSING is a sovereign veto: front-load must NOT re-open.
+        val decision = RecursiveBeliefAuthorityGate.evaluate(frontLoadInput(predictionAvailable = false))
+        assertThat(decision.reasonCodes).contains("PRED_MISSING")
+        assertThat(decision.reasonCodes).doesNotContain("TREE_MEAL_RISE_FRONTLOAD")
+        assertThat(decision.effectiveAuthority).isEqualTo(ReleaseAuthority.NONE)
+    }
+
+    @Test
+    fun frontload_not_applied_below_target_margin() {
+        // Real low-ish BG (below target+45) → excluded by construction (no override into hypo territory).
+        val decision = RecursiveBeliefAuthorityGate.evaluate(frontLoadInput(bg = 120.0))
+        assertThat(decision.reasonCodes).doesNotContain("TREE_MEAL_RISE_FRONTLOAD")
+        assertThat(decision.effectiveAuthority).isEqualTo(ReleaseAuthority.NONE)
+    }
+
+    @Test
+    fun frontload_not_applied_on_freefall() {
+        // Free-falling (Δ<−15) → shared exemption predicate closes → no override.
+        val decision = RecursiveBeliefAuthorityGate.evaluate(frontLoadInput(delta = -18.0))
+        assertThat(decision.reasonCodes).doesNotContain("TREE_MEAL_RISE_FRONTLOAD")
+        assertThat(decision.effectiveAuthority).isEqualTo(ReleaseAuthority.NONE)
+    }
+
+    /**
+     * SENSOR_LOW-clobbered, corroborated meal-rise with the tree deploying NEED_MORE_INSULIN — the
+     * front-loader's target case. Knobs let each test flip one condition.
+     */
+    private fun frontLoadInput(
+        flag: Boolean = true,
+        intent: InsulinIntent = InsulinIntent.NEED_MORE_INSULIN,
+        requested: ReleaseAuthority = ReleaseAuthority.HARD,
+        bg: Double = 185.0,
+        delta: Double = 2.0,
+        mealProb: Double = 0.84,
+        predictionAvailable: Boolean = true,
+    ): RecursiveBeliefAuthorityGate.Input =
+        RecursiveBeliefAuthorityGate.Input(
+            authorityEnabled = true,
+            requestedAuthority = requested,
+            predictionAvailable = predictionAvailable,
+            phaseOutput = null,
+            patternSnapshot = PhysiologicalPatternSnapshot.EMPTY,
+            latentState = PhysioLatentState(
+                mealProb = mealProb,
+                endogenousGlucoseDrive = 0.10,
+                transientResistanceProb = 0.15,
+                sensorConfidence = 0.32, // < 0.45 → SENSOR_LOW forces NONE
+                postHypoReboundProb = 0.10,
+                source = "test",
+            ),
+            hypothesisState = UamHypothesisState(
+                mealProb = mealProb,
+                dawnEndogenousProb = 0.05,
+                stressProb = 0.05,
+                postHypoProb = 0.05,
+                dominant = UamHypothesisId.MEAL,
+                dominantConfidence = mealProb,
+                suppressMealInterpretation = false,
+            ),
+            patientState = null,
+            patientModeDecision = null,
+            safetyRiskExport = SafetyRiskExportSnapshot(
+                phase = AimiRiskPhase.DECISION,
+                predictiveHypoSuppressed = false,
+                safetyGate = "pass",
+                haltRemainingPipeline = false,
+                mealContextActive = true,
+                mealRiseConfirmed = false,
+                compositeMinMgdl = bg,
+                predBgMgdl = bg,
+                eventualBgMgdl = bg,
+                uamTerminalMgdl = bg + 30.0,
+                hypoThresholdMgdl = 70.0,
+            ),
+            bgMgdl = bg,
+            targetBgMgdl = 112.0,
+            deltaMgdl5m = delta,
+            treeInsulinIntent = intent,
+            treeInsulinUrgency = 0.8,
+            treeMealRiseFrontLoadEnabled = flag,
+        )
 }
 

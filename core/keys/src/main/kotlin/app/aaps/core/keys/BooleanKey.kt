@@ -87,13 +87,23 @@ enum class BooleanKey(
     AlertUrgentAsAndroidNotification("raise_urgent_alarms_as_android_notification", true, R.string.pref_title_alert_urgent_as_android_notification),
     AlertIncreaseVolume("gradually_increase_notification_volume", true, R.string.pref_title_alert_increase_volume),
     AlertOverrideDoNotDisturb("alert_override_dnd", true, R.string.pref_title_alert_override_dnd, R.string.pref_summary_alert_override_dnd, defaultedBySM = true),
+    AlertHypo("enable_hypo_alert", false, R.string.pref_title_alert_hypo, R.string.pref_summary_alert_hypo),
+    AlertHyper("enable_hyper_alert", false, R.string.pref_title_alert_hyper, R.string.pref_summary_alert_hyper),
+    AlertRapidFall("enable_rapid_fall_alert", false, R.string.pref_title_alert_rapid_fall, R.string.pref_summary_alert_rapid_fall),
 
     BgSourceUploadToNs("dexcomg5_nsupload", true, R.string.pref_title_bg_source_upload_to_ns, defaultedBySM = true, hideParentScreenIfHidden = true),
     BgSourceCreateSensorChange("dexcom_lognssensorchange", true, R.string.pref_title_bg_source_create_sensor_change, R.string.pref_summary_bg_source_create_sensor_change, defaultedBySM = true),
     BgSourceRandomBgRandomize("randombg_randomize", true, R.string.pref_title_random_bg_randomize, R.string.pref_summary_random_bg_randomize, defaultedBySM = true),
 
     ApsUseDynamicSensitivity("use_dynamic_sensitivity", false, R.string.pref_title_aps_use_dynamic_sensitivity, R.string.pref_summary_aps_use_dynamic_sensitivity, sync = SyncSpec(SyncChannel.Cold, SyncDirection.Bidirectional)),
-    ApsUseAutosens("openapsama_useautosens", true, R.string.pref_title_aps_use_autosens, defaultedBySM = true, negativeDependency = ApsUseDynamicSensitivity, sync = SyncSpec(SyncChannel.Cold, SyncDirection.Bidirectional)),
+    ApsUseAutosens(
+        "openapsama_useautosens", true, R.string.pref_title_aps_use_autosens, defaultedBySM = true,
+        // Hidden only while the active APS both offers dynamic sensitivity and has it enabled.
+        // A plain negativeDependency on ApsUseDynamicSensitivity would also hide it on algorithms
+        // whose screens never show that toggle (AMA, AutoISF), with no way to reveal it (issue #4482).
+        visibility = ElementVisibility { !(it.apsOffersDynamicSensitivity && it.preferences.get(ApsUseDynamicSensitivity)) },
+        sync = SyncSpec(SyncChannel.Cold, SyncDirection.Bidirectional)
+    ),
     ApsUseSmb("use_smb", true, R.string.pref_title_aps_use_smb, R.string.pref_summary_aps_use_smb, defaultedBySM = true, sync = SyncSpec(SyncChannel.Cold, SyncDirection.Bidirectional)),
     ApsUseSmbWithHighTt(
         "enableSMB_with_high_temptarget",
@@ -363,6 +373,57 @@ enum class BooleanKey(
      *  downstream vetoes (sensor, post-hypo, false-meal, protective mode) still apply. Fail-safe: false
      *  → legacy behaviour. See docs/AIMI_HARMONIA_SMB_ARBITRATION.md and undeclared-meal 3-gate analysis. */
     OApsAIMIMealHyperBypassEnabled("key_aimi_meal_hyper_bypass_enabled", true),
+    /** Tree meal-rise front-loader — lets the physiological tree's deployed `NEED_MORE_INSULIN` intent
+     *  RE-OPEN a `NONE` authority that a *soft-overridable* veto (`SENSOR_LOW` / `PREDICTIVE_HYPO` /
+     *  `PHYSIO_CAP`) posted, so Harmonia can apply the early SMB lift on a corroborated meal rise
+     *  instead of waiting for established hyper. Restores **SOFT only** (never HARD), and only when: a
+     *  real meal is corroborated (mode/causal/latent/hypothesis), BG ≥ target+45, rising (Δ≥1.2) and
+     *  NOT free-falling (shared `HyperInstalledDroppingExemption` predicate). Genuine hypo vetoes stay
+     *  sovereign — never overrides `PRED_MISSING` / `CHAOS_BLOCK` / `POST_HYPO_BLOCK` / real low BG.
+     *  ⚠️ Overrides the sensor-confidence safety gate → **default OFF (opt-in)**. Fail-safe: false →
+     *  legacy behaviour. See docs/AIMI_HARMONIA_SMB_ARBITRATION.md §8. */
+    OApsAIMITreeMealRiseFrontLoad(
+        key = "key_aimi_tree_meal_rise_frontload",
+        defaultValue = false,
+        titleResId = R.string.pref_title_aimi_tree_meal_rise_frontload,
+        summaryResId = R.string.pref_summary_aimi_tree_meal_rise_frontload,
+    ),
+    /** CGM-first sensor confidence (root fix): base `sensor_confidence` on the CGM SOURCE (a
+     *  signal-quality proxy) instead of the wearable/health-context freshness snapshot. The legacy
+     *  formula weighted the watch data at 70%, so CGM trust collapsed (~0.32) without a wearable and
+     *  forced Harmonia/RBT authority to NONE all day even with a perfect CGM. When on, a native/filtered
+     *  CGM is trusted and a null/unknown source stays cautious (SOFT-eligible) instead of blocking.
+     *  Raises dosing authority → default OFF (opt-in). Fail-safe: false → legacy wearable-weighted
+     *  formula. See memory sensor-confidence-gates-harmonia. */
+    OApsAIMISensorConfidenceCgmFirst(
+        key = "key_aimi_sensor_confidence_cgm_first",
+        defaultValue = false,
+        titleResId = R.string.pref_title_aimi_sensor_confidence_cgm_first,
+        summaryResId = R.string.pref_summary_aimi_sensor_confidence_cgm_first,
+    ),
+    /** Meal-confirmed early release (MCER) — root fix for the carb-blind dose-governing floor. On an
+     *  undeclared meal (COB=0) the dose-governing terminal (`predTerminalMgdl`) is the PKPD insulin-only
+     *  floor, which predicts a phantom descent while the meal/UAM path is climbing; it structurally
+     *  throttles the SMB cap (tube `minPred`), holds RBT authority at SOFT and lets the PKPD safety
+     *  zero the SMB — so a confirmed meal runs uncorrected for hours. When on, once a meal is
+     *  corroborated (mode/causal/UAM/tree) AND rising (Δ≥1.2, not free-falling) AND BG ≥ target+20, the
+     *  floor is released toward the best/UAM path (`scenarioBest.pathMin`) so the loop can dose to the
+     *  configured maxima early. It only ever RAISES the floor, never lowers it, and stays bounded by
+     *  maxSMB/maxSMBHB/maxBasal/maxIOB downstream. Tail circuit-breaker: reverts to the insulin-only
+     *  floor as soon as the post-peak tail risk appears — absorption phase `PEAK_CORRECTION` (NOT
+     *  `LATE_FAT`, which is a late rise still needing insulin), IOB headroom consumed, or the rise
+     *  breaks (Δ<0) — so it cannot set up a post-peak hypo. It is also self-limiting: the release
+     *  target is the best/UAM path minimum, which still contains insulin action, so stacked IOB pulls
+     *  that trough (and the cap) back down automatically. Genuine hypo
+     *  stays sovereign: never engages under false-meal suppression or post-hypo delivery guard.
+     *  ⚠️ Raises early dosing authority on the safety floor → **default OFF (opt-in)**. Fail-safe:
+     *  false → legacy insulin-only floor. See memory release-authority-channel-mutex-deadend. */
+    OApsAIMIMealConfirmedEarlyRelease(
+        key = "key_aimi_meal_confirmed_early_release",
+        defaultValue = false,
+        titleResId = R.string.pref_title_aimi_meal_confirmed_early_release,
+        summaryResId = R.string.pref_summary_aimi_meal_confirmed_early_release,
+    ),
     /**
      * Lever 1 — hyper-installed dropping exemption: when BG ≫ target on a meal/deep-hyper
      * plateau, do not hard-zero SMB solely because the 5‑min delta is negative
@@ -492,6 +553,57 @@ enum class BooleanKey(
         defaultValue = true,
         dependency = OApsAIMIPkpdEndogenousReversion,
     ),
+    /** 🩸 pkpd Guard B — stack-aware floor suspension (F1-B, opt-in). The hyper floor (BG ≥ 160) holds every
+     *  prediction curve at ≥ 80; legacy Guard B only releases it on delta ≤ -3, ignoring IOB — so a large
+     *  active stack keeps the basal whipsawing on CGM noise during a hyper descent. When ON, also suspend the
+     *  floor once the stack can physiologically breach it (IOB×ISF > BG − floor) AND BG is no longer rising
+     *  (delta < 0), letting the true low surface so the basal cuts and holds. Fail-safe: false → legacy
+     *  delta-only Guard B. Requires [OApsAIMIPkpdHyperReversion]. */
+    OApsAIMIPkpdStackAwareGuardB(
+        key = "key_aimi_pkpd_stack_aware_guardb",
+        defaultValue = false,
+        dependency = OApsAIMIPkpdHyperReversion,
+    ),
+    /** 🛡️ Basal-channel safety guards (lot 3, opt-in). Two authority leaks let the automatic basal channel
+     *  dose while the SMB channel was deliberately held back:
+     *  1. the basal-first mutex only asks "was an SMB requested?", so an SMB **zeroed by a safety rule**
+     *     (`isCriticalSafetyCondition`, `HypoRecovery` context) *unlocks* the T3C/Harmonia basal-first
+     *     production channels instead of blocking them;
+     *  2. when those channels own the rate they force the adaptive multiplier to 1.0, discarding the
+     *     learners' protective reduction — the only damper that was still binding.
+     *  When ON, a safety-zeroed SMB blocks those channels, and their rate keeps any learner reduction
+     *  (`min(adaptiveMult, 1.0)`; amplifications above 1.0 are still discarded, so the rate can only be
+     *  lower than today, never higher). Does not touch the manual meal modes, whose TBR stays the
+     *  user-configured [app.aaps.core.keys.DoubleKey.meal_modes_MaxBasal] setpoint.
+     *  Défaut ON : actif en production, désactivable si besoin. */
+    OApsAIMIBasalChannelSafetyGuards(
+        "key_aimi_basal_channel_safety_guards", true,
+        titleResId = R.string.pref_title_aimi_basal_channel_safety_guards,
+        summaryResId = R.string.pref_summary_aimi_basal_channel_safety_guards,
+    ),
+    /** 🔒 Invariants terminaux du canal basal (lot 2, opt-in). Les protections du TBR étaient posées en
+     *  amont de multiplicateurs pouvant élever le taux ×10 (`DynamicBasalController`, `AdaptiveBasal`,
+     *  ampli endocrine) : un plafond placé avant un multiplicateur ne borne pas la valeur finale. Quand ON,
+     *  trois invariants s'évaluent **après le dernier multiplicateur**, juste avant l'écriture du taux —
+     *  prédiction sous la cible, verrou post-hypo, IOB négatif sans montée — chacun en réduction seule
+     *  (`coerceAtMost` au basal profil). Les modes repas manuels sont exempts. Défaut ON : actif en production,
+     *  désactivable si besoin ; chaque verdict est exporté dans `adjustments.basal_terminal`. */
+    /** 🎯 Contrôleur basal en erreur projetée (lot 1). Le couple (P, D) historique combinait un gain de
+     *  0,05 par mg/dL d'écart avec un gain de 1,8 par mg/dL/5min de pente — un rapport de 36:1 qui rendait
+     *  le terme proportionnel incapable de freiner le terme dérivé : le moteur demandait 5 à 8× le basal
+     *  profil alors que la glycémie était sous la cible. Quand ON, la glycémie est projetée sur l'horizon
+     *  d'action de l'insuline et un **seul** écart est mesuré ; le gain dérivé devient `gain_P × horizon`.
+     *  À glycémie stable le résultat est inchangé. Défaut ON : actif en production. */
+    OApsAIMIBasalProjectedError(
+        "key_aimi_basal_projected_error", true,
+        titleResId = R.string.pref_title_aimi_basal_projected_error,
+        summaryResId = R.string.pref_summary_aimi_basal_projected_error,
+    ),
+    OApsAIMIBasalTerminalInvariants(
+        "key_aimi_basal_terminal_invariants", true,
+        titleResId = R.string.pref_title_aimi_basal_terminal_invariants,
+        summaryResId = R.string.pref_summary_aimi_basal_terminal_invariants,
+    ),
     // 🩸 pkpd predictions: shape the insulin-activity curves on the LEARNED DIA/peak, not the static profile
     OApsAIMIPkpdPredictionKinetics(
         "key_aimi_pkpd_prediction_kinetics", true,
@@ -512,12 +624,39 @@ enum class BooleanKey(
         summaryResId = R.string.pref_summary_aimi_t3c_autodrive_basal_authority,
         dependency = OApsAIMIT3cBrittleMode,
     ),
+    /**
+     * T3C: hyper basal floor. When BG has stayed at/above the hyper level (160 mg/dL) for a sustained
+     * window (20 min), hold the basal at the user's configured Max basal (profile max_basal) instead of
+     * letting CGM noise collapse it to zero. Basal-only (TBR). Releases automatically when BG falls back
+     * below the level. Depends on T3C brittle mode. On by default (opt-out) — gated behind T3C brittle mode
+     * plus a sustained-dwell requirement, so a single CGM noise spike cannot trigger it.
+     */
+    OApsAIMIT3cHyperBasalFloor(
+        key = "key_aimi_t3c_hyper_basal_floor",
+        defaultValue = true,
+        titleResId = R.string.pref_title_aimi_t3c_hyper_basal_floor,
+        summaryResId = R.string.pref_summary_aimi_t3c_hyper_basal_floor,
+        dependency = OApsAIMIT3cBrittleMode,
+    ),
     /** Cystic fibrosis-related diabetes (CFRD) adaptations in T3C mode:
-     *  higher LGS safety floor, COB absorption delay, exacerbation support. */
-    OApsAIMIT3cCfrdMode("key_aimi_t3c_cfrd_mode", false),
+     *  higher LGS safety floor, COB absorption delay, exacerbation support.
+     *  Default ON: T3C brittle is the intended basal-only path for CFRD; prefs are visible under T3C. */
+    OApsAIMIT3cCfrdMode(
+        key = "key_aimi_t3c_cfrd_mode",
+        defaultValue = true,
+        titleResId = R.string.pref_title_aimi_t3c_cfrd_mode,
+        summaryResId = R.string.pref_summary_aimi_t3c_cfrd_mode,
+        dependency = OApsAIMIT3cBrittleMode,
+    ),
     /** CFRD manual exacerbation flag: raises the T3C aggressiveness ceiling during
      *  active pulmonary exacerbations or corticosteroid (steroid) treatment. */
-    OApsAIMIT3cCfrdExacerbationMode("key_aimi_t3c_cfrd_exacerbation", false),
+    OApsAIMIT3cCfrdExacerbationMode(
+        key = "key_aimi_t3c_cfrd_exacerbation",
+        defaultValue = false,
+        titleResId = R.string.pref_title_aimi_t3c_cfrd_exacerbation,
+        summaryResId = R.string.pref_summary_aimi_t3c_cfrd_exacerbation,
+        dependency = OApsAIMIT3cCfrdMode,
+    ),
 
     /** Undeclared-meal COB estimation: derives a bounded virtual COB (grams) from the glucose
      *  appearance rate, BG dynamics, weight/TDD ceiling and rest/activity context, then injects it

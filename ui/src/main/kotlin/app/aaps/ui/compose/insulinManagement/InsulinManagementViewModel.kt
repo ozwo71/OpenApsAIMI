@@ -480,7 +480,8 @@ class InsulinManagementViewModel @Inject constructor(
         _uiState.update { it.copy(insulins = insulinManager.insulins.map { it.deepClone() }) }
 
         lastAppliedConfig = preferences.get(StringNonKey.InsulinConfiguration) // mark as our own write
-        loadData(targetIndex = insulinManager.currentInsulinIndex, reload = false, autoName = state.autoNameEnabled, saveAfterAutoName = true)
+        // addNewInsulin appends, so the card to open is the last one.
+        loadData(targetIndex = insulinManager.insulins.lastIndex, reload = false, autoName = state.autoNameEnabled, saveAfterAutoName = true)
     }
 
     fun deleteCurrentInsulin(): Boolean {
@@ -495,8 +496,7 @@ class InsulinManagementViewModel @Inject constructor(
             return false
         }
 
-        insulinManager.currentInsulinIndex = state.currentCardIndex
-        insulinManager.removeCurrentInsulin() // persists internally (storeSettings)
+        insulinManager.removeInsulin(state.currentCardIndex) // persists internally (storeSettings)
 
         lastAppliedConfig = preferences.get(StringNonKey.InsulinConfiguration) // mark as our own write
         // Full resync in one atomic update: insulins + coerced index + editor for the new current card.

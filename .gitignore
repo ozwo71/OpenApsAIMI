@@ -23,11 +23,17 @@ wear/.classpath
 wear/.settings/org.eclipse.buildship.core.prefs
 app/aapsclient/*
 app/aapsclient2/*
+app/aapsclient3/*
 app/pumpcontrol/*
 wear/aapsclient/*
 wear/aapsclient2/*
+wear/aapsclient3/*
 wear/pumpcontrol/*
 wear/full/
+wear/watchfacepush/aapsclient/*
+wear/watchfacepush/aapsclient2/*
+wear/watchfacepush/aapsclient3/*
+wear/watchfacepush/pumpcontrol/*
 .kotlin/*
 /*.log
 *.bak
@@ -40,7 +46,8 @@ tmpclaude-*
 .venv_onnx/
 .tmp_eversense_patches/
 eversense_upstream_patches/
-# Local ONE+/xDrip pin scratch artifacts (never commit)
-/build-libkeks-gradle.txt
-/build-xdrip-tree.json
-/build-xdrip-pin/
+build-xdrip-pin/
+build-libkeks*.txt
+build-oneplus*.log
+build-a*.log
+build-xdrip-tree.json

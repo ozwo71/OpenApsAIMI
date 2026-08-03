@@ -49,8 +49,16 @@ object T3cAutodriveBasalBridge {
     }
 
     /**
-     * Tree opens high-basal authority when rise + resistance/meal/hyper evidence and risk is not critical.
-     * Activity / post-activity / hypo / post-hypo veto the unlock.
+     * Unlocks high-basal authority (rise ceiling + faster ramp) on **glycemic reality first**.
+     *
+     * T3C brittle mode is the reliable floor for a patient whose safety depends on it, so its basal
+     * authority must NOT depend on the physiological tree — which is frequently inert in production
+     * (`rbt_authority_off` → blank branches that never classify resistance/meal/hyper even during a
+     * sustained hyper). The **primary** unlock is therefore a confirmed rising hyper on glycemic
+     * evidence alone (projected BG + rising + not projected below target). The tree contributes only the
+     * hypo/critical **safety** gates (which fire only when it is actually alive). Post-hypo (tree-
+     * independent) and computeT3c's own hypo brakes remain in force, so decoupling does not remove any
+     * hypo protection — it removes an artificial *upward* throttle.
      */
     fun evaluateTreeUnlock(
         tree: PhysiologicalTreeSnapshot?,
@@ -60,49 +68,27 @@ object T3cAutodriveBasalBridge {
         postHypoActive: Boolean,
         eventualBg: Double?,
         targetBg: Double,
+        projectedBg: Double? = null,
     ): UnlockDecision {
         if (postHypoActive) return UnlockDecision(false, "post_hypo")
+        // Anticipatory + tree-independent: engage on where BG is heading (projected), not current BG.
+        // Fail-safe: null/invalid projection falls back to current BG.
+        val proj = projectedBg?.takeIf { it.isFinite() && it > 0.0 } ?: bg
+        val glycemicRise = proj > activationThreshold &&
+            delta > 0f &&
+            (eventualBg == null || eventualBg <= 0.0 || eventualBg > targetBg)
+        // No tree → unlock on the glycemic rise alone (fail-open, self-sufficient).
         if (tree == null) {
-            // Fail-open for rise without tree: still allow unlock on hard glycemic evidence alone.
-            val riseOnly = bg > activationThreshold + 15.0 &&
-                delta >= 2.0f &&
-                (eventualBg == null || eventualBg <= 0.0 || eventualBg > targetBg)
-            return UnlockDecision(riseOnly, if (riseOnly) "rise_no_tree" else "no_tree")
+            return UnlockDecision(glycemicRise, if (glycemicRise) "rise_no_tree" else "no_tree")
         }
-        val risk = tree.trunk.riskLevel
-        if (risk == PhysiologicalRiskLevel.CRITICAL) return UnlockDecision(false, "tree_critical")
+        // Tree-based SAFETY gates only (effective when the tree is actually alive).
+        if (tree.trunk.riskLevel == PhysiologicalRiskLevel.CRITICAL) return UnlockDecision(false, "tree_critical")
         if (tree.trunk.globalState == GlobalPhysiologicalState.HYPO_RISK) {
             return UnlockDecision(false, "tree_hypo_risk")
         }
-        val activityConf = tree.branches.activity.confidence
-        val postActivityConf = tree.branches.postActivity.confidence
-        if (activityConf >= 0.55 || postActivityConf >= 0.45) {
-            return UnlockDecision(false, "tree_activity")
-        }
-        val rising = bg > activationThreshold + 15.0 &&
-            delta >= 1.5f &&
-            (eventualBg == null || eventualBg <= 0.0 || eventualBg > targetBg)
-        if (!rising) return UnlockDecision(false, "no_confirmed_rise")
-
-        val b = tree.branches
-        val resistanceLike =
-            b.hormonalResistance.confidence >= 0.55 ||
-                b.stress.confidence >= 0.55 ||
-                b.insulinEffectiveness.confidence >= 0.55 ||
-                b.hyperRisk.confidence >= 0.55 ||
-                b.meal.confidence >= 0.55 ||
-                tree.trunk.globalState == GlobalPhysiologicalState.RESISTANCE_PROBABLE ||
-                tree.trunk.globalState == GlobalPhysiologicalState.MEAL_PROBABLE ||
-                tree.trunk.globalState == GlobalPhysiologicalState.HYPER_RISK ||
-                tree.trunk.globalState == GlobalPhysiologicalState.DIGESTION_ACTIVE ||
-                risk == PhysiologicalRiskLevel.MODERATE ||
-                risk == PhysiologicalRiskLevel.LOW
-
-        return if (resistanceLike) {
-            UnlockDecision(true, "tree_unlock_${tree.trunk.globalState.name.lowercase(Locale.US)}")
-        } else {
-            UnlockDecision(false, "tree_no_resistance_signal")
-        }
+        // PRIMARY unlock: glycemic evidence, independent of the (often inert) tree classification and of
+        // a frequently false-positive activity veto. computeT3c's PI + hypo brakes still bound the rate.
+        return UnlockDecision(glycemicRise, if (glycemicRise) "glycemic_override" else "no_confirmed_rise")
     }
 
     /**

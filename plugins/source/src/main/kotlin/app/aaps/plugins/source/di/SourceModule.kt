@@ -15,6 +15,9 @@ import app.aaps.plugins.source.PoctechPlugin
 import app.aaps.plugins.source.SyaiPlugin
 import app.aaps.plugins.source.TomatoPlugin
 import app.aaps.plugins.source.XdripSourcePlugin
+import app.aaps.plugins.source.activities.DexcomOnePlusStartActivity
+import app.aaps.plugins.source.activities.DexcomOnePlusStatusActivity
+import app.aaps.plugins.source.activities.DexcomOnePlusWarmupActivity
 import app.aaps.plugins.source.activities.EversenseCalibrationActivity
 import app.aaps.plugins.source.activities.EversensePlacementActivity
 import app.aaps.plugins.source.activities.EversenseStatusActivity
@@ -44,6 +47,9 @@ abstract class SourceModule {
     @ContributesAndroidInjector abstract fun contributesEversenseCalibrationActivity(): EversenseCalibrationActivity
     @ContributesAndroidInjector abstract fun contributesEversenseStatusActivity(): EversenseStatusActivity
     @ContributesAndroidInjector abstract fun contributesEversensePlacementActivity(): EversensePlacementActivity
+    @ContributesAndroidInjector abstract fun contributesDexcomOnePlusStatusActivity(): DexcomOnePlusStatusActivity
+    @ContributesAndroidInjector abstract fun contributesDexcomOnePlusStartActivity(): DexcomOnePlusStartActivity
+    @ContributesAndroidInjector abstract fun contributesDexcomOnePlusWarmupActivity(): DexcomOnePlusWarmupActivity
     @ContributesAndroidInjector abstract fun contributesNotificationCollectorService(): NotificationCollectorService
 
     @Module

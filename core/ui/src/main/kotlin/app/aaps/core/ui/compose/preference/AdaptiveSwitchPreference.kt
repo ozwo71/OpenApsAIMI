@@ -4,25 +4,17 @@
 
 package app.aaps.core.ui.compose.preference
 
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.tooling.preview.Preview
-import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.BooleanKeyWithChangeGuard
 import app.aaps.core.keys.interfaces.BooleanPreferenceKey
 import app.aaps.core.keys.interfaces.VisibilityContext
 import app.aaps.core.ui.R
-import app.aaps.core.ui.compose.ExcludeFromJacocoGeneratedReport
 import app.aaps.core.ui.compose.dialogs.OkDialog
 
 /**
@@ -31,6 +23,8 @@ import app.aaps.core.ui.compose.dialogs.OkDialog
  * @param titleResId Optional title resource ID. If 0 or not provided, uses booleanKey.titleResId
  * @param summaryResId Optional summary resource ID. If null, uses booleanKey.summaryResId
  * @param visibilityContext Optional context for evaluating runtime visibility/enabled conditions
+ *
+ * @see AdaptiveSwitchPreferencePreview
  */
 @Composable
 fun AdaptiveSwitchPreferenceItem(
@@ -81,24 +75,14 @@ fun AdaptiveSwitchPreferenceItem(
                     guardMessage = message
                 }
             },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(titleText)
-                    SyncBadge(booleanKey, Modifier.padding(start = 6.dp))
-                }
-            },
+            title = { TextWithSyncBadge(titleText, booleanKey) },
             summary = summary,
             enabled = visibility.enabled
         )
     } else {
         SwitchPreference(
             state = state,
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(titleText)
-                    SyncBadge(booleanKey, Modifier.padding(start = 6.dp))
-                }
-            },
+            title = { TextWithSyncBadge(titleText, booleanKey) },
             summary = summary,
             enabled = visibility.enabled
         )
@@ -110,17 +94,6 @@ fun AdaptiveSwitchPreferenceItem(
             title = stringResource(R.string.error),
             message = message,
             onDismiss = { guardMessage = null }
-        )
-    }
-}
-
-@ExcludeFromJacocoGeneratedReport
-@Preview(showBackground = true)
-@Composable
-private fun AdaptiveSwitchPreferencePreview() {
-    PreviewTheme {
-        AdaptiveSwitchPreferenceItem(
-            booleanKey = BooleanKey.OverviewKeepScreenOn
         )
     }
 }

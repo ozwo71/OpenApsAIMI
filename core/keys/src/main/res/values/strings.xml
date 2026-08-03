@@ -58,6 +58,16 @@
     <string name="pref_title_alert_increase_volume">Gradually increase notification volume</string>
     <string name="pref_title_alert_override_dnd">Override Do Not Disturb mode</string>
     <string name="pref_summary_alert_override_dnd">When enabled, AAPS alarms play through silent and Do Not Disturb modes (alarm stream). When disabled, alarms respect silent/DND (notification stream).</string>
+    <string name="pref_title_alert_hypo">Alert on low glucose</string>
+    <string name="pref_summary_alert_hypo">Sound an alarm when glucose is at or below the low threshold.</string>
+    <string name="pref_title_alert_hypo_threshold">Low glucose alarm threshold</string>
+    <string name="pref_title_alert_hyper">Alert on high glucose</string>
+    <string name="pref_summary_alert_hyper">Notify when glucose is at or above the high threshold.</string>
+    <string name="pref_title_alert_hyper_threshold">High glucose alarm threshold</string>
+    <string name="pref_title_alert_rapid_fall">Alert on rapid fall</string>
+    <string name="pref_summary_alert_rapid_fall">Sound an alarm when glucose drops by at least the configured amount within the configured time window.</string>
+    <string name="pref_title_alert_rapid_fall_drop">Rapid fall drop threshold</string>
+    <string name="pref_title_alert_rapid_fall_window">Rapid fall time window</string>
 
     <!-- BG Source preferences -->
     <string name="pref_title_bg_source_upload_to_ns">Upload BG data to NS</string>
@@ -544,6 +554,16 @@
     <string name="pref_summary_aimi_straight_line_tube">Discrete short-horizon control on max SMB: keeps predicted minimum BG above a floor using the PKPD min curve, favors larger caps when eventual BG is high, penalizes zig-zag SMB sizing. Does not replace PKPD or safety nets. Off by default.</string>
     <string name="pref_title_aimi_t3c_autodrive_basal_authority">T3C: Autodrive basal authority</string>
     <string name="pref_summary_aimi_t3c_autodrive_basal_authority">Under T3C brittle mode, fuse Autodrive’s temporary basal demand with the T3C PI controller. SMB from Autodrive is never delivered (basal-only). The physiological tree can unlock a higher basal ceiling and faster ramp on a confirmed rise. Off disables fusion (PI-only + shadow Autodrive).</string>
+    <string name="pref_title_aimi_t3c_hyper_basal_floor">T3C: Hyper basal floor</string>
+    <string name="pref_summary_aimi_t3c_hyper_basal_floor">Under T3C brittle mode, when glucose has stayed at or above 160 mg/dL for at least 20 minutes, hold the basal at your configured Max basal rate so sensor noise cannot collapse the correction to zero. Basal only (no SMB). Releases automatically once glucose falls back below 160 mg/dL. On by default. This is not medical advice — review your settings with your care team.</string>
+    <string name="pref_title_aimi_t3c_cfrd_mode">T3C: CFRD mode</string>
+    <string name="pref_summary_aimi_t3c_cfrd_mode">Cystic fibrosis–related diabetes adaptations under T3C: higher LGS safety floor, delayed COB absorption for malabsorption, and inflammation-aware basal aggressiveness. Basal-only (no SMB). On by default when T3C brittle mode is used. This is not medical advice — review with your CF/diabetes care team.</string>
+    <string name="pref_title_aimi_t3c_cfrd_exacerbation">T3C CFRD: pulmonary exacerbation</string>
+    <string name="pref_summary_aimi_t3c_cfrd_exacerbation">Manual flag for active pulmonary exacerbation or corticosteroid treatment. Raises the T3C basal aggressiveness ceiling while CFRD mode is on. Turn off when the exacerbation ends. Off by default.</string>
+    <string name="pref_title_aimi_t3c_cfrd_lgs_floor">T3C CFRD: LGS safety floor</string>
+    <string name="pref_summary_aimi_t3c_cfrd_lgs_floor">Minimum LGS threshold (mg/dL) used by T3C anticipation when CFRD mode is on. Impaired counter-regulation needs a higher floor than typical T1D. Range 70–95.</string>
+    <string name="pref_title_aimi_t3c_cfrd_cob_delay">T3C CFRD: COB absorption delay</string>
+    <string name="pref_summary_aimi_t3c_cfrd_cob_delay">Minutes to shift the COB prediction curve forward for delayed/irregular carbohydrate absorption. Feeds basal anticipation only (no SMB). Range 0–90 min.</string>
     <string name="pref_title_aimi_sos_enable">Enable Emergency SOS</string>
     <string name="pref_summary_aimi_sos_enable">Send SMS with BG, trend, IOB and location when a severe hypo or missing CGM data is detected. SMS only (no automatic calls).</string>
     <string name="pref_title_aimi_sos_phone">Emergency contact #1</string>
@@ -578,6 +598,12 @@
     <string name="pref_summary_aimi_effort_activity_protection">Lower SMB when steps and heart rate show current or recent physical effort, even if no activity was declared in AIMI Context. Protection persists for a while after you stop (post-exercise sensitivity) and is skipped when the signals look like stress rather than exercise. Reduction-only.</string>
     <string name="pref_title_aimi_hyper_trajectory_release">Hyper trajectory SMB release (HTR)</string>
     <string name="pref_summary_aimi_hyper_trajectory_release">When Autodrive V3 is on, lift V3 micro-bolus using scenario projection and trajectory on credible hyper rise. Trigger is not a fixed 200 mg/dL threshold.</string>
+    <string name="pref_title_aimi_tree_meal_rise_frontload">Meal-rise front-loader (early SMB)</string>
+    <string name="pref_summary_aimi_tree_meal_rise_frontload">On a corroborated meal rise (tree = NEED_MORE_INSULIN, BG above target, rising), let Harmonia apply the early SMB lift even when sensor confidence is low — instead of waiting for established hyper. Only ever softens the authority (never a hard bolus); real hypo, free-fall and safety blocks are never overridden. Off by default: it overrides the sensor-confidence gate. Fix the sensor source first if you can.</string>
+    <string name="pref_title_aimi_sensor_confidence_cgm_first">Sensor confidence: CGM-first</string>
+    <string name="pref_summary_aimi_sensor_confidence_cgm_first">Base sensor confidence on the CGM source and signal, not on wearable/health data availability. The old formula let a missing watch collapse sensor confidence and block Harmonia/RBT all day even with a good CGM. When on, a native/filtered CGM is trusted and an unknown source stays cautious rather than fully blocking. This raises dosing authority, so it is off by default.</string>
+    <string name="pref_title_aimi_meal_confirmed_early_release">Meal-confirmed early release</string>
+    <string name="pref_summary_aimi_meal_confirmed_early_release">For undeclared meals: once a meal is confirmed and rising, let the loop reach your configured maximum SMB and basal early, instead of holding back until the high is already established. It only lifts the internal safety floor toward the meal path while blood glucose is climbing, stays within your max SMB, max basal and max IOB, and automatically hands back to the cautious floor once the peak is passed, insulin has stacked, or the rise stops. Real lows and post-hypo protection are never overridden. This raises early dosing, so it is off by default.</string>
     <string name="pref_title_aimi_hyper_trajectory_release_aggressive">HTR aggressive floors</string>
     <string name="pref_summary_aimi_hyper_trajectory_release_aggressive">Raises HTR SMB floors ~15%% when scenario confirms hyper rise. Use only if default release feels too weak.</string>
     <string name="pref_title_aimi_recursive_belief_shadow">Recursive belief tree (shadow export)</string>
@@ -645,5 +671,11 @@
     <string name="pref_summary_aimi_pkpd_endo_reversion">Stop the pkpd eventual prediction from sticking at the 39 mg/dL floor once insulin is spent, letting counter-regulation drift it back toward a low-normal. Affects the eventual only; the hypo-protection floor is unchanged.</string>
     <string name="pref_title_aimi_pkpd_prediction_kinetics">Prediction: learned insulin kinetics</string>
     <string name="pref_summary_aimi_pkpd_prediction_kinetics">Shape the glucose prediction curves with the adaptive PK/PD learned DIA and peak instead of the fixed insulin profile, so eventual and minPred reflect how your insulin actually acts. Falls back to the profile kinetics when the learner is off or its values are out of range.</string>
+    <string name="pref_title_aimi_basal_channel_safety_guards">Basal channel: honour SMB safety holds</string>
+    <string name="pref_summary_aimi_basal_channel_safety_guards">When a safety rule zeroes the SMB, also block the automatic T3C/Harmonia basal channels instead of letting them take over, and keep the adaptive learner reduction on the rate they propose. Can only lower the automatic temp basal, never raise it. Manual meal modes keep their configured rate.</string>
+    <string name="pref_title_aimi_basal_projected_error">Basal channel: project glucose before correcting</string>
+    <string name="pref_summary_aimi_basal_projected_error">Size the temp basal on where glucose is heading over the insulin action window, as a single distance from target, instead of adding a separate trend term that outweighed the distance term 36 to 1. Unchanged when glucose is steady; a rise no longer alone drives several times profile basal.</string>
+    <string name="pref_title_aimi_basal_terminal_invariants">Basal channel: final safety limits</string>
+    <string name="pref_summary_aimi_basal_terminal_invariants">Re-check three limits on the temp basal after every multiplier has been applied, instead of before them: hold at profile basal when both glucose and the prediction are below target, while post-hypo recovery is active, or when insulin on board is negative without a rise. Can only lower the rate, never raise it. Manual meal modes are exempt.</string>
 </resources>
 

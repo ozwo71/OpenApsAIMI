@@ -31,6 +31,13 @@ import app.aaps.core.interfaces.profile.EffectiveProfile
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.source.CgmSensorLifecycle
+import app.aaps.core.interfaces.source.CgmSensorStatusProvider
+import app.aaps.core.interfaces.source.CgmWarmupProvider
+import app.aaps.core.interfaces.source.CgmWarmupStatus
+import app.aaps.core.interfaces.source.PromotionRejectReason
+import app.aaps.core.interfaces.source.PromotionResult
+import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.interfaces.rx.AapsSchedulers
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMIPhysioDataRepositoryMTR
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard // 🌀 Trajectory
@@ -84,6 +91,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
@@ -173,6 +182,13 @@ class OverviewViewModel(
 
     private val _graphMessage = MutableLiveData<String>()
     val graphMessage: LiveData<String> = _graphMessage
+
+    /**
+     * One-shot user feedback for a staging-sensor promotion (result message). Hoisted to the Compose
+     * layer (a background ViewModel has no Compose tree) — the dashboard collects and shows a toast.
+     */
+    private val _promotionEvents = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val promotionEvents = _promotionEvents.asSharedFlow()
 
     // Adaptive smoothing quality (informational, used only for UI badge in phase 1)
     private var adaptiveSmoothingQualityTier: AdaptiveSmoothingQualityTier? = null
@@ -365,6 +381,44 @@ class OverviewViewModel(
         // Cannula / sensor ages on the hybrid card
         observePersistenceChanges(TE::class.java) { scheduleDebouncedStatusRefresh() }
 
+        // Generic CGM warm-up: refresh the hero when the active source starts/updates/ends a warm-up
+        // (phase change, (re)connection, or first glucose → handoff). No-op for sources that don't
+        // implement [CgmWarmupProvider]. Per-second countdown ticking is driven from the Compose layer.
+        scope.launch {
+            try {
+                (activePlugin.activeBgSource as? CgmWarmupProvider)?.warmupStatus?.collect {
+                    scheduleDebouncedStatusRefresh()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                fabricPrivacy.logException(e)
+            }
+        }
+
+        // Generic dual-sensor lifecycle + staging: refresh the hero when the active source reports a
+        // production lifecycle change (early/end of life) or any staging-slot change (warm-up, settling,
+        // ready). No-op for sources that don't implement [CgmSensorStatusProvider]; the staging slot is
+        // collect-only and never feeds the loop until an explicit promote.
+        scope.launch {
+            try {
+                (activePlugin.activeBgSource as? CgmSensorStatusProvider)?.let { sensor ->
+                    merge(
+                        sensor.lifecycle.map { },
+                        sensor.stagingState.map { },
+                        sensor.stagingLifecycle.map { },
+                        sensor.stagingWarmupStatus.map { },
+                    ).collect {
+                        scheduleDebouncedStatusRefresh()
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                fabricPrivacy.logException(e)
+            }
+        }
+
         // Same preference-driven refresh as overview [merge(...).onEach { scheduleUpdateGUI() }].
         scope.launch {
             try {
@@ -472,6 +526,38 @@ class OverviewViewModel(
         )
         latestStatusCardState = refreshedState
         _statusCardState.postValue(refreshedState)
+    }
+
+    /**
+     * Promote the active source's staging sensor to production (the ONLY action that swaps the loop's
+     * glucose source — safety-critical). Runs on the update scope; the result message is emitted on
+     * [promotionEvents] for the UI and the dashboard is refreshed so the staging card reflects the new
+     * state. No-op when the active source has no staging capability.
+     */
+    fun promoteStaging() {
+        val scope = updateScope ?: return
+        val sensor = activePlugin.activeBgSource as? CgmSensorStatusProvider ?: return
+        scope.launch {
+            try {
+                val message = when (val result = sensor.promoteStagingToProduction()) {
+                    is PromotionResult.Ok       -> resourceHelper.gs(R.string.dashboard_staging_promote_ok)
+                    is PromotionResult.Rejected -> resourceHelper.gs(promotionRejectReasonRes(result.reason))
+                }
+                _promotionEvents.emit(message)
+                scheduleDebouncedStatusRefresh()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                fabricPrivacy.logException(e)
+            }
+        }
+    }
+
+    private fun promotionRejectReasonRes(reason: PromotionRejectReason): Int = when (reason) {
+        PromotionRejectReason.STAGING_ABSENT           -> R.string.dashboard_staging_promote_rejected_absent
+        PromotionRejectReason.STAGING_NOT_SETTLED      -> R.string.dashboard_staging_promote_rejected_not_settled
+        PromotionRejectReason.STAGING_NO_VALID_GLUCOSE -> R.string.dashboard_staging_promote_rejected_no_glucose
+        PromotionRejectReason.LOOP_BUSY                -> R.string.dashboard_staging_promote_rejected_loop_busy
     }
 
     private suspend fun updateStatus() {
@@ -727,6 +813,16 @@ class OverviewViewModel(
         val healthScore = rt?.trajectoryHealth?.toDouble()?.div(100.0) ?: autodriveEngine.getHealthScore()
         val adaptationSummary = buildAimiAdaptationSummary(rt, now)
 
+        // Generic CGM warm-up status of the active source (null for sources that don't implement the provider).
+        val warmupStatus = (activePlugin.activeBgSource as? CgmWarmupProvider)?.warmupStatus?.value
+
+        // Generic dual-sensor lifecycle + staging status (null / ABSENT for sources that don't implement it).
+        val sensorStatus = activePlugin.activeBgSource as? CgmSensorStatusProvider
+        val productionLifecycle = sensorStatus?.lifecycle?.value
+        val stagingSlotState = sensorStatus?.stagingState?.value ?: StagingState.ABSENT
+        val stagingLifecycleValue = sensorStatus?.stagingLifecycle?.value
+        val stagingWarmupValue = sensorStatus?.stagingWarmupStatus?.value
+
         val state = StatusCardState(
             glucoseText = glucoseText,
             glucoseColor = DashboardCoherentGlucose.displayBgColor(
@@ -809,7 +905,12 @@ class OverviewViewModel(
 
             adaptiveSmoothingQualityTier = adaptiveSmoothingQualityTier,
             adaptiveSmoothingQualityBadgeText = adaptiveSmoothingQualityBadgeText,
-            adaptiveSmoothingQualityDialogMessage = adaptiveSmoothingQualityDialogMessage
+            adaptiveSmoothingQualityDialogMessage = adaptiveSmoothingQualityDialogMessage,
+            warmup = warmupStatus,
+            lifecycle = productionLifecycle,
+            stagingState = stagingSlotState,
+            stagingLifecycle = stagingLifecycleValue,
+            stagingWarmup = stagingWarmupValue,
         )
         latestStatusCardState = state
         _statusCardState.postValue(state)
@@ -1436,7 +1537,31 @@ data class StatusCardState(
     // Adaptive Smoothing Quality Badge (phase 1: informational only)
     val adaptiveSmoothingQualityTier: AdaptiveSmoothingQualityTier? = null,
     val adaptiveSmoothingQualityBadgeText: String = "",
-    val adaptiveSmoothingQualityDialogMessage: String = ""
+    val adaptiveSmoothingQualityDialogMessage: String = "",
+
+    /**
+     * Generic warm-up / (re)connection status of the active BG source, or null when the source does
+     * not report one (or is READY / IDLE / FAILED). Populated from
+     * `(activeBgSource as? CgmWarmupProvider)?.warmupStatus`. Drives the hero warm-up ring only when
+     * there is no fresh glucose to show — never references any specific CGM vendor.
+     */
+    val warmup: CgmWarmupStatus? = null,
+
+    /**
+     * Production sensor lifecycle (early/end of life) of the active source, or null when the source
+     * does not report one. Drives a small, non-alarming "beginning of life" / "expires soon" subtext
+     * under the hero — the glucose ring itself stays normal.
+     */
+    val lifecycle: CgmSensorLifecycle? = null,
+
+    /** Coarse staging-slot state of the active source; [StagingState.ABSENT] hides the staging card. */
+    val stagingState: StagingState = StagingState.ABSENT,
+
+    /** Staging sensor lifecycle (age → settle progress), or null when there is no staging sensor. */
+    val stagingLifecycle: CgmSensorLifecycle? = null,
+
+    /** Staging sensor warm-up status (countdown), or null when nothing to show. */
+    val stagingWarmup: CgmWarmupStatus? = null,
 )
 
 data class AdjustmentCardState(

@@ -3,6 +3,7 @@ package app.aaps.plugins.source.di
 import app.aaps.core.interfaces.di.AllConfigs
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.plugins.source.AidexPlugin
+import app.aaps.plugins.source.DexcomOnePlusPlugin
 import app.aaps.plugins.source.DexcomPlugin
 import app.aaps.plugins.source.EversensePlugin
 import app.aaps.plugins.source.GlimpPlugin
@@ -72,6 +73,12 @@ abstract class SourcePluginsListModule {
     @IntoMap
     @IntKey(445)
     abstract fun bindEversensePlugin(plugin: EversensePlugin): PluginBase
+
+    @Binds
+    @AllConfigs
+    @IntoMap
+    @IntKey(446)
+    abstract fun bindDexcomOnePlusPlugin(plugin: DexcomOnePlusPlugin): PluginBase
 
     @Binds
     @AllConfigs

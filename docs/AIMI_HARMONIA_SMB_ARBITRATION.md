@@ -211,7 +211,35 @@ and the safety wall open at the exact same tick.
 - Freefall (`Δ ≤ −15`) or projection into hypo: authority returns to `NONE`, safety wall re-fires.  
 - `eventual_bg` no longer equals 39 while real BG > 180 (with `OApsAIMIPkpdHyperReversion` on).
 
-### 8.6 Still open
+### 8.6 Tree meal-rise front-loader (arbre déploie → Harmonia applique)
+
+Field failure (BG 213, Δ+14): SMB stuck at ~1.20/1.25 and only escalating past ~210 (too late). Root:
+the tree already deploys `NEED_MORE_INSULIN` early (`resolveInsulinIntent`, bg≥140 & Δ≥1.2), but the
+early **rate-driven** actuator (RBT lift toward `maxSMBHB`) is entirely gated behind RBT authority —
+which `sensor_confidence` (≈0.32: null `sourceSensor` + wearable-weighted formula, not CGM quality)
+forces to `NONE` via `SENSOR_LOW`. The only surviving escalator is the **level-driven** HTR tier ladder
+(ESTABLISHED weight 1.20/1.25), hence "wait for established hyper". See [[sensor-confidence-gates-harmonia]].
+
+**Front-loader** (`RecursiveBeliefAuthorityGate.shouldFrontLoadTreeMealRise`, flag
+`OApsAIMITreeMealRiseFrontLoad`, **default OFF / opt-in**): when the tree deployed `NEED_MORE_INSULIN`
+on a corroborated meal rise, **re-open a `NONE` posted by a *soft-overridable* veto**
+(`SENSOR_LOW` / `PREDICTIVE_HYPO` / `PHYSIO_CAP`) back to **SOFT**, so Harmonia can apply the early lift
+(SOFT re-opens `channelOpen` → arbiter `LIFT_WITHIN_ENVELOPE`). Guarded, reason-code-aware:
+- Requires: `treeInsulinIntent == NEED_MORE_INSULIN`, `bg ≥ target+45`, rising (`Δ≥1.2`) or a
+  non-free-falling descent (shared `HyperInstalledDroppingExemption` predicate), and **independent meal
+  corroboration** (`corroboratesMeal`: mode/causal/latent/hypothesis). Never on level+intent alone.
+- **Sovereign vetoes never overridden**: `PRED_MISSING`, `CHAOS_BLOCK`, `POST_HYPO_BLOCK`,
+  `EPISODE_POST_HYPO/CHAOTIC`, real low BG (excluded by `bg ≥ target+45`), free-fall, sticky post-hypo
+  latent, false-meal. **SOFT only, never HARD.**
+- ⚠️ It overrides the sensor-confidence safety gate → default OFF; the *proper* fix is still to repair
+  `sensor_confidence` (plumb `sourceSensor`, decouple from wearable). This is the interim actuator.
+
+**Deferred (cas B):** when the RBT never even *requested* authority (`requestedAuthority == NONE`, flat
+plateau, urgency below threshold), the gate early-returns `NO_RELEASE`; re-opening would require the
+gate to *synthesize* a request (breaks its `effectiveAuthority ≤ min(requested, maxAllowed)` invariant).
+Left for a separate iteration pending replay evidence of frequency.
+
+### 8.7 Still open
 
 - **Post-hypo latency**: a meal starting right after a hypo is held `NONE` for ~14 min because
   `PostHypoAggressiveRiseExit` requires `Δ > 15`; a softer meal-rise exit is pending (validate in

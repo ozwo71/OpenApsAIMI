@@ -28,6 +28,16 @@
             android:exported="false" />
         <activity android:name=".activities.EversenseStatusActivity"
             android:exported="false" />
+
+        <activity
+            android:name=".activities.DexcomOnePlusStatusActivity"
+            android:exported="false" />
+        <activity
+            android:name=".activities.DexcomOnePlusStartActivity"
+            android:exported="false" />
+        <activity
+            android:name=".activities.DexcomOnePlusWarmupActivity"
+            android:exported="false" />
     </application>
 
 </manifest>

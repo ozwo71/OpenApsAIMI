@@ -41,8 +41,10 @@ import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
+import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
+import app.aaps.plugins.aps.openAPSAIMI.basal.BasalTerminalInvariants
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAnticipation
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAutodriveBasalBridge
@@ -219,6 +221,7 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
 import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertaintyBuilder
 import app.aaps.plugins.aps.openAPSAIMI.patient.MealRiseGeometry
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaAction
+import app.aaps.plugins.aps.openAPSAIMI.patient.InsulinIntent
 import app.aaps.plugins.aps.openAPSAIMI.patient.GlobalPhysiologicalState
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalRiskLevel
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalTreeBuilder
@@ -338,6 +341,8 @@ internal data class AimiDecisionContext(
         var dose_terminal_snapshot: org.json.JSONObject? = null,
         /** Wave4 H3 — soft-floor/EGP path-min (production curves + study JSON raw/soft). */
         var pkpd_soft_floor: org.json.JSONObject? = null,
+        /** Lot 2 — invariants terminaux du canal basal: taux avant/apres et invariant liant. */
+        var basal_terminal: org.json.JSONObject? = null,
         /** AIMI Harmonia simulated production branch; virtual only, never applied to the real pump. */
         var harmonia_simulation: org.json.JSONObject? = null,
         /** AIMI Harmonia production owner state; basal-first only and safety-gated. */
@@ -703,6 +708,9 @@ internal data class AimiDecisionContext(
             }
             adjustments.pkpd_soft_floor?.let { softFloor ->
                 adj.put("pkpd_soft_floor", softFloor)
+            }
+            adjustments.basal_terminal?.let { terminal ->
+                adj.put("basal_terminal", terminal)
             }
             adjustments.harmonia_simulation?.let { simulation ->
                 adj.put("harmonia_simulation", simulation)
@@ -1081,6 +1089,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val sensorInsertionMsRef = AtomicReference<Long?>(null)
     private val sensorInsertionRefreshInFlight = AtomicBoolean(false)
     @Volatile private var lastBasalLearnerHypoNotifyMs: Long = 0L
+    @Volatile private var lastBasalLearnerHyperNotifyMs: Long = 0L
     private val stepsSnapshotRef = AtomicReference<List<SC>>(emptyList())
     private val stepsRefreshInFlight = AtomicBoolean(false)
     private val heartRatesSnapshotRef = AtomicReference<List<HR>>(emptyList())
@@ -1354,6 +1363,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (nowMs - lastBasalLearnerHypoNotifyMs < 30 * 60_000L) return
         lastBasalLearnerHypoNotifyMs = nowMs
         basalLearner.onHypoDetected()
+    }
+
+    /**
+     * Pendant symétrique de [notifyBasalLearnerHypoIfNeeded] : une hyperglycémie qui dure doit elle aussi
+     * être apprise, sinon le learner ne reçoit que des signaux à la baisse.
+     * `onPersistentHyper` existait dans [BasalLearner] mais n'avait **aucun appelant** — l'événement hypo
+     * se déclenchait, l'événement hyper jamais, ce qui rendait l'apprentissage structurellement asymétrique.
+     *
+     * Critère « persistant » : le **minimum** des 60 dernières minutes reste au-dessus de
+     * [PERSISTENT_HYPER_BG_MGDL], donc la glycémie n'est pas redescendue une seule fois sous le seuil sur
+     * la fenêtre — un pic transitoire ne suffit pas. Même cadence que le versant hypo (une fois / 30 min).
+     *
+     * La garde post-hypo est appliquée dans [BasalLearner.onPersistentHyper] : un rebond consécutif à une
+     * hypo ne doit pas entraîner à la hausse, c'est précisément ce que la fenêtre d'exclusion écarte.
+     */
+    private fun notifyBasalLearnerPersistentHyperIfNeeded(nowMs: Long) {
+        if (bg <= PERSISTENT_HYPER_BG_MGDL) return
+        if (minBgInLastMinutes(PERSISTENT_HYPER_LOOKBACK_MINUTES) <= PERSISTENT_HYPER_BG_MGDL) return
+        if (nowMs - lastBasalLearnerHyperNotifyMs < 30 * 60_000L) return
+        lastBasalLearnerHyperNotifyMs = nowMs
+        basalLearner.onPersistentHyper()
     }
 
     private fun stepsCountsCached(now: Long): List<SC> {
@@ -1686,6 +1716,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // holdTicks every loop and made 15–20 min holds dead on arrival. reset() belongs in
         // tests / plugin restart only.
         pendingTrajSpiralBasal = null
+        // 🔭 Lot 0 — l'export JSONL doit avoir lieu sur TOUS les chemins de sortie du tick, pas seulement
+        // sur les deux qui appellent explicitement le stage. On repart d'un état non exporté à chaque tick.
+        aimiDecisionExportedThisTick = false
+        pendingDecisionCtxForExport = null
         val decisionCtx = AimiDecisionContext(
             event_id = "evt_${ctx.currentTime}".also { currentTickDecisionEventId = it },
             timestamp = ctx.currentTime,
@@ -1751,6 +1785,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } else {
             ctx.flatBGsDetected
         }
+        pendingDecisionCtxForExport = decisionCtx
         return AimiTickDecisionRtBootstrap(decisionCtx, rT, flatBGsDetected)
     }
 
@@ -1843,24 +1878,31 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         val gs = pack.gs!!
         val f = pack.features
-        val glucoseStatus = ctx.glucoseStatus ?: GlucoseStatusAIMI(
-            glucose = gs.glucose,
-            noise = gs.noise,
-            delta = gs.delta,
-            shortAvgDelta = gs.shortAvgDelta,
-            longAvgDelta = gs.longAvgDelta,
-            date = gs.date,
-            duraISFminutes = f?.stable5pctMinutes ?: 0.0,
-            duraISFaverage = f?.stable5pctAverage ?: 0.0,
-            parabolaMinutes = f?.parabolaMinutes ?: 0.0,
-            deltaPl = f?.delta5Prev ?: 0.0,
-            deltaPn = f?.delta5Next ?: 0.0,
-            bgAcceleration = f?.accel ?: 0.0,
-            a0 = f?.a0 ?: 0.0,
-            a1 = f?.a1 ?: 0.0,
-            a2 = f?.a2 ?: 0.0,
-            corrSqu = f?.corrR2 ?: 0.0
-        )
+        val glucoseStatus = when {
+            ctx.glucoseStatus == null -> GlucoseStatusAIMI(
+                glucose = gs.glucose,
+                noise = gs.noise,
+                delta = gs.delta,
+                shortAvgDelta = gs.shortAvgDelta,
+                longAvgDelta = gs.longAvgDelta,
+                date = gs.date,
+                duraISFminutes = f?.stable5pctMinutes ?: 0.0,
+                duraISFaverage = f?.stable5pctAverage ?: 0.0,
+                parabolaMinutes = f?.parabolaMinutes ?: 0.0,
+                deltaPl = f?.delta5Prev ?: 0.0,
+                deltaPn = f?.delta5Next ?: 0.0,
+                bgAcceleration = f?.accel ?: 0.0,
+                a0 = f?.a0 ?: 0.0,
+                a1 = f?.a1 ?: 0.0,
+                a2 = f?.a2 ?: 0.0,
+                corrSqu = f?.corrR2 ?: 0.0,
+                sourceSensor = gs.sourceSensor
+            )
+            // Enrich if caller omitted sensor but calculator pack has it (One+ / G7 / G6)
+            ctx.glucoseStatus.sourceSensor == null && gs.sourceSensor != null ->
+                ctx.glucoseStatus.copy(sourceSensor = gs.sourceSensor)
+            else -> ctx.glucoseStatus
+        }
         ensurePredictionFallback(rT, glucoseStatus.glucose)
         return AimiGlucosePackLoadOutcome.Continue(glucoseStatus, f)
     }
@@ -3020,6 +3062,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             autonomicStress = stressMask.autonomicStress,
             inflammationRecovery = stressMask.inflammationRecovery,
             hormonalCircadian = stressMask.hormonalCircadian,
+            cgmFirstSensorConfidence = preferences.get(BooleanKey.OApsAIMISensorConfidenceCgmFirst),
         )
         lastUamHypothesisState = hypothesisState
         lastPhysioLatentState = latentState
@@ -4097,6 +4140,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 targetBgMgdl = targetForPostHypoExit,
                 deltaMgdl5m = delta.toDouble(),
                 mealHyperBypassEnabled = rbtPrefs.mealHyperBypassEnabled,
+                treeInsulinIntent = lastPhysiologicalTreeSnapshot?.insulinIntent ?: InsulinIntent.NONE,
+                treeInsulinUrgency = lastPhysiologicalTreeSnapshot?.insulinUrgency ?: 0.0,
+                treeMealRiseFrontLoadEnabled = rbtPrefs.treeMealRiseFrontLoadEnabled,
             ),
         )
         lastRecursiveAuthorityGateDecision = authorityGate
@@ -4539,10 +4585,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 )
             }
 
-            if (adState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G6_NATIVE) {
+            if (adState.sourceSensor == SourceSensor.DEXCOM_G6_NATIVE) {
                 consoleLog.add("🤖 SENSOR_AWARE: G6 Detected -> Engaging Lead Compensator (UKF +50% Vel).")
-            } else if (adState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G7_NATIVE) {
-                consoleLog.add("🤖 SENSOR_AWARE: One+/G7 Detected -> Fast Sensor, Real-Time Maths Engaged.")
+            } else if (adState.sourceSensor == SourceSensor.DEXCOM_ONEPLUS_NATIVE) {
+                consoleLog.add("🤖 SENSOR_AWARE: One+ Detected -> Fast Sensor, Real-Time Maths Engaged (no G6 lead).")
+            } else if (adState.sourceSensor == SourceSensor.DEXCOM_G7_NATIVE) {
+                consoleLog.add("🤖 SENSOR_AWARE: G7 Detected -> Fast Sensor, Real-Time Maths Engaged.")
             }
 
             autodriveEngine.setShadowMode(false)
@@ -7141,6 +7189,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             minutesSinceLastChange = bundle.minutesSinceLastChange,
             pumpCaps = bundle.pumpCaps,
             auditorConfidence = auditorConfidence,
+            projectionHorizonMin = DynamicBasalController.PROJECTION_HORIZON_MIN
+                .takeIf { preferences.get(BooleanKey.OApsAIMIBasalProjectedError) },
         )
         val helpers = BasalDecisionEngine.Helpers(
             calculateRate = { basalValue, currentBasalValue, multiplier, label ->
@@ -7293,6 +7343,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         if ((b.rT.units ?: 0.0) > 0.0 || (b.rT.insulinReq ?: 0.0) > 0.0) {
             return blockT3cBasalFirstProduction(t3cState, "smb_already_requested")
+        }
+        if (basalChannelSafetyGuardsActive() && smbZeroedBySafetyThisTick()) {
+            basalChannelGuardBlockedT3cCount++
+            return blockT3cBasalFirstProduction(t3cState, "smb_zeroed_by_safety")
         }
         if (exerciseInsulinLockoutActive || t3cState.exerciseBlock) {
             return blockT3cBasalFirstProduction(t3cState, "exercise_lockout")
@@ -7486,6 +7540,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if ((b.rT.units ?: 0.0) > 0.0 || (b.rT.insulinReq ?: 0.0) > 0.0) {
             return blockHarmoniaProduction(simulation, "smb_already_requested")
         }
+        if (basalChannelSafetyGuardsActive() && smbZeroedBySafetyThisTick()) {
+            basalChannelGuardBlockedHarmoniaCount++
+            return blockHarmoniaProduction(simulation, "smb_zeroed_by_safety")
+        }
         if (exerciseInsulinLockoutActive) {
             return blockHarmoniaProduction(simulation, "exercise_lockout")
         }
@@ -7655,6 +7713,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             isFastingTime = isNight && !anyMealActive
         )
         notifyBasalLearnerHypoIfNeeded(b.ctx.currentTime)
+        notifyBasalLearnerPersistentHyperIfNeeded(b.ctx.currentTime)
 
         // 📊 Expose BasalLearner state in rT for visibility
         consoleLog.add("📊 BASAL_LEARNER:")
@@ -7848,14 +7907,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             finalProposedRate = t3cNativePlan.rateUph
             finalDuration = t3cNativePlan.durationMin
             finalOverrideSafetyLimits = false
-            finalAdaptiveMultiplier = 1.0
+            finalAdaptiveMultiplier = basalFirstAdaptiveMultiplier()
             lastDecisionSource = t3cNativePlan.decisionSource
             b.rT.reason.append("; 🌳T3C_NATIVE_BASAL_FIRST")
         } else if (harmoniaProductionPlan != null) {
             finalProposedRate = harmoniaProductionPlan.rateUph
             finalDuration = harmoniaProductionPlan.durationMin
             finalOverrideSafetyLimits = false
-            finalAdaptiveMultiplier = 1.0
+            finalAdaptiveMultiplier = basalFirstAdaptiveMultiplier()
             lastDecisionSource = harmoniaProductionPlan.decisionSource
             b.rT.reason.append("; 🌿HARMONIA_PRODUCTION_BASAL_FIRST")
         }
@@ -8344,6 +8403,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.meal_certainty = lastMealCertainty?.toJsonObject()
         decisionCtx.adjustments.dose_terminal_snapshot = lastDoseTerminalSnapshot?.toJsonObject()
         decisionCtx.adjustments.pkpd_soft_floor = lastPkpdSoftFloorTelemetry?.toJsonObject()
+        decisionCtx.adjustments.basal_terminal = lastBasalTerminalTelemetry
         decisionCtx.adjustments.harmonia_simulation = lastHarmoniaDecision?.toJsonObject()
         decisionCtx.adjustments.harmonia_production = lastHarmoniaProductionDecision?.toJsonObject()
         decisionCtx.adjustments.t3c_runtime_ownership = lastT3cRuntimeOwnership
@@ -8384,9 +8444,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         val medicalJson = decisionCtx.toMedicalJson()
-        consoleLog.add("AIMI_SNAPSHOT: $medicalJson")
-
+        // NB: do NOT push medicalJson into consoleLog — consoleLog is serialized into the NS deviceStatus
+        // (suggested + enacted, twice per document); this multi-hundred-KB blob makes the deviceStatus
+        // multi-MB and OOMs any client re-parsing it on receive (DeviceStatusMapper.toString). The full
+        // snapshot is already persisted locally on the next line (AIMI_Decisions.jsonl), so the NS copy
+        // was pure redundancy. Keep it out of consoleLog.
         appendAimiDecisionsJsonlLine(medicalJson)
+        // 🔭 Lot 0 — marque le tick comme exporté pour que l'enveloppe [runDetermineBasalTick] ne double
+        // pas la ligne sur les deux chemins qui appellent déjà ce stage.
+        aimiDecisionExportedThisTick = true
 
         AimiLoopTelemetry.enterPhase(AimiLoopPhase.EXPORT, hormonitorStudyExporter)
         try {
@@ -9062,6 +9128,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             delta = delta.toDouble(),
             endogenousReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
             hyperReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdHyperReversion),
+            stackAwareGuardBEnabled = preferences.get(BooleanKey.OApsAIMIPkpdStackAwareGuardB),
         )
         lastAdvancedPredictionCurves = curves
         recordPkpdSoftFloor(curves)
@@ -9666,6 +9733,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             postHypoDelivery = lastPostHypoDeliveryAuthority,
             mealCertainty = lastMealCertainty,
             trunkGlobalState = lastPhysiologicalTreeSnapshot?.trunk?.globalState,
+            mealConfirmedEarlyReleaseEnabled = preferences.get(BooleanKey.OApsAIMIMealConfirmedEarlyRelease),
+            combinedDeltaMgdl5m = delta.toDouble(),
+            targetBgMgdl = targetBgMgdl,
+            iobU = iob.toDouble(),
+            maxIobU = maxIob,
         )
         lastDecisionPredictionAuthority = decisionPrediction
         consoleLog.add(
@@ -9894,6 +9966,63 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * pose pas) ni les prébolus des modes manuels (chemin applyLegacyMealModes, hors Red Carpet).
      */
     private var criticalSafetyZeroedThisTick: Boolean = false
+
+    /** 🔒 Lot 2 — dernier verdict des invariants terminaux du tick, exporté en JSON structuré. */
+    private var lastBasalTerminalTelemetry: org.json.JSONObject? = null
+
+    /** 🔭 Lot 0 — `true` dès qu'une ligne `AIMI_Decisions.jsonl` a été écrite pour le tick courant. */
+    private var aimiDecisionExportedThisTick: Boolean = false
+
+    /** 🔭 Lot 0 — contexte de décision du tick, conservé pour l'export des sorties anticipées. */
+    private var pendingDecisionCtxForExport: AimiDecisionContext? = null
+
+    /** 🛡️ Lot 3 — nombre de fois que le garde-fou a bloqué chaque canal basal-first (télémétrie). */
+    private var basalChannelGuardBlockedT3cCount: Int = 0
+    private var basalChannelGuardBlockedHarmoniaCount: Int = 0
+
+    /** 🛡️ Lot 3 — garde-fous du canal basal, voir [BooleanKey.OApsAIMIBasalChannelSafetyGuards]. */
+    private fun basalChannelSafetyGuardsActive(): Boolean =
+        preferences.get(BooleanKey.OApsAIMIBasalChannelSafetyGuards)
+
+    /** Mode repas manuel déclaré (l'un des six). Même expression que les [MealSafetyContext] du tick. */
+    private fun manualMealModeActive(): Boolean =
+        mealTime || lunchTime || dinnerTime || snackTime || highCarbTime || bfastTime
+
+    /**
+     * `true` quand le canal basal-first doit être bloqué parce que le SMB de ce tick a été mis à zéro par
+     * une **règle de sécurité** ([criticalSafetyZeroedThisTick] ou `lastContextSuppressSmb`), et non
+     * simplement « pas demandé ». Les modes repas manuels sont exclus : leur basale doit s'appliquer.
+     * Règle pure dans
+     * [app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards.shouldBlockBasalFirst].
+     */
+    private fun smbZeroedBySafetyThisTick(): Boolean =
+        BasalChannelSafetyGuards.shouldBlockBasalFirst(
+            guardsEnabled = true, // le gate de préférence est évalué par l'appelant
+            criticalSafetyZeroed = criticalSafetyZeroedThisTick,
+            contextSuppressSmb = lastContextSuppressSmb,
+            mealModeActive = manualMealModeActive(),
+        )
+
+    /**
+     * Multiplicateur adaptatif conservé quand un plan basal-first (T3C natif / Harmonia production) possède
+     * le taux. Historiquement forcé à `1.0`, ce qui jetait la réduction protectrice des learners — le seul
+     * amortisseur qui liait encore. Règle pure dans
+     * [app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier].
+     */
+    private fun basalFirstAdaptiveMultiplier(): Double {
+        val kept = BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(
+            guardsEnabled = basalChannelSafetyGuardsActive(),
+            adaptiveMult = adaptiveMult,
+            mealModeActive = manualMealModeActive(),
+        )
+        if (kept < 1.0) {
+            consoleLog.add(
+                "🛡️ BASAL_FIRST_GOV: adaptiveMult conservé à ${"%.2f".format(Locale.US, kept)}x (legacy forçait 1.00x)"
+            )
+        }
+        return kept
+    }
+
     private var correctionAggressionDecision: CorrectionAggressionGate.Decision? = null
     private var lastPostHypoDeliveryAuthority: PostHypoDeliveryAuthority.Decision =
         PostHypoDeliveryAuthority.INACTIVE
@@ -10068,6 +10197,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         /** Fenêtre pour [minBgInLastMinutes] : min BG &lt; 70 dans cette durée → amortissement Ra post-hypo (AutoDrive V3). */
         private const val AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES = 75
+
+        /** Seuil et fenêtre de l'hyperglycémie « persistante » qui entraîne le [BasalLearner] à la hausse. */
+        private const val PERSISTENT_HYPER_BG_MGDL = 180.0
+        private const val PERSISTENT_HYPER_LOOKBACK_MINUTES = 60
 
         /**
          * Durée (ms) pendant laquelle une demande de prébolus legacy est considérée « en vol ».
@@ -11465,7 +11598,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bg = bgNow,
             targetBg = profile.target_bg.toDouble(),
             delta = delta.toDouble(),
-            shortAvgDelta = shortAvgDelta.toDouble()
+            shortAvgDelta = shortAvgDelta.toDouble(),
+            projectionHorizonMin = DynamicBasalController.PROJECTION_HORIZON_MIN
+                .takeIf { preferences.get(BooleanKey.OApsAIMIBasalProjectedError) },
         )
         var rateAdjustment = dynamicState.finalRate.coerceAtLeast(0.0)
         
@@ -11587,6 +11722,44 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 dosePathOwner = EndocrineDosePathOwner.HARMONIA_PRODUCTION_BASAL_FIRST,
             )
         }
+
+        // 🔒 Lot 2 — invariants terminaux : dernier point où le taux peut encore être borné. Tout ce qui
+        // précède (DynamicBasalController ×[0..10], AdaptiveBasal, ampli endocrine) a déjà été appliqué,
+        // donc un plafond posé ici ne peut plus être écrasé. Réduction seule.
+        val terminal = BasalTerminalInvariants.resolve(
+            BasalTerminalInvariants.Input(
+                enabled = preferences.get(BooleanKey.OApsAIMIBasalTerminalInvariants),
+                rateUph = rate,
+                profileBasalUph = profile.current_basal,
+                bgMgdl = bgNow,
+                targetBgMgdl = targetBg.toDouble(),
+                eventualBgMgdl = eventualBG.takeIf { it.isFinite() && it > 1.0 },
+                deltaMgdl5m = delta.toDouble(),
+                iobU = iobNet,
+                mealModeActive = isMealMode,
+                postHypoActive = lastPostHypoDeliveryAuthority.active,
+            )
+        )
+        lastBasalTerminalTelemetry = org.json.JSONObject().apply {
+            put("enabled", preferences.get(BooleanKey.OApsAIMIBasalTerminalInvariants))
+            put("rate_in_uph", rate)
+            put("rate_out_uph", terminal.rateUph)
+            put("bound_by", terminal.boundBy ?: org.json.JSONObject.NULL)
+            put("trace", terminal.trace)
+            put("profile_basal_uph", profile.current_basal)
+            put("bg_mgdl", bgNow)
+            put("target_bg_mgdl", targetBg.toDouble())
+            put("eventual_bg_mgdl", eventualBG.takeIf { it.isFinite() && it > 1.0 } ?: org.json.JSONObject.NULL)
+            put("delta_mgdl_5m", delta.toDouble())
+            put("iob_u", iobNet)
+            put("meal_mode_active", isMealMode)
+            put("post_hypo_active", lastPostHypoDeliveryAuthority.active)
+        }
+        if (terminal.boundBy != null) {
+            consoleLog.add("🔒 BASAL_TERMINAL[${terminal.boundBy}] ${terminal.trace}")
+            rT.reason.append(" [BASAL_TERMINAL:${terminal.boundBy} ${"%.2f".format(rate)}→${"%.2f".format(terminal.rateUph)}U/h]")
+        }
+        rate = terminal.rateUph
 
         rT.reason.append(context.getString(R.string.temp_basal_pose, "%.2f".format(rate), duration))
         rT.duration = duration
@@ -14127,6 +14300,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 modulation = predictionModulation,
                 endogenousReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
                 hyperReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdHyperReversion),
+                stackAwareGuardBEnabled = preferences.get(BooleanKey.OApsAIMIPkpdStackAwareGuardB),
             )
         } catch (e: Exception) {
             consoleLog.add("Error in AdvancedPredictionEngine: ${e.message}")
@@ -15359,6 +15533,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 cobG = effectiveCOB, profile = profile, delta = delta.toDouble(),
                 endogenousReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
                 hyperReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdHyperReversion),
+                stackAwareGuardBEnabled = preferences.get(BooleanKey.OApsAIMIPkpdStackAwareGuardB),
             )
             lastAdvancedPredictionCurves = curves
             val softFloor = recordPkpdSoftFloor(curves)
@@ -15557,7 +15732,53 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      *
      * @see app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiDetermineBasalTickOrchestrator
      */
+    /**
+     * 🔭 Lot 0 — enveloppe d'export. [runDetermineBasalTickInner] possède **quatorze** points de sortie
+     * (abort glucose, verrou exercice, modes repas manuels, T3C, stale, halt LGS TIER1, Meal Advisor,
+     * HARD_BRAKE, compression/drift, meal-hyper boost, arrêt basal hypo, TBR précoce repas, MAX_IOB, plus
+     * la queue principale) et seuls **deux** appelaient le stage d'export : les douze autres décidaient,
+     * dosaient et entraînaient les learners sans laisser la moindre ligne dans `AIMI_Decisions.jsonl`.
+     *
+     * Ce biais n'était pas neutre : il portait précisément sur les descentes basses (HARD_BRAKE exige
+     * `bg < targetBg + 10`, l'arrêt hypo `bg < 85`, le halt LGS `bg < seuil`) et sur les décisions au
+     * basal le plus élevé (les 30 premières minutes de tout mode repas manuel, qui posent la TBR à
+     * `meal_modes_MaxBasal`). Toute statistique de fréquence tirée du JSONL héritait de cette censure.
+     *
+     * L'export reste **idempotent** : les deux sites historiques positionnent
+     * [aimiDecisionExportedThisTick], et cette enveloppe ne fait que rattraper les sorties qui n'ont rien
+     * écrit. Un échec d'export ne doit jamais compromettre la décision, d'où le `runCatching`.
+     */
     internal fun runDetermineBasalTick(ctx: AimiTickContext): RT {
+        val result = runDetermineBasalTickInner(ctx)
+        exportAimiDecisionIfNotYetExported(ctx, result)
+        return result
+    }
+
+    /**
+     * Filet de rattrapage de l'export JSONL, appelé une fois par tick depuis [runDetermineBasalTick].
+     *
+     * Utilise [cachedPkpdRuntime] plutôt que la variable locale du tick : sur une sortie anticipée le
+     * runtime pkpd local peut ne pas encore exister, et le champ porte alors la dernière valeur connue
+     * (ou `null`, que le stage accepte).
+     */
+    private fun exportAimiDecisionIfNotYetExported(ctx: AimiTickContext, finalResult: RT) {
+        if (aimiDecisionExportedThisTick) return
+        val decisionCtx = pendingDecisionCtxForExport ?: return
+        runCatching {
+            runAimiSnapshotMedicalJsonAndHormonitorExportStage(
+                ctx = ctx,
+                profile = ctx.profile,
+                decisionCtx = decisionCtx,
+                finalResult = finalResult,
+                pkpdRuntime = cachedPkpdRuntime,
+            )
+        }.onFailure { e ->
+            consoleError.add("AIMI decision export (early-exit path) failed: ${e.message}")
+            aapsLogger.error(LTag.APS, "AIMI decision export (early-exit path) failed", e)
+        }
+    }
+
+    private fun runDetermineBasalTickInner(ctx: AimiTickContext): RT {
         val profile = ctx.profile
         val (
             originalProfile,
@@ -17213,6 +17434,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         // Tree unlock: opens rise ceiling + aggressive ramp when resistance/meal/hyper evidence is present.
+        // Anticipatory: gate on the projected BG (where it's heading) so the ramp engages at rise onset.
+        val unlockProjectedBg = DynamicBasalController.projectBg(bg, delta, shortAvgDelta, accel)
         val treeUnlock = T3cAutodriveBasalBridge.evaluateTreeUnlock(
             tree = lastPhysiologicalTreeSnapshot,
             bg = bg,
@@ -17221,6 +17444,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             postHypoActive = postHypoRecoveryActive(),
             eventualBg = eventualBg.takeIf { it > 0 },
             targetBg = targetBg,
+            projectedBg = unlockProjectedBg,
         )
         val maxBasalCapForPi = if (treeUnlock.unlock) riseBasalCap else steadyBasalCap
 
@@ -17286,18 +17510,39 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog.add("🌙 T3c NGR nocturnal basal boost ×${"%.2f".format(ngrBasalMult)} → ${"%.2f".format(t3cFinalRate)}U/h")
         }
 
-        rT.rate = t3cFinalRate
+        // ── T3C Hyper basal floor ───────────────────────────────────────────────
+        // Installed-hyper protection: when BG has stayed at/above the hyper level for a sustained
+        // window, CGM-noise down-ticks must not collapse the basal to ~0 (the observed whipsaw). Hold
+        // the basal at the user's configured Max basal (profile.max_basal — tunable via the standard
+        // Max basal preference), bounded by the active cap. Basal-only. Releases automatically once BG
+        // drops back below the level. Fail-safe: on by default (opt-out) AND a sustained-dwell
+        // requirement (minBg over the window ≥ level) so a single noise spike cannot trigger it.
+        val hyperFloorBgMgdl = 160.0   // "hyper installed" level (user-requested)
+        val hyperFloorDwellMin = 20    // sustained minutes required — makes the trigger noise-robust
+        val hyperFloorApplies = preferences.get(BooleanKey.OApsAIMIT3cHyperBasalFloor) &&
+            bg >= hyperFloorBgMgdl &&
+            minBgInLastMinutes(hyperFloorDwellMin) >= hyperFloorBgMgdl
+        val hyperFloorUph = if (hyperFloorApplies) profile.max_basal.coerceIn(0.0, maxBasalCap) else 0.0
+        val t3cFlooredRate = t3cFinalRate.coerceAtLeast(hyperFloorUph)
+        if (hyperFloorApplies && t3cFlooredRate > t3cFinalRate + 0.01) {
+            consoleLog.add(
+                "🧱 T3c hyper floor: BG≥${hyperFloorBgMgdl.toInt()} for ≥${hyperFloorDwellMin}m → basal held at maxBasal " +
+                    "${"%.2f".format(hyperFloorUph)}U/h (was ${"%.2f".format(t3cFinalRate)})"
+            )
+        }
+
+        rT.rate = t3cFlooredRate
         rT.duration = 30
         rT.reason.append(
             "🛡️T3c | Thresh: ${activationThreshold.toInt()} | Agg: ${"%.1f".format(aggressiveness)} (raw=${"%.1f".format(rawAggressiveness)} AML=${"%.2f".format(adaptiveMult)}) | " +
                 "ANT:${"%.2f".format(anticipationStrength)} | unlock=${fusion.unlock} | " +
-                "PI/AD: ${"%.2f".format(t3cFinalRate)}U/h (target=${"%.2f".format(targetRate)} cap=${"%.2f".format(maxBasalCap)} stepUp=${"%.2f".format(maxStepUp)})"
+                "PI/AD: ${"%.2f".format(t3cFlooredRate)}U/h (target=${"%.2f".format(targetRate)} cap=${"%.2f".format(maxBasalCap)} stepUp=${"%.2f".format(maxStepUp)})"
         )
 
-        // 🧬 Adaptive Learning Update
+        // 🧬 Adaptive Learning Update — learn from the actually delivered rate (post hyper-floor).
         applyBasalNeuralLearningAndTraining(
             rT = rT,
-            tbrUph = t3cFinalRate,
+            tbrUph = t3cFlooredRate,
             govTag = "T3C",
         )
         consoleLog.add(rT.reason.toString())

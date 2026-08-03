@@ -37,5 +37,31 @@ enum class UnitDoubleKey(
         defaultedBySM = true,
         dependency = BooleanKey.ApsUseDynamicSensitivity,
         sync = SyncSpec(SyncChannel.Cold, SyncDirection.Bidirectional)
+    ),
+    AlertHypoThreshold(
+        key = "alert_hypo_threshold",
+        defaultValue = 70.0,
+        minMgdl = 50,
+        maxMgdl = 100,
+        titleResId = R.string.pref_title_alert_hypo_threshold,
+        dependency = BooleanKey.AlertHypo
+    ),
+    AlertHyperThreshold(
+        key = "alert_hyper_threshold",
+        defaultValue = 250.0,
+        minMgdl = 140,
+        maxMgdl = 400,
+        titleResId = R.string.pref_title_alert_hyper_threshold,
+        dependency = BooleanKey.AlertHyper
+    ),
+    // Rapid-fall drop magnitude: a glucose *difference* (mg/dL) — UnitDoubleKey still converts it
+    // correctly for display (30 mg/dL ≈ 1.7 mmol/L).
+    AlertRapidFallDrop(
+        key = "alert_rapid_fall_drop",
+        defaultValue = 30.0,
+        minMgdl = 15,
+        maxMgdl = 60,
+        titleResId = R.string.pref_title_alert_rapid_fall_drop,
+        dependency = BooleanKey.AlertRapidFall
     )
 }

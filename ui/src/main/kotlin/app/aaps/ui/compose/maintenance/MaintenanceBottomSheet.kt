@@ -38,10 +38,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import app.aaps.core.interfaces.maintenance.ExportConfig
-import app.aaps.core.ui.compose.ExcludeFromJacocoGeneratedReport
 import app.aaps.core.ui.compose.TonalIcon
 import app.aaps.core.ui.compose.consumeOverscroll
 import app.aaps.core.ui.R as CoreUiR
@@ -106,6 +104,9 @@ fun MaintenanceBottomSheet(
     }
 }
 
+/**
+ * @see MaintenanceBottomSheetContentPreview
+ */
 @Composable
 internal fun MaintenanceBottomSheetContent(
     onDismiss: () -> Unit = {},
@@ -509,30 +510,6 @@ private fun DestinationChips(
                 selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
                 selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
             )
-        )
-    }
-}
-
-@ExcludeFromJacocoGeneratedReport
-@Preview(showBackground = true)
-@Composable
-private fun MaintenanceBottomSheetContentPreview() {
-    MaterialTheme {
-        MaintenanceBottomSheetContent(
-            exportConfig = ExportConfig(
-                isCloudActive = true,
-                isCloudError = false,
-                hasCloudCredentials = true,
-                settingsLocal = true,
-                settingsCloud = true,
-                logEmail = true,
-                logCloud = false,
-                csvLocal = true,
-                csvCloud = false,
-                aimiCloud = false,
-                cloudDisplayName = "Google Drive"
-            ),
-            isDirectoryAccessGranted = true
         )
     }
 }

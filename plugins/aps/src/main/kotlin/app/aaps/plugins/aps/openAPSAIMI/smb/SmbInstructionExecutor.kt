@@ -470,7 +470,10 @@ object SmbInstructionExecutor {
                 exercise = input.sportTime,
                 suspectedLateFatMeal = input.lateFatRiseFlag,
                 mealModeRun = mealModeRun,
-                highBgRiseActive = highBgRiseActive
+                highBgRiseActive = highBgRiseActive,
+                // Best available time-since-meal at this call site: high-carb meal runtime (0 when unknown →
+                // full late-fat damping at the preference floor). Lets SmbDamping ramp toward neutral post-meal.
+                elapsedSinceMealMin = hooks.runtimeToMinutes(input.highCarbRunTime).toDouble()
             )
         )
         var smbAfterDamping = dampingOut.smbAfterDamping

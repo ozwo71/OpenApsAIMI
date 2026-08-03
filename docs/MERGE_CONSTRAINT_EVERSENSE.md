@@ -96,6 +96,32 @@ Reference: [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS-E
   `calibratedOrValue`, dashboard skin, ML/physio manifest, `KeepAliveWorker runVacuum=false`.
 - Log: [MERGE_DEV_2026-07-16.md](MERGE_DEV_2026-07-16.md).
 
+### Merge `dev` → `feature/dexcom-oneplus-native` (2026-08-03)
+
+- Upstream `dev` at `fa2d2c78a5` (45 commits since `88d31b816d`: alarms refactor — `USE_FULL_SCREEN_INTENT`
+  dropped in favour of `AlarmManager.setAlarmClock()` + mute receiver, APS non-finite-field diagnostics,
+  Equil direct connect #5040, Wear WFF/complications, Crowdin, 3.4.2.6).
+- **No upstream change to Eversense, `SourceSensor`, DI/plugin registration, `settings.gradle`, AIMI, SMB,
+  AutoISF, `determine_basal`, smoothing, dashboard, DB or storage** — constraint satisfied without
+  re-application. Nothing to port into AIMI.
+- **Conflicts (4, none Eversense):** app `AndroidManifest.xml` (combine: fork AIMI activities + upstream alarm
+  receivers), `PluginStore.kt` (combine: upstream FSI removal + fork DND group; **restored the
+  `NotificationManager` import** upstream deleted), `EquilBLE.kt` (combine: upstream direct-connect + fork
+  connect watchdog), `aaps-ci.yml` (ours, fork build modes).
+- **Eversense / ONE+ / fork preserved:** `:plugins:eversense` + `SourceSensor` E3/365, `:plugins:dexcom_oneplus`
+  + `DEXCOM_ONEPLUS_NATIVE`, AIMI/hormonitor, adaptive `calibratedOrValue`, dashboard skin switch, ML/physio
+  manifest, `KeepAliveWorker runVacuum=false` — verified by invariant-baseline diff.
+- Log: [MERGE_DEV_2026-08-03.md](MERGE_DEV_2026-08-03.md).
+
+### Merge `milos/dev` → `feature/dexcom-oneplus-native` (2026-07-31)
+
+- Upstream `milos/dev` at `88d31b816d` (~106 commits since `638f23dfab`: dynISF API rename,
+  Insulin→InsulinManager, overview graph dynamic scaling, Wear watchfacepush, Adaptive prefs SyncBadge API).
+- **AIMI port:** `usingDynamicIsf` / `offersDynamicSensitivity`; peak from `profile.iCfg` (Insulin DI gone).
+- **Eversense / ONE+ / fork preserved:** `:plugins:eversense`, `:plugins:dexcom_oneplus`, AIMI/hormonitor,
+  adaptive `calibratedOrValue`, dashboard skin switch, ML/physio manifest, `KeepAliveWorker runVacuum=false`.
+- Log: [MERGE_DEV_2026-07-31.md](MERGE_DEV_2026-07-31.md).
+
 ### Merge `dev` → `dev_OAPSAIMI_mergeDEV` (2026-07-10)
 
 - Upstream Nightscout `dev` at `d389d5e1c2` (7 commits: **Plugin self registration**, automation

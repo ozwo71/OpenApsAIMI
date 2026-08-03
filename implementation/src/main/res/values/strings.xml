@@ -22,6 +22,8 @@
     <string name="permission_notifications_description">Required to show alerts, alarms, and pump status updates</string>
     <string name="permission_fsi_title">Full screen alarms</string>
     <string name="permission_fsi_description">Required so alarms can wake the screen and show full screen while the phone is locked</string>
+    <string name="permission_dnd_title">Alarms through Do Not Disturb</string>
+    <string name="permission_dnd_description">Required so urgent alarms (low/high glucose) can sound through Do Not Disturb and bedtime modes</string>
 
     <!--       ConcentrationHelper / DecimalFormatter-->
     <string name="bolus_with_volume">%1$s\u00a0U (%2$.1f\u00a0µl)</string>

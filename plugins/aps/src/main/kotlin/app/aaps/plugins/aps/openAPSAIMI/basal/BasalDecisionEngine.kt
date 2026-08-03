@@ -80,7 +80,12 @@ class BasalDecisionEngine @Inject constructor(
         val zeroSinceMin: Int,
         val minutesSinceLastChange: Int,
         val pumpCaps: PumpCaps,
-        val auditorConfidence: Double = 0.0
+        val auditorConfidence: Double = 0.0,
+        /**
+         * Horizon de projection du lot 1, en minutes ; `null` = ancienne formulation P+D du
+         * [DynamicBasalController]. Renseigné depuis `BooleanKey.OApsAIMIBasalProjectedError`.
+         */
+        val projectionHorizonMin: Double? = null,
     )
 
     data class Helpers(
@@ -570,7 +575,8 @@ class BasalDecisionEngine @Inject constructor(
                 variableSensitivity = input.variableSensitivity,
                 duraISFminutes = input.glucoseStatus?.duraISFminutes ?: 0.0,
                 predictedBgOverride = if (input.eventualBg > 0) input.eventualBg else null,
-                mode = DynamicBasalController.Mode.STANDARD
+                mode = DynamicBasalController.Mode.STANDARD,
+                projectionHorizonMin = input.projectionHorizonMin,
             )
             val piDecision = DynamicBasalController.compute(piInput)
             chosenRate = piDecision.rate

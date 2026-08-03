@@ -87,6 +87,7 @@ internal object PhysioLatentStateBuilder {
         autonomicStress: Double,
         inflammationRecovery: Double,
         hormonalCircadian: Double,
+        cgmFirstSensorConfidence: Boolean = false,
     ): PhysioLatentState {
         val mealSignal = buildMealProbability(
             phaseOutput = phaseOutput,
@@ -142,7 +143,7 @@ internal object PhysioLatentStateBuilder {
                 patternSnapshot?.suppressMealInterpretation == true ||
                 phaseOutput?.policy?.suppressMealLikeScenario == true ||
                 (endogenousDrive > mealSignal + 0.15)
-        val sensorConfidence = buildSensorConfidence(snapshot.confidence, sourceSensor)
+        val sensorConfidence = buildSensorConfidence(snapshot.confidence, sourceSensor, cgmFirstSensorConfidence)
 
         return PhysioLatentState(
             mealProb = if (falseMealSuppression) mealSignal.coerceAtMost(0.35) else mealSignal,
@@ -262,16 +263,37 @@ internal object PhysioLatentStateBuilder {
         )
     }
 
-    private fun buildSensorConfidence(
+    /**
+     * Sensor confidence for the Harmonia/RBT authority gates.
+     *
+     * Legacy formula weights the **health-context snapshot** (Health Connect / watch data freshness) at
+     * 70% and the CGM source at 30% — so CGM trust collapses when no wearable is present, even with a
+     * perfect CGM, pinning `sensor_confidence` ≈ 0.32 and forcing authority to NONE all day.
+     * `cgmFirst` decouples the two: CGM trust is driven by the **CGM source** (a signal-quality proxy),
+     * with the health-context as a minor freshness modifier only. A null/unknown source stays cautious
+     * (SOFT-eligible, ≈0.46 — clears the 0.45 block) rather than collapsing; a filtered native CGM is
+     * trusted. See memory `sensor-confidence-gates-harmonia`.
+     */
+    internal fun buildSensorConfidence(
         snapshotConfidence: Double,
         sourceSensor: SourceSensor?,
+        cgmFirst: Boolean = false,
     ): Double {
+        val snap = snapshotConfidence.coerceIn(0.0, 1.0)
+        if (cgmFirst) {
+            val sourceConfidence = when {
+                sourceSensor == null -> 0.50
+                sourceSensor.advancedFilteringSupported() -> 0.85
+                else -> 0.70
+            }
+            return (sourceConfidence * 0.80 + snap * 0.20).coerceIn(0.0, 1.0)
+        }
         val sourceFloor = when {
             sourceSensor == null -> 0.35
             sourceSensor.advancedFilteringSupported() -> 0.75
             else -> 0.55
         }
-        return ((snapshotConfidence.coerceIn(0.0, 1.0) * 0.70) + (sourceFloor * 0.30)).coerceIn(0.0, 1.0)
+        return ((snap * 0.70) + (sourceFloor * 0.30)).coerceIn(0.0, 1.0)
     }
 
     private fun combineSignals(vararg values: Double): Double {
