@@ -23,8 +23,8 @@
     <string name="dexcom_oneplus_step_prepare">Prepare</string>
     <string name="dexcom_oneplus_step_code">Code</string>
     <string name="dexcom_oneplus_step_connect">Connect</string>
-    <string name="dexcom_oneplus_step_dashboard">Dashboard</string>
-    <string name="dexcom_oneplus_start_return_dashboard">After Connect you return to the dashboard. The warm-up countdown and glucose return show there and in the ongoing notification — you do not have to stay on this screen.</string>
+    <string name="dexcom_oneplus_step_warmup">Warm-up</string>
+    <string name="dexcom_oneplus_start_return_warmup">Connect adopts the selected sensor and opens the warm-up screen. The countdown also shows on the dashboard and in the ongoing notification — you do not have to stay on that screen.</string>
     <string name="dexcom_oneplus_applicator_gs1_label">Applicator Data Matrix (GS1) or 4-digit PIN</string>
     <string name="dexcom_oneplus_applicator_gs1_hint">Paste the full Data Matrix text from a QR scanner, or type the 4-digit PIN. Serial is stored for reconnect matching.</string>
     <string name="dexcom_oneplus_applicator_parsed" comment="%1$s=PIN, %2$s=serial or dash. Example: PIN 1234 · serial ABCD">Parsed PIN %1$s · serial %2$s</string>
@@ -42,6 +42,7 @@
     <string name="dexcom_oneplus_scan_unnamed">Unnamed Dexcom device</string>
     <string name="dexcom_oneplus_scan_device_line" comment="%1$s=Bluetooth MAC, %2$d=RSSI. Example: AA:BB:CC:DD:EE:FF · −67 dBm">%1$s · %2$d dBm</string>
     <string name="dexcom_oneplus_device_required">Select a sensor from the scan list</string>
+    <string name="dexcom_oneplus_new_sensor_code_warning">This is a different sensor from the paired one, but the pairing code has not changed. Paste the new applicator code — or press Connect again to keep the current one.</string>
     <string name="dexcom_oneplus_real_skeleton_hint">Engineering: enable “Use Real BLE skeleton” in plugin prefs before Start if you want GATT+KEKS (otherwise Stub fails closed after connect).</string>
     <string name="dexcom_oneplus_real_skeleton_required">Enable “Use Real BLE skeleton” (engineering) in ONE+ plugin settings before connecting.</string>
     <string name="dexcom_oneplus_dexcom_recovery_warning">Stop the Dexcom app and xDrip first (one Bluetooth master). This build attaches to an existing sensor session and does not stop it. Returning to the Dexcom app afterward is not guaranteed — prefer a spare sensor for testing.</string>
@@ -94,6 +95,9 @@
     <string name="dexcom_oneplus_notif_pairing">Pairing…</string>
     <string name="dexcom_oneplus_notif_connecting">Connecting to sensor…</string>
     <string name="dexcom_oneplus_notif_reconnecting">Reconnecting…</string>
+    <string name="dexcom_oneplus_notif_waiting_adv" comment="%1$d = whole minutes the sensor has been silent. Example: No signal from the sensor for 7 min">No signal from the sensor for %1$d min — keep the phone close</string>
+    <string name="dexcom_oneplus_notif_stale_mac_title">Wrong sensor?</string>
+    <string name="dexcom_oneplus_notif_stale_mac_text">Another Dexcom ONE+ is nearby but the paired one stays silent. Start the sensor again to pair the new one.</string>
     <string name="dexcom_oneplus_notif_warming_title">Sensor warming up</string>
     <string name="dexcom_oneplus_notif_warming_text">Keep the phone near the sensor</string>
     <string name="dexcom_oneplus_notif_failed_title">Warm-up interrupted</string>

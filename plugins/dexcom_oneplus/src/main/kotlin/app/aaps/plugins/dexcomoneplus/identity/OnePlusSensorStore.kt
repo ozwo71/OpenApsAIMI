@@ -83,6 +83,25 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
         prefs.edit().remove(KEY_LAST_SEQ).remove(KEY_LAST_TS).apply()
     }
 
+    /**
+     * Persist the slot's collect-only progress so it survives a process restart. Used by the STAGING
+     * slot: without it, `stagingPresent` / `stagingValidEgvCount` are in-memory only, so any restart
+     * reset a warming pre-soak sensor to ABSENT — it could then neither resume, leave warm-up, nor be
+     * promoted, even though this store still held its identity, MAC and KEKS key.
+     */
+    fun saveSlotProgress(present: Boolean, validEgvCount: Int) {
+        prefs.edit()
+            .putBoolean(KEY_SLOT_PRESENT, present)
+            .putInt(KEY_SLOT_EGV_COUNT, validEgvCount.coerceAtLeast(0))
+            .apply()
+    }
+
+    /** A sensor was started in this slot and not cancelled/promoted. */
+    fun loadSlotPresent(): Boolean = prefs.getBoolean(KEY_SLOT_PRESENT, false)
+
+    /** Valid EGVs collected in this slot so far (promotion gate). */
+    fun loadSlotValidEgvCount(): Int = prefs.getInt(KEY_SLOT_EGV_COUNT, 0)
+
     /** Record the sensor session start (epoch ms) once — used to derive early/end-of-life age. */
     fun saveSessionStartIfAbsent(epochMs: Long) {
         if (!prefs.contains(KEY_SESSION_START)) prefs.edit().putLong(KEY_SESSION_START, epochMs).apply()
@@ -154,5 +173,7 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
         private const val KEY_LAST_SEQ = "last_ingest_seq"
         private const val KEY_LAST_TS = "last_ingest_ts"
         private const val KEY_SESSION_START = "session_start_ms"
+        private const val KEY_SLOT_PRESENT = "slot_present"
+        private const val KEY_SLOT_EGV_COUNT = "slot_valid_egv_count"
     }
 }

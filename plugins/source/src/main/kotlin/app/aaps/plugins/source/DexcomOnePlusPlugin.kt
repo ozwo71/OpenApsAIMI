@@ -213,6 +213,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         DexcomOnePlusIngest.seed(sensorStore.loadLastIngestSequence(), recentTs)
         refreshProductionLifecycle()
         val autoResumeQueued = (driver as? OnePlusCgmDriverReal)?.resumeStoredSession() == true
+        val stagingResumeQueued = resumeStagingSessionIfStored()
         warmupPhase = driver.warmupState().phase
         // Reconcile a warm-up notification that survived a process restart with the driver's current
         // state — cancels it when warm-up is already READY/IDLE (otherwise nothing clears the stale
@@ -221,7 +222,8 @@ class DexcomOnePlusPlugin @Inject constructor(
         aapsLogger.info(
             LTag.BGSOURCE,
             "DEXCOM_ONEPLUS_SESSION: plugin start " +
-                "realSkeleton=${OnePlusCgmDrivers.useRealSkeleton} autoResumeQueued=$autoResumeQueued",
+                "realSkeleton=${OnePlusCgmDrivers.useRealSkeleton} autoResumeQueued=$autoResumeQueued " +
+                "stagingResumeQueued=$stagingResumeQueued",
         )
         // SAFETY (DRAFT — see DexcomOnePlusWarmupBasalGuard): while warm-up is active and no glucose
         // is available, revert the pump to profile basal (option b: only cancel a high residual temp).
@@ -354,10 +356,58 @@ class DexcomOnePlusPlugin @Inject constructor(
         stagingValidEgvCount = 0
         synchronized(stagingBuffer) { stagingBuffer.clear() }
         stagingStore.saveSessionStartIfAbsent(System.currentTimeMillis())
+        // Durability: a restart must be able to tell "a staging sensor is warming" from "no staging
+        // sensor" — see resumeStagingSessionIfStored.
+        stagingStore.saveSlotProgress(present = true, validEgvCount = 0)
         _stagingWarmup.value = null
         refreshStagingLifecycle()
         refreshStagingState()
         aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_STAGING: begin")
+    }
+
+    /**
+     * Restore a STAGING sensor after a process / plugin restart.
+     *
+     * Without this the dual-instance split silently lost the pre-soak sensor: [onStart] only resumed
+     * the production driver, so a staged sensor that was already authenticated (identity + MAC +
+     * KEKS key persisted in its own store) had **no** session recreated — it could never reconnect,
+     * never leave warm-up and never reach the promotion gate, while its in-memory state reset to
+     * ABSENT. Never publishes to the loop: promotion stays an explicit user action.
+     */
+    private fun resumeStagingSessionIfStored(): Boolean {
+        if (!stagingStore.loadSlotPresent()) return false
+        stagingDriver.setContext(context)
+        stagingDriver.addWatcher(stagingWatcher)
+        // The driver itself vetoes an incomplete stored session (no MAC / PIN / KEKS key).
+        val queued = stagingDriver.resumeStoredSession()
+        if (!queued) {
+            // Nothing is running for this slot, so it must not be shown as a warming sensor — that
+            // was the "stuck in warm-up forever" state. The store is kept intact (clearing it would
+            // reset session_start and let a re-start skip the soak), so the user can simply re-run
+            // the staging start from the Start screen.
+            runCatching { stagingDriver.removeWatcher(stagingWatcher) }
+            stagingPresent = false
+            stagingWarming = false
+            _stagingWarmup.value = null
+            _stagingLifecycle.value = null
+            _stagingState.value = StagingState.ABSENT
+            aapsLogger.warn(
+                LTag.BGSOURCE,
+                "DEXCOM_ONEPLUS_STAGING: auto-resume skipped — stored staging session incomplete, re-run the sensor start",
+            )
+            return false
+        }
+        stagingPublishesToLoop = false
+        stagingPresent = true
+        stagingWarming = true
+        stagingValidEgvCount = stagingStore.loadSlotValidEgvCount()
+        refreshStagingLifecycle()
+        refreshStagingState()
+        aapsLogger.info(
+            LTag.BGSOURCE,
+            "DEXCOM_ONEPLUS_STAGING: auto-resume queued egvCount=$stagingValidEgvCount",
+        )
+        return true
     }
 
     /** The STAGING driver instance, for the Start UI to run scan/connect against the new sensor. */
@@ -467,6 +517,8 @@ class DexcomOnePlusPlugin @Inject constructor(
         stagingWarming = false
         stagingValidEgvCount++
         stagingStore.saveSessionStartIfAbsent(sample.timestampMs)
+        // Survive a restart with the promotion gate intact (the count is the gate, plan §8).
+        stagingStore.saveSlotProgress(present = true, validEgvCount = stagingValidEgvCount)
         refreshStagingLifecycle()
         refreshStagingState()
         aapsLogger.debug(

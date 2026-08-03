@@ -7,6 +7,7 @@ import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.os.ParcelUuid
 import android.os.SystemClock
 import android.util.Log
 import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
@@ -39,6 +40,8 @@ class OnePlusBleScannerAndroid(
     context: Context,
     /** Optional stored session for Juggluco-style candidate ranking / sticky match. */
     @Volatile var sessionHint: OnePlusStoredSession? = null,
+    /** Sensor slot owning this scanner (`prod` / `staging`) — logged so field traces are attributable. */
+    private val slot: String = OnePlusLogMarkers.SLOT_PRODUCTION,
 ) : OnePlusBleScanner {
 
     private val appContext = context.applicationContext
@@ -61,7 +64,7 @@ class OnePlusBleScannerAndroid(
         }
 
         override fun onScanFailed(errorCode: Int) {
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: failed errorCode=$errorCode")
+            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: [$slot] failed errorCode=$errorCode")
             scanning.set(false)
         }
     }
@@ -70,7 +73,7 @@ class OnePlusBleScannerAndroid(
         val adapter = bluetoothManager.adapter
         val leScanner = adapter?.bluetoothLeScanner
         if (adapter == null || !adapter.isEnabled || leScanner == null) {
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: adapter unavailable")
+            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: [$slot] adapter unavailable")
             return
         }
         stopScan()
@@ -79,9 +82,12 @@ class OnePlusBleScannerAndroid(
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
+        // UI discovery runs on the main thread: book the platform quota slot but never wait for one
+        // (the reserve kept by OnePlusScanBudget is precisely what makes this always affordable).
+        OnePlusScanBudget.record(SystemClock.elapsedRealtime())
         leScanner.startScan(null, settings, callback)
         scanning.set(true)
-        Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: started")
+        Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: [$slot] started")
     }
 
     override fun stopScan() {
@@ -92,7 +98,7 @@ class OnePlusBleScannerAndroid(
         }
         scanning.set(false)
         listener = null
-        Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: stopped")
+        Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: [$slot] stopped")
     }
 
     override fun isScanning(): Boolean = scanning.get()
@@ -100,23 +106,40 @@ class OnePlusBleScannerAndroid(
     /**
      * Pre-connect ADV wait isolated from UI [stopScan] (own [ScanCallback]).
      * Field log: StartActivity onDispose stopped shared scan ~0.6s into prepareConnect.
+     *
+     * The platform filter list is OR'ed: the target MAC **plus** the ONE+/G7 advertisement service
+     * (FEBC). The extra filter costs no additional scan start, and lets a wait that never hears its
+     * own MAC still report that another ONE+ is nearby — the stale-stored-MAC signature.
+     *
+     * ⚠️ ASYNC IMPACT: blocks the calling BLE executor for up to [timeoutMs] plus any wait imposed
+     * by [OnePlusScanBudget]; [OnePlusBleSession.stop] does not need this to return (it clears
+     * `running` and disconnects GATT).
      */
-    override fun awaitTargetMac(address: String, timeoutMs: Long): OnePlusScanResult? {
+    override fun awaitTarget(address: String, timeoutMs: Long): OnePlusAdvWaitResult {
         val adapter = bluetoothManager.adapter
         val leScanner = adapter?.bluetoothLeScanner
         if (adapter == null || !adapter.isEnabled || leScanner == null) {
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: awaitTargetMac adapter unavailable")
-            return null
+            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget adapter unavailable")
+            return OnePlusAdvWaitResult()
         }
         val target = normalizeTargetAddress(address)
         val found = AtomicReference<OnePlusScanResult?>(null)
+        val foreign = ConcurrentHashMap<String, OnePlusScanResult>()
         val latch = CountDownLatch(1)
         val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 val device = result.device ?: return
                 val addr = device.address ?: return
-                if (addr.uppercase() != target) return
                 val name = device.name ?: result.scanRecord?.deviceName
+                if (addr.uppercase() != target) {
+                    // FEBC-matched neighbour: keep it only if it looks like a G7-family transmitter
+                    // (never a G6 `Dexcom*` companion), so the diagnostic cannot cry wolf.
+                    if (isG7FamilyAdvertisement(name)) {
+                        foreign[addr.uppercase()] = OnePlusScanResult(addr, name, result.rssi)
+                            .apply { seenElapsedMs = SystemClock.elapsedRealtime() }
+                    }
+                    return
+                }
                 val hit = OnePlusScanResult(addr, name, result.rssi)
                     .apply { seenElapsedMs = SystemClock.elapsedRealtime() }
                 if (found.compareAndSet(null, hit)) {
@@ -131,7 +154,7 @@ class OnePlusBleScannerAndroid(
             override fun onScanFailed(errorCode: Int) {
                 Log.e(
                     OnePlusLogMarkers.TAG,
-                    "${OnePlusLogMarkers.SCAN}: awaitTargetMac failed errorCode=$errorCode",
+                    "${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget failed errorCode=$errorCode",
                 )
                 latch.countDown()
             }
@@ -139,27 +162,57 @@ class OnePlusBleScannerAndroid(
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
+        awaitScanBudgetSlot()
         return try {
             val targetFilter = ScanFilter.Builder()
                 .setDeviceAddress(target)
                 .build()
-            leScanner.startScan(listOf(targetFilter), settings, cb)
+            val familyFilter = ScanFilter.Builder()
+                .setServiceUuid(ParcelUuid(OnePlusBluetoothUuids.Advertisement))
+                .build()
+            leScanner.startScan(listOf(targetFilter, familyFilter), settings, cb)
             Log.i(
                 OnePlusLogMarkers.TAG,
-                "${OnePlusLogMarkers.SCAN}: awaitTargetMac filtered started " +
+                "${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget filtered started " +
                     "mac=***${target.takeLast(5)} timeoutMs=$timeoutMs",
             )
             latch.await(timeoutMs.coerceAtLeast(1L), TimeUnit.MILLISECONDS)
-            found.get()
+            OnePlusAdvWaitResult(target = found.get(), foreign = foreign.values.toList())
         } catch (t: Throwable) {
-            Log.w(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: awaitTargetMac ${t.message}")
-            null
+            Log.w(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget ${t.message}")
+            OnePlusAdvWaitResult(foreign = foreign.values.toList())
         } finally {
             try {
                 leScanner.stopScan(cb)
             } catch (_: Throwable) {
             }
-            Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: awaitTargetMac stopped")
+            Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget stopped")
+        }
+    }
+
+    /**
+     * Hold this (background) thread until the shared [OnePlusScanBudget] grants a start slot, so
+     * two slots waiting for their sensors cannot together trip the platform's silent scan throttle.
+     * Returns with the slot already booked.
+     */
+    private fun awaitScanBudgetSlot() {
+        var logged = false
+        while (true) {
+            val wait = OnePlusScanBudget.reserve(SystemClock.elapsedRealtime())
+            if (wait <= 0L) return
+            if (!logged) {
+                Log.i(
+                    OnePlusLogMarkers.TAG,
+                    "${OnePlusLogMarkers.SCAN}: [$slot] scan budget full — deferring startScan ${wait}ms",
+                )
+                logged = true
+            }
+            try {
+                Thread.sleep(wait.coerceAtMost(OnePlusScanBudget.MAX_SLEEP_SLICE_MS))
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return
+            }
         }
     }
 
@@ -186,7 +239,7 @@ class OnePlusBleScannerAndroid(
             val score = OnePlusAdvCandidate.rankScore(name, address, hit.rssi, hint)
             Log.d(
                 OnePlusLogMarkers.TAG,
-                "${OnePlusLogMarkers.SCAN}: device name=${name ?: "?"} rssi=${hit.rssi} " +
+                "${OnePlusLogMarkers.SCAN}: [$slot] device name=${name ?: "?"} rssi=${hit.rssi} " +
                     "score=$score addr=***${address.takeLast(5)}",
             )
             listener?.onDevice(hit)
@@ -197,5 +250,15 @@ class OnePlusBleScannerAndroid(
         fun nameMatches(name: String?): Boolean = OnePlusAdvCandidate.nameMatchesSoft(name)
 
         internal fun normalizeTargetAddress(address: String): String = address.uppercase()
+
+        /**
+         * A FEBC advertiser that is a G7-family transmitter: either a nameless ADV (G7/ONE+ often
+         * advertise without a local name) or a `DXCM`/`DX0x` name — never a G6 `Dexcom*` companion.
+         */
+        internal fun isG7FamilyAdvertisement(name: String?): Boolean = when {
+            name.isNullOrBlank()                            -> true
+            name.startsWith("Dexcom", ignoreCase = true)    -> false
+            else                                            -> nameMatches(name)
+        }
     }
 }

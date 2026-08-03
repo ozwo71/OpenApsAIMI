@@ -62,10 +62,32 @@ class DexcomOnePlusWarmupNotification(private val context: Context) {
                     .setProgress(0, 0, true)
                     .setShowWhen(false)
 
-            OnePlusWarmupState.Phase.RECONNECTING ->
-                builder.setContentText(context.getString(R.string.dexcom_oneplus_notif_reconnecting))
-                    .setProgress(0, 0, true)
-                    .setShowWhen(false)
+            OnePlusWarmupState.Phase.RECONNECTING -> {
+                // A reconnect that is really a long ADV silence must say so: the field case showed
+                // an unchanging "Reconnecting…" for 18 min while nothing was happening.
+                val silenceMinutes = state.advSilenceMinutes
+                when {
+                    state.staleMacSuspected                      ->
+                        builder.setContentTitle(context.getString(R.string.dexcom_oneplus_notif_stale_mac_title))
+                            .setContentText(context.getString(R.string.dexcom_oneplus_notif_stale_mac_text))
+                            .setStyle(
+                                NotificationCompat.BigTextStyle()
+                                    .bigText(context.getString(R.string.dexcom_oneplus_notif_stale_mac_text)),
+                            )
+
+                    silenceMinutes != null && silenceMinutes > 0 ->
+                        builder.setContentText(
+                            context.getString(
+                                R.string.dexcom_oneplus_notif_waiting_adv,
+                                silenceMinutes.toInt(),
+                            ),
+                        )
+
+                    else                                         ->
+                        builder.setContentText(context.getString(R.string.dexcom_oneplus_notif_reconnecting))
+                }
+                builder.setProgress(0, 0, true).setShowWhen(false)
+            }
 
             OnePlusWarmupState.Phase.WARMING      -> {
                 builder.setContentTitle(context.getString(R.string.dexcom_oneplus_notif_warming_title))
