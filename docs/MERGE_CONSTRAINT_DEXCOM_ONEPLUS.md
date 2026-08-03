@@ -93,3 +93,4 @@ Keep these mappings (sensor text must match enum `"AAPS-DexcomOnePlus"`):
 | 2026-07-18 | A12: merge constraint + user guide + non-regression pointer. |
 | 2026-07-18 | `:plugins:libkeks` + Android GATT + KEKS + EGV/SessionStart/Backfill; Stub default; Real via eng pref. |
 | 2026-07-19 | Attach-safe (no auto SessionStop); docs onboarding/changelog; UI i18n. Device A3 still required. |
+| 2026-08-03 | Merge `dev` @ `fa2d2c78a5`: no upstream change on ONE+ paths (`settings.gradle`, `SourceSensor`, `SourcePluginsListModule` `@IntKey(446)`, notification-reader remaps all untouched). Constraint satisfied without re-application — verified by invariant-baseline diff. Log: [MERGE_DEV_2026-08-03.md](MERGE_DEV_2026-08-03.md). |

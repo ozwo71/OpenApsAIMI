@@ -4,7 +4,7 @@ Purpose: enforce repeatable quality gates to prevent freezes and functional regr
 
 Use this file for every merge from `dev` and every release candidate.
 
-**Latest merge log:** [MERGE_DEV_2026-07-31.md](MERGE_DEV_2026-07-31.md) (`milos/dev` @ `88d31b816d` → `feature/dexcom-oneplus-native`). Previous: [MERGE_DEV_2026-07-16.md](MERGE_DEV_2026-07-16.md) (dev @ `638f23dfab` → `dev_OAPSAIMI_mergeDEV`).
+**Latest merge log:** [MERGE_DEV_2026-08-03.md](MERGE_DEV_2026-08-03.md) (`dev` @ `fa2d2c78a5` → `feature/dexcom-oneplus-native`). Previous: [MERGE_DEV_2026-07-31.md](MERGE_DEV_2026-07-31.md) (`milos/dev` @ `88d31b816d` → `feature/dexcom-oneplus-native`), [MERGE_DEV_2026-07-16.md](MERGE_DEV_2026-07-16.md) (dev @ `638f23dfab` → `dev_OAPSAIMI_mergeDEV`).
 
 ---
 
@@ -16,9 +16,23 @@ Use this file for every merge from `dev` and every release candidate.
 - [ ] For each conflict, decision recorded: keep ours / keep theirs / combine.
 - [ ] If conflict touches async code, mark with `ASYNC IMPACT`.
 
+- [ ] **Safety tag** created on the pre-merge commit (`git tag premerge-dev-<date> HEAD`) — enables the two
+      baselines below and a clean rollback.
+- [ ] **Invariant baseline captured before the merge and re-run after**, output diffed (fork markers: module
+      includes, `SourceSensor`, `@IntKey` registrations, AIMI file count, `calibratedOrValue`,
+      `dashboardOverview` / `SkinDescriptionProvider`, manifest ML/physio permissions, `patient_story`,
+      `runVacuum = false`, `drain()`, notification-reader mappings). Any diff other than line-number shifts
+      must be explained.
+- [ ] **Failing tests attributed before being accepted.** A red test is only "pre-existing" once the *same*
+      task has been run on the pre-merge tag in a separate worktree (`git worktree add --detach <dir>
+      premerge-dev-<date>`, copy `local.properties`, `./gradlew -p <dir> <task>`) and shows the identical
+      failure set. Otherwise treat it as a merge regression.
+
 Notes:
 - No opportunistic refactor during merge conflict resolution.
 - Keep method signatures and contracts unchanged unless explicitly required.
+- Verify gradle results by **exit code on a redirected log**, never through a pipe (`| tail` reports the
+  pipe's status, so a FAILED run looks green).
 
 ### Fork merge constraint: Eversense (native CGM patches)
 
@@ -73,6 +87,23 @@ When this fork includes the Dexcom ONE+ native plugin (`:plugins:dexcom_oneplus`
 - [ ] Historical compatibility preserved for study data consumption.
 - [ ] Schema `1.2.0` additive block `patient_story` present when patient runtime is active (no breaking rename of `1.1.0` keys).
 
+### AIMI documentation consistency (fork-specific `.md`)
+
+Our AIMI docs are part of the contract: a merge that renames or deletes a symbol they reference is a
+documentation regression even when the build is green.
+
+- [ ] Every `` `*.kt` `` reference in [AIMI_ARCHITECTURE_MAP.md](AIMI_ARCHITECTURE_MAP.md),
+      [AIMI_ROADMAP.md](AIMI_ROADMAP.md) and the merge-constraint docs still resolves to an existing file:
+      ```bash
+      grep -ohE '`[A-Za-z0-9_/.:-]+\.kt`' docs/AIMI_ARCHITECTURE_MAP.md docs/AIMI_ROADMAP.md \
+        docs/NON_REGRESSION_CHECKLIST.md docs/MERGE_CONSTRAINT_EVERSENSE.md \
+        docs/MERGE_CONSTRAINT_DEXCOM_ONEPLUS.md | tr -d '`' | sort -u | while read -r p; do
+          find . -name "$(basename "$p")" -not -path '*/build/*' -not -path './.git/*' | grep -q . || echo "MISSING: $p"
+        done
+      ```
+- [ ] Behaviour claims still true for paths the merge touched (AIMI decision cascade, physio, hormonitor export).
+- [ ] New merge log added under `docs/MERGE_DEV_<date>.md` and the **Latest merge log** pointer above updated.
+
 ---
 
 ## 3) Stability and Freeze Prevention Gates
@@ -101,8 +132,8 @@ When this fork includes the Dexcom ONE+ native plugin (`:plugins:dexcom_oneplus`
 
 Upstream once ran **inline `VACUUM`** inside `cleanupDatabase()`; `KeepAliveWorker` triggered it daily while the loop was active → crashes / OOM. Re-verify after every merge touching DB or workers.
 
-- [ ] **`KeepAliveWorker.databaseCleanup`** calls `cleanupDatabase(..., runVacuum = false)` only (daily retention trim, no VACUUM). File: `app/.../receivers/KeepAliveWorker.kt`.
-- [ ] **`AppRepository.cleanupDatabase`** does **not** run `VACUUM` unless `runVacuum == true` (comment documents SQLITE_NOMEM risk). Default path: `PRAGMA optimize` + deletes + `wal_checkpoint(TRUNCATE)` only. File: `database/impl/.../AppRepository.kt`.
+- [ ] **`KeepAliveWorker.databaseCleanup`** calls `cleanupDatabase(..., runVacuum = false)` only (daily retention trim, no VACUUM). File: `implementation/src/main/kotlin/app/aaps/implementation/receivers/KeepAliveWorker.kt`.
+- [ ] **`AppRepository.cleanupDatabase`** does **not** run `VACUUM` unless `runVacuum == true` (comment documents SQLITE_NOMEM risk). Default path: `PRAGMA optimize` + deletes + `wal_checkpoint(TRUNCATE)` only. File: `database/impl/src/main/kotlin/app/aaps/database/AppRepository.kt`.
 - [ ] **Startup DB maintenance** uses `MainApp.maintainDatabaseIfDue()` → `maintainDatabaseAtStartup()` (**no automatic VACUUM** at launch; full VACUUM only via manual `runVacuum=true`). Key `LongNonKey.LastVacuumRun`, timeout 2 min, `catch (Throwable)`.
 - [ ] **Manual maintenance only:** `runVacuum = true` only from explicit UI (e.g. `MaintenanceViewModel`, NS client cleanup dialog), with `DatabaseMaintenanceCoordinator` around compaction in `AppRepository`.
 - [ ] **Merge conflicts:** resolving `AppRepository.kt` / `KeepAliveWorker.kt` / `PersistenceLayer.kt` did not re-inline `VACUUM` into the automatic cleanup path. See [MERGE_DEV_2026-05-20.md](MERGE_DEV_2026-05-20.md) (AppRepository combine note).
@@ -158,6 +189,8 @@ Pass criteria:
 - [ ] ML JSON/CSV permissions and writes verified
 - [ ] Physio path verified
 - [ ] Hormonitor structure verified
+- [ ] AIMI `.md` documentation consistency verified (references resolve, merge log added)
+- [ ] AIMI/SMB/AutoISF parity reviewed (upstream APS changes ported or explicitly declined)
 - [ ] Eversense merge constraint reviewed (if native plugin present on branch)
 - [ ] Dexcom ONE+ merge constraint reviewed (if native plugin present on branch)
 - [ ] Database maintenance regression gate reviewed (KeepAlive `runVacuum=false`, no auto VACUUM in `cleanupDatabase`)
