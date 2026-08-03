@@ -28,6 +28,25 @@ Use this file for every merge from `dev` and every release candidate.
       premerge-dev-<date>`, copy `local.properties`, `./gradlew -p <dir> <task>`) and shows the identical
       failure set. Otherwise treat it as a merge regression.
 
+- [ ] **Duplicate-entry scan after any merge touching `strings.xml` or a manifest.** Git text-merges these
+      files happily; gradle then rejects the result. Neither a Kotlin compile nor a unit test catches it —
+      only `mergeResources` / `processMainManifest` do. Run:
+      ```bash
+      # duplicate resource names
+      for f in $(find . -name strings.xml -not -path '*/build/*'); do
+        d=$(grep -oE '<(string|plurals|string-array) name="[^"]+"' "$f" | sed 's/.*name="//;s/"//' | sort | uniq -d)
+        [ -n "$d" ] && echo "$f: $d"
+      done
+      # duplicate manifest components
+      for f in app/src/main/AndroidManifest.xml wear/src/main/AndroidManifest.xml; do
+        grep -oE 'android:name="\.[A-Za-z0-9_.]+"' "$f" | sort | uniq -d
+      done
+      ```
+- [ ] **Build what CI builds, not just `:app` debug.** Both `aaps-ci.yml` and `android-build.yml` run
+      `:app:assemble<Variant>` **and `:wear:assemble<Variant>`**. `:app:compileFullDebugKotlin` alone never
+      exercises `:wear` resource merging or manifest merging, so it can pass while CI fails. Minimum
+      post-merge gate: `./gradlew :app:assembleFullDebug :wear:assembleFullDebug`.
+
 Notes:
 - No opportunistic refactor during merge conflict resolution.
 - Keep method signatures and contracts unchanged unless explicitly required.
