@@ -135,11 +135,17 @@ jobs:
 
       # 2. Upload zu Nextcloud (Optionales Backup)
       - name: Upload to Nextcloud
-        continue-on-error: true # WICHTIG: Wenn Nextcloud down ist, gilt der Build trotzdem als "Success" (wegen Release)
+        continue-on-error: true
         run: |
-          curl --fail --show-error -u "${{ secrets.NEXTCLOUD_USER }}:${{ secrets.NEXTCLOUD_PASSWORD }}" \
-          -T "${{ steps.prepare_assets.outputs.apk_path }}" \
-          "${{ secrets.NEXTCLOUD_URL }}${{ steps.prepare_assets.outputs.apk_path }}"
+          curl \
+            --fail \
+            --show-error \
+            --retry 5 \
+            --retry-all-errors \
+            --retry-delay 15 \
+            -u "${{ secrets.NEXTCLOUD_USER }}:${{ secrets.NEXTCLOUD_PASSWORD }}" \
+            -T "${{ steps.prepare_assets.outputs.apk_path }}" \
+            "${{ secrets.NEXTCLOUD_URL }}${{ steps.prepare_assets.outputs.apk_path }}"
 
   cleanup:
     runs-on: ubuntu-latest
