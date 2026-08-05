@@ -122,7 +122,7 @@ jobs:
 
       # 1. Upload zu GitHub Release
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.prepare_assets.outputs.tag_name }}
           name: "AAPS Build ${{ steps.prepare_assets.outputs.tag_name }}"
