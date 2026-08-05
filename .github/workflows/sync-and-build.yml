@@ -67,7 +67,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.BUILD_BRANCH }}
-          submodules: recursive
+          # submodules: recursive
 
       - name: Set up JDK 21
         uses: actions/setup-java@v3
