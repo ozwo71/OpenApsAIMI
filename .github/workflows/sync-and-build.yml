@@ -25,7 +25,7 @@ jobs:
       has_changes: ${{ steps.sync.outputs.has_changes }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ env.BUILD_BRANCH }}
           fetch-depth: 0
@@ -64,7 +64,7 @@ jobs:
     if: needs.sync.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ env.BUILD_BRANCH }}
           # submodules: recursive
