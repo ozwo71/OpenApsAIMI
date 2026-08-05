@@ -287,11 +287,26 @@ internal data class AimiDecisionContext(
     var outcome: Outcome? = null
 ) {
     data class BaselineState(
+        /**
+         * Historical field. Despite its name it carries `profile.sens`, which is the **command**
+         * sensitivity (dynamic ISF x physiological factor), not the profile block value. Kept
+         * populated so existing analysis keeps working; use [command_isf_mgdl] in new work and
+         * [profile_isf_static_mgdl] when a static baseline is needed.
+         * See `docs/adr/0002-sensitivity-three-levels.md`.
+         */
         val profile_isf_mgdl: Double,
         val profile_basal_uph: Double,
         val current_bg_mgdl: Double,
         val cob_g: Double,
-        val iob_u: Double
+        val iob_u: Double,
+        /** User profile ISF block for this time of day. Static within the tick. */
+        val profile_isf_static_mgdl: Double? = null,
+        /** Sensitivity the command actually used for this tick (same value as [profile_isf_mgdl]). */
+        val command_isf_mgdl: Double? = null,
+        /** Which source produced the dynamic value this tick. See [IsfSourceTelemetry]. */
+        val isf_source: String? = null,
+        /** Age (ms) of the cached dynamic entry that was used, when one was used. */
+        val isf_age_ms: Long? = null
     )
     data class Adjustments(
         var dynamic_isf: DynamicIsf? = null,
@@ -355,6 +370,11 @@ internal data class AimiDecisionContext(
         var t3c_runtime_ownership: T3cRuntimeOwnershipExport? = null,
         /** Loop vs auditor binding for this tick (sync disposition; follow-up may arrive async). */
         var auditor_tick: org.json.JSONObject? = null,
+        /**
+         * Post-hypo delivery authority for this tick: whether it applied, which condition declined
+         * it, and the SMB before / after its cap. See `docs/adr/0006-autodrive-consumes-authority.md`.
+         */
+        var post_hypo_delivery: org.json.JSONObject? = null,
     )
 
     data class T3cRuntimeOwnershipExport(
@@ -511,6 +531,10 @@ internal data class AimiDecisionContext(
             base.put("current_bg_mgdl", baseline_state.current_bg_mgdl)
             base.put("cob_g", baseline_state.cob_g)
             base.put("iob_u", baseline_state.iob_u)
+            base.put("profile_isf_static_mgdl", baseline_state.profile_isf_static_mgdl ?: org.json.JSONObject.NULL)
+            base.put("command_isf_mgdl", baseline_state.command_isf_mgdl ?: org.json.JSONObject.NULL)
+            base.put("isf_source", baseline_state.isf_source ?: org.json.JSONObject.NULL)
+            base.put("isf_age_ms", baseline_state.isf_age_ms ?: org.json.JSONObject.NULL)
             json.put("baseline_state", base)
 
             val adj = org.json.JSONObject()
@@ -734,6 +758,9 @@ internal data class AimiDecisionContext(
             }
             adjustments.auditor_tick?.let { auditorTick ->
                 adj.put("auditor_tick", auditorTick)
+            }
+            adjustments.post_hypo_delivery?.let { postHypoDelivery ->
+                adj.put("post_hypo_delivery", postHypoDelivery)
             }
             json.put("adjustments", adj)
 
@@ -1712,6 +1739,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         currentTickDecisionEventId = null
         lastAuditorAuditStartedAtMs = 0L
         lastPostHypoDeliveryAuthority = PostHypoDeliveryAuthority.INACTIVE
+        lastPostHypoSmbBeforeCapU = null
+        lastPostHypoSmbAfterCapU = null
         // Cross-tick hysteresis (InsulinSlope / Endogenous) must NOT reset here — that zeroed
         // holdTicks every loop and made 15–20 min holds dead on arrival. reset() belongs in
         // tests / plugin restart only.
@@ -1750,7 +1779,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 profile_basal_uph = ctx.profile.current_basal,
                 current_bg_mgdl = ctx.glucoseStatus.glucose,
                 cob_g = ctx.mealData.mealCOB,
-                iob_u = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0
+                iob_u = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
+                profile_isf_static_mgdl = IsfSourceTelemetry.lastProfileStaticMgdl,
+                command_isf_mgdl = ctx.profile.sens,
+                isf_source = IsfSourceTelemetry.lastSource,
+                isf_age_ms = IsfSourceTelemetry.lastAgeMs
             )
         )
         val rT = RT(
@@ -4688,6 +4721,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 )
             }
             val v3Smb = lastPostHypoDeliveryAuthority.capSmbU(v3SmbRaw)
+            lastPostHypoSmbBeforeCapU = v3SmbRaw
+            lastPostHypoSmbAfterCapU = v3Smb
             lastSmbBindingTraceDraft = lastSmbBindingTraceDraft.appendStage(
                 name = "POST_HYPO_CAP",
                 beforeU = v3SmbRaw,
@@ -8442,6 +8477,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastAuditorLoopSnapshot?.let { snapshot ->
             decisionCtx.adjustments.auditor_tick = snapshot.toJsonObject()
         }
+        decisionCtx.adjustments.post_hypo_delivery = PostHypoDeliveryAuthority.toJsonObject(
+            decision = lastPostHypoDeliveryAuthority,
+            smbBeforeCapU = lastPostHypoSmbBeforeCapU,
+            smbAfterCapU = lastPostHypoSmbAfterCapU,
+        )
 
         val medicalJson = decisionCtx.toMedicalJson()
         // NB: do NOT push medicalJson into consoleLog — consoleLog is serialized into the NS deviceStatus
@@ -10026,6 +10066,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var correctionAggressionDecision: CorrectionAggressionGate.Decision? = null
     private var lastPostHypoDeliveryAuthority: PostHypoDeliveryAuthority.Decision =
         PostHypoDeliveryAuthority.INACTIVE
+
+    /** SMB proposed before the post-hypo cap, for `adjustments.post_hypo_delivery`. Per tick. */
+    private var lastPostHypoSmbBeforeCapU: Double? = null
+
+    /** SMB left after the post-hypo cap, for `adjustments.post_hypo_delivery`. Per tick. */
+    private var lastPostHypoSmbAfterCapU: Double? = null
     private var mealAdvisorOneShotThisTick: Boolean = false
     private var lastTubeAdvisorSmbCapScale: Double? = null
     private var lastInflammationResult: app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster.InflammationResult? = null

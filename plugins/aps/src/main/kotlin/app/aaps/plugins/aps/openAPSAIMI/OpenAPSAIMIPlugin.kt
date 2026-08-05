@@ -548,27 +548,57 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     }
 
     @SuppressLint("DefaultLocale")
+    /**
+     * Reads the newest cache entry and records **which source was used** in [IsfSourceTelemetry].
+     *
+     * Diagnostic only — it does not change which value is returned. The cache key is
+     * `bucketStart + glucose` (see the warm-up loop), so `valueAt(size - 1)` returns the entry of
+     * the highest glucose in the newest 30-minute bucket, not the most recent one. The bucket start
+     * is recovered from the key to report the age of the value actually used.
+     *
+     * See `docs/adr/0003-dynisf-cache-read-path.md`.
+     */
+    private fun readNewestDynIsfAndRecordSource(now: Long): Double? {
+        val entry = synchronized(dynIsfCacheLock) {
+            val size = dynIsfCache.size()
+            if (size == 0) null else dynIsfCache.keyAt(size - 1) to dynIsfCache.valueAt(size - 1)
+        }
+        if (entry == null) {
+            IsfSourceTelemetry.record(IsfSourceTelemetry.SOURCE_PROFILE_FALLBACK, null, null)
+            return null
+        }
+        val (key, value) = entry
+        val bucketMs = T.mins(30).msecs()
+        val bucketStart = key - key % bucketMs
+        val ageMs = (now - bucketStart).coerceAtLeast(0L)
+        val source =
+            if (ageMs > IsfSourceTelemetry.STALE_AFTER_MS) IsfSourceTelemetry.SOURCE_DYNAMIC_STALE
+            else IsfSourceTelemetry.SOURCE_DYNAMIC_FRESH
+        IsfSourceTelemetry.record(source, value, ageMs)
+        return value
+    }
+
     override fun getIsfMgdl(profile: Profile, caller: String): Double? {
         val start = dateUtil.now()
         val multiplier = (profile as? ProfileSealed.EPS)?.value?.originalPercentage?.div(100.0)
-            ?: return null
+            ?: run {
+                IsfSourceTelemetry.record(IsfSourceTelemetry.SOURCE_NO_EPS, null, null)
+                return null
+            }
 
         if (Looper.myLooper() == Looper.getMainLooper()) {
             // Keep UI path non-blocking; use latest cache and refresh in background.
-            val cached = synchronized(dynIsfCacheLock) {
-                if (dynIsfCache.size() == 0) null else dynIsfCache.valueAt(dynIsfCache.size() - 1)
-            }
+            val cached = readNewestDynIsfAndRecordSource(start)
             aimiPluginIoScope.launch { runCatching { calculateVariableIsf(start) } }
             return cached?.let { it * multiplier }
         }
 
-        val cached = synchronized(dynIsfCacheLock) {
-            if (dynIsfCache.size() == 0) null else dynIsfCache.valueAt(dynIsfCache.size() - 1)
-        }
+        val cached = readNewestDynIsfAndRecordSource(start)
         aimiPluginIoScope.launch { runCatching { calculateVariableIsf(start) } }
         profiler.log(
             LTag.APS,
-            "getIsfMgdl() CACHE $cached ${dateUtil.dateAndTimeAndSecondsString(start)} $caller",
+            "getIsfMgdl() CACHE $cached src=${IsfSourceTelemetry.lastSource} " +
+                "age=${IsfSourceTelemetry.lastAgeMs} ${dateUtil.dateAndTimeAndSecondsString(start)} $caller",
             start
         )
         return cached?.let { it * multiplier }
@@ -1271,6 +1301,12 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             historicActivity = Round.roundTo(historicActivity, 0.0001)
             currentActivity = Round.roundTo(currentActivity, 0.0001)
             val tdd4D = tddCalculator.averageTDD(tddCalculator.calculate(4, allowMissingDays = false))
+            // Diagnostic only: capture the static profile ISF next to the command value written into
+            // `sens` below, so a support package can show the gap between the two.
+            // See `docs/adr/0002-sensitivity-three-levels.md`.
+            IsfSourceTelemetry.recordProfileStatic(
+                runCatching { profile.getProfileIsfMgdl() }.getOrNull()
+            )
             val oapsProfile = OapsProfileAimi(
                 dia = eff.iCfg.dia,
                 min_5m_carbimpact = 0.0, // not used

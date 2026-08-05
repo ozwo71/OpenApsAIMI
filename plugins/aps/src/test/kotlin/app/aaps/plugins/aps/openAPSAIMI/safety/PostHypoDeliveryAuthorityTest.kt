@@ -68,6 +68,7 @@ class PostHypoDeliveryAuthorityTest {
         )
 
         assertFalse(decision.active)
+        assertEquals(PostHypoDeliveryAuthority.REASON_TIER_NOT_REBOUND, decision.reasonTag)
         assertEquals(0.77, decision.capSmbU(0.77), 0.001)
     }
 
@@ -82,6 +83,7 @@ class PostHypoDeliveryAuthorityTest {
         )
 
         assertFalse(decision.active)
+        assertEquals(PostHypoDeliveryAuthority.REASON_MEAL_EVIDENCE, decision.reasonTag)
     }
 
     @Test
@@ -95,6 +97,37 @@ class PostHypoDeliveryAuthorityTest {
         )
 
         assertFalse(decision.active)
+        assertEquals(PostHypoDeliveryAuthority.REASON_MODE_NOT_POST_HYPO, decision.reasonTag)
+    }
+
+    @Test
+    fun export_namesTheDecliningConditionAndTheCapEffect() {
+        val declined = PostHypoDeliveryAuthority.evaluate(
+            PostHypoDeliveryAuthority.Input(
+                gate = reboundGuardGate(),
+                patientMode = PatientMode.POST_HYPO_RECOVERY,
+                aggressionInput = aggressionInput(cob = 12.0),
+            ),
+        )
+        val declinedJson = PostHypoDeliveryAuthority.toJsonObject(declined, 0.77, 0.77)
+        assertFalse(declinedJson.getBoolean("active"))
+        assertEquals(PostHypoDeliveryAuthority.REASON_MEAL_EVIDENCE, declinedJson.getString("reason_tag"))
+        assertTrue(declinedJson.isNull("max_smb_u"))
+        assertEquals(0.77, declinedJson.getDouble("smb_before_cap_u"), 0.001)
+        assertEquals(0.77, declinedJson.getDouble("smb_after_cap_u"), 0.001)
+
+        val applied = PostHypoDeliveryAuthority.evaluate(
+            PostHypoDeliveryAuthority.Input(
+                gate = reboundGuardGate(),
+                patientMode = PatientMode.POST_HYPO_RECOVERY,
+                aggressionInput = aggressionInput(),
+            ),
+        )
+        val appliedJson = PostHypoDeliveryAuthority.toJsonObject(applied, 0.77, applied.capSmbU(0.77))
+        assertTrue(appliedJson.getBoolean("active"))
+        assertEquals(0.0, appliedJson.getDouble("max_smb_u"), 0.001)
+        assertEquals(0.77, appliedJson.getDouble("smb_before_cap_u"), 0.001)
+        assertEquals(0.0, appliedJson.getDouble("smb_after_cap_u"), 0.001)
     }
 
     @Test

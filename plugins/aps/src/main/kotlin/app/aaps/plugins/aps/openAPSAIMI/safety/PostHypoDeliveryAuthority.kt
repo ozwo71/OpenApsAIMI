@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.safety
 
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
+import org.json.JSONObject
 import java.util.Locale
 
 /**
@@ -39,10 +40,29 @@ object PostHypoDeliveryAuthority {
         reasonTag = "inactive",
     )
 
+    /**
+     * Same shape as [INACTIVE] but naming the condition that declined the authority, so a support
+     * package says *why* the guard did not apply instead of only that it did not.
+     * See `docs/adr/0006-autodrive-consumes-authority.md`.
+     */
+    private fun inactiveBecause(reason: String): Decision = INACTIVE.copy(reasonTag = reason)
+
+    /** Tick is not classified as a post-hypo rebound by [CorrectionAggressionGate]. */
+    const val REASON_TIER_NOT_REBOUND = "inactive_tier_not_rebound"
+
+    /** Patient mode is not post-hypo recovery. */
+    const val REASON_MODE_NOT_POST_HYPO = "inactive_mode_not_post_hypo"
+
+    /** Independent meal evidence (COB, declared mode, carb estimate, confirmed rise) was found. */
+    const val REASON_MEAL_EVIDENCE = "inactive_meal_evidence"
+
     fun evaluate(input: Input): Decision {
-        if (input.gate?.tier != CorrectionAggressionGate.Tier.REBOUND_GUARD) return INACTIVE
-        if (input.patientMode != PatientMode.POST_HYPO_RECOVERY) return INACTIVE
-        if (CorrectionAggressionGate.hasIndependentMealEvidence(input.aggressionInput)) return INACTIVE
+        if (input.gate?.tier != CorrectionAggressionGate.Tier.REBOUND_GUARD)
+            return inactiveBecause(REASON_TIER_NOT_REBOUND)
+        if (input.patientMode != PatientMode.POST_HYPO_RECOVERY)
+            return inactiveBecause(REASON_MODE_NOT_POST_HYPO)
+        if (CorrectionAggressionGate.hasIndependentMealEvidence(input.aggressionInput))
+            return inactiveBecause(REASON_MEAL_EVIDENCE)
         // Aggressive rise past target+30 with Δ>15 → act normally (product 2026-07-17).
         if (
             PostHypoAggressiveRiseExit.shouldExit(
@@ -82,4 +102,24 @@ object PostHypoDeliveryAuthority {
             )
             append(" tag=").append(decision.reasonTag)
         }
+
+    /**
+     * Snapshot for `AIMI_Decisions.jsonl` (`adjustments.post_hypo_delivery`). Diagnostic only.
+     *
+     * @param smbBeforeCapU SMB the channel proposed before [Decision.capSmbU] was applied.
+     * @param smbAfterCapU  SMB left after the cap, so the effect of the guard is directly readable.
+     */
+    fun toJsonObject(
+        decision: Decision,
+        smbBeforeCapU: Double?,
+        smbAfterCapU: Double?,
+    ): JSONObject = JSONObject().apply {
+        put("active", decision.active)
+        put("reason_tag", decision.reasonTag)
+        put("force_meal_interpretation_suppressed", decision.forceMealInterpretationSuppressed)
+        put("suppress_meal_delivery", decision.suppressMealDelivery)
+        put("max_smb_u", if (decision.maxSmbU.isFinite()) decision.maxSmbU else JSONObject.NULL)
+        put("smb_before_cap_u", smbBeforeCapU ?: JSONObject.NULL)
+        put("smb_after_cap_u", smbAfterCapU ?: JSONObject.NULL)
+    }
 }
