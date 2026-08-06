@@ -18,6 +18,7 @@ import app.aaps.core.interfaces.source.PromotionRejectReason
 import app.aaps.core.interfaces.source.PromotionResult
 import app.aaps.core.interfaces.source.SensorSlot
 import app.aaps.core.interfaces.source.StagingState
+import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.withActivity
 import app.aaps.core.ui.compose.icons.IcPluginByoda
@@ -192,6 +193,8 @@ class DexcomOnePlusPlugin @Inject constructor(
             DexcomOnePlusIntentKey.Start.withActivity(DexcomOnePlusStartActivity::class.java),
             DexcomOnePlusIntentKey.Warmup.withActivity(DexcomOnePlusWarmupActivity::class.java),
             DexcomOnePlusBooleanKey.UseRealSkeleton,
+            // Sensor age on the dashboard comes from the SENSOR_CHANGE therapy event this writes.
+            BooleanKey.BgSourceCreateSensorChange,
         ),
         icon = pluginDescription.icon,
     )
@@ -333,6 +336,51 @@ class DexcomOnePlusPlugin @Inject constructor(
         }
     }
 
+    /**
+     * The user explicitly started [deviceAddress] from the Start screen: anchor the sensor age on
+     * that moment and log a `SENSOR_CHANGE` therapy event.
+     *
+     * Without it the dashboard sensor age stayed empty for this source (nothing ever wrote the event)
+     * and had to be entered by hand in Care. Anchoring on the user action rather than on the first
+     * reading keeps the age honest — the first reading only arrives after the ~30 min warm-up.
+     *
+     * No-op when the same sensor is simply re-connected, so re-pairing a running sensor does not
+     * rejuvenate its age. The therapy event itself follows [BooleanKey.BgSourceCreateSensorChange].
+     *
+     * @param previousMac MAC stored for the running session before this start, so a sensor anchored
+     *   by an older build (session start without its owner MAC) is still seen as the same sensor.
+     */
+    fun onSensorSessionStarted(
+        deviceAddress: String,
+        previousMac: String?,
+        startMs: Long = System.currentTimeMillis(),
+    ) {
+        if (!sensorStore.startSessionForSensor(deviceAddress, startMs, previousMac)) return
+        refreshProductionLifecycle()
+        logSensorChange(startMs)
+    }
+
+    /**
+     * Creates the `SENSOR_CHANGE` therapy event the dashboard sensor age reads. The DB transaction
+     * ignores a second event with the same timestamp, so this is safe to call again for one session.
+     */
+    private fun logSensorChange(startMs: Long) {
+        if (!preferences.get(BooleanKey.BgSourceCreateSensorChange)) return
+        ioScope.launch {
+            val result = persistenceLayer.insertCgmSourceData(
+                Sources.DexcomOnePlus,
+                emptyList(),
+                emptyList(),
+                sensorInsertionTime = startMs,
+            )
+            aapsLogger.info(
+                LTag.BGSOURCE,
+                "DEXCOM_ONEPLUS_SESSION: sensor change logged startMs=$startMs " +
+                    "inserted=${result.sensorInsertionsInserted.size}",
+            )
+        }
+    }
+
     override fun onSession(up: Boolean, reason: String?) {
         aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_SESSION: up=$up reason=$reason")
     }
@@ -469,8 +517,11 @@ class DexcomOnePlusPlugin @Inject constructor(
         DexcomOnePlusIngest.reset()
         // 3) Durability: migrate the staging identity into the production store so a later restart
         //    resumes the promoted sensor on the production driver. Then retire the staging store.
-        stagingStore.load()?.let { sensorStore.adopt(it, stagingStore.loadSessionStart()) }
+        stagingStore.load()?.let { sensorStore.adopt(it, startMs) }
         stagingStore.clearAll()
+        // The promoted sensor becomes the loop's sensor: its age must show on the dashboard from the
+        // moment it was applied (its staging start, verified above), not from the promotion.
+        logSensorChange(startMs)
         // 4) In-session: the already-connected staging driver now feeds the loop (no gap).
         stagingPublishesToLoop = true
         stagingPresent = false

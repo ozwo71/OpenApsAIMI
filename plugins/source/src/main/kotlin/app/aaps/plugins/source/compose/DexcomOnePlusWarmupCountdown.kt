@@ -40,6 +40,35 @@ object DexcomOnePlusWarmupCountdown {
             state.remainingMs == null &&
             state.endsAtEpochMs == null
 
+    /**
+     * The local fallback deadline belongs to the whole warm-up, not to a single phase: a duty-cycle
+     * disconnect moves the phase to CONNECTING / RECONNECTING and must keep the clock. Dropping it
+     * there blanked the countdown and restarted a fresh ~30 min timer on the next WARMING packet.
+     * Only a finished / stopped / failed warm-up clears it.
+     */
+    fun shouldClearLocalFallback(phase: OnePlusWarmupState.Phase): Boolean = when (phase) {
+        OnePlusWarmupState.Phase.READY,
+        OnePlusWarmupState.Phase.IDLE,
+        OnePlusWarmupState.Phase.FAILED       -> true
+
+        OnePlusWarmupState.Phase.WARMING,
+        OnePlusWarmupState.Phase.PAIRING,
+        OnePlusWarmupState.Phase.CONNECTING,
+        OnePlusWarmupState.Phase.RECONNECTING -> false
+    }
+
+    /** Phases that show the mm:ss countdown when one is known (the link may be re-establishing). */
+    fun showsCountdown(phase: OnePlusWarmupState.Phase): Boolean = when (phase) {
+        OnePlusWarmupState.Phase.WARMING,
+        OnePlusWarmupState.Phase.IDLE,
+        OnePlusWarmupState.Phase.PAIRING,
+        OnePlusWarmupState.Phase.CONNECTING,
+        OnePlusWarmupState.Phase.RECONNECTING -> true
+
+        OnePlusWarmupState.Phase.READY,
+        OnePlusWarmupState.Phase.FAILED       -> false
+    }
+
     fun formatMmSs(remainingMs: Long): String {
         val totalSec = (remainingMs / 1000L).coerceAtLeast(0L)
         val minutes = totalSec / 60L

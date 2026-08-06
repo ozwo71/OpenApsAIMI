@@ -9,13 +9,13 @@
     <string name="dexcom_app_patched">BYODA</string>
     <string name="dexcom_short">BYODA</string>
     <string name="description_source_dexcom">Receive BG values from the \'Build Your Own Dexcom App\'.</string>
-    <string name="dexcom_oneplus_native">Dexcom ONE+</string>
-    <string name="dexcom_oneplus_short">ONE+</string>
-    <string name="description_source_dexcom_oneplus_native">Native Dexcom ONE+ Bluetooth in AAPS. Apply the sensor, enter the pairing code immediately, then wait ~30 min warm-up before loop glucose.</string>
+    <string name="dexcom_oneplus_native">Dexcom ONE+ / G7</string>
+    <string name="dexcom_oneplus_short">ONE+/G7</string>
+    <string name="description_source_dexcom_oneplus_native">Native Dexcom ONE+ and G7 Bluetooth in AAPS. Apply the sensor, enter the pairing code immediately, then wait ~30 min warm-up before loop glucose.</string>
     <string name="dexcom_oneplus_plugin_summary">Status, connect with pairing code, and warm-up</string>
     <string name="dexcom_oneplus_aaps_directory_access_lost">Access to the AAPS folder has been lost. Open Maintenance, select the Documents/AAPS folder and grant permission again.</string>
     <string name="dexcom_oneplus_aaps_directory_select">Select folder</string>
-    <string name="dexcom_oneplus_status_title">ONE+ status</string>
+    <string name="dexcom_oneplus_status_title">ONE+ / G7 status</string>
     <string name="dexcom_oneplus_status_summary">Session phase and connection status</string>
     <string name="dexcom_oneplus_start_title">Start sensor</string>
     <string name="dexcom_oneplus_start_summary">Apply sensor → enter code now → connect → ~30 min warm-up</string>
@@ -44,7 +44,7 @@
     <string name="dexcom_oneplus_device_required">Select a sensor from the scan list</string>
     <string name="dexcom_oneplus_new_sensor_code_warning">This is a different sensor from the paired one, but the pairing code has not changed. Paste the new applicator code — or press Connect again to keep the current one.</string>
     <string name="dexcom_oneplus_real_skeleton_hint">Engineering: enable “Use Real BLE skeleton” in plugin prefs before Start if you want GATT+KEKS (otherwise Stub fails closed after connect).</string>
-    <string name="dexcom_oneplus_real_skeleton_required">Enable “Use Real BLE skeleton” (engineering) in ONE+ plugin settings before connecting.</string>
+    <string name="dexcom_oneplus_real_skeleton_required">Enable “Use Real BLE skeleton” (engineering) in ONE+ / G7 plugin settings before connecting.</string>
     <string name="dexcom_oneplus_dexcom_recovery_warning">Stop the Dexcom app and xDrip first (one Bluetooth master). This build attaches to an existing sensor session and does not stop it. Returning to the Dexcom app afterward is not guaranteed — prefer a spare sensor for testing.</string>
     <string name="dexcom_oneplus_connect_follow">Connect / follow sensor</string>
     <string name="dexcom_oneplus_pairing_code_label">Sensor pairing code</string>
@@ -89,15 +89,15 @@
     <string name="dexcom_oneplus_status_message_generic">See status details in logcat if problems persist.</string>
     <string name="dexcom_oneplus_warmup_done">Warm-up complete — source active</string>
     <string name="dexcom_oneplus_warmup_failed" comment="%1$s=error detail. Example: BLE session not ported">Warm-up failed: %1$s</string>
-    <string name="dexcom_oneplus_notif_title">Dexcom ONE+</string>
-    <string name="dexcom_oneplus_notif_channel_name">Dexcom ONE+ status</string>
+    <string name="dexcom_oneplus_notif_title">Dexcom ONE+ / G7</string>
+    <string name="dexcom_oneplus_notif_channel_name">Dexcom ONE+ / G7 status</string>
     <string name="dexcom_oneplus_notif_channel_desc">Ongoing sensor connection and warm-up status.</string>
     <string name="dexcom_oneplus_notif_pairing">Pairing…</string>
     <string name="dexcom_oneplus_notif_connecting">Connecting to sensor…</string>
     <string name="dexcom_oneplus_notif_reconnecting">Reconnecting…</string>
     <string name="dexcom_oneplus_notif_waiting_adv" comment="%1$d = whole minutes the sensor has been silent. Example: No signal from the sensor for 7 min">No signal from the sensor for %1$d min — keep the phone close</string>
     <string name="dexcom_oneplus_notif_stale_mac_title">Wrong sensor?</string>
-    <string name="dexcom_oneplus_notif_stale_mac_text">Another Dexcom ONE+ is nearby but the paired one stays silent. Start the sensor again to pair the new one.</string>
+    <string name="dexcom_oneplus_notif_stale_mac_text">Another Dexcom ONE+ / G7 sensor is nearby but the paired one stays silent. Start the sensor again to pair the new one.</string>
     <string name="dexcom_oneplus_notif_warming_title">Sensor warming up</string>
     <string name="dexcom_oneplus_notif_warming_text">Keep the phone near the sensor</string>
     <string name="dexcom_oneplus_notif_failed_title">Warm-up interrupted</string>
@@ -107,7 +107,7 @@
     <string name="dexcom_oneplus_slot_staging">Start in staging (pre-soak)</string>
     <string name="dexcom_oneplus_slot_hint">Production feeds the loop after warm-up. Staging (pre-soak) warms a second sensor alongside the one you are currently using — it is collect-only and never feeds the loop until you promote it from the status screen.</string>
     <string name="dexcom_oneplus_staging_connect">Start staging sensor</string>
-    <string name="dexcom_oneplus_staging_return_note">The staging sensor collects readings in the background and does not feed the loop. Return to the dashboard; promote it later from the ONE+ status screen once it is ready.</string>
+    <string name="dexcom_oneplus_staging_return_note">The staging sensor collects readings in the background and does not feed the loop. Return to the dashboard; promote it later from the ONE+ / G7 status screen once it is ready.</string>
     <string name="dexcom_oneplus_staging_heading">Staging sensor (pre-soak)</string>
     <string name="dexcom_oneplus_staging_state" comment="%1$s=staging state label. Example: Ready to promote">Staging state: %1$s</string>
     <string name="dexcom_oneplus_staging_state_absent">None</string>

@@ -31,9 +31,11 @@ internal object DexcomOnePlusWarmupMapper {
             remainingMs = state.remainingMs,
             endsAtEpochMs = state.endsAtEpochMs,
             message = state.message,
-            // Nominal ONE+/G7 warm-up length (~30 min) so the dashboard ring fills. Only meaningful
-            // during WARMING; pre-warm-up phases (connecting/reconnecting) have no countdown total.
-            totalMs = if (mappedPhase == CgmWarmupStatus.Phase.WARMING) {
+            // Nominal ONE+/G7 warm-up length (~30 min) so the dashboard ring fills. Supplied while
+            // warming, and also when a connection phase still carries the sticky warm-up deadline
+            // (a duty-cycle reconnect during warm-up must not blank the ring). Phases without any
+            // deadline have no countdown total → indeterminate ring.
+            totalMs = if (mappedPhase == CgmWarmupStatus.Phase.WARMING || state.endsAtEpochMs != null) {
                 DexcomOnePlusWarmupCountdown.LOCAL_FALLBACK_DURATION_MS
             } else {
                 null

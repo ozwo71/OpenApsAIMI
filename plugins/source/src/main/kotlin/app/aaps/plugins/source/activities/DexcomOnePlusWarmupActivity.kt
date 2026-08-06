@@ -93,7 +93,7 @@ private fun DexcomOnePlusWarmupScreen(onBack: () -> Unit) {
                 // Local fallback ONLY if remainingMs (and endsAt) are null — documented above.
                 localFallbackEndsAt = now + DexcomOnePlusWarmupCountdown.LOCAL_FALLBACK_DURATION_MS
             }
-            if (state.phase != OnePlusWarmupState.Phase.WARMING) {
+            if (DexcomOnePlusWarmupCountdown.shouldClearLocalFallback(state.phase)) {
                 localFallbackEndsAt = null
             }
             usingLocalFallback =
@@ -156,13 +156,16 @@ private fun DexcomOnePlusWarmupScreen(onBack: () -> Unit) {
                 OnePlusWarmupState.Phase.FAILED -> MaterialTheme.colorScheme.error
                 else                            -> MaterialTheme.colorScheme.tertiary
             }
-            val ringCenter = when (state.phase) {
-                OnePlusWarmupState.Phase.WARMING,
-                OnePlusWarmupState.Phase.IDLE,
-                OnePlusWarmupState.Phase.PAIRING ->
-                    remainingMs?.let { DexcomOnePlusWarmupCountdown.formatMmSs(it) }
-                        ?: stringResource(R.string.dexcom_oneplus_warmup_countdown_unknown)
-                else -> DexcomOnePlusUiLabels.phaseLabel(state.phase)
+            // Keep the mm:ss countdown while the link is being re-established: a normal duty-cycle
+            // disconnect during warm-up used to blank it until the next EGV packet.
+            val countdownText = remainingMs?.let { DexcomOnePlusWarmupCountdown.formatMmSs(it) }
+            val warmupClockPhase = state.phase == OnePlusWarmupState.Phase.WARMING ||
+                state.phase == OnePlusWarmupState.Phase.IDLE ||
+                state.phase == OnePlusWarmupState.Phase.PAIRING
+            val ringCenter = when {
+                DexcomOnePlusWarmupCountdown.showsCountdown(state.phase) && countdownText != null -> countdownText
+                warmupClockPhase -> stringResource(R.string.dexcom_oneplus_warmup_countdown_unknown)
+                else             -> DexcomOnePlusUiLabels.phaseLabel(state.phase)
             }
             WarmupRing(
                 progress = ringProgress,
@@ -173,6 +176,16 @@ private fun DexcomOnePlusWarmupScreen(onBack: () -> Unit) {
                     text = ringCenter,
                     style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            // Honest end-of-warm-up annotation, from the protocol clock or the local fallback. Shown
+            // during the connection phases too, so the user keeps a landmark while the sensor's radio
+            // window is closed.
+            val endMs = state.endsAtEpochMs ?: localFallbackEndsAt
+            val endsAtLabel = endMs?.let {
+                stringResource(
+                    R.string.dexcom_oneplus_warmup_ends_at,
+                    DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(it)),
                 )
             }
             when (state.phase) {
@@ -202,15 +215,19 @@ private fun DexcomOnePlusWarmupScreen(onBack: () -> Unit) {
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    endsAtLabel?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
                 else -> {
                     // The mm:ss countdown itself is rendered inside the ring center above; here we
                     // only add the honest end-time / local-fallback annotations.
-                    val endMs = state.endsAtEpochMs ?: localFallbackEndsAt
-                    if (endMs != null) {
-                        val endLabel = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(endMs))
+                    endsAtLabel?.let {
                         Text(
-                            text = stringResource(R.string.dexcom_oneplus_warmup_ends_at, endLabel),
+                            text = it,
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }

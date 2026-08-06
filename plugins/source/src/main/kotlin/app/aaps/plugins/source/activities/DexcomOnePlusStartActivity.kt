@@ -125,6 +125,9 @@ class DexcomOnePlusStartActivity : AppCompatActivity() {
                         },
                         onBeginStaging = { dexcomOnePlusPlugin.beginStaging() },
                         onStagingDriver = { dexcomOnePlusPlugin.stagingDriverForConnect() },
+                        onSensorSessionStarted = { address, previousMac ->
+                            dexcomOnePlusPlugin.onSensorSessionStarted(address, previousMac)
+                        },
                     )
                 }
             }
@@ -141,6 +144,11 @@ private fun DexcomOnePlusStartScreen(
     onStarted: (SensorSlot) -> Unit,
     onBeginStaging: () -> Unit,
     onStagingDriver: () -> OnePlusCgmDriverReal,
+    /**
+     * PRODUCTION only: the user started this sensor now → anchor its age and log a sensor change.
+     * Called with (MAC of the started sensor, MAC stored before this start).
+     */
+    onSensorSessionStarted: (String, String?) -> Unit,
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -278,6 +286,10 @@ private fun DexcomOnePlusStartScreen(
         sensorStore.saveIdentity(identity.copy(pin = code))
         sensorStore.saveLastMac(address)
         selected?.name?.let { sensorStore.saveLastDeviceName(it) }
+        // Anchor the sensor age on this explicit start (dashboard sensor age / SENSOR_CHANGE). After
+        // saveIdentity, which drops the stored start when the serial shows another sensor. storedMac
+        // is the MAC read at screen entry, so it still describes the sensor that was running.
+        onSensorSessionStarted(address, storedMac)
         val activeDriver = onEnsureDriver()
         activeDriver.setContext(context.applicationContext)
         (activeDriver as? OnePlusCgmDriverReal)?.saveIdentity(identity.copy(pin = code))

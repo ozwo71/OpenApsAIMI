@@ -46,6 +46,22 @@ class DexcomOnePlusWarmupMapperTest {
     }
 
     @Test
+    fun `a reconnect that still carries the warm-up deadline keeps a determinate ring`() {
+        val out = DexcomOnePlusWarmupMapper.toCgmWarmupStatus(
+            OnePlusWarmupState(
+                phase = OnePlusWarmupState.Phase.RECONNECTING,
+                endsAtEpochMs = 1_700_000_000_000L,
+                message = "waiting_for_adv",
+            ),
+        )
+        assertThat(out).isNotNull()
+        assertThat(out!!.phase).isEqualTo(CgmWarmupStatus.Phase.RECONNECTING)
+        assertThat(out.endsAtEpochMs).isEqualTo(1_700_000_000_000L)
+        // Duty-cycle reconnect during warm-up must not blank the dashboard ring.
+        assertThat(out.totalMs).isEqualTo(DexcomOnePlusWarmupCountdown.LOCAL_FALLBACK_DURATION_MS)
+    }
+
+    @Test
     fun `terminal and idle phases map to null`() {
         listOf(
             OnePlusWarmupState.Phase.READY,

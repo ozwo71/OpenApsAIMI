@@ -53,7 +53,7 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
             .apply()
         if (serialChanged) {
             clearLastIngest()
-            prefs.edit().remove(KEY_SESSION_START).apply()
+            prefs.edit().remove(KEY_SESSION_START).remove(KEY_SESSION_START_MAC).apply()
         }
         Log.i(
             OnePlusLogMarkers.TAG,
@@ -107,6 +107,45 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
         if (!prefs.contains(KEY_SESSION_START)) prefs.edit().putLong(KEY_SESSION_START, epochMs).apply()
     }
 
+    /**
+     * Anchor the session start on the explicit sensor start the user just ran, so the sensor age can
+     * be known from that moment instead of only from the first reading (~30 min later, after warm-up).
+     *
+     * Re-connecting the **same** sensor keeps the stored start — re-pairing a running sensor must not
+     * rejuvenate its age. Another sensor restarts the clock. The owning MAC is kept in its own key,
+     * so this does not depend on the order in which [saveLastMac] / [saveIdentity] are called
+     * around it; see [startsNewSession] for the decision itself.
+     *
+     * @param previousMac MAC stored for the running session **before** this start. Only used for
+     *   sessions anchored by [saveSessionStartIfAbsent] before the owner key existed.
+     * @return true when a new session start was written (the caller may then log a sensor change).
+     */
+    fun startSessionForSensor(deviceAddress: String, epochMs: Long, previousMac: String?): Boolean {
+        if (deviceAddress.isBlank() || epochMs <= 0L) return false
+        val address = deviceAddress.uppercase()
+        val isNewSession = startsNewSession(
+            storedStartMs = prefs.getLong(KEY_SESSION_START, 0L),
+            storedOwnerMac = prefs.getString(KEY_SESSION_START_MAC, null),
+            previousMac = previousMac,
+            deviceAddress = address,
+        )
+        if (!isNewSession) {
+            // Same sensor: keep its age, and adopt the owner key so a session anchored before that
+            // key existed is recognised directly next time.
+            prefs.edit().putString(KEY_SESSION_START_MAC, address).apply()
+            return false
+        }
+        prefs.edit()
+            .putLong(KEY_SESSION_START, epochMs)
+            .putString(KEY_SESSION_START_MAC, address)
+            .apply()
+        Log.i(
+            OnePlusLogMarkers.TAG,
+            "${OnePlusLogMarkers.SESSION}: sensor session start recorded startMs=$epochMs",
+        )
+        return true
+    }
+
     /** Sensor session start (epoch ms), or 0 when unknown. */
     fun loadSessionStart(): Long = prefs.getLong(KEY_SESSION_START, 0L)
 
@@ -156,12 +195,41 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
         session.lastMac?.let { edit.putString(KEY_MAC, it) }
         session.lastDeviceName?.let { edit.putString(KEY_DEVICE_NAME, it) }
         session.sharedKey?.let { edit.putString(KEY_SHARED, Base64.encodeToString(it, Base64.NO_WRAP)) }
-        if (sessionStartMs > 0L) edit.putLong(KEY_SESSION_START, sessionStartMs)
+        if (sessionStartMs > 0L) {
+            edit.putLong(KEY_SESSION_START, sessionStartMs)
+            // Keep the start owned by the promoted sensor's MAC, so re-connecting it later is seen as
+            // the same sensor and does not restart the age clock (see startSessionForSensor).
+            session.lastMac?.let { edit.putString(KEY_SESSION_START_MAC, it.uppercase()) }
+        }
         edit.apply()
         Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: adopted promoted sensor serial=${session.identity.serial ?: "-"}")
     }
 
     companion object {
+
+        /**
+         * Pure decision behind [startSessionForSensor]: does an explicit start of [deviceAddress]
+         * begin a NEW sensor session?
+         *
+         * @param storedStartMs stored session start, 0 when none
+         * @param storedOwnerMac MAC owning the stored start; null for a session anchored on the first
+         *   reading before that key existed, which then falls back to [previousMac] instead of being
+         *   read as another sensor (that would reset the age of a sensor that never changed)
+         * @param previousMac last stored MAC of the running session, taken before this start
+         */
+        fun startsNewSession(
+            storedStartMs: Long,
+            storedOwnerMac: String?,
+            previousMac: String?,
+            deviceAddress: String,
+        ): Boolean {
+            if (storedStartMs <= 0L) return true
+            val owner = storedOwnerMac?.takeIf { it.isNotBlank() }
+                ?: previousMac?.takeIf { it.isNotBlank() }
+                ?: return true
+            return !owner.equals(deviceAddress, ignoreCase = true)
+        }
+
         private const val PREFS_NAME = "dexcom_oneplus_sensor"
         private const val KEY_PIN = "pin"
         private const val KEY_SERIAL = "serial"
@@ -173,6 +241,9 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
         private const val KEY_LAST_SEQ = "last_ingest_seq"
         private const val KEY_LAST_TS = "last_ingest_ts"
         private const val KEY_SESSION_START = "session_start_ms"
+
+        /** MAC that owns [KEY_SESSION_START] — tells "same sensor re-connected" from "new sensor". */
+        private const val KEY_SESSION_START_MAC = "session_start_mac"
         private const val KEY_SLOT_PRESENT = "slot_present"
         private const val KEY_SLOT_EGV_COUNT = "slot_valid_egv_count"
     }

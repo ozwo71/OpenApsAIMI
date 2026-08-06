@@ -63,8 +63,50 @@ internal object OnePlusBleSessionCyclePolicy {
     /** Continuous ADV silence after which a foreign ONE+ sighting is reported as a stale-MAC suspicion. */
     const val STALE_MAC_SUSPICION_AFTER_MS = 6L * 60_000L
 
-    fun waitForAdvertisementAfterExit(deliveredUsableGlucose: Boolean): Boolean =
-        deliveredUsableGlucose
+    /**
+     * A cycle that proved the link works ends in the persistent ADV wait instead of the bounded
+     * failure budget.
+     *
+     * Gating this on a *usable glucose value* made warm-up impossible to survive: a warming sensor
+     * only sends `WarmingUp` packets, so every normal duty-cycle disconnect burned one retry, and the
+     * budget was exhausted (FAILED, session dead) minutes into the ~30 min warm-up. Any parsed
+     * Control packet proves the same thing a glucose value does — the sensor is ours, authenticated
+     * and talking.
+     */
+    fun waitForAdvertisementAfterExit(sessionProvedHealthy: Boolean): Boolean =
+        sessionProvedHealthy
+
+    /**
+     * Control traffic that proves the session is alive. [OnePlusWarmupState.Phase.FAILED] is
+     * excluded on purpose: a stopped / expired / failed sensor must keep the bounded budget so it
+     * ends in a real failure instead of waiting for an advertisement that means nothing.
+     */
+    fun controlTrafficProvesSession(phase: OnePlusWarmupState.Phase): Boolean =
+        phase == OnePlusWarmupState.Phase.WARMING || phase == OnePlusWarmupState.Phase.READY
+
+    /**
+     * Retry budget exhausted: recover into the persistent ADV wait when the session already
+     * authenticated at least once, instead of the terminal FAILED that only a manual restart could
+     * leave. A sensor we have talked to is asleep, not lost.
+     */
+    fun recoverExhaustedBudgetWithPersistentWait(sessionEverAuthenticated: Boolean): Boolean =
+        sessionEverAuthenticated
+
+    /**
+     * Warm-up deadline to remember once [state] has been emitted, so the countdown survives the
+     * CONNECTING / RECONNECTING states of a duty cycle (those carry no clock of their own and used
+     * to blank the UI countdown until the next EGV packet).
+     */
+    fun warmupDeadlineAfter(previousEndsAtMs: Long?, state: OnePlusWarmupState): Long? =
+        when (state.phase) {
+            OnePlusWarmupState.Phase.WARMING      -> state.endsAtEpochMs ?: previousEndsAtMs
+            OnePlusWarmupState.Phase.READY,
+            OnePlusWarmupState.Phase.IDLE,
+            OnePlusWarmupState.Phase.FAILED       -> null
+            OnePlusWarmupState.Phase.PAIRING,
+            OnePlusWarmupState.Phase.CONNECTING,
+            OnePlusWarmupState.Phase.RECONNECTING -> previousEndsAtMs
+        }
 
     fun applyFailureBudget(preparedPostCollectionAdvertisement: Boolean): Boolean =
         !preparedPostCollectionAdvertisement
@@ -147,6 +189,17 @@ class OnePlusBleSessionSkeleton(
     @Volatile
     private var warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.IDLE)
 
+    /**
+     * Last known end of warm-up, kept across connection phases so the UI countdown does not blank
+     * out on every duty cycle. Maintained by [OnePlusBleSessionCyclePolicy.warmupDeadlineAfter].
+     */
+    @Volatile
+    private var warmupEndsAtEpochMs: Long? = null
+
+    /** At least one connection cycle authenticated — the sensor is ours and reachable. */
+    @Volatile
+    private var everAuthenticated = false
+
     override fun startWithPairingCode(deviceAddress: String, pairingCode: String) {
         val codeError = OnePlusSessionStart.validationError(pairingCode)
         if (codeError != null) {
@@ -181,8 +234,7 @@ class OnePlusBleSessionSkeleton(
             )
             return
         }
-        warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.PAIRING, message = "pairing")
-        emitWarmup()
+        setWarmup(OnePlusWarmupState(phase = OnePlusWarmupState.Phase.PAIRING, message = "pairing"))
 
         var attempt = 0
         var preparedConnect: OnePlusConnectPrep? = null
@@ -195,8 +247,27 @@ class OnePlusBleSessionSkeleton(
                     preparedPostCollectionAdvertisement = preparedConnect != null,
                 )
                 if (applyFailureBudget && !reconnectPolicy.shouldRetry(attempt, profile)) {
-                    fail("ONEPLUS_RECONNECT_EXHAUSTED: attempts=$attempt", fatal = false)
-                    return
+                    if (!OnePlusBleSessionCyclePolicy.recoverExhaustedBudgetWithPersistentWait(everAuthenticated)) {
+                        fail("ONEPLUS_RECONNECT_EXHAUSTED: attempts=$attempt", fatal = false)
+                        return
+                    }
+                    // A sensor we already authenticated with is asleep, not lost: keep waiting for its
+                    // next radio window instead of ending in a terminal FAILED only a manual restart
+                    // could leave.
+                    Log.w(
+                        OnePlusLogMarkers.TAG,
+                        "${OnePlusLogMarkers.RECONNECT}: [$slot] retry budget exhausted after successful auth " +
+                            "(attempts=$attempt) — switch to persistent ADV wait",
+                    )
+                    persistentAdvertisementMode = true
+                    preparedConnect = preparePostCollectionReconnect(
+                        deviceAddress = deviceAddress,
+                        reason = "retry_budget_exhausted_waiting_for_adv",
+                    )
+                    if (!running || preparedConnect == null) return
+                    attempt = OnePlusBleSessionCyclePolicy.POST_COLLECTION_RECONNECT_ATTEMPT
+                    // The prepared fresh ADV bypasses the backoff delay and the pre-connect rescan.
+                    continue
                 }
                 if (applyFailureBudget) {
                     val delayMs = reconnectPolicy.nextDelayMs(attempt, profile)
@@ -240,7 +311,7 @@ class OnePlusBleSessionSkeleton(
 
             when (outcome) {
                 CycleOutcome.Stopped -> return
-                CycleOutcome.EgvDeliveredThenExited -> {
+                CycleOutcome.HealthyCycleThenExited -> {
                     persistentAdvertisementMode = true
                     preparedConnect = preparePostCollectionReconnect(
                         deviceAddress = deviceAddress,
@@ -315,6 +386,7 @@ class OnePlusBleSessionSkeleton(
             running = false
             up = false
             warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.IDLE, message = reason)
+            warmupEndsAtEpochMs = null
         }
         gatt.disconnect()
         emitWarmup()
@@ -337,8 +409,7 @@ class OnePlusBleSessionSkeleton(
         // "establishing link" from the terminal FAILED it used to flash between retries.
         val connectingPhase =
             if (attempt == 0) OnePlusWarmupState.Phase.CONNECTING else OnePlusWarmupState.Phase.RECONNECTING
-        warmup = OnePlusWarmupState(phase = connectingPhase, message = "connect_attempt_$attempt")
-        emitWarmup()
+        setWarmup(OnePlusWarmupState(phase = connectingPhase, message = "connect_attempt_$attempt"))
 
         val prep = preparedConnect ?: try {
             beforeConnect(deviceAddress, attempt)
@@ -439,24 +510,28 @@ class OnePlusBleSessionSkeleton(
 
             // Do NOT invent a 30 min WARMING clock here — that blocked ingest even when the
             // transmitter was already producing Ok EGVs. Protocol (TransmitterTime / EGV) sets phase.
-            warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.PAIRING, message = "auth_ok")
+            everAuthenticated = true
             up = true
-            emitWarmup()
+            setWarmup(OnePlusWarmupState(phase = OnePlusWarmupState.Phase.PAIRING, message = "auth_ok"))
             onSession(true, if (attempt == 0) "session_up" else "session_reconnected")
             Log.i(
                 OnePlusLogMarkers.TAG,
                 "${OnePlusLogMarkers.SESSION}: [$slot] up attempt=$attempt newStart=$requestNewSensorStart — Control/EGV",
             )
 
-            var deliveredUsableGlucose = false
+            // Any Control traffic proves the link — a warming sensor never sends usable glucose, so
+            // gating the persistent ADV wait on glucose alone made warm-up burn the retry budget.
+            var sessionProvedHealthy = false
             val egv = OnePlusEgvSession(
                 gatt = gatt,
                 onWarmup = { state ->
-                    warmup = state
-                    emitWarmup()
+                    if (OnePlusBleSessionCyclePolicy.controlTrafficProvesSession(state.phase)) {
+                        sessionProvedHealthy = true
+                    }
+                    setWarmup(state)
                 },
                 onGlucose = { sample ->
-                    deliveredUsableGlucose = true
+                    sessionProvedHealthy = true
                     onGlucose(sample)
                 },
                 onError = onError,
@@ -475,8 +550,8 @@ class OnePlusBleSessionSkeleton(
 
             return when {
                 !running -> CycleOutcome.Stopped
-                OnePlusBleSessionCyclePolicy.waitForAdvertisementAfterExit(deliveredUsableGlucose) ->
-                    CycleOutcome.EgvDeliveredThenExited
+                OnePlusBleSessionCyclePolicy.waitForAdvertisementAfterExit(sessionProvedHealthy) ->
+                    CycleOutcome.HealthyCycleThenExited
                 else -> CycleOutcome.EgvExited
             }
         } finally {
@@ -517,13 +592,14 @@ class OnePlusBleSessionSkeleton(
         staleMacSuspected: Boolean = false,
     ) {
         if (!running) return
-        warmup = OnePlusWarmupState(
-            phase = OnePlusWarmupState.Phase.RECONNECTING,
-            message = message,
-            advSilenceMinutes = advSilenceMinutes,
-            staleMacSuspected = staleMacSuspected,
+        setWarmup(
+            OnePlusWarmupState(
+                phase = OnePlusWarmupState.Phase.RECONNECTING,
+                message = message,
+                advSilenceMinutes = advSilenceMinutes,
+                staleMacSuspected = staleMacSuspected,
+            ),
         )
-        emitWarmup()
     }
 
     /**
@@ -671,23 +747,42 @@ class OnePlusBleSessionSkeleton(
             gatt.disconnect()
         } catch (_: Throwable) {
         }
-        warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.FAILED, message = message)
-        emitWarmup()
+        setWarmup(OnePlusWarmupState(phase = OnePlusWarmupState.Phase.FAILED, message = message))
         onError(message, fatal)
         onSession(false, message)
         Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: [$slot] $message fatal=$fatal")
         Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: [$slot] down reason=fail")
     }
 
-    private fun emitWarmup() {
-        val remaining = OnePlusWarmupClock.resolveRemainingMs(warmup, System.currentTimeMillis())
+    /**
+     * Publishes [state] and keeps the warm-up deadline sticky: connection phases carry no clock of
+     * their own, so without this the UI countdown (and the ongoing notification) went blank on every
+     * duty cycle and only came back with the next EGV packet.
+     */
+    private fun setWarmup(state: OnePlusWarmupState) {
+        val published = synchronized(lifecycleLock) {
+            // A stopped / superseded session must not be resurrected by a late callback still queued
+            // on the BLE executor: it would republish a stale phase and, worse, bring the sticky
+            // deadline back for every later state. [stop] owns the final IDLE state.
+            if (cancelled && state.phase != OnePlusWarmupState.Phase.IDLE) return
+            val endsAt = OnePlusBleSessionCyclePolicy.warmupDeadlineAfter(warmupEndsAtEpochMs, state)
+            warmupEndsAtEpochMs = endsAt
+            warmup = if (state.endsAtEpochMs == null) state.copy(endsAtEpochMs = endsAt) else state
+            warmup
+        }
+        emitWarmup(published)
+    }
+
+    /** Logs and publishes [state] to the watcher — outside [lifecycleLock], callbacks are foreign code. */
+    private fun emitWarmup(state: OnePlusWarmupState = warmup) {
+        val remaining = OnePlusWarmupClock.resolveRemainingMs(state, System.currentTimeMillis())
         Log.i(
             OnePlusLogMarkers.TAG,
-            "${OnePlusLogMarkers.WARMUP}: [$slot] phase=${warmup.phase} remainingMs=$remaining " +
-                "msg=${warmup.message} advSilenceMin=${warmup.advSilenceMinutes ?: "-"} " +
-                "staleMac=${warmup.staleMacSuspected}",
+            "${OnePlusLogMarkers.WARMUP}: [$slot] phase=${state.phase} remainingMs=$remaining " +
+                "msg=${state.message} advSilenceMin=${state.advSilenceMinutes ?: "-"} " +
+                "staleMac=${state.staleMacSuspected}",
         )
-        onWarmup(warmup)
+        onWarmup(state)
     }
 
     /** Interruptible sleep that exits early when [stop] clears [running]. */
@@ -712,7 +807,8 @@ class OnePlusBleSessionSkeleton(
     }
 
     private enum class CycleOutcome {
-        EgvDeliveredThenExited,
+        /** The cycle proved the session works (glucose or warm-up Control traffic) before exiting. */
+        HealthyCycleThenExited,
         EgvExited,
         RetryableFailure,
         Stopped,

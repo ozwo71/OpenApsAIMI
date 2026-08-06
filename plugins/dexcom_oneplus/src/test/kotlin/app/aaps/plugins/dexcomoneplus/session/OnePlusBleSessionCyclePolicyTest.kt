@@ -1,5 +1,6 @@
 package app.aaps.plugins.dexcomoneplus.session
 
+import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
@@ -11,7 +12,7 @@ class OnePlusBleSessionCyclePolicyTest {
 
         assertThat(
             OnePlusBleSessionCyclePolicy.waitForAdvertisementAfterExit(
-                deliveredUsableGlucose = true,
+                sessionProvedHealthy = true,
             ),
         ).isTrue()
         assertThat(
@@ -100,10 +101,108 @@ class OnePlusBleSessionCyclePolicyTest {
     }
 
     @Test
-    fun `exit before glucose and unprepared retry retain failure budget`() {
+    fun `warm-up Control traffic proves the session so a duty cycle does not burn the retry budget`() {
+        // The reported field failure: a warming sensor never sends usable glucose, so every duty
+        // cycle used the bounded budget and warm-up always ended in FAILED.
+        assertThat(
+            OnePlusBleSessionCyclePolicy.controlTrafficProvesSession(OnePlusWarmupState.Phase.WARMING),
+        ).isTrue()
+        assertThat(
+            OnePlusBleSessionCyclePolicy.controlTrafficProvesSession(OnePlusWarmupState.Phase.READY),
+        ).isTrue()
         assertThat(
             OnePlusBleSessionCyclePolicy.waitForAdvertisementAfterExit(
-                deliveredUsableGlucose = false,
+                sessionProvedHealthy = OnePlusBleSessionCyclePolicy.controlTrafficProvesSession(
+                    OnePlusWarmupState.Phase.WARMING,
+                ),
+            ),
+        ).isTrue()
+
+        // A stopped / expired / failed sensor keeps the bounded budget: waiting for its advertisement
+        // would hide a real failure.
+        listOf(
+            OnePlusWarmupState.Phase.FAILED,
+            OnePlusWarmupState.Phase.IDLE,
+            OnePlusWarmupState.Phase.PAIRING,
+            OnePlusWarmupState.Phase.CONNECTING,
+            OnePlusWarmupState.Phase.RECONNECTING,
+        ).forEach { phase ->
+            assertThat(OnePlusBleSessionCyclePolicy.controlTrafficProvesSession(phase)).isFalse()
+        }
+    }
+
+    @Test
+    fun `an authenticated session recovers from an exhausted retry budget instead of failing`() {
+        assertThat(
+            OnePlusBleSessionCyclePolicy.recoverExhaustedBudgetWithPersistentWait(
+                sessionEverAuthenticated = true,
+            ),
+        ).isTrue()
+        // Never authenticated (wrong PIN, wrong sensor…) → keep the terminal failure.
+        assertThat(
+            OnePlusBleSessionCyclePolicy.recoverExhaustedBudgetWithPersistentWait(
+                sessionEverAuthenticated = false,
+            ),
+        ).isFalse()
+    }
+
+    @Test
+    fun `the warm-up deadline survives the connection phases and is dropped when warm-up ends`() {
+        val endsAt = 1_700_000_000_000L
+
+        // Learned from a WARMING packet…
+        assertThat(
+            OnePlusBleSessionCyclePolicy.warmupDeadlineAfter(
+                previousEndsAtMs = null,
+                state = OnePlusWarmupState(
+                    phase = OnePlusWarmupState.Phase.WARMING,
+                    endsAtEpochMs = endsAt,
+                ),
+            ),
+        ).isEqualTo(endsAt)
+
+        // …kept while the link is re-established (the UI countdown used to blank out here)…
+        listOf(
+            OnePlusWarmupState.Phase.CONNECTING,
+            OnePlusWarmupState.Phase.RECONNECTING,
+            OnePlusWarmupState.Phase.PAIRING,
+        ).forEach { phase ->
+            assertThat(
+                OnePlusBleSessionCyclePolicy.warmupDeadlineAfter(
+                    previousEndsAtMs = endsAt,
+                    state = OnePlusWarmupState(phase = phase),
+                ),
+            ).isEqualTo(endsAt)
+        }
+
+        // …a WARMING packet without its own clock keeps the known deadline…
+        assertThat(
+            OnePlusBleSessionCyclePolicy.warmupDeadlineAfter(
+                previousEndsAtMs = endsAt,
+                state = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.WARMING),
+            ),
+        ).isEqualTo(endsAt)
+
+        // …and it is dropped once warm-up is over, stopped or failed.
+        listOf(
+            OnePlusWarmupState.Phase.READY,
+            OnePlusWarmupState.Phase.IDLE,
+            OnePlusWarmupState.Phase.FAILED,
+        ).forEach { phase ->
+            assertThat(
+                OnePlusBleSessionCyclePolicy.warmupDeadlineAfter(
+                    previousEndsAtMs = endsAt,
+                    state = OnePlusWarmupState(phase = phase),
+                ),
+            ).isNull()
+        }
+    }
+
+    @Test
+    fun `exit before any control traffic and unprepared retry retain failure budget`() {
+        assertThat(
+            OnePlusBleSessionCyclePolicy.waitForAdvertisementAfterExit(
+                sessionProvedHealthy = false,
             ),
         ).isFalse()
         assertThat(

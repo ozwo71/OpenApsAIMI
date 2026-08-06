@@ -92,4 +92,42 @@ class DexcomOnePlusWarmupCountdownTest {
             ),
         ).isFalse()
     }
+
+    // ---- shouldClearLocalFallback / showsCountdown ----
+
+    @Test
+    fun `the local fallback survives a duty-cycle reconnect and is cleared only when warm-up ends`() {
+        // Dropping the deadline on every CONNECTING / RECONNECTING blanked the countdown and then
+        // restarted a fresh ~30 min timer on the next WARMING packet.
+        listOf(
+            OnePlusWarmupState.Phase.WARMING,
+            OnePlusWarmupState.Phase.PAIRING,
+            OnePlusWarmupState.Phase.CONNECTING,
+            OnePlusWarmupState.Phase.RECONNECTING,
+        ).forEach { phase ->
+            assertThat(DexcomOnePlusWarmupCountdown.shouldClearLocalFallback(phase)).isFalse()
+        }
+        listOf(
+            OnePlusWarmupState.Phase.READY,
+            OnePlusWarmupState.Phase.IDLE,
+            OnePlusWarmupState.Phase.FAILED,
+        ).forEach { phase ->
+            assertThat(DexcomOnePlusWarmupCountdown.shouldClearLocalFallback(phase)).isTrue()
+        }
+    }
+
+    @Test
+    fun `the countdown is shown while re-establishing the link but not once warm-up is over`() {
+        listOf(
+            OnePlusWarmupState.Phase.WARMING,
+            OnePlusWarmupState.Phase.IDLE,
+            OnePlusWarmupState.Phase.PAIRING,
+            OnePlusWarmupState.Phase.CONNECTING,
+            OnePlusWarmupState.Phase.RECONNECTING,
+        ).forEach { phase ->
+            assertThat(DexcomOnePlusWarmupCountdown.showsCountdown(phase)).isTrue()
+        }
+        assertThat(DexcomOnePlusWarmupCountdown.showsCountdown(OnePlusWarmupState.Phase.READY)).isFalse()
+        assertThat(DexcomOnePlusWarmupCountdown.showsCountdown(OnePlusWarmupState.Phase.FAILED)).isFalse()
+    }
 }
