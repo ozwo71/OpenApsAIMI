@@ -76,16 +76,6 @@ jobs:
           java-version: '21'
           cache: gradle
 
-#      - name: Cache Gradle packages
-#        uses: actions/cache@v3
-#        with:
-#          path: |
-#            ~/.gradle/caches
-#            ~/.gradle/wrapper/
-#          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-#          restore-keys: |
-#            ${{ runner.os }}-gradle-
-
       - name: Decode keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > monkeystore.jks
@@ -122,17 +112,15 @@ jobs:
 
       # 1. Upload zu GitHub Release
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.prepare_assets.outputs.tag_name }}
-          name: "AAPS Build ${{ steps.prepare_assets.outputs.tag_name }}"
-          body: "Automatischer Build vom Branch ${{ env.BUILD_BRANCH }}"
-          draft: false
-          prerelease: false
-          files: ${{ steps.prepare_assets.outputs.apk_path }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Standard Token reicht hier dank 'permissions' oben
-
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create \
+            "${{ steps.prepare_assets.outputs.tag_name }}" \
+            "${{ steps.prepare_assets.outputs.apk_path }}" \
+            --title "AAPS Build ${{ steps.prepare_assets.outputs.tag_name }}" \
+            --notes "Automatischer Build vom Branch ${{ env.BUILD_BRANCH }}"
+            
       # 2. Upload zu Nextcloud (Optionales Backup)
       - name: Upload to Nextcloud
         continue-on-error: true
