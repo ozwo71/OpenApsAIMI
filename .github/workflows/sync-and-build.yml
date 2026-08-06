@@ -169,6 +169,8 @@ jobs:
       contents: write # WICHTIG: Erlaubt das Löschen von Releases
       actions: write
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
       # 1. Alte Logs löschen
       - name: Delete Old Workflow Runs
         env:
