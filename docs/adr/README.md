@@ -41,6 +41,7 @@ ones are in place.
 | 4 | [0004](0004-classify-before-dose.md) | Classify before dosing (tick order) | low | enables |
 | 5 | [0005](0005-continuous-authority.md) | Continuous authority scalar instead of tiers | medium | yes |
 | 6 | [0006](0006-autodrive-consumes-authority.md) | Autodrive V3 consumes the dose authority | low | yes |
+| — | [0007](0007-isf-chain-roles.md) | The ISF chain carries a dosing policy; the meal model is discarded | — | two small fixes applied |
 
 **Implementation order is not ADR order.** 0003 ships before 0002: it is the narrower change and it
 stabilises the value that 0002 then renames and rewires. 0006 stays last despite a good

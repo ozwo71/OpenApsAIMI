@@ -105,6 +105,7 @@ import javax.inject.Provider
 import javax.inject.Singleton
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.floor
+import kotlin.math.max
 import app.aaps.plugins.aps.openAPSAIMI.ISF.IsfBlender
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfFusion
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfFusionBounds
@@ -570,11 +571,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val (key, value) = entry
         val bucketMs = T.mins(30).msecs()
         val bucketStart = key - key % bucketMs
+        // The key is `bucketStart + glucose`, so the remainder identifies the reading this value was
+        // computed for. Two entries of the same bucket share an age but not a key.
+        val cacheGlucose = key % bucketMs
         val ageMs = (now - bucketStart).coerceAtLeast(0L)
         val source =
             if (ageMs > IsfSourceTelemetry.STALE_AFTER_MS) IsfSourceTelemetry.SOURCE_DYNAMIC_STALE
             else IsfSourceTelemetry.SOURCE_DYNAMIC_FRESH
-        IsfSourceTelemetry.record(source, value, ageMs)
+        IsfSourceTelemetry.record(source, value, ageMs, cacheKey = key, cacheGlucoseMgdl = cacheGlucose)
         return value
     }
 
@@ -793,13 +797,21 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         )
         aapsLogger.debug(LTag.APS, "Adaptive ISF via IsfAdjustmentEngine: $isfAdj (tddEma=$tddEma, sipp=$sippConfidence, var=$kalmanVarProxy)")
 
-        // 8) Combine les deux rapides par m?diane robuste (r?sistant aux outliers)
-        val fastMedian = listOf(kalmanFastIsf, isfAdj).sorted()[1]
+        // 8) Combine the two fast estimators.
+        //
+        // This was written as `listOf(kalmanFastIsf, isfAdj).sorted()[1]` and described as a "robust
+        // median". Two values have no median: `sorted()[1]` is the maximum. The behaviour is kept
+        // because the maximum is the **conservative** choice here — a higher ISF means the loop
+        // assumes insulin acts more strongly, so it doses less — but it is now named for what it is.
+        //
+        // Whether max, min or mean is right is a calibration question, not a naming one. It needs the
+        // replay corpus and a shadow period, so it is deliberately not changed here.
+        val fastConservative = max(kalmanFastIsf, isfAdj)
 
         // 9) Blend final (socle lent vs rapide), avec rate-limit temporel de IsfBlender
         var blended = isfBlender.blend(
             fusedIsf = fusedSlowIsf,
-            kalmanIsf = fastMedian,
+            kalmanIsf = fastConservative,
             trustFast = kalmanTrustProxy,
             nowMs = System.currentTimeMillis()
         )
@@ -835,13 +847,29 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         )
         blended = trajectoryTuning.isfMgdlPerU
 
-        // ?? PHYSIO MODULATION (ISF) ? apr?s trajectoire
-        if (physioMultsNullable != null && physioMultsNullable.isfFactor != 1.0) {
-            blended *= physioMultsNullable.isfFactor
-            aapsLogger.debug(LTag.APS, "?? DynISF modulated by Physio: x${physioMultsNullable.isfFactor} -> $blended")
-        }
+        // 🏥 The physiological factor is NOT applied here.
+        //
+        // It used to be, and the callers applied it again on their own value, so `profile.sens`
+        // carried it twice (0.72–1.32 instead of 0.85–1.15) while `profile.variable_sens` carried it
+        // once — two fields meant to hold the same quantity, differing by one factor.
+        //
+        // What this function returns is the **estimated** sensitivity. The physiological factor is a
+        // situational modulation, applied once by each caller on a fresh value; keeping it out of the
+        // cached estimate also stops a 30-minute-old factor from being frozen into it.
+        // See `docs/adr/0002-sensitivity-three-levels.md`.
 
         blended = blended.coerceIn(5.0, 300.0)
+
+        // Diagnostic only: keep the intermediate terms so a support package can attribute the
+        // movement of the commanded sensitivity. See `docs/adr/0002-sensitivity-three-levels.md`.
+        IsfSourceTelemetry.recordComponents(
+            kalmanFastIsf = kalmanFastIsf,
+            isfAdjEngine = isfAdj,
+            fusedSlowIsf = fusedSlowIsf,
+            trustFast = kalmanTrustProxy,
+            dynamicFactor = dynamicFactor,
+            trajectoryMultiplier = trajectoryTuning.trajectoryMultiplier,
+        )
 
         aapsLogger.debug(LTag.APS, "Final DynISF: $blended")
         aapsLogger.debug(
@@ -1030,17 +1058,15 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             
             aapsLogger.debug(LTag.APS, "Adaptive ISF computed (source: $source): $variableSensitivity for BG: $currentBG, currentDelta: $currentDelta, predictedDelta: $predictedDelta")
 
-            // ?? Apply Physio ISF Modulation to Dynamic ISF (it might already be in calculateVariableIsf, but applying it if not fully wrapped)
-            // (calculateVariableIsf does apply physioMults internally before returning blended, 
-            // but if we fell back to profile ISF, we apply it here for safety)
-            if (source == "OFF" || calcSensitivity == null) {
-                if (physioMults.isfFactor != 1.0) {
-                    variableSensitivity *= physioMults.isfFactor
-                    aapsLogger.debug(LTag.APS, "?? LOOP: DynISF modulated: $variableSensitivity (x${physioMults.isfFactor})")
-                }
-                // Imposition des bornes
-                variableSensitivity = variableSensitivity.coerceIn(5.0, 300.0)
+            // 🏥 Physiological modulation, applied here on every path — `calculateVariableIsf` returns
+            // the estimate without it (see the note at its physio step). Previously this branch only
+            // ran on the fallback path, so the dynamic path ended up with the factor once in
+            // `variable_sens` and twice in `sens`.
+            if (physioMults.isfFactor != 1.0) {
+                variableSensitivity *= physioMults.isfFactor
+                aapsLogger.debug(LTag.APS, "🏥 LOOP: DynISF modulated: $variableSensitivity (x${physioMults.isfFactor})")
             }
+            variableSensitivity = variableSensitivity.coerceIn(5.0, 300.0)
             
             aapsLogger.debug(LTag.APS, "Final adaptive ISF after clamping: $variableSensitivity")
 

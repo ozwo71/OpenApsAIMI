@@ -306,7 +306,25 @@ internal data class AimiDecisionContext(
         /** Which source produced the dynamic value this tick. See [IsfSourceTelemetry]. */
         val isf_source: String? = null,
         /** Age (ms) of the cached dynamic entry that was used, when one was used. */
-        val isf_age_ms: Long? = null
+        val isf_age_ms: Long? = null,
+        /** Key of the cached entry used. Distinguishes two entries sharing a 30-minute bucket. */
+        val isf_cache_key: Long? = null,
+        /** Glucose the cached value was computed for (the key's within-bucket remainder). */
+        val isf_cache_glucose_mgdl: Long? = null,
+        /** Fast estimator 1: Kalman-filtered raw ISF. */
+        val isf_kalman_fast_mgdl: Double? = null,
+        /** Fast estimator 2: IsfAdjustmentEngine output. */
+        val isf_adj_engine_mgdl: Double? = null,
+        /** Slow floor: profile/TDD fusion scaled by PKPD. */
+        val isf_fused_slow_mgdl: Double? = null,
+        /** Weight given to the fast estimators in the final blend. */
+        val isf_trust_fast: Double? = null,
+        /** Delta-driven correction factor applied after the blend. */
+        val isf_dynamic_factor: Double? = null,
+        /** AutoISF-style trajectory multiplier (1.0 when the layer did not fire). */
+        val isf_trajectory_multiplier: Double? = null,
+        /** Estimated rate of glucose appearance (mg/dL/min) from the continuous state estimator. */
+        val estimated_ra_mgdl_per_min: Double? = null
     )
     data class Adjustments(
         var dynamic_isf: DynamicIsf? = null,
@@ -535,6 +553,15 @@ internal data class AimiDecisionContext(
             base.put("command_isf_mgdl", baseline_state.command_isf_mgdl ?: org.json.JSONObject.NULL)
             base.put("isf_source", baseline_state.isf_source ?: org.json.JSONObject.NULL)
             base.put("isf_age_ms", baseline_state.isf_age_ms ?: org.json.JSONObject.NULL)
+            base.put("isf_cache_key", baseline_state.isf_cache_key ?: org.json.JSONObject.NULL)
+            base.put("isf_cache_glucose_mgdl", baseline_state.isf_cache_glucose_mgdl ?: org.json.JSONObject.NULL)
+            base.put("isf_kalman_fast_mgdl", baseline_state.isf_kalman_fast_mgdl ?: org.json.JSONObject.NULL)
+            base.put("isf_adj_engine_mgdl", baseline_state.isf_adj_engine_mgdl ?: org.json.JSONObject.NULL)
+            base.put("isf_fused_slow_mgdl", baseline_state.isf_fused_slow_mgdl ?: org.json.JSONObject.NULL)
+            base.put("isf_trust_fast", baseline_state.isf_trust_fast ?: org.json.JSONObject.NULL)
+            base.put("isf_dynamic_factor", baseline_state.isf_dynamic_factor ?: org.json.JSONObject.NULL)
+            base.put("isf_trajectory_multiplier", baseline_state.isf_trajectory_multiplier ?: org.json.JSONObject.NULL)
+            base.put("estimated_ra_mgdl_per_min", baseline_state.estimated_ra_mgdl_per_min ?: org.json.JSONObject.NULL)
             json.put("baseline_state", base)
 
             val adj = org.json.JSONObject()
@@ -1783,7 +1810,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 profile_isf_static_mgdl = IsfSourceTelemetry.lastProfileStaticMgdl,
                 command_isf_mgdl = ctx.profile.sens,
                 isf_source = IsfSourceTelemetry.lastSource,
-                isf_age_ms = IsfSourceTelemetry.lastAgeMs
+                isf_age_ms = IsfSourceTelemetry.lastAgeMs,
+                isf_cache_key = IsfSourceTelemetry.lastCacheKey,
+                isf_cache_glucose_mgdl = IsfSourceTelemetry.lastCacheGlucoseMgdl,
+                isf_kalman_fast_mgdl = IsfSourceTelemetry.lastKalmanFastIsf,
+                isf_adj_engine_mgdl = IsfSourceTelemetry.lastIsfAdjEngine,
+                isf_fused_slow_mgdl = IsfSourceTelemetry.lastFusedSlowIsf,
+                isf_trust_fast = IsfSourceTelemetry.lastTrustFast,
+                isf_dynamic_factor = IsfSourceTelemetry.lastDynamicFactor,
+                isf_trajectory_multiplier = IsfSourceTelemetry.lastTrajectoryMultiplier,
+                estimated_ra_mgdl_per_min = runCatching { continuousStateEstimator.getLastRa() }.getOrNull()
             )
         )
         val rT = RT(
