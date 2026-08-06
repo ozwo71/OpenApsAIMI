@@ -49,11 +49,9 @@ jobs:
           LOCAL_COMMIT=$(git rev-parse HEAD)
           
           if [ "$UPSTREAM_COMMIT" != "$LOCAL_COMMIT" ]; then
-            echo "Updates found. Mirroring upstream..."
-
-            git reset --hard upstream/dev_OAPSAIMI
-            git push --force origin dev_OAPSAIMI
-
+            echo "Updates found. Merging..."
+            git merge upstream/dev_OAPSAIMI --allow-unrelated-histories
+            git push origin dev_OAPSAIMI
             echo "has_changes=true" >> $GITHUB_OUTPUT
           else
             echo "No updates."
