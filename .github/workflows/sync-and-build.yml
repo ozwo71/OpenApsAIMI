@@ -169,42 +169,47 @@ jobs:
       contents: write # WICHTIG: Erlaubt das Löschen von Releases
       actions: write
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v5
       # 1. Alte Logs löschen
       - name: Delete Old Workflow Runs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           KEEP=5
+          REPO="${GITHUB_REPOSITORY}"
 
-          gh run list \
-            --limit 100 \
-            --json databaseId,createdAt \
-            --jq 'sort_by(.createdAt) | reverse | .['"$KEEP"':] | .[].databaseId' \
+          gh api \
+            "repos/${REPO}/actions/runs?per_page=100" \
+            --jq '.workflow_runs | sort_by(.created_at) | reverse | .['"$KEEP"':] | .[].id' \
           | while read RUNID; do
               [ -z "$RUNID" ] && continue
 
               echo "Deleting workflow run $RUNID"
-              gh run delete "$RUNID"
-            done
 
-      # 2. Alte Releases (APKs) löschen (NEU)
+              gh api \
+                -X DELETE \
+                "repos/${REPO}/actions/runs/${RUNID}"
+            done
+            
+      # 2. Alte Releases (APKs) löschen
       - name: Delete Older Releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           KEEP=5
+          REPO="${GITHUB_REPOSITORY}"
 
           gh release list \
+            --repo "$REPO" \
             --limit 100 \
             --json tagName,publishedAt \
             --jq 'sort_by(.publishedAt) | reverse | .['"$KEEP"':] | .[].tagName' \
           | while read TAG; do
               [ -z "$TAG" ] && continue
 
-              echo "Deleting release and tag: $TAG"
+              echo "Deleting release and tag $TAG"
 
-              gh release delete "$TAG" --yes
-              git push origin ":refs/tags/$TAG" || true
+              gh release delete "$TAG" \
+                --repo "$REPO" \
+                --cleanup-tag \
+                --yes
             done
