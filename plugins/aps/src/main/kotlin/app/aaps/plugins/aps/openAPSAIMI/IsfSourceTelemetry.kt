@@ -110,6 +110,19 @@ object IsfSourceTelemetry {
     @Volatile var lastDynamicFactor: Double? = null; private set
     @Volatile var lastTrajectoryMultiplier: Double? = null; private set
 
+    /**
+     * Physiological ISF factor of the tick, bounds [0.85, 1.15].
+     *
+     * Exported because the fix that made it apply once instead of twice could not be verified from
+     * a support package: the only comparable field, `dynamic_isf.final_value_mgdl`, turned out to
+     * carry the PKPD fused ISF, an unrelated quantity.
+     */
+    @Volatile var lastPhysioIsfFactor: Double? = null; private set
+
+    fun recordPhysioFactor(factor: Double?) {
+        lastPhysioIsfFactor = factor
+    }
+
     fun recordComponents(
         kalmanFastIsf: Double?,
         isfAdjEngine: Double?,
@@ -133,5 +146,6 @@ object IsfSourceTelemetry {
         lastCacheKey = null
         lastCacheGlucoseMgdl = null
         lastProfileStaticMgdl = null
+        lastPhysioIsfFactor = null
     }
 }

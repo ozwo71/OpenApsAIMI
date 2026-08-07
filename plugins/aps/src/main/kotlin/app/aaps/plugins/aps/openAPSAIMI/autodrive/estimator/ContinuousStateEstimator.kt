@@ -5,6 +5,7 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.exp
 import kotlin.math.max
 
 /**
@@ -28,6 +29,31 @@ class ContinuousStateEstimator @Inject constructor(
     private var pRa = 1.0      // Incertitude sur l'Absorption
     private var lastSi = 1.0   // Dernier SI estimé
     private var lastRa = 0.0   // Dernier Ra estimé
+
+    /** Instant de la dernière mise à jour, pour l'étape de prédiction de [lastRa]. */
+    private var lastUpdateMs: Long = 0L
+
+    companion object {
+
+        /**
+         * Constante de temps de décroissance de Ra en l'absence de preuve nouvelle, en minutes.
+         *
+         * Sans elle, l'estimateur n'avait **pas d'étape de prédiction** : `innovation` retranchait
+         * `lastRa` lui-même, donc dès que Ra expliquait la vitesse observée l'innovation tombait à
+         * zéro et Ra restait figé. Mesuré en production le 07/08/2026 : Ra bloqué à 1,89 pendant
+         * deux heures, puis 1,24, puis 1,18 pendant trois heures et demie — un escalier descendant
+         * au lieu d'un retour au repos. Conséquence : les seuils 0,6 / 0,7 / 0,8 utilisés comme
+         * portes étaient franchis sur 82 % des ticks, donc ne filtraient plus rien.
+         *
+         * Un taux d'apparition doit retourner à zéro quand plus rien n'est digéré. 45 minutes est
+         * un premier calibrage : après 30 min sans support, Ra est divisé par deux ; après 90 min,
+         * par sept. À valider sur le corpus de rejeu.
+         */
+        const val RA_DECAY_TAU_MIN: Double = 45.0
+
+        /** Borne sur l'intervalle entre deux ticks, pour qu'une longue coupure n'annule pas Ra d'un coup. */
+        const val RA_DECAY_MAX_DT_MIN: Double = 30.0
+    }
 
     /**
      * Reçoit le nouvel état réel depuis la pompe/capteur et met à jour l'estimation
@@ -57,9 +83,21 @@ class ContinuousStateEstimator @Inject constructor(
             actualState.bgVelocity // Transmission directe temps réel (One+ / G7 / Libre)
         }
 
+        // 1bis. ÉTAPE DE PRÉDICTION de Ra (elle manquait : l'état était propagé à l'identique).
+        // Les glucides d'un repas s'épuisent ; en l'absence de preuve nouvelle, Ra doit revenir
+        // vers zéro. Voir [RA_DECAY_TAU_MIN].
+        val nowMs = System.currentTimeMillis()
+        val dtMin = if (lastUpdateMs == 0L) 5.0
+        else ((nowMs - lastUpdateMs) / 60_000.0).coerceIn(0.0, RA_DECAY_MAX_DT_MIN)
+        val raDecay = exp(-dtMin / RA_DECAY_TAU_MIN)
+        val raPredicted = lastRa * raDecay
+        lastUpdateMs = nowMs
+
         // 2. Erreur d'Innovation (L'écart avec la réalité : La vitesse BG réelle)
-        // bgVelocity est en mg/dL/min. 
-        val innovation = hardwareCompensatedVelocity - (expectedNaturalDelta + lastRa)
+        // bgVelocity est en mg/dL/min. On retranche la PRÉDICTION de Ra, pas sa valeur précédente :
+        // si le repas continue vraiment, l'innovation redevient positive et l'étape de mise à jour
+        // remonte Ra ; sinon il redescend.
+        val innovation = hardwareCompensatedVelocity - (expectedNaturalDelta + raPredicted)
         
         // 🚀 DAWN GUARD DAMPENING (Prevent Cortisol Over-Correction)
         // Entre 5h et 9h, si peu d'activité physique (pas de marche), on suspecte le cortisol.
@@ -103,14 +141,15 @@ class ContinuousStateEstimator @Inject constructor(
         }
         
         // 4. Prédiction de Covariance (P_k|k-1)
-        pRa += qRa
+        // Propagation linéaire cohérente avec l'étape de prédiction : F = raDecay, donc P <- F^2 P + Q.
+        pRa = raDecay * raDecay * pRa + qRa
 
         // 5. Calcul du Gain de Kalman (K) pour Ra
         val sRa = pRa + rVariance 
         val kRa = pRa / sRa 
 
-        // 6. Mise à jour de l'état caché (Rate of Appearance)
-        var estimatedRa = lastRa + (kRa * innovation)
+        // 6. Mise à jour de l'état caché (Rate of Appearance), à partir de la prédiction
+        var estimatedRa = raPredicted + (kRa * innovation)
 
         // 7. Règles physiologiques d'Écrêtage (Clipping)
         // On limite le maximum de Ra possible (Vitesse d'absorption) pendant le Dawn Guard

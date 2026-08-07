@@ -324,7 +324,9 @@ internal data class AimiDecisionContext(
         /** AutoISF-style trajectory multiplier (1.0 when the layer did not fire). */
         val isf_trajectory_multiplier: Double? = null,
         /** Estimated rate of glucose appearance (mg/dL/min) from the continuous state estimator. */
-        val estimated_ra_mgdl_per_min: Double? = null
+        val estimated_ra_mgdl_per_min: Double? = null,
+        /** Physiological ISF factor of the tick, bounds [0.85, 1.15]. Applied once since ADR 0007. */
+        val physio_isf_factor: Double? = null
     )
     data class Adjustments(
         var dynamic_isf: DynamicIsf? = null,
@@ -562,6 +564,7 @@ internal data class AimiDecisionContext(
             base.put("isf_dynamic_factor", baseline_state.isf_dynamic_factor ?: org.json.JSONObject.NULL)
             base.put("isf_trajectory_multiplier", baseline_state.isf_trajectory_multiplier ?: org.json.JSONObject.NULL)
             base.put("estimated_ra_mgdl_per_min", baseline_state.estimated_ra_mgdl_per_min ?: org.json.JSONObject.NULL)
+            base.put("physio_isf_factor", baseline_state.physio_isf_factor ?: org.json.JSONObject.NULL)
             json.put("baseline_state", base)
 
             val adj = org.json.JSONObject()
@@ -1819,7 +1822,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 isf_trust_fast = IsfSourceTelemetry.lastTrustFast,
                 isf_dynamic_factor = IsfSourceTelemetry.lastDynamicFactor,
                 isf_trajectory_multiplier = IsfSourceTelemetry.lastTrajectoryMultiplier,
-                estimated_ra_mgdl_per_min = runCatching { continuousStateEstimator.getLastRa() }.getOrNull()
+                estimated_ra_mgdl_per_min = runCatching { continuousStateEstimator.getLastRa() }.getOrNull(),
+                physio_isf_factor = IsfSourceTelemetry.lastPhysioIsfFactor
             )
         )
         val rT = RT(

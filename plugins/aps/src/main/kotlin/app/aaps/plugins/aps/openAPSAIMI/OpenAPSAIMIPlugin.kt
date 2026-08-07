@@ -1333,6 +1333,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             IsfSourceTelemetry.recordProfileStatic(
                 runCatching { profile.getProfileIsfMgdl() }.getOrNull()
             )
+            IsfSourceTelemetry.recordPhysioFactor(physioMults.isfFactor)
             val oapsProfile = OapsProfileAimi(
                 dia = eff.iCfg.dia,
                 min_5m_carbimpact = 0.0, // not used
