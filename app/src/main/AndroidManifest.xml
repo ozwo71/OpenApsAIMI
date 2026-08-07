@@ -129,6 +129,11 @@
             android:name="app.aaps.implementation.androidNotification.AlarmMuteReceiver"
             android:exported="false" />
 
+        <!-- "Hypo treated" action on the low glucose alarm notification → holds the alarm 20 min. -->
+        <receiver
+            android:name="app.aaps.implementation.androidNotification.HypoTreatedReceiver"
+            android:exported="false" />
+
         <!-- Receive new BG readings from other local apps -->
         <receiver
             android:name="app.aaps.receivers.DataReceiver"

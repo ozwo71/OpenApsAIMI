@@ -15,11 +15,13 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.TaskStackBuilder
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.AlarmAction
 import app.aaps.core.interfaces.notifications.AlarmIntent
 import app.aaps.core.interfaces.notifications.AlarmSoundPlayer
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.ui.IconsProvider
 import app.aaps.core.interfaces.ui.UiInteraction
+import app.aaps.core.ui.R
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.implementation.androidNotification.AlarmNotificationManager.Companion.CHANNEL_FULL_SCREEN_SILENT
@@ -77,6 +79,9 @@ class AlarmNotificationManager @Inject constructor(
 
         /** Request code for the notification Mute action PendingIntent. */
         private const val MUTE_REQUEST_CODE = 4714
+
+        /** Request code for the per-alarm extra action PendingIntent (see [AlarmAction]). */
+        private const val ALARM_ACTION_REQUEST_CODE = 4715
 
         /**
          * Delay before the screen-wake / activity-launch alarms fire. Small buffer so both
@@ -226,6 +231,26 @@ class AlarmNotificationManager @Inject constructor(
         }
     }
 
+    /**
+     * Adds the alarm's extra action button (e.g. "Hypo treated") to [builder] when it declares one.
+     *
+     * The button reaches a [android.content.BroadcastReceiver] rather than the in-app
+     * [app.aaps.core.interfaces.notifications.NotificationAction] lambda, because during the event
+     * that matters — a real hypo — the phone is locked and the app is not open.
+     */
+    private fun addAlarmAction(builder: NotificationCompat.Builder, action: AlarmAction?) {
+        if (action == null) return
+        val (labelRes, receiver) = when (action) {
+            AlarmAction.HYPO_TREATED -> R.string.alert_hypo_treated to HypoTreatedReceiver::class.java
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context, ALARM_ACTION_REQUEST_CODE,
+            Intent(context, receiver),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        builder.addAction(0, rh.gs(labelRes), pendingIntent)
+    }
+
     private fun channelIdForSound(@RawRes soundId: Int, overrideDnd: Boolean): String {
         val name = SOUND_NAMES[soundId] ?: "error"
         // "_bypass" (was "_alarm") is a version bump: channel settings are immutable after creation,
@@ -365,12 +390,14 @@ class AlarmNotificationManager @Inject constructor(
      *
      * @param notificationKey unique-per-AAPS-notification identifier (the `AapsNotification.instanceKey`)
      * @param urgent          true for URGENT-level alerts (stronger vibration)
+     * @param alarmAction     optional extra action button declared by the alarm (see [addAlarmAction])
      */
     fun postSilentAlarmNotification(
         notificationKey: Int,
         title: String,
         body: String,
-        urgent: Boolean
+        urgent: Boolean,
+        alarmAction: AlarmAction? = null
     ) {
         val builder = NotificationCompat.Builder(context, CHANNEL_FULL_SCREEN_SILENT)
             .setSmallIcon(iconsProvider.getNotificationIcon())
@@ -388,6 +415,7 @@ class AlarmNotificationManager @Inject constructor(
         } else {
             builder.setVibrate(longArrayOf(0, 100, 50, 100, 50))
         }
+        addAlarmAction(builder, alarmAction)
 
         val systemId = SOUND_ID_OFFSET + notificationKey
         try {
@@ -420,13 +448,15 @@ class AlarmNotificationManager @Inject constructor(
      * @param notificationKey unique-per-AAPS-notification identifier (the `AapsNotification.instanceKey`)
      * @param soundId         raw alarm sound resource (selects the channel)
      * @param urgent          true for URGENT-level alerts (stronger vibration)
+     * @param alarmAction     optional extra action button declared by the alarm (see [addAlarmAction])
      */
     fun postSoundAlarmNotification(
         notificationKey: Int,
         title: String,
         body: String,
         @RawRes soundId: Int,
-        urgent: Boolean
+        urgent: Boolean,
+        alarmAction: AlarmAction? = null
     ) {
         val channelId = channelIdForSound(soundId, overrideDnd = true)
         val builder = NotificationCompat.Builder(context, channelId)
@@ -445,6 +475,7 @@ class AlarmNotificationManager @Inject constructor(
         } else {
             builder.setVibrate(longArrayOf(0, 100, 50, 100, 50))
         }
+        addAlarmAction(builder, alarmAction)
 
         val systemId = SOUND_ID_OFFSET + notificationKey
         try {

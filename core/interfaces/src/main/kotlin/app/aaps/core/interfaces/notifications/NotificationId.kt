@@ -31,7 +31,9 @@ import app.aaps.core.interfaces.notifications.NotificationLevel.URGENT
 enum class NotificationId(
     val defaultLevel: NotificationLevel,
     val category: NotificationCategory,
-    val allowMultiple: Boolean = false
+    val allowMultiple: Boolean = false,
+    /** Extra action button carried by this alarm's Android notification, if any. */
+    val alarmAction: AlarmAction? = null
 ) {
 
     // Profile
@@ -122,7 +124,7 @@ enum class NotificationId(
     SENSOR_CHANGE_DETECTED(NORMAL, CGM),
 
     // CGM — user-configured glucose value/rate alarms (source-agnostic; notification-only, never dosing)
-    BG_HYPO(URGENT, CGM),
+    BG_HYPO(URGENT, CGM, alarmAction = AlarmAction.HYPO_TREATED),
     BG_HYPER(IMPORTANT, CGM),
     BG_RAPID_FALL(URGENT, CGM),
 

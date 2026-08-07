@@ -202,11 +202,13 @@ class NotificationManagerImpl @Inject constructor(
             val title = rh.gs(app.aaps.core.ui.R.string.urgent_alarm)
             if (overrideDnd) {
                 alarmNotificationManager.postSoundAlarmNotification(
-                    notificationKey = instanceKey, title = title, body = text, soundId = soundRes, urgent = true
+                    notificationKey = instanceKey, title = title, body = text, soundId = soundRes, urgent = true,
+                    alarmAction = id.alarmAction
                 )
             } else {
                 alarmNotificationManager.postSilentAlarmNotification(
-                    notificationKey = instanceKey, title = title, body = text, urgent = true
+                    notificationKey = instanceKey, title = title, body = text, urgent = true,
+                    alarmAction = id.alarmAction
                 )
             }
         } else if (preferences.get(BooleanKey.AlertUrgentAsAndroidNotification) && actions.isEmpty()) {

@@ -42,4 +42,13 @@ interface LocalAlertUtils {
      * (the stale-data alarm owns that case).
      */
     suspend fun checkGlucoseAlerts()
+
+    /**
+     * The user reported treating the current hypo (carbs taken): clear the low-glucose alert and
+     * hold it for about the time carbs need to work, instead of the shorter automatic re-alarm.
+     *
+     * Silences only — the alarm comes back by itself if glucose is still low when the hold ends,
+     * and [checkGlucoseAlerts] clears the hold as soon as glucose has recovered.
+     */
+    fun snoozeHypoAfterTreatment()
 }
