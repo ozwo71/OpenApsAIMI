@@ -135,7 +135,20 @@ class AutodriveEngine @Inject constructor(
         steps: Int,
         hr: Int,
         rhr: Int,
-        currentEpochMs: Long = System.currentTimeMillis()
+        currentEpochMs: Long = System.currentTimeMillis(),
+        /**
+         * Hyper-trajectory Ra floor, in mg/dL/min, or 0.0 for none.
+         *
+         * Applied to the **controller's** view only. The barrier shield keeps the estimator's honest
+         * value: it reads `estimatedRa` to size its own margins
+         * (`ControlBarrierShield.kt:67, 101-103, 115`), and a safety barrier fed an optimistic input
+         * is no longer a barrier.
+         *
+         * Until now this floor was computed, passed in as `AutoDriveState.estimatedRa`, and silently
+         * discarded — line 165 overwrote the field before the estimator ran. It reached the recursive
+         * belief tree but never the MPC its producer is named after.
+         */
+        mpcRaFloorMgdlPerMin: Double = 0.0
     ): AutoDriveCommand? {
         val state = systemState.get() as? AimiState.AutoDrive ?: return null
         if (!state.isActive && !state.isShadowMode) return null
@@ -166,9 +179,23 @@ class AutodriveEngine @Inject constructor(
         val estimatedState = stateEstimator.updateAndPredict(stateWithMomentum)
 
         // 2. MPC (Model Predictive Controller) Calculation
-        val rawCommand = mpcController.calculateOptimalDose(estimatedState, profileBasal, lgsThreshold)
+        // The floor lifts what the controller anticipates, never what the estimator believes: it is a
+        // feed-forward, not an observation, so it must not ratchet into the next tick's prediction.
+        val mpcState = if (
+            mpcRaFloorMgdlPerMin.isFinite() && mpcRaFloorMgdlPerMin > estimatedState.estimatedRa
+        ) {
+            aapsLogger.debug(
+                LTag.APS,
+                "🍽️ HTR_RA_FLOOR: MPC sees Ra=${"%.2f".format(mpcRaFloorMgdlPerMin)} " +
+                    "instead of estimated ${"%.2f".format(estimatedState.estimatedRa)}",
+            )
+            estimatedState.copy(estimatedRa = mpcRaFloorMgdlPerMin)
+        } else {
+            estimatedState
+        }
+        val rawCommand = mpcController.calculateOptimalDose(mpcState, profileBasal, lgsThreshold)
 
-        // 3. CBF (Control Barrier Shield) Safety Check
+        // 3. CBF (Control Barrier Shield) Safety Check — honest Ra on purpose, see the parameter doc.
         val safeCommand = safetyShield.enforce(rawCommand, estimatedState, profileBasal)
 
         // 5. Explicabilité de l'IA (Auditor Traducteur)

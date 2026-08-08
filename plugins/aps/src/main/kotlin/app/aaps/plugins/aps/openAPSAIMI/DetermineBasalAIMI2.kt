@@ -4747,19 +4747,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 isNight = isNightAutodrive,
                 exerciseLockout = exerciseInsulinLockoutActive,
             )
-            // ⚠️ This floor does NOT reach the MPC, despite the name of its producer.
+            // The floor now reaches the MPC, through `tick(mpcRaFloorMgdlPerMin = …)` below.
             //
-            // It is passed as `AutoDriveState.estimatedRa` below, but `AutodriveEngine.tick` overwrites
-            // that field with `stateEstimator.getLastRa()` before calling the estimator
-            // (`AutodriveEngine.kt:165`), and `updateAndPredict` then returns `copy(estimatedRa = …)`
-            // with its own value — so the MPC and the barrier shield never see the floor.
+            // It used to be passed as `AutoDriveState.estimatedRa` and silently dropped:
+            // `AutodriveEngine.kt:165` overwrote the field with `stateEstimator.getLastRa()` before the
+            // estimator ran, so the only consumer it ever reached was the recursive belief tree, as
+            // `mpcFeedForwardRa`. Passing it explicitly keeps that route and adds the one its producer
+            // is named after.
             //
-            // It is not dead: it still reaches the recursive belief tree as `mpcFeedForwardRa` (see the
-            // `RbtExtendedSignals` construction below and `BeliefLeafAdapterRegistry` MPC_FEEDFWD).
-            //
-            // Wiring it into the MPC would switch on a feed-forward that has never run on a dosing
-            // path, with no production measurement of its magnitude. It is exported instead, so a week
-            // of data can say what it would change. See `docs/adr/0008-isf-decision-architecture.md`.
+            // The barrier shield deliberately keeps the estimator's honest Ra — see the parameter doc
+            // on `AutodriveEngine.tick`. `htr_ra_floor_mgdl_per_min` is exported next to
+            // `estimated_ra_mgdl_per_min` so the gap between the two is visible per tick.
             val estimatedRaForMpc = HyperTrajectoryMpcFeedForward.blendEstimatedRa(
                 baseRa = continuousStateEstimator.getLastRa(),
                 hints = mpcHints,
@@ -4824,7 +4822,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 hour = hourOfDay,
                 steps = snapshot.stepsLast15m,
                 hr = snapshot.hrNow,
-                rhr = snapshot.rhrResting
+                rhr = snapshot.rhrResting,
+                mpcRaFloorMgdlPerMin = mpcHints.estimatedRaFloorMgdlPerMin,
             )
 
             val v3CommandSafe = adCommand != null && adCommand.isSafe
