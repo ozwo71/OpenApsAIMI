@@ -862,12 +862,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         blended = blended.coerceIn(5.0, 300.0)
 
-        // Shadow only — nothing below reads this. Records what an **unconditional exit clamp**
-        // relative to the profile would produce. The chain's only relative bound today sits inside
-        // `DynIsfTrajectoryTuning`, behind gates that skip it; the absolute [5, 300] above is so wide
-        // it has never bound. See `docs/adr/0008-isf-decision-architecture.md`.
-        IsfSourceTelemetry.recordProfileRelativeShadow(blended, profileIsf)
-
         // Diagnostic only: keep the intermediate terms so a support package can attribute the
         // movement of the commanded sensitivity. See `docs/adr/0002-sensitivity-three-levels.md`.
         IsfSourceTelemetry.recordComponents(
@@ -1354,7 +1348,22 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 max_bg = maxBg,
                 target_bg = targetBg,
                 carb_ratio = profile.getIc(),
-                sens = profile.getIsfMgdl("OpenAPSAIMIPlugin") * physioMults.isfFactor, // ?? ISF Modulation
+                sens = (profile.getIsfMgdl("OpenAPSAIMIPlugin") * physioMults.isfFactor).also { commanded ->
+                    // Shadow only — nothing reads this. Records what an **unconditional exit clamp**
+                    // relative to the profile would command.
+                    //
+                    // It was first placed inside `calculateVariableIsf`, before the effective-profile
+                    // percentage and the physiological factor. Production then showed the commanded
+                    // sensitivity reaching x0.46 and x2.11 of profile while the shadow reported a
+                    // single hit in 282 ticks — the guard had been put before the multipliers that
+                    // undo it, which is precisely the defect this ADR set keeps documenting. It now
+                    // sits where the value is final.
+                    // See `docs/adr/0008-isf-decision-architecture.md`.
+                    IsfSourceTelemetry.recordProfileRelativeShadow(
+                        blendedMgdl = commanded,
+                        profileIsfMgdl = runCatching { profile.getProfileIsfMgdl() }.getOrNull() ?: 0.0,
+                    )
+                },
                 autosens_adjust_targets = false, // not used
                 max_daily_safety_multiplier = preferences.get(DoubleKey.ApsMaxDailyMultiplier) * physioMults.smbFactor, // ?? SMB Cap modulation
                 current_basal_safety_multiplier = preferences.get(DoubleKey.ApsMaxCurrentBasalMultiplier) * physioMults.basalFactor, // ?? Basal Cap modulation

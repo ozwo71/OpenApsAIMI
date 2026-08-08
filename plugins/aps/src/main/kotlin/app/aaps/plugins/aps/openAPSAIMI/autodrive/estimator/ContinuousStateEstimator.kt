@@ -33,6 +33,17 @@ class ContinuousStateEstimator @Inject constructor(
     /** Instant de la dernière mise à jour, pour l'étape de prédiction de [lastRa]. */
     private var lastUpdateMs: Long = 0L
 
+    /**
+     * Nombre d'exécutions depuis le démarrage du process.
+     *
+     * Sert à garantir l'invariant « l'estimateur tourne **exactement une fois par tick** » quand
+     * plusieurs points d'appel existent. Ne pas réutiliser [lastUpdateMs] pour ça : il est alimenté
+     * par `System.currentTimeMillis()` alors que le tick raisonne en `dateUtil.now()`, et mélanger
+     * deux horloges dans une garde est la façon la plus sûre de laisser passer un double appel.
+     */
+    var runCount: Long = 0L
+        private set
+
     companion object {
 
         /**
@@ -63,7 +74,11 @@ class ContinuousStateEstimator @Inject constructor(
      * calculée par AIMI V1 (WCycle + Heart Rate + Autosens). Le PSE va donc l'utiliser
      * comme "truth" robuste et se focaliser sur l'estimation du repas fantôme (Ra).
      */
-    fun updateAndPredict(actualState: AutoDriveState): AutoDriveState {
+    fun updateAndPredict(
+        actualState: AutoDriveState,
+        nowMs: Long = System.currentTimeMillis(),
+    ): AutoDriveState {
+        runCount++
         
         // 1. Modèle Interne Prédictif (Ce qu'on PENSE qui aurait dû se passer sans repas)
         // dBG/dt = - [p1 + SI * IOB]*(BG - BG_target) + Ra
@@ -86,7 +101,6 @@ class ContinuousStateEstimator @Inject constructor(
         // 1bis. ÉTAPE DE PRÉDICTION de Ra (elle manquait : l'état était propagé à l'identique).
         // Les glucides d'un repas s'épuisent ; en l'absence de preuve nouvelle, Ra doit revenir
         // vers zéro. Voir [RA_DECAY_TAU_MIN].
-        val nowMs = System.currentTimeMillis()
         val dtMin = if (lastUpdateMs == 0L) 5.0
         else ((nowMs - lastUpdateMs) / 60_000.0).coerceIn(0.0, RA_DECAY_MAX_DT_MIN)
         val raDecay = exp(-dtMin / RA_DECAY_TAU_MIN)

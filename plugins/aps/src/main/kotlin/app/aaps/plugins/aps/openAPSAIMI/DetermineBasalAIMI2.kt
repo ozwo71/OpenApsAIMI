@@ -330,7 +330,15 @@ internal data class AimiDecisionContext(
         /** Shadow: sensitivity an unconditional exit clamp relative to the profile would command. */
         val isf_profile_relative_shadow_mgdl: Double? = null,
         /** Shadow: true when that clamp would have changed the value. */
-        val isf_profile_relative_bound_hit: Boolean? = null
+        val isf_profile_relative_bound_hit: Boolean? = null,
+        /** Shadow: sensitivity ratio measured from outcomes, dimensionless, 1.0 = the profile is right. */
+        val sensitivity_ratio_r: Double? = null,
+        /** Shadow: sensitivity this ratio would command, i.e. profile x ratio, bounded. */
+        val isf_shadow_s_mgdl: Double? = null,
+        /** Shadow: how many closed windows have been folded in so far. */
+        val sensitivity_observations: Int? = null,
+        /** Hyper-trajectory Ra floor for this tick. Reaches the belief tree, never the MPC. */
+        val htr_ra_floor_mgdl_per_min: Double? = null
     )
     data class Adjustments(
         var dynamic_isf: DynamicIsf? = null,
@@ -571,6 +579,10 @@ internal data class AimiDecisionContext(
             base.put("physio_isf_factor", baseline_state.physio_isf_factor ?: org.json.JSONObject.NULL)
             base.put("isf_profile_relative_shadow_mgdl", baseline_state.isf_profile_relative_shadow_mgdl ?: org.json.JSONObject.NULL)
             base.put("isf_profile_relative_bound_hit", baseline_state.isf_profile_relative_bound_hit ?: org.json.JSONObject.NULL)
+            base.put("sensitivity_ratio_r", baseline_state.sensitivity_ratio_r ?: org.json.JSONObject.NULL)
+            base.put("isf_shadow_s_mgdl", baseline_state.isf_shadow_s_mgdl ?: org.json.JSONObject.NULL)
+            base.put("sensitivity_observations", baseline_state.sensitivity_observations ?: org.json.JSONObject.NULL)
+            base.put("htr_ra_floor_mgdl_per_min", baseline_state.htr_ra_floor_mgdl_per_min ?: org.json.JSONObject.NULL)
             json.put("baseline_state", base)
 
             val adj = org.json.JSONObject()
@@ -1125,6 +1137,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var contextInfluenceEngine: app.aaps.plugins.aps.openAPSAIMI.context.ContextInfluenceEngine  // 🎯 Context Influence
     @Inject lateinit var physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR  // 🏥 Physiological Modulation
     @Inject lateinit var straightLineTubeAdvisor: StraightLineTubeAdvisor  // 📐 MPC-lite hypo tube + SMB-cap smoothing
+    @Inject lateinit var sensitivityRatioEstimator: app.aaps.plugins.aps.openAPSAIMI.ISF.SensitivityRatioEstimator
     @Inject lateinit var continuousStateEstimator: app.aaps.plugins.aps.openAPSAIMI.autodrive.estimator.ContinuousStateEstimator
     @Inject lateinit var tpoOrchestrator: TpoOrchestrator
     
@@ -1834,7 +1847,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 estimated_ra_mgdl_per_min = runCatching { continuousStateEstimator.getLastRa() }.getOrNull(),
                 physio_isf_factor = IsfSourceTelemetry.lastPhysioIsfFactor,
                 isf_profile_relative_shadow_mgdl = IsfSourceTelemetry.lastProfileRelativeShadowMgdl,
-                isf_profile_relative_bound_hit = IsfSourceTelemetry.lastProfileRelativeBoundHit
+                isf_profile_relative_bound_hit = IsfSourceTelemetry.lastProfileRelativeBoundHit,
+                sensitivity_ratio_r = runCatching { sensitivityRatioEstimator.ratio }.getOrNull(),
+                isf_shadow_s_mgdl = runCatching {
+                    IsfSourceTelemetry.lastProfileStaticMgdl?.let { sensitivityRatioEstimator.sensitivityMgdl(it) }
+                }.getOrNull(),
+                sensitivity_observations = runCatching { sensitivityRatioEstimator.observationCount }.getOrNull(),
+                htr_ra_floor_mgdl_per_min = lastHtrRaFloorMgdlPerMin
             )
         )
         val rT = RT(
@@ -3043,7 +3062,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 deltaMgdlPer5 = delta.toDouble(),
                 shortAvgDeltaMgdlPer5 = shortAvgDelta.toDouble(),
                 combinedDeltaMgdlPer5 = combinedDelta.toDouble(),
-                deltaPrevMgdlPer5 = MealAbsorptionMemory.lastDeltaMgdlPer5,
+                deltaPrevMgdlPer5 = mealAbsorptionDeltaPrevOfTick(),
                 mealCobG = cob.toDouble(),
                 hourOfDay = hourOfDay,
                 iobU = iob.toDouble(),
@@ -4033,7 +4052,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             maxSmbEffectiveU = maxSMBHB.coerceAtLeast(maxSMB),
             tdd24hU = tdd24hU,
             patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
-            deltaPrevMgdlPer5 = MealAbsorptionMemory.lastDeltaMgdlPer5,
+            deltaPrevMgdlPer5 = mealAbsorptionDeltaPrevOfTick(),
             eventualBgMgdl = eventualBG.takeIf { it.isFinite() },
             insulinActivityNow = tickInsulinActionState?.activityNow,
             lastLoadGovernorMultiplierG = lastLoadGovernorMultiplierG,
@@ -4529,6 +4548,94 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }.coerceAtLeast(0.0)
     }
 
+    /**
+     * Minimal state for **observation only** — the fields [ContinuousStateEstimator] actually reads.
+     *
+     * ## Why this exists
+     *
+     * `updateAndPredict` is the only update path of the meal model, and its single call site sits
+     * inside `AutodriveEngine.tick()`, itself behind `if (gate.engage)`. Measured on 2026-08-08 over
+     * 282 ticks: `Ra` changed on 81 transitions (81 % of them with Autodrive owning the dose) and was
+     * frozen on 200 (7 %), the longest freezes running 37, 32, 23 and 21 consecutive ticks — up to
+     * three hours. An estimator that only advances when a controller engages is not an estimator, and
+     * the decay added to it could not work because the function was never called.
+     *
+     * ## Why a separate builder rather than hoisting `adState`
+     *
+     * The engaged path rebuilds physiology (`refreshPhysiologicalPhase`, `refreshMealAbsorptionPhase`,
+     * `updatePhysioLatentState`) inside the gate, but those already ran unconditionally earlier in the
+     * tick. Hoisting them would fire their persisted side effects — TPO episode ledger, circadian dawn
+     * learning, meal-absorption wave counting — on every tick instead of engaged ones. This builder
+     * reads the values they already published instead.
+     *
+     * ## Contract
+     *
+     * Returns `null` when the tick cannot be observed. It deliberately does **not** lean on
+     * `AutoDriveState.createSafe`'s catch-all, which turns any failure into `bg = 100, velocity = 0,
+     * iob = 0` — a fabricated "quiet" observation is exactly the input that would drive `Ra` to zero
+     * for no reason.
+     *
+     * The online-learner factor is read, never updated: `learnAndUpdate` and `applyAttention` mutate
+     * state that engaged ticks depend on. See `docs/adr/0008-isf-decision-architecture.md`.
+     */
+    private fun buildRaObservationState(
+        ctx: AimiTickContext,
+        combinedDelta: Float,
+        shortAvgDeltaAdj: Float,
+        pkpdRuntime: PkPdRuntime?,
+        hasRecentMealEstimate: Boolean,
+    ): app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState? {
+        val bgNow = ctx.glucoseStatus.glucose
+        if (!bgNow.isFinite() || bgNow <= 0.0) return null
+        val velocity = shortAvgDeltaAdj.toDouble() / 5.0
+        if (!velocity.isFinite()) return null
+
+        val canonicalSI = if (pkpdRuntime != null) pkpdRuntime.fusedIsf / 10000.0
+        else variableSensitivity.toDouble() / 10000.0
+        if (!canonicalSI.isFinite() || canonicalSI <= 0.0) return null
+        val learnedFactor = runCatching { autodriveEngine.onlineLearnerStatus().learnedSensitivityFactor }
+            .getOrNull()?.takeIf { it.isFinite() && it > 0.0 } ?: 1.0
+
+        val mealSignals = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime ||
+            ctx.mealData.mealCOB >= 0.1 || hasRecentMealEstimate
+
+        return runCatching {
+            app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState.createSafe(
+                bg = bgNow,
+                bgVelocity = velocity,
+                iob = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
+                cob = ctx.mealData.mealCOB,
+                estimatedSI = canonicalSI * learnedFactor,
+                patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
+                physiologicalStressMask = lastPhysioLatentState?.toAttentionMask() ?: DoubleArray(0),
+                hour = hourOfDay,
+                steps = physioAdapter.getLatestSnapshot().stepsLast15m,
+                sourceSensor = ctx.glucoseStatus.sourceSensor,
+                combinedDelta = combinedDelta.toDouble(),
+                uamConfidence = AimiUamHandler.confidenceOrZero(),
+                applyHypoRecoveryRaDampening = postHypoRecoveryActive() && !mealSignals,
+                physioExtendedDawnGuard = lastPhysiologicalPhaseOutput?.policy?.extendedDawnGuard == true,
+            )
+        }.getOrNull()
+    }
+
+    /** Runs the meal-model estimator for this tick when no other path has. Observation only. */
+    private fun observeRaIfNotAlreadyRun(
+        ctx: AimiTickContext,
+        combinedDelta: Float,
+        shortAvgDeltaAdj: Float,
+        pkpdRuntime: PkPdRuntime?,
+        hasRecentMealEstimate: Boolean,
+        reason: String,
+    ) {
+        val before = continuousStateEstimator.runCount
+        if (before != raEstimatorRunCountAtTickStart) return // something already observed this tick
+        val state = buildRaObservationState(ctx, combinedDelta, shortAvgDeltaAdj, pkpdRuntime, hasRecentMealEstimate)
+            ?: return
+        runCatching { continuousStateEstimator.updateAndPredict(state) }
+        consoleLog.add("🍽️ RA_OBSERVE[$reason]: Ra=${"%.2f".format(continuousStateEstimator.getLastRa())}")
+    }
+
     private fun runAutodriveV3MultiVariableBranch(
         ctx: AimiTickContext,
         profile: OapsProfileAimi,
@@ -4540,11 +4647,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         pkpdRuntime: PkPdRuntime?,
     ): AutodriveV3BranchResult {
         if (!preferences.get(BooleanKey.OApsAIMIautoDriveActive)) {
+            // Autodrive off: without this the meal model would stay frozen for the life of the
+            // install, while getLastRa() still feeds the absorption phase, the correction-aggression
+            // gate, the undeclared-COB estimate and the exports.
+            observeRaIfNotAlreadyRun(ctx, combinedDelta, shortAvgDeltaAdj, pkpdRuntime, false, "autodrive_off")
             return AutodriveV3BranchResult(
                 appliedAction = false,
                 skipLegacySmbBlender = false,
             )
         }
+        raNetCombinedDelta = combinedDelta
+        raNetShortAvgDeltaAdj = shortAvgDeltaAdj
         var v3AppliedAction = false
         var skipLegacySmbBlender = false
         val recentEstimateCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
@@ -4567,6 +4680,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             estimatedRa = continuousStateEstimator.getLastRa(),
             mealChannelHint = lastRbtAppliedHints?.mealChannel,
         )
+
+        if (!gate.engage) {
+            // Estimation is unconditional; actuation is gated. Nothing inside the engaged branch
+            // below is touched, so engaged ticks stay bit-identical by construction rather than by
+            // argument. See `docs/adr/0008-isf-decision-architecture.md`.
+            observeRaIfNotAlreadyRun(
+                ctx, combinedDelta, shortAvgDeltaAdj, pkpdRuntime, hasRecentMealEstimate, "gate_disengaged",
+            )
+        }
 
         if (gate.engage) {
             lastAutodriveState = AutodriveState.ENGAGED
@@ -4625,10 +4747,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 isNight = isNightAutodrive,
                 exerciseLockout = exerciseInsulinLockoutActive,
             )
+            // ⚠️ This floor does NOT reach the MPC, despite the name of its producer.
+            //
+            // It is passed as `AutoDriveState.estimatedRa` below, but `AutodriveEngine.tick` overwrites
+            // that field with `stateEstimator.getLastRa()` before calling the estimator
+            // (`AutodriveEngine.kt:165`), and `updateAndPredict` then returns `copy(estimatedRa = …)`
+            // with its own value — so the MPC and the barrier shield never see the floor.
+            //
+            // It is not dead: it still reaches the recursive belief tree as `mpcFeedForwardRa` (see the
+            // `RbtExtendedSignals` construction below and `BeliefLeafAdapterRegistry` MPC_FEEDFWD).
+            //
+            // Wiring it into the MPC would switch on a feed-forward that has never run on a dosing
+            // path, with no production measurement of its magnitude. It is exported instead, so a week
+            // of data can say what it would change. See `docs/adr/0008-isf-decision-architecture.md`.
             val estimatedRaForMpc = HyperTrajectoryMpcFeedForward.blendEstimatedRa(
                 baseRa = continuousStateEstimator.getLastRa(),
                 hints = mpcHints,
             )
+            lastHtrRaFloorMgdlPerMin = mpcHints.estimatedRaFloorMgdlPerMin.takeIf { it > 0.0 }
 
             val adState = app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState.createSafe(
                 bg = ctx.glucoseStatus.glucose,
@@ -8363,6 +8499,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val snapshotFusedIsf = pkpdRuntime?.fusedIsf ?: profile.sens
         val snapshotProfileIsf = profile.sens
 
+        // Shadow only — nothing reads the result. Feeds the outcome-based sensitivity estimator once
+        // per tick, unconditionally: an estimator that only runs when a controller engages is not an
+        // estimator. See `docs/adr/0008-isf-decision-architecture.md`.
+        val staticIsfForRatio = IsfSourceTelemetry.lastProfileStaticMgdl ?: 0.0
+        runCatching {
+            sensitivityRatioEstimator.observe(
+                app.aaps.plugins.aps.openAPSAIMI.ISF.SensitivityRatioEstimator.Sample(
+                    timestampMs = decisionCtx.timestamp,
+                    bgMgdl = decisionCtx.baseline_state.current_bg_mgdl,
+                    iobU = decisionCtx.baseline_state.iob_u,
+                    profileBasalUph = profile.current_basal,
+                    deliveredBasalUph = finalResult.rate ?: profile.current_basal,
+                    smbU = finalResult.units ?: 0.0,
+                    profileIsfMgdl = staticIsfForRatio,
+                ),
+            )
+        }
+
         decisionCtx.adjustments.dynamic_isf = AimiDecisionContext.DynamicIsf(
             final_value_mgdl = snapshotFusedIsf,
             modifiers = mutableListOf<AimiDecisionContext.Modifier>().apply {
@@ -10117,6 +10271,40 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var correctionAggressionDecision: CorrectionAggressionGate.Decision? = null
     private var lastPostHypoDeliveryAuthority: PostHypoDeliveryAuthority.Decision =
         PostHypoDeliveryAuthority.INACTIVE
+
+    /** [ContinuousStateEstimator.runCount] at tick entry, to enforce "observe exactly once per tick". */
+    private var raEstimatorRunCountAtTickStart: Long = -1L
+
+    /**
+     * `MealAbsorptionMemory.lastDeltaMgdlPer5` as it stood at tick entry, i.e. the **previous tick's**
+     * delta.
+     *
+     * `refreshMealAbsorptionPhase` reads that memory as `deltaPrevMgdlPer5` and then overwrites it
+     * with the current delta. On an engaged tick the function runs twice — once unconditionally in
+     * the prediction stage, once again inside the Autodrive gate — so the second, authoritative run
+     * was reading `deltaPrev == deltaNow`, making the acceleration term zero by construction exactly
+     * on the ticks that drive dosing.
+     *
+     * Latching the value here makes "previous" mean previous for every read of the tick, whichever
+     * runs first, without having to decide which invocation is authoritative.
+     */
+    private var mealAbsorptionDeltaPrevForTick: Double? = null
+
+    /** Whether [mealAbsorptionDeltaPrevForTick] has been latched this tick — `null` is a valid value. */
+    private var mealAbsorptionDeltaPrevLatched: Boolean = false
+
+    /** HTR Ra floor computed this tick, or `null` when none. Reaches the belief tree, not the MPC. */
+    private var lastHtrRaFloorMgdlPerMin: Double? = null
+
+    /**
+     * Deltas the end-of-tick safety net feeds the estimator with.
+     *
+     * Seeded from the tick's own fields and overwritten with the exact values once the Autodrive
+     * branch runs. On paths that return before that branch, `combinedDelta` was never computed, so
+     * the seed is the honest best available — it only drives the process-noise term, not the model.
+     */
+    private var raNetCombinedDelta: Float = 0.0f
+    private var raNetShortAvgDeltaAdj: Float = 0.0f
 
     /** SMB proposed before the post-hypo cap, for `adjustments.post_hypo_delivery`. Per tick. */
     private var lastPostHypoSmbBeforeCapU: Double? = null
@@ -15861,8 +16049,34 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * [aimiDecisionExportedThisTick], et cette enveloppe ne fait que rattraper les sorties qui n'ont rien
      * écrit. Un échec d'export ne doit jamais compromettre la décision, d'où le `runCatching`.
      */
+    /**
+     * Previous-tick meal delta, latched on first read so any later read within the same tick sees the
+     * same value. `null` is a legitimate latched value, hence the explicit flag rather than `?:`.
+     */
+    private fun mealAbsorptionDeltaPrevOfTick(): Double? {
+        if (!mealAbsorptionDeltaPrevLatched) {
+            mealAbsorptionDeltaPrevForTick = MealAbsorptionMemory.lastDeltaMgdlPer5
+            mealAbsorptionDeltaPrevLatched = true
+        }
+        return mealAbsorptionDeltaPrevForTick
+    }
+
     internal fun runDetermineBasalTick(ctx: AimiTickContext): RT {
+        raEstimatorRunCountAtTickStart = continuousStateEstimator.runCount
+        mealAbsorptionDeltaPrevForTick = null
+        mealAbsorptionDeltaPrevLatched = false
+        lastHtrRaFloorMgdlPerMin = null
+        raNetCombinedDelta = shortAvgDelta
+        raNetShortAvgDeltaAdj = shortAvgDelta
         val result = runDetermineBasalTickInner(ctx)
+        observeRaIfNotAlreadyRun(
+            ctx = ctx,
+            combinedDelta = raNetCombinedDelta,
+            shortAvgDeltaAdj = raNetShortAvgDeltaAdj,
+            pkpdRuntime = cachedPkpdRuntime,
+            hasRecentMealEstimate = false,
+            reason = "tick_net",
+        )
         exportAimiDecisionIfNotYetExported(ctx, result)
         return result
     }

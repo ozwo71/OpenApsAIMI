@@ -35,32 +35,101 @@ class ContinuousStateEstimatorRaDecayTest {
         physiologicalStressMask = DoubleArray(4),
     )
 
+    /**
+     * Time must be injected. An earlier version of this test called `updateAndPredict` in a tight
+     * loop, so `dtMin` was ~0 on every iteration and the decay never ran — it passed on the
+     * `lastUpdateMs == 0L -> 5.0` branch alone and could not have detected a regression.
+     */
+    private fun advance(
+        estimator: ContinuousStateEstimator,
+        state: AutoDriveState,
+        ticks: Int,
+        startMs: Long,
+        build: (Double) -> AutoDriveState,
+    ): Pair<AutoDriveState, Long> {
+        var s = state
+        var now = startMs
+        repeat(ticks) {
+            now += 5 * 60_000L
+            s = estimator.updateAndPredict(build(s.estimatedRa), nowMs = now)
+        }
+        return s to now
+    }
+
     @Test
     fun `Ra decays towards zero over a quiet stretch instead of holding a plateau`() {
         val estimator = ContinuousStateEstimator(logger)
 
         // Feed a rise so the estimator picks a meal up.
-        var state = risingState(0.0)
-        repeat(6) { state = estimator.updateAndPredict(risingState(state.estimatedRa)) }
+        var (state, now) = advance(estimator, risingState(0.0), 6, 1_000_000L) { risingState(it) }
         val raAfterRise = state.estimatedRa
         assertThat(raAfterRise).isGreaterThan(0.5)
 
-        // Then a long quiet stretch: BG flat, no insulin, nothing to explain.
-        repeat(40) { state = estimator.updateAndPredict(quietState(state.estimatedRa)) }
+        // Then three hours of quiet: BG flat, no insulin, nothing left to explain.
+        val (quiet, _) = advance(estimator, state, 36, now) { quietState(it) }
 
-        assertThat(state.estimatedRa).isLessThan(raAfterRise)
-        assertThat(state.estimatedRa).isLessThan(0.6) // below the lowest gate that reads it
+        assertThat(quiet.estimatedRa).isLessThan(raAfterRise)
+        assertThat(quiet.estimatedRa).isLessThan(0.6) // below the lowest gate that reads it
+    }
+
+    @Test
+    fun `the decay is real time based, not call based`() {
+        val fast = ContinuousStateEstimator(logger)
+        val slow = ContinuousStateEstimator(logger)
+
+        val (fastRisen, fastNow) = advance(fast, risingState(0.0), 6, 1_000_000L) { risingState(it) }
+        val (slowRisen, slowNow) = advance(slow, risingState(0.0), 6, 1_000_000L) { risingState(it) }
+        assertThat(fastRisen.estimatedRa).isWithin(1e-9).of(slowRisen.estimatedRa)
+
+        // Same number of quiet calls, very different elapsed time.
+        var f = fastRisen
+        repeat(6) { f = fast.updateAndPredict(quietState(f.estimatedRa), nowMs = fastNow + 1_000L * (it + 1)) }
+        val (s, _) = advance(slow, slowRisen, 6, slowNow) { quietState(it) }
+
+        assertThat(s.estimatedRa).isLessThan(f.estimatedRa)
     }
 
     @Test
     fun `a sustained rise still holds Ra up`() {
         val estimator = ContinuousStateEstimator(logger)
 
-        var state = risingState(0.0)
-        repeat(12) { state = estimator.updateAndPredict(risingState(state.estimatedRa)) }
+        val (state, _) = advance(estimator, risingState(0.0), 12, 1_000_000L) { risingState(it) }
 
         // The decay must not fight a meal that is genuinely still going.
         assertThat(state.estimatedRa).isGreaterThan(0.8)
+    }
+
+    @Test
+    fun `runCount advances once per call so the once-per-tick invariant is checkable`() {
+        val estimator = ContinuousStateEstimator(logger)
+        assertThat(estimator.runCount).isEqualTo(0L)
+
+        advance(estimator, risingState(0.0), 3, 1_000_000L) { risingState(it) }
+
+        assertThat(estimator.runCount).isEqualTo(3L)
+    }
+
+    @Test
+    fun `a frozen estimator is what the once-per-tick guard has to prevent`() {
+        val estimator = ContinuousStateEstimator(logger)
+
+        // Rise, then a stretch during which nothing calls the estimator at all — the production
+        // failure: 37 consecutive ticks with an identical Ra because updateAndPredict sat behind
+        // `if (gate.engage)`.
+        val (risen, now) = advance(estimator, risingState(0.0), 6, 1_000_000L) { risingState(it) }
+        val frozen = estimator.getLastRa()
+        val runsAfterRise = estimator.runCount
+
+        // Three hours pass with no call.
+        assertThat(estimator.getLastRa()).isWithin(1e-9).of(frozen)
+        assertThat(estimator.runCount).isEqualTo(runsAfterRise)
+
+        // One call, three hours later, and the decay finally applies — capped by RA_DECAY_MAX_DT_MIN
+        // so a long gap cannot wipe the state in a single step.
+        val after = estimator.updateAndPredict(quietState(risen.estimatedRa), nowMs = now + 3 * 3_600_000L)
+        assertThat(after.estimatedRa).isLessThan(frozen)
+        assertThat(after.estimatedRa).isGreaterThan(0.0)
+        assertThat(estimator.runCount).isEqualTo(runsAfterRise + 1)
     }
 
     @Test
