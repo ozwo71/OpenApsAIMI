@@ -1674,7 +1674,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val isExplicitAdvisorRun = preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
         val tdd7P = preferences.get(DoubleKey.OApsAIMITDD7)
         var tdd7Days = ctx.profile.TDD
-        if (tdd7Days == 0.0 || tdd7Days < tdd7P) tdd7Days = tdd7P
+        // `!isFinite()` first: the `tdd7Days.toFloat() != 0.0f` guards further down are TRUE for NaN,
+        // so a NaN would enter those branches and make `basalaimi` (tdd7Days / weight) and
+        // `ci` (450 / tdd7Days) NaN for the whole tick. No change for any finite value.
+        if (!tdd7Days.isFinite() || tdd7Days == 0.0 || tdd7Days < tdd7P) tdd7Days = tdd7P
 
         val originalProfile = ctx.profile.copy()
         AimiLoopTelemetry.enterPhase(AimiLoopPhase.BOOTSTRAP, hormonitorStudyExporter)
