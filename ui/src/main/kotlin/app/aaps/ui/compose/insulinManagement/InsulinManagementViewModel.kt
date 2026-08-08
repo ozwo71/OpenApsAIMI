@@ -431,15 +431,13 @@ class InsulinManagementViewModel @Inject constructor(
 
         // Validation — inhaled insulin (Afrezza) uses shorter DIA / Peak limits
         val isInhaled = state.editorTemplate?.isInhaled == true
-        val minDia = if (isInhaled) hardLimits.minDiaInhaled() else hardLimits.minDia()
-        val maxDia = if (isInhaled) hardLimits.maxDiaInhaled() else hardLimits.maxDia()
-        if (editedICfg.dia < minDia || editedICfg.dia > maxDia) {
+        val diaRange = if (isInhaled) hardLimits.diaRangeInhaled() else hardLimits.diaRange()
+        if (editedICfg.dia !in diaRange) {
             showSnackbar(rh.gs(CoreUiR.string.value_out_of_hard_limits, rh.gs(CoreUiR.string.insulin_dia), editedICfg.dia))
             return false
         }
-        val minPeak = if (isInhaled) hardLimits.minPeakInhaled() else hardLimits.minPeak()
-        val maxPeak = if (isInhaled) hardLimits.maxPeakInhaled() else hardLimits.maxPeak()
-        if (editedICfg.peak < minPeak || editedICfg.peak > maxPeak) {
+        val peakRange = if (isInhaled) hardLimits.peakRangeInhaled() else hardLimits.peakRange()
+        if (editedICfg.peak !in peakRange) {
             showSnackbar(rh.gs(CoreUiR.string.value_out_of_hard_limits, rh.gs(CoreUiR.string.insulin_peak), editedICfg.peak.toDouble()))
             return false
         }
@@ -580,20 +578,14 @@ class InsulinManagementViewModel @Inject constructor(
 
     fun diaRange(): ClosedFloatingPointRange<Double> {
         val isInhaled = uiState.value.editorTemplate?.isInhaled == true
-        return if (isInhaled) {
-            hardLimits.minDiaInhaled()..hardLimits.maxDiaInhaled()
-        } else {
-            hardLimits.minDia()..hardLimits.maxDia()
-        }
+        return if (isInhaled) hardLimits.diaRangeInhaled() else hardLimits.diaRange()
     }
 
+    /** Peak limits as a Double range, because the sliders work with Double. */
     fun peakRange(): ClosedFloatingPointRange<Double> {
         val isInhaled = uiState.value.editorTemplate?.isInhaled == true
-        return if (isInhaled) {
-            hardLimits.minPeakInhaled().toDouble()..hardLimits.maxPeakInhaled().toDouble()
-        } else {
-            hardLimits.minPeak().toDouble()..hardLimits.maxPeak().toDouble()
-        }
+        val range = if (isInhaled) hardLimits.peakRangeInhaled() else hardLimits.peakRange()
+        return range.first.toDouble()..range.last.toDouble()
     }
 
     /**
@@ -606,9 +598,8 @@ class InsulinManagementViewModel @Inject constructor(
     private fun resolveEditorTemplate(iCfg: ICfg): InsulinType {
         val byPeak = InsulinType.fromPeak(iCfg.insulinPeakTime)
         if (byPeak.isInhaled) return byPeak
-        val peakOk = iCfg.peak in hardLimits.minPeakInhaled()..hardLimits.maxPeakInhaled()
-        val diaLooksInhaled = iCfg.dia !in hardLimits.minDia()..hardLimits.maxDia() &&
-            iCfg.dia in hardLimits.minDiaInhaled()..hardLimits.maxDiaInhaled()
+        val peakOk = iCfg.peak in hardLimits.peakRangeInhaled()
+        val diaLooksInhaled = iCfg.dia !in hardLimits.diaRange() && iCfg.dia in hardLimits.diaRangeInhaled()
         if (peakOk && diaLooksInhaled) return InsulinType.OREF_INHALED_AFREZZA
         return byPeak
     }

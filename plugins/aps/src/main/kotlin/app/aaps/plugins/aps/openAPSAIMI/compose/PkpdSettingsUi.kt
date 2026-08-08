@@ -47,13 +47,13 @@ import app.aaps.core.keys.valueResId
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.core.ui.compose.SliderWithButtons
+import app.aaps.core.data.format.NumberFormat
 import app.aaps.core.ui.compose.preference.AdaptiveDoublePreferenceItem
 import app.aaps.core.ui.compose.preference.AdaptiveSwitchPreferenceItem
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiRecommendation
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain
-import java.text.DecimalFormat
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -735,7 +735,7 @@ fun PkpdReactiveDoubleSlider(
     val decimalPlaces = unitType.decimalPlaces()
     val step = unitType.step()
     val valueFormatResId = unitType.valueResId()
-    val valueFormat = if (decimalPlaces == 0) DecimalFormat("0") else DecimalFormat("0.${"0".repeat(decimalPlaces)}")
+    val valueFormat = NumberFormat.withDecimals(decimalPlaces)
     val unitLabelResId = unitType.unitLabelResId()
     val unitLabel = unitLabelResId?.takeIf { it != 0 }?.let { stringResource(it) } ?: ""
 

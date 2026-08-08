@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import app.aaps.core.data.format.NumberFormat
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.UnitType
 import app.aaps.core.keys.decimalPlaces
@@ -28,7 +29,6 @@ import app.aaps.core.keys.valueResId
 import kotlin.math.abs
 import app.aaps.core.ui.R
 import app.aaps.core.ui.compose.LocalPreferences
-import java.text.DecimalFormat
 
 /**
  * Composable double preference for use inside card sections.
@@ -85,12 +85,7 @@ fun AdaptiveDoublePreferenceItem(
     val unitLabelResId = unitType.unitLabelResId()
     val unitLabel = unitLabelResId?.takeIf { it != 0 }?.let { stringResource(it) } ?: unit
 
-    val valueFormat = when (decimalPlaces) {
-        0    -> DecimalFormat("0")
-        1    -> DecimalFormat("0.0")
-        2    -> DecimalFormat("0.00")
-        else -> DecimalFormat("0.000")
-    }
+    val valueFormat = NumberFormat.withDecimals(decimalPlaces)
 
     // Get summary if available
     val summaryResId = doubleKey.summaryResId

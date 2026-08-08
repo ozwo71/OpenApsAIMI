@@ -1,6 +1,7 @@
 package app.aaps.core.objects.profile
 
 import app.aaps.core.data.configuration.Constants
+import app.aaps.core.data.format.NumberFormat
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.ICfg
 import app.aaps.core.data.model.IDs
@@ -34,7 +35,6 @@ import app.aaps.core.ui.R
 import app.aaps.core.utils.MidnightUtils
 import org.json.JSONArray
 import org.json.JSONObject
-import java.text.DecimalFormat
 import java.util.TimeZone
 
 sealed class ProfileSealed(
@@ -178,7 +178,7 @@ sealed class ProfileSealed(
         val validityCheck = Profile.ValidityCheck()
         for (basal in basalBlocks) {
             val basalAmount = basal.amount * percentage / 100.0
-            if (!hardLimits.isInRange(basalAmount, 0.01, hardLimits.maxBasal())) {
+            if (basalAmount !in 0.01..hardLimits.maxBasal()) {
                 validityCheck.isValid = false
                 validityCheck.reasons.add(rh.gs(R.string.value_out_of_hard_limits, rh.gs(R.string.basal_value), basalAmount))
                 break
@@ -190,18 +190,16 @@ sealed class ProfileSealed(
             // edited peaks that no longer match OREF_INHALED_AFREZZA exactly when DIA is still
             // in the inhaled range (outside regular pump-insulin DIA limits).
             val byPeakInhaled = InsulinType.fromPeak(it.insulinPeakTime).isInhaled
-            val diaLooksInhaled = !hardLimits.isInRange(it.dia, hardLimits.minDia(), hardLimits.maxDia()) &&
-                hardLimits.isInRange(it.dia, hardLimits.minDiaInhaled(), hardLimits.maxDiaInhaled())
+            val diaLooksInhaled = it.dia !in hardLimits.diaRange() && it.dia in hardLimits.diaRangeInhaled()
             val isInhaled = byPeakInhaled || diaLooksInhaled
-            val minDia = if (isInhaled) hardLimits.minDiaInhaled() else hardLimits.minDia()
-            val maxDia = if (isInhaled) hardLimits.maxDiaInhaled() else hardLimits.maxDia()
-            if (!hardLimits.isInRange(it.dia, minDia, maxDia)) {
+            val diaRange = if (isInhaled) hardLimits.diaRangeInhaled() else hardLimits.diaRange()
+            if (it.dia !in diaRange) {
                 validityCheck.isValid = false
                 validityCheck.reasons.add(rh.gs(R.string.value_out_of_hard_limits, rh.gs(R.string.profile_dia), it.dia))
             }
         }
         for (ic in icBlocks)
-            if (!hardLimits.isInRange(ic.amount * 100.0 / percentage, hardLimits.minIC(), hardLimits.maxIC())) {
+            if (ic.amount * 100.0 / percentage !in hardLimits.icRange()) {
                 validityCheck.isValid = false
                 validityCheck.reasons.add(
                     rh.gs(
@@ -213,7 +211,7 @@ sealed class ProfileSealed(
                 break
             }
         for (isf in isfBlocks)
-            if (!hardLimits.isInRange(toMgdl(isf.amount * 100.0 / percentage, units), HardLimits.MIN_ISF, HardLimits.MAX_ISF)) {
+            if (toMgdl(isf.amount * 100.0 / percentage, units) !in HardLimits.LIMIT_ISF) {
                 validityCheck.isValid = false
                 validityCheck.reasons.add(
                     rh.gs(
@@ -225,22 +223,12 @@ sealed class ProfileSealed(
                 break
             }
         for (target in targetBlocks) {
-            if (!hardLimits.isInRange(
-                    toMgdl(target.lowTarget, units),
-                    HardLimits.LIMIT_MIN_BG[0],
-                    HardLimits.LIMIT_MIN_BG[1]
-                )
-            ) {
+            if (toMgdl(target.lowTarget, units) !in HardLimits.LIMIT_MIN_BG) {
                 validityCheck.isValid = false
                 validityCheck.reasons.add(rh.gs(R.string.value_out_of_hard_limits, rh.gs(R.string.profile_low_target), target.lowTarget))
                 break
             }
-            if (!hardLimits.isInRange(
-                    toMgdl(target.highTarget, units),
-                    HardLimits.LIMIT_MAX_BG[0],
-                    HardLimits.LIMIT_MAX_BG[1]
-                )
-            ) {
+            if (toMgdl(target.highTarget, units) !in HardLimits.LIMIT_MAX_BG) {
                 validityCheck.isValid = false
                 validityCheck.reasons.add(rh.gs(R.string.value_out_of_hard_limits, rh.gs(R.string.profile_high_target), target.highTarget))
                 break
@@ -375,15 +363,15 @@ sealed class ProfileSealed(
     override fun getTargetHighMgdlTimeFromMidnight(timeAsSeconds: Int): Double = toMgdl(targetBlocks.highTargetBlockValueBySeconds(timeAsSeconds, timeshift), units)
 
     override fun getIcList(rh: ResourceHelper, dateUtil: DateUtil): String =
-        getValuesList(icBlocks, 100.0 / percentage, DecimalFormat("0.0"), rh.gs(R.string.profile_carbs_per_unit), dateUtil)
+        getValuesList(icBlocks, 100.0 / percentage, NumberFormat.DECIMAL_1, rh.gs(R.string.profile_carbs_per_unit), dateUtil)
 
     override fun getIsfList(rh: ResourceHelper, dateUtil: DateUtil): String =
-        getValuesList(isfBlocks, 100.0 / percentage, DecimalFormat("0.0"), rh.gs(if (units == GlucoseUnit.MGDL) R.string.profile_isf_units_mgdl else R.string.profile_isf_units_mmol), dateUtil)
+        getValuesList(isfBlocks, 100.0 / percentage, NumberFormat.DECIMAL_1, rh.gs(if (units == GlucoseUnit.MGDL) R.string.profile_isf_units_mgdl else R.string.profile_isf_units_mmol), dateUtil)
 
     override fun getBasalList(rh: ResourceHelper, dateUtil: DateUtil): String =
-        getValuesList(basalBlocks, percentage / 100.0, DecimalFormat("0.00"), rh.gs(R.string.profile_ins_units_per_hour), dateUtil)
+        getValuesList(basalBlocks, percentage / 100.0, NumberFormat.DECIMAL_2, rh.gs(R.string.profile_ins_units_per_hour), dateUtil)
 
-    override fun getTargetList(rh: ResourceHelper, dateUtil: DateUtil): String = getTargetValuesList(targetBlocks, DecimalFormat("0.0"), units.displayLabel, dateUtil)
+    override fun getTargetList(rh: ResourceHelper, dateUtil: DateUtil): String = getTargetValuesList(targetBlocks, NumberFormat.DECIMAL_1, units.displayLabel, dateUtil)
 
     override fun convertToNonCustomizedProfile(dateUtil: DateUtil): PureProfile =
         PureProfile(
@@ -408,7 +396,7 @@ sealed class ProfileSealed(
         isfBlocks.forEach {
             sens.put(
                 JSONObject()
-                    .put("time", DecimalFormat("00").format(elapsedHours) + ":00")
+                    .put("time", NumberFormat.INTEGER_2_DIGITS.format(elapsedHours) + ":00")
                     .put("timeAsSeconds", T.hours(elapsedHours).secs())
                     .put("value", getIsfTimeFromMidnight(T.hours(elapsedHours).secs().toInt()))
             )
@@ -420,7 +408,7 @@ sealed class ProfileSealed(
         icBlocks.forEach {
             carbratio.put(
                 JSONObject()
-                    .put("time", DecimalFormat("00").format(elapsedHours) + ":00")
+                    .put("time", NumberFormat.INTEGER_2_DIGITS.format(elapsedHours) + ":00")
                     .put("timeAsSeconds", T.hours(elapsedHours).secs())
                     .put("value", getIcTimeFromMidnight(T.hours(elapsedHours).secs().toInt()))
             )
@@ -432,7 +420,7 @@ sealed class ProfileSealed(
         basalBlocks.forEach {
             basal.put(
                 JSONObject()
-                    .put("time", DecimalFormat("00").format(elapsedHours) + ":00")
+                    .put("time", NumberFormat.INTEGER_2_DIGITS.format(elapsedHours) + ":00")
                     .put("timeAsSeconds", T.hours(elapsedHours).secs())
                     .put("value", getBasalTimeFromMidnight(T.hours(elapsedHours).secs().toInt()))
             )
@@ -445,13 +433,13 @@ sealed class ProfileSealed(
         targetBlocks.forEach {
             targetLow.put(
                 JSONObject()
-                    .put("time", DecimalFormat("00").format(elapsedHours) + ":00")
+                    .put("time", NumberFormat.INTEGER_2_DIGITS.format(elapsedHours) + ":00")
                     .put("timeAsSeconds", T.hours(elapsedHours).secs())
                     .put("value", getTargetLowTimeFromMidnight(T.hours(elapsedHours).secs().toInt()))
             )
             targetHigh.put(
                 JSONObject()
-                    .put("time", DecimalFormat("00").format(elapsedHours) + ":00")
+                    .put("time", NumberFormat.INTEGER_2_DIGITS.format(elapsedHours) + ":00")
                     .put("timeAsSeconds", T.hours(elapsedHours).secs())
                     .put("value", getTargetHighTimeFromMidnight(T.hours(elapsedHours).secs().toInt()))
             )
@@ -537,7 +525,7 @@ sealed class ProfileSealed(
             )
         else error("Conversion allowed only from EffectiveProfile")
 
-    private fun getValuesList(array: List<Block>, multiplier: Double, format: DecimalFormat, units: String, dateUtil: DateUtil): String =
+    private fun getValuesList(array: List<Block>, multiplier: Double, format: NumberFormat, units: String, dateUtil: DateUtil): String =
         StringBuilder().also { sb ->
             var elapsedSec = 0
             array.shiftBlock(multiplier, timeshift).forEach {
@@ -550,7 +538,7 @@ sealed class ProfileSealed(
             }
         }.toString()
 
-    private fun getTargetValuesList(array: List<TargetBlock>, format: DecimalFormat, units: String, dateUtil: DateUtil): String =
+    private fun getTargetValuesList(array: List<TargetBlock>, format: NumberFormat, units: String, dateUtil: DateUtil): String =
         StringBuilder().also { sb ->
             var elapsedSec = 0
             array.shiftTargetBlock(timeshift).forEach {
@@ -564,10 +552,6 @@ sealed class ProfileSealed(
                 elapsedSec += T.msecs(it.duration).secs().toInt()
             }
         }.toString()
-
-    fun isInProgress(dateUtil: DateUtil): Boolean =
-        dateUtil.now() in timestamp..timestamp + (duration ?: 0L)
-
     private fun toMgdl(value: Double, units: GlucoseUnit): Double =
         if (units == GlucoseUnit.MGDL) value else value * Constants.MMOLL_TO_MGDL
 }

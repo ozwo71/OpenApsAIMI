@@ -141,10 +141,10 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.util.Collections.emptyList
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Provider
 import kotlin.reflect.KClass
+import kotlin.time.Duration.Companion.milliseconds
 
 @Reusable
 class PersistenceLayerImpl @Inject constructor(
@@ -1653,7 +1653,7 @@ class PersistenceLayerImpl @Inject constructor(
                         values = listOf(
                             ValueWithUnit.Timestamp(it.timestamp),
                             if (it.isAbsolute) ValueWithUnit.UnitPerHour(it.rate) else ValueWithUnit.Percent(it.rate.toInt()),
-                            ValueWithUnit.Minute(TimeUnit.MILLISECONDS.toMinutes(it.duration).toInt())
+                            ValueWithUnit.Minute(it.duration.milliseconds.inWholeMinutes.toInt())
                         )
                     )
                 )
@@ -1670,7 +1670,7 @@ class PersistenceLayerImpl @Inject constructor(
                         values = listOf(
                             ValueWithUnit.Timestamp(it.timestamp),
                             if (it.isAbsolute) ValueWithUnit.UnitPerHour(it.rate) else ValueWithUnit.Percent(it.rate.toInt()),
-                            ValueWithUnit.Minute(TimeUnit.MILLISECONDS.toMinutes(it.duration).toInt())
+                            ValueWithUnit.Minute(it.duration.milliseconds.inWholeMinutes.toInt())
                         )
                     )
                 )
@@ -1687,7 +1687,7 @@ class PersistenceLayerImpl @Inject constructor(
                         values = listOf(
                             ValueWithUnit.Timestamp(it.timestamp),
                             if (it.isAbsolute) ValueWithUnit.UnitPerHour(it.rate) else ValueWithUnit.Percent(it.rate.toInt()),
-                            ValueWithUnit.Minute(TimeUnit.MILLISECONDS.toMinutes(it.duration).toInt())
+                            ValueWithUnit.Minute(it.duration.milliseconds.inWholeMinutes.toInt())
                         )
                     )
                 )
@@ -1888,7 +1888,7 @@ class PersistenceLayerImpl @Inject constructor(
                             ValueWithUnit.Timestamp(it.timestamp),
                             ValueWithUnit.Insulin(it.amount),
                             ValueWithUnit.UnitPerHour(it.rate),
-                            ValueWithUnit.Minute(TimeUnit.MILLISECONDS.toMinutes(it.duration).toInt())
+                            ValueWithUnit.Minute(it.duration.milliseconds.inWholeMinutes.toInt())
                         )
                     )
                 )
@@ -1906,7 +1906,7 @@ class PersistenceLayerImpl @Inject constructor(
                             ValueWithUnit.Timestamp(it.timestamp),
                             ValueWithUnit.Insulin(it.amount),
                             ValueWithUnit.UnitPerHour(it.rate),
-                            ValueWithUnit.Minute(TimeUnit.MILLISECONDS.toMinutes(it.duration).toInt())
+                            ValueWithUnit.Minute(it.duration.milliseconds.inWholeMinutes.toInt())
                         )
                     )
                 )
@@ -1924,7 +1924,7 @@ class PersistenceLayerImpl @Inject constructor(
                             ValueWithUnit.Timestamp(it.timestamp),
                             ValueWithUnit.Insulin(it.amount),
                             ValueWithUnit.UnitPerHour(it.rate),
-                            ValueWithUnit.Minute(TimeUnit.MILLISECONDS.toMinutes(it.duration).toInt())
+                            ValueWithUnit.Minute(it.duration.milliseconds.inWholeMinutes.toInt())
                         )
                     )
                 )
@@ -2047,7 +2047,7 @@ class PersistenceLayerImpl @Inject constructor(
                             ValueWithUnit.TETTReason(tt.reason.fromDb()),
                             ValueWithUnit.fromGlucoseUnit(tt.lowTarget, GlucoseUnit.MGDL),
                             ValueWithUnit.fromGlucoseUnit(tt.highTarget, GlucoseUnit.MGDL).takeIf { tt.lowTarget != tt.highTarget },
-                            ValueWithUnit.Minute(TimeUnit.MILLISECONDS.toMinutes(tt.duration).toInt())
+                            ValueWithUnit.Minute(tt.duration.milliseconds.inWholeMinutes.toInt())
                         )
                     )
                 )
@@ -2065,7 +2065,7 @@ class PersistenceLayerImpl @Inject constructor(
                             ValueWithUnit.TETTReason(tt.reason.fromDb()),
                             ValueWithUnit.Mgdl(tt.lowTarget),
                             ValueWithUnit.Mgdl(tt.highTarget).takeIf { tt.lowTarget != tt.highTarget },
-                            ValueWithUnit.Minute(TimeUnit.MILLISECONDS.toMinutes(tt.duration).toInt())
+                            ValueWithUnit.Minute(tt.duration.milliseconds.inWholeMinutes.toInt())
                         )
                     )
                 )
@@ -2083,7 +2083,7 @@ class PersistenceLayerImpl @Inject constructor(
                             ValueWithUnit.TETTReason(tt.reason.fromDb()),
                             ValueWithUnit.Mgdl(tt.lowTarget),
                             ValueWithUnit.Mgdl(tt.highTarget).takeIf { tt.lowTarget != tt.highTarget },
-                            ValueWithUnit.Minute(TimeUnit.MILLISECONDS.toMinutes(tt.duration).toInt())
+                            ValueWithUnit.Minute(tt.duration.milliseconds.inWholeMinutes.toInt())
                         )
                     )
                 )

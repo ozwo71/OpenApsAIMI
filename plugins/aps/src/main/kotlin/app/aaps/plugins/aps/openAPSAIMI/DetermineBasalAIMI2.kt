@@ -11311,16 +11311,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // Rounds value to 'digits' decimal places
     // different for negative numbers fun round(value: Double, digits: Int): Double = BigDecimal(value).setScale(digits, RoundingMode.HALF_EVEN).toDouble()
     fun round(value: Double, digits: Int): Double {
-        if (value.isNaN()) return Double.NaN
+        // Pass NaN AND ±Infinity through untouched. Math.round saturates at Long.MAX_VALUE, so without
+        // this an infinite value would come back as a normal looking ~9.2e18/scale and every isFinite()
+        // guard downstream would be blind to it - the guards all read values that went through here.
+        if (!value.isFinite()) return value
         val scale = 10.0.pow(digits.toDouble())
         return Math.round(value * scale) / scale
     }
 
     private fun Double.withoutZeros(): String = DecimalFormat("0.##").format(this)
     fun round(value: Double): Int {
-        if (value.isNaN()) {
-            // Keep the fallback observable by PersistenceLayerImpl's non-finite APS-result diagnostic.
-            consoleError.add("round(): non-finite value substituted with 0 (roundNaN=NaN)")
+        // Crash backstop: roundToInt() throws on NaN and saturates at Int.MAX_VALUE on ±Infinity.
+        // Substitute 0, but keep the fallback observable by PersistenceLayerImpl's non-finite
+        // APS-result diagnostic, so laundering here does not hide the real bug.
+        if (!value.isFinite()) {
+            consoleError.add("round(): non-finite value substituted with 0 (roundNonFinite=$value)")
             return 0
         }
         val scale = 10.0.pow(2.0)
@@ -11554,6 +11559,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         allowPartialSafetyTbr: Boolean = false,
         mealContext: MealSafetyContext? = null,
     ): RT {
+        // Upstream parity (`DetermineBasalSMB.setTempBasal`, non-finite hardening merged 2026-08-08):
+        // a non-finite rate slips through every clamp below, because every comparison with NaN is
+        // false, and then lands in rT.rate, which DetermineBasalResult turns into a real pump command.
+        // Do not invent a dose out of a broken value: fall back to the profile basal. Zero would be
+        // worse, because that actively withholds basal for 30 minutes. The interpolated value leaves a
+        // literal `setTempBasalRate=NaN` token in consoleError, which is what the
+        // `PersistenceLayerImpl` non-finite tripwire scans for.
+        val requestedRate = if (_rate.isFinite()) _rate else {
+            consoleError.add("setTempBasal: setTempBasalRate=$_rate is not finite, using profile basal instead")
+            profile.current_basal
+        }
         val lgsPref = profile.lgsThreshold
         val hypoGuard = HypoThresholdMath.computeHypoThreshold(minBg = profile.min_bg, lgsThreshold = lgsPref)
         val floor = PredictiveHypoEvaluator.floor(hypoGuard)
@@ -11576,7 +11592,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     return rT
                 }
                 isMealMode && bg > hypoGuard -> {
-                    val rate = _rate.coerceAtLeast(0.0)
+                    val rate = requestedRate.coerceAtLeast(0.0)
                     rT.reason.append(
                         context.getString(
                             R.string.manual_basal_override,
@@ -11599,7 +11615,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
 
-        if (!(allowPartialSafetyTbr && _rate > 0.0)) {
+        if (!(allowPartialSafetyTbr && requestedRate > 0.0)) {
             val (hypoPredForLgs, hypoEventualForLgs) = sanitizedHypoGuardPredictedEventual(
                 rT = rT,
                 predictedBg = predictedBg.toDouble(),
@@ -11647,7 +11663,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 1) Mode manuel : on pose exactement la valeur demandée (toujours bornée ≥ 0)
         if (forceExact) {
-            val rate = _rate.coerceAtLeast(0.0)
+            val rate = requestedRate.coerceAtLeast(0.0)
             rT.reason.append(
                 context.getString(
                     R.string.manual_basal_override,
@@ -11688,7 +11704,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         
         // Use the new progressive Sigmoid/PD controller instead of the old fixed 1.2x limit
         val dynamicState = dynamicBasalController.calculateDynamicRate(
-            currentRate = _rate,
+            currentRate = requestedRate,
             bg = bgNow,
             targetBg = profile.target_bg.toDouble(),
             delta = delta.toDouble(),

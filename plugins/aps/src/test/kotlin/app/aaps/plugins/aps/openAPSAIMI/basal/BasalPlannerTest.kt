@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.basal
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.pump.PumpInsulin
+import app.aaps.core.data.format.NumberFormat
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.plugins.aps.openAPSAIMI.AIMIAdaptiveBasal
 import app.aaps.plugins.aps.openAPSAIMI.model.BgSnapshot
@@ -52,7 +53,7 @@ class BasalPlannerTest {
         override fun toPumpSupportedBolus(value: Double, bolusStep: Double): String = to2Decimal(value)
         override fun toPumpSupportedBolusWithUnits(value: Double, bolusStep: Double): String = to2Decimal(value)
         override fun toPumpSupportedBolusWithUnits(value: PumpInsulin, bolusStep: Double): String = to2Decimal(value.cU)
-        override fun pumpSupportedBolusFormat(bolusStep: Double): java.text.DecimalFormat = java.text.DecimalFormat("0.00")
+        override fun pumpSupportedBolusFormat(bolusStep: Double): NumberFormat = NumberFormat(minFractionDigits = 2)
     }
 
     private val logger = DummyLogger()

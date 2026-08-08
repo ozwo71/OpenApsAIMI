@@ -57,6 +57,7 @@ import org.mockito.kotlin.whenever
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
+import kotlin.time.Duration.Companion.milliseconds
 
 class LoopHubTest : TestBase() {
 
@@ -228,7 +229,7 @@ class LoopHubTest : TestBase() {
     @Test
     fun testTemporaryBasalAbsolute() = runTest {
         val profile = mock<EffectiveProfile> {
-            onGeneric { getBasal(clock.millis()) }.thenReturn(2.0)
+            on { getBasal(clock.millis()) }.thenReturn(2.0)
         }
         whenever(profileFunction.getProfile()).thenReturn(profile)
         val tb = mock<TB> {
@@ -290,7 +291,7 @@ class LoopHubTest : TestBase() {
     @Test
     fun testPostCarbs() {
         val constraint = mock<Constraint<Int>> {
-            onGeneric { value() }.thenReturn(99)
+            on { value() }.thenReturn(99)
         }
         whenever(constraints.getMaxCarbsAllowed()).thenReturn(constraint)
         loopHub.postCarbs(100)
@@ -318,7 +319,7 @@ class LoopHubTest : TestBase() {
         loopHub.storeHeartRate(
             samplingStart, samplingEnd, 101, "Test Device"
         )
-        kotlinx.coroutines.delay(100) // Give time for GlobalScope.launch to complete
+        kotlinx.coroutines.delay(100.milliseconds) // Give time for GlobalScope.launch to complete
         verify(persistenceLayer).insertOrUpdateHeartRates(listOf(hr))
     }
 

@@ -4,7 +4,7 @@ Purpose: enforce repeatable quality gates to prevent freezes and functional regr
 
 Use this file for every merge from `dev` and every release candidate.
 
-**Latest merge log:** [MERGE_DEV_2026-08-03.md](MERGE_DEV_2026-08-03.md) (`dev` @ `fa2d2c78a5` → `feature/dexcom-oneplus-native`). Previous: [MERGE_DEV_2026-07-31.md](MERGE_DEV_2026-07-31.md) (`milos/dev` @ `88d31b816d` → `feature/dexcom-oneplus-native`), [MERGE_DEV_2026-07-16.md](MERGE_DEV_2026-07-16.md) (dev @ `638f23dfab` → `dev_OAPSAIMI_mergeDEV`).
+**Latest merge log:** [MERGE_DEV_2026-08-08.md](MERGE_DEV_2026-08-08.md) (`dev` @ `7fc8205e9a` → `dev_OAPSAIMI`). Previous: [MERGE_DEV_2026-08-03.md](MERGE_DEV_2026-08-03.md) (`dev` @ `fa2d2c78a5` → `feature/dexcom-oneplus-native`), [MERGE_DEV_2026-07-31.md](MERGE_DEV_2026-07-31.md) (`milos/dev` @ `88d31b816d` → `feature/dexcom-oneplus-native`).
 
 ---
 

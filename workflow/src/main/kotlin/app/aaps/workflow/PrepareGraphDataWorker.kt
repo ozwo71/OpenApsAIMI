@@ -8,6 +8,7 @@ import androidx.work.workDataOf
 import app.aaps.core.data.aps.SMBDefaults
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.iob.InMemoryGlucoseValue
+import app.aaps.core.data.model.TE
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.aps.AutosensData
 import app.aaps.core.interfaces.aps.AutosensDataStore
@@ -281,6 +282,11 @@ class PrepareGraphDataWorker @AssistedInject constructor(
                     "AUTOSENSDATA warm-start ${data.reason}: skipping buckets 0..${oldestBucketIndex - 1} of ${bucketedData.size}"
                 )
             }
+            // These three inputs depend only on the fixed detection start, so read them once here instead
+            // of inside detectSensitivity, which is called for every bucketed data point in the loop below.
+            val sensitivityProfile = profileFunction.getProfile()
+            val siteChanges = persistenceLayer.getTherapyEventDataFromTime(oldestTimeWithData, TE.Type.CANNULA_CHANGE, true)
+            val profileSwitches = persistenceLayer.getProfileSwitchesFromTime(oldestTimeWithData, true)
             // start from oldest to be able sub cob
             for (i in bucketedData.size - 4 downTo oldestBucketIndex) {
                 data.signals.emitProgress(CalculationWorkflow.ProgressData.IOB_COB_OREF, 100 - (100.0 * i / bucketedData.size).toInt())
@@ -461,7 +467,7 @@ class PrepareGraphDataWorker @AssistedInject constructor(
                 aapsLogger.debug(LTag.AUTOSENS) {
                     "Running detectSensitivity from: " + dateUtil.dateAndTimeString(oldestTimeWithData) + " to: " + dateUtil.dateAndTimeString(bgTime) + " lastDataTime:" + ads.lastDataTime(dateUtil)
                 }
-                val sensitivity = activePlugin.activeSensitivity.detectSensitivity(ads, oldestTimeWithData, bgTime)
+                val sensitivity = activePlugin.activeSensitivity.detectSensitivity(ads, oldestTimeWithData, bgTime, sensitivityProfile, siteChanges, profileSwitches)
                 aapsLogger.debug(LTag.AUTOSENS, "Sensitivity result: $sensitivity")
                 autosensData.autosensResult = sensitivity
                 aapsLogger.debug(LTag.AUTOSENS) { autosensData.toString() }
@@ -507,6 +513,11 @@ class PrepareGraphDataWorker @AssistedInject constructor(
                     "AUTOSENSDATA warm-start ${data.reason}: skipping buckets 0..${oldestBucketIndexOref - 1} of ${bucketedData.size}"
                 )
             }
+            // These three inputs depend only on the fixed detection start, so read them once here instead
+            // of inside detectSensitivity, which is called for every bucketed data point in the loop below.
+            val sensitivityProfile = profileFunction.getProfile()
+            val siteChanges = persistenceLayer.getTherapyEventDataFromTime(oldestTimeWithData, TE.Type.CANNULA_CHANGE, true)
+            val profileSwitches = persistenceLayer.getProfileSwitchesFromTime(oldestTimeWithData, true)
             // start from oldest to be able to sub cob
             for (i in bucketedData.size - 4 downTo oldestBucketIndexOref) {
                 data.signals.emitProgress(CalculationWorkflow.ProgressData.IOB_COB_OREF, 100 - (100.0 * i / bucketedData.size).toInt())
@@ -647,7 +658,7 @@ class PrepareGraphDataWorker @AssistedInject constructor(
                 aapsLogger.debug(LTag.AUTOSENS) {
                     "Running detectSensitivity from: ${dateUtil.dateAndTimeString(oldestTimeWithData)} to: ${dateUtil.dateAndTimeString(bgTime)} lastDataTime:${ads.lastDataTime(dateUtil)}"
                 }
-                val sensitivity = activePlugin.activeSensitivity.detectSensitivity(ads, oldestTimeWithData, bgTime)
+                val sensitivity = activePlugin.activeSensitivity.detectSensitivity(ads, oldestTimeWithData, bgTime, sensitivityProfile, siteChanges, profileSwitches)
                 aapsLogger.debug(LTag.AUTOSENS) { "Sensitivity result: $sensitivity" }
                 autosensData.autosensResult = sensitivity
                 aapsLogger.debug(LTag.AUTOSENS, autosensData.toString())

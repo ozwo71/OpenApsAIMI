@@ -59,7 +59,7 @@ Source : `patches/afrezza-combined.patch` (~36 fichiers, ~947 lignes). Base vér
 | Changement | Détail |
 |------------|--------|
 | `InsulinType.OREF_INHALED_AFREZZA` | value=6, peak=40 min, DIA=2,5 h, `isInhaled=true` |
-| `HardLimits` | `MIN_DIA_INHALED` 1,5 h, `MAX_DIA_INHALED` 4 h — **DIA pompe inchangé** (min 5 h) |
+| `HardLimits` | `LIMIT_DIA_INHALED` 1,5–4 h — **DIA pompe inchangé** (voir `LIMIT_DIA`) |
 | `InsulinImpl.insulinTemplateList()` | Ajout template Afrezza |
 | Tests `ICfgAfrezzaIobTest` | 9 tests — courbe oref bilinéaire à tp=40, td=150 min |
 
@@ -136,6 +136,15 @@ if (editedICfg.dia < hardLimits.minDia() || editedICfg.dia > hardLimits.maxDia()
 - brancher `saveCurrentInsulin()` + `diaRange()` sur `editorTemplate?.isInhaled`.
 
 **À traiter explicitement lors du port sur OpenApsAIMI** (même si upstream merge la PR telle quelle).
+
+> **Mise à jour 2026-08-08 (merge `dev`).** La lacune est comblée depuis longtemps sur le fork :
+> `InsulinManagementViewModel.saveCurrentInsulin()`, `diaRange()`, `peakRange()` et
+> `resolveEditorTemplate()` branchent bien sur `editorTemplate?.isInhaled`.
+> L'API `HardLimits` a par ailleurs été remplacée en amont par des plages :
+> `minDia()` / `maxDia()` → `diaRange()`, `minPeak()` / `maxPeak()` → `peakRange()`,
+> `minIC()` / `maxIC()` → `icRange()`. Les variantes inhalées propres au fork suivent la même forme :
+> `diaRangeInhaled()` et `peakRangeInhaled()` (constantes `LIMIT_DIA_INHALED` et `LIMIT_PEAK_INHALED`).
+> Les extraits de code ci-dessus gardent les anciens noms parce qu'ils décrivent l'état historique du patch.
 
 ---
 

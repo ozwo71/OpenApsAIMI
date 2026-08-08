@@ -96,6 +96,29 @@ Reference: [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS-E
   `calibratedOrValue`, dashboard skin, ML/physio manifest, `KeepAliveWorker runVacuum=false`.
 - Log: [MERGE_DEV_2026-07-16.md](MERGE_DEV_2026-07-16.md).
 
+### Merge `dev` → `dev_OAPSAIMI` (2026-08-08)
+
+- Upstream `dev` at `7fc8205e9a` (24 commits since `fa2d2c78a5`: APS non-finite hardening in
+  SMB/AutoISF/AMA, `HardLimits` array→map/range API, `Constants` renames + ranges, new
+  `core:data` `NumberFormat` replacing `DecimalFormat` in API signatures, `Sensitivity.detectSensitivity`
+  extra parameters, profile sync `ProfileRepository.reset()`, `TimeUnit`→`kotlin.time.Duration`).
+- **No upstream change to Eversense, `SourceSensor`, DI/plugin registration or `settings.gradle`** —
+  constraint satisfied without re-application.
+- **Conflicts (10, none Eversense, all combine):** `MainApp.kt` (fork `maintainDatabaseIfDue()` kept,
+  upstream `profileRepository.reset()` added, upstream `vacuumDatabaseIfDue()` refused),
+  `Constants.kt` (fork 300 % profile switch kept), `HardLimits.kt` + `HardLimitsImpl.kt` +
+  `HardLimitsMock.kt` (fork DIA/ISF widenings and inhaled-insulin limits re-expressed as ranges),
+  `ProfileSealed.kt` + `InsulinManagementViewModel.kt` (fork Afrezza heuristics on the new API),
+  `AdaptiveDoublePreference.kt`, `StepCountListener.kt` (fork `synchronized`),
+  `PrepareGraphDataWorker.kt` (fork warm-start + upstream hoisted sensitivity inputs).
+- **AIMI parity ported:** non-finite `round()` guards and the `setTempBasal` non-finite-rate fallback
+  into `DetermineBasalAIMI2`; the whole `HardLimits` range API into `OpenAPSAIMIPlugin`.
+- **Eversense / ONE+ / fork preserved:** verified by an invariant-baseline diff that is **byte-identical**
+  before and after the merge (`:plugins:eversense` + E3/365, `:plugins:dexcom_oneplus` + libkeks,
+  AIMI/hormonitor, adaptive `calibratedOrValue`, dashboard skin switch, ML/physio manifest,
+  `KeepAliveWorker runVacuum=false`, notification-reader v3).
+- Log: [MERGE_DEV_2026-08-08.md](MERGE_DEV_2026-08-08.md).
+
 ### Merge `dev` → `feature/dexcom-oneplus-native` (2026-08-03)
 
 - Upstream `dev` at `fa2d2c78a5` (45 commits since `88d31b816d`: alarms refactor — `USE_FULL_SCREEN_INTENT`
