@@ -83,6 +83,15 @@ class BasalNeuralLearner @Inject constructor(
         val sensorNoise: Double,
         /** Min BG across short prediction curves at this tick (mg/dL); null if unavailable. */
         val shortMinPredBg: Double? = null,
+        /**
+         * BG actually measured about [OUTCOME_HORIZON_MS] after this tick, filled in later.
+         *
+         * [bgAfter] is `rT.eventualBG`, a PKPD prediction floored at 39 mg/dL on roughly a quarter of
+         * ticks — the same artefact the CSV parser was fixed for. Counting those as hypoglycaemia
+         * biased governance towards HOLD_CONSERVATIVE, which suppresses basal learning. Governance now
+         * scores realised outcomes only; a sample with no realised value is not counted at all.
+         */
+        var realisedBgAfter: Double? = null,
     )
 
     private var internalAggressivenessFactor = 1.0 // Heuristic fallback for T3C
@@ -323,6 +332,7 @@ class BasalNeuralLearner @Inject constructor(
         val iob = if (iobUnits.isFinite()) iobUnits else 0.0
         val d = if (deltaMgDl.isFinite()) deltaMgDl else (bgAfter - bgBefore)
         val predMin = shortMinPredBg?.takeIf { it.isFinite() }
+        fillRealisedOutcomes(nowMs = System.currentTimeMillis(), observedBg = bgBefore)
         governanceWindow.addFirst(
             LearningSample(
                 timestamp = System.currentTimeMillis(),
@@ -480,16 +490,37 @@ class BasalNeuralLearner @Inject constructor(
         )
     }
 
+    /**
+     * Fills [LearningSample.realisedBgAfter] on samples that have reached the outcome horizon.
+     *
+     * `observedBg` is the BG measured now, which is the realised outcome for a tick recorded roughly
+     * [OUTCOME_HORIZON_MS] ago. Samples outside the acceptance window are left unrealised rather than
+     * labelled with a stale reading.
+     */
+    private fun fillRealisedOutcomes(nowMs: Long, observedBg: Double) {
+        if (!observedBg.isFinite() || observedBg <= 0.0) return
+        governanceWindow.forEach { sample ->
+            if (sample.realisedBgAfter != null) return@forEach
+            val age = nowMs - sample.timestamp
+            if (age in OUTCOME_HORIZON_MIN_MS..OUTCOME_HORIZON_MAX_MS) {
+                sample.realisedBgAfter = observedBg
+            }
+        }
+    }
+
     internal fun evaluateGovernance() {
         val now = System.currentTimeMillis()
         if (governanceWindow.isEmpty()) return
 
         val p = effectiveGovernanceParams()
-        val samples = governanceWindow.toList()
+        // Realised outcomes only: a floored prediction must never be scored as a hypo.
+        val samples = governanceWindow.filter { it.realisedBgAfter != null }
+        if (samples.isEmpty()) return
         val count = samples.size
-        val hypoCount = samples.count { it.bgAfter < p.hypoBgThreshold }
-        val highCount = samples.count { it.bgAfter > 180.0 }
-        val meanAbsTargetError = samples.map { abs(it.bgAfter - it.targetBg) }.average()
+        val outcome = { s: LearningSample -> s.realisedBgAfter ?: s.bgAfter }
+        val hypoCount = samples.count { outcome(it) < p.hypoBgThreshold }
+        val highCount = samples.count { outcome(it) > 180.0 }
+        val meanAbsTargetError = samples.map { abs(outcome(it) - it.targetBg) }.average()
 
         val hypoRateUnweighted = hypoCount.toDouble() / count.toDouble()
         var weightSum = 0.0
@@ -497,7 +528,7 @@ class BasalNeuralLearner @Inject constructor(
         samples.forEach { s ->
             val w = governanceSampleWeight(s)
             weightSum += w
-            if (s.bgAfter < p.hypoBgThreshold) hypoWeightedSum += w
+            if ((s.realisedBgAfter ?: s.bgAfter) < p.hypoBgThreshold) hypoWeightedSum += w
         }
         val hypoRateGovernance = if (weightSum > 0.0) hypoWeightedSum / weightSum else hypoRateUnweighted
         val meanGovernanceWeight = if (count > 0) weightSum / count.toDouble() else 1.0
@@ -682,6 +713,10 @@ class BasalNeuralLearner @Inject constructor(
                     iobUnits = iob,
                     sensorNoise = noise,
                     shortMinPredBg = pred,
+                    // The seeded values *are* outcomes: this helper takes the BG that was actually
+                    // reached. Marking them realised keeps the test intent and the production filter
+                    // consistent.
+                    realisedBgAfter = bg,
                 )
             )
         }
@@ -716,6 +751,11 @@ class BasalNeuralLearner @Inject constructor(
     private companion object {
         const val GOVERNANCE_WINDOW_MAX = 288 // ~24h @ 5-min cadence
         const val GOVERNANCE_MIN_SAMPLES = 36 // ~3h warmup
+
+        /** Delay after which a tick's outcome is considered observable. */
+        const val OUTCOME_HORIZON_MS = 30L * 60_000
+        const val OUTCOME_HORIZON_MIN_MS = 20L * 60_000
+        const val OUTCOME_HORIZON_MAX_MS = 45L * 60_000
         const val GOVERNANCE_LOG_MIN_MS = 5 * 60 * 1000L
 
         const val GOVERNANCE_WEIGHT_NOISE_TIER3 = 0.35

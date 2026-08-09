@@ -4575,8 +4575,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * iob = 0` — a fabricated "quiet" observation is exactly the input that would drive `Ra` to zero
      * for no reason.
      *
-     * The online-learner factor is read, never updated: `learnAndUpdate` and `applyAttention` mutate
-     * state that engaged ticks depend on. See `docs/adr/0008-isf-decision-architecture.md`.
+     * Nothing here mutates learner state: `learnAndUpdate` and `applyAttention` change values that
+     * engaged ticks depend on. See `docs/adr/0008-isf-decision-architecture.md`.
      */
     private fun buildRaObservationState(
         ctx: AimiTickContext,
@@ -4593,8 +4593,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val canonicalSI = if (pkpdRuntime != null) pkpdRuntime.fusedIsf / 10000.0
         else variableSensitivity.toDouble() / 10000.0
         if (!canonicalSI.isFinite() || canonicalSI <= 0.0) return null
-        val learnedFactor = runCatching { autodriveEngine.onlineLearnerStatus().learnedSensitivityFactor }
-            .getOrNull()?.takeIf { it.isFinite() && it > 0.0 } ?: 1.0
 
         val mealSignals = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime ||
             ctx.mealData.mealCOB >= 0.1 || hasRecentMealEstimate
@@ -4605,7 +4603,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 bgVelocity = velocity,
                 iob = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
                 cob = ctx.mealData.mealCOB,
-                estimatedSI = canonicalSI * learnedFactor,
+                // No online-learner factor: the engaged path stopped applying it too, so the estimator
+                // sees the same sensitivity on every tick. See the note in AutodriveEngine.tick.
+                estimatedSI = canonicalSI,
                 patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
                 physiologicalStressMask = lastPhysioLatentState?.toAttentionMask() ?: DoubleArray(0),
                 hour = hourOfDay,

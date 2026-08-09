@@ -1,10 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.autodrive.learning
 
 import android.content.Context
-import androidx.work.Constraints
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
@@ -32,39 +28,13 @@ class AutodriveDataBackfiller @Inject constructor(
     }
 
     init {
+        // Scheduling lives in AimiMlTrainingScheduler, which the plugin starts and stops. Enqueuing
+        // from a constructor fires at DI graph construction, in no defined order, and the constraints
+        // used here (charging + device idle) almost never coincide on a real phone — the same reason
+        // the basal trainer had to drop them.
         instance = this
-        scheduleNightlyWorker()
     }
 
-    /**
-     * Phase 9 : Night-Time Execution (Setup pour le Backfiller et futur Trainer)
-     * Protège la batterie : le lourd calcul CSV / ML ne tourne QUE la nuit.
-     */
-    private fun scheduleNightlyWorker() {
-        // Exige Téléphone branché + Écran éteint/Veille profonde
-        val constraints = Constraints.Builder()
-            .setRequiresDeviceIdle(true)
-            .setRequiresCharging(true)
-            .build()
-            
-        // Boucle toutes les 12 heures, mais Android attendra la nuit physique via Constraintes
-        val backfillRequest = PeriodicWorkRequestBuilder<AutodriveBackfillWorker>(
-            12, java.util.concurrent.TimeUnit.HOURS
-        )
-            .setConstraints(constraints)
-            .build()
-            
-        try {
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                "AIMI_AUTODRIVE_BACKFILLER",
-                ExistingPeriodicWorkPolicy.KEEP,
-                backfillRequest
-            )
-            aapsLogger.info(LTag.APS, "Autodrive V3 : Worker ML nocturne planifié avec protection Batterie.")
-        } catch (e: Exception) {
-            aapsLogger.error(LTag.APS, "Erreur planification Autodrive Backfiller: ${e.message}")
-        }
-    }
 
     private val csvFileName = "autodrive_dataset.csv"
     private val tmpCsvFileName = "autodrive_dataset_tmp.csv"
@@ -77,7 +47,9 @@ class AutodriveDataBackfiller @Inject constructor(
     private val IDX_HYPER = 17
 
     private val MIN_MILLIS_FOR_FUTURE = 45 * 60 * 1000L // 45 minutes
-    private val MAX_MILLIS_FOR_HYPO = 60 * 60 * 1000L   // 60 minutes de fenêtre 
+    private val MAX_MILLIS_FOR_HYPO = 60 * 60 * 1000L   // 60 minutes de fenêtre
+    /** Écart maximal toléré entre deux lignes pour affirmer qu'aucune hypo n'a eu lieu entre elles. */
+    private val MAX_COVERAGE_GAP_MILLIS = 15 * 60 * 1000L
 
     /**
      * Parse le fichier CSV, trouve les lignes incomplètes (récentes il y a > 45min),
@@ -85,7 +57,10 @@ class AutodriveDataBackfiller @Inject constructor(
      * 
      * @return Le nombre de lignes back-fillées avec succès.
      */
-    fun processPendingLines(): Int {
+    /** Read-modify-rename over the whole dataset; held under [AutodriveDatasetLock] as one transaction. */
+    fun processPendingLines(): Int = AutodriveDatasetLock.withDataset { processPendingLinesLocked() }
+
+    private fun processPendingLinesLocked(): Int {
         val originalFile = storageHelper.getAimiFile(csvFileName)
         if (!originalFile.exists()) return 0
 
@@ -128,6 +103,14 @@ class AutodriveDataBackfiller @Inject constructor(
                 var hypoOccurred = false
                 var hyperOccurred = false
 
+                // Couverture : le label « pas d'hypo » n'est affirmable que si le CSV contient des
+                // lignes en continu sur toute la fenêtre. Les lignes ne sont écrites que sur les ticks
+                // où Autodrive s'engage — or une hypo fait justement décrocher Autodrive. Sans ce
+                // contrôle, une hypo survenue pendant un décrochage est étiquetée « 0 », donc la classe
+                // positive est censurée exactement là où elle compte.
+                var lastSeenTs = timestampNow
+                var coverageComplete = false
+
                 for (j in i + 1 until parsedLines.size) {
                     val futureRow = parsedLines[j]
                     val futureTs = futureRow.timestamp
@@ -135,13 +118,20 @@ class AutodriveDataBackfiller @Inject constructor(
 
                     // Check d'hypoglycémie dans la fenêtre de 60 minutes suivant la décision
                     if (futureTs in (timestampNow + 1)..maxWindowMillis) {
+                        if (futureTs - lastSeenTs > MAX_COVERAGE_GAP_MILLIS) {
+                            // Trou dans la couverture : on ne sait pas ce qui s'est passé.
+                            break
+                        }
+                        lastSeenTs = futureTs
                         if (futureBg > 0 && futureBg < 70.0) {
                             hypoOccurred = true
                         }
                     }
 
-                    // On cherche LA première glycémie qui est à +45min ou plus
-                    if (futureBgVal == null && futureTs >= targetMillis) {
+                    // On cherche LA première glycémie qui est à +45min ou plus, mais **dans** la fenêtre :
+                    // sans borne haute, une ligne trois heures plus tard était estampillée comme le
+                    // résultat à 45 minutes.
+                    if (futureBgVal == null && futureTs >= targetMillis && futureTs <= maxWindowMillis) {
                         futureBgVal = futureBg
                         if (futureBg >= 180.0) {
                             hyperOccurred = true
@@ -150,12 +140,14 @@ class AutodriveDataBackfiller @Inject constructor(
 
                     // Une fois qu'on a dépassé la fenêtre totale (Future + Fenêtre de crash), on arrête la boucle interne
                     if (futureTs > maxWindowMillis) {
+                        coverageComplete = true
                         break
                     }
+                    if (futureTs == maxWindowMillis) coverageComplete = true
                 }
 
-                // Si on a bien trouvé une valeur dans le futur (au moins 45min plus tard)
-                if (futureBgVal != null) {
+                // Étiquetage seulement si le futur est observé ET la fenêtre couverte sans trou.
+                if (futureBgVal != null && coverageComplete) {
                     currentRow.cols[IDX_FUTURE_BG] = futureBgVal.toString()
                     currentRow.cols[IDX_HYPO] = if (hypoOccurred) "1" else "0"
                     currentRow.cols[IDX_HYPER] = if (hyperOccurred) "1" else "0"

@@ -65,9 +65,23 @@ class MechanismAttentionGate @Inject constructor(
             // Amplification défensive (Ex: risque très fort = x1.5 sensibilité)
             1.0 + (hypoRiskScore - 0.5)
         } else {
-            // Le patient est safe, mais on peut réduire la prudence (jusqu'à x0.8 SI)
-            // pour taper un peu plus fort si on sait qu'il résiste
-            1.0 - (0.5 - hypoRiskScore) * 0.4 
+            // ⚠️ Defensive-only until the classifier is validated.
+            //
+            // This arm used to return `1.0 - (0.5 - hypoRiskScore) * 0.4`, down to ×0.8 — "the patient
+            // is safe, we can lower caution to hit a bit harder". Lowering `estimatedSI` does not only
+            // push the MPC: it shrinks `lgh = -siMetabolic * bg` in `ControlBarrierShield`, so the
+            // safety barrier permits a **larger** dose.
+            //
+            // The classifier is trained from scratch each run on a ~3 % positive class with no feature
+            // normalisation, so its fitted probability sits below 0.5 almost always — meaning that arm
+            // would fire on essentially every engaged tick, driven by the base rate of hypoglycaemia
+            // rather than by any measured resistance. It never actually ran, because the trainer was
+            // never instantiated and the weights file never existed; this keeps it that way rather
+            // than switching on an untested permissive path.
+            //
+            // Restore it only with per-feature normalisation, a class-balance-aware objective, and the
+            // barrier reading the un-attenuated SI — the same rule already applied to `estimatedRa`.
+            1.0
         }
 
         val modulatedSI = state.estimatedSI * attentionMultiplier

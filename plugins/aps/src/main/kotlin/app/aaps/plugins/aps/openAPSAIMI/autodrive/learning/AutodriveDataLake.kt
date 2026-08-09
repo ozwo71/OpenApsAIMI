@@ -91,7 +91,10 @@ class AutodriveDataLake @Inject constructor(
                 "0"  // Hyper_Occurred (à remplir off-line)
             ).joinToString(",") + "\n"
 
-            FileWriter(logFile, true).use { it.append(line) }
+            // Serialised against the backfiller's read-modify-rename — see AutodriveDatasetLock.
+            AutodriveDatasetLock.withDataset {
+                FileWriter(logFile, true).use { it.append(line) }
+            }
 
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "Autodrive Data Lake Error: " + e.message)

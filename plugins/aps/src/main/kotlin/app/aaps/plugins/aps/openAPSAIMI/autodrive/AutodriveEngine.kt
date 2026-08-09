@@ -164,9 +164,22 @@ class AutodriveEngine @Inject constructor(
         // 0. Le Processus d'apprentissage en ligne s'exécute pour affiner les paramètres
         onlineLearner.learnAndUpdate(stateWithContext, currentEpochMs)
 
-        val learningAdjustedState = stateWithContext.copy(
-            estimatedSI = stateWithContext.estimatedSI * onlineLearner.learnedSensitivityFactor
-        )
+        // 🎓 `learnedSensitivityFactor` is observed, not applied.
+        //
+        // Its training target is self-described in OnlineLearner as "un mock simple pour valider
+        // l'architecture": `bg + velocity * 30`, a linear extrapolation, not the MPC trajectory. The
+        // error of a linear extrapolation measures how curved the glucose trace is, not how strongly
+        // insulin acts — so accumulating it into a sensitivity is not meaningful.
+        //
+        // It is also structurally pinned at 1.0 today: the step is `error * 0.001 * 0.005` (~1e-4 per
+        // evaluation), it only advances on engaged ticks, and the field is never persisted, so every
+        // restart resets it. Persisting it, as the obvious "fix", would let a meaningless quantity
+        // accumulate to the ±50 % clamp and multiply `estimatedSI` — which reaches both MpcController
+        // and ControlBarrierShield.
+        //
+        // The learner keeps running and reporting through `onlineLearnerStatus()`, so the signal stays
+        // observable. Apply it only once its target is a real MPC trajectory.
+        val learningAdjustedState = stateWithContext
 
         // 1. Attention Gate (Phase 9 - ML On-Device)
         // L'intelligence artificielle vient potentiellement biaiser la sensibilité perçue 

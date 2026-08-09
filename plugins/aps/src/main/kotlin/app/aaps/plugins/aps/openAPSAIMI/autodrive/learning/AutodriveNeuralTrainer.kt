@@ -4,10 +4,6 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import android.content.Context
-import androidx.work.Constraints
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
 import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -33,39 +29,12 @@ class AutodriveNeuralTrainer @Inject constructor(
     }
 
     init {
+        // Scheduling lives in AimiMlTrainingScheduler, which the plugin starts and stops. Enqueuing
+        // from a constructor fires at DI graph construction, in no defined order, and silently does
+        // nothing when the class is never instantiated — which is exactly what happened here.
         instance = this
-        scheduleNightlyTrainer()
     }
 
-    /**
-     * Phase 9 : Night-Time Execution
-     * Le modèle neuronal prend plus de temps CPU. Il ne tourne QUE la nuit.
-     */
-    private fun scheduleNightlyTrainer() {
-        // Exige Téléphone branché + Écran éteint/Veille profonde
-        val constraints = Constraints.Builder()
-            .setRequiresDeviceIdle(true)
-            .setRequiresCharging(true)
-            .build()
-            
-        // Entraînement 1 fois par 24 heures maximum
-        val trainerRequest = PeriodicWorkRequestBuilder<AutodriveNeuralTrainerWorker>(
-            24, java.util.concurrent.TimeUnit.HOURS
-        )
-            .setConstraints(constraints)
-            .build()
-            
-        try {
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                "AIMI_AUTODRIVE_NEURAL_TRAINER",
-                ExistingPeriodicWorkPolicy.KEEP,
-                trainerRequest
-            )
-            aapsLogger.info(LTag.APS, "Autodrive V3 : Worker d'Apprentissage Neuronal planifié avec succès.")
-        } catch (e: Exception) {
-            aapsLogger.error(LTag.APS, "Erreur planification Autodrive Neural Trainer: ${e.message}")
-        }
-    }
 
     private val csvFileName = "autodrive_dataset.csv"
     private val weightsFileName = "autodrive_attention_weights.json"

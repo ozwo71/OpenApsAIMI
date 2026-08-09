@@ -149,15 +149,23 @@ class BasalMlTrainingCoordinator @Inject constructor(
                     TrainingOutcome.FAILED_RETRY
                 }
                 published -> {
-                    lastTrainMs.set(now)
-                    rowsAtLastTrain.set(totalRows)
+                    markAttemptCompleted(now, totalRows)
                     circuitBreaker.reset()
-                    persistState()
                     basalNeuralLearner.reloadModels()
                     log.info(LTag.APS, "$TAG: training complete — models reloaded ($totalRows CSV rows)")
                     TrainingOutcome.SUCCESS
                 }
-                else -> TrainingOutcome.SKIPPED
+                else -> {
+                    // An attempt that ran to completion without beating the incumbent still counts.
+                    //
+                    // The rate limit and the min-new-rows gate both keyed on the last *publish*. Once a
+                    // model stopped being beaten, `newRows` kept growing past the threshold and nothing
+                    // ever reset the clock — so a full 200+300-epoch training over the whole CSV ran on
+                    // every tick, forever, on a phone.
+                    markAttemptCompleted(now, totalRows)
+                    log.debug(LTag.APS, "$TAG: candidate did not beat the incumbent — attempt recorded")
+                    TrainingOutcome.SKIPPED
+                }
             }
         } catch (e: Exception) {
             recordFailure()
@@ -250,6 +258,19 @@ class BasalMlTrainingCoordinator @Inject constructor(
         } catch (e: Exception) {
             log.warn(LTag.APS, "$TAG: could not load training state", e)
         }
+    }
+
+    /**
+     * Records that a training attempt ran to completion, whether or not it published a model.
+     *
+     * Both gates — the interval in [TRAIN_INTERVAL_MS] and [MIN_NEW_ROWS] — key on this. Recording it
+     * only on publish meant a model that stopped being beaten left the clock frozen while the row
+     * count kept growing, so the coordinator retrained on every tick indefinitely.
+     */
+    private fun markAttemptCompleted(nowMs: Long, totalRows: Long) {
+        lastTrainMs.set(nowMs)
+        rowsAtLastTrain.set(totalRows)
+        persistState()
     }
 
     private fun persistState() {
