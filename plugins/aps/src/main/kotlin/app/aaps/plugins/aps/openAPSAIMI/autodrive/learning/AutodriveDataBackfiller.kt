@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.autodrive.learning
 
 import android.content.Context
+import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
@@ -19,7 +20,8 @@ import javax.inject.Singleton
 class AutodriveDataBackfiller @Inject constructor(
     private val context: Context,
     private val aapsLogger: AAPSLogger,
-    private val storageHelper: AimiStorageHelper
+    private val storageHelper: AimiStorageHelper,
+    private val persistenceLayer: PersistenceLayer,
 ) {
     companion object {
         @Volatile
@@ -46,10 +48,11 @@ class AutodriveDataBackfiller @Inject constructor(
     private val IDX_HYPO = 16
     private val IDX_HYPER = 17
 
+    /** Fenêtre d'historique conservée dans le CSV d'entraînement. */
+    private val RETENTION_DAYS = 60L
+    private val RETENTION_MILLIS = RETENTION_DAYS * 24L * 60L * 60L * 1000L
     private val MIN_MILLIS_FOR_FUTURE = 45 * 60 * 1000L // 45 minutes
     private val MAX_MILLIS_FOR_HYPO = 60 * 60 * 1000L   // 60 minutes de fenêtre
-    /** Écart maximal toléré entre deux lignes pour affirmer qu'aucune hypo n'a eu lieu entre elles. */
-    private val MAX_COVERAGE_GAP_MILLIS = 15 * 60 * 1000L
 
     /**
      * Parse le fichier CSV, trouve les lignes incomplètes (récentes il y a > 45min),
@@ -57,10 +60,44 @@ class AutodriveDataBackfiller @Inject constructor(
      * 
      * @return Le nombre de lignes back-fillées avec succès.
      */
-    /** Read-modify-rename over the whole dataset; held under [AutodriveDatasetLock] as one transaction. */
-    fun processPendingLines(): Int = AutodriveDatasetLock.withDataset { processPendingLinesLocked() }
+    /**
+     * Read-modify-rename over the whole dataset; held under [AutodriveDatasetLock] as one transaction.
+     *
+     * Outcome labels come from the **CGM history**, not from the rows of this CSV. Rows are only
+     * written on ticks where Autodrive engaged, and a hypoglycaemia is precisely what makes Autodrive
+     * disengage — so labelling from the CSV censored the positive class exactly where it matters, and
+     * silently wrote `0`.
+     */
+    suspend fun processPendingLines(): Int {
+        val readings = loadGlucoseWindow()
+        return AutodriveDatasetLock.withDataset { processPendingLinesLocked(readings) }
+    }
 
-    private fun processPendingLinesLocked(): Int {
+    /** CGM readings covering every pending row's outcome window, read once rather than per row. */
+    private suspend fun loadGlucoseWindow(): List<Pair<Long, Double>> = try {
+        val file = storageHelper.getAimiFile(csvFileName)
+        if (!file.exists()) {
+            emptyList()
+        } else {
+            val stamps = file.useLines { lines ->
+                lines.drop(1).mapNotNull { it.split(",").getOrNull(IDX_TIMESTAMP)?.toLongOrNull() }
+                    .filter { it > 0L }
+                    .toList()
+            }
+            if (stamps.isEmpty()) {
+                emptyList()
+            } else {
+                persistenceLayer
+                    .getBgReadingsDataFromTimeToTime(stamps.min(), stamps.max() + MAX_MILLIS_FOR_HYPO, true)
+                    .map { it.timestamp to it.value }
+            }
+        }
+    } catch (e: Exception) {
+        aapsLogger.error(LTag.APS, "Backfill: glucose history unavailable — ${e.message}")
+        emptyList()
+    }
+
+    private fun processPendingLinesLocked(readings: List<Pair<Long, Double>>): Int {
         val originalFile = storageHelper.getAimiFile(csvFileName)
         if (!originalFile.exists()) return 0
 
@@ -103,51 +140,20 @@ class AutodriveDataBackfiller @Inject constructor(
                 var hypoOccurred = false
                 var hyperOccurred = false
 
-                // Couverture : le label « pas d'hypo » n'est affirmable que si le CSV contient des
-                // lignes en continu sur toute la fenêtre. Les lignes ne sont écrites que sur les ticks
-                // où Autodrive s'engage — or une hypo fait justement décrocher Autodrive. Sans ce
-                // contrôle, une hypo survenue pendant un décrochage est étiquetée « 0 », donc la classe
-                // positive est censurée exactement là où elle compte.
-                var lastSeenTs = timestampNow
-                var coverageComplete = false
-
-                for (j in i + 1 until parsedLines.size) {
-                    val futureRow = parsedLines[j]
-                    val futureTs = futureRow.timestamp
-                    val futureBg = futureRow.bg
-
-                    // Check d'hypoglycémie dans la fenêtre de 60 minutes suivant la décision
-                    if (futureTs in (timestampNow + 1)..maxWindowMillis) {
-                        if (futureTs - lastSeenTs > MAX_COVERAGE_GAP_MILLIS) {
-                            // Trou dans la couverture : on ne sait pas ce qui s'est passé.
-                            break
-                        }
-                        lastSeenTs = futureTs
-                        if (futureBg > 0 && futureBg < 70.0) {
-                            hypoOccurred = true
-                        }
+                // Étiquetage depuis la glycémie réelle : continue par construction, donc un
+                // décrochage d'Autodrive ne masque plus une hypo.
+                val windowReadings = readings.filter { (ts, _) -> ts in (timestampNow + 1)..maxWindowMillis }
+                if (windowReadings.isNotEmpty()) {
+                    hypoOccurred = windowReadings.any { (_, bgV) -> bgV > 0.0 && bgV < 70.0 }
+                    // Première mesure au-delà de +45 min, mais **dans** la fenêtre : sans borne haute,
+                    // une valeur trois heures plus tard était estampillée comme le résultat à 45 min.
+                    windowReadings.firstOrNull { (ts, _) -> ts >= targetMillis }?.let { (_, bgV) ->
+                        futureBgVal = bgV
+                        if (bgV >= 180.0) hyperOccurred = true
                     }
-
-                    // On cherche LA première glycémie qui est à +45min ou plus, mais **dans** la fenêtre :
-                    // sans borne haute, une ligne trois heures plus tard était estampillée comme le
-                    // résultat à 45 minutes.
-                    if (futureBgVal == null && futureTs >= targetMillis && futureTs <= maxWindowMillis) {
-                        futureBgVal = futureBg
-                        if (futureBg >= 180.0) {
-                            hyperOccurred = true
-                        }
-                    }
-
-                    // Une fois qu'on a dépassé la fenêtre totale (Future + Fenêtre de crash), on arrête la boucle interne
-                    if (futureTs > maxWindowMillis) {
-                        coverageComplete = true
-                        break
-                    }
-                    if (futureTs == maxWindowMillis) coverageComplete = true
                 }
 
-                // Étiquetage seulement si le futur est observé ET la fenêtre couverte sans trou.
-                if (futureBgVal != null && coverageComplete) {
+                if (futureBgVal != null) {
                     currentRow.cols[IDX_FUTURE_BG] = futureBgVal.toString()
                     currentRow.cols[IDX_HYPO] = if (hypoOccurred) "1" else "0"
                     currentRow.cols[IDX_HYPER] = if (hyperOccurred) "1" else "0"
@@ -157,14 +163,25 @@ class AutodriveDataBackfiller @Inject constructor(
             }
         }
 
-        // Si on a complété des données, on réécrit le fichier Atomiquement
-        if (modifiedCount > 0) {
+        // Rétention glissante. Le fichier n'avait aucun plafond : il est relu **intégralement** par
+        // cette passe toutes les 6 h, par la porte de volume et par l'entraîneur. Enregistrer chaque
+        // tick au lieu des seuls ticks engagés multiplie sa croissance par ~3,5, donc le plafond doit
+        // exister avant. La purge se fait ici parce que cette passe réécrit le fichier de toute façon.
+        val retentionCutoff = System.currentTimeMillis() - RETENTION_MILLIS
+        val retained = parsedLines.filter { it.timestamp <= 0L || it.timestamp >= retentionCutoff }
+        val prunedCount = parsedLines.size - retained.size
+        if (prunedCount > 0) {
+            aapsLogger.info(LTag.APS, "Backfill: pruned $prunedCount rows older than $RETENTION_DAYS days")
+        }
+
+        // Si on a complété des données ou purgé, on réécrit le fichier Atomiquement
+        if (modifiedCount > 0 || prunedCount > 0) {
             val tmpFile = storageHelper.getAimiFile(tmpCsvFileName)
             try {
                 tmpFile.bufferedWriter().use { writer ->
                     writer.write(header)
                     writer.newLine()
-                    parsedLines.forEach { row ->
+                    retained.forEach { row ->
                         writer.write(row.cols.joinToString(","))
                         writer.newLine()
                     }

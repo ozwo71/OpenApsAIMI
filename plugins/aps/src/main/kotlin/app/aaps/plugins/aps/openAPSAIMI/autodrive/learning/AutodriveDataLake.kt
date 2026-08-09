@@ -37,7 +37,8 @@ class AutodriveDataLake @Inject constructor(
                     "Physio_Mask," +
                     "MPC_Raw_SMB,MPC_Raw_TBR," +
                     "CBF_Safe_SMB,CBF_Safe_TBR,CBF_Intervention," +
-                    "Future_BG_45m,Hypo_Occurred,Hyper_Occurred\n"
+                    "Future_BG_45m,Hypo_Occurred,Hyper_Occurred," +
+                    "Engaged\n"
                 )
             }
         }
@@ -50,8 +51,9 @@ class AutodriveDataLake @Inject constructor(
      */
     fun recordSnapshot(
         state: AutoDriveState,
-        rawCommand: AutoDriveCommand,
-        safeCommand: AutoDriveCommand,
+        rawCommand: AutoDriveCommand?,
+        safeCommand: AutoDriveCommand?,
+        engaged: Boolean,
         currentTimestamp: Long = System.currentTimeMillis()
     ) {
         try {
@@ -59,9 +61,14 @@ class AutodriveDataLake @Inject constructor(
             val dateStr = sdf.format(Date(currentTimestamp))
 
             // Calcul de l'Intervention CBF (Est-ce que le bouclier a frappé ?)
+            // Pas de commande sur un tick non engagé : les colonnes de décision restent neutres et
+            // `Engaged` le dit explicitement, plutôt que de laisser le jeu de données être filtré en
+            // silence par la porte.
             val cbfIntervention = if (
-                rawCommand.scheduledMicroBolus > safeCommand.scheduledMicroBolus || 
-                rawCommand.temporaryBasalRate > safeCommand.temporaryBasalRate
+                rawCommand != null && safeCommand != null && (
+                    rawCommand.scheduledMicroBolus > safeCommand.scheduledMicroBolus ||
+                        rawCommand.temporaryBasalRate > safeCommand.temporaryBasalRate
+                    )
             ) 1 else 0
 
             val maskStr = if (state.physiologicalStressMask.isNotEmpty()) {
@@ -81,14 +88,15 @@ class AutodriveDataLake @Inject constructor(
                 "%.3f".format(Locale.US, state.estimatedRa),
                 "%.1f".format(Locale.US, state.patientWeightKg),
                 maskStr,
-                "%.3f".format(Locale.US, rawCommand.scheduledMicroBolus),
-                "%.3f".format(Locale.US, rawCommand.temporaryBasalRate),
-                "%.3f".format(Locale.US, safeCommand.scheduledMicroBolus),
-                "%.3f".format(Locale.US, safeCommand.temporaryBasalRate),
+                "%.3f".format(Locale.US, rawCommand?.scheduledMicroBolus ?: 0.0),
+                "%.3f".format(Locale.US, rawCommand?.temporaryBasalRate ?: 0.0),
+                "%.3f".format(Locale.US, safeCommand?.scheduledMicroBolus ?: 0.0),
+                "%.3f".format(Locale.US, safeCommand?.temporaryBasalRate ?: 0.0),
                 cbfIntervention.toString(),
                 "", // Future_BG_45m (à remplir off-line)
                 "0", // Hypo_Occurred (à remplir off-line)
-                "0"  // Hyper_Occurred (à remplir off-line)
+                "0", // Hyper_Occurred (à remplir off-line)
+                if (engaged) "1" else "0"
             ).joinToString(",") + "\n"
 
             // Serialised against the backfiller's read-modify-rename — see AutodriveDatasetLock.

@@ -4619,6 +4619,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }.getOrNull()
     }
 
+    /**
+     * Records one training row for a tick where Autodrive did **not** engage.
+     *
+     * The attention classifier answers a physiological question — given this state, what is the risk
+     * of hypoglycaemia within the hour — and that does not depend on whether a controller engaged.
+     * Recording only engaged ticks biased the set twice over: `AutoDriveGater` selects high or rising
+     * glucose, where hypoglycaemia is rarer than in reality, on top of a positive rate already around
+     * 3 %. Worse, the subset is defined by a gate that keeps being retuned, so the training
+     * distribution moved every time the policy did.
+     *
+     * The row carries `engaged = 0` and neutral decision columns, so the model can condition on
+     * engagement explicitly instead of the dataset being filtered by it in silence.
+     */
+    private fun recordDisengagedTrainingRow(state: app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState) {
+        runCatching {
+            autodriveEngine.recordDisengagedSnapshot(state, dateUtil.now())
+        }
+    }
+
     /** Runs the meal-model estimator for this tick when no other path has. Observation only. */
     private fun observeRaIfNotAlreadyRun(
         ctx: AimiTickContext,
@@ -4632,8 +4651,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (before != raEstimatorRunCountAtTickStart) return // something already observed this tick
         val state = buildRaObservationState(ctx, combinedDelta, shortAvgDeltaAdj, pkpdRuntime, hasRecentMealEstimate)
             ?: return
-        runCatching { continuousStateEstimator.updateAndPredict(state) }
+        val observed = runCatching { continuousStateEstimator.updateAndPredict(state) }.getOrNull() ?: state
         consoleLog.add("🍽️ RA_OBSERVE[$reason]: Ra=${"%.2f".format(continuousStateEstimator.getLastRa())}")
+        recordDisengagedTrainingRow(observed)
     }
 
     private fun runAutodriveV3MultiVariableBranch(

@@ -54,6 +54,10 @@ class MechanismAttentionGate @Inject constructor(
         if (mask.size > 0) z += weights.wHr * mask[0]
         if (mask.size > 1) z += weights.wInflammation * mask[1]
         if (mask.size > 2) z += weights.wHormonal * mask[2]
+        // Inference always happens on an engaged tick, so this feature is 1 here. It exists so the
+        // model can separate "risk given this physiology" from "risk given the gate opened", instead
+        // of the training set carrying that difference silently.
+        z += weights.wEngaged * 1.0
         
         // 2. Fonction d'activation (Sigmoid) -> Probabilité de Crash (Hypo)
         val hypoRiskScore = sigmoid(z)
@@ -117,7 +121,10 @@ class MechanismAttentionGate @Inject constructor(
                 bias = json.optDouble("bias", 0.0),
                 wHr = json.optDouble("weight_hr", 0.0),
                 wInflammation = json.optDouble("weight_inflammation", 0.0),
-                wHormonal = json.optDouble("weight_hormonal", 0.0)
+                wHormonal = json.optDouble("weight_hormonal", 0.0),
+                // Absent from weight files written before the dataset carried the engagement column.
+                // 0.0 keeps those files behaving exactly as they did.
+                wEngaged = json.optDouble("weight_engaged", 0.0)
             )
             lastLoadTime = System.currentTimeMillis()
             aapsLogger.info(LTag.APS, "IA Attention Gate: Nouveaux Poids d'Apprentissage chargés en mémoire.")
@@ -131,6 +138,8 @@ class MechanismAttentionGate @Inject constructor(
         val bias: Double,
         val wHr: Double,
         val wInflammation: Double,
-        val wHormonal: Double
+        val wHormonal: Double,
+        /** Weight of the "Autodrive engaged" feature. 0.0 for weight files written before it existed. */
+        val wEngaged: Double = 0.0,
     )
 }

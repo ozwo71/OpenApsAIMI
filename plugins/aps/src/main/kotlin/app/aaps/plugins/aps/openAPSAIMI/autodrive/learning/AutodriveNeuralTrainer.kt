@@ -45,6 +45,14 @@ class AutodriveNeuralTrainer @Inject constructor(
     private val IDX_HYPO = 16
     private val IDX_HYPER = 17
 
+    /**
+     * 1 = Autodrive drove this tick, 0 = the tick was only observed.
+     *
+     * Appended last on purpose, so indices 0..17 keep their meaning for rows written before the
+     * column existed. Those rows simply have no 18th field.
+     */
+    private val IDX_ENGAGED = 18
+
     // Hyperparamètres ML
     private val learningRate = 0.01
     private val epochs = 100 // On-Device : petit nombre d'epochs pour sauver la batterie
@@ -71,11 +79,28 @@ class AutodriveNeuralTrainer @Inject constructor(
                         val hypoVal = cols[IDX_HYPO].toDoubleOrNull() ?: 0.0
                         
                         // Parse du vecteur physiologique (Ex: "0.8|0.0|0.0")
-                        val features = if (physioStr != "0" && physioStr.isNotBlank()) {
-                            physioStr.split("|").map { it.toDoubleOrNull() ?: 0.0 }.toDoubleArray()
+                        val physio = if (physioStr != "0" && physioStr.isNotBlank()) {
+                            physioStr.split("|").map { it.toDoubleOrNull() ?: 0.0 }
                         } else {
-                            DoubleArray(3) { 0.0 } // [HR, Inflammation, WCycle] par défaut
+                            listOf(0.0, 0.0, 0.0) // [HR, Inflammation, WCycle] par défaut
                         }
+                        // 4th feature: was this tick driven by Autodrive.
+                        //
+                        // The dataset now holds every tick, not only the ones where the gate opened.
+                        // Those two groups do not have the same hypo rate: the gate picks high or
+                        // rising glucose, where hypos are rarer. Given as a feature, the model can
+                        // account for that difference instead of absorbing it into the other weights.
+                        // Rows written before the column existed do not have it: they were all
+                        // engaged, so they read as 1.0.
+                        val engaged = cols.getOrNull(IDX_ENGAGED)?.toDoubleOrNull() ?: 1.0
+                        // Fixed length, whatever the mask string held: `featureCount` is read from the
+                        // first row, so a shorter vector further down would break the gradient loop.
+                        val features = doubleArrayOf(
+                            physio.getOrElse(0) { 0.0 },
+                            physio.getOrElse(1) { 0.0 },
+                            physio.getOrElse(2) { 0.0 },
+                            engaged
+                        )
 
                         // Label = 1.0 si crash Hypo, sinon 0.0
                         dataset.add(TrainingExample(features, hypoVal))
@@ -158,6 +183,7 @@ class AutodriveNeuralTrainer @Inject constructor(
             if (weights.isNotEmpty()) json.put("weight_hr", weights[0])
             if (weights.size > 1) json.put("weight_inflammation", weights[1])
             if (weights.size > 2) json.put("weight_hormonal", weights[2])
+            if (weights.size > 3) json.put("weight_engaged", weights[3])
             
             json.put("timestamp", System.currentTimeMillis())
 

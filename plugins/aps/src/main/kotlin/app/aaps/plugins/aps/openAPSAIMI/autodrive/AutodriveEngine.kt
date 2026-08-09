@@ -76,6 +76,23 @@ class AutodriveEngine @Inject constructor(
     fun onlineLearnerStatus(): OnlineLearner.StatusSnapshot = onlineLearner.statusSnapshot()
 
     /**
+     * Records a training row for a tick where the gate did not engage.
+     *
+     * Only the dataset is touched — no estimator update, no learner step, no command. The decision
+     * columns stay neutral and `Engaged` is 0, so the classifier can condition on engagement rather
+     * than the dataset being silently filtered by it.
+     */
+    fun recordDisengagedSnapshot(state: AutoDriveState, currentEpochMs: Long) {
+        dataLake.recordSnapshot(
+            state = state,
+            rawCommand = null,
+            safeCommand = null,
+            engaged = false,
+            currentTimestamp = currentEpochMs,
+        )
+    }
+
+    /**
      * T3C basal-only proposal: runs the full Autodrive pipeline and returns TBR demand.
      * Restores prior engine mode afterward. Caller must strip/ignore SMB (never enact bolus).
      *
@@ -226,6 +243,7 @@ class AutodriveEngine @Inject constructor(
             state = estimatedState,
             rawCommand = rawCommand,
             safeCommand = auditedCommand,
+            engaged = true,
             currentTimestamp = currentEpochMs
         )
 
