@@ -337,8 +337,41 @@ internal data class AimiDecisionContext(
         val isf_shadow_s_mgdl: Double? = null,
         /** Shadow: how many closed windows have been folded in so far. */
         val sensitivity_observations: Int? = null,
-        /** Hyper-trajectory Ra floor for this tick. Reaches the belief tree, never the MPC. */
-        val htr_ra_floor_mgdl_per_min: Double? = null
+        /**
+         * Hyper-trajectory Ra floor for this tick, in mg/dL/min, or null when no floor applied.
+         *
+         * `var`, and set late: the floor is computed inside the engaged Autodrive branch, thousands of
+         * lines after this object is built at tick bootstrap. As a `val` read at construction it
+         * exported `null` on every tick, for ever — the one instrument added to make the floor
+         * measurable could not measure it. Written through [markHtrRaFloorForExport].
+         */
+        var htr_ra_floor_mgdl_per_min: Double? = null,
+        /**
+         * Ra the controller actually used this tick, in mg/dL/min.
+         *
+         * Same reason for being a `var`: read at bootstrap it carried the **previous** tick's estimate,
+         * which makes the comparison with [htr_ra_floor_mgdl_per_min] meaningless — that comparison is
+         * the entire point of exporting the two side by side.
+         */
+        var estimated_ra_used_mgdl_per_min: Double? = null,
+        /** Diagnostic: how many times the meal filter advanced, and how many calls were replays. */
+        var ra_estimator_advances: Long? = null,
+        var ra_estimator_replayed_calls: Long? = null,
+        /**
+         * Shadow: Ra the filter would report with its insulin term aligned on the controller's.
+         *
+         * Never dosed on. Answers whether aligning `InsulinActionModel.ESTIMATOR_TAU_MIN` would pin Ra
+         * above the 0.6 / 0.7 / 0.8 gates, which is the one thing the medians could not settle.
+         */
+        var ra_aligned_tau_shadow_mgdl_per_min: Double? = null,
+        /** Coefficient the barrier used, and what it would be with the floor removed. */
+        var cbf_coefficient_used: Double? = null,
+        var cbf_coefficient_unfloored: Double? = null,
+        /** Shadow: insulin the barrier permitted, floored vs unfloored, in U per 5 min. */
+        var cbf_permitted_u: Double? = null,
+        var cbf_permitted_unfloored_u: Double? = null,
+        /** Profile ISF the barrier was handed, so the two above are interpretable. */
+        var cbf_profile_isf_mgdl: Double? = null,
     )
     data class Adjustments(
         var dynamic_isf: DynamicIsf? = null,
@@ -583,6 +616,15 @@ internal data class AimiDecisionContext(
             base.put("isf_shadow_s_mgdl", baseline_state.isf_shadow_s_mgdl ?: org.json.JSONObject.NULL)
             base.put("sensitivity_observations", baseline_state.sensitivity_observations ?: org.json.JSONObject.NULL)
             base.put("htr_ra_floor_mgdl_per_min", baseline_state.htr_ra_floor_mgdl_per_min ?: org.json.JSONObject.NULL)
+            base.put("estimated_ra_used_mgdl_per_min", baseline_state.estimated_ra_used_mgdl_per_min ?: org.json.JSONObject.NULL)
+            base.put("ra_estimator_advances", baseline_state.ra_estimator_advances ?: org.json.JSONObject.NULL)
+            base.put("ra_estimator_replayed_calls", baseline_state.ra_estimator_replayed_calls ?: org.json.JSONObject.NULL)
+            base.put("ra_aligned_tau_shadow_mgdl_per_min", baseline_state.ra_aligned_tau_shadow_mgdl_per_min ?: org.json.JSONObject.NULL)
+            base.put("cbf_coefficient_used", baseline_state.cbf_coefficient_used ?: org.json.JSONObject.NULL)
+            base.put("cbf_coefficient_unfloored", baseline_state.cbf_coefficient_unfloored ?: org.json.JSONObject.NULL)
+            base.put("cbf_permitted_u", baseline_state.cbf_permitted_u ?: org.json.JSONObject.NULL)
+            base.put("cbf_permitted_unfloored_u", baseline_state.cbf_permitted_unfloored_u ?: org.json.JSONObject.NULL)
+            base.put("cbf_profile_isf_mgdl", baseline_state.cbf_profile_isf_mgdl ?: org.json.JSONObject.NULL)
             json.put("baseline_state", base)
 
             val adj = org.json.JSONObject()
@@ -1853,7 +1895,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     IsfSourceTelemetry.lastProfileStaticMgdl?.let { sensitivityRatioEstimator.sensitivityMgdl(it) }
                 }.getOrNull(),
                 sensitivity_observations = runCatching { sensitivityRatioEstimator.observationCount }.getOrNull(),
-                htr_ra_floor_mgdl_per_min = lastHtrRaFloorMgdlPerMin
+                // Laissé null ici et écrit tard par `markHtrRaFloorForExport` : la valeur n'existe
+                // pas encore au bootstrap du tick.
+                htr_ra_floor_mgdl_per_min = null
             )
         )
         val rT = RT(
@@ -4645,6 +4689,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * Falls back to the invocation time when the sample carries no date, so the guard degrades to
      * "once per invocation" rather than to "never".
      */
+    /**
+     * Writes the hyper-trajectory Ra floor, and the Ra the controller used, into this tick's export.
+     *
+     * Called from inside the engaged branch, because that is where the two values first exist. The
+     * export object is built at tick bootstrap, so reading them there — as the fields used to do —
+     * gave `null` for the floor and the previous tick's estimate for Ra.
+     */
+    private fun markHtrRaFloorForExport(floorMgdlPerMin: Double?, raUsedMgdlPerMin: Double) {
+        val baseline = pendingDecisionCtxForExport?.baseline_state ?: return
+        baseline.htr_ra_floor_mgdl_per_min = floorMgdlPerMin
+        baseline.estimated_ra_used_mgdl_per_min = raUsedMgdlPerMin.takeIf { it.isFinite() }
+        baseline.cbf_coefficient_used = autodriveEngine.lastControlCoefficientUsed.takeIf { it > 0.0 }
+        baseline.cbf_coefficient_unfloored = autodriveEngine.lastControlCoefficientUnfloored.takeIf { it > 0.0 }
+        baseline.cbf_permitted_u = autodriveEngine.lastCbfPermittedU.takeIf { it.isFinite() }
+        baseline.cbf_permitted_unfloored_u = autodriveEngine.lastCbfPermittedUnflooredU.takeIf { it.isFinite() }
+        baseline.cbf_profile_isf_mgdl = autodriveEngine.lastProfileIsfSeen.takeIf { it > 0.0 }
+    }
+
     private fun raObservationId(ctx: AimiTickContext): Long =
         ctx.glucoseStatus.date.takeIf { it > 0L } ?: ctx.currentTime
 
@@ -4804,6 +4866,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 hints = mpcHints,
             )
             lastHtrRaFloorMgdlPerMin = mpcHints.estimatedRaFloorMgdlPerMin.takeIf { it > 0.0 }
+            markHtrRaFloorForExport(lastHtrRaFloorMgdlPerMin, estimatedRaForMpc)
 
             val adState = app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState.createSafe(
                 bg = ctx.glucoseStatus.glucose,
@@ -16134,6 +16197,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Unconditional, too: the engaged branch stages its row inside `AutodriveEngine.tick`, and
             // `observeRaIfNotAlreadyRun` returns early on exactly those ticks — flushing from inside
             // it would drop every engaged row.
+            runCatching {
+                pendingDecisionCtxForExport?.baseline_state?.let { b ->
+                    b.ra_estimator_advances = continuousStateEstimator.runCount
+                    b.ra_estimator_replayed_calls = continuousStateEstimator.replayedCallCount
+                    b.ra_aligned_tau_shadow_mgdl_per_min = continuousStateEstimator.lastRaAlignedTauShadow
+                }
+            }
             runCatching { autodriveEngine.flushTickRow(ctx.currentTime) }
         }
         exportAimiDecisionIfNotYetExported(ctx, result)
@@ -17587,6 +17657,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 steps = snapshot.stepsLast15m,
                 hr = snapshot.hrNow,
                 rhr = snapshot.rhrResting,
+                // No `mpcRaFloorMgdlPerMin`: the floor is a hyper-trajectory feed-forward produced
+                // by the engaged branch, and this path has no classification to derive it from. The
+                // 0.0 default is the intended value here, not an oversight.
                 tickId = ctx.currentTime,
                 observationId = raObservationId(ctx),
                 // Shadow tick: it enacts nothing, so it must not be labelled as owning the dose.
@@ -17663,6 +17736,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 rhr = snapshot.rhrResting,
                 tickId = ctx.currentTime,
                 observationId = raObservationId(ctx),
+                // Same reasoning as the shadow tick: no hyper-trajectory classification on this path.
+                mpcRaFloorMgdlPerMin = 0.0,
             )
         } catch (e: Exception) {
             aapsLogger.warn(LTag.APS, "[T3c_AD_BASAL] proposeBasalOnlyTbr failed: ${e.message}")

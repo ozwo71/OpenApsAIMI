@@ -43,6 +43,36 @@ class AutodriveEngine @Inject constructor(
     private var aggressiveWindowUntilEpochMs: Long = 0L
 
     /**
+     * Sensitivity the safety barrier actually read on the last engaged tick, in ISF/10000 units.
+     *
+     * The dataset row carries `estimatedSI`, which is what the *controller* optimised against. As long
+     * as the profile anchor stays unreachable the two are equal, but a safety component whose input is
+     * not recorded anywhere is an audit hole, so it is exposed here for the exports to pick up.
+     */
+    var lastSafetySiUsed: Double = 0.0
+        private set
+
+    /** Coefficient the barrier actually used, i.e. floored. Diagnostic only. */
+    var lastControlCoefficientUsed: Double = 0.0
+        private set
+
+    /** What that coefficient would be without the floor — see [recordCoefficientShadow]. */
+    var lastControlCoefficientUnfloored: Double = 0.0
+        private set
+
+    /** Total insulin the barrier permitted this tick, in U over 5 minutes. */
+    var lastCbfPermittedU: Double = 0.0
+        private set
+
+    /** What it would have permitted with the floor removed. Never enacted. */
+    var lastCbfPermittedUnflooredU: Double = 0.0
+        private set
+
+    /** Profile ISF the barrier was handed, in mg/dL/U, so the ratio above is interpretable. */
+    var lastProfileIsfSeen: Double = 0.0
+        private set
+
+    /**
      * Training row waiting to be written, for the tick currently running.
      *
      * `tick()` no longer writes to the dataset itself. It is reached from three places — the engaged
@@ -193,6 +223,8 @@ class AutodriveEngine @Inject constructor(
         currentEpochMs: Long = System.currentTimeMillis(),
         tickId: Long = 0L,
         observationId: Long = 0L,
+        /** Relayed to `tick`; without it this path silently took the 0.0 default. */
+        mpcRaFloorMgdlPerMin: Double = 0.0,
     ): BasalOnlyTbrProposal? {
         val previous = systemState.get()
         return try {
@@ -208,6 +240,7 @@ class AutodriveEngine @Inject constructor(
                 hr = hr,
                 rhr = rhr,
                 currentEpochMs = currentEpochMs,
+                mpcRaFloorMgdlPerMin = mpcRaFloorMgdlPerMin,
                 tickId = tickId,
                 observationId = observationId,
                 // A proposal is not a decision: the caller strips the SMB and may ignore the TBR, so
@@ -354,13 +387,18 @@ class AutodriveEngine @Inject constructor(
         // This is the same failure the attention gate was clamped for — except that arm had never run,
         // and this one runs on every tick.
         //
-        // `safetySi` therefore anchors on the profile ISF, and takes whichever of the two is *more*
+        // The barrier therefore anchors on the profile ISF, and takes whichever of the two is *more*
         // restrictive, so this can only ever tighten the barrier relative to today: a defensive
         // learner raising `estimatedSI` is kept, a policy lowering it is ignored.
-        val safetyState = estimatedState.copy(
-            safetySi = profileAnchoredSafetySi(profileIsf, estimatedState.estimatedSI)
-        )
-        val safeCommand = safetyShield.enforce(rawCommand, safetyState, profileBasal)
+        //
+        // Passed as an argument, not carried on the state: a `copy()` here would re-run
+        // `AutoDriveState.init` on the dosing path, turning a non-finite estimate into a throw where
+        // it used to be tolerated.
+        val safetySi = profileAnchoredSafetySi(profileIsf, estimatedState.estimatedSI)
+        lastSafetySiUsed = safetySi
+        val safeCommand = safetyShield.enforce(rawCommand, estimatedState, profileBasal, safetySi, observationId)
+
+        recordCoefficientShadow(profileIsf, safetySi, rawCommand, estimatedState, profileBasal, observationId, safeCommand)
 
         // 5. Explicabilité de l'IA (Auditor Traducteur)
         val auditedReason = autodriveAuditor.generateHumanReadableReason(
@@ -439,6 +477,49 @@ class AutodriveEngine @Inject constructor(
      * On a non-finite or non-positive profile ISF there is no anchor to trust, so the commanded value
      * is used unchanged and the event is logged rather than silently substituted.
      */
+    /**
+     * Measures what removing the coefficient floor would cost, without letting it reach the pump.
+     *
+     * `InsulinActionModel.controlCoefficient` floors at the pre-unification value so this refactor can
+     * only tighten the barrier. Removing that floor is the next step and it is the one that moves the
+     * dose: on this deployment the median profile ISF is 30 against a reference of 45, so the
+     * unfloored coefficient is 0.67x and the barrier would be about a third more permissive.
+     *
+     * A third more permissive **on the median tick** is not something to ship on arithmetic. So the
+     * unfloored barrier is run here on the same state, and only its result is exported. `enforce` is
+     * pure apart from its acceleration memory, and that memory is now keyed on [observationId], so the
+     * second call reads the same acceleration as the first instead of resetting it.
+     */
+    private fun recordCoefficientShadow(
+        profileIsf: Double,
+        safetySi: Double,
+        rawCommand: AutoDriveCommand,
+        estimatedState: AutoDriveState,
+        profileBasal: Double,
+        observationId: Long,
+        safeCommand: AutoDriveCommand,
+    ) {
+        runCatching {
+            val isf = InsulinActionModel.isfFromStateSi(safetySi)
+            lastControlCoefficientUsed =
+                InsulinActionModel.controlCoefficient(isf, InsulinActionModel.MPC_TAU_MIN)
+            lastControlCoefficientUnfloored =
+                InsulinActionModel.metabolicCoefficient(isf, InsulinActionModel.MPC_TAU_MIN)
+            lastCbfPermittedU = safeCommand.scheduledMicroBolus + safeCommand.temporaryBasalRate / 12.0
+
+            // Same barrier, same state, only the floor removed. Expressed as the sensitivity that
+            // yields the unfloored coefficient, so `enforce` needs no new parameter.
+            val unflooredEquivalentSi = lastControlCoefficientUnfloored * InsulinActionModel.REFERENCE_BG_MGDL *
+                InsulinActionModel.MPC_TAU_MIN / 10000.0
+            val unflooredCommand = safetyShield.enforce(
+                rawCommand, estimatedState, profileBasal, unflooredEquivalentSi, observationId,
+            )
+            lastCbfPermittedUnflooredU =
+                unflooredCommand.scheduledMicroBolus + unflooredCommand.temporaryBasalRate / 12.0
+            lastProfileIsfSeen = profileIsf
+        }
+    }
+
     private fun profileAnchoredSafetySi(profileIsf: Double, commandedSi: Double): Double {
         if (!profileIsf.isFinite() || profileIsf <= 0.0) {
             aapsLogger.warn(
@@ -448,8 +529,19 @@ class AutodriveEngine @Inject constructor(
             return commandedSi
         }
         val anchored = (profileIsf / 10000.0).coerceIn(SAFETY_SI_MIN, SAFETY_SI_MAX)
+        if (anchored > commandedSi) {
+            // Today this never fires: `AutoDriveState.createSafe` floors `estimatedSI` at 0.1 while
+            // `SAFETY_SI_MAX` is 0.04, so the commanded value always wins. The day it does fire, the
+            // units have changed and the barrier's binding rate must be re-measured before shipping.
+            aapsLogger.info(
+                LTag.APS,
+                "🛡️ [CBF] Ancre profil retenue: ${anchored.format(5)} au lieu de ${commandedSi.format(5)}."
+            )
+        }
         return max(anchored, commandedSi)
     }
+
+    private fun Double.format(digits: Int) = "%.${digits}f".format(this)
 
     private fun logShadowDecision(state: AutoDriveState, autodriveCommand: AutoDriveCommand, profileBasal: Double) {
         aapsLogger.debug(

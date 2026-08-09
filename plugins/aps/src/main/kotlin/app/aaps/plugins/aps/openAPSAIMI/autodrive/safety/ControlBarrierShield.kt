@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.autodrive.safety
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.InsulinActionModel
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveCommand
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import javax.inject.Inject
@@ -24,12 +25,18 @@ import kotlin.math.min
 class ControlBarrierShield @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {
-    // --- ⚖️ METABOLIC_SI_BASE (Phase 3 Synchronization) ---
-    private val METABOLIC_SI_BASE = 0.05
+    // --- ⚖️ Insulin action: one shared model, see InsulinActionModel ---
 
     
-    // État persistant pour le calcul de l'accélération
+    // État persistant pour le calcul de l'accélération, et l'observation à laquelle il se rapporte.
+    //
+    // ⚠️ `lastBgVelocity` est un état de singleton. Quand `enforce` était appelé deux fois dans le
+    // même tick — ce qui arrivait dès que T3C et la branche engagée tournaient ensemble — le second
+    // appel lisait `accel = (v - v) / 5 = 0`, ce qui désarmait le garde-fou d'accélération qui divise
+    // gamma par deux en chute rapide, **et** écrasait définitivement la vitesse d'il y a cinq minutes
+    // par celle de l'instant. La dérivée tick-à-tick était détruite, en desserrant la barrière.
     private var lastBgVelocity: Double? = null
+    private var lastVelocityObservationId: Long = 0L
 
     // Paramètres de Sécurité CBF
     private val bgDangerThreshold = 80.0 // Marge renforcée pour la limite absolue
@@ -42,7 +49,25 @@ class ControlBarrierShield @Inject constructor(
     /**
      * Vérifie et modifie si besoin la commande brute proposée par le MPC.
      */
-    fun enforce(rawCommand: AutoDriveCommand, state: AutoDriveState, profileBasal: Double): AutoDriveCommand {
+    /**
+     * @param safetySi Sensitivity the barrier must use, in the same ISF/10000 units as
+     *   `state.estimatedSI`. Passed in rather than read off the state so the caller can hand the
+     *   barrier a different number from the one the controller optimised against, without a second
+     *   sensitivity field in the domain model — and without a `copy()` re-running the state's `init`
+     *   checks on the dosing path. `null` falls back to `state.estimatedSI`.
+     */
+    fun enforce(
+        rawCommand: AutoDriveCommand,
+        state: AutoDriveState,
+        profileBasal: Double,
+        safetySi: Double? = null,
+        /**
+         * CGM sample this call is judging, or 0 when unknown.
+         *
+         * Used only to keep the acceleration memory one-per-observation — see [lastBgVelocity].
+         */
+        observationId: Long = 0L,
+    ): AutoDriveCommand {
         
         // --- 1. Définition de la distance à la zone de danger, h(x) ---
         // h(x) > 0 signifie "On est safe"
@@ -74,7 +99,10 @@ class ControlBarrierShield @Inject constructor(
         // `safetySi` est ancré sur l'ISF du profil et pris comme le plus restrictif des deux (voir
         // `AutodriveEngine.profileAnchoredSafetySi`). Le repli sur `estimatedSI` conserve le
         // comportement d'avant pour les états construits hors du moteur.
-        val siMetabolic = (state.safetySi ?: state.estimatedSI) * METABOLIC_SI_BASE
+        val siMetabolic = InsulinActionModel.controlCoefficient(
+            isfMgdlPerU = InsulinActionModel.isfFromStateSi(safetySi ?: state.estimatedSI),
+            tauMin = InsulinActionModel.MPC_TAU_MIN,
+        )
         val lfh = - p1 * (state.bg - 100.0) - (siMetabolic * state.iob * state.bg) + state.estimatedRa
 
         // Lie Derivative L_g(h) : Impact de l'action de contrôle (Dose_u)
@@ -85,7 +113,12 @@ class ControlBarrierShield @Inject constructor(
         // Si la chute s'accélère (a < 0), on réduit gamma pour durcir le bouclier.
         val currentVelocity = state.bgVelocity
         val accel = lastBgVelocity?.let { (currentVelocity - it) / 5.0 } ?: 0.0
-        lastBgVelocity = currentVelocity
+        // On ne mémorise qu'une fois par observation CGM : un second `enforce` sur le même
+        // échantillon doit voir la même accélération, pas zéro.
+        if (observationId == 0L || observationId != lastVelocityObservationId) {
+            lastBgVelocity = currentVelocity
+            lastVelocityObservationId = observationId
+        }
         
         var activeGamma = if (accel < -0.05 && currentVelocity < 0) {
             // Accélération vers le bas détectée : On divise gamma par 2 (Bouclier Rigide)

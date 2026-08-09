@@ -59,7 +59,7 @@ class AutodriveEngineTrainingRowTest {
         every { estimator.getLastRa() } returns 0.3
         every { estimator.updateAndPredict(any(), any(), any()) } answers { firstArg() }
         every { mpc.calculateOptimalDose(any(), any(), any()) } returns command
-        every { shield.enforce(any(), any(), any()) } returns command
+        every { shield.enforce(any(), any(), any(), any()) } returns command
         every { auditor.generateHumanReadableReason(any(), any(), any(), any()) } returns "audited"
 
         return AutodriveEngine(

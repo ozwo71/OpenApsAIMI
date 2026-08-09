@@ -4,6 +4,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.InsulinActionModel
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveCommand
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperSeverityTier
@@ -28,10 +29,9 @@ class MpcController @Inject constructor(
     private val aapsLogger: AAPSLogger,
     private val preferences: Preferences
 ) {
-    // 🔬 METABOLIC_SI_BASE — CALIBRATION
-    // 0.05 : Augmente l'agressivité (perçu comme moins puissant par le solveur)
-    // pour permettre d'atteindre le maxIOB réel de l'utilisateur lors d'une montée.
-    private val METABOLIC_SI_BASE = 0.05
+    // 🔬 Action de l'insuline : voir InsulinActionModel.
+    // L'ancien `METABOLIC_SI_BASE = 0.05` vivait ici, dans la barrière et dans l'estimateur avec
+    // trois valeurs différentes. La calibration est désormais énoncée en une constante de temps.
 
     // Paramètres MPC
     private val horizonMinutes = 180          // On vérifie sur 180 minutes (Weighted Horizon)
@@ -222,7 +222,10 @@ class MpcController @Inject constructor(
         val p1 = 0.015 
         
         // La sensibilité est dynamique, estimée dans l'état, mise à l'échelle métabolique
-        val si = startState.estimatedSI * METABOLIC_SI_BASE
+        val si = InsulinActionModel.controlCoefficient(
+            isfMgdlPerU = InsulinActionModel.isfFromStateSi(startState.estimatedSI),
+            tauMin = InsulinActionModel.MPC_TAU_MIN,
+        )
 
         for (k in 1..targetSteps) {
             // -- Dynamique du Glucose (Simulation Euler sur 5 min) --
