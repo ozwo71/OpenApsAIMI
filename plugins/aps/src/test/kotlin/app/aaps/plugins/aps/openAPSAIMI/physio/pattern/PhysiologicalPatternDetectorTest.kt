@@ -39,7 +39,7 @@ class PhysiologicalPatternDetectorTest {
         assertThat(snap.suppressMealInterpretation).isTrue()
         assertThat(snap.suppressHyperRelease).isTrue()
         assertThat(snap.suppressWaveletBoost).isTrue()
-        assertThat(snap.smbCapU).isEqualTo(0.50)
+        assertThat(snap.smbCapU!!).isWithin(0.01).of(0.50)
     }
 
     @Test
@@ -81,7 +81,7 @@ class PhysiologicalPatternDetectorTest {
         val snap = PhysiologicalPatternDetector.detect(input)
         assertThat(snap.active.map { it.id }).contains(PhysiologicalPatternId.IOB_STACKING_SURVEILLANCE)
         assertThat(snap.suppressHyperRelease).isTrue()
-        assertThat(snap.smbCapU).isEqualTo(0.50)
+        assertThat(snap.smbCapU!!).isWithin(0.01).of(0.50)
     }
 
     @Test

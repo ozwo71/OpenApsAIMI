@@ -194,7 +194,21 @@ object InsulinLoadGovernor {
             rawG = max(rawG, 0.92)
             reasonCodes += "LOW_IOB_BUDGET"
         }
-        if (sharpRise >= 0.75 || (input.bgMgdl > input.targetBgMgdl + 85 && input.deltaMgdlPer5 > 0.8)) {
+        // ⛔ L'échappement de montée s'arrête au budget physiologique.
+        //
+        // Sans `iobSafe < budget`, cette clause épinglait `rawG` à 0.88 — donc `smoothedG` à 0.928,
+        // au-dessus du seuil `FULL` de 0.92 — pour aussi longtemps que la glycémie montait, quelle
+        // que soit l'insuline déjà à bord. Le déjeuner du 09/08/2026 est resté en `FULL` jusqu'à
+        // IOB 16,75 U contre un budget de 8,11, soit 2,07 fois le budget, et 14,09 U de SMB ont été
+        // servis pendant que la vanne restait ouverte. C'est la sortie de `FULL` à 15:11 qui a mis
+        // fin à l'épisode, pas une décision.
+        //
+        // `ESCAPE_PROJECTION` juste en dessous porte déjà cette garde. Son absence ici était une
+        // omission, pas une intention : une montée justifie de continuer à corriger, elle ne
+        // justifie pas de dépasser ce que le corps peut absorber.
+        if (iobSafe < budget &&
+            (sharpRise >= 0.75 || (input.bgMgdl > input.targetBgMgdl + 85 && input.deltaMgdlPer5 > 0.8))
+        ) {
             rawG = max(rawG, 0.88)
             reasonCodes += "ESCAPE_RISE"
         }

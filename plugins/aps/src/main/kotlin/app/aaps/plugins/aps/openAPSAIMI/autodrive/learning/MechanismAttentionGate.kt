@@ -21,7 +21,7 @@ class MechanismAttentionGate @Inject constructor(
     private val aapsLogger: AAPSLogger,
     private val storageHelper: AimiStorageHelper
 ) {
-    private val weightsFileName = "autodrive_attention_weights.json"
+    private val weightsFileName = AutodriveNeuralTrainer.WEIGHTS_FILE_NAME
     
     // Cache en mémoire pour ne pas tuer les I/O à chaque tique de 5 minutes
     private var weightsCache: AttentionWeights? = null

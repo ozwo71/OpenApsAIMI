@@ -22,7 +22,7 @@ object PhysiologicalPatternDetector {
         }.filter { it.confidence >= 0.30 }
 
         val stabilized = PhysiologicalPatternHysteresis.stabilize(raw, input.nowMs)
-        return PhysiologicalPatternPolicy.aggregate(stabilized)
+        return PhysiologicalPatternPolicy.aggregate(stabilized, input.maxSmbHbU)
     }
 
     private fun matchFromPhase(input: PhysiologicalPatternInput): PhysiologicalPatternReading? {

@@ -28,15 +28,15 @@ class PhysiologicalPatternCatalogTest {
         )
         for (id in mealPatterns) {
             val def = PhysiologicalPatternCatalog.definitionOf(id)
-            assertThat(def.smbCapU).isNotNull()
-            // Generous (meal response must not be strangled) but finite.
-            assertThat(def.smbCapU!!).isAtLeast(1.0)
-            assertThat(def.smbCapU!!).isAtMost(2.0)
+            assertThat(def.smbCapFraction).isNotNull()
+            // Generous (meal response must not be strangled) but never above the user's own ceiling.
+            assertThat(def.smbCapFraction!!).isAtLeast(0.60)
+            assertThat(def.smbCapFraction!!).isAtMost(1.0)
         }
         // Declared meals are the most trusted context — their cap must be the loosest of the four.
-        val declared = PhysiologicalPatternCatalog.definitionOf(PhysiologicalPatternId.MEAL_DECLARED).smbCapU!!
+        val declared = PhysiologicalPatternCatalog.definitionOf(PhysiologicalPatternId.MEAL_DECLARED).smbCapFraction!!
         for (id in mealPatterns - PhysiologicalPatternId.MEAL_DECLARED) {
-            assertThat(PhysiologicalPatternCatalog.definitionOf(id).smbCapU!!).isAtMost(declared)
+            assertThat(PhysiologicalPatternCatalog.definitionOf(id).smbCapFraction!!).isAtMost(declared)
         }
     }
 
@@ -46,6 +46,7 @@ class PhysiologicalPatternCatalogTest {
         assertThat(def.suppressMealInterpretation).isTrue()
         assertThat(def.suppressHyperRelease).isTrue()
         assertThat(def.suppressWaveletBoost).isTrue()
-        assertThat(def.smbCapU).isEqualTo(0.50)
+        // 0.31 x 1.6 = 0.496, i.e. the previous 0.50 U at the reference ceiling.
+        assertThat(def.capU(LEGACY_REFERENCE_MAX_SMB_HB_U)).isWithin(0.01).of(0.50)
     }
 }

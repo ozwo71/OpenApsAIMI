@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.ISF
 
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.exp
@@ -17,18 +19,38 @@ import kotlin.math.ln
  * an estimate of anything; it is a dosing policy wearing the name of a physiological parameter.
  *
  * This estimator answers one question and nothing else: *given what was delivered, how much did
- * glucose actually fall?* It observes **closed windows** where the answer is readable — no bolus, a
- * decaying IOB, glucose going down — and folds each observation into a slow state.
+ * glucose actually fall?* It observes **closed windows** where the answer is readable — nothing
+ * being digested, no bolus of any origin, a decaying IOB, glucose going down — and folds each
+ * observation into a slow state.
  *
  * The result is a ratio, not an ISF, so it composes: `S = profileIsf × ratio`. The circadian shape
  * stays owned by the user's profile blocks, which is where it belongs.
+ *
+ * ## What "closed" has to mean
+ *
+ * A window that is merely free of AIMI's own SMBs is not closed. A meal bolus is a bolus, and the
+ * carbs it covers are still being absorbed: the absorption offsets part of the fall, so the drop
+ * credited to insulin is **too small**, so the measured ratio is **too low**, so the sensitivity
+ * commanded from it is too low, so the loop gives **more** insulin. That is the dangerous direction,
+ * on the quantity proposed to replace the commanded sensitivity. So a window is rejected outright if
+ * it — or its run-up — contains any carbs on board, any bolus of any origin, or any SMB.
  *
  * ## The basal deficit correction
  *
  * `iobU` is net of profile basal. When the loop runs a zero temp basal, IOB decays partly because
  * insulin acted and partly because insulin was **not given** — and the second part lowers nothing.
  * Ignoring it made the same production data read 9.7 mg/dL/U instead of 11.9. The deficit is
- * subtracted from the insulin credited with the fall.
+ * subtracted from the insulin credited with the fall, and it is computed from the basal that was
+ * **delivered**, which is the running temp basal, not the rate the loop is about to ask for.
+ *
+ * ## Why the state is persisted
+ *
+ * Roughly 52 observations are needed to move the ratio from 1.0 to 0.94. Android kills the process
+ * routinely, and an in-memory ratio restarts at 1.0 every time — so in the field it would never
+ * converge, and every export would show a value that had merely not had time to move. The ratio,
+ * the observation count and the time of the last fold are written to disk and reloaded, with a
+ * staleness rule: state older than [STALE_AFTER_DAYS] days describes a patient who may have changed,
+ * so it is discarded rather than trusted.
  *
  * ## What it is not
  *
@@ -40,16 +62,24 @@ import kotlin.math.ln
  * See `docs/adr/0008-isf-decision-architecture.md`.
  */
 @Singleton
-class SensitivityRatioEstimator @Inject constructor() {
+class SensitivityRatioEstimator @Inject constructor(
+    private val storageHelper: AimiStorageHelper,
+) {
 
     data class Sample(
         val timestampMs: Long,
         val bgMgdl: Double,
         val iobU: Double,
         val profileBasalUph: Double,
+        /** Basal the pump is **running**, not the rate the loop is about to request. */
         val deliveredBasalUph: Double,
+        /** SMB commanded on this tick. */
         val smbU: Double,
         val profileIsfMgdl: Double,
+        /** Carbs on board. Any amount disqualifies the window: absorption hides part of the fall. */
+        val cobG: Double,
+        /** Time of the most recent bolus of **any** origin, or 0 when none is known. */
+        val lastBolusMs: Long,
     )
 
     /** One usable observation, kept for logging and tests. */
@@ -71,26 +101,36 @@ class SensitivityRatioEstimator @Inject constructor() {
     var lastObservation: Observation? = null
         private set
 
-    /** Number of observations folded in since start, for confidence reporting. */
+    /** Number of observations folded in, across restarts. */
     var observationCount: Int = 0
         private set
+
+    /** Time of the last fold, across restarts. 0 when nothing has ever been folded. */
+    var lastFoldMs: Long = 0L
+        private set
+
+    private var stateLoaded = false
 
     /**
      * Feeds one loop tick and returns the current ratio.
      *
-     * Cheap and side-effect free apart from the internal state: safe to call on every tick,
-     * including ticks where nothing else runs. An estimator that only updates when a controller
-     * engages is not an estimator — that defect is why the meal model froze for hours at a time.
+     * Cheap and side-effect free apart from the internal state and the small state file written on a
+     * fold: safe to call on every tick, including ticks where nothing else runs. An estimator that
+     * only updates when a controller engages is not an estimator — that defect is why the meal model
+     * froze for hours at a time.
      */
     fun observe(sample: Sample): Double {
         if (!sample.isUsable()) return ratio
+        loadStateOnce(sample.timestampMs)
         samples.addLast(sample)
         while (samples.isNotEmpty() &&
             sample.timestampMs - samples.first().timestampMs > RETENTION_MINUTES * 60_000L
         ) {
             samples.removeFirst()
         }
-        closedWindowObservation(sample)?.let { fold(it) }
+        closedWindowObservation(sample)
+            ?.takeIf { mayFoldAt(it.timestampMs) }
+            ?.let { fold(it) }
         return ratio
     }
 
@@ -107,6 +147,7 @@ class SensitivityRatioEstimator @Inject constructor() {
         ratio = 1.0
         lastObservation = null
         observationCount = 0
+        lastFoldMs = 0L
     }
 
     private fun Sample.isUsable(): Boolean =
@@ -116,8 +157,9 @@ class SensitivityRatioEstimator @Inject constructor() {
     /**
      * Looks for a window ending at [end] where the fall can be attributed to insulin alone.
      *
-     * Rejects anything with a bolus inside the window or in the run-up, a rise (which would mean
-     * carbs are arriving), or too little insulin acting to measure against.
+     * Rejects anything with carbs on board or a bolus of any origin inside the window or in the
+     * run-up, a rise (which would mean carbs are arriving), or too little insulin acting to measure
+     * against.
      */
     private fun closedWindowObservation(end: Sample): Observation? {
         val start = samples.firstOrNull { s ->
@@ -130,7 +172,12 @@ class SensitivityRatioEstimator @Inject constructor() {
 
         val runUpStart = start.timestampMs - QUIET_RUN_UP_MINUTES * 60_000L
         val runUp = samples.filter { it.timestampMs in runUpStart until start.timestampMs }
-        if (window.any { it.smbU > 0.0 } || runUp.any { it.smbU > 0.0 }) return null
+        val quietZone = window + runUp
+        // Any insulin the loop did not schedule as basal, and any digestion, breaks the attribution.
+        if (quietZone.any { it.smbU > 0.0 }) return null
+        if (quietZone.any { it.cobG > 0.0 }) return null
+        // 0 means "no bolus is known", not "a bolus at the epoch".
+        if (quietZone.any { it.lastBolusMs > 0L && it.lastBolusMs >= runUpStart }) return null
 
         if (start.iobU < MIN_START_IOB_U) return null
         val drop = start.bgMgdl - end.bgMgdl
@@ -161,12 +208,73 @@ class SensitivityRatioEstimator @Inject constructor() {
             maxOf(0.0, a.profileBasalUph - a.deliveredBasalUph) * hours
         }
 
+    /**
+     * Windows overlap: the same fall qualifies on several consecutive ticks, and folding each of
+     * them would make one episode count five or ten times. A minimum spacing keeps one episode
+     * roughly one observation.
+     */
+    private fun mayFoldAt(timestampMs: Long): Boolean =
+        lastFoldMs <= 0L || timestampMs - lastFoldMs >= MIN_FOLD_SPACING_MINUTES * 60_000L
+
+    /**
+     * Folds one observation with a weight set by the **time since the last fold**.
+     *
+     * The alpha used to be derived for a 5-minute step while `fold` was called once per qualifying
+     * observation, so the realised time constant was `TAU_HOURS × ticks-per-observation` — unbounded,
+     * and different for every patient. Keying it on elapsed time makes [TAU_HOURS] mean what it says.
+     * The elapsed time is capped at [MAX_FOLD_ELAPSED_HOURS] so a single window after a long quiet
+     * period cannot dominate the state.
+     */
     private fun fold(observation: Observation) {
         val bounded = observation.ratio.coerceIn(MIN_OBSERVATION_RATIO, MAX_OBSERVATION_RATIO)
-        val alpha = 1.0 - exp(-(TICK_MINUTES / 60.0) / TAU_HOURS)
+        val elapsedHours = if (lastFoldMs <= 0L) {
+            MIN_FOLD_SPACING_MINUTES / 60.0
+        } else {
+            ((observation.timestampMs - lastFoldMs) / 3_600_000.0)
+                .coerceIn(MIN_FOLD_SPACING_MINUTES / 60.0, MAX_FOLD_ELAPSED_HOURS)
+        }
+        val alpha = 1.0 - exp(-elapsedHours / TAU_HOURS)
         ratio = (ratio + alpha * (bounded - ratio)).coerceIn(MIN_RATIO, MAX_RATIO)
         lastObservation = observation
         observationCount++
+        lastFoldMs = observation.timestampMs
+        saveState(observation.timestampMs)
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Persistence
+    // ---------------------------------------------------------------------------------------------
+
+    private fun loadStateOnce(nowMs: Long) {
+        if (stateLoaded) return
+        stateLoaded = true
+        runCatching {
+            val file = storageHelper.getAimiFile(STATE_FILE_NAME)
+            if (!file.exists() || file.length() == 0L) return@runCatching
+            val json = JSONObject(file.readText())
+            val savedAtMs = json.optLong("saved_at_ms", 0L)
+            val ageMs = nowMs - savedAtMs
+            // Too old to describe this patient, or stamped in the future by a clock change.
+            if (savedAtMs <= 0L || ageMs > STALE_AFTER_DAYS * 24L * 3_600_000L || ageMs < -CLOCK_SKEW_TOLERANCE_MS) {
+                return@runCatching
+            }
+            val savedRatio = json.optDouble("ratio", 1.0)
+            if (!savedRatio.isFinite()) return@runCatching
+            ratio = savedRatio.coerceIn(MIN_RATIO, MAX_RATIO)
+            observationCount = json.optInt("observation_count", 0).coerceAtLeast(0)
+            lastFoldMs = json.optLong("last_fold_ms", 0L).coerceAtLeast(0L)
+        }
+    }
+
+    private fun saveState(nowMs: Long) {
+        runCatching {
+            val json = JSONObject()
+                .put("ratio", ratio)
+                .put("observation_count", observationCount)
+                .put("last_fold_ms", lastFoldMs)
+                .put("saved_at_ms", nowMs)
+            storageHelper.saveFileSafe(storageHelper.getAimiFile(STATE_FILE_NAME), json.toString())
+        }
     }
 
     companion object {
@@ -186,7 +294,12 @@ class SensitivityRatioEstimator @Inject constructor() {
 
         /** Sensitivity moves over hours, not minutes. */
         const val TAU_HOURS = 12.0
-        const val TICK_MINUTES = 5.0
+
+        /** Two folds closer together than this describe the same episode. */
+        const val MIN_FOLD_SPACING_MINUTES = 30.0
+
+        /** Weight ceiling for one fold, so a lone window after a quiet night cannot take over. */
+        const val MAX_FOLD_ELAPSED_HOURS = 2.0
 
         /** The commanded value stays inside the domain where the profile still means something. */
         const val MIN_RATIO = 0.5
@@ -203,5 +316,12 @@ class SensitivityRatioEstimator @Inject constructor() {
         const val MIN_START_IOB_U = 0.8
         const val MIN_ACTED_U = 0.3
         const val RETENTION_MINUTES = 120L
+
+        /** Saved state older than this is discarded: the patient may no longer be the same. */
+        const val STALE_AFTER_DAYS = 7L
+
+        const val STATE_FILE_NAME = "sensitivity_ratio_state.json"
+
+        private const val CLOCK_SKEW_TOLERANCE_MS = 24L * 3_600_000L
     }
 }

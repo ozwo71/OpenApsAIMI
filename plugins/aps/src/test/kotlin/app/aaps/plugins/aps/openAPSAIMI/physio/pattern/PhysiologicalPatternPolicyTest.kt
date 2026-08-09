@@ -27,12 +27,12 @@ class PhysiologicalPatternPolicyTest {
             ),
         )
 
-        assertThat(snapshot.smbCapU).isEqualTo(1.20)
+        assertThat(snapshot.smbCapU!!).isWithin(0.01).of(1.20)
         assertThat(snapshot.smbCapKind).isEqualTo(PatternCapKind.SOFT)
         assertThat(snapshot.mealPatternCap?.kind).isEqualTo(PatternCapKind.SOFT)
         // Soft meal is a proposal for Harmonia; co-active HARD protectors still bind via min().
-        assertThat(snapshot.softProposedCapU()).isEqualTo(1.20)
-        assertThat(snapshot.hardBindingCapU()).isEqualTo(0.40)
+        assertThat(snapshot.softProposedCapU()!!).isWithin(0.01).of(1.20)
+        assertThat(snapshot.hardBindingCapU()!!).isWithin(0.01).of(0.40)
         assertThat(snapshot.suppressHyperRelease).isFalse()
         assertThat(snapshot.suppressMealInterpretation).isFalse()
     }
@@ -48,7 +48,7 @@ class PhysiologicalPatternPolicyTest {
                 ),
             ),
         )
-        assertThat(snapshot.softProposedCapU()).isEqualTo(1.20)
+        assertThat(snapshot.softProposedCapU()!!).isWithin(0.01).of(1.20)
         assertThat(snapshot.hardBindingCapU()).isNull()
     }
 
@@ -69,9 +69,9 @@ class PhysiologicalPatternPolicyTest {
             ),
         )
 
-        assertThat(snapshot.smbCapU).isEqualTo(0.40)
+        assertThat(snapshot.smbCapU!!).isWithin(0.01).of(0.40)
         assertThat(snapshot.smbCapKind).isEqualTo(PatternCapKind.HARD)
-        assertThat(snapshot.hardBindingCapU()).isEqualTo(0.40)
+        assertThat(snapshot.hardBindingCapU()!!).isWithin(0.01).of(0.40)
         assertThat(snapshot.softProposedCapU()).isNull()
         assertThat(snapshot.suppressHyperRelease).isTrue()
     }

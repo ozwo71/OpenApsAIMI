@@ -45,6 +45,8 @@ object PhysiologicalPatternInputBuilder {
         dwellAboveHighBgMinutes: Int,
         trajectoryRelevanceScore: Double,
         nowMs: Long,
+        /** User's high-BG SMB ceiling; catalogue caps are fractions of it. */
+        maxSmbHbU: Double = LEGACY_REFERENCE_MAX_SMB_HB_U,
     ): PhysiologicalPatternInput {
         val highBand = HyperTrajectoryHypoCredibility.highBgBandMgdl(targetBgMgdl, highBgPreferenceMgdl)
         var illness = false
@@ -93,6 +95,7 @@ object PhysiologicalPatternInputBuilder {
             dwellAboveHighBgMinutes = dwellAboveHighBgMinutes,
             trajectoryRelevanceScore = trajectoryRelevanceScore,
             nowMs = nowMs,
+            maxSmbHbU = maxSmbHbU,
         )
     }
 }
@@ -118,6 +121,7 @@ object PhysiologicalPatternExport {
                 },
             )
         }
+        root.put("max_smb_hb_u", snapshot.maxSmbHbU)
         snapshot.hardBindingCapU()?.let { root.put("hard_binding_cap_u", it) }
         snapshot.softProposedCapU()?.let { root.put("soft_proposed_cap_u", it) }
         root.put("summary", snapshot.reasonSummary)
@@ -130,7 +134,8 @@ object PhysiologicalPatternExport {
                 put("reason", reading.reason)
                 put("dominant_scale_min", def.dominantScaleMinutes)
                 put("cap_kind", def.capKind.name)
-                def.smbCapU?.let { put("smb_cap_u", it) }
+                def.smbCapFraction?.let { put("smb_cap_fraction", it) }
+                def.capU(snapshot.maxSmbHbU)?.let { put("smb_cap_u", it) }
             }
         }))
         return root

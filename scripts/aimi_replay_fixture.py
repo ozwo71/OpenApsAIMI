@@ -50,6 +50,8 @@ def flat(r):
       "cbfc":b.get("cbf_coefficient_used"),"cbfcunf":b.get("cbf_coefficient_unfloored"),
       "cbfu":b.get("cbf_permitted_u"),"cbfuunf":b.get("cbf_permitted_unfloored_u"),
       "cbfisf":b.get("cbf_profile_isf_mgdl"),
+      "sealref":b.get("smb_seal_refused_count"),"sealrefu":b.get("smb_seal_refused_total_u"),
+      "sealok":b.get("smb_seal_allowed_raise_count"),
       "dec":o.get("decision"),"amt":o.get("amount"),"basal":o.get("target_basal_rate_uph"),
       "owner":st.get("origin_owner"),"fowner":st.get("final_owner"),
       "maxsmb":st.get("max_smb_u"),"iobhead":st.get("iob_headroom_u"),

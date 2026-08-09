@@ -42,6 +42,14 @@ data class PhysiologicalPatternSnapshot(
     val suppressWaveletBoost: Boolean,
     val smbCapU: Double?,
     val smbCapKind: PatternCapKind? = null,
+    /**
+     * High-BG SMB ceiling this snapshot's caps were resolved against, in units.
+     *
+     * The catalogue holds **fractions** of that ceiling, not absolute doses, so [hardBindingCapU]
+     * needs it to re-resolve a definition it did not store. See `PhysiologicalPatternDefinition
+     * .smbCapFraction`.
+     */
+    val maxSmbHbU: Double = LEGACY_REFERENCE_MAX_SMB_HB_U,
     val mealPatternCap: PatternCapProposal? = null,
     val reasonSummary: String,
 ) {
@@ -59,7 +67,7 @@ data class PhysiologicalPatternSnapshot(
             if (reading.confidence < 0.35) continue
             val def = PhysiologicalPatternCatalog.definitionOf(reading.id)
             if (def.capKind != PatternCapKind.HARD) continue
-            val cap = def.smbCapU ?: continue
+            val cap = def.capU(maxSmbHbU) ?: continue
             hard = hard?.let { minOf(it, cap) } ?: cap
         }
         if (smbCapKind == null || smbCapKind == PatternCapKind.HARD) {
@@ -109,7 +117,17 @@ data class PhysiologicalPatternSnapshot(
     }
 }
 
+/** High-BG ceiling the catalogue fractions were calibrated against. Conversion reference only. */
+const val LEGACY_REFERENCE_MAX_SMB_HB_U: Double = 1.6
+
 data class PhysiologicalPatternInput(
+    /**
+     * The user's high-BG SMB ceiling, in units. Catalogue caps are fractions of it.
+     *
+     * Defaulted to the conversion reference so a caller that forgets it keeps the previous numbers
+     * instead of silently producing a cap of zero.
+     */
+    val maxSmbHbU: Double = LEGACY_REFERENCE_MAX_SMB_HB_U,
     val bgMgdl: Double,
     val targetBgMgdl: Double,
     val highBgBandMgdl: Double,
@@ -153,13 +171,37 @@ data class PatternDefinition(
     val suppressMealInterpretation: Boolean = false,
     val suppressHyperRelease: Boolean = false,
     val suppressWaveletBoost: Boolean = false,
-    val smbCapU: Double? = null,
+    /**
+     * SMB ceiling this pattern proposes, as a **fraction of the high-BG ceiling** `maxSMBHB`.
+     *
+     * Was an absolute number of units. That made the whole catalogue a table calibrated for one
+     * patient: the same 1.20 U applied at 60 kg and at 100 kg, and a user with `maxSMBHB = 4.0` got a
+     * straitjacket while one at 0.8 never saw the cap bind at all. Read as fractions of the user's own
+     * ceiling, the same table is a coherent severity ladder from 19 % to 94 %.
+     *
+     * The values were converted from the previous units against
+     * [LEGACY_REFERENCE_MAX_SMB_HB_U], rounded **down** so no cap became more permissive. The largest
+     * resulting difference is under 0.002 U, well below pump resolution.
+     */
+    val smbCapFraction: Double? = null,
     val capKind: PatternCapKind = PatternCapKind.HARD,
     private val mealLeafCredScale: Double = 1.0,
     private val hyperLeafCredScale: Double = 1.0,
     private val waveletCredScale: Double = 1.0,
     private val uamLeafCredScale: Double = 1.0,
 ) {
+    /**
+     * This pattern's SMB cap in units, for a user whose high-BG ceiling is [maxSmbHbU].
+     *
+     * Null when the pattern proposes no cap. Never above the ceiling, because every fraction in the
+     * catalogue is at most 1.0 — a pattern may reduce the user's ceiling, never raise it.
+     */
+    fun capU(maxSmbHbU: Double): Double? {
+        val fraction = smbCapFraction ?: return null
+        if (!maxSmbHbU.isFinite() || maxSmbHbU <= 0.0) return null
+        return (fraction.coerceIn(0.0, 1.0) * maxSmbHbU)
+    }
+
     fun leafCredibilityScale(leafId: BeliefLeafId, confidence: Double): Double {
         val blend = 1.0 - (1.0 - confidence.coerceIn(0.0, 1.0)) * 0.5
         return when (leafId) {

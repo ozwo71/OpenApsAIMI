@@ -51,6 +51,7 @@ import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAutodriveBasalBridge
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cTrajectoryContext
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
+import app.aaps.plugins.aps.openAPSAIMI.ISF.SensitivityRatioEstimator
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
@@ -364,6 +365,16 @@ internal data class AimiDecisionContext(
          * above the 0.6 / 0.7 / 0.8 gates, which is the one thing the medians could not settle.
          */
         var ra_aligned_tau_shadow_mgdl_per_min: Double? = null,
+        /**
+         * Writes to the SMB refused after `finalizeAndCapSMB` sealed the tick, and their total size.
+         *
+         * A non-zero count means a component tried to raise the dose past the terminal. That is the
+         * signal `AiAuditor` and the legacy meal paths never produced before the seal existed.
+         */
+        var smb_seal_refused_count: Int? = null,
+        var smb_seal_refused_total_u: Double? = null,
+        /** Post-seal raises allowed because the owner is a user-initiated action (meal advisor). */
+        var smb_seal_allowed_raise_count: Int? = null,
         /** Coefficient the barrier used, and what it would be with the floor removed. */
         var cbf_coefficient_used: Double? = null,
         var cbf_coefficient_unfloored: Double? = null,
@@ -620,6 +631,9 @@ internal data class AimiDecisionContext(
             base.put("ra_estimator_advances", baseline_state.ra_estimator_advances ?: org.json.JSONObject.NULL)
             base.put("ra_estimator_replayed_calls", baseline_state.ra_estimator_replayed_calls ?: org.json.JSONObject.NULL)
             base.put("ra_aligned_tau_shadow_mgdl_per_min", baseline_state.ra_aligned_tau_shadow_mgdl_per_min ?: org.json.JSONObject.NULL)
+            base.put("smb_seal_refused_count", baseline_state.smb_seal_refused_count ?: org.json.JSONObject.NULL)
+            base.put("smb_seal_refused_total_u", baseline_state.smb_seal_refused_total_u ?: org.json.JSONObject.NULL)
+            base.put("smb_seal_allowed_raise_count", baseline_state.smb_seal_allowed_raise_count ?: org.json.JSONObject.NULL)
             base.put("cbf_coefficient_used", baseline_state.cbf_coefficient_used ?: org.json.JSONObject.NULL)
             base.put("cbf_coefficient_unfloored", baseline_state.cbf_coefficient_unfloored ?: org.json.JSONObject.NULL)
             base.put("cbf_permitted_u", baseline_state.cbf_permitted_u ?: org.json.JSONObject.NULL)
@@ -917,6 +931,14 @@ private const val MEAL_ADVISOR_MIN_CARB_COVERAGE = 0.25
  * **Prédictions** : eventual aberrants → [SafetyNet.sanitizeEventualMgdlForSmbZones] et
  * [InsulinStackingStance.sanitizeEventualMgdlForStackingSignals].
  */
+/**
+ * Idle time after which the aggressive-rise SMB floor may serve a fresh prebolus, in ms.
+ *
+ * 90 minutes: long enough that a second absorption wave of the same meal does not re-arm the budget,
+ * short enough that a genuinely new meal does.
+ */
+private const val RISE_FLOOR_REARM_MS = 90L * 60L * 1000L
+
 private const val TIGHT_SPIRAL_CAP_TDD_REFERENCE_U = 55.0
 
 /** Seuil énergie spiral (U) à TDD = [TIGHT_SPIRAL_CAP_TDD_REFERENCE_U] (échelle adulte repas). */
@@ -1179,7 +1201,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var contextInfluenceEngine: app.aaps.plugins.aps.openAPSAIMI.context.ContextInfluenceEngine  // 🎯 Context Influence
     @Inject lateinit var physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR  // 🏥 Physiological Modulation
     @Inject lateinit var straightLineTubeAdvisor: StraightLineTubeAdvisor  // 📐 MPC-lite hypo tube + SMB-cap smoothing
-    @Inject lateinit var sensitivityRatioEstimator: app.aaps.plugins.aps.openAPSAIMI.ISF.SensitivityRatioEstimator
+    @Inject lateinit var sensitivityRatioEstimator: SensitivityRatioEstimator
     @Inject lateinit var continuousStateEstimator: app.aaps.plugins.aps.openAPSAIMI.autodrive.estimator.ContinuousStateEstimator
     @Inject lateinit var tpoOrchestrator: TpoOrchestrator
     
@@ -2869,7 +2891,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Direct send for all Meal Advisor results — bypass finalizeAndCapSMB (refractory + min carb coverage inside advisor).
         if (bolusIntent > 0) {
             val safeIntent = kotlin.math.min(bolusIntent, 30.0)
-            rT.units = safeIntent
+            applySmbUnits(rT, safeIntent, "MealAdvisor")
             rT.reason.append(advisorRes.reason)
 
             val triggerType = if (isExplicitAdvisorRun) "Explicit" else "Auto"
@@ -4059,6 +4081,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             trajectoryRelevanceScore = lastFusedPhysioMultipliers?.trajectoryRelevanceScore?.toDouble()
                 ?: lastBasePhysioMultipliers.trajectoryRelevanceScore.toDouble(),
             nowMs = dateUtil.now(),
+            // The catalogue reduces the user's own ceiling instead of imposing absolute units.
+            maxSmbHbU = maxOf(this.maxSMBHB, this.maxSMB),
         )
         val patternSnapshot = PhysiologicalPatternDetector.detect(patternInput)
         lastPhysiologicalPatternSnapshot = patternSnapshot
@@ -4585,11 +4609,52 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (bgMgdl < 120.0) return 0.0
         val largePrebolus = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
         val smallPrebolus = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
-        return when {
+        val tierFloor = when {
             riseSignal >= 5.0f && shortAvgDelta >= 3.0f -> largePrebolus
-            riseSignal >= 2.0f -> smallPrebolus
-            else -> 0.0
+            riseSignal >= 2.0f                          -> smallPrebolus
+            else                                        -> 0.0
         }.coerceAtLeast(0.0)
+        if (tierFloor <= 0.0) return 0.0
+        return tierFloor.coerceAtMost(remainingRiseFloorBudgetU(largePrebolus))
+    }
+
+    /**
+     * What is left of this rise's floor budget, in units.
+     *
+     * ## Why a budget and not just a per-tick value
+     *
+     * The floor is a **prebolus**: it exists to put insulin in before a rise is visible in the model.
+     * A prebolus is served once. This one had no memory, so it re-armed on every tick and, at a
+     * 1.6 U ceiling on 5-minute ticks, behaved as a **19 U/h floor** for as long as the rise held.
+     *
+     * Measured on 2026-08-09: it delivered 1.088 U per tick for six consecutive ticks starting at
+     * 14:41, while the MPC was asking for exactly 0.000 and the safety barrier was permitting exactly
+     * 0.000. Peak IOB 16.75 U against a physiological budget of 8.11. The patient needed rescue carbs.
+     *
+     * One large prebolus per rise is the whole intent. The budget re-arms only on a fresh onset —
+     * defined as the floor having been idle for [RISE_FLOOR_REARM_MS], which is long enough that a
+     * second wave of the same meal does not qualify.
+     */
+    private fun remainingRiseFloorBudgetU(largePrebolusU: Double): Double {
+        val now = dateUtil.now()
+        val budget = largePrebolusU.coerceAtLeast(0.0)
+        if (budget <= 0.0) return 0.0
+        if (now - lastRiseFloorContributionMs > RISE_FLOOR_REARM_MS) {
+            riseFloorSpentU = 0.0
+        }
+        return (budget - riseFloorSpentU).coerceAtLeast(0.0)
+    }
+
+    /**
+     * Records what the floor actually contributed, so the budget above can be spent down.
+     *
+     * Called with the amount by which the floor raised the dose above the model — not with the whole
+     * dose. Insulin the model asked for is not the floor's doing and must not consume its budget.
+     */
+    private fun noteRiseFloorContribution(contributedU: Double) {
+        if (contributedU <= 0.0) return
+        riseFloorSpentU += contributedU
+        lastRiseFloorContributionMs = dateUtil.now()
     }
 
     /**
@@ -4696,6 +4761,77 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * export object is built at tick bootstrap, so reading them there — as the fields used to do —
      * gave `null` for the floor and the previous tick's estimate for Ra.
      */
+    /** Poses estimator counters and the aligned-tau shadow on [decisionCtx] before it is serialised. */
+    /**
+     * Owners allowed to raise the dose after the terminal has sealed it.
+     *
+     * The meal advisor is a user-initiated action, not a loop decision, and it deliberately bypasses
+     * `finalizeAndCapSMB` — the comment at its call site says so. It stays allowed, but it is now
+     * counted and logged instead of being indistinguishable from a defect.
+     */
+    private val smbPostSealRaiseAllowedOwners = setOf("MealAdvisor")
+
+    /**
+     * The one way to write the tick's SMB.
+     *
+     * ## Why this exists
+     *
+     * `finalizeAndCapSMB` is meant to be the terminal: every cap, guard and budget converges there.
+     * It was not the last word. Five places wrote `rT.units`, and three of them ran after it — the AI
+     * auditor, and two legacy meal-mode paths. The auditor's own prompt says its role is
+     * *"CONFIRM or SOFTEN only — never invent a lift"*; nothing in the code enforced that, so it could
+     * write any value straight over the terminal's result.
+     *
+     * That is the same shape as the two other defects found on 2026-08-09: a constraint stated in
+     * documentation and absent from the code. Here it becomes structural — after the seal, a write may
+     * only ever **lower** the dose, unless its owner is on [smbPostSealRaiseAllowedOwners].
+     *
+     * Refusals are counted and exported rather than silently swallowed, because a refused raise means
+     * a component disagreed with the terminal and that is worth seeing.
+     *
+     * Note what this does **not** cover: the aggressive-rise floor feeds `finalizeAndCapSMB` as an
+     * input, so it is upstream of the seal. Its problem is that it bypasses `ControlBarrierShield`,
+     * which is a different boundary.
+     */
+    private fun applySmbUnits(rT: RT, requestedU: Double, owner: String) {
+        val requested = if (requestedU.isFinite()) requestedU.coerceAtLeast(0.0) else 0.0
+        val current = rT.units ?: 0.0
+        if (!smbTerminalSealed || requested <= current + 1e-9) {
+            rT.units = requested
+            return
+        }
+        if (owner in smbPostSealRaiseAllowedOwners) {
+            smbSealAllowedRaiseCount++
+            consoleLog.add("🔓 SMB_SEAL_EXCEPTION[$owner]: ${"%.2f".format(current)} -> ${"%.2f".format(requested)} U")
+            rT.units = requested
+            return
+        }
+        smbSealRefusedCount++
+        smbSealRefusedTotalU += requested - current
+        consoleError.add(
+            "🔒 SMB_SEAL_REFUSED[$owner]: tentative ${"%.2f".format(current)} -> ${"%.2f".format(requested)} U " +
+                "apres le terminal ; la dose reste a ${"%.2f".format(current)} U"
+        )
+    }
+
+    /** Closes the terminal for this tick. Called once, at the end of `finalizeAndCapSMB`. */
+    private fun sealSmbTerminal() {
+        smbTerminalSealed = true
+    }
+
+    private fun markEstimatorDiagnosticsForExport(decisionCtx: AimiDecisionContext) {
+        runCatching {
+            decisionCtx.baseline_state.let { b ->
+                b.ra_estimator_advances = continuousStateEstimator.runCount
+                b.ra_estimator_replayed_calls = continuousStateEstimator.replayedCallCount
+                b.ra_aligned_tau_shadow_mgdl_per_min = continuousStateEstimator.lastRaAlignedTauShadow
+                b.smb_seal_refused_count = smbSealRefusedCount
+                b.smb_seal_refused_total_u = smbSealRefusedTotalU.takeIf { it > 0.0 }
+                b.smb_seal_allowed_raise_count = smbSealAllowedRaiseCount
+            }
+        }
+    }
+
     private fun markHtrRaFloorForExport(floorMgdlPerMin: Double?, raUsedMgdlPerMin: Double) {
         val baseline = pendingDecisionCtxForExport?.baseline_state ?: return
         baseline.htr_ra_floor_mgdl_per_min = floorMgdlPerMin
@@ -4981,6 +5117,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 0.0
             }
             val v3SmbRaw = maxOf(v3SmbModel, v3SmbFloor)
+            // Only what the floor added on top of the model spends its budget.
+            noteRiseFloorContribution(v3SmbRaw - v3SmbModel)
             val smallPrebolusPref = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
             val largePrebolusPref = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
             val v3FloorTier = when {
@@ -8513,7 +8651,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                             if (verdict != null) {
                                 consoleLog.add(sanitizeForJson("   Verdict: ${verdict.verdict}, Conf: ${"%.2f".format(verdict.confidence)}"))
                             }
-                            finalResult.units = result.bolusU ?: 0.0
+                            applySmbUnits(finalResult, result.bolusU ?: 0.0, "AiAuditor")
                             if (result.tbrUph != null) {
                                 finalResult.rate = result.tbrUph
                             }
@@ -8610,15 +8748,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // estimator. See `docs/adr/0008-isf-decision-architecture.md`.
         val staticIsfForRatio = IsfSourceTelemetry.lastProfileStaticMgdl ?: 0.0
         runCatching {
+            // Basal that was actually **running** over the interval just elapsed. `finalResult.rate`
+            // is the rate this tick is about to request, which the pump has not delivered yet — using
+            // it made the basal-deficit correction read the future instead of the past. A temp basal
+            // with no remaining duration means the profile rate is what ran.
+            val runningTemp = ctx.currentTemp
+            val deliveredBasalUph =
+                if (runningTemp.duration > 0) runningTemp.rate else profile.current_basal
             sensitivityRatioEstimator.observe(
-                app.aaps.plugins.aps.openAPSAIMI.ISF.SensitivityRatioEstimator.Sample(
+                SensitivityRatioEstimator.Sample(
                     timestampMs = decisionCtx.timestamp,
                     bgMgdl = decisionCtx.baseline_state.current_bg_mgdl,
                     iobU = decisionCtx.baseline_state.iob_u,
                     profileBasalUph = profile.current_basal,
-                    deliveredBasalUph = finalResult.rate ?: profile.current_basal,
+                    deliveredBasalUph = deliveredBasalUph,
                     smbU = finalResult.units ?: 0.0,
                     profileIsfMgdl = staticIsfForRatio,
+                    // Any digestion disqualifies the window: absorption hides part of the fall, so
+                    // the ratio reads low, so the sensitivity commanded from it reads low, so the
+                    // loop would give more insulin. See SensitivityRatioEstimator.
+                    cobG = decisionCtx.baseline_state.cob_g,
+                    // Boluses of any origin, not only AIMI's own SMBs.
+                    lastBolusMs = ctx.iobDataArray.firstOrNull()?.lastBolusTime ?: 0L,
                 ),
             )
         }
@@ -8794,6 +8945,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             smbAfterCapU = lastPostHypoSmbAfterCapU,
         )
 
+        // Les compteurs et l'ombre Ra doivent être posés ICI, pas en fin de tick.
+        //
+        // Mesuré sur le paquet du 09/08 : écrits après `runDetermineBasalTick`, ils n'atteignaient
+        // que 7 lignes sur 93 — celles qui tombent dans le filet de rattrapage. Toutes les autres
+        // étaient déjà sérialisées. Et les 7 survivantes étaient toutes des `Basal_Modulation`, donc
+        // l'échantillon était en plus biaisé vers les ticks calmes.
+        //
+        // Ce point-ci est le seul par lequel tous les chemins d'export passent.
+        markEstimatorDiagnosticsForExport(decisionCtx)
         val medicalJson = decisionCtx.toMedicalJson()
         // NB: do NOT push medicalJson into consoleLog — consoleLog is serialized into the NS deviceStatus
         // (suggested + enacted, twice per document); this multi-hundred-KB blob makes the deviceStatus
@@ -10401,6 +10561,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     /** HTR Ra floor computed this tick, or `null` when none. Reaches the belief tree, not the MPC. */
     private var lastHtrRaFloorMgdlPerMin: Double? = null
+
+    /** True once `finalizeAndCapSMB` has written the tick's dose. See [applySmbUnits]. */
+    private var smbTerminalSealed: Boolean = false
+
+    /** Post-seal raises that were refused this tick, and by how much in total. Exported. */
+    private var smbSealRefusedCount: Int = 0
+    private var smbSealRefusedTotalU: Double = 0.0
+
+    /** Post-seal raises that were allowed because their owner is on the exception list. Exported. */
+    private var smbSealAllowedRaiseCount: Int = 0
+
+    /** Units the aggressive-rise floor has contributed to the current rise. See `remainingRiseFloorBudgetU`. */
+    private var riseFloorSpentU: Double = 0.0
+
+    /** When the floor last contributed, so a fresh rise can re-arm the budget. */
+    private var lastRiseFloorContributionMs: Long = 0L
 
     /**
      * Deltas the end-of-tick safety net feeds the estimator with.
@@ -12998,6 +13174,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         rT.units = finalUnits.coerceAtLeast(0.0)
+        sealSmbTerminal()
         recordSmbActionType(if (finalUnits > 0.0) "smb" else "none")
         rT.reason.append(reasonHeader)
 
@@ -15430,7 +15607,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 rT.units = 0.0
                 return
             }
-            rT.units = units
+            applySmbUnits(rT, units, "LegacyMealModes")
             rT.deliverAt = dateUtil.now()
             legacyPrebolusFiredAtMem[logTag] = dateUtil.now() // 🔒 arme le latch au tir effectif
             onAllowed(units)
@@ -15489,7 +15666,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val timeSinceLastCarryRetry = dateUtil.now() - lastCarryRetryFireMillis
                 val carryOnCooldown = lastCarryRetryFireMillis > 0L && timeSinceLastCarryRetry < CARRY_RETRY_COOLDOWN_MS
                 if (!carryOnCooldown) {
-                    rT.units = pendingLegacyPrebolusUnit.toDouble()
+                    applySmbUnits(rT, pendingLegacyPrebolusUnit.toDouble(), "LegacyPrebolus")
                     rT.deliverAt = dateUtil.now()
                     lastCarryRetryFireMillis = dateUtil.now()
                     consoleLog.add("🍱 LEGACY_PB1_PRIORITY_CARRY: re-propose ${pendingLegacyPrebolusUnit}U (non confirmé en base)")
@@ -16172,6 +16349,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         mealAbsorptionDeltaPrevForTick = null
         mealAbsorptionDeltaPrevLatched = false
         lastHtrRaFloorMgdlPerMin = null
+        smbTerminalSealed = false
+        smbSealRefusedCount = 0
+        smbSealRefusedTotalU = 0.0
+        smbSealAllowedRaiseCount = 0
         raNetCombinedDelta = shortAvgDelta
         raNetShortAvgDeltaAdj = shortAvgDelta
         val result = try {
@@ -16197,13 +16378,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Unconditional, too: the engaged branch stages its row inside `AutodriveEngine.tick`, and
             // `observeRaIfNotAlreadyRun` returns early on exactly those ticks — flushing from inside
             // it would drop every engaged row.
-            runCatching {
-                pendingDecisionCtxForExport?.baseline_state?.let { b ->
-                    b.ra_estimator_advances = continuousStateEstimator.runCount
-                    b.ra_estimator_replayed_calls = continuousStateEstimator.replayedCallCount
-                    b.ra_aligned_tau_shadow_mgdl_per_min = continuousStateEstimator.lastRaAlignedTauShadow
-                }
-            }
             runCatching { autodriveEngine.flushTickRow(ctx.currentTime) }
         }
         exportAimiDecisionIfNotYetExported(ctx, result)
