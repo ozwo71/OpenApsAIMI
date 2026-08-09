@@ -63,7 +63,18 @@ class ControlBarrierShield @Inject constructor(
         val totalProposedDose = proposedIobIncrement + tbrIncrement
         
         // Lie Derivative L_f(h) : Évolution naturelle sans insuline actionnée (Dose = 0)
-        val siMetabolic = state.estimatedSI * METABOLIC_SI_BASE
+        //
+        // 🛡️ On lit `safetySi`, jamais `estimatedSI`.
+        //
+        // `lgh = -siMetabolic * bg` ci-dessous : plus la sensibilité est **basse**, plus `|lgh|` est
+        // petit, et plus la dose autorisée `safeU = (-γh - lfh) / lgh` est **grande**. Tout ce qui
+        // sait baisser la sensibilité sait donc desserrer cette barrière — c'est vrai du
+        // multiplicateur d'agressivité de `PkPdIntegration` comme d'un futur learner.
+        //
+        // `safetySi` est ancré sur l'ISF du profil et pris comme le plus restrictif des deux (voir
+        // `AutodriveEngine.profileAnchoredSafetySi`). Le repli sur `estimatedSI` conserve le
+        // comportement d'avant pour les états construits hors du moteur.
+        val siMetabolic = (state.safetySi ?: state.estimatedSI) * METABOLIC_SI_BASE
         val lfh = - p1 * (state.bg - 100.0) - (siMetabolic * state.iob * state.bg) + state.estimatedRa
 
         // Lie Derivative L_g(h) : Impact de l'action de contrôle (Dose_u)

@@ -4632,9 +4632,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * The row carries `engaged = 0` and neutral decision columns, so the model can condition on
      * engagement explicitly instead of the dataset being filtered by it in silence.
      */
-    private fun recordDisengagedTrainingRow(state: app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState) {
+    /**
+     * Identity of the observation the meal model is allowed to consume once.
+     *
+     * The CGM sample time, not `ctx.currentTime`. `determine_basal` can be invoked more than once for
+     * the same sample — measured on the production corpus: 2610 consecutive dataset rows carry an
+     * identical `BG_Current` **and** `BG_Velocity` less than 60 s apart, and `Estimated_Ra` moved
+     * between them on 1974 of those (76 %), by more than 0.2 mg/dL/min on 405, up to 2.83. Keying on
+     * the invocation would let every one of those advance the filter again on evidence it has already
+     * used.
+     *
+     * Falls back to the invocation time when the sample carries no date, so the guard degrades to
+     * "once per invocation" rather than to "never".
+     */
+    private fun raObservationId(ctx: AimiTickContext): Long =
+        ctx.glucoseStatus.date.takeIf { it > 0L } ?: ctx.currentTime
+
+    private fun stageDisengagedTrainingRow(
+        ctx: AimiTickContext,
+        state: app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState,
+    ) {
         runCatching {
-            autodriveEngine.recordDisengagedSnapshot(state, dateUtil.now())
+            autodriveEngine.stageDisengagedSnapshot(state, tickId = ctx.currentTime, currentEpochMs = dateUtil.now())
         }
     }
 
@@ -4651,9 +4670,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (before != raEstimatorRunCountAtTickStart) return // something already observed this tick
         val state = buildRaObservationState(ctx, combinedDelta, shortAvgDeltaAdj, pkpdRuntime, hasRecentMealEstimate)
             ?: return
-        val observed = runCatching { continuousStateEstimator.updateAndPredict(state) }.getOrNull() ?: state
+        val observed = runCatching {
+            continuousStateEstimator.updateAndPredict(state, tickId = raObservationId(ctx))
+        }.getOrNull() ?: state
         consoleLog.add("🍽️ RA_OBSERVE[$reason]: Ra=${"%.2f".format(continuousStateEstimator.getLastRa())}")
-        recordDisengagedTrainingRow(observed)
+        stageDisengagedTrainingRow(ctx, observed)
     }
 
     private fun runAutodriveV3MultiVariableBranch(
@@ -4844,6 +4865,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 hr = snapshot.hrNow,
                 rhr = snapshot.rhrResting,
                 mpcRaFloorMgdlPerMin = mpcHints.estimatedRaFloorMgdlPerMin,
+                tickId = ctx.currentTime,
+                observationId = raObservationId(ctx),
+                engaged = true,
             )
 
             val v3CommandSafe = adCommand != null && adCommand.isSafe
@@ -16087,15 +16111,31 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastHtrRaFloorMgdlPerMin = null
         raNetCombinedDelta = shortAvgDelta
         raNetShortAvgDeltaAdj = shortAvgDelta
-        val result = runDetermineBasalTickInner(ctx)
-        observeRaIfNotAlreadyRun(
-            ctx = ctx,
-            combinedDelta = raNetCombinedDelta,
-            shortAvgDeltaAdj = raNetShortAvgDeltaAdj,
-            pkpdRuntime = cachedPkpdRuntime,
-            hasRecentMealEstimate = false,
-            reason = "tick_net",
-        )
+        val result = try {
+            val inner = runDetermineBasalTickInner(ctx)
+            observeRaIfNotAlreadyRun(
+                ctx = ctx,
+                combinedDelta = raNetCombinedDelta,
+                shortAvgDeltaAdj = raNetShortAvgDeltaAdj,
+                pkpdRuntime = cachedPkpdRuntime,
+                hasRecentMealEstimate = false,
+                reason = "tick_net",
+            )
+            inner
+        } finally {
+            // One training row per tick, written after the dose is decided rather than in the middle
+            // of it.
+            //
+            // In `finally`, not as a plain statement: `AimiLoopTickRecovery` exists because the inner
+            // tick does throw, and a staged row lost on those ticks would bias the training set away
+            // from exactly the anomalous ones. Under the previous immediate write, that row was
+            // already on disk.
+            //
+            // Unconditional, too: the engaged branch stages its row inside `AutodriveEngine.tick`, and
+            // `observeRaIfNotAlreadyRun` returns early on exactly those ticks — flushing from inside
+            // it would drop every engaged row.
+            runCatching { autodriveEngine.flushTickRow(ctx.currentTime) }
+        }
         exportAimiDecisionIfNotYetExported(ctx, result)
         return result
     }
@@ -17547,6 +17587,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 steps = snapshot.stepsLast15m,
                 hr = snapshot.hrNow,
                 rhr = snapshot.rhrResting,
+                tickId = ctx.currentTime,
+                observationId = raObservationId(ctx),
+                // Shadow tick: it enacts nothing, so it must not be labelled as owning the dose.
+                engaged = false,
             )
             consoleLog.add("👻 [T3c_SHADOW] DataLake tick fired for V3 ML continuity.")
         } catch (e: Exception) {
@@ -17617,6 +17661,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 steps = snapshot.stepsLast15m,
                 hr = snapshot.hrNow,
                 rhr = snapshot.rhrResting,
+                tickId = ctx.currentTime,
+                observationId = raObservationId(ctx),
             )
         } catch (e: Exception) {
             aapsLogger.warn(LTag.APS, "[T3c_AD_BASAL] proposeBasalOnlyTbr failed: ${e.message}")

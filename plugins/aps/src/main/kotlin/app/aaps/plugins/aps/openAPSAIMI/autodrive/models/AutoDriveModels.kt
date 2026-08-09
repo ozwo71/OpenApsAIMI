@@ -51,6 +51,20 @@ data class AutoDriveState(
     val iob: Double,
     val cob: Double = 0.0,
     val estimatedSI: Double = 1.0,
+    /**
+     * Sensitivity the safety barrier must use, in the same ISF/10000 units as [estimatedSI].
+     *
+     * Separate from [estimatedSI] because the barrier and the controller need different guarantees.
+     * The controller may be optimistic; the barrier may not. `ControlBarrierShield` derives
+     * `lgh = -siMetabolic * bg` from this value, so a **lower** sensitivity permits a **larger** dose
+     * — which means any policy multiplier or learner able to lower [estimatedSI] is able to loosen the
+     * barrier. This field is the value nothing downstream of the profile is allowed to lower.
+     *
+     * `null` means "no anchor supplied": the barrier falls back to [estimatedSI], i.e. the behaviour
+     * before the split. Only paths that build a state outside `AutodriveEngine.tick` should leave it
+     * null.
+     */
+    val safetySi: Double? = null,
     val estimatedRa: Double = 0.0,
     val patientWeightKg: Double = 70.0,
     val physiologicalStressMask: DoubleArray,
@@ -77,6 +91,7 @@ data class AutoDriveState(
         require(iob >= 0.0) { "IOB cannot be negative: $iob" }
         require(cob >= 0.0) { "COB cannot be negative: $cob" }
         require(estimatedSI > 0.0) { "Estimated SI must be positive: $estimatedSI" }
+        require(safetySi == null || safetySi > 0.0) { "Safety SI must be positive when set: $safetySi" }
         require(estimatedRa >= 0.0) { "Estimated Ra cannot be negative: $estimatedRa" }
         require(patientWeightKg in 40.0..250.0) { "Patient weight out of physiological bounds: $patientWeightKg" }
         require(hour in 0..23) { "Invalid hour: $hour" }

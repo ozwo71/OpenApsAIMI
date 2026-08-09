@@ -17,6 +17,7 @@ import app.aaps.core.keys.interfaces.PreferenceKey
 import javax.inject.Inject
 import javax.inject.Singleton
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.math.max
 
 /**
  * 🧠 Autodrive Engine (iLet-like Architecture)
@@ -41,8 +42,35 @@ class AutodriveEngine @Inject constructor(
     private val systemState = AtomicReference<AimiState>(AimiState.Manual)
     private var aggressiveWindowUntilEpochMs: Long = 0L
 
+    /**
+     * Training row waiting to be written, for the tick currently running.
+     *
+     * `tick()` no longer writes to the dataset itself. It is reached from three places — the engaged
+     * Autodrive branch, the T3C shadow tick, and `proposeBasalOnlyTbr` which delegates to `tick()` —
+     * so a write inside it produced two or three rows carrying the same timestamp, in a count that
+     * depended on which preferences were on. Every one of them was labelled `engaged = 1`, including
+     * T3C proposals whose SMB the caller strips and which never reach the pump.
+     *
+     * Staging instead of writing gives one row per tick, labelled by the path that actually owned the
+     * decision, and moves the file write off the middle of the dosing sequence.
+     */
+    private val pendingRow = AtomicReference<PendingTrainingRow?>(null)
+
+    private data class PendingTrainingRow(
+        val tickId: Long,
+        val state: AutoDriveState,
+        val rawCommand: AutoDriveCommand?,
+        val safeCommand: AutoDriveCommand?,
+        val engaged: Boolean,
+        val timestampMs: Long,
+    )
+
     private companion object {
         const val AGGRESSIVE_HOLD_MS: Long = 12 * 60 * 1000L
+
+        /** Bounds on the profile-anchored sensitivity the safety barrier reads, in ISF/10000 units. */
+        const val SAFETY_SI_MIN: Double = 1.0 / 10000.0
+        const val SAFETY_SI_MAX: Double = 400.0 / 10000.0
     }
 
     fun setIsActive(enabled: Boolean) {
@@ -76,20 +104,75 @@ class AutodriveEngine @Inject constructor(
     fun onlineLearnerStatus(): OnlineLearner.StatusSnapshot = onlineLearner.statusSnapshot()
 
     /**
-     * Records a training row for a tick where the gate did not engage.
+     * Stages a training row for a tick where the gate did not engage.
      *
      * Only the dataset is touched — no estimator update, no learner step, no command. The decision
      * columns stay neutral and `Engaged` is 0, so the classifier can condition on engagement rather
      * than the dataset being silently filtered by it.
+     *
+     * Nothing is written until [flushTickRow]. If the engaged branch also runs this tick, its row
+     * wins, because that is the one whose decision reached the pump.
      */
-    fun recordDisengagedSnapshot(state: AutoDriveState, currentEpochMs: Long) {
-        dataLake.recordSnapshot(
+    fun stageDisengagedSnapshot(state: AutoDriveState, tickId: Long, currentEpochMs: Long) {
+        stageTickRow(
+            tickId = tickId,
             state = state,
             rawCommand = null,
             safeCommand = null,
             engaged = false,
-            currentTimestamp = currentEpochMs,
+            timestampMs = currentEpochMs,
         )
+    }
+
+    /**
+     * Stages the row for [tickId], keeping the engaged one when several paths run in the same tick.
+     *
+     * A T3C proposal and the engaged branch describe the same 5 minutes of physiology. Only one of
+     * them decided the dose, and that is the one the classifier must see.
+     */
+    private fun stageTickRow(
+        tickId: Long,
+        state: AutoDriveState,
+        rawCommand: AutoDriveCommand?,
+        safeCommand: AutoDriveCommand?,
+        engaged: Boolean,
+        timestampMs: Long,
+    ) {
+        val candidate = PendingTrainingRow(tickId, state, rawCommand, safeCommand, engaged, timestampMs)
+        pendingRow.getAndUpdate { existing ->
+            when {
+                existing == null || existing.tickId != tickId -> candidate
+                // Same tick: an engaged row must never be replaced by a shadow one.
+                existing.engaged && !engaged                  -> existing
+                else                                          -> candidate
+            }
+        }
+    }
+
+    /**
+     * Writes the row staged for [tickId], if any, and clears the slot.
+     *
+     * Must be called once per tick, on every exit path, otherwise the tick's row is silently dropped
+     * and the next tick starts with a stale slot. A tick that staged nothing writes nothing.
+     */
+    fun flushTickRow(tickId: Long) {
+        val row = pendingRow.getAndSet(null) ?: return
+        if (row.tickId != tickId) {
+            aapsLogger.debug(
+                LTag.APS,
+                "🗂️ [DATA_LAKE] Ligne en attente du tick ${row.tickId} abandonnée au tick $tickId."
+            )
+            return
+        }
+        runCatching {
+            dataLake.recordSnapshot(
+                state = row.state,
+                rawCommand = row.rawCommand,
+                safeCommand = row.safeCommand,
+                engaged = row.engaged,
+                currentTimestamp = row.timestampMs,
+            )
+        }.onFailure { aapsLogger.error(LTag.APS, "🗂️ [DATA_LAKE] Écriture de la ligne échouée: ${it.message}") }
     }
 
     /**
@@ -108,6 +191,8 @@ class AutodriveEngine @Inject constructor(
         hr: Int,
         rhr: Int,
         currentEpochMs: Long = System.currentTimeMillis(),
+        tickId: Long = 0L,
+        observationId: Long = 0L,
     ): BasalOnlyTbrProposal? {
         val previous = systemState.get()
         return try {
@@ -123,6 +208,11 @@ class AutodriveEngine @Inject constructor(
                 hr = hr,
                 rhr = rhr,
                 currentEpochMs = currentEpochMs,
+                tickId = tickId,
+                observationId = observationId,
+                // A proposal is not a decision: the caller strips the SMB and may ignore the TBR, so
+                // this row must not teach the classifier that Autodrive drove the tick.
+                engaged = false,
             ) ?: return null
             BasalOnlyTbrProposal(
                 tbrUph = cmd.temporaryBasalRate,
@@ -165,7 +255,30 @@ class AutodriveEngine @Inject constructor(
          * discarded — line 165 overwrote the field before the estimator ran. It reached the recursive
          * belief tree but never the MPC its producer is named after.
          */
-        mpcRaFloorMgdlPerMin: Double = 0.0
+        mpcRaFloorMgdlPerMin: Double = 0.0,
+        /**
+         * Identifier of the loop tick, used to stage at most one training row per tick.
+         *
+         * This is the *invocation* identity, and it must be the same value `flushTickRow` is later
+         * called with. Do not confuse it with [observationId]: a row describes one decision, an
+         * observation describes one CGM sample, and a sample can be seen by several invocations.
+         */
+        tickId: Long = 0L,
+        /**
+         * Identifier of the CGM sample, so the estimator consumes each observation only once.
+         *
+         * `0` means "unknown" and restores the old behaviour of advancing on every call. See
+         * `ContinuousStateEstimator.updateAndPredict`.
+         */
+        observationId: Long = 0L,
+        /**
+         * Whether this call owns the dose for the tick.
+         *
+         * Written to the `Engaged` column. It must come from the caller: `tick()` cannot tell a real
+         * decision from a T3C proposal whose SMB the caller throws away, and it used to label both
+         * as engaged.
+         */
+        engaged: Boolean = true,
     ): AutoDriveCommand? {
         val state = systemState.get() as? AimiState.AutoDrive ?: return null
         if (!state.isActive && !state.isShadowMode) return null
@@ -206,7 +319,7 @@ class AutodriveEngine @Inject constructor(
         // 2. PSE (Physiological State Estimator) Update
         // [FIX CRITIQUE]: On réinjecte le Ra précédemment appris pour garder le momentum de la courbe
         val stateWithMomentum = attentionState.copy(estimatedRa = stateEstimator.getLastRa())
-        val estimatedState = stateEstimator.updateAndPredict(stateWithMomentum)
+        val estimatedState = stateEstimator.updateAndPredict(stateWithMomentum, tickId = observationId)
 
         // 2. MPC (Model Predictive Controller) Calculation
         // The floor lifts what the controller anticipates, never what the estimator believes: it is a
@@ -225,8 +338,29 @@ class AutodriveEngine @Inject constructor(
         }
         val rawCommand = mpcController.calculateOptimalDose(mpcState, profileBasal, lgsThreshold)
 
-        // 3. CBF (Control Barrier Shield) Safety Check — honest Ra on purpose, see the parameter doc.
-        val safeCommand = safetyShield.enforce(rawCommand, estimatedState, profileBasal)
+        // 3. CBF (Control Barrier Shield) Safety Check.
+        //
+        // Honest Ra on purpose (see the `mpcRaFloorMgdlPerMin` doc), and now an honest sensitivity
+        // too. The shield computes `lgh = -siMetabolic * bg` from the sensitivity it is given, so a
+        // *lower* sensitivity shrinks the coefficient on the control action and the barrier permits a
+        // *larger* dose. Anything able to lower that number is able to loosen the barrier.
+        //
+        // `estimatedSI` is exactly such a number: it descends from `pkpdRuntime.fusedIsf`, which
+        // `PkPdIntegration` multiplies by an `aggressionMultiplier` bounded [0.55, 1.08] driven by
+        // delta, UAM confidence and the behaviour family. On an undeclared meal that policy can lower
+        // the sensitivity by 45 %, which loosens the barrier and pushes the controller the same way at
+        // the same moment. A barrier that moves with the controller is not a barrier.
+        //
+        // This is the same failure the attention gate was clamped for — except that arm had never run,
+        // and this one runs on every tick.
+        //
+        // `safetySi` therefore anchors on the profile ISF, and takes whichever of the two is *more*
+        // restrictive, so this can only ever tighten the barrier relative to today: a defensive
+        // learner raising `estimatedSI` is kept, a policy lowering it is ignored.
+        val safetyState = estimatedState.copy(
+            safetySi = profileAnchoredSafetySi(profileIsf, estimatedState.estimatedSI)
+        )
+        val safeCommand = safetyShield.enforce(rawCommand, safetyState, profileBasal)
 
         // 5. Explicabilité de l'IA (Auditor Traducteur)
         val auditedReason = autodriveAuditor.generateHumanReadableReason(
@@ -237,14 +371,16 @@ class AutodriveEngine @Inject constructor(
         )
         val auditedCommand = safeCommand.copy(reason = auditedReason)
 
-        // 6. Data Lake CSV persistancy (Pour entraînement V3)
-        // L'enregistrement est silencieux et asynchrone par rapport à la boucle de contrôle
-        dataLake.recordSnapshot(
+        // 6. Data Lake CSV persistency (for V3 training).
+        // Staged, not written: the file write happens once per tick in `flushTickRow`, after the dose
+        // is decided. See `pendingRow`.
+        stageTickRow(
+            tickId = tickId,
             state = estimatedState,
             rawCommand = rawCommand,
             safeCommand = auditedCommand,
-            engaged = true,
-            currentTimestamp = currentEpochMs
+            engaged = engaged,
+            timestampMs = currentEpochMs,
         )
 
         // 7. Logging & Shadow metrics
@@ -286,6 +422,33 @@ class AutodriveEngine @Inject constructor(
             )
             null
         }
+    }
+
+    /**
+     * Sensitivity the safety barrier reads, anchored on the profile and never looser than today.
+     *
+     * [profileIsf] is the profile ISF in mg/dL/U; the state carries sensitivity as ISF/10000, so it is
+     * rescaled. The result is `max(profile-anchored, commanded)` because a **higher** sensitivity
+     * makes `lgh = -siMetabolic * bg` larger in magnitude and the permitted dose smaller. Taking the
+     * maximum means:
+     *
+     * - a policy multiplier that lowers the commanded sensitivity no longer loosens the barrier;
+     * - a defensive learner that raises it is still honoured;
+     * - the barrier can never end up looser than it is today, whatever the inputs.
+     *
+     * On a non-finite or non-positive profile ISF there is no anchor to trust, so the commanded value
+     * is used unchanged and the event is logged rather than silently substituted.
+     */
+    private fun profileAnchoredSafetySi(profileIsf: Double, commandedSi: Double): Double {
+        if (!profileIsf.isFinite() || profileIsf <= 0.0) {
+            aapsLogger.warn(
+                LTag.APS,
+                "🛡️ [CBF] ISF profil inutilisable ($profileIsf) — la barrière retombe sur la sensibilité commandée."
+            )
+            return commandedSi
+        }
+        val anchored = (profileIsf / 10000.0).coerceIn(SAFETY_SI_MIN, SAFETY_SI_MAX)
+        return max(anchored, commandedSi)
     }
 
     private fun logShadowDecision(state: AutoDriveState, autodriveCommand: AutoDriveCommand, profileBasal: Double) {
