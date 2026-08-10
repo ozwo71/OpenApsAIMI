@@ -1,14 +1,15 @@
 # AIMI — session handover, 2026-08-09
 
-Written at the end of the morning session. It has two halves:
+Started at the end of the 2026-08-09 morning session, extended 2026-08-10. Three parts:
 
-- **Part A — the record.** What was decided, what was measured, what was wrong and is now fixed.
-  Read this first; the numbers in it are the evidence base for everything in Part B.
-- **Part B — the prompt for the next session.** Paste it as-is. It defines the objective, the agent
-  split, the loop, and when to stop.
+- **Part A — the record of the morning.** Decisions and measurements. Several of its conclusions are
+  superseded; read Part A-bis before acting on any of them.
+- **Part A-bis — the production day of 2026-08-09.** What actually happened on the pump, what caused
+  it, and which of Part A's conclusions were wrong. **This is the current state of knowledge.**
+- **Part B — the prompt for the next session.** Paste it as-is.
 
-Everything in Part A is committed: `eda530a545` then `6d24095023`. Working tree clean.
-Full module suite at the end of the session: **1294 tests, 0 failures, 12 skipped**.
+Part A is committed: `eda530a545` then `6d24095023`. **Everything in Part A-bis is uncommitted** — 18
+files, +1248/-373. Full module suite: **1332 tests, 0 failures, 14 skipped**.
 
 ---
 
@@ -220,6 +221,126 @@ The build now computes two shadow quantities. Neither reaches the pump; both are
 
 ---
 
+# Part A-bis — the production day of 2026-08-09, and what it changed
+
+Written 2026-08-10. This supersedes several conclusions in Part A. Read it before Part B.
+
+## The event
+
+An undeclared lunch. No meal mode, COB 0 g throughout. Support package
+`AIMI_Support_Package_1786304612047`, 292 ticks.
+
+| | |
+|---|---|
+| SMB delivered 14:07 → 15:26 | **14.09 U in 79 minutes** |
+| peak IOB | **16.75 U**, against a computed physiological budget of **8.11 U** |
+| BG | 115 → 225 → 110, still 11.1 U on board at 16:06 |
+| outcome | no hypoglycaemia — rescue carbs (ice cream) at 16:10 |
+
+The patient's words: *"ça a corrigé un peu trop"*.
+
+## The cause, and the one it is not
+
+**Not the ISF collapse.** `command_isf_mgdl` did collapse — 46.8 at euglycaemia down to a terminal
+9.7 at BG 225, driven by `dynamicDeltaCorrectionFactor` (`OpenAPSAIMIPlugin.kt:707`, exact against the
+export to 10 decimals). But `InsulinActionModel.controlCoefficient` floors at 0.005 and the floor was
+active on 39 of 45 ticks, so **the MPC and the barrier both reasoned as if the ISF were 45 on every
+tick of this event**. The collapse changed their arithmetic by nothing.
+
+**The cause is `aggressiveRiseSmbFloorU`, `max()`-ed after the safety barrier.**
+`DetermineBasalAIMI2.kt`, `val v3SmbRaw = maxOf(v3SmbModel, v3SmbFloor)`, downstream of
+`safetyShield.enforce`:
+
+```
+h      BG     IOB    MPC asked   barrier permitted   delivered
+14:41  188.5   9.04     0.000          0.000           1.088
+14:46  202.2  10.36     0.000          0.000           1.088
+14:51  212.6  11.65     0.000          0.000           1.088
+14:56  217.2  12.75     0.000          0.000           1.088
+15:01  220.3  13.66     0.000          0.000           1.600
+15:06  224.9  15.28     0.000          0.000           1.550
+```
+
+Over the whole day: **25 ticks where the delivered dose exceeded what the barrier permitted, +12.87 U
+in total.** A per-tick floor with no memory, at a 1.6 U ceiling on 5-minute ticks, is an effective
+19 U/h floor for as long as the rise holds. Its KDoc claims it is *"always re-bounded by V3 safety"*.
+
+**Nothing braked the stack.** `InsulinLoadGovernor` computes the right number (`phys_budget_u` 8.11)
+and stayed in tier `FULL` up to IOB 16.75 — 2.07x the budget — because `ESCAPE_RISE` pinned the
+multiplier on any rise with **no IOB guard**, while `ESCAPE_PROJECTION` three lines below already had
+one. `maxIOB` is 20 U, which against a budget of 8.11 is not a brake. The predictive hypo guard fired,
+announced 67 mg/dL, and was overridden by `PREDICTIVE_HYPO_MEAL_BYPASS`.
+
+**Harmonia was not absent — it was overruled.** Through the entire rise the pattern catalogue proposed
+a SOFT cap of **1.2 U** and Harmonia's SMB arbiter returned `REDUCE` with intent `PROTECTIVE`. Three
+components said no or less; a `maxOf()` downstream of all three served anyway.
+
+## Corrections to Part A and to earlier notes
+
+1. **The build boundary was 14:07, not 16:22.** Part A's A5 assumed the new export fields would date
+   it. They did not: `ra_estimator_advances` was written **after** the JSONL was serialised, so it
+   landed on 7 ticks out of 93, all `Basal_Modulation`. The lunch ran on `6d24095023`. Fixed —
+   the counters are now written in `markEstimatorDiagnosticsForExport`, immediately before
+   `decisionCtx.toMedicalJson()`, the one point every export path goes through.
+2. **The two calibration questions of A5 are still unanswered.** The shadow reached only 7 ticks for
+   the reason above. What those 7 do show: on flat glucose at BG 91 with 5.5 U on board and a real Ra
+   of 0.00, the aligned-tau shadow reported **0.60 / 0.70 / 0.79** — it invents appearance to explain
+   why glucose is not falling faster, and crosses all three gates. Suggestive, not conclusive: n = 7,
+   biased to quiet ticks. **A clean day is still needed.**
+3. **`sensor_confidence` is no longer the Harmonia blocker.** It measured 0.88 (min 0.77) against
+   thresholds of 0.45 / 0.65. The `cgm_first` option is on and works. The memory note claiming it is
+   pinned at 0.32 is obsolete.
+4. **Harmonia has an SMB path, and it works.** `basal_first_only = true` is the *label of the basal
+   production record*, tautological — not a restriction. `HarmoniaSmbArbiter` exists with a
+   `LIFT_WITHIN_ENVELOPE` mode. The note claiming the LIFT is "structurally dead downstream" is wrong:
+   `RecursiveBeliefResolver` applies it and explicitly protects it from the legacy meal-support
+   target. LIFT never fired on this day because the intent was `PROTECTIVE`, which takes an early
+   return that can only reduce or accept — correctly, on this meal.
+5. **Do not clamp the dose to the barrier.** It was proposed as a "pure reduction" and it is not: it
+   would remove **12.87 U, 38 % of the day's SMB**, and it would have delivered nothing during the
+   evening rise (BG 130 → 151, barrier at zero on every tick). The barrier's `lfh` was wrong by
+   ~12 mg/dL/min during the meal. **The barrier cannot be made binding until its insulin model is
+   fixed** — which is the `MPC_TAU_MIN` question deliberately deferred in D5.
+
+## Structural finding: five writers of the final SMB
+
+| site | owner | legitimate |
+|---|---|---|
+| `finalizeAndCapSMB` | the intended terminal | yes |
+| `runMealAdvisorDecisionOrReturn` | meal advisor | yes — user action |
+| `applyLegacyMealModes` (x2) | legacy meal modes / prebolus | early-exit paths |
+| `runPostBasalEngineLearners…AuditorStage` | **AI auditor** | **no** |
+
+The auditor wrote `finalResult.units = result.bolusU` with no comparison against the terminal, while
+its own prompt says *"CONFIRM or SOFTEN only — never invent a lift"*. Third instance in two days of
+the same shape: **a constraint stated in documentation and absent from the code.**
+
+## What was implemented on 2026-08-09/10 (uncommitted, 1332 tests green)
+
+- **Export instrumentation fixed** — counters and the Ra shadow now reach every tick.
+- **`ESCAPE_RISE` IOB guard** — the escape stops at the physiological budget, matching its neighbour.
+  On this event it stops at 14:41, IOB 9.04 vs budget 8.11: the tick the overdose began.
+- **Episode budget on the rise floor** — one prebolus per rise, re-arming after 90 idle minutes; only
+  what the floor adds *above the model* spends the budget.
+- **Pattern catalogue in fractions of the user's ceiling** — the table was absolute units implicitly
+  calibrated for `maxSMBHB = 1.6`. Converted against that reference, rounded **down**, max difference
+  0.001 U. Read as fractions it is a coherent severity ladder from 19 % to 94 %; read as units it was
+  a single-patient table. A fraction can never exceed 1.0, so a pattern may reduce the user's ceiling,
+  never raise it.
+- **Sealed SMB terminal** — `applySmbUnits(rT, value, owner)` is the only write path; after
+  `finalizeAndCapSMB` seals the tick, a write may only lower. `MealAdvisor` keeps its exception, now
+  counted. Refusals exported as `smb_seal_refused_count` / `_total_u`.
+- **Learning pipeline hardened** — schema-versioned dataset (the `Engaged` feature was perfectly
+  collinear with "labelled by the broken pass"; 73.2 % of rows had an uncovered outcome window; the
+  positive class is **0.53 %**, not 3 %), non-blocking lock on the dosing path, class-balanced trainer
+  objective with a chronological holdout gate and prior correction on save, `SensitivityRatioEstimator`
+  given COB/bolus rejection, real delivered basal, time-keyed EMA and persistence.
+
+**The sealed terminal would not have prevented this event.** The floor is an *input* to
+`finalizeAndCapSMB`, upstream of the seal. The two brakes are what address it.
+
+---
+
 # Part B — prompt for the next session
 
 Paste everything below.
@@ -257,138 +378,70 @@ Read `docs/AIMI_NEXT_SESSION.md` Part A first — it is the evidence base, with 
 
 ## Objective
 
-The session is done when **all** of these hold:
+Updated 2026-08-10 after the production day. The session is done when **all** of these hold:
 
-1. The four fixes of `eda530a545` + `6d24095023` are **confirmed from production data**, not from
-   tests alone (A5, first table).
-2. The two calibration questions are **answered with numbers** — `ESTIMATOR_TAU_MIN` and the
-   `LEGACY_CONTROL_COEFFICIENT` floor — and either implemented or explicitly deferred with the
-   measurement that justifies the deferral.
-3. Every P0 in the task list below is either fixed or closed with evidence that it is not a defect.
+1. The 2026-08-09/10 work is **confirmed from a clean production day** — one where the app is not
+   restarted mid-meal. Specifically: the `ESCAPE_RISE` guard leaves `FULL` at the budget, the rise
+   floor serves one prebolus per rise, `smb_seal_refused_count` is observable, and the pattern
+   catalogue reports `smb_cap_fraction` against `max_smb_hb_u`.
+2. The two calibration questions of A5 are **answered with numbers** — they still are not, because the
+   shadow reached 7 ticks out of 93 on 2026-08-09 (see A-bis).
+3. The barrier's insulin model is decided. Until `MPC_TAU_MIN` is right, the barrier cannot be made
+   binding and the floor cannot be clamped to it — see A-bis correction 5.
 4. The full module suite passes: `./gradlew :plugins:aps:testFullDebugUnitTest --no-daemon`.
-5. `docs/adr/0008-isf-decision-architecture.md` reflects the code — its chain map currently stops
-   before the `0.1` floor, which was the load-bearing number.
+5. `docs/adr/0008-isf-decision-architecture.md` reflects the code — its chain map still stops before
+   the sensitivity floor, and the `safetySi` anchor is a construct step 3 removes.
 
 ## Agent split
 
-Spawn these four. Give each the bash rules, the data-privacy rule, and the pointer to Part A. They
-work in parallel; you integrate and verify.
+Give each agent the bash rules, the data-privacy rule, and a pointer to Part A **and A-bis**. Agent 1
+runs first; the others use its findings.
 
-### Agent 1 — `data-validation` (start first; everything else waits on its findings)
+### Agent 1 — `data-validation` (blocking)
 
-Analyse the support package the user provides tonight, with the two meals timestamped.
+Analyse the next support package, from a day with **no mid-meal app restart**, with meals timestamped.
 
-- Verify the four fixes from A5's first table. Report each as confirmed / refuted / not observable,
-  with the field and the count.
-- Answer the two calibration questions. For the Ra shadow: distribution overall, and separately
-  **inside the two meal windows** versus outside. The question is whether the aligned term separates
-  a meal from the mere presence of IOB — report the gate-crossing rate at 0.6 / 0.7 / 0.8 in each
-  window. For the barrier: the distribution of `cbf_permitted_unfloored_u - cbf_permitted_u`, as a
-  ratio, and the fraction of ticks where the difference exceeds 0.1 U.
-- Report absolute numbers with denominators. If a field is null everywhere, say so — that is a
-  finding, not a gap.
+- Confirm the five items of objective 1 above, each as confirmed / refuted / not observable, with the
+  field and the count.
+- Answer the two calibration questions. For the Ra shadow: distribution inside meal windows versus
+  outside, and the crossing rate at 0.6 / 0.7 / 0.8 in each. The question is whether the aligned term
+  separates a meal from the mere presence of IOB — on 2026-08-09 it reported 0.60–0.79 on flat glucose
+  with 5.5 U on board and a real Ra of 0.00, which is the failure mode, on 7 ticks only.
+- For the barrier: `cbf_permitted_unfloored_u - cbf_permitted_u` as a ratio, with
+  `cbf_profile_isf_mgdl` alongside.
 
-### Agent 2 — `safety-architecture`
+### Agent 2 — `barrier-calibration` (the one that unblocks the rest)
 
-- **P0:** `ControlBarrierShield.enforce`, the `safeU > 0.2` branch: `tbr = min(profileBasal, raw.tbr)`
-  is set **before** the budget check, then `smbBudget = safeU - tbr/12`. If `tbr/12 > safeU`, `smb`
-  clamps to 0 but the delivered total is `tbr/12`, which **exceeds `safeU`**. Confirm against the
-  code, quantify from the corpus how often it happens and by how much, then fix so the barrier's own
-  bound holds.
-- Re-measure the profile-relative exit bound on the quantity the barrier and the MPC actually read
-  (`pkpdRuntime.fusedIsf`), not `oapsProfile.sens`. The withdrawn "3 %" figure needs replacing (A4.7).
-- `aggressiveWindowUntilEpochMs` is set from shadow and proposal calls, before the
-  `if (!state.isActive) return null`. A shadow tick can open a 12-minute aggressive window for the
-  engaged controller. Confirm and fix.
-- `OnlineLearner.learnAndUpdate` is stepped once per `tick()` call, not once per tick. Inert today
-  only because the factor is discarded — one line from being undone. Align it with `observationId`.
-- Update ADR 0008: record the `0.1` floor in the chain map, and note that the `safetySi` anchor is a
-  construct step 3 removes.
+The barrier is the natural bound on the rise floor and cannot be used as one today: its `lfh` was
+wrong by ~12 mg/dL/min during the 2026-08-09 meal, it says zero on ordinary rises (BG 130 → 151 with
+4–6 U on board), and clamping to it would remove 38 % of a day's SMB.
 
-### Agent 3 — `learning-pipeline` — **DONE except one item, deliberately left**
+- Establish what `MPC_TAU_MIN` should be, from data rather than from the 150–200 min literature range.
+  `InsulinActionModel` states the calibration as a time constant precisely so this is one number.
+- Quantify what each candidate does to the barrier's binding rate and to the delivered dose, on the
+  corpus, before proposing a change. Note that τ = 75 reproduces the pre-unification behaviour exactly
+  at ISF 45 and that the `LEGACY_CONTROL_COEFFICIENT` floor currently guarantees the refactor can only
+  tighten.
+- Only once that number is settled: propose clamping the rise floor to the barrier's verdict, with the
+  measured cost.
 
-Implemented, uncommitted, compiles, `1313 tests / 0 failures / 12 skipped` on
-`:plugins:aps:testFullDebugUnitTest` (was 1294 before; +19 new). Tests pass — **nothing here is
-confirmed in production yet.**
+### Agent 3 — `harmonia-authority`
 
-Measured on the corpus before changing anything (17 068 rows, 2026-02-28 → 2026-07-11):
+Harmonia computes on 79 % of ticks and reaches the pump on **9 of 292 (3 %)**.
 
-| measurement | value |
-|---|---|
-| rows with the 18-column layout (no `Engaged`, trainer reads `1.0`) | **17 068 / 17 068 — 100 %** |
-| rows carrying a label, i.e. actually trained on | 17 011 |
-| labelled `Hypo_Occurred = 1` | 91 — **0.53 %**, not the ~3 % assumed |
-| rows whose 60-min outcome window the CSV does **not** cover continuously | **12 456 / 17 011 — 73.2 %** |
-| inter-row gaps > 15 min (the old pass's give-up condition) | 1 808 / 17 067 — 10.6 % |
-| re-deriving the label from the CSV's own BG series | reproduces the file **exactly** (91/91) |
-
-That last line is the point: the censoring is **invisible from the CSV**, because the CSV is what the
-broken pass read. It can only be corrected against CGM history. And since the 18-column layout and
-the CGM-based labelling landed in the same commit (`1135038d55`), "has no `Engaged` field" and
-"labelled by the broken method" are the **same 17 068 rows** — perfect collinearity.
-
-- ✅ **P0 dataset confound.** New `AutodriveDatasetSchema` (single source for the header + indices,
-  previously copied into three files). 20th column `Schema_Version`. v0 = 18 cols, outcomes not
-  trustworthy; v1 = 19 cols, CGM-labelled, only needs the stamp; v2 = current. The backfiller blanks
-  the outcome columns on v0 rows so they are re-derived from CGM, or stay unlabelled and out of
-  training. Belt and braces: the trainer now **refuses** any row below v1, so `engaged` is never
-  defaulted to `1.0` again.
-- ✅ **Lock gaps closed** (the KDoc was right, the code was not): `trainAttentionWeights`,
-  `isDatasetReadyForTraining` and the file scan inside `loadGlucoseWindow` all run under
-  `AutodriveDatasetLock`. The **database** query in `loadGlucoseWindow` stays outside on purpose —
-  it touches no file, and holding the file lock across a DB round-trip would expose the APS thread.
-- ✅ **Blocking I/O off the decision path.** Measured: read-modify-rename over a 17 068-row / 2 MB
-  file is ~14 ms of pure I/O on a desktop SSD (5 trials, 13.3–17.5 ms); an append is 0.02 ms. On a
-  phone, with `readLines` into 17 000 strings, a `split` per row and the `copyTo` fallback, that is
-  an order of magnitude worse and unbounded from the caller's side. `AutodriveDatasetLock` is now a
-  `ReentrantLock` with `tryWithDataset` (zero timeout); the data lake takes that path and, on
-  contention, **carries the row forward** in a bounded buffer (48 rows ≈ 4 h) instead of dropping it.
-  Counters: `contendedWriteCount`, `deferredRowCount`, `droppedRowCount`, plus a warn log on drop.
-  Not yet wired into any JSON export — see Agent 4's liveness item.
-- ✅ **Header migration.** The header is rewritten from the schema on every pass, never echoed back,
-  including on a file that holds only a header.
-- ✅ **Trainer: kept scheduled, given a real objective.** Reasoning: even a perfect classifier can
-  only ever *raise* `estimatedSI` (the permissive arm stays pinned at 1.0), which is the safe
-  direction, so the pipeline is worth having — but the model it produced was not a model. On a 0.53 %
-  positive class, 100 epochs at lr 0.01 from zero moves the intercept ≈ -0.45 of the -5.2 it needs.
-  Now: class-balanced loss, lr 0.1 / 300 epochs, weights bounded to ±5, chronological 20 % holdout,
-  and the incumbent is displaced only if the candidate beats **both** it and a base-rate predictor on
-  balanced holdout log-loss by ≥ 0.005. Minimums: 500 rows, 20 train positives, 5 holdout positives.
-  **Prior correction on save** — balancing calibrates to a 50 % prior, and left there the gate's
-  `score > 0.5` would fire on about half of all ticks: a permanent sensitivity inflation dressed up
-  as a detection. The intercept is shifted back onto the true base rate, so today's behaviour does
-  not move. Feature normalisation was *not* added: measured mask ranges are [0, 1.000], [0, 0.963],
-  [0, 0.990] and `Engaged` is an indicator — the features are already on one bounded scale.
-  Liveness metadata written alongside the weights (rows, positives, holdout size and losses, schema
-  version, timestamp).
-- ✅ **`SensitivityRatioEstimator`.** COB > 0 or a bolus of **any** origin (`lastBolusMs`, not just
-  `smbU`) in the window or its run-up now rejects the window — this was the dangerous one, biasing R
-  low and therefore giving *more* insulin. `deliveredBasalUph` is the **running** temp basal
-  (`ctx.currentTemp`, profile rate when duration is 0), not `finalResult.rate`, which is what the
-  tick is about to request. EMA α is keyed on **elapsed time since the last fold** (so `TAU_HOURS`
-  means what it says), with a 30-minute minimum spacing so overlapping windows cannot fold the same
-  episode repeatedly, and a 2-hour cap so one window after a quiet night cannot take over. State
-  (ratio, observation count, last fold) is persisted to `sensitivity_ratio_state.json` and reloaded,
-  discarded if older than 7 days or stamped in the future.
-- ❌ **Deliberately left: `bgModulation`.** It bakes in a BG-dependence ADR 0007 calls unmeasured.
-  Changing it moves the quantity proposed to replace the commanded sensitivity, in both directions,
-  and no measurement in hand settles the shape. It needs the corpus, not a judgement call.
+- `HARMONIA_SMB_NO_RBT_AUTHORITY` on 64 % of ticks, and `requested_authority` is `NONE` on 85 % with
+  reason `NO_RELEASE`. The gate is **not** truncating — `requested == max_allowed == effective`. RBT
+  simply never asks. Find out why `NO_RELEASE` dominates, and whether that is intended.
+- Harmonia's **basal** channel is blocked by **SMB-channel** conditions: `smb_zeroed_by_safety` 39 %,
+  `smb_already_requested` 19 %, `smb_authority_active` 1 % — 60 % of its blocks. Reducing a basal rate
+  and refusing a bolus are different decisions. Confirm and propose.
+- `eligible` is true on 166 ticks and only 9 reach the pump. Trace the other 157.
 
 ### Agent 4 — `hygiene-and-observability`
 
-- Dead constructor dependencies: `dataBackfiller` in `AutodriveEngine`, `context` in
-  `AutodriveDataBackfiller` and `AutodriveNeuralTrainer`. Unused `LTag` imports in both workers.
-- `AutodriveBackfillWorker` computes `linesModified` and discards it; both workers swallow failures
-  into `Result.success()`; `processPendingLinesLocked` returns a count while swallowing a rewrite
-  failure, so a caller is told N rows were backfilled when none were persisted.
-- `AutodriveAuditor` computes `isfRatio = state.estimatedSI / baseProfileIsf`, a unit mismatch that
-  penalises `health` on every tick. Now that the floor is gone the numerator changed — re-check the
-  arithmetic before fixing.
-- Per-learner liveness in the export: weights present, last-trained timestamp, sample count. Today it
-  is impossible to tell "the model says safe" from "there is no model".
-- `OrefPersonalMlTrainer` writes two model files nobody reads; `WCycleLearner.retrainFromCsv` has no
-  caller populating its columns; `AimiSmbTrainer` only trains when `OApsAIMIMLtraining` is on. Decide
-  per item: finish, delete, or document as intentionally dormant.
+Unchanged from the original list: dead constructor dependencies, workers swallowing failures,
+`AutodriveAuditor`'s `isfRatio` unit mismatch (re-check the arithmetic — the sensitivity floor is
+gone), per-learner liveness in the export, and the three dormant ML components.
 
 ## Loop protocol
 

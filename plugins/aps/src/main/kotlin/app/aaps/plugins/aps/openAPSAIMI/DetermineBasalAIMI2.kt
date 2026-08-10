@@ -4615,13 +4615,39 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             else                                        -> 0.0
         }.coerceAtLeast(0.0)
         if (tierFloor <= 0.0) return 0.0
-        return tierFloor.coerceAtMost(remainingRiseFloorBudgetU(largePrebolus))
+        // No episode budget here — see [remainingRiseFloorBudgetU] for why it was removed after a
+        // measured hyperglycaemia.
+        return tierFloor
     }
 
     /**
-     * What is left of this rise's floor budget, in units.
+     * Removed from the dose path on 2026-08-10. Kept for the export and for the record.
      *
-     * ## Why a budget and not just a per-tick value
+     * ## Why it was removed
+     *
+     * It capped the floor at one prebolus per rise. Measured on two consecutive undeclared lunches,
+     * same patient, no meal mode, COB 0:
+     *
+     * | | 2026-08-09, no budget | 2026-08-10, with budget |
+     * |---|---|---|
+     * | peak BG | 225 | **268.7** |
+     * | SMB at peak | 14.06 U | **6.53 U** |
+     *
+     * The design error: the floor was not only a prebolus, it was **carrying the whole meal**. The
+     * governed path was not. `harmonia_smb_authority.insulin_intent` was `PROTECTIVE` on every tick of
+     * the rise — at BG 269 with Ra 5.33 — and that branch of `HarmoniaSmbArbiter` can only accept or
+     * reduce, so `LIFT_WITHIN_ENVELOPE` was unreachable. Removing the bypass without first checking
+     * that the legitimate path could carry the load produced the hyperglycaemia.
+     *
+     * The real brake is elsewhere and is already in place: the `iobSafe < budget` guard on
+     * `ESCAPE_RISE` takes the load governor out of `FULL` at the physiological budget, which would
+     * have stopped 2026-08-09 at IOB 9.04 instead of 16.75. It bounds the accumulation without
+     * starving the start of a meal, which a per-rise budget cannot do.
+     *
+     * Do not reinstate it until Harmonia's intent switches to `MEAL_SUPPORT` on a confirmed meal —
+     * that is, until the governed path can carry a meal on its own.
+     *
+     * ## What it computed
      *
      * The floor is a **prebolus**: it exists to put insulin in before a rise is visible in the model.
      * A prebolus is served once. This one had no memory, so it re-armed on every tick and, at a
