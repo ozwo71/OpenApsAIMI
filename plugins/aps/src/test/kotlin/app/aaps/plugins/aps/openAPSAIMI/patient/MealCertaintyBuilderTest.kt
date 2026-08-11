@@ -149,4 +149,46 @@ class MealCertaintyBuilderTest {
             ),
         ).isFalse()
     }
+
+    // --- effort SMB floor on a certain meal (2026-08-10 lunch) ---
+
+    private fun certaintyAt(level: MealCertaintyLevel): MealCertainty =
+        MealCertainty.NONE.copy(level = level)
+
+    @Test
+    fun effortSmbFactorFor_floorsTheReductionOnlyWhenTheMealIsCertain() {
+        // The 12:36 tick of 2026-08-10: effort asked for 0.56 at BG 237 with the meal certain.
+        assertThat(MealCertaintyBuilder.effortSmbFactorFor(certaintyAt(MealCertaintyLevel.HIGH), 0.56))
+            .isWithin(1e-9).of(0.75)
+        // The dinner of 2026-08-10 never left LOW — it must not move.
+        assertThat(MealCertaintyBuilder.effortSmbFactorFor(certaintyAt(MealCertaintyLevel.LOW), 0.56))
+            .isWithin(1e-9).of(0.56)
+        assertThat(MealCertaintyBuilder.effortSmbFactorFor(certaintyAt(MealCertaintyLevel.MED), 0.56))
+            .isWithin(1e-9).of(0.56)
+        assertThat(MealCertaintyBuilder.effortSmbFactorFor(null, 0.56)).isWithin(1e-9).of(0.56)
+    }
+
+    @Test
+    fun effortSmbFactorFor_neverRaisesAboveWhatEffortAsked_whenItAskedForMore() {
+        assertThat(MealCertaintyBuilder.effortSmbFactorFor(certaintyAt(MealCertaintyLevel.HIGH), 0.90))
+            .isWithin(1e-9).of(0.90)
+    }
+
+    @Test
+    fun effortSmbFactorFor_isAlwaysAReduction() {
+        for (level in MealCertaintyLevel.entries) {
+            assertThat(MealCertaintyBuilder.effortSmbFactorFor(certaintyAt(level), 1.0)).isAtMost(1.0)
+            assertThat(MealCertaintyBuilder.effortSmbFactorFor(certaintyAt(level), 0.0)).isAtMost(1.0)
+        }
+        assertThat(MealCertaintyBuilder.effortSmbFactorFor(certaintyAt(MealCertaintyLevel.HIGH), 1.4))
+            .isWithin(1e-9).of(1.0)
+        assertThat(MealCertaintyBuilder.effortSmbFactorFor(certaintyAt(MealCertaintyLevel.HIGH), Double.NaN))
+            .isWithin(1e-9).of(1.0)
+    }
+
+    @Test
+    fun effortSmbFactorFor_aTotalEffortStopStillKeepsAQuarterOnACertainMeal() {
+        assertThat(MealCertaintyBuilder.effortSmbFactorFor(certaintyAt(MealCertaintyLevel.HIGH), 0.0))
+            .isWithin(1e-9).of(0.75)
+    }
 }

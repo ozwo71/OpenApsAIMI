@@ -250,6 +250,89 @@ class PhysiologicalTreeBuilderTest {
             reasons = listOf("test"),
         )
 
+    // --- insulin intent: a confirmed meal versus the activity veto (2026-08-10 lunch) ---
+
+    /** Reproduces the 12:36 tick: BG 237, Δ 20.1, meal + digestion at 1.0, post-activity 0.79. */
+    private fun undeclaredMealAtBg237(): PhysiologicalTreeSnapshot =
+        PhysiologicalTreeBuilder.build(
+            enabled = true,
+            patientState = mealState(),
+            patientModeDecision = PatientModeOrchestrator.evaluate(mealState()),
+            currentBgMgdl = 237.0,
+            deltaMgdl5m = 20.1,
+            effortRecentConfidence = 0.79,
+        )!!
+
+    @Test
+    fun insulinIntent_postActivityVetoesAConfirmedMealRise() {
+        val tree = undeclaredMealAtBg237()
+
+        assertThat(tree.branches.hypoRisk.confidence).isLessThan(0.55)
+        assertThat(tree.branches.postActivity.confidence).isWithin(1e-9).of(0.79)
+        assertThat(tree.insulinIntent).isEqualTo(InsulinIntent.PROTECTIVE)
+    }
+
+    @Test
+    fun withMealCertainty_highMealOutranksThePostActivityVeto() {
+        val revised = PhysiologicalTreeBuilder.withMealCertainty(
+            snapshot = undeclaredMealAtBg237(),
+            mealOverridesProtective = true,
+            deltaMgdl5m = 20.1,
+            currentBgMgdl = 237.0,
+        )
+
+        assertThat(revised.insulinIntent).isEqualTo(InsulinIntent.NEED_MORE_INSULIN)
+        assertThat(revised.insulinUrgency).isGreaterThan(0.0)
+    }
+
+    @Test
+    fun withMealCertainty_leavesTheSnapshotAloneWhenTheMealIsNotConfirmed() {
+        val tree = undeclaredMealAtBg237()
+        val revised = PhysiologicalTreeBuilder.withMealCertainty(
+            snapshot = tree,
+            mealOverridesProtective = false,
+            deltaMgdl5m = 20.1,
+            currentBgMgdl = 237.0,
+        )
+
+        assertThat(revised).isSameInstanceAs(tree)
+    }
+
+    @Test
+    fun withMealCertainty_neverOverridesTheHypoGate() {
+        val hypoState = mealState().copy(postHypoReboundProb = 0.80)
+        val tree = PhysiologicalTreeBuilder.build(
+            enabled = true,
+            patientState = hypoState,
+            patientModeDecision = PatientModeOrchestrator.evaluate(hypoState),
+            currentBgMgdl = 237.0,
+            deltaMgdl5m = 20.1,
+            effortRecentConfidence = 0.79,
+        )!!
+        val revised = PhysiologicalTreeBuilder.withMealCertainty(
+            snapshot = tree,
+            mealOverridesProtective = true,
+            deltaMgdl5m = 20.1,
+            currentBgMgdl = 237.0,
+        )
+
+        assertThat(revised.insulinIntent).isEqualTo(InsulinIntent.PROTECTIVE)
+    }
+
+    private fun mealState(): PatientStateSnapshot =
+        stableState().copy(
+            phase = PhysiologicalPhase.MEAL_UNDECLARED,
+            mealAbsorptionPhase = MealAbsorptionPhase.FIRST_WAVE,
+            mealAbsorptionBelief = 1.0,
+            mealProb = 1.0,
+            causalPosterior = CausalStatePosterior(
+                fastMealProb = 1.0,
+                dominant = CausalStateId.FAST_MEAL,
+                dominantConfidence = 1.0,
+                learningQuality = 0.80,
+            ),
+        )
+
     private fun buildTree(state: PatientStateSnapshot): PhysiologicalTreeSnapshot? =
         PhysiologicalTreeBuilder.build(
             enabled = true,

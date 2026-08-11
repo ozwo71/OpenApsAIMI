@@ -761,9 +761,22 @@ object RecursiveBeliefResolver {
                 ext.harmoniaHardSafetyBlock ||
                 ctx.tier1Hypo ||
                 ext.postHypoDeliverySuppressSmb
+        // A basal-first owner normally closes the SMB arbitration channel. The one exception is the
+        // soft meal-rise channel added in [allowsHarmoniaBasalDuringSoftMealSupport]: it grants
+        // Harmonia the basal channel *while RBT still holds SMB authority* (it requires SOFT, and the
+        // classic mutex requires NONE). It was added so TBR could still act on a meal — not to revoke
+        // the SMB lift. Measured on 2026-08-09/10: this was the dominant blocker,
+        // `BASAL_FIRST_OWNER_HARMONIA_PRODUCTION_BASAL_FIRST` on 110–144 ticks per day and on every
+        // tick of both lunch rises, with `effective_authority` SOFT throughout.
+        val basalFirstClosesSmbChannel =
+            basalFirstChannel == BasalFirstChannel.T3C_BASAL_FIRST ||
+                (
+                    basalFirstChannel == BasalFirstChannel.HARMONIA_PRODUCTION_BASAL_FIRST &&
+                        releaseAuthority != ReleaseAuthority.SOFT
+                    )
         val channelOpen =
             releaseAuthority != ReleaseAuthority.NONE &&
-                basalFirstChannel == BasalFirstChannel.NONE &&
+                !basalFirstClosesSmbChannel &&
                 !protectiveBlock
         if (!channelOpen) {
             return HarmoniaSmbArbiter.decide(
@@ -790,6 +803,7 @@ object RecursiveBeliefResolver {
             riseConfirmed = ext.riseConfirmed || ctx.deltaMgdlPer5 >= 1.2,
             mealCertaintySupports = ext.mealCertaintySupports,
             protectiveBlock = false,
+            barrierPermittedU = ctx.barrierPermittedU,
         )
     }
 

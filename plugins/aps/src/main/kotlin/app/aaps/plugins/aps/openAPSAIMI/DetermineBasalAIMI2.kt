@@ -220,6 +220,7 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.AimiCascadeArbitrationArtifacts
 import app.aaps.plugins.aps.openAPSAIMI.patient.BodyKineticsDigest
 import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
 import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertaintyBuilder
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertaintyLevel
 import app.aaps.plugins.aps.openAPSAIMI.patient.MealRiseGeometry
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaAction
 import app.aaps.plugins.aps.openAPSAIMI.patient.InsulinIntent
@@ -383,6 +384,27 @@ internal data class AimiDecisionContext(
         var cbf_permitted_unfloored_u: Double? = null,
         /** Profile ISF the barrier was handed, so the two above are interpretable. */
         var cbf_profile_isf_mgdl: Double? = null,
+        /**
+         * Effort SMB reduction, as actually applied at the universal SMB exit.
+         *
+         * `_requested` is what the effort belief asked for, `_applied` is what was used after the
+         * confirmed-meal floor, and the two unit fields bracket the reduction. Before this existed the
+         * multiplier could only be recovered by parsing the narrative, which cost one wrong
+         * attribution (see docs/AIMI_NEXT_SESSION.md Part A-quater).
+         */
+        var effort_smb_factor_requested: Double? = null,
+        var effort_smb_factor_applied: Double? = null,
+        var effort_smb_before_u: Double? = null,
+        var effort_smb_after_u: Double? = null,
+        /** True when the confirmed-meal floor raised the multiplier this tick. */
+        var effort_smb_floored_by_meal: Boolean? = null,
+        /**
+         * Aggressive-rise floor budget state. The episode budget is out of the dose path, but its
+         * accounting still runs, and its absence from the export is why the 2026-08-10 diagnosis
+         * rested on inference.
+         */
+        var rise_floor_spent_u: Double? = null,
+        var rise_floor_minutes_since_contribution: Double? = null,
     )
     data class Adjustments(
         var dynamic_isf: DynamicIsf? = null,
@@ -639,6 +661,16 @@ internal data class AimiDecisionContext(
             base.put("cbf_permitted_u", baseline_state.cbf_permitted_u ?: org.json.JSONObject.NULL)
             base.put("cbf_permitted_unfloored_u", baseline_state.cbf_permitted_unfloored_u ?: org.json.JSONObject.NULL)
             base.put("cbf_profile_isf_mgdl", baseline_state.cbf_profile_isf_mgdl ?: org.json.JSONObject.NULL)
+            base.put("effort_smb_factor_requested", baseline_state.effort_smb_factor_requested ?: org.json.JSONObject.NULL)
+            base.put("effort_smb_factor_applied", baseline_state.effort_smb_factor_applied ?: org.json.JSONObject.NULL)
+            base.put("effort_smb_before_u", baseline_state.effort_smb_before_u ?: org.json.JSONObject.NULL)
+            base.put("effort_smb_after_u", baseline_state.effort_smb_after_u ?: org.json.JSONObject.NULL)
+            base.put("effort_smb_floored_by_meal", baseline_state.effort_smb_floored_by_meal ?: org.json.JSONObject.NULL)
+            base.put("rise_floor_spent_u", baseline_state.rise_floor_spent_u ?: org.json.JSONObject.NULL)
+            base.put(
+                "rise_floor_minutes_since_contribution",
+                baseline_state.rise_floor_minutes_since_contribution ?: org.json.JSONObject.NULL,
+            )
             json.put("baseline_state", base)
 
             val adj = org.json.JSONObject()
@@ -1824,6 +1856,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastSmbCapped = 0.0
         lastSmbFinal = 0.0
         lastSmbBindingTraceDraft = SmbBindingTrace.Draft(timestampMs = ctx.currentTime)
+        // Effort reduction telemetry is per tick — a basal-only tick must export null, not the last
+        // SMB tick's multiplier.
+        lastEffortSmbFactorRaw = null
+        lastEffortSmbFactorApplied = null
+        lastEffortSmbBeforeU = null
+        lastEffortSmbAfterU = null
         lastNgrBasalMultiplier = 1.0
         lastHyperTrajectoryRelease = null
         lastRecursiveBeliefSnapshot = null
@@ -3375,7 +3413,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             effectivePeakMinutes = tickEffectivePeakMinutes,
             insulinActionState = tickInsulinActionState,
         )
-        val physiologicalTree = PhysiologicalTreeBuilder.build(
+        var physiologicalTree = PhysiologicalTreeBuilder.build(
             enabled = true,
             patientState = patientState,
             patientModeDecision = patientModeDecision,
@@ -3426,6 +3464,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
         }
         lastMealCertainty = mealCertainty
+        // Cascade D3-bis: a confirmed meal (MealCertainty HIGH) outranks the tree's activity veto.
+        // The tree is built first because MealCertainty reads its trunk and branches, so the intent
+        // has to be re-resolved here. Hypo protection is untouched — only the activity gate moves.
+        val treeBeforeMealCertainty = physiologicalTree
+        if (treeBeforeMealCertainty != null && mealCertainty?.supportsMealOverProtective == true) {
+            val revisedTree = PhysiologicalTreeBuilder.withMealCertainty(
+                snapshot = treeBeforeMealCertainty,
+                mealOverridesProtective = true,
+                deltaMgdl5m = delta.toDouble(),
+                currentBgMgdl = bg,
+            )
+            if (revisedTree.insulinIntent != treeBeforeMealCertainty.insulinIntent) {
+                consoleLog.add(
+                    "🌳 TREE_INTENT: ${treeBeforeMealCertainty.insulinIntent} → ${revisedTree.insulinIntent} " +
+                        "(meal certainty HIGH outranks activity veto)",
+                )
+            }
+            physiologicalTree = revisedTree
+            lastPhysiologicalTreeSnapshot = revisedTree
+        }
         val harmoniaMealRiseConfirmed = mealCertainty?.supportsMealSupport == true
         val harmoniaEnvironment = physiologicalTree?.let {
             val currentBasalForSimulation = basalaimi.toDouble().takeIf { basal -> basal.isFinite() && basal > 0.0 } ?: 1.0
@@ -4128,6 +4186,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             iobU = iob.toDouble(),
             maxIobU = maxIob,
             maxSmbEffectiveU = maxSMBHB.coerceAtLeast(maxSMB),
+            barrierPermittedU = autodriveEngine.lastCbfPermittedU.takeIf { it.isFinite() && it >= 0.0 },
             tdd24hU = tdd24hU,
             patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
             deltaPrevMgdlPer5 = mealAbsorptionDeltaPrevOfTick(),
@@ -4864,6 +4923,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 b.smb_seal_refused_count = smbSealRefusedCount
                 b.smb_seal_refused_total_u = smbSealRefusedTotalU.takeIf { it > 0.0 }
                 b.smb_seal_allowed_raise_count = smbSealAllowedRaiseCount
+                // Written here, immediately before serialisation, because this is the one point every
+                // export path goes through — the mistake that made `ra_estimator_advances` reach
+                // 7 ticks out of 93 (Part A-bis correction 1).
+                b.effort_smb_factor_requested = lastEffortSmbFactorRaw
+                b.effort_smb_factor_applied = lastEffortSmbFactorApplied
+                b.effort_smb_before_u = lastEffortSmbBeforeU
+                b.effort_smb_after_u = lastEffortSmbAfterU
+                b.effort_smb_floored_by_meal = lastEffortSmbFactorRaw?.let { raw ->
+                    lastEffortSmbFactorApplied?.let { applied -> applied > raw + 1e-9 }
+                }
+                b.rise_floor_spent_u = riseFloorSpentU
+                b.rise_floor_minutes_since_contribution =
+                    lastRiseFloorContributionMs
+                        .takeIf { it > 0L }
+                        ?.let { (dateUtil.now() - it) / 60000.0 }
             }
         }
     }
@@ -10629,6 +10703,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     /** SMB left after the post-hypo cap, for `adjustments.post_hypo_delivery`. Per tick. */
     private var lastPostHypoSmbAfterCapU: Double? = null
+
+    /** Effort SMB multiplier the belief asked for, before the confirmed-meal floor. Per tick. */
+    private var lastEffortSmbFactorRaw: Double? = null
+
+    /** Effort SMB multiplier actually applied, after the confirmed-meal floor. Per tick. */
+    private var lastEffortSmbFactorApplied: Double? = null
+
+    /** SMB entering the effort reduction, in units. Per tick. */
+    private var lastEffortSmbBeforeU: Double? = null
+
+    /** SMB leaving the effort reduction, in units. Per tick. */
+    private var lastEffortSmbAfterU: Double? = null
     private var mealAdvisorOneShotThisTick: Boolean = false
     private var lastTubeAdvisorSmbCapScale: Double? = null
     private var lastInflammationResult: app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster.InflammationResult? = null
@@ -13180,14 +13266,31 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🏃 Effort/activity protection — final, unbypassable SMB reduction (see [refreshEffortActivityBelief]).
         // Applied at the universal SMB exit so no upstream maxSMB reset can silently discard it; skips
         // explicit user actions; reduction-only.
-        val effortFactor = lastEffortAssessment?.smbFactor ?: 1.0
+        //
+        // On a *certain* meal the reduction is floored — see
+        // [MealCertaintyBuilder.effortSmbFactorFor]. The gate is `MealCertaintyLevel.HIGH`, which
+        // already requires DIGESTION_ACTIVE, an OK rise, BG above the meal band and terminals with no
+        // hypo conflict, so this cannot relax effort protection outside a confirmed meal. It never
+        // raises the dose above the pre-effort value that the HARD caps, the barrier-bounded
+        // arbitration and the seal already allowed — the floor is at most 1.0.
+        val rawEffortFactor = lastEffortAssessment?.smbFactor ?: 1.0
+        val confirmedMeal = lastMealCertainty?.level == MealCertaintyLevel.HIGH
+        val effortFactor = MealCertaintyBuilder.effortSmbFactorFor(lastMealCertainty, rawEffortFactor)
+        lastEffortSmbFactorRaw = rawEffortFactor
+        lastEffortSmbFactorApplied = effortFactor
+        lastEffortSmbBeforeU = finalUnits
+        lastEffortSmbAfterU = finalUnits
         if (effortFactor < 1.0 && !isExplicitUserAction && finalUnits > 0.0) {
             val beforeEffort = finalUnits
             finalUnits = (finalUnits * effortFactor).coerceAtLeast(0.0)
+            lastEffortSmbBeforeU = beforeEffort
+            lastEffortSmbAfterU = finalUnits
+            val floored = confirmedMeal && effortFactor > rawEffortFactor + 1e-9
             consoleLog.add(
                 "🏃 EFFORT_PROTECT_SMB ×${"%.2f".format(Locale.US, effortFactor)} " +
                     "${"%.2f".format(Locale.US, beforeEffort)}→${"%.2f".format(Locale.US, finalUnits)}U " +
-                    "[${lastEffortAssessment?.state?.name}/${lastEffortAssessment?.posture?.name}]",
+                    "[${lastEffortAssessment?.state?.name}/${lastEffortAssessment?.posture?.name}]" +
+                    if (floored) " (floored from ×${"%.2f".format(Locale.US, rawEffortFactor)}, meal certainty HIGH)" else "",
             )
             rT.reason.append("🏃effort×${"%.2f".format(Locale.US, effortFactor)} ")
         }

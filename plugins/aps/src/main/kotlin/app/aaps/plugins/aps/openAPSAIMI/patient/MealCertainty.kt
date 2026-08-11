@@ -5,6 +5,7 @@ import app.aaps.plugins.aps.openAPSAIMI.prediction.ClampPkpdScenarioReconcile
 import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoAggressiveRiseExit
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.max
 
 /**
  * Single meal-language for the decision cascade (Tree → Harmonia → Auditor).
@@ -91,6 +92,33 @@ object MealCertaintyBuilder {
 
     /** Strong 5‑min rise (mg/dL) required with an active absorption wave to override effort_veto. */
     internal const val EFFORT_VETO_OVERRIDE_MIN_DELTA_MGDL5M = 4.0
+
+    /**
+     * Lower bound on the effort SMB multiplier while the meal is certain ([MealCertaintyLevel.HIGH]).
+     *
+     * The effort reduction is a hypo protection and stays in force — on a certain meal it may take at
+     * most a quarter of the dose instead of up to 55 %.
+     */
+    internal const val EFFORT_SMB_FLOOR_CONFIRMED_MEAL = 0.75
+
+    /**
+     * Effort SMB multiplier to apply, after the confirmed-meal floor.
+     *
+     * Reduction-only in both arms: the result is never above 1.0, and never above [requestedFactor]
+     * unless the meal is certain. Measured on 2026-08-09/10: two lunches ran the identical cap chain
+     * and differed only in this multiplier — absent on 2026-08-09 (14.09 U delivered), 0.45–0.56 on
+     * 14 ticks of 2026-08-10 (6.81 U delivered, BG peaked at 269) after a walk to lunch. See
+     * docs/AIMI_NEXT_SESSION.md Part A-quater.
+     *
+     * @param certainty the tick's meal certainty, or null when it was not evaluated.
+     * @param requestedFactor what `EffortActivityBelief` asked for.
+     */
+    fun effortSmbFactorFor(certainty: MealCertainty?, requestedFactor: Double): Double {
+        if (!requestedFactor.isFinite()) return 1.0
+        val requested = requestedFactor.coerceIn(0.0, 1.0)
+        if (certainty?.level != MealCertaintyLevel.HIGH) return requested
+        return max(requested, EFFORT_SMB_FLOOR_CONFIRMED_MEAL)
+    }
 
     data class Input(
         val trunkState: GlobalPhysiologicalState?,

@@ -63,6 +63,12 @@ data class RecursiveBeliefTickContext(
     val tubeAdvisorCapScale: Double?,
     // Late-tick (Autodrive path) — optional until MPC runs
     val v3SmbU: Double? = null,
+    /**
+     * Last dose the control barrier permitted, in units, or null when it did not run this tick.
+     * Bounds the Harmonia SMB **lift** only — never the accept/reduce arms. See
+     * `HarmoniaSmbArbiter.decide`.
+     */
+    val barrierPermittedU: Double? = null,
     val htrResult: HyperTrajectoryReleaseResult? = null,
     val htrClassification: HyperSeverityClassifier.Output? = null,
     val tier1Hypo: Boolean = false,

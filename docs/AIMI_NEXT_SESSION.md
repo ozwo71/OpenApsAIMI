@@ -9,11 +9,13 @@ Started at the end of the 2026-08-09 morning session, extended 2026-08-10. Three
 - **Part A-ter — the lunch of 2026-08-10.** The Part A-bis build ran, and one of its brakes turned a
   near-hypo into a sustained hyper. **This is the current state of knowledge, and it reverses one
   change from Part A-bis.**
-- **Part B — the prompt for the next session.** Paste it as-is, but read Part A-ter's closing question
-  first — it outranks everything in Part B.
+- **Part A-quater — the meal intent, traced (2026-08-11).** Answers Part A-ter's closing question and
+  **corrects its diagnosis of the 2026-08-10 lunch**. This is now the current state of knowledge.
+- **Part B — the prompt for the next session.** Paste it as-is, but read Part A-quater first — it
+  outranks everything in Part B.
 
-Part A is committed: `eda530a545` then `6d24095023`. **Everything in Part A-bis and A-ter is
-uncommitted.** Full module suite: **1332 tests, 0 failures**.
+Part A is committed: `eda530a545` then `6d24095023`. **Everything in Part A-bis, A-ter and A-quater is
+uncommitted.** Full module suite: **1345 tests, 0 failures** (was 1332; A-quater adds 13).
 
 ---
 
@@ -369,6 +371,13 @@ One failure was replaced by its opposite.
 **Not the pattern catalogue.** The conversion to fractions reproduces the previous behaviour exactly:
 `max_smb_hb_u` = 1.6, `smb_cap_u` = 1.20, identical to the previous absolute value. It is exonerated.
 
+> **⚠️ CORRECTED 2026-08-11 — this attribution is wrong. See Part A-quater §AQ5.** The 2026-08-10
+> undershoot was the **effort veto after a walk to lunch** (steps15 390–453 at 12:02–12:12, HR 74–84),
+> which multiplied the SMB by 0.45–0.56 on 14 ticks. Both lunches ran the *identical* cap chain
+> (proposed 1.60 → safety 1.36 → throttle 1.09) and differed only in that multiplier. The paragraph
+> below is left as the record of what was believed on 2026-08-10; its own caveat — that the budget
+> state was never exported and its absence was inferred — is exactly why it was wrong.
+
 **The episode budget on `aggressiveRiseSmbFloorU`.** The floor appears nowhere in the 2026-08-10 lunch
 trace, while on 2026-08-09 it delivered 1.36 then 1.60 U per tick. Doses were small from the very
 first tick — 0.29 U at BG 125 with IOB 0.94 — well before any governor action.
@@ -376,6 +385,10 @@ first tick — 0.29 U at BG 125 with IOB 0.94 — well before any governor actio
 **Caveat, and it is mine:** the budget state (`riseFloorSpentU`, time since last contribution) was
 **never exported**. The floor's absence is inferred from the trace, not measured. Second time in this
 work that a mechanism was shipped without its instrument.
+
+> **⚠️ CORRECTED 2026-08-11.** `PROTECTIVE` is real, but it is *not* the root cause, and
+> `LIFT_WITHIN_ENVELOPE` is not the fix: it can only restore RBT's own demand toward the MPC command,
+> never exceed it, so it cannot carry a meal at any threshold. See Part A-quater §AQ5.
 
 **The root cause is upstream of both brakes.** On **every tick** of the rise,
 `harmonia_smb_authority.insulin_intent` was `PROTECTIVE` — at BG 144, 195, 237, 269, with Ra up to
@@ -445,12 +458,291 @@ Same failure shape as the episode budget: a claim of neutrality verified at one 
 **Still open:** a `SOFT` cap that is never lifted behaves exactly like a `HARD` one. Either the lift
 becomes reachable (Agent 0), or an unlifted `SOFT` must defer to `maxSMBHB` instead of replacing it.
 
+## The Ra shadow, finally measurable — and the answer to A5's first calibration question
+
+The export-ordering fix landed, so `ra_aligned_tau_shadow_mgdl_per_min` now reaches **226 ticks out of
+231** instead of 7 out of 93. Measured on `AIMI_Support_Package_1786432933407`, and pooled with the
+earlier corpora where the field exists (**413 paired ticks**).
+
+### The aligned insulin term produces a usable signal
+
+| | Ra today | shadow, aligned tau |
+|---|---|---|
+| median | 0.21 | 0.87 |
+| p90 | 1.51 | 5.49 |
+| max | 5.33 | 8.13 |
+| crosses 0.6 | 23 % | **59 %** |
+
+**The earlier fear was overstated.** On the 65 ticks where the real Ra is ≤ 0.05 — nothing digesting —
+the shadow's median is **0.14**, and it crosses 0.6 on only 13 of them. It does *not* invent
+appearance from the mere presence of insulin. It separates rest (0.14) from meal (p90 5.49).
+
+The conclusion of A-bis correction 2 — "suggestive, not conclusive, n = 7, biased to quiet ticks" —
+resolves in favour of alignment being **viable**, provided the gates move with it.
+
+Also confirmed in production: **`ra_estimator_replayed_calls` = 0**. The once-per-CGM-sample guard
+holds; no duplicate advances observed.
+
+### Iso-rate gate thresholds — and why the result is itself a finding
+
+Mapping each current gate to the shadow threshold that reproduces its crossing rate, over 413 ticks:
+
+| gate | crossing rate today | equivalent shadow threshold |
+|---|---|---|
+| 0.6 | 18.4 % | **4.25** |
+| 0.7 | 16.7 % | **4.55** |
+| 0.8 | 16.2 % | **4.57** |
+
+Shadow distribution: p50 0.63, p75 2.85, p90 5.22, p95 6.14, p99 7.38.
+
+**The three thresholds compress to almost one value, because they already do today.** 0.6 / 0.7 / 0.8
+select 18.4 % / 16.7 % / 16.2 % — 2.2 percentage points apart across the whole range. Three gates that
+differ by two points of population are not three gates; they are one gate written three times.
+
+So iso-rate mapping is the wrong method here, and it fails informatively: it should not be used to
+pick 4.25 / 4.55 / 4.57. The prior question is **what each of the three gates is supposed to
+discriminate**, since today they do not discriminate anything from each other. Answer that first, then
+place thresholds on the shadow's distribution by intent rather than by rate-matching.
+
+**Nothing was changed in code for this.** `ESTIMATOR_TAU_MIN` stays at 3125 (behaviour-preserving),
+the gates stay at 0.6 / 0.7 / 0.8. The shadow is exported on every tick, so the next packages extend
+the sample at no cost and with no dosing risk.
+
+**Deliberately not sequenced with the dosing work.** `OApsAIMIHighBGMaxSMB` is being raised by the
+patient, which moves the dose. Changing the Ra gates at the same time would make neither effect
+attributable — the exact error made twice this week.
+
 ## The open question, and it is now the only one that matters
 
 **Where is `insulin_intent` decided, and why does it never select `MEAL_SUPPORT` on a confirmed
 undeclared meal?** Until it does, the loop depends on a floor that ignores the MPC, the barrier and
 Harmonia — and every attempt to bound that floor will starve meals. This is the next session's first
 task, ahead of everything in Part B.
+
+---
+
+# Part A-quater — the meal intent, traced (2026-08-11)
+
+Written 2026-08-11 by the Agent 0 (`meal-intent`) run. **This answers Part A-ter's closing question
+and corrects its diagnosis of the 2026-08-10 lunch.** Everything below was computed from the three
+support packages (`1786304612047`, `1786365787997`, `1786432933407`); reproduce before trusting.
+
+## AQ1. Where `insulin_intent` is decided, and what makes it `PROTECTIVE`
+
+Producer: `PhysiologicalTreeBuilder.resolveInsulinIntent`,
+`plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/patient/PhysiologicalTree.kt`. Two
+`PROTECTIVE` gates, in order:
+
+| gate | line (before this change) | condition |
+|---|---|---|
+| 1 — hypo / sleep | `PhysiologicalTree.kt:301` | trunk `HYPO_RISK` or `SLEEP_RECOVERY`, or `branches.hypoRisk.confidence >= 0.55` |
+| 2 — activity | `PhysiologicalTree.kt:307` | `branches.activity.confidence >= 0.60` **or** `branches.postActivity.confidence >= 0.55` |
+
+**Gate 2 causes essentially all of it, and gate 1 causes none of it on a meal.** Classified over every
+`PROTECTIVE` tick in each package:
+
+| package | gate 2 (activity) | gate 1 (hypo/sleep) |
+|---|---|---|
+| lunch 2026-08-10 | **150 / 150** | 0 |
+| dinner 2026-08-10 | **156 / 156** | 0 |
+| lunch 2026-08-09 | 74 / 98 | 24 |
+
+At the tick the prompt named — **BG 237, Ra 4.59, COB 0, 12:36 on 2026-08-10** — the tree reported
+`hypo_risk 0.06`, `activity 0.00` (steps15 = 0, HR 82), and `post_activity 0.79` made **entirely of
+`effort_recent = 0.79`**; the biometric `exercise_afterburn` was only 0.20. The `effort_recent` memory
+came from steps15 = 390–453 at 12:02–12:12 with HR 74–84 — walking to lunch, scored `effort = 1.00`.
+So a meal branch at confidence 1.00 and a digestion branch at 1.00, on a trunk already
+`DIGESTION_ACTIVE`, lost to a 120-minute activity memory of a walk.
+
+## AQ2. The dinner switch at 21:12 — Part A-ter's reading was wrong
+
+Part A-ter says the mode stayed `ACCEPT` at 21:12/21:17 "because the MPC was not asking above the
+1.20 cap". It was: `v3_smb_before_u` = **1.600** against a SOFT catalogue cap of **1.200**. The real
+reason is the third term of `liftEligible`: `meal_certainty.level` was **`LOW`** on every dinner tick
+(BG peaked at 199, and the effort veto was on), so `mealCertaintySupports` was false.
+
+## AQ3. Three independent blockers, all rooted in the same signal
+
+`HarmoniaSmbArbiter.decide` needs `softMeal && riseConfirmed && mealCertaintySupports &&
+wantsMoreInsulin && max(mpc, before) > softCap`. Measured at 12:36 on 2026-08-10:
+
+| term | value | why |
+|---|---|---|
+| `softMeal` | ✅ SOFT 1.20, `MEAL_UNDECLARED_FAST` | — |
+| `max(mpc, before) > softCap` | ✅ 1.60 > 1.20 | — |
+| `wantsMoreInsulin` | ❌ intent `PROTECTIVE` | AQ1, gate 2 |
+| `mealCertaintySupports` | ❌ forced `false` | `RecursiveBeliefResolver.kt:778` |
+| `riseConfirmed` | ❌ forced `false` | same |
+
+The two forced values come from `channelOpen`, which required `basalFirstChannel == NONE`. On these
+ticks the channel was `HARMONIA_PRODUCTION_BASAL_FIRST`, granted by
+`allowsHarmoniaBasalDuringSoftMealSupport` — the exception added so TBR could still act on a soft
+meal. **It requires `releaseAuthority == SOFT`, i.e. RBT still holds SMB authority; it was never meant
+to revoke the SMB lift, and that is exactly what it did.** `BASAL_FIRST_OWNER_HARMONIA_PRODUCTION_BASAL_FIRST`
+is the dominant blocker of the whole corpus: 110 / 133 / 144 ticks per day, and every tick of both
+lunch rises, with `effective_authority` = `SOFT` throughout.
+
+`MealCertainty` already computes the right answer and is simply not consumed by the tree: it reached
+**`HIGH`** (`supportsMealOverProtective`) at 12:32–12:56 on 2026-08-10 (BG 216 → 269) and across
+14:17–15:06 on 2026-08-09. Its KDoc already says *"digestion + strong rise → meal support beats
+protective"*. The tree is built before it, so the intent never sees it.
+
+## AQ4. What was changed
+
+All uncommitted. Two groups: the governed-path unblocking (A), and the change that actually moves the
+dose (B), plus the instruments (C).
+
+**A — make `LIFT_WITHIN_ENVELOPE` reachable on a confirmed meal**
+
+| file | change |
+|---|---|
+| `patient/PhysiologicalTree.kt` | `resolveInsulinIntent` takes `mealOverridesProtective`; when true, **gate 2 only** is skipped — gate 1 is untouched. New `PhysiologicalTreeBuilder.withMealCertainty(...)` re-resolves the intent after `MealCertainty` exists. |
+| `DetermineBasalAIMI2.kt` | calls it right after `lastMealCertainty` is set, gated on `mealCertainty.supportsMealOverProtective`; logs `🌳 TREE_INTENT`. Also passes `autodriveEngine.lastCbfPermittedU` into the RBT context. |
+| `recursive/RecursiveBeliefResolver.kt` | the soft-meal basal exception no longer closes the SMB arbitration channel: `basalFirstClosesSmbChannel` is true for T3C, and for Harmonia only when `releaseAuthority != SOFT` (the classic mutex). |
+| `patient/HarmoniaSmbAuthorityDecision.kt` | `decide` takes `barrierPermittedU`; it bounds the **LIFT only**, and never below `demandBeforeU`. |
+
+Bounds that already existed and are preserved: the envelope is `min(maxSmbEffectiveU, iobHeadroom)` and
+`maxSmbEffectiveU = maxSMBHB.coerceAtLeast(maxSMB)` — **a LIFT already reaches the full `maxSMBHB`**,
+so nothing had to change for the patient's decision on that point. HARD catalogue caps re-bind after
+the arbiter (`RecursiveBeliefResolver.kt` terminal `hardBindingCapU()`), and everything still passes
+through `finalizeAndCapSMB` / `applySmbUnits`, so a lift cannot reach the pump past the seal.
+
+The barrier bounds the lift and not the whole dose on purpose: A-bis correction 5 measured that
+clamping the dose to the barrier removes 38 % of a day's SMB, and `cbf_permitted_u` is 0.00 on 46 %
+(lunch package) to 58 % (dinner package) of ticks. On the 2026-08-10 lunch rise it was 1.68–2.00 U, so
+the bound costs nothing there.
+
+**B — the effort SMB floor on a certain meal (patient decision, 2026-08-11)**
+
+`MealCertaintyBuilder.effortSmbFactorFor(certainty, requestedFactor)` floors the effort multiplier at
+**0.75** when — and only when — `MealCertaintyLevel.HIGH` holds. `finalizeAndCapSMB` calls it in place
+of reading `lastEffortAssessment.smbFactor` directly.
+
+The floor is a **mitigation, not the fix** (see AQ7). It cannot bypass anything: it is at most 1.0, so
+the post-effort dose never exceeds the pre-effort value, which the HARD catalogue caps, the
+barrier-bounded arbitration and the seal have already bounded. `HIGH` already requires
+`DIGESTION_ACTIVE`, an OK rise, BG above the meal band and terminals with no hypo conflict, so effort
+protection is untouched outside a confirmed meal — the 2026-08-10 dinner never reached `HIGH` and does
+not move at any floor value.
+
+**C — the instruments that were missing**
+
+Two blind spots have each cost one wrong attribution. Both are now written in
+`markEstimatorDiagnosticsForExport`, the one point every export path goes through (the fix from A-bis
+correction 1), and the effort fields are reset at tick bootstrap so a basal-only tick exports null:
+
+| field | why |
+|---|---|
+| `effort_smb_factor_requested` / `_applied` | the multiplier was only recoverable by parsing the narrative — the reason AQ5's 7.01 U is a reconstruction |
+| `effort_smb_before_u` / `_after_u` | brackets the reduction in units |
+| `effort_smb_floored_by_meal` | did the confirmed-meal floor bite this tick |
+| `rise_floor_spent_u` | the episode-budget state A-ter had to infer |
+| `rise_floor_minutes_since_contribution` | idle time against `RISE_FLOOR_REARM_MS` |
+
+Suite: **1345 tests, 0 failures** (`:plugins:aps:testFullDebugUnitTest`). New tests:
+`HarmoniaSmbArbiterTest` ×5 (full-ceiling lift, barrier bound, barrier never lowers, null barrier,
+`MEAL_SUPPORT` lifts), `PhysiologicalTreeBuilderTest` ×4 (the 12:36 veto reproduced, the override, the
+no-op case, and that the hypo gate still wins), `MealCertaintyBuilderTest` ×4 (floors only at `HIGH`,
+never raises above what effort asked, always a reduction incl. NaN and >1 inputs, and a total effort
+stop still keeps a quarter on a certain meal).
+
+## AQ5. What it would have delivered — and the number that actually matters
+
+**It delivers essentially nothing, and the reason is worth more than the change.**
+
+`mpcDemandU` passed to the arbiter is `ctx.v3SmbU`, set at `DetermineBasalAIMI2.kt:5235` to the same
+`v3Smb` that becomes `htr.v3SmbBeforeU`. The lift's output can therefore only exceed the baseline when
+the pre-arbiter RBT demand already exceeds the V3 command, and `rawLifted` keeps
+`max(v3SmbBeforeU, …)` regardless. Measured inside the meal windows, `demand_before_u > v3_smb_before_u`
+on **1 tick of each lunch** (+0.15 U and +0.28 U *pre-terminal*, less after the terminal chain).
+
+> **`LIFT_WITHIN_ENVELOPE` is a restore mechanism for RBT's own demand, not a lift above the model.**
+> No calibration of the intent threshold can make it carry a meal. The name is misleading.
+
+The real limiter, measured per tick from `MEAL_PRIORITY_CHAIN` in the narrative:
+
+```
+2026-08-10 12:36  proposed=1.60 baseLimit=1.60 safety=1.36 throttle=1.09  effort×0.56 → 0.61
+2026-08-09 14:41  proposed=1.60 baseLimit=1.60 safety=1.36 throttle=1.09  (no effort)  → 1.09
+```
+
+Identical chain, identical throttle. The only difference is `EFFORT_PROTECT_SMB`
+(`DetermineBasalAIMI2.kt:13183`), applied last, after even the `hyperReleaseFloorU` restore.
+
+| meal window | delivered | effort-multiplied ticks | factors | U removed by effort (reconstructed) |
+|---|---|---|---|---|
+| lunch 2026-08-09 | 14.09 U | **0** | — | 0.00 |
+| lunch 2026-08-10 | 6.81 U | **14** | 0.45–0.56 | **7.01** |
+| dinner 2026-08-10 | 9.17 U | 11 | 0.68–0.85 | 2.67 |
+
+**6.81 + 7.01 = 13.82 U against 14.09 U.** The 14.06 → 6.53 collapse is the effort multiplier, to
+within 2 %. **Part A-ter's attribution to the episode budget on `aggressiveRiseSmbFloorU` is not
+supported** — that budget was never exported, its absence was inferred, and the effort factor explains
+the whole gap. Removing the budget was still the right call for other reasons; the reasoning given for
+it was wrong.
+
+**Status of these numbers — read this before quoting them.** The **mechanism is measured**: the two
+lunches ran the identical cap chain and `meal_certainty.effort_veto` is true on **0 / 19** ticks of the
+2026-08-09 lunch and **14 / 16** of the 2026-08-10 lunch (independently confirmed from the export).
+The **7.01 U is a reconstruction, not a measurement**: `EFFORT_PROTECT_SMB` had no before/after export,
+so the factor was recovered by parsing `🏃effort×…` out of the narrative and the units were
+back-computed as `amount / factor − amount`. It is also open-loop — per tick, no IOB feedback — and a
+higher SMB would raise IOB and re-enter the chain on later ticks, so treat it as an upper bound. The
+export added in AQ4-C is what settles it on the next package.
+
+## AQ6. The effort floor — the numbers behind the chosen 0.75
+
+The target — between 6.53 U and 14.06 U — is reachable only through the effort multiplier, gated on a
+confirmed meal. Modelled per tick on the 2026-08-10 packages, flooring `effortFactor` **only when
+`MealCertainty.level == HIGH`**:
+
+| floor | lunch 2026-08-10 | dinner 2026-08-10 |
+|---|---|---|
+| none (as delivered) | 6.81 U | 9.17 U |
+| 0.65 | 7.75 U | 9.17 U |
+| **0.75 — chosen by the patient 2026-08-11** | **8.40 U** | 9.17 U |
+| 0.85 | 9.06 U | 9.17 U |
+| 1.00 (no effort cut on a HIGH meal) | 10.04 U | 9.17 U |
+
+The dinner is untouched at every floor because it never reached `HIGH` — the selectivity is right on
+its own: it relaxes at BG 216–269 on a confirmed hyper meal and not at BG 179. Same reconstruction
+caveat as AQ5.
+
+**Attribution risk, accepted by the patient.** This ships in the same install as
+`OApsAIMIHighBGMaxSMB` 1.6 → 2.2. Two dose-moving changes at once is the error Part A-ter records as
+having been made twice; the patient accepts it and will disentangle from the next package. The new
+exports make that possible: `effort_smb_factor_requested` vs `_applied` isolates the floor's own
+contribution independently of the ceiling change.
+
+## AQ7. Still open
+
+- **The upstream defect is untouched, and the floor is a mitigation, not the fix.**
+  `EffortActivityBelief` scored `effort = 1.00` on steps15 = 156 (≈10 steps/min) and kept
+  `effort_recent = 0.96` two hours after a walk to lunch at HR 74–84. Until that is calibrated, a
+  confirmed meal is still fighting a false exercise belief in three places — the tree's intent gate,
+  `MealCertainty.effortVeto`, and the terminal multiplier — and the 0.75 floor only softens the third.
+  The fix belongs in `EffortActivityBelief`, which is the single activity path; **do not add a parallel
+  one.**
+- `LIFT_WITHIN_ENVELOPE` is now reachable but remains a restore mechanism. If a genuine lift above the
+  MPC command is wanted, that is a different change and needs its own justification.
+
+## AQ8. What the next day's data must answer
+
+The build to install carries: the intent override, the channel fix, the barrier-bounded lift, the 0.75
+effort floor, and `OApsAIMIHighBGMaxSMB` = 2.2. From the next package, with meals timestamped:
+
+| question | field(s) | what would confirm it |
+|---|---|---|
+| Does the floor fire, and only on a certain meal? | `effort_smb_floored_by_meal`, `effort_smb_factor_requested` vs `_applied` | true only on ticks where `meal_certainty.level == HIGH`; `_applied` = max(`_requested`, 0.75) exactly |
+| Is the 7.01 U reconstruction right? | `effort_smb_before_u` / `_after_u` summed over the meal window | replaces the narrative-parsed estimate with a measurement |
+| Does the intent actually switch? | `physiological_tree.insulin_intent`, console `🌳 TREE_INTENT` | `NEED_MORE_INSULIN` on the HIGH ticks of a rise, `PROTECTIVE` retained on real activity |
+| Is the SMB channel open on a meal now? | `recursive_belief.resolution.harmonia_smb.dominant_blocker` | `BASAL_FIRST_OWNER_HARMONIA_PRODUCTION_BASAL_FIRST` should fall sharply on SOFT meal ticks |
+| Does a LIFT ever fire, and does it add anything? | `harmonia_smb_authority.mode`, `reason_codes` incl. `LIFT_BARRIER_BOUND_*` | if `LIFT_WITHIN_ENVELOPE` appears with `demand_after_u` ≤ `v3_smb_before_u` on every tick, AQ5's restore-mechanism finding is confirmed in production |
+| Did the rise floor carry anything? | `rise_floor_spent_u`, `rise_floor_minutes_since_contribution` | settles A-ter's inference with a measurement at last |
+| Attribution: floor vs the 2.2 ceiling | `physiological_patterns.max_smb_hb_u` alongside the effort fields | separates the ceiling's effect from the floor's |
+
+**Do not change the Ra gates or `MPC_TAU_MIN` on this cycle** — three dose-moving changes would make
+none of the above attributable.
 
 ---
 

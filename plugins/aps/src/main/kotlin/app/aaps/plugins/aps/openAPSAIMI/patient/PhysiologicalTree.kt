@@ -289,14 +289,50 @@ internal object PhysiologicalTreeBuilder {
     )
 
     /**
+     * Re-resolves the insulin intent once [MealCertainty] is known for the tick.
+     *
+     * The tree is built before `MealCertainty`, because `MealCertainty` reads the trunk state and the
+     * meal/digestion branches. So the first pass cannot see whether the meal is confirmed, and an
+     * activity signal wins by default. This second pass changes nothing except the intent, and only
+     * when the meal reached `HIGH` — measured on the 2026-08-10 lunch, where the activity branch held
+     * the intent at `PROTECTIVE` on every tick from BG 144 to BG 269 while `post_activity` came from
+     * `effort_recent` alone (0.79 at BG 237, with the biometric afterburn probability at 0.20).
+     *
+     * @param mealOverridesProtective `MealCertainty.supportsMealOverProtective` — level `HIGH`, which
+     *   already requires DIGESTION_ACTIVE, an OK rise, BG above the meal band, and terminals that do
+     *   not signal a hypo conflict.
+     */
+    fun withMealCertainty(
+        snapshot: PhysiologicalTreeSnapshot,
+        mealOverridesProtective: Boolean,
+        deltaMgdl5m: Double?,
+        currentBgMgdl: Double?,
+    ): PhysiologicalTreeSnapshot {
+        if (!mealOverridesProtective) return snapshot
+        val revised = resolveInsulinIntent(
+            trunk = snapshot.trunk,
+            branches = snapshot.branches,
+            deltaMgdl5m = deltaMgdl5m,
+            currentBgMgdl = currentBgMgdl,
+            mealOverridesProtective = true,
+        )
+        if (revised.intent == snapshot.insulinIntent) return snapshot
+        return snapshot.copy(insulinIntent = revised.intent, insulinUrgency = revised.urgency)
+    }
+
+    /**
      * Deploys a clear insulin intent when digestion/meal + rise geometry say more insulin is needed.
      * Dose amplitude remains Harmonia's job (up to maxSMBHB / hard envelope).
+     *
+     * @param mealOverridesProtective when true, a confirmed meal outranks the activity / post-activity
+     *   veto. The hypo gate below is never overridden — a hypo risk still returns `PROTECTIVE` first.
      */
     private fun resolveInsulinIntent(
         trunk: PhysiologicalTrunk,
         branches: PhysiologicalBranches,
         deltaMgdl5m: Double?,
         currentBgMgdl: Double?,
+        mealOverridesProtective: Boolean = false,
     ): InsulinIntentResolved {
         if (trunk.globalState == GlobalPhysiologicalState.HYPO_RISK ||
             trunk.globalState == GlobalPhysiologicalState.SLEEP_RECOVERY ||
@@ -304,7 +340,9 @@ internal object PhysiologicalTreeBuilder {
         ) {
             return InsulinIntentResolved(InsulinIntent.PROTECTIVE, branches.hypoRisk.confidence)
         }
-        if (branches.activity.confidence >= 0.60 || branches.postActivity.confidence >= 0.55) {
+        if (!mealOverridesProtective &&
+            (branches.activity.confidence >= 0.60 || branches.postActivity.confidence >= 0.55)
+        ) {
             return InsulinIntentResolved(InsulinIntent.PROTECTIVE, max(branches.activity.confidence, branches.postActivity.confidence))
         }
         val delta = deltaMgdl5m ?: 0.0
