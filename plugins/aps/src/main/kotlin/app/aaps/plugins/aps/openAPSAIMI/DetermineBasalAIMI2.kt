@@ -4082,7 +4082,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 ?: lastBasePhysioMultipliers.trajectoryRelevanceScore.toDouble(),
             nowMs = dateUtil.now(),
             // The catalogue reduces the user's own ceiling instead of imposing absolute units.
-            maxSmbHbU = maxOf(this.maxSMBHB, this.maxSMB),
+            //
+            // ⚠️ The **configured** ceiling, not `this.maxSMBHB`. That field is reassigned during the
+            // tick and ramps with glucose (0.88 → 1.12 → 1.36 → 1.60 on the dinner of 2026-08-10), so
+            // multiplying a fraction by it applies the reduction twice: the cap fell to 0.66 U at
+            // BG 111 where it should have been 1.20 — 45 % tighter at the start of a meal, exactly
+            // when the prebolus matters. The catalogue reduces a *setting*, and the tick's own
+            // maxSMB/maxSMBHB selection still bounds the dose afterwards.
+            maxSmbHbU = maxOf(
+                preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB),
+                preferences.get(DoubleKey.OApsAIMIMaxSMB),
+            ),
         )
         val patternSnapshot = PhysiologicalPatternDetector.detect(patternInput)
         lastPhysiologicalPatternSnapshot = patternSnapshot

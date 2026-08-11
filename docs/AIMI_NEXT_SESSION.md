@@ -4,12 +4,16 @@ Started at the end of the 2026-08-09 morning session, extended 2026-08-10. Three
 
 - **Part A — the record of the morning.** Decisions and measurements. Several of its conclusions are
   superseded; read Part A-bis before acting on any of them.
-- **Part A-bis — the production day of 2026-08-09.** What actually happened on the pump, what caused
-  it, and which of Part A's conclusions were wrong. **This is the current state of knowledge.**
-- **Part B — the prompt for the next session.** Paste it as-is.
+- **Part A-bis — the production day of 2026-08-09.** What happened on the pump, what caused it, and
+  which of Part A's conclusions were wrong.
+- **Part A-ter — the lunch of 2026-08-10.** The Part A-bis build ran, and one of its brakes turned a
+  near-hypo into a sustained hyper. **This is the current state of knowledge, and it reverses one
+  change from Part A-bis.**
+- **Part B — the prompt for the next session.** Paste it as-is, but read Part A-ter's closing question
+  first — it outranks everything in Part B.
 
-Part A is committed: `eda530a545` then `6d24095023`. **Everything in Part A-bis is uncommitted** — 18
-files, +1248/-373. Full module suite: **1332 tests, 0 failures, 14 skipped**.
+Part A is committed: `eda530a545` then `6d24095023`. **Everything in Part A-bis and A-ter is
+uncommitted.** Full module suite: **1332 tests, 0 failures**.
 
 ---
 
@@ -341,6 +345,115 @@ the same shape: **a constraint stated in documentation and absent from the code.
 
 ---
 
+# Part A-ter — the lunch of 2026-08-10, and the brake that was reverted
+
+Written 2026-08-10, after the build of Part A-bis ran in production. **This is the current state of
+knowledge. It reverses one of Part A-bis's changes.**
+
+## The event
+
+The Part A-bis build was installed. Same patient, undeclared lunch again, no meal mode, COB 0.
+Support package `AIMI_Support_Package_1786365787997`.
+
+| | 2026-08-09 (no episode budget) | 2026-08-10 (episode budget active) |
+|---|---|---|
+| peak BG | 225 | **268.7** |
+| SMB at peak | 14.06 U | **6.53 U** |
+| peak IOB | 16.75 | 8.66 |
+| two hours later | 110 (rescue carbs) | still ~205 |
+
+One failure was replaced by its opposite.
+
+## What caused it, and what did not
+
+**Not the pattern catalogue.** The conversion to fractions reproduces the previous behaviour exactly:
+`max_smb_hb_u` = 1.6, `smb_cap_u` = 1.20, identical to the previous absolute value. It is exonerated.
+
+**The episode budget on `aggressiveRiseSmbFloorU`.** The floor appears nowhere in the 2026-08-10 lunch
+trace, while on 2026-08-09 it delivered 1.36 then 1.60 U per tick. Doses were small from the very
+first tick — 0.29 U at BG 125 with IOB 0.94 — well before any governor action.
+
+**Caveat, and it is mine:** the budget state (`riseFloorSpentU`, time since last contribution) was
+**never exported**. The floor's absence is inferred from the trace, not measured. Second time in this
+work that a mechanism was shipped without its instrument.
+
+**The root cause is upstream of both brakes.** On **every tick** of the rise,
+`harmonia_smb_authority.insulin_intent` was `PROTECTIVE` — at BG 144, 195, 237, 269, with Ra up to
+5.33. Never `MEAL_SUPPORT`, never `NEED_MORE_INSULIN`. `PROTECTIVE` takes an early return in
+`HarmoniaSmbArbiter.decide` that can only ACCEPT or REDUCE, so `LIFT_WITHIN_ENVELOPE` is structurally
+unreachable. The governed demand caps at the catalogue's 1.20 U and Harmonia reduces it further,
+leaving ~0.5 U per tick against a meal driving BG to 268.
+
+**So the floor was not merely bypassing the barrier — it was carrying the entire meal.** The governed
+path never has. Removing the bypass without first checking that the legitimate path could carry the
+load turned a near-hypo into a sustained hyper.
+
+## What was changed on 2026-08-10
+
+- **The episode budget was removed from the dose path.** `remainingRiseFloorBudgetU` and its eight
+  tests are kept, out of the dose path, with the two measurement tables in its KDoc and an explicit
+  instruction not to reinstate it until Harmonia's intent switches on a confirmed meal.
+- **The `ESCAPE_RISE` IOB guard was kept.** The two brakes bound the same thing — accumulation — but
+  not at the same place. The budget cuts at the *start* of a meal, when dosing is still needed; the
+  guard cuts at the *physiological budget*, when there genuinely is too much insulin on board. On
+  2026-08-09 it would have stopped at IOB 9.04 instead of 16.75. Keeping the guard and dropping the
+  budget should land between the two failures.
+
+Suite: 1332 tests, 0 failures. Uncommitted.
+
+## The lesson, stated plainly
+
+The 2026-08-09 brake was designed from a single episode — the one where the floor delivered 14 U too
+many — without measuring what the governed path delivered **without** it. It delivered almost nothing.
+Removing a bypass is only safe once the legitimate path is shown to carry the load.
+
+## The dinner of 2026-08-10 — a regression I introduced, and a useful signal
+
+Package `AIMI_Support_Package_1786432933407`. The patient observed that the highest SMB of the dinner
+was 1.2 U and asked why it could not reach the configured 1.6.
+
+**Answer:** `max_smb_hb_u` did ramp correctly with glucose (0.88 → 1.12 → 1.36 → 1.60), but the meal
+patterns propose **0.75 of the ceiling**, so the effective cap is 1.20 and never 1.60. Confirmed:
+`smb_cap_u` = 1.200 on every tick of the rise, and the delivered doses sat on it (1.16, 1.19, 1.24).
+
+**The regression — mine, fixed.** The fraction conversion was calibrated against `maxSMBHB = 1.6`
+assuming that ceiling constant. It is not: `this.maxSMBHB` is a field **reassigned during the tick**
+that ramps with glucose. Multiplying a fraction by it applied the reduction twice:
+
+| BG | cap before the conversion | cap with the bug | cap now |
+|---|---|---|---|
+| 111 | 1.20 | **0.66** | 1.20 |
+| 125 | 1.20 | 0.84 | 1.20 |
+| 140 | 1.20 | 1.02 | 1.20 |
+
+Up to **45 % tighter at the start of a meal**, exactly when the prebolus matters. Fixed by reading
+`preferences.get(OApsAIMIHighBGMaxSMB)` — the configured setting — instead of the ramped field. The
+catalogue reduces a *setting*; the tick's own maxSMB/maxSMBHB selection still bounds the dose
+afterwards, so the two bounds act in their own place.
+
+Same failure shape as the episode budget: a claim of neutrality verified at one operating point only.
+
+**Two signals worth carrying forward:**
+
+1. At 21:12 and 21:17 the intent was **`NEED_MORE_INSULIN`**, not `PROTECTIVE`. First observed switch.
+   The mode stayed `ACCEPT` because the MPC was not asking above the 1.20 cap, so there was nothing to
+   lift. This points Agent 0 at a **mis-calibrated threshold — too late, too rare — rather than a dead
+   path.** That is a materially different (and easier) problem than the one Part A-ter states.
+2. The day's highest SMB was **1.60 U at 07:42**, with no meal pattern active. The full ramp is
+   reachable outside meals and capped at 75 % during them — the inverse of what is wanted.
+
+**Still open:** a `SOFT` cap that is never lifted behaves exactly like a `HARD` one. Either the lift
+becomes reachable (Agent 0), or an unlifted `SOFT` must defer to `maxSMBHB` instead of replacing it.
+
+## The open question, and it is now the only one that matters
+
+**Where is `insulin_intent` decided, and why does it never select `MEAL_SUPPORT` on a confirmed
+undeclared meal?** Until it does, the loop depends on a floor that ignores the MPC, the barrier and
+Harmonia — and every attempt to bound that floor will starve meals. This is the next session's first
+task, ahead of everything in Part B.
+
+---
+
 # Part B — prompt for the next session
 
 Paste everything below.
@@ -394,8 +507,10 @@ Updated 2026-08-10 after the production day. The session is done when **all** of
 
 ## Agent split
 
-Give each agent the bash rules, the data-privacy rule, and a pointer to Part A **and A-bis**. Agent 1
-runs first; the others use its findings.
+Give each agent the bash rules, the data-privacy rule, and a pointer to Part A **and A-bis**. **Order: Agent 0 first** — it is
+listed below Agent 2 for historical reasons but it outranks them, because until the meal intent can
+switch, every other bound on the SMB floor starves meals. Then Agent 1 on the next support package,
+then 2, 3, 4 in parallel.
 
 ### Agent 1 — `data-validation` (blocking)
 
@@ -424,6 +539,22 @@ wrong by ~12 mg/dL/min during the 2026-08-09 meal, it says zero on ordinary rise
   tighten.
 - Only once that number is settled: propose clamping the rise floor to the barrier's verdict, with the
   measured cost.
+
+### Agent 0 — `meal-intent` (runs before everything else; see Part A-ter)
+
+`harmonia_smb_authority.insulin_intent` is `PROTECTIVE` on every tick of an undeclared meal, including
+at BG 269 with Ra 5.33. That branch of `HarmoniaSmbArbiter.decide` can only ACCEPT or REDUCE, so
+`LIFT_WITHIN_ENVELOPE` — the governed equivalent of the crude SMB floor — is structurally unreachable.
+
+- Trace `insulin_intent` back to its producer. Establish whether `PROTECTIVE` is a deliberate
+  classification for high IOB, a threshold miscalibration, or a path that simply never selects the
+  meal intent in this state.
+- State what would have to change for BG 237 with Ra 4.59 and no COB to produce `MEAL_SUPPORT`.
+- Implement the smallest change that makes the LIFT reachable on a confirmed meal, bounded by the
+  catalogue cap and the barrier. Then quantify, on both corpora, what it would have delivered: the
+  target is **between** 6.53 U and 14.06 U, not at either end.
+- Export `riseFloorSpentU` and the time since the last floor contribution. Its absence is why the
+  2026-08-10 diagnosis rests on inference rather than measurement.
 
 ### Agent 3 — `harmonia-authority`
 
