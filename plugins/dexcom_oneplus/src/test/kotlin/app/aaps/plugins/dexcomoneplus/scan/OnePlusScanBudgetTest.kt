@@ -69,6 +69,49 @@ class OnePlusScanBudgetTest {
     }
 
     @Test
+    fun `an explicit block holds back starts even when the quota is free`() {
+        assertThat(OnePlusScanBudget.waitMsFor(1_000L)).isEqualTo(0L)
+
+        OnePlusScanBudget.blockFor(nowMs = 1_000L, durationMs = 5_000L)
+
+        assertThat(OnePlusScanBudget.waitMsFor(1_000L)).isEqualTo(5_000L)
+        assertThat(OnePlusScanBudget.waitMsFor(3_000L)).isEqualTo(3_000L)
+        assertThat(OnePlusScanBudget.waitMsFor(6_000L)).isEqualTo(0L)
+    }
+
+    @Test
+    fun `a longer block wins and a shorter one cannot shorten it`() {
+        OnePlusScanBudget.blockFor(nowMs = 1_000L, durationMs = 10_000L)
+        OnePlusScanBudget.blockFor(nowMs = 1_000L, durationMs = 2_000L)
+
+        assertThat(OnePlusScanBudget.waitMsFor(1_000L)).isEqualTo(10_000L)
+    }
+
+    @Test
+    fun `reserve does not book a slot while blocked`() {
+        OnePlusScanBudget.blockFor(nowMs = 1_000L, durationMs = 5_000L)
+
+        assertThat(OnePlusScanBudget.reserve(1_000L)).isGreaterThan(0L)
+        assertThat(OnePlusScanBudget.startsInWindow(1_000L)).isEqualTo(0)
+    }
+
+    @Test
+    fun `reset clears an active block`() {
+        OnePlusScanBudget.blockFor(nowMs = 1_000L, durationMs = 30_000L)
+
+        OnePlusScanBudget.reset()
+
+        assertThat(OnePlusScanBudget.waitMsFor(1_000L)).isEqualTo(0L)
+    }
+
+    @Test
+    fun `a negative block duration is treated as no block`() {
+        OnePlusScanBudget.blockFor(nowMs = 1_000L, durationMs = -5_000L)
+
+        assertThat(OnePlusScanBudget.waitMsFor(1_000L)).isEqualTo(0L)
+    }
+
+    @Test
     fun `a backwards clock jump cannot wedge the budget`() {
         repeat(OnePlusScanBudget.MAX_STARTS_PER_WINDOW) { OnePlusScanBudget.record(500_000L) }
 

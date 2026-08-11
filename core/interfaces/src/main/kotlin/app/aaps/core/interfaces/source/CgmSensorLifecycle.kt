@@ -47,8 +47,33 @@ data class CgmSensorLifecycle(
     val endOfLife: Boolean,
 )
 
+/**
+ * Proof that the collect-only staging sensor is really producing data.
+ *
+ * A pre-soak asks the user to wait many hours on a sensor whose readings are deliberately never
+ * published, so without this the slot is unauditable: a working sensor and a dead one look exactly
+ * the same on screen.
+ *
+ * @param validCount valid readings collected since the staging session started.
+ * @param lastValueMgdl most recent collected reading (mg/dL), null when none yet.
+ * @param lastValueAtEpochMs timestamp of [lastValueMgdl], null when none yet.
+ */
+data class CgmStagingEvidence(
+    val validCount: Int,
+    val lastValueMgdl: Double?,
+    val lastValueAtEpochMs: Long?,
+)
+
 /** Why a promote-staging-to-production request was rejected (for UI feedback + audit). */
-enum class PromotionRejectReason { STAGING_ABSENT, STAGING_NOT_SETTLED, STAGING_NO_VALID_GLUCOSE, LOOP_BUSY }
+enum class PromotionRejectReason {
+    STAGING_ABSENT,
+    STAGING_NOT_SETTLED,
+    STAGING_NO_VALID_GLUCOSE,
+
+    /** Early promotion asked for, but the staging sensor has not sent a reading recently enough. */
+    STAGING_NO_RECENT_GLUCOSE,
+    LOOP_BUSY,
+}
 
 /** Result of a promote-staging-to-production request. */
 sealed interface PromotionResult {
@@ -81,10 +106,19 @@ interface CgmSensorStatusProvider : CgmWarmupProvider {
     /** Coarse staging slot state driving the dashboard "new sensor" card + promote affordance. */
     val stagingState: StateFlow<StagingState>
 
+    /** Evidence that the staging sensor is collecting, or null when there is no staging sensor. */
+    val stagingEvidence: StateFlow<CgmStagingEvidence?>
+
     /**
      * Promote the staging sensor to production (the ONLY action that changes the loop's glucose
      * source — safety-critical). Suspends; returns [PromotionResult.Ok] on success or
      * [PromotionResult.Rejected] with the reason (e.g. not settled) without changing any state.
+     *
+     * @param allowEarly the user knowingly promotes a sensor that has not finished its soak, because
+     *   the production sensor stopped early or must be replaced now. The soak gate is then skipped,
+     *   but the evidence gates are NOT: the staging sensor must have produced enough valid readings
+     *   and one of them must be recent, so the loop can never be handed a silent sensor. Readings
+     *   from a sensor promoted this way are less reliable for the first hours.
      */
-    suspend fun promoteStagingToProduction(): PromotionResult
+    suspend fun promoteStagingToProduction(allowEarly: Boolean = false): PromotionResult
 }

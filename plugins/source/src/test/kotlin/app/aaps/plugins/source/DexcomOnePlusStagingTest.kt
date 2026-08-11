@@ -71,4 +71,120 @@ class DexcomOnePlusStagingTest {
         assertThat(DexcomOnePlusStaging.computeStagingState(present = true, warming = false, sessionStartMs = now - 13 * hour, validEgvCount = 5, nowMs = now))
             .isEqualTo(StagingState.SETTLING)
     }
+
+    // ---- canPromoteEarly (explicit early promotion) ----
+
+    @Test
+    fun `early promotion is offered when the sensor reads enough and reads now`() {
+        assertThat(
+            DexcomOnePlusStaging.canPromoteEarly(
+                validEgvCount = DexcomOnePlusStaging.STAGING_MIN_VALID_EGV,
+                lastValueAtEpochMs = now - 5 * 60_000L,
+                nowMs = now,
+            ),
+        ).isTrue()
+    }
+
+    @Test
+    fun `early promotion needs the same evidence as the normal path`() {
+        assertThat(
+            DexcomOnePlusStaging.canPromoteEarly(
+                validEgvCount = DexcomOnePlusStaging.STAGING_MIN_VALID_EGV - 1,
+                lastValueAtEpochMs = now,
+                nowMs = now,
+            ),
+        ).isFalse()
+    }
+
+    @Test
+    fun `a sensor that went silent is never offered for early promotion`() {
+        // The 12 h soak is what normally proves the sensor lives; without it, freshness must.
+        assertThat(
+            DexcomOnePlusStaging.canPromoteEarly(
+                validEgvCount = 50,
+                lastValueAtEpochMs = now - DexcomOnePlusStaging.STAGING_MAX_EGV_AGE_MS - 1,
+                nowMs = now,
+            ),
+        ).isFalse()
+    }
+
+    @Test
+    fun `a reading exactly at the age limit still counts`() {
+        assertThat(
+            DexcomOnePlusStaging.canPromoteEarly(
+                validEgvCount = 10,
+                lastValueAtEpochMs = now - DexcomOnePlusStaging.STAGING_MAX_EGV_AGE_MS,
+                nowMs = now,
+            ),
+        ).isTrue()
+    }
+
+    @Test
+    fun `no reading at all blocks early promotion`() {
+        assertThat(DexcomOnePlusStaging.canPromoteEarly(validEgvCount = 10, lastValueAtEpochMs = null, nowMs = now)).isFalse()
+        assertThat(DexcomOnePlusStaging.canPromoteEarly(validEgvCount = 10, lastValueAtEpochMs = 0L, nowMs = now)).isFalse()
+    }
+
+    @Test
+    fun `a reading stamped in the future cannot unlock early promotion`() {
+        assertThat(
+            DexcomOnePlusStaging.canPromoteEarly(validEgvCount = 10, lastValueAtEpochMs = now + 60_000L, nowMs = now),
+        ).isFalse()
+    }
+
+    // ---- applyWarmupPhase (warm-up latch) ----
+
+    @Test
+    fun `connecting during warm-up keeps the slot warming`() {
+        val d = DexcomOnePlusStaging.applyWarmupPhase(warmupDoneBefore = false, readyPhase = false)
+
+        assertThat(d.warmupDone).isFalse()
+        assertThat(d.warming).isTrue()
+    }
+
+    @Test
+    fun `ready ends the warm-up`() {
+        val d = DexcomOnePlusStaging.applyWarmupPhase(warmupDoneBefore = false, readyPhase = true)
+
+        assertThat(d.warmupDone).isTrue()
+        assertThat(d.warming).isFalse()
+    }
+
+    @Test
+    fun `a later reconnect cycle cannot send a settled slot back to warm-up`() {
+        // This is the defect the latch fixes: a healthy sensor reconnects every radio cycle for life.
+        val d = DexcomOnePlusStaging.applyWarmupPhase(warmupDoneBefore = true, readyPhase = false)
+
+        assertThat(d.warmupDone).isTrue()
+        assertThat(d.warming).isFalse()
+    }
+
+    @Test
+    fun `a sensor that failed before warm-up is never shown as settling`() {
+        // A dead sensor must not display a 12 h stabilisation countdown it can never finish.
+        val d = DexcomOnePlusStaging.applyWarmupPhase(warmupDoneBefore = false, readyPhase = false)
+        val state = DexcomOnePlusStaging.computeStagingState(
+            present = true,
+            warming = d.warming,
+            sessionStartMs = now - 13 * hour,
+            validEgvCount = 0,
+            nowMs = now,
+        )
+
+        assertThat(state).isEqualTo(StagingState.WARMUP)
+    }
+
+    @Test
+    fun `a settled slot still reaches ready after a reconnect cycle`() {
+        val d = DexcomOnePlusStaging.applyWarmupPhase(warmupDoneBefore = true, readyPhase = false)
+        val state = DexcomOnePlusStaging.computeStagingState(
+            present = true,
+            warming = d.warming,
+            sessionStartMs = now - 13 * hour,
+            validEgvCount = DexcomOnePlusStaging.STAGING_MIN_VALID_EGV,
+            nowMs = now,
+        )
+
+        assertThat(state).isEqualTo(StagingState.READY)
+    }
 }

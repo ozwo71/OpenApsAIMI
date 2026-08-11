@@ -51,6 +51,10 @@ class OnePlusBleScannerAndroid(
     private val scanning = AtomicBoolean(false)
     private val seen = ConcurrentHashMap<String, OnePlusScanResult>()
 
+    /** Consecutive `awaitTarget` windows that heard nothing at all — see [noteScanOutcome]. */
+    @Volatile
+    private var silentScans = 0
+
     @Volatile
     private var listener: OnePlusScanListener? = null
 
@@ -126,8 +130,11 @@ class OnePlusBleScannerAndroid(
         val found = AtomicReference<OnePlusScanResult?>(null)
         val foreign = ConcurrentHashMap<String, OnePlusScanResult>()
         val latch = CountDownLatch(1)
+        // Any callback at all proves the scan really registered with the OS — see silentScans.
+        val heardAnything = AtomicBoolean(false)
         val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
+                heardAnything.set(true)
                 val device = result.device ?: return
                 val addr = device.address ?: return
                 val name = device.name ?: result.scanRecord?.deviceName
@@ -152,6 +159,7 @@ class OnePlusBleScannerAndroid(
             }
 
             override fun onScanFailed(errorCode: Int) {
+                heardAnything.set(true)
                 Log.e(
                     OnePlusLogMarkers.TAG,
                     "${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget failed errorCode=$errorCode",
@@ -177,6 +185,7 @@ class OnePlusBleScannerAndroid(
                     "mac=***${target.takeLast(5)} timeoutMs=$timeoutMs",
             )
             latch.await(timeoutMs.coerceAtLeast(1L), TimeUnit.MILLISECONDS)
+            noteScanOutcome(heardAnything.get(), timeoutMs)
             OnePlusAdvWaitResult(target = found.get(), foreign = foreign.values.toList())
         } catch (t: Throwable) {
             Log.w(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget ${t.message}")
@@ -188,6 +197,29 @@ class OnePlusBleScannerAndroid(
             }
             Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget stopped")
         }
+    }
+
+    /**
+     * A scan that the OS refused to register delivers **nothing at all** — not even `onScanFailed` on
+     * some builds (field log 2026-08-11: `registration failed because app is scanning too frequently`
+     * right after our own "filtered started" line, then 8 s of waiting on a dead callback). We cannot
+     * see the refusal directly, so we infer it: a scan window that heard no advertisement of any kind,
+     * not even from a neighbour, is suspicious, and two in a row are treated as throttled.
+     *
+     * The only reaction is to scan LESS — one extra platform window of cool-down, booked in the shared
+     * budget. It can never make the app scan more, so it is safe even if the inference is wrong.
+     */
+    private fun noteScanOutcome(heardAnything: Boolean, timeoutMs: Long) {
+        val next = nextSilentScanState(silentScans, heardAnything)
+        silentScans = next.silentScans
+        if (!next.backOff) return
+        Log.w(
+            OnePlusLogMarkers.TAG,
+            "${OnePlusLogMarkers.SCAN}: [$slot] $SILENT_SCANS_BEFORE_BACKOFF silent scans " +
+                "(${timeoutMs}ms each, no advertisement at all) — the OS may be refusing our scans " +
+                "(\"scanning too frequently\"); backing off one budget window",
+        )
+        OnePlusScanBudget.blockFor(SystemClock.elapsedRealtime(), OnePlusScanBudget.WINDOW_MS)
     }
 
     /**
@@ -247,6 +279,29 @@ class OnePlusBleScannerAndroid(
     }
 
     companion object {
+
+        /**
+         * Consecutive scan windows with no advertisement at all before we assume the OS is refusing
+         * our scans. Two, so a genuinely quiet moment (every sensor asleep, no neighbour) does not
+         * trigger a needless cool-down.
+         */
+        const val SILENT_SCANS_BEFORE_BACKOFF = 2
+
+        /** Result of one scan window: silent windows counted so far, and whether to cool down now. */
+        internal data class SilentScanState(val silentScans: Int, val backOff: Boolean)
+
+        /**
+         * Pure counter step of [noteScanOutcome], so the back-off rule can be tested without the
+         * Android BLE stack. The counter restarts after a back-off, so a permanently blind scanner
+         * cools down once per [SILENT_SCANS_BEFORE_BACKOFF] windows and not on every window.
+         */
+        internal fun nextSilentScanState(previousSilentScans: Int, heardAnything: Boolean): SilentScanState =
+            when {
+                heardAnything                                        -> SilentScanState(silentScans = 0, backOff = false)
+                previousSilentScans + 1 >= SILENT_SCANS_BEFORE_BACKOFF -> SilentScanState(silentScans = 0, backOff = true)
+                else                                                 -> SilentScanState(previousSilentScans + 1, backOff = false)
+            }
+
         fun nameMatches(name: String?): Boolean = OnePlusAdvCandidate.nameMatchesSoft(name)
 
         internal fun normalizeTargetAddress(address: String): String = address.uppercase()

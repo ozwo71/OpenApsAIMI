@@ -19,6 +19,7 @@ import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import app.aaps.core.interfaces.source.CgmSensorLifecycle
+import app.aaps.core.interfaces.source.CgmStagingEvidence
 import app.aaps.core.interfaces.source.CgmWarmupStatus
 import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.ui.compose.AapsSpacing
@@ -53,7 +54,7 @@ fun DashboardStagingCard(
         ) {
             when (state.stagingState) {
                 StagingState.WARMUP   -> StagingWarmupContent(state.stagingWarmup)
-                StagingState.SETTLING -> StagingSettlingContent(state.stagingLifecycle)
+                StagingState.SETTLING -> StagingSettlingContent(state.stagingLifecycle, state.stagingEvidence)
                 StagingState.READY    -> StagingReadyContent(onPromote)
                 StagingState.ABSENT   -> Unit
             }
@@ -95,7 +96,7 @@ private fun StagingWarmupContent(warmup: CgmWarmupStatus?) {
 }
 
 @Composable
-private fun StagingSettlingContent(lifecycle: CgmSensorLifecycle?) {
+private fun StagingSettlingContent(lifecycle: CgmSensorLifecycle?, evidence: CgmStagingEvidence?) {
     val ageMs = lifecycle?.ageMs ?: 0L
     val remainingMs = (STAGING_MIN_SETTLE_MS - ageMs).coerceAtLeast(0L)
     // Ceil to whole hours so "ready in 1 h" is shown until the final minutes rather than "0 h".
@@ -104,6 +105,14 @@ private fun StagingSettlingContent(lifecycle: CgmSensorLifecycle?) {
         text = stringResource(R.string.dashboard_staging_title_settling, readyInHours),
         style = MaterialTheme.typography.labelLarge,
         maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+    )
+    // Reading count tells the user the staging sensor is really sending data, not just counting hours.
+    Text(
+        text = stringResource(R.string.dashboard_staging_readings, evidence?.validCount ?: 0),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSecondaryContainer,
+        maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
     val progress = (ageMs.toFloat() / STAGING_MIN_SETTLE_MS).coerceIn(0f, 1f)

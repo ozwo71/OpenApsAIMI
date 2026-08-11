@@ -33,6 +33,7 @@ import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.source.CgmSensorLifecycle
 import app.aaps.core.interfaces.source.CgmSensorStatusProvider
+import app.aaps.core.interfaces.source.CgmStagingEvidence
 import app.aaps.core.interfaces.source.CgmWarmupProvider
 import app.aaps.core.interfaces.source.CgmWarmupStatus
 import app.aaps.core.interfaces.source.PromotionRejectReason
@@ -408,6 +409,7 @@ class OverviewViewModel(
                         sensor.stagingState.map { },
                         sensor.stagingLifecycle.map { },
                         sensor.stagingWarmupStatus.map { },
+                        sensor.stagingEvidence.map { },
                     ).collect {
                         scheduleDebouncedStatusRefresh()
                     }
@@ -554,10 +556,11 @@ class OverviewViewModel(
     }
 
     private fun promotionRejectReasonRes(reason: PromotionRejectReason): Int = when (reason) {
-        PromotionRejectReason.STAGING_ABSENT           -> R.string.dashboard_staging_promote_rejected_absent
-        PromotionRejectReason.STAGING_NOT_SETTLED      -> R.string.dashboard_staging_promote_rejected_not_settled
-        PromotionRejectReason.STAGING_NO_VALID_GLUCOSE -> R.string.dashboard_staging_promote_rejected_no_glucose
-        PromotionRejectReason.LOOP_BUSY                -> R.string.dashboard_staging_promote_rejected_loop_busy
+        PromotionRejectReason.STAGING_ABSENT            -> R.string.dashboard_staging_promote_rejected_absent
+        PromotionRejectReason.STAGING_NOT_SETTLED       -> R.string.dashboard_staging_promote_rejected_not_settled
+        PromotionRejectReason.STAGING_NO_VALID_GLUCOSE  -> R.string.dashboard_staging_promote_rejected_no_glucose
+        PromotionRejectReason.STAGING_NO_RECENT_GLUCOSE -> R.string.dashboard_staging_promote_rejected_no_recent_glucose
+        PromotionRejectReason.LOOP_BUSY                 -> R.string.dashboard_staging_promote_rejected_loop_busy
     }
 
     private suspend fun updateStatus() {
@@ -822,6 +825,7 @@ class OverviewViewModel(
         val stagingSlotState = sensorStatus?.stagingState?.value ?: StagingState.ABSENT
         val stagingLifecycleValue = sensorStatus?.stagingLifecycle?.value
         val stagingWarmupValue = sensorStatus?.stagingWarmupStatus?.value
+        val stagingEvidenceValue = sensorStatus?.stagingEvidence?.value
 
         val state = StatusCardState(
             glucoseText = glucoseText,
@@ -911,6 +915,7 @@ class OverviewViewModel(
             stagingState = stagingSlotState,
             stagingLifecycle = stagingLifecycleValue,
             stagingWarmup = stagingWarmupValue,
+            stagingEvidence = stagingEvidenceValue,
         )
         latestStatusCardState = state
         _statusCardState.postValue(state)
@@ -1562,6 +1567,9 @@ data class StatusCardState(
 
     /** Staging sensor warm-up status (countdown), or null when nothing to show. */
     val stagingWarmup: CgmWarmupStatus? = null,
+
+    /** Proof that the staging sensor really sends data (reading count), or null when unknown. */
+    val stagingEvidence: CgmStagingEvidence? = null,
 )
 
 data class AdjustmentCardState(

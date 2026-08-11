@@ -1,5 +1,7 @@
 package app.aaps.plugins.dexcomoneplus
 
+import app.aaps.core.interfaces.source.SensorSlot
+
 /**
  * Driver selection. **Stub remains default** until A3 device GO and Real protocol is filled.
  *
@@ -25,6 +27,19 @@ object OnePlusCgmDrivers {
 
     /** SharedPreferences namespace for the staging slot's sensor store. */
     const val STAGING_NAMESPACE = "staging"
+
+    /**
+     * Sensor-store namespace of a slot — the ONE definition, shared by the drivers and by any UI that
+     * opens a store (Start screen). null = production's original single-sensor file (non-breaking).
+     *
+     * Using the production store for the staging slot is what made a pre-soak silently adopt the
+     * sensor already in use: same stored MAC, same PIN, same KEKS key, so no second sensor was ever
+     * started and no new PIN could stick.
+     */
+    fun storeNamespace(slot: SensorSlot): String? = when (slot) {
+        SensorSlot.PRODUCTION -> null
+        SensorSlot.STAGING    -> STAGING_NAMESPACE
+    }
 
     private val lock = Any()
 

@@ -51,10 +51,12 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
             .putString(KEY_GTIN, identity.gtin)
             .putString(KEY_RAW_GS1, identity.rawGs1)
             .apply()
-        if (serialChanged) {
-            clearLastIngest()
-            prefs.edit().remove(KEY_SESSION_START).remove(KEY_SESSION_START_MAC).apply()
-        }
+        // The session start is NOT cleared here. It is owned solely by [startSessionForSensor], which
+        // decides from the MAC whether this is the same sensor. Clearing it here made the write order
+        // matter: the staging start recorded the session start first, then saveIdentity wiped it
+        // milliseconds later, so the soak clock restarted from the first reading instead of from the
+        // moment the sensor was applied.
+        if (serialChanged) clearLastIngest()
         Log.i(
             OnePlusLogMarkers.TAG,
             "${OnePlusLogMarkers.SESSION}: sensor identity saved serial=${identity.serial ?: "-"} serialChanged=$serialChanged",
@@ -101,6 +103,20 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
 
     /** Valid EGVs collected in this slot so far (promotion gate). */
     fun loadSlotValidEgvCount(): Int = prefs.getInt(KEY_SLOT_EGV_COUNT, 0)
+
+    /**
+     * Latch: this slot's sensor has finished warm-up at least once.
+     *
+     * Warm-up completion is an event, not a state that can be read back from the live connection
+     * phase — a healthy sensor keeps re-connecting every radio cycle for its whole life. Persisted so
+     * a restart does not send a settled sensor back to "warming up".
+     */
+    fun saveSlotWarmupDone(done: Boolean) {
+        prefs.edit().putBoolean(KEY_SLOT_WARMUP_DONE, done).apply()
+    }
+
+    /** True once this slot's sensor has left warm-up (see [saveSlotWarmupDone]). */
+    fun loadSlotWarmupDone(): Boolean = prefs.getBoolean(KEY_SLOT_WARMUP_DONE, false)
 
     /** Record the sensor session start (epoch ms) once — used to derive early/end-of-life age. */
     fun saveSessionStartIfAbsent(epochMs: Long) {
@@ -246,5 +262,6 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
         private const val KEY_SESSION_START_MAC = "session_start_mac"
         private const val KEY_SLOT_PRESENT = "slot_present"
         private const val KEY_SLOT_EGV_COUNT = "slot_valid_egv_count"
+        private const val KEY_SLOT_WARMUP_DONE = "slot_warmup_done"
     }
 }

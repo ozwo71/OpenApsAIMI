@@ -33,9 +33,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import app.aaps.core.interfaces.profile.ProfileUtil
+import app.aaps.core.interfaces.source.CgmStagingEvidence
 import app.aaps.core.interfaces.source.PromotionRejectReason
 import app.aaps.core.interfaces.source.PromotionResult
 import app.aaps.core.interfaces.source.StagingState
+import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
@@ -44,6 +47,7 @@ import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.source.DexcomOnePlusPlugin
+import app.aaps.plugins.source.DexcomOnePlusStaging
 import app.aaps.plugins.source.R
 import app.aaps.plugins.source.compose.DexcomOnePlusUiLabels
 import dagger.hilt.android.AndroidEntryPoint
@@ -61,6 +65,8 @@ class DexcomOnePlusStatusActivity : AppCompatActivity() {
 
     @Inject lateinit var dexcomOnePlusPlugin: DexcomOnePlusPlugin
     @Inject lateinit var preferences: Preferences
+    @Inject lateinit var profileUtil: ProfileUtil
+    @Inject lateinit var dateUtil: DateUtil
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,8 +83,11 @@ class DexcomOnePlusStatusActivity : AppCompatActivity() {
                             startActivity(Intent(this, DexcomOnePlusWarmupActivity::class.java))
                         },
                         stagingStateFlow = dexcomOnePlusPlugin.stagingState,
+                        stagingEvidenceFlow = dexcomOnePlusPlugin.stagingEvidence,
+                        formatGlucose = { mgdl -> profileUtil.fromMgdlToStringWithUnits(mgdl) },
+                        formatTime = { epochMs -> dateUtil.timeString(epochMs) },
                         onCancelStaging = { dexcomOnePlusPlugin.cancelStaging() },
-                        onPromote = { dexcomOnePlusPlugin.promoteStagingToProduction() },
+                        onPromote = { allowEarly -> dexcomOnePlusPlugin.promoteStagingToProduction(allowEarly) },
                     )
                 }
             }
@@ -93,28 +102,42 @@ private fun DexcomOnePlusStatusScreen(
     onOpenStart: () -> Unit,
     onOpenWarmup: () -> Unit,
     stagingStateFlow: StateFlow<StagingState>,
+    stagingEvidenceFlow: StateFlow<CgmStagingEvidence?>,
+    formatGlucose: (Double) -> String,
+    formatTime: (Long) -> String,
     onCancelStaging: () -> Unit,
-    onPromote: suspend () -> PromotionResult,
+    onPromote: suspend (Boolean) -> PromotionResult,
 ) {
     val driver = remember { OnePlusCgmDrivers.default() }
     var state by remember { mutableStateOf(driver.warmupState()) }
     var sessionUp by remember { mutableStateOf(driver.isSessionUp()) }
     val stagingState by stagingStateFlow.collectAsState()
+    val stagingEvidence by stagingEvidenceFlow.collectAsState()
     val scope = rememberCoroutineScope()
     var showPromoteConfirm by remember { mutableStateOf(false) }
+    var promoteEarly by remember { mutableStateOf(false) }
     var promoteResultText by remember { mutableStateOf<String?>(null) }
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    // Offer the early way out only while the sensor is proving itself right now — see canPromoteEarly.
+    val earlyPromoteOffered = stagingState != StagingState.ABSENT && DexcomOnePlusStaging.canPromoteEarly(
+        validEgvCount = stagingEvidence?.validCount ?: 0,
+        lastValueAtEpochMs = stagingEvidence?.lastValueAtEpochMs,
+        nowMs = now,
+    )
 
     // Promotion result → user message (resolved here so the coroutine has no Composable context).
     val promoteOk = stringResource(R.string.dexcom_oneplus_staging_promote_ok)
     val promoteRejectedAbsent = stringResource(R.string.dexcom_oneplus_staging_promote_rejected_absent)
     val promoteRejectedNotSettled = stringResource(R.string.dexcom_oneplus_staging_promote_rejected_not_settled)
     val promoteRejectedNoGlucose = stringResource(R.string.dexcom_oneplus_staging_promote_rejected_no_glucose)
+    val promoteRejectedNoRecentGlucose = stringResource(R.string.dexcom_oneplus_staging_promote_rejected_no_recent_glucose)
     val promoteRejectedLoopBusy = stringResource(R.string.dexcom_oneplus_staging_promote_rejected_loop_busy)
 
     LaunchedEffect(Unit) {
         while (true) {
             state = driver.warmupState()
             sessionUp = driver.isSessionUp()
+            now = System.currentTimeMillis()
             delay(1_000L)
         }
     }
@@ -201,13 +224,58 @@ private fun DexcomOnePlusStatusScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
+                // Evidence the staging sensor is really alive: without it the user only sees a state
+                // label and cannot tell "settling with data" from "settling with a dead radio".
+                Text(
+                    text = stringResource(R.string.dexcom_oneplus_staging_readings, stagingEvidence?.validCount ?: 0),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                val lastValue = stagingEvidence?.lastValueMgdl
+                val lastAt = stagingEvidence?.lastValueAtEpochMs
+                if (lastValue != null && lastAt != null) {
+                    Text(
+                        text = stringResource(
+                            R.string.dexcom_oneplus_staging_last_reading,
+                            formatGlucose(lastValue),
+                            formatTime(lastAt),
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.dexcom_oneplus_staging_no_reading_yet),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 if (stagingState == StagingState.READY) {
                     Button(
-                        onClick = { showPromoteConfirm = true },
+                        onClick = {
+                            promoteEarly = false
+                            showPromoteConfirm = true
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(stringResource(R.string.dexcom_oneplus_staging_promote))
                     }
+                } else if (earlyPromoteOffered) {
+                    // Way out when the production sensor stops before the soak ends. Deliberately an
+                    // outlined button with its own warning dialog: it gives up sensor quality, so it
+                    // must never look like the normal path.
+                    OutlinedButton(
+                        onClick = {
+                            promoteEarly = true
+                            showPromoteConfirm = true
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.dexcom_oneplus_staging_promote_early))
+                    }
+                    Text(
+                        text = stringResource(R.string.dexcom_oneplus_staging_promote_early_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 OutlinedButton(
                     onClick = {
@@ -232,19 +300,31 @@ private fun DexcomOnePlusStatusScreen(
     if (showPromoteConfirm) {
         AlertDialog(
             onDismissRequest = { showPromoteConfirm = false },
-            title = { Text(stringResource(R.string.dexcom_oneplus_staging_promote_confirm_title)) },
-            text = { Text(stringResource(R.string.dexcom_oneplus_staging_promote_confirm_message)) },
+            title = {
+                Text(
+                    if (promoteEarly) stringResource(R.string.dexcom_oneplus_staging_promote_early_confirm_title)
+                    else stringResource(R.string.dexcom_oneplus_staging_promote_confirm_title),
+                )
+            },
+            text = {
+                Text(
+                    if (promoteEarly) stringResource(R.string.dexcom_oneplus_staging_promote_early_confirm_message)
+                    else stringResource(R.string.dexcom_oneplus_staging_promote_confirm_message),
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showPromoteConfirm = false
+                        val allowEarly = promoteEarly
                         scope.launch {
-                            promoteResultText = when (val result = onPromote()) {
+                            promoteResultText = when (val result = onPromote(allowEarly)) {
                                 is PromotionResult.Ok       -> promoteOk
                                 is PromotionResult.Rejected -> when (result.reason) {
                                     PromotionRejectReason.STAGING_ABSENT            -> promoteRejectedAbsent
                                     PromotionRejectReason.STAGING_NOT_SETTLED       -> promoteRejectedNotSettled
                                     PromotionRejectReason.STAGING_NO_VALID_GLUCOSE  -> promoteRejectedNoGlucose
+                                    PromotionRejectReason.STAGING_NO_RECENT_GLUCOSE -> promoteRejectedNoRecentGlucose
                                     PromotionRejectReason.LOOP_BUSY                 -> promoteRejectedLoopBusy
                                 }
                             }

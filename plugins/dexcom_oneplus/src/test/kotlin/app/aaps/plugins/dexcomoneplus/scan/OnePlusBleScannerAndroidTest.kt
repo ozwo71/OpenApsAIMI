@@ -15,6 +15,45 @@ class OnePlusBleScannerAndroidTest {
     }
 
     @Test
+    fun `one silent scan window is not enough to back off`() {
+        val state = OnePlusBleScannerAndroid.nextSilentScanState(previousSilentScans = 0, heardAnything = false)
+
+        assertThat(state.silentScans).isEqualTo(1)
+        assertThat(state.backOff).isFalse()
+    }
+
+    @Test
+    fun `two silent windows in a row trigger the cool-down and restart the counter`() {
+        val first = OnePlusBleScannerAndroid.nextSilentScanState(previousSilentScans = 0, heardAnything = false)
+        val second = OnePlusBleScannerAndroid.nextSilentScanState(first.silentScans, heardAnything = false)
+
+        assertThat(second.backOff).isTrue()
+        assertThat(second.silentScans).isEqualTo(0)
+    }
+
+    @Test
+    fun `a still blind scanner backs off again after the next pair of silent windows`() {
+        // The back-off must be repeatable, not a one-shot: a sensor out of range for hours keeps the
+        // app scanning less until it answers again.
+        var silent = 0
+        val backOffs = (1..4).count {
+            val state = OnePlusBleScannerAndroid.nextSilentScanState(silent, heardAnything = false)
+            silent = state.silentScans
+            state.backOff
+        }
+
+        assertThat(backOffs).isEqualTo(2)
+    }
+
+    @Test
+    fun `hearing any advertisement clears the silent counter`() {
+        val state = OnePlusBleScannerAndroid.nextSilentScanState(previousSilentScans = 1, heardAnything = true)
+
+        assertThat(state.silentScans).isEqualTo(0)
+        assertThat(state.backOff).isFalse()
+    }
+
+    @Test
     fun `nameMatches rejects unrelated names`() {
         assertThat(OnePlusBleScannerAndroid.nameMatches(null)).isFalse()
         assertThat(OnePlusBleScannerAndroid.nameMatches("")).isFalse()

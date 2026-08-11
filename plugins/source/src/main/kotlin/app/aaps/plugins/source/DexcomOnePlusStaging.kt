@@ -34,6 +34,13 @@ internal object DexcomOnePlusStaging {
     const val STAGING_MIN_VALID_EGV = 6
 
     /**
+     * How recent the staging sensor's last reading must be for an EARLY promotion (4 missed readings
+     * on a 5-minute sensor). The normal path already proves the sensor lives through a 12 h soak; an
+     * early promotion has no such proof, so the loop must not be handed a sensor that went silent.
+     */
+    const val STAGING_MAX_EGV_AGE_MS = 20L * 60L * 1000L
+
+    /**
      * Derive a [CgmSensorLifecycle] from a sensor session start. Returns null when the start is
      * unknown (0) so the dashboard simply shows nothing special.
      */
@@ -73,5 +80,45 @@ internal object DexcomOnePlusStaging {
         val settledLongEnough = sessionStartMs > 0L && (nowMs - sessionStartMs) >= STAGING_MIN_SETTLE_MS
         return if (settledLongEnough && validEgvCount >= STAGING_MIN_VALID_EGV) StagingState.READY
         else StagingState.SETTLING
+    }
+
+    /** What the staging slot knows about its warm-up after one driver phase — see [applyWarmupPhase]. */
+    data class StagingWarmupDecision(val warmupDone: Boolean, val warming: Boolean)
+
+    /**
+     * May the user be OFFERED an early promotion — promoting the staging sensor before its soak ends,
+     * because the production sensor stopped early or has to be replaced now?
+     *
+     * This is only about showing the button and about the matching guard in the promote path. It never
+     * relaxes the evidence: the sensor must have produced [STAGING_MIN_VALID_EGV] valid readings and a
+     * reading no older than [STAGING_MAX_EGV_AGE_MS], so a silent or dead sensor can never take over
+     * the loop. What it does drop is the 12 h soak, which is a quality gate, not a safety one — the
+     * user is told the readings will be less reliable for the first hours.
+     */
+    fun canPromoteEarly(validEgvCount: Int, lastValueAtEpochMs: Long?, nowMs: Long): Boolean {
+        if (validEgvCount < STAGING_MIN_VALID_EGV) return false
+        if (lastValueAtEpochMs == null || lastValueAtEpochMs <= 0L) return false
+        val age = nowMs - lastValueAtEpochMs
+        return age in 0L..STAGING_MAX_EGV_AGE_MS
+    }
+
+    /**
+     * Feed one driver warm-up phase into the staging warm-up latch.
+     *
+     * Leaving warm-up is an EVENT that is latched once, never re-derived from the live phase: a
+     * healthy sensor re-connects on every radio cycle (~5 min) for its whole life, so reading
+     * CONNECTING / RECONNECTING as "still warming up" kept the slot in [StagingState.WARMUP] forever —
+     * the settling countdown was never shown and the promote button (READY only) stayed unreachable.
+     *
+     * A slot that has not passed warm-up yet counts as warming whatever the driver is doing right now,
+     * including a failed or idle radio: a sensor that never warmed up must not be shown as settling,
+     * which would display a 12 h stabilisation countdown for a sensor that has produced nothing.
+     *
+     * @param warmupDoneBefore the latch as it stands (restored from the store across restarts).
+     * @param readyPhase       the driver reports the sensor has finished warm-up.
+     */
+    fun applyWarmupPhase(warmupDoneBefore: Boolean, readyPhase: Boolean): StagingWarmupDecision {
+        val done = warmupDoneBefore || readyPhase
+        return StagingWarmupDecision(warmupDone = done, warming = !done)
     }
 }

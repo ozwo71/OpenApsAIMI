@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -123,7 +124,7 @@ class DexcomOnePlusStartActivity : AppCompatActivity() {
                             }
                             finish()
                         },
-                        onBeginStaging = { dexcomOnePlusPlugin.beginStaging() },
+                        onBeginStaging = { address -> dexcomOnePlusPlugin.beginStaging(address) },
                         onStagingDriver = { dexcomOnePlusPlugin.stagingDriverForConnect() },
                         onSensorSessionStarted = { address, previousMac ->
                             dexcomOnePlusPlugin.onSensorSessionStarted(address, previousMac)
@@ -135,6 +136,12 @@ class DexcomOnePlusStartActivity : AppCompatActivity() {
     }
 }
 
+/**
+ * SharedPreferences namespace of the slot's own sensor store: the staging sensor keeps its identity,
+ * MAC and KEKS key completely apart from the production one. null = the original single-sensor file.
+ */
+private fun SensorSlot.storeNamespace(): String? = OnePlusCgmDrivers.storeNamespace(this)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DexcomOnePlusStartScreen(
@@ -142,7 +149,8 @@ private fun DexcomOnePlusStartScreen(
     onEnsureDriver: () -> OnePlusCgmDriver,
     onActivatePlugin: () -> Unit,
     onStarted: (SensorSlot) -> Unit,
-    onBeginStaging: () -> Unit,
+    /** STAGING only: the user started this sensor now — anchors the pre-soak clock on its MAC. */
+    onBeginStaging: (String) -> Unit,
     onStagingDriver: () -> OnePlusCgmDriverReal,
     /**
      * PRODUCTION only: the user started this sensor now → anchor its age and log a sensor change.
@@ -153,36 +161,47 @@ private fun DexcomOnePlusStartScreen(
     val context = LocalContext.current
     val activity = context as? Activity
     val mainHandler = remember { HandlerCompat.createAsync(Looper.getMainLooper()) }
-    val sensorStore = remember { OnePlusSensorStore(context.applicationContext) }
-    val storedSession = remember { sensorStore.load() }
-    val scanner = remember {
-        OnePlusBleScannerAndroid(context.applicationContext, sessionHint = storedSession)
-    }
-    val focusManager = LocalFocusManager.current
-
-    var applicatorInput by remember {
-        mutableStateOf(storedSession?.identity?.rawGs1 ?: storedSession?.identity?.pin.orEmpty())
-    }
-    var parsedIdentity by remember {
-        mutableStateOf(
-            storedSession?.identity
-                ?: OnePlusGs1ApplicatorParser.parse(applicatorInput),
-        )
-    }
-    var errorText by remember { mutableStateOf<String?>(null) }
     // Which slot the guided flow starts. PRODUCTION keeps the existing behaviour (activates the
     // plugin + feeds the loop after warm-up). STAGING pre-soaks a second sensor collect-only — it
     // never touches the AAPS active BG source until promoted from the status screen.
     var slot by remember { mutableStateOf(SensorSlot.PRODUCTION) }
+    // EVERY store read below follows the selected slot. Reading the production store while starting a
+    // STAGING sensor pre-filled the old sensor's code and MAC and ranked the scan with the old
+    // sensor's fingerprint, so a pre-soak silently re-adopted the sensor already in use (field log
+    // 2026-08-11: both slots connecting to the same MAC).
+    val sensorStore = remember(slot) { OnePlusSensorStore(context.applicationContext, slot.storeNamespace()) }
+    val storedSession = remember(slot) { sensorStore.load() }
+    val scanner = remember { OnePlusBleScannerAndroid(context.applicationContext, sessionHint = null) }
+    val focusManager = LocalFocusManager.current
+
+    var applicatorInput by remember { mutableStateOf("") }
+    var parsedIdentity by remember { mutableStateOf<OnePlusSensorIdentity?>(null) }
+    var errorText by remember { mutableStateOf<String?>(null) }
     var scanning by remember { mutableStateOf(false) }
-    var selected by remember {
-        mutableStateOf<OnePlusScanResult?>(
-            storedSession?.lastMac?.let { mac ->
-                OnePlusScanResult(address = mac, name = storedSession.lastDeviceName, rssi = 0)
-            },
-        )
-    }
+    var selected by remember { mutableStateOf<OnePlusScanResult?>(null) }
+    /** The user tapped a sensor in the scan list — auto-select must not overrule that choice. */
+    var deviceChosenByUser by remember { mutableStateOf(false) }
     val devices = remember { mutableStateListOf<OnePlusScanResult>() }
+    // The applicator field is pre-filled with the *stored* sensor's code. Picking a different MAC
+    // while leaving that code untouched pairs a NEW transmitter with the OLD sensor's PIN: auth
+    // fails and the slot keeps a session start that is not this sensor's. Warn once, then let the
+    // user proceed (a re-typed identical code is legitimate, if unlikely).
+    var newSensorConfirmPending by remember { mutableStateOf(false) }
+
+    // Re-seed the whole form from the slot's own store, on first composition and on every slot
+    // switch, so what is shown always belongs to the sensor being started.
+    LaunchedEffect(slot) {
+        scanner.sessionHint = storedSession
+        applicatorInput = storedSession?.identity?.rawGs1 ?: storedSession?.identity?.pin.orEmpty()
+        parsedIdentity = storedSession?.identity ?: OnePlusGs1ApplicatorParser.parse(applicatorInput)
+        selected = storedSession?.lastMac?.let { mac ->
+            OnePlusScanResult(address = mac, name = storedSession.lastDeviceName, rssi = 0)
+        }
+        deviceChosenByUser = false
+        devices.clear()
+        errorText = null
+        newSensorConfirmPending = false
+    }
 
     val codeRequired = stringResource(R.string.dexcom_oneplus_pairing_code_required)
     val codeInvalid = stringResource(R.string.dexcom_oneplus_pairing_code_invalid)
@@ -192,11 +211,6 @@ private fun DexcomOnePlusStartScreen(
     val serialNone = stringResource(R.string.dexcom_oneplus_applicator_serial_none)
     val newSensorCodeWarning = stringResource(R.string.dexcom_oneplus_new_sensor_code_warning)
     var connectRequested by remember { mutableStateOf(false) }
-    // The applicator field is pre-filled with the *stored* sensor's code. Picking a different MAC
-    // while leaving that code untouched pairs a NEW transmitter with the OLD sensor's PIN: auth
-    // fails and the slot keeps a session start that is not this sensor's. Warn once, then let the
-    // user proceed (a re-typed identical code is legitimate, if unlikely).
-    var newSensorConfirmPending by remember { mutableStateOf(false) }
 
     // Guided-flow progress for the stepper: Prepare → Code → Connect → Warm-up.
     val hasPermissions = activity == null || OnePlusBlePermissionHelper.hasAll(activity)
@@ -262,7 +276,7 @@ private fun DexcomOnePlusStartScreen(
             // Staging: collect-only. Never write the production store, never activate the
             // plugin, never switch the AAPS active BG source — just drive scan/connect on
             // the dedicated staging driver and return to the dashboard.
-            onBeginStaging()
+            onBeginStaging(address)
             val stagingDriver = onStagingDriver()
             stagingDriver.setContext(context.applicationContext)
             stagingDriver.saveIdentity(identity.copy(pin = code))
@@ -476,13 +490,20 @@ private fun DexcomOnePlusStartScreen(
                             return@OutlinedButton
                         }
                         devices.clear()
+                        deviceChosenByUser = false
                         scanner.sessionHint = sensorStore.load()
                         scanner.startScan { hit ->
                             mainHandler.post {
                                 val idx = devices.indexOfFirst { it.address == hit.address }
                                 if (idx >= 0) devices[idx] = hit else devices.add(hit)
-                                autoSelectBest(devices, scanner.sessionHint)?.let { best ->
-                                    selected = best
+                                // Only a suggestion, and only while the user has not chosen: the
+                                // ranking scores a match with the STORED sensor far above everything
+                                // else, so on a re-scan it kept pulling the selection back to the
+                                // sensor already in use instead of the new one the user tapped.
+                                if (!deviceChosenByUser) {
+                                    autoSelectBest(devices, scanner.sessionHint)?.let { best ->
+                                        selected = best
+                                    }
                                 }
                             }
                         }
@@ -530,6 +551,7 @@ private fun DexcomOnePlusStartScreen(
                             .fillMaxWidth()
                             .clickable {
                                 selected = device
+                                deviceChosenByUser = true
                                 errorText = null
                                 newSensorConfirmPending = false
                             }

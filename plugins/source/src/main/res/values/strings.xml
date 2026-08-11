@@ -115,16 +115,24 @@
     <string name="dexcom_oneplus_staging_state_settling">Settling</string>
     <string name="dexcom_oneplus_staging_state_ready">Ready to promote</string>
     <string name="dexcom_oneplus_staging_none_hint">No staging sensor. Start one from Start / new sensor, then choose \"Start in staging (pre-soak)\".</string>
+    <string name="dexcom_oneplus_staging_readings" comment="%1$d=how many valid glucose readings the staging sensor has sent so far. Example: Readings collected: 4">Readings collected: %1$d</string>
+    <string name="dexcom_oneplus_staging_last_reading" comment="%1$s=glucose value with unit, %2$s=time. Example: Last reading: 5.6 mmol/l at 14:32">Last reading: %1$s at %2$s</string>
+    <string name="dexcom_oneplus_staging_no_reading_yet">No reading yet. The staging sensor is still warming up or out of range.</string>
     <string name="dexcom_oneplus_staging_cancel">Cancel staging</string>
     <string name="dexcom_oneplus_staging_promote">Promote to production</string>
     <string name="dexcom_oneplus_staging_promote_confirm_title">Promote staging sensor?</string>
     <string name="dexcom_oneplus_staging_promote_confirm_message">This switches the loop\'s glucose source to the staging sensor and retires the sensor currently in use. This cannot be undone.</string>
+    <string name="dexcom_oneplus_staging_promote_early">Switch to it now (not settled)</string>
+    <string name="dexcom_oneplus_staging_promote_early_hint">Use this only if the sensor in use has stopped or has to be replaced now. The new sensor is reading, but it has not finished its 12 hour settling time.</string>
+    <string name="dexcom_oneplus_staging_promote_early_confirm_title">Switch to a sensor that is not settled?</string>
+    <string name="dexcom_oneplus_staging_promote_early_confirm_message">The new sensor is sending readings, but it has not finished its 12 hour settling time. Its readings can be less accurate for the first hours, so the loop may dose on values that are too high or too low. Only do this if the sensor in use has stopped or must be replaced now. This switches the loop\'s glucose source and cannot be undone.</string>
     <string name="dexcom_oneplus_staging_promote_confirm">Promote</string>
     <string name="dexcom_oneplus_staging_promote_dismiss">Cancel</string>
     <string name="dexcom_oneplus_staging_promote_ok">Staging sensor promoted — it now feeds the loop.</string>
     <string name="dexcom_oneplus_staging_promote_rejected_absent">No staging sensor to promote.</string>
     <string name="dexcom_oneplus_staging_promote_rejected_not_settled">Staging sensor has not settled long enough to promote yet.</string>
     <string name="dexcom_oneplus_staging_promote_rejected_no_glucose">Staging sensor has not produced enough valid glucose yet.</string>
+    <string name="dexcom_oneplus_staging_promote_rejected_no_recent_glucose">Staging sensor has not sent a reading in the last minutes. Wait until it reads again before switching to it.</string>
     <string name="dexcom_oneplus_staging_promote_rejected_loop_busy">The loop is busy right now — try again in a moment.</string>
     <string name="glimp">Glimp</string>
     <string name="description_source_glimp">Receive BG values from Glimp.</string>

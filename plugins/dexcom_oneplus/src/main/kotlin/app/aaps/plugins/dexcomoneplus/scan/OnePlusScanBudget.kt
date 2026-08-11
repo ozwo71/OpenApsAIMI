@@ -33,6 +33,22 @@ object OnePlusScanBudget {
 
     private val starts = ArrayDeque<Long>()
 
+    /** Elapsed-time until which no start is granted at all — see [blockFor]. */
+    private var blockedUntilMs = 0L
+
+    /**
+     * Hold every scan start back for [durationMs], on top of the normal quota.
+     *
+     * Used when a caller has good reason to believe the OS is silently refusing our scans: the model
+     * of the platform quota is then known to be too optimistic on this device, and the only safe
+     * reaction is to scan less until the platform window has certainly rolled over.
+     */
+    @Synchronized
+    fun blockFor(nowMs: Long, durationMs: Long) {
+        val until = nowMs + durationMs.coerceAtLeast(0L)
+        if (until > blockedUntilMs) blockedUntilMs = until
+    }
+
     /**
      * Milliseconds to wait before another `startScan` may be issued (0 = free slot available now).
      * Pure function of the recorded history — safe to call from any thread.
@@ -40,6 +56,8 @@ object OnePlusScanBudget {
     @Synchronized
     fun waitMsFor(nowMs: Long): Long {
         prune(nowMs)
+        val blocked = (blockedUntilMs - nowMs).coerceAtLeast(0L)
+        if (blocked > 0L) return blocked
         if (starts.size < MAX_STARTS_PER_WINDOW) return 0L
         val oldest = starts.first()
         return (WINDOW_MS - (nowMs - oldest)).coerceAtLeast(0L)
@@ -76,6 +94,7 @@ object OnePlusScanBudget {
     @Synchronized
     fun reset() {
         starts.clear()
+        blockedUntilMs = 0L
     }
 
     private fun prune(nowMs: Long) {

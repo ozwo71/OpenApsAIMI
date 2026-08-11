@@ -288,12 +288,14 @@
     <string name="dashboard_staging_title_warmup">New sensor · warming up</string>
     <string name="dashboard_staging_warmup_countdown" comment="%1$d = whole minutes remaining in the new sensor warm-up. Example: Ready in 25 min">Ready in %1$d min</string>
     <string name="dashboard_staging_title_settling" comment="%1$d = whole hours until the new sensor has stabilised enough to switch to. Example: New sensor · stabilising · ready in 8 h">New sensor · stabilising · ready in %1$d h</string>
+    <string name="dashboard_staging_readings" comment="%1$d = how many glucose readings the new (staging) sensor has sent so far. Example: Readings collected: 12">Readings collected: %1$d</string>
     <string name="dashboard_staging_ready">Ready to switch</string>
     <string name="dashboard_staging_promote_button">Switch</string>
     <string name="dashboard_staging_promote_ok">New sensor is now active</string>
     <string name="dashboard_staging_promote_rejected_absent">No new sensor to switch to</string>
     <string name="dashboard_staging_promote_rejected_not_settled">New sensor is not stabilised yet</string>
     <string name="dashboard_staging_promote_rejected_no_glucose">New sensor has no valid reading yet</string>
+    <string name="dashboard_staging_promote_rejected_no_recent_glucose">New sensor has not sent a reading in the last minutes</string>
     <string name="dashboard_staging_promote_rejected_loop_busy">Loop is busy — try again in a moment</string>
     <string name="dashboard_hero_sensor_dialog_message">%1$s\n\n%2$s</string>
     <string name="graph_legend_smb">SMB</string>

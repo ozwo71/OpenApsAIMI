@@ -13,6 +13,7 @@ import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.source.BgSource
 import app.aaps.core.interfaces.source.CgmSensorLifecycle
 import app.aaps.core.interfaces.source.CgmSensorStatusProvider
+import app.aaps.core.interfaces.source.CgmStagingEvidence
 import app.aaps.core.interfaces.source.CgmWarmupStatus
 import app.aaps.core.interfaces.source.PromotionRejectReason
 import app.aaps.core.interfaces.source.PromotionResult
@@ -141,14 +142,26 @@ class DexcomOnePlusPlugin @Inject constructor(
     private val _stagingState = MutableStateFlow(StagingState.ABSENT)
     override val stagingState: StateFlow<StagingState> = _stagingState.asStateFlow()
 
+    private val _stagingEvidence = MutableStateFlow<CgmStagingEvidence?>(null)
+    override val stagingEvidence: StateFlow<CgmStagingEvidence?> = _stagingEvidence.asStateFlow()
+
     /** A staging sensor session exists (warming/settling), collect-only until promoted. */
     @Volatile private var stagingPresent = false
 
     /** Staging sensor is still warming up / (re)connecting (no glucose yet). */
     @Volatile private var stagingWarming = false
 
+    /** Latched once the staging sensor has left warm-up; survives restarts through the slot store. */
+    @Volatile private var stagingWarmupDone = false
+
     /** Count of valid staging EGVs collected (promotion gate). */
     @Volatile private var stagingValidEgvCount = 0
+
+    /** Last reading collected from the staging sensor (mg/dL), for the evidence surface. */
+    @Volatile private var stagingLastValueMgdl: Double? = null
+
+    /** Timestamp of [stagingLastValueMgdl]. */
+    @Volatile private var stagingLastValueAtMs: Long? = null
 
     /** Set true after promotion: the (formerly staging) driver now feeds the loop. */
     @Volatile private var stagingPublishesToLoop = false
@@ -395,21 +408,41 @@ class DexcomOnePlusPlugin @Inject constructor(
      * Start watching the STAGING sensor (collect-only, never published to the loop). The caller (Start
      * UI) then drives scan/connect on [stagingDriverForConnect]. Safe to call while production runs.
      */
-    fun beginStaging() {
+    fun beginStaging(deviceAddress: String) {
         stagingDriver.setContext(context)
         stagingDriver.addWatcher(stagingWatcher)
         stagingPublishesToLoop = false
         stagingPresent = true
-        stagingWarming = true
-        stagingValidEgvCount = 0
-        synchronized(stagingBuffer) { stagingBuffer.clear() }
-        stagingStore.saveSessionStartIfAbsent(System.currentTimeMillis())
-        // Durability: a restart must be able to tell "a staging sensor is warming" from "no staging
-        // sensor" — see resumeStagingSessionIfStored.
-        stagingStore.saveSlotProgress(present = true, validEgvCount = 0)
-        _stagingWarmup.value = null
+        // The soak clock starts when the sensor is applied, not at its first reading (~30 min later).
+        // MAC-owned, so re-running the start on the same sensor keeps its clock while a different
+        // sensor restarts it — a PIN-only entry can no longer inherit a previous sensor's soak.
+        // Read before the driver overwrites the slot's MAC in saveIdentity / connect.
+        val previousStagingMac = stagingStore.load()?.lastMac
+        val newSensor = stagingStore.startSessionForSensor(deviceAddress, System.currentTimeMillis(), previousStagingMac)
+        if (newSensor) {
+            // Another sensor: everything the previous soak collected is void.
+            stagingWarmupDone = false
+            stagingValidEgvCount = 0
+            stagingLastValueMgdl = null
+            stagingLastValueAtMs = null
+            synchronized(stagingBuffer) { stagingBuffer.clear() }
+            // Durability: a restart must be able to tell "a staging sensor is warming" from "no
+            // staging sensor" — see resumeStagingSessionIfStored.
+            stagingStore.saveSlotProgress(present = true, validEgvCount = 0)
+            stagingStore.saveSlotWarmupDone(false)
+            _stagingWarmup.value = null
+        } else {
+            // Same sensor started again (one extra tap on the Start screen is enough). The store keeps
+            // its soak clock, so its progress must be kept too: resetting it sent a settled slot back
+            // to warm-up and hid the promote button for another ~30 min for nothing.
+            stagingWarmupDone = stagingStore.loadSlotWarmupDone()
+            stagingValidEgvCount = stagingStore.loadSlotValidEgvCount()
+            stagingStore.saveSlotProgress(present = true, validEgvCount = stagingValidEgvCount)
+        }
+        stagingWarming = !stagingWarmupDone
         refreshStagingLifecycle()
         refreshStagingState()
+        refreshStagingEvidence()
         aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_STAGING: begin")
     }
 
@@ -427,8 +460,11 @@ class DexcomOnePlusPlugin @Inject constructor(
         stagingDriver.setContext(context)
         stagingDriver.addWatcher(stagingWatcher)
         // The driver itself vetoes an incomplete stored session (no MAC / PIN / KEKS key).
+        // It also returns false when a session is ALREADY running (nothing to queue) — tearing the
+        // slot down there would drop a live pre-soak on a plugin disable/enable cycle.
+        val alreadyRunning = stagingDriver.isSessionUp()
         val queued = stagingDriver.resumeStoredSession()
-        if (!queued) {
+        if (!queued && !alreadyRunning) {
             // Nothing is running for this slot, so it must not be shown as a warming sensor — that
             // was the "stuck in warm-up forever" state. The store is kept intact (clearing it would
             // reset session_start and let a re-start skip the soak), so the user can simply re-run
@@ -447,13 +483,17 @@ class DexcomOnePlusPlugin @Inject constructor(
         }
         stagingPublishesToLoop = false
         stagingPresent = true
-        stagingWarming = true
         stagingValidEgvCount = stagingStore.loadSlotValidEgvCount()
+        // A settled sensor must not be shown as warming again after a restart — the latch is durable.
+        stagingWarmupDone = stagingStore.loadSlotWarmupDone()
+        stagingWarming = !stagingWarmupDone
         refreshStagingLifecycle()
         refreshStagingState()
+        refreshStagingEvidence()
         aapsLogger.info(
             LTag.BGSOURCE,
-            "DEXCOM_ONEPLUS_STAGING: auto-resume queued egvCount=$stagingValidEgvCount",
+            "DEXCOM_ONEPLUS_STAGING: auto-resume queued=$queued alreadyRunning=$alreadyRunning " +
+                "egvCount=$stagingValidEgvCount warmupDone=$stagingWarmupDone",
         )
         return true
     }
@@ -478,10 +518,14 @@ class DexcomOnePlusPlugin @Inject constructor(
         runCatching { stagingStore.clearAll() }
         stagingPresent = false
         stagingWarming = false
+        stagingWarmupDone = false
         stagingValidEgvCount = 0
+        stagingLastValueMgdl = null
+        stagingLastValueAtMs = null
         synchronized(stagingBuffer) { stagingBuffer.clear() }
         _stagingWarmup.value = null
         _stagingLifecycle.value = null
+        _stagingEvidence.value = null
         _stagingState.value = StagingState.ABSENT
         aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_STAGING: cancelled")
     }
@@ -493,7 +537,7 @@ class DexcomOnePlusPlugin @Inject constructor(
      * (new EGV sequence space), migrates the staging identity into the production store (so a restart
      * durably resumes the promoted sensor), and routes the staging driver's glucose to the loop.
      */
-    override suspend fun promoteStagingToProduction(): PromotionResult {
+    override suspend fun promoteStagingToProduction(allowEarly: Boolean): PromotionResult {
         if (!stagingPresent) return PromotionResult.Rejected(PromotionRejectReason.STAGING_ABSENT)
         if (stagingValidEgvCount < DexcomOnePlusStaging.STAGING_MIN_VALID_EGV)
             return PromotionResult.Rejected(PromotionRejectReason.STAGING_NO_VALID_GLUCOSE)
@@ -501,12 +545,24 @@ class DexcomOnePlusPlugin @Inject constructor(
         // trusting the cached _stagingState — a stale start (e.g. cancel/restage) must never authorise
         // an under-soaked promotion onto the loop.
         val startMs = stagingStore.loadSessionStart()
-        if (startMs <= 0L || System.currentTimeMillis() - startMs < DexcomOnePlusStaging.STAGING_MIN_SETTLE_MS)
-            return PromotionResult.Rejected(PromotionRejectReason.STAGING_NOT_SETTLED)
-        if (_stagingState.value != StagingState.READY)
-            return PromotionResult.Rejected(PromotionRejectReason.STAGING_NOT_SETTLED)
+        if (startMs <= 0L) return PromotionResult.Rejected(PromotionRejectReason.STAGING_NOT_SETTLED)
+        if (allowEarly) {
+            // The user knowingly gives up the soak (production sensor stopped early). The evidence
+            // gates stay: enough valid readings, and one of them recent — never a silent sensor.
+            if (!DexcomOnePlusStaging.canPromoteEarly(stagingValidEgvCount, stagingLastValueAtMs, System.currentTimeMillis()))
+                return PromotionResult.Rejected(PromotionRejectReason.STAGING_NO_RECENT_GLUCOSE)
+        } else {
+            if (System.currentTimeMillis() - startMs < DexcomOnePlusStaging.STAGING_MIN_SETTLE_MS)
+                return PromotionResult.Rejected(PromotionRejectReason.STAGING_NOT_SETTLED)
+            if (_stagingState.value != StagingState.READY)
+                return PromotionResult.Rejected(PromotionRejectReason.STAGING_NOT_SETTLED)
+        }
 
-        aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_PROMOTE: staging → production (by user)")
+        aapsLogger.info(
+            LTag.BGSOURCE,
+            "DEXCOM_ONEPLUS_PROMOTE: staging → production (by user) early=$allowEarly " +
+                "soakMs=${System.currentTimeMillis() - startMs} egvCount=$stagingValidEgvCount",
+        )
         // The promoted sensor is a real sensor — ensure it resumes on the Real driver after a restart.
         preferences.put(DexcomOnePlusBooleanKey.UseRealSkeleton, true)
         // 1) Retire the old production sensor — stop its callbacks and BLE session (no more loop feed).
@@ -526,10 +582,14 @@ class DexcomOnePlusPlugin @Inject constructor(
         stagingPublishesToLoop = true
         stagingPresent = false
         stagingWarming = false
+        stagingWarmupDone = false
         stagingValidEgvCount = 0
+        stagingLastValueMgdl = null
+        stagingLastValueAtMs = null
         synchronized(stagingBuffer) { stagingBuffer.clear() }
         _stagingWarmup.value = null
         _stagingLifecycle.value = null
+        _stagingEvidence.value = null
         _stagingState.value = StagingState.ABSENT
         refreshProductionLifecycle()
         return PromotionResult.Ok
@@ -541,17 +601,28 @@ class DexcomOnePlusPlugin @Inject constructor(
             onWarmup(state)
             return
         }
-        stagingWarming = when (state.phase) {
-            OnePlusWarmupState.Phase.WARMING,
-            OnePlusWarmupState.Phase.CONNECTING,
-            OnePlusWarmupState.Phase.RECONNECTING,
-            OnePlusWarmupState.Phase.PAIRING -> true
-
-            else                             -> false
-        }
+        // Leaving warm-up is a latched EVENT, never re-derived from the live phase — see
+        // [DexcomOnePlusStaging.applyWarmupPhase] for why.
+        val decision = DexcomOnePlusStaging.applyWarmupPhase(
+            warmupDoneBefore = stagingWarmupDone,
+            readyPhase = state.phase == OnePlusWarmupState.Phase.READY,
+        )
+        if (decision.warmupDone) markStagingWarmupDone() else stagingWarming = decision.warming
         _stagingWarmup.value = DexcomOnePlusWarmupMapper.toCgmWarmupStatus(state)
         refreshStagingState()
-        aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_STAGING: warmup phase=${state.phase}")
+        aapsLogger.info(
+            LTag.BGSOURCE,
+            "DEXCOM_ONEPLUS_STAGING: warmup phase=${state.phase} warmupDone=$stagingWarmupDone",
+        )
+    }
+
+    /** Latch (and persist) "this staging sensor has left warm-up" — see [handleStagingWarmup]. */
+    private fun markStagingWarmupDone() {
+        if (stagingWarmupDone) return
+        stagingWarmupDone = true
+        stagingWarming = false
+        stagingStore.saveSlotWarmupDone(true)
+        aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_STAGING: warm-up done — slot is settling")
     }
 
     private fun handleStagingGlucose(sample: OnePlusGlucoseSample) {
@@ -565,13 +636,16 @@ class DexcomOnePlusPlugin @Inject constructor(
             stagingBuffer.addLast(sample.timestampMs to sample.mgdl)
             while (stagingBuffer.size > STAGING_BUFFER_CAP) stagingBuffer.removeFirst()
         }
-        stagingWarming = false
+        // A collected reading is proof warm-up is over, even if no READY phase was ever emitted.
+        markStagingWarmupDone()
         stagingValidEgvCount++
-        stagingStore.saveSessionStartIfAbsent(sample.timestampMs)
+        stagingLastValueMgdl = sample.mgdl
+        stagingLastValueAtMs = sample.timestampMs
         // Survive a restart with the promotion gate intact (the count is the gate, plan §8).
         stagingStore.saveSlotProgress(present = true, validEgvCount = stagingValidEgvCount)
         refreshStagingLifecycle()
         refreshStagingState()
+        refreshStagingEvidence()
         aapsLogger.debug(
             LTag.BGSOURCE,
             "DEXCOM_ONEPLUS_STAGING: buffered ${sample.mgdl.toInt()} count=$stagingValidEgvCount (not published)",
@@ -587,6 +661,21 @@ class DexcomOnePlusPlugin @Inject constructor(
         _stagingLifecycle.value =
             if (stagingPresent) DexcomOnePlusStaging.computeLifecycle(SensorSlot.STAGING, stagingStore.loadSessionStart(), System.currentTimeMillis())
             else null
+    }
+
+    /**
+     * Publish what the collect-only slot has actually gathered. Without it the user is asked to wait
+     * ~12 h on a sensor that shows no reading anywhere, so a dead staging sensor is indistinguishable
+     * from a healthy one.
+     */
+    private fun refreshStagingEvidence() {
+        _stagingEvidence.value =
+            if (!stagingPresent) null
+            else CgmStagingEvidence(
+                validCount = stagingValidEgvCount,
+                lastValueMgdl = stagingLastValueMgdl,
+                lastValueAtEpochMs = stagingLastValueAtMs,
+            )
     }
 
     private fun refreshStagingState() {
