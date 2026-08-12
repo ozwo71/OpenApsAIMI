@@ -85,12 +85,19 @@ internal object OnePlusBleSessionCyclePolicy {
         phase == OnePlusWarmupState.Phase.WARMING || phase == OnePlusWarmupState.Phase.READY
 
     /**
-     * Retry budget exhausted: recover into the persistent ADV wait when the session already
-     * authenticated at least once, instead of the terminal FAILED that only a manual restart could
-     * leave. A sensor we have talked to is asleep, not lost.
+     * Retry budget exhausted: recover into the persistent ADV wait instead of the terminal FAILED,
+     * but ONLY when the Control channel has already delivered at least once. Such a sensor is
+     * asleep between radio windows, not lost, so waiting is right.
+     *
+     * The proof must be real Control traffic, never a successful authentication. A sensor that has
+     * no session started completes the whole handshake and then hangs up on the first glucose
+     * request, so "authenticated" is true on every cycle while the slot receives nothing at all.
+     * Recovering on that signal removed the terminal FAILED, and with it the only way back to a
+     * fresh sensor start (SessionStart is issued on attempt 0 only) — the slot then retried for
+     * ever and could never come back.
      */
-    fun recoverExhaustedBudgetWithPersistentWait(sessionEverAuthenticated: Boolean): Boolean =
-        sessionEverAuthenticated
+    fun recoverExhaustedBudgetWithPersistentWait(sessionEverProvedControlChannel: Boolean): Boolean =
+        sessionEverProvedControlChannel
 
     /**
      * Warm-up deadline to remember once [state] has been emitted, so the countdown survives the
@@ -196,9 +203,18 @@ class OnePlusBleSessionSkeleton(
     @Volatile
     private var warmupEndsAtEpochMs: Long? = null
 
-    /** At least one connection cycle authenticated — the sensor is ours and reachable. */
+    /**
+     * At least one cycle received real Control traffic (warm-up state or glucose) — the sensor is
+     * ours AND its data channel works.
+     *
+     * This must NOT be "auth succeeded": a sensor with no active session completes the whole KEKS
+     * handshake and then drops the link as soon as it is asked for glucose (peer status 19). Using
+     * auth as the proof kept such a sensor in the persistent wait for ever, so the retry budget
+     * never ran out, the session never reached FAILED, and the only path that re-issues
+     * SessionStart (a fresh start on attempt 0) could never be reached again.
+     */
     @Volatile
-    private var everAuthenticated = false
+    private var everProvedControlChannel = false
 
     override fun startWithPairingCode(deviceAddress: String, pairingCode: String) {
         val codeError = OnePlusSessionStart.validationError(pairingCode)
@@ -247,17 +263,17 @@ class OnePlusBleSessionSkeleton(
                     preparedPostCollectionAdvertisement = preparedConnect != null,
                 )
                 if (applyFailureBudget && !reconnectPolicy.shouldRetry(attempt, profile)) {
-                    if (!OnePlusBleSessionCyclePolicy.recoverExhaustedBudgetWithPersistentWait(everAuthenticated)) {
+                    if (!OnePlusBleSessionCyclePolicy.recoverExhaustedBudgetWithPersistentWait(everProvedControlChannel)) {
                         fail("ONEPLUS_RECONNECT_EXHAUSTED: attempts=$attempt", fatal = false)
                         return
                     }
-                    // A sensor we already authenticated with is asleep, not lost: keep waiting for its
-                    // next radio window instead of ending in a terminal FAILED only a manual restart
-                    // could leave.
+                    // A sensor that has already sent us Control traffic is asleep, not lost: keep
+                    // waiting for its next radio window instead of ending in a terminal FAILED only
+                    // a manual restart could leave.
                     Log.w(
                         OnePlusLogMarkers.TAG,
-                        "${OnePlusLogMarkers.RECONNECT}: [$slot] retry budget exhausted after successful auth " +
-                            "(attempts=$attempt) — switch to persistent ADV wait",
+                        "${OnePlusLogMarkers.RECONNECT}: [$slot] retry budget exhausted after proven Control " +
+                            "traffic (attempts=$attempt) — switch to persistent ADV wait",
                     )
                     persistentAdvertisementMode = true
                     preparedConnect = preparePostCollectionReconnect(
@@ -510,7 +526,6 @@ class OnePlusBleSessionSkeleton(
 
             // Do NOT invent a 30 min WARMING clock here — that blocked ingest even when the
             // transmitter was already producing Ok EGVs. Protocol (TransmitterTime / EGV) sets phase.
-            everAuthenticated = true
             up = true
             setWarmup(OnePlusWarmupState(phase = OnePlusWarmupState.Phase.PAIRING, message = "auth_ok"))
             onSession(true, if (attempt == 0) "session_up" else "session_reconnected")
@@ -527,11 +542,13 @@ class OnePlusBleSessionSkeleton(
                 onWarmup = { state ->
                     if (OnePlusBleSessionCyclePolicy.controlTrafficProvesSession(state.phase)) {
                         sessionProvedHealthy = true
+                        everProvedControlChannel = true
                     }
                     setWarmup(state)
                 },
                 onGlucose = { sample ->
                     sessionProvedHealthy = true
+                    everProvedControlChannel = true
                     onGlucose(sample)
                 },
                 onError = onError,

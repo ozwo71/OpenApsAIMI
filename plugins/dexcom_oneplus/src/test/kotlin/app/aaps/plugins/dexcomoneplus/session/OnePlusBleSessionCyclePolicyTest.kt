@@ -132,16 +132,23 @@ class OnePlusBleSessionCyclePolicyTest {
     }
 
     @Test
-    fun `an authenticated session recovers from an exhausted retry budget instead of failing`() {
+    fun `a session with proven Control traffic recovers from an exhausted retry budget`() {
         assertThat(
             OnePlusBleSessionCyclePolicy.recoverExhaustedBudgetWithPersistentWait(
-                sessionEverAuthenticated = true,
+                sessionEverProvedControlChannel = true,
             ),
         ).isTrue()
-        // Never authenticated (wrong PIN, wrong sensor…) → keep the terminal failure.
+    }
+
+    @Test
+    fun `a sensor that never sent Control traffic still ends in the terminal failure`() {
+        // Wrong PIN or wrong sensor — but also the case that made a working pairing impossible:
+        // a sensor with no session started authenticates fully, then hangs up on the first glucose
+        // request. Recovering there would loop for ever, and SessionStart (attempt 0 only) could
+        // never be re-issued. The terminal failure is what lets the user start the sensor again.
         assertThat(
             OnePlusBleSessionCyclePolicy.recoverExhaustedBudgetWithPersistentWait(
-                sessionEverAuthenticated = false,
+                sessionEverProvedControlChannel = false,
             ),
         ).isFalse()
     }
