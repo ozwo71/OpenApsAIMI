@@ -746,6 +746,208 @@ none of the above attributable.
 
 ---
 
+# Part A-quinquies — the morning under-correction, traced (2026-08-13)
+
+Written 2026-08-13 from package `1786605720362` (292 ticks, 24 h to 09:22) plus the three earlier
+packages, 952 distinct ticks pooled. The patient reported that the evening before and that morning
+"did not correct enough". **This part supersedes Part A-quater's picture of where the dose is lost,
+and it corrects two attributions made during this session itself.** All changes below are
+uncommitted. Suite: **1393 tests, 0 failures** (was 1345; this part adds 48).
+
+## AQ5-1. The day
+
+| window | BG | SMB | outcome |
+|---|---|---|---|
+| 12 Aug morning | 166 → **297** | 9.94 U / 22 ticks | plateau ~1.5 h |
+| 12 Aug lunch | 126 → 206 | 6.13 U | handled |
+| 12 Aug dinner | 117 → 247 → 164 | 10.30 U | handled |
+| 13 Aug morning | 94 → **243** | **4.92 U / 15 ticks** | still 241 at 09:16, IOB 6.2 |
+
+Day: 9.1 % below 70, 24.1 % above 180, min BG 45. The evening worked; the two mornings did not.
+
+## AQ5-2. Root cause of the mornings: one mis-classification, five consequences
+
+`PhysiologicalPhase.STRESS_CORTISOL` was applied to both breakfasts. `PHYSIO_CAP` (its
+`smbFloorCapU = 0.75`) was the binding stage on **12 of 15** ticks on 13 Aug and **14 of 22** on
+12 Aug.
+
+The trigger is `isStressCortisol`: `heartRateBpm > restingHeartRateBpm + 12`. Measured RHR is **49**,
+so the test is true above 61 bpm — **every waking heart rate** (observed 72–96). The natural
+experiment is on 12 Aug: at 09:22/09:26 the watch reported no HR, the phase was `MEAL_UNDECLARED`
+and the doses were 1.50 and 2.20 U; at 09:31 HR 94 arrived, the phase flipped, and the dose fell to
+0.23 U for 70 minutes while BG went to 297. **The dose fell tenfold because a heart rate appeared.**
+
+One classification bites in five places, all verified in code:
+
+```
+STRESS_CORTISOL
+ ├─ smbFloorCapU 0.75                          (BehavioralRiskPolicy.forPhase)
+ ├─ mpcInsulinCostMultiplier 2.5 / maxSmbFraction 0.65
+ ├─ maxHtrTier EMERGING
+ └─ toPatternId() → STRESS_CORTISOL_ACUTE
+      → CausalStatePosterior.buildStressResistanceProb → stress branch 0.997
+        → PhysiologicalTree.isConflicting (meal 1.00 vs stress ≥ meal − 0.04) → trunk MIXED
+          → MealCertainty.treeStateOf(MIXED) = NONE → level never HIGH
+             ├─ the A-quater intent override is unreachable
+             └─ the A-quater 0.75 effort floor is unreachable
+```
+
+The evening proves the same code works when the root is right: meal 1.00 vs stress 0.483 → not
+conflicting → `DIGESTION_ACTIVE` → HIGH → the floor fired on 4 ticks → 1.1–1.75 U per tick.
+
+## AQ5-3. The cortisol discriminator, measured
+
+14 distinct `STRESS_CORTISOL` episodes over 952 ticks, labelled from the BG trajectory (not from the
+classifier's own opinion):
+
+| group | n | excursion | peak Δ per 5 min | duration |
+|---|---|---|---|---|
+| genuine cortisol | 11 | 0–26 mg/dL | 1.5–**9.1** | 0–30 min |
+| food | 3 | 112 / 140 | 12.9 / 20.1 | 65–70 min |
+
+Threshold search, requiring the gate to fire at the *start* of the rise:
+
+| candidate | food caught | cortisol false |
+|---|---|---|
+| Δ ≥ 9 | 2/3 | 1/11 |
+| Δ ≥ 10, 11 or 12 | 2/3 | **0/11** |
+| Δ ≥ 11 **or** (shortΔ ≥ 5 **and** dev ≥ 1.6 × highBand) | 2/3, both at their first rising tick | **0/11** |
+
+`highBand = OApsAIMIHighBg 140 − target 90 = 50`, so the level clause is BG ≥ 170. The third "food"
+episode is a single tick at BG 297 where the phase flickered mid-event; the main episode already
+fired. Counterfactual across the cortisol episodes: **14.80 U → 27.22 U** (+12.42 U, 26 ticks),
+open-loop upper bound.
+
+**`isAcuteMealSurgeAtDawn` cannot be the escape** — its first clause `dev >= highBand * 0.45` is
+BG ≥ 112, which fires on **11 of 11** genuine cortisol episodes. Making the existing dead escape
+reachable would have deleted the cortisol path. This is why the escape is a new, tighter test.
+
+## AQ5-4. The hysteresis hold, which would have made the escape worthless
+
+`EndogenousPhaseHysteresis.stabilize` arms `HOLD_TICKS_DEFAULT = 4` on **every** `STRESS_CORTISOL`
+tick, then re-applies the held phase — through `BehavioralRiskPolicy.forPhase(STRESS_CORTISOL, …)`
+and its 0.75 cap — to the next four `MEAL_UNDECLARED` / `OFF` ticks. Because both breakfasts were
+cortisol on the ticks *before* the steep rise, the escape would have been suppressed from 08:11 to
+08:26 and first bitten at 08:31, BG 201. **A correct classifier fix would have delivered nothing for
+the first 20 minutes of the meal.** Fixed by `Output.breaksEndogenousHold`, set when a steep rise
+takes the tick out of the cortisol family; `stabilize` drops the hold on it. The hold still damps
+ordinary flip-flop.
+
+## AQ5-5. The effort multiplier — AQ5's reconstruction replaced by measurement
+
+The A-quater exports settle AQ5's 7.01 U estimate. Over 24 h: **the effort multiplier removed
+21.71 U**, against 42.26 U delivered. Reduced on 82 of 107 ticks, minimum 0.45. **61 of those 82 had
+no live movement** (`effort=0.00`), median 12 steps per 15 min. The confirmed-meal floor fired on
+**6 ticks of 107**, and `MealCertainty` reached HIGH on only 10 of 292 — the floor is not a
+substitute for fixing the belief.
+
+Two defects, both now fixed:
+
+- **Re-arm.** `stepRate = max(rate5, rate15)` with `rate5 = stepsLast5m / 5`, so ~125 steps in any
+  one 5-minute window re-stamps `lastEffortMs` and restarts a 120-minute protection at full
+  strength. Observed on 12 Aug: the factor decayed 0.45 → 0.54 then jumped back to 0.45. **Proven,
+  not inferred**: 12 ticks had `activity_state = ACTIVE` with `steps15 < 375`, which forces
+  `steps5 ≥ 200`, and all 12 had a 15-minute rate of only 13.7–22.8 steps/min. Every provable burst
+  in the corpus was uncorroborated at 15 minutes. Fix: onset stays fast (the 5-min window may open
+  the current reduction) but only the **15-min** window may arm the cross-tick memory.
+- **Decay.** Flat 120-minute linear horizon. Now scaled by how long the corroborated effort lasted,
+  30 → 120 min; a ≥30-min session reproduces today's behaviour exactly.
+
+Result: **21.71 U → 14.45 U, 7.26 U returned**, reduced ticks 82 → 42, **zero ticks reduced more
+than today, and no tick with real movement loses protection**. Residual left on purpose: 2.97 U over
+9 single-tick `ACTIVE` bursts, kept to preserve fast onset; `hrConf` (up to 0.50 of strength) is what
+saturates them, and HR is measurably a poor discriminator here — the 25 bpm elevation threshold is
+crossed at the *median* of the 1–10 steps/min band.
+
+**Same defect family as the cortisol HR test: a threshold calibrated against a sleeping baseline.**
+
+## AQ5-6. Why lunch and dinner start late — and two wrong answers on the way
+
+The patient's second question. **Three attributions were made in sequence; the first two were wrong
+and both were mine.** Recorded because the doc already shows this exact question being mis-answered
+twice before.
+
+**Wrong answer 1 — the BG-keyed ceiling.** Median `max_smb_high_bg_u` is 0.05 U up to BG 159, 0.22
+at 160–179, 2.20 from BG 200, which looks like a purely reactive ceiling. It is not the cause: the
+`MAXSMB_*` selection actually picks the 1.8 U preference at BG 109, and something overrides it
+afterwards.
+
+**Partly right — basal-first.** `basalFirstActive` sets `maxSMB = 0.0; maxSMBHB = 0.0` and is gated
+on `bg < 110.0`, and every meal starts below 110, so the first tick of every meal has zero SMB
+authority by construction. Measured per tick: lunch and breakfast were blocked by **Learner
+Prudence**, dinner by **Fragile BG**. The existing exemption `isPersistentRise` has a *level* clause
+(`bg > targetBg`), unreachable at BG 103 against a target of 110, and `isConfirmedHighRise` needs
+BG > 150, structurally dead below 110. Fixed with an anticipated-rise exemption (rate + 30-min
+projection, floor at BG 90 to exclude rescue rebounds). **But it is worth only ≈0.4 U across the
+three meals** — not the gate.
+
+**Wrong answer 2 — the tube veto.** `StraightLineTubeAdvisor` infeasible sets
+`maxSMB = maxSMBHB = 0.05`. The correlation is real and strong: the 0.05 ceiling on 80 ticks,
+`tubeCap=0,00` on 81, intersection 80 — 28 % of the day, including the first rising tick of lunch and
+dinner. I called it the dominant gate. **It is not.** Measured:
+
+- Feasibility is *exactly* `minPred < hypoFloor` — the candidate ladder ends at `s = 0.0`, where
+  `minAfter == minPred`, so the tube runs **no projection of its own**. It restates an upstream
+  forecast.
+- Of 53 veto ticks, **38 are falling** (Δ5 ≤ −3) with 5–12 U IOB on descents that reached 41–76
+  mg/dL within the hour, and 14 are flat with real IOB load. **52 of 53 vetoes are correct**; the one
+  wrong veto is 12 Aug 13:16. Removing the veto would have made those descents worse.
+- A graded cap on the infeasible branch is arithmetically impossible: headroom is negative by
+  construction, `max(minPred − floor) = −3.0` mg/dL, so a headroom-graded cap yields **0.000 U**.
+- The remaining 28 zero-cap ticks are *not* vetoes: 17 are a degenerate objective (`W_BG·bgErr²` and
+  `W_EV·evErr²` do not depend on `s`, so with `hyperExcess = 0` the cost reduces to a leaky
+  integrator decaying to `0.4 × lastScale` and then to zero), 5 are a quantisation dead band, 6 are
+  unexplained by the export.
+
+**And the earlier `minPred = 39` attribution is also only partly right**: `minPred == 39` on 53 of
+292 ticks but co-occurs with the veto on only 37 of 81, and at meal onset the veto fired with
+`min_pred_mgdl` of 64.3, **73.7** and **116.8** — the last two *above* the 70 floor. The tube ran on
+an earlier snapshot than the one exported.
+
+**The real gate is the prediction, and it is still open.** A forecast cannot coherently report a path
+minimum of 73.7 while its own terminal is 376 and BG is rising 18 mg/dL per 5 min. Nothing was
+changed in the tube; observability was added instead (`adjustments.tube_advisor` with
+`deciding_stage`, `branch`, `min_pred_used_mgdl`, `snapshot_source_used`, `kappa_mgdl_per_u`,
+`s_max_feasible`, `max_smb_baseline_u`), which settles the 6 unexplained ticks by measurement next
+package. **No dosing path was touched by that change.**
+
+## AQ5-7. What changed (all uncommitted)
+
+| file | change |
+|---|---|
+| `physio/PhysiologicalPhaseClassifier.kt` | `isTooSteepForCortisolAlone`; applied at **both** cortisol sites and to the `morningChrono rebound` branch; `classify` wraps `classifyPhase` to stamp `breaksEndogenousHold` |
+| `physio/EndogenousPhaseHysteresis.kt` | the hold releases on `breaksEndogenousHold` |
+| `activity/EffortActivityBelief.kt` | memory arms only on 15-min corroboration; horizon scales with effort length; non-finite inputs fail open at 1.0 |
+| `DetermineBasalAIMI2.kt` | `BasalFirstPolicyMath` extracted pure and testable, plus the anticipated-rise exemption; `adjustments.tube_advisor` export |
+| `control/StraightLineTubeAdvisor.kt` | `Branch` enum and diagnostic fields on `Outcome`; `sMaxFeasible` computed **for export only**, not fed back into the ladder |
+
+48 new tests, including the regression guards that matter: a genuine dawn cortisol ramp is still
+`STRESS_CORTISOL`; a sustained walk still produces full protection; a falling or flat BG below 110
+still gets basal-first with SMB off; every chosen tube scale still respects the hypo floor.
+
+## AQ5-8. What the next package must answer
+
+| question | field(s) | what would confirm it |
+|---|---|---|
+| Does the cortisol escape fire on breakfast only? | `physiological_phase.phase` / `reason` in the morning | `MEAL_UNDECLARED` on the steep ticks, `STRESS_CORTISOL` retained on modest dawn ramps |
+| Is the hysteresis hold still releasing correctly? | phase on the 4 ticks after a cortisol tick | no cortisol policy on a steep rise; hold still visible on ordinary flip-flop |
+| Did the effort fix return the units? | `effort_smb_factor_requested` vs `_applied`, `_before_u` / `_after_u` | ≈7 U less removed; no reduction on still ticks; full reduction during real movement |
+| Does the basal-first exemption fire? | `[Basal-First: rise exemption]` marker | present on meal-onset ticks, absent on falling ticks |
+| **Which snapshot froze the tube?** | `tube_advisor.min_pred_used_mgdl` vs `dose_terminal_snapshot.min_pred_mgdl`, `snapshot_source_used`, `branch` | settles the 6 unexplained ticks, incl. dinner 20:52 |
+| Does `MealCertainty` reach HIGH on breakfast now? | `meal_certainty.level`, `physiological_tree.trunk.global_state` | `DIGESTION_ACTIVE` instead of `MIXED` once the stress branch is not inflated |
+
+**Next ticket, ahead of any further tuning: the prediction that populates `minPredictedBg`.** It is
+the gate on 28 % of ticks, the tube is a faithful messenger for 52 of its 53 vetoes, and shooting the
+messenger buys ≈0.2 U while removing a working hypo defence.
+
+**Attribution risk.** Four dose-moving changes ship together here (cortisol escape, hysteresis
+release, effort calibration, basal-first exemption). That is the error this doc records twice. They
+were taken together because they are one causal chain and three of them are individually inert — but
+the exports above are what make them separable, and the effort fields separate cleanly from the
+phase fields.
+
+---
+
 # Part B — prompt for the next session
 
 Paste everything below.

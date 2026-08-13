@@ -12,6 +12,25 @@ import kotlin.math.abs
  */
 object PhysiologicalPhaseClassifier {
 
+    /**
+     * Rise per 5 min that cortisol alone cannot explain. Measured peak of the genuine cortisol
+     * episodes was 9.1 mg/dL per 5 min, so 11.0 keeps a margin above real physiology.
+     */
+    private const val CORTISOL_ESCAPE_RATE_MGDL_PER_5M = 11.0
+
+    /**
+     * Sustained (short average) rise per 5 min for the level clause, used together with the level
+     * test below. Genuine cortisol episodes never held such a rise that high above target, while
+     * the two mis-read breakfasts peaked at 12.9 and 20.1 mg/dL per 5 min.
+     */
+    private const val CORTISOL_ESCAPE_SUSTAINED_MGDL_PER_5M = 5.0
+
+    /**
+     * Level test for the sustained clause: 1.6 * high band, which is BG 170 for this deployment
+     * (target 90, high 140, band 50). No genuine cortisol episode was that high while still rising.
+     */
+    private const val CORTISOL_ESCAPE_DEV_BAND_MULT = 1.6
+
     data class Input(
         val bgMgdl: Double,
         val targetBgMgdl: Double,
@@ -40,15 +59,39 @@ object PhysiologicalPhaseClassifier {
         val phase: PhysiologicalPhase,
         val confidence: Double,
         val policy: BehavioralRiskPolicy,
+        /**
+         * Set when the tick left the cortisol family because the rise was too steep for it
+         * (see [isTooSteepForCortisolAlone]). `EndogenousPhaseHysteresis` must not damp such a
+         * change: its hold exists to stop 5-minute flip-flop, not to outvote new strong evidence.
+         */
+        val breaksEndogenousHold: Boolean = false,
     )
 
+    /**
+     * Classifies the tick, then marks the result when a steep rise took it out of the cortisol
+     * family. The mark is what lets `EndogenousPhaseHysteresis` drop a hold that would otherwise
+     * re-apply the cortisol policy — with its 0.75 U SMB cap — for the first four ticks of a meal,
+     * which is exactly when the dose matters.
+     */
     fun classify(input: Input): Output {
+        val raw = classifyPhase(input)
+        if (raw.phase == PhysiologicalPhase.STRESS_CORTISOL) return raw
+        val highBand = HyperTrajectoryHypoCredibility.highBgBandMgdl(
+            input.targetBgMgdl,
+            input.highBgPreferenceMgdl,
+        )
+        if (!isTooSteepForCortisolAlone(input, highBand, input.bgMgdl - input.targetBgMgdl)) return raw
+        return raw.copy(breaksEndogenousHold = true)
+    }
+
+    private fun classifyPhase(input: Input): Output {
         val highBand = HyperTrajectoryHypoCredibility.highBgBandMgdl(
             input.targetBgMgdl,
             input.highBgPreferenceMgdl,
         )
         val dev = input.bgMgdl - input.targetBgMgdl
         val projectionLead = input.bestTerminalMgdl - input.bgMgdl
+        val tooSteepForCortisolAlone = isTooSteepForCortisolAlone(input, highBand, dev)
 
         if (input.mealCobG >= 5.0) {
             return out(PhysiologicalPhase.MEAL_DECLARED, 0.95, "COB>=5g")
@@ -75,6 +118,7 @@ object PhysiologicalPhaseClassifier {
             highBand = highBand,
             dev = dev,
             projectionLead = projectionLead,
+            tooSteepForCortisolAlone = tooSteepForCortisolAlone,
         )?.let { return it }
 
         val mealLikeRise = isMealLikeRise(input, highBand, mealProjectionLead, mealDiscriminantBestT)
@@ -86,7 +130,9 @@ object PhysiologicalPhaseClassifier {
             return out(PhysiologicalPhase.MEAL_UNDECLARED, 0.84, "mealDominant Δ/proj")
         }
 
-        if (isStressCortisol(input) && !input.mealAbsorptionMemoryActive) {
+        // Second cortisol site. It runs after the meal checks, so it must carry the same escape,
+        // otherwise a tick that no meal branch caught would get the cortisol phase back.
+        if (isStressCortisol(input) && !input.mealAbsorptionMemoryActive && !tooSteepForCortisolAlone) {
             return out(PhysiologicalPhase.STRESS_CORTISOL, 0.82, "stress Δ+HR COB=0")
         }
 
@@ -247,28 +293,60 @@ object PhysiologicalPhaseClassifier {
     }
 
     /**
+     * True when the rise is too steep, or too high while still rising, to be cortisol alone.
+     * The caller then skips the cortisol classification so the tick can be seen as a meal.
+     *
+     * Measured on 952 ticks and 14 STRESS_CORTISOL episodes (3 food, 11 genuine cortisol):
+     * genuine cortisol never rose faster than 9.1 mg/dL per 5 min and its whole excursion stayed
+     * inside 26 mg/dL, while the two mis-read breakfasts (12 Aug 178 -> 290, 13 Aug 103 -> 243)
+     * both trip this test on their first rising tick.
+     *
+     * Declared carbs take the MEAL_DECLARED path, so `mealCobG` >= 1 returns false here.
+     *
+     * This is on purpose a different test from [isAcuteMealSurgeAtDawn]: that one starts with
+     * dev >= 0.45 * band, which is BG >= 112 for this deployment and fires on all 11 genuine
+     * cortisol episodes, so it cannot be used as the escape.
+     */
+    internal fun isTooSteepForCortisolAlone(input: Input, highBand: Double, dev: Double): Boolean {
+        if (input.mealCobG >= 1.0) return false
+        if (input.deltaMgdlPer5 >= CORTISOL_ESCAPE_RATE_MGDL_PER_5M) return true
+        return input.shortAvgDeltaMgdlPer5 >= CORTISOL_ESCAPE_SUSTAINED_MGDL_PER_5M &&
+            dev >= highBand * CORTISOL_ESCAPE_DEV_BAND_MULT
+    }
+
+    /**
      * Morning chrono prior (COB=0): cortisol / circadian hormonal wins over mealLike when UAM inflates bestT.
      * Window 5h–11h local — individual wake shifts absorbed by HR + rise shape, not only near-target dawn.
+     *
+     * When [tooSteepForCortisolAlone] is set, **both** cortisol branches are skipped, not only
+     * [isStressCortisol]. The `morningChrono rebound` branch is the same cortisol family with a
+     * looser HR test (resting + 8 instead of + 12) and it only asks dev < 1.45 * band. On the
+     * 13 Aug 08:16 tick dev was 53 and 1.45 * band was 72.5, so that branch would hand back
+     * STRESS_CORTISOL and the escape would change nothing. The tail of this function
+     * ([classifyDawnHormonalIfNearTarget], [isHormonalKinetic]) stays reachable as before.
      */
     internal fun classifyMorningCortisolPrior(
         input: Input,
         highBand: Double,
         dev: Double,
         projectionLead: Double,
+        tooSteepForCortisolAlone: Boolean,
     ): Output? {
         if (input.mealCobG >= 1.0) return null
         if (input.hourOfDay !in 5..10) return null
 
-        if (isStressCortisol(input)) {
-            return out(PhysiologicalPhase.STRESS_CORTISOL, 0.86, "morningStress Δ+HR COB=0")
-        }
+        if (!tooSteepForCortisolAlone) {
+            if (isStressCortisol(input)) {
+                return out(PhysiologicalPhase.STRESS_CORTISOL, 0.86, "morningStress Δ+HR COB=0")
+            }
 
-        val hrElevated = input.heartRateBpm > input.restingHeartRateBpm + 8
-        val moderateRise = input.deltaMgdlPer5 >= 2.5 ||
-            input.shortAvgDeltaMgdlPer5 >= 2.0 ||
-            input.combinedDeltaMgdlPer5 >= 3.0
-        if (hrElevated && moderateRise && dev < highBand * 1.45) {
-            return out(PhysiologicalPhase.STRESS_CORTISOL, 0.84, "morningChrono rebound COB=0")
+            val hrElevated = input.heartRateBpm > input.restingHeartRateBpm + 8
+            val moderateRise = input.deltaMgdlPer5 >= 2.5 ||
+                input.shortAvgDeltaMgdlPer5 >= 2.0 ||
+                input.combinedDeltaMgdlPer5 >= 3.0
+            if (hrElevated && moderateRise && dev < highBand * 1.45) {
+                return out(PhysiologicalPhase.STRESS_CORTISOL, 0.84, "morningChrono rebound COB=0")
+            }
         }
 
         if (isAcuteMealSurgeAtDawn(input, highBand, dev, projectionLead)) return null

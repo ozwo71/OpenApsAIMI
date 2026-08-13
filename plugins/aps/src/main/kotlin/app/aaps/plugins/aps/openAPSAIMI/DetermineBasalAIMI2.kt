@@ -452,6 +452,14 @@ internal data class AimiDecisionContext(
         var meal_certainty: org.json.JSONObject? = null,
         /** Cascade D4 / C1 — single dose-facing eventual + minPred for the tick. */
         var dose_terminal_snapshot: org.json.JSONObject? = null,
+        /**
+         * Straight-line tube decision that set this tick's SMB ceiling.
+         *
+         * `dose_terminal_snapshot` is republished at `late_pkpd`, after the tube has already frozen
+         * the caps, so the exported snapshot is **not** the input the tube used. This block carries
+         * the inputs of the stage that actually decided, so the two can be compared.
+         */
+        var tube_advisor: JSONObject? = null,
         /** Wave4 H3 — soft-floor/EGP path-min (production curves + study JSON raw/soft). */
         var pkpd_soft_floor: org.json.JSONObject? = null,
         /** Lot 2 — invariants terminaux du canal basal: taux avant/apres et invariant liant. */
@@ -865,6 +873,9 @@ internal data class AimiDecisionContext(
             }
             adjustments.dose_terminal_snapshot?.let { doseTerminal ->
                 adj.put("dose_terminal_snapshot", doseTerminal)
+            }
+            adjustments.tube_advisor?.let { tube ->
+                adj.put("tube_advisor", tube)
             }
             adjustments.pkpd_soft_floor?.let { softFloor ->
                 adj.put("pkpd_soft_floor", softFloor)
@@ -1767,6 +1778,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         correctionAggressionDecision = null
         mealAdvisorOneShotThisTick = false
         lastTubeAdvisorSmbCapScale = null
+        lastTubeAdvisorTrace = null
         lastInflammationResult = null
         tickInsulinActionState = null
         tickEffectiveDiaHours = ctx.effectiveDiaHours
@@ -9009,6 +9021,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         decisionCtx.adjustments.meal_certainty = lastMealCertainty?.toJsonObject()
         decisionCtx.adjustments.dose_terminal_snapshot = lastDoseTerminalSnapshot?.toJsonObject()
+        decisionCtx.adjustments.tube_advisor = lastTubeAdvisorTrace
         decisionCtx.adjustments.pkpd_soft_floor = lastPkpdSoftFloorTelemetry?.toJsonObject()
         decisionCtx.adjustments.basal_terminal = lastBasalTerminalTelemetry
         decisionCtx.adjustments.harmonia_simulation = lastHarmoniaDecision?.toJsonObject()
@@ -10304,6 +10317,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     profile.max_daily_basal = baseline.maxDailyBasal * tubeOut.basalCapScale
                 }
                 consoleLog.add("📐 TUBE-LINE-D4[$stageTag]: infeasible ${tubeOut.reason}")
+                noteTubeAdvisorTrace(tubeOut, snap, stageTag, baseline)
             } else {
                 if (tubeOut.smbCapScale < 0.999) {
                     lastTubeAdvisorSmbCapScale = tubeOut.smbCapScale
@@ -10318,10 +10332,53 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     "📐 TUBE-LINE-D4[$stageTag]: maxSMB=${"%.2f".format(this.maxSMB)} " +
                         "basal×${"%.3f".format(tubeOut.basalCapScale)} | ${tubeOut.reason}",
                 )
+                noteTubeAdvisorTrace(tubeOut, snap, stageTag, baseline)
             }
             tubeAppliedFromDoseSnapshotThisTick = true
         } catch (e: Exception) {
             consoleError.add("📐 TUBE-LINE-D4[$stageTag]: ${e.message}")
+        }
+    }
+
+    /**
+     * Record what the tube actually decided from, so the next support package can settle it by
+     * measurement instead of inference.
+     *
+     * Why this is needed: the tube runs on the `pre_rbt` and `pre_v3_rbt` snapshots and is skipped on
+     * `late_pkpd`, but `dose_terminal_snapshot` is exported **after** the `late_pkpd` republish. So the
+     * exported `min_pred_mgdl` can be a very different, and better, number than the one that set the
+     * ceiling. Measured on the 2026-08-13 package: on 6 of 81 zero-cap ticks the exported snapshot
+     * says the tube should have allowed a scale of 0.10 to 1.00, which is only explicable if the
+     * deciding snapshot was an earlier and worse one. Nothing exported could confirm that.
+     *
+     * Called once per applied stage; the last stage to run wins, because its caps are the ones that
+     * survive into `finalizeAndCapSMB`.
+     */
+    private fun noteTubeAdvisorTrace(
+        outcome: StraightLineTubeAdvisor.Outcome,
+        snapshot: DoseTerminalSnapshot,
+        stageTag: String,
+        baseline: TubeDoseBaseline,
+    ) {
+        lastTubeAdvisorTrace = JSONObject().apply {
+            put("deciding_stage", stageTag)
+            put("branch", outcome.branch.name)
+            put("feasible", outcome.feasible)
+            put("smb_cap_scale", outcome.smbCapScale)
+            put("basal_cap_scale", outcome.basalCapScale)
+            // The deciding input. Compare with adjustments.dose_terminal_snapshot.min_pred_mgdl:
+            // a difference means the late republish moved the prediction after the caps were frozen.
+            outcome.minPredUsedMgdl?.let { put("min_pred_used_mgdl", it) }
+            put("eventual_used_mgdl", snapshot.eventualMgdl)
+            put("snapshot_source_used", snapshot.source)
+            put("hypo_floor_mgdl", outcome.hypoFloorMgdl)
+            put("kappa_mgdl_per_u", outcome.kappaMgdlPerU)
+            put("max_smb_in_u", outcome.maxSmbU)
+            put("s_max_feasible", outcome.sMaxFeasible)
+            put("hyper_excess_mgdl", outcome.hyperExcessMgdl)
+            put("max_smb_baseline_u", baseline.maxSmb)
+            put("max_smb_after_u", this@DetermineBasalaimiSMB2.maxSMB)
+            put("max_smb_hb_after_u", this@DetermineBasalaimiSMB2.maxSMBHB)
         }
     }
 
@@ -10717,6 +10774,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastEffortSmbAfterU: Double? = null
     private var mealAdvisorOneShotThisTick: Boolean = false
     private var lastTubeAdvisorSmbCapScale: Double? = null
+
+    /**
+     * Inputs and branch of the tube call that set this tick's SMB ceiling. See
+     * `AimiDecisionContext.Adjustments.tube_advisor`. Written by `noteTubeAdvisorTrace`, per tick.
+     */
+    private var lastTubeAdvisorTrace: JSONObject? = null
     private var lastInflammationResult: app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster.InflammationResult? = null
     private var tickInsulinActionState: InsulinActionState? = null
     private var tickEffectiveDiaHours: Double? = null
@@ -15573,27 +15636,36 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         isConfirmedHighRise: Boolean = false
     ) {
         val learnerFactor = safeReactivityFactor
-        val isFragileBg = bg < 110.0 && delta < 0.0
         val autosensResistance = autosens_data.ratio < 0.8
         val isLearnerPrudent = learnerFactor < 0.75 && !autosensResistance
         val basalFirstMealActive = mealData.mealCOB > 0.1
-        val basalFirstHeavyMeal  = mealData.mealCOB > 20.0
+        val basalFirstHeavyMeal = mealData.mealCOB > 20.0
         val isPersistentRise = bg > targetBg && combinedDelta >= 0.3f
-        
-        // 🛡️ Basal-First Policy: Bypassed if rise is confirmed OR BG > 110
-        val basalFirstActive = (((isLearnerPrudent && !basalFirstMealActive && !isPersistentRise)
-                || (isFragileBg && !basalFirstHeavyMeal)) && !isMealAdvisorOneShot)
-                && !isConfirmedHighRise
-                && bg < 110.0 // 🚀 REVISED: Never block SMBs when BG is above 110
-        
+
+        // 🛡️ Basal-First Policy: bypassed if the rise is confirmed, if a meal rise is anticipated,
+        // or if BG is above 110. See [BasalFirstPolicyMath] for the decision math.
+        val decision = BasalFirstPolicyMath.decide(
+            bg = bg,
+            delta = delta,
+            combinedDelta = combinedDelta,
+            mealCob = mealData.mealCOB,
+            autosensRatio = autosens_data.ratio,
+            learnerFactor = learnerFactor,
+            isMealAdvisorOneShot = isMealAdvisorOneShot,
+            targetBg = targetBg,
+            isConfirmedHighRise = isConfirmedHighRise,
+        )
+        val basalFirstActive = decision.active
+        val isFragileBg = decision.fragileBg
+
         this.cachedBasalFirstActive = basalFirstActive
         this.cachedIsFragileBg = isFragileBg
         if (basalFirstActive) {
             this.maxSMB = 0.0; this.maxSMBHB = 0.0
-            val reason = when {
-                isFragileBg    -> "Fragile BG (<110 & falling)"
-                isLearnerPrudent -> "Learner Prudence (Factor=${"%.2f".format(learnerFactor)})"
-                else -> "Unknown Safety Trigger"
+            val reason = when (decision.reason) {
+                BasalFirstPolicyMath.Reason.FRAGILE_BG       -> "Fragile BG (<110 & falling)"
+                BasalFirstPolicyMath.Reason.LEARNER_PRUDENCE -> "Learner Prudence (Factor=${"%.2f".format(learnerFactor)})"
+                else                                         -> "Unknown Safety Trigger"
             }
             consoleLog.add("🛡️ BASAL-FIRST ACTIVE: $reason -> SMB DISABLED")
             rT.reason.append(" [Basal-First: SMB OFF]")
@@ -15606,6 +15678,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleLog.add("📈 RISE EXEMPTION: CombinedDelta=${"%.1f".format(combinedDelta)}")
             if (isFragileBg && basalFirstHeavyMeal)
                 consoleLog.add("🍔 HEAVY MEAL EXEMPTION: COB=${"%.1f".format(mealData.mealCOB)}g")
+            if (decision.anticipatedRise) {
+                consoleLog.add(
+                    "🚀 ANTICIPATED RISE EXEMPTION: Δ=${"%.1f".format(delta)} combΔ=${"%.1f".format(combinedDelta)} " +
+                        "BG=${"%.0f".format(bg)} proj30=${"%.0f".format(decision.projectedBgMgdl)} " +
+                        "> target+${"%.0f".format(BasalFirstPolicyMath.ANTICIPATED_RISE_TARGET_MARGIN_MGDL)} " +
+                        "(${"%.0f".format(targetBg)}) -> SMB ceiling kept"
+                )
+                rT.reason.append(" [Basal-First: rise exemption]")
+            }
         }
     }
 
@@ -18335,4 +18416,121 @@ enum class AutodriveState {
     IDLE,
     WATCHING,
     ENGAGED
+}
+
+/**
+ * Pure decision math of the Basal-First policy (SMB ceiling switched off, basal only).
+ *
+ * Extracted from `DetermineBasalaimiSMB2.applyBasalFirstPolicy` so it can be unit tested without
+ * building a whole loop tick. The wrapper in the plugin only adds logging and writes the caps.
+ *
+ * The policy answers one question: below [BASAL_FIRST_BG_CEILING_MGDL], may the loop still use SMB?
+ * Two protective branches say no (fragile BG, prudent learner) and several exemptions say yes.
+ * [isAnticipatedRise] is the exemption that lets the loop meet a meal that starts from a normal BG:
+ * it is driven by the rise rate and by the 30 min projection, never by the BG level alone, and it is
+ * inert while BG falls because it needs `delta > 0` while the fragile branch needs `delta < 0`.
+ */
+internal object BasalFirstPolicyMath {
+
+    /** Above this BG the policy never switches SMB off. */
+    const val BASAL_FIRST_BG_CEILING_MGDL = 110.0
+
+    /** Lowest BG at which an anticipated rise may keep the SMB ceiling open (mg/dL). */
+    const val ANTICIPATED_RISE_MIN_BG_MGDL = 90.0
+
+    /** Smallest measured 5 min rise that counts as fast (mg/dL per 5 min, i.e. 36 mg/dL per hour). */
+    const val ANTICIPATED_RISE_MIN_DELTA = 3.0f
+
+    /** Smallest combined (measured + predicted) 5 min rise that corroborates the fast rise. */
+    const val ANTICIPATED_RISE_MIN_COMBINED_DELTA = 0.3f
+
+    /** Projection horizon in CGM steps: 6 steps of 5 min = 30 min. */
+    const val ANTICIPATED_RISE_HORIZON_STEPS = 6.0f
+
+    /** How far above target the 30 min projection must land before the ceiling stays open (mg/dL). */
+    const val ANTICIPATED_RISE_TARGET_MARGIN_MGDL = 20.0
+
+    /** Why the policy switched SMB off, or why it did not. */
+    enum class Reason {
+        NOT_ACTIVE,
+        FRAGILE_BG,
+        LEARNER_PRUDENCE,
+        UNKNOWN,
+    }
+
+    /** Result of one policy evaluation. [active] true means "SMB off, basal only". */
+    data class Decision(
+        val active: Boolean,
+        val fragileBg: Boolean,
+        val anticipatedRise: Boolean,
+        val projectedBgMgdl: Double,
+        val reason: Reason,
+    )
+
+    /** Straight line projection of BG over [ANTICIPATED_RISE_HORIZON_STEPS] using the current rise rate. */
+    fun projectedBg(bg: Double, delta: Float): Double = bg + delta * ANTICIPATED_RISE_HORIZON_STEPS
+
+    /**
+     * True when the current rise is fast enough, corroborated by the combined delta, and projected to
+     * land clearly above target within 30 min. This is the meal anticipation exemption.
+     *
+     * Needs `delta > 0`, so it can never fire while BG falls, and never cancels the fragile branch.
+     */
+    fun isAnticipatedRise(bg: Double, delta: Float, combinedDelta: Float, targetBg: Double): Boolean {
+        if (!bg.isFinite() || !targetBg.isFinite() || !delta.isFinite() || !combinedDelta.isFinite()) return false
+        // Falling or flat BG: nothing to anticipate, stay protected.
+        if (delta <= 0f) return false
+        if (delta < ANTICIPATED_RISE_MIN_DELTA) return false
+        // The smoothed trend must agree with the single tick, so one noisy sample cannot open the ceiling.
+        if (combinedDelta < ANTICIPATED_RISE_MIN_COMBINED_DELTA) return false
+        // Below this BG a fast rise is usually a rebound out of a low, so keep it basal only.
+        if (bg < ANTICIPATED_RISE_MIN_BG_MGDL) return false
+        return projectedBg(bg, delta) > targetBg + ANTICIPATED_RISE_TARGET_MARGIN_MGDL
+    }
+
+    /**
+     * Decide whether the Basal-First policy is active for this tick.
+     *
+     * @param learnerFactor reactivity factor of the unified learner (1.0 means neutral).
+     * @param autosensRatio autosens ratio; below 0.8 means resistance, which cancels learner prudence.
+     */
+    fun decide(
+        bg: Double,
+        delta: Float,
+        combinedDelta: Float,
+        mealCob: Double,
+        autosensRatio: Double,
+        learnerFactor: Double,
+        isMealAdvisorOneShot: Boolean,
+        targetBg: Double,
+        isConfirmedHighRise: Boolean,
+    ): Decision {
+        val fragileBg = bg < BASAL_FIRST_BG_CEILING_MGDL && delta < 0.0f
+        val autosensResistance = autosensRatio < 0.8
+        val learnerPrudent = learnerFactor < 0.75 && !autosensResistance
+        val mealActive = mealCob > 0.1
+        val heavyMeal = mealCob > 20.0
+        val persistentRise = bg > targetBg && combinedDelta >= 0.3f
+        // Mutually exclusive with fragileBg by the sign of delta; the extra guard makes that explicit.
+        val anticipatedRise = !fragileBg && isAnticipatedRise(bg, delta, combinedDelta, targetBg)
+
+        val active = (((learnerPrudent && !mealActive && !persistentRise) || (fragileBg && !heavyMeal)) && !isMealAdvisorOneShot) &&
+            !isConfirmedHighRise &&
+            !anticipatedRise &&
+            bg < BASAL_FIRST_BG_CEILING_MGDL
+
+        val reason = when {
+            !active         -> Reason.NOT_ACTIVE
+            fragileBg       -> Reason.FRAGILE_BG
+            learnerPrudent  -> Reason.LEARNER_PRUDENCE
+            else            -> Reason.UNKNOWN
+        }
+        return Decision(
+            active = active,
+            fragileBg = fragileBg,
+            anticipatedRise = anticipatedRise,
+            projectedBgMgdl = projectedBg(bg, delta),
+            reason = reason,
+        )
+    }
 }

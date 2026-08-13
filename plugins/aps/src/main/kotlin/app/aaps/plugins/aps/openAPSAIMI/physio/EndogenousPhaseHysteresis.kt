@@ -26,6 +26,13 @@ object EndogenousPhaseHysteresis {
             reset()
             return raw
         }
+        // A rise too steep for cortisol is new strong evidence, not flip-flop. Without this the
+        // hold would hand the cortisol policy — and its 0.75 U SMB cap — back to the first four
+        // ticks of the meal, which is when the dose is worth most.
+        if (raw.breaksEndogenousHold) {
+            reset()
+            return raw
+        }
         if (raw.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY ||
             raw.phase.isHormonalRisk ||
             raw.phase == PhysiologicalPhase.STRESS_CORTISOL

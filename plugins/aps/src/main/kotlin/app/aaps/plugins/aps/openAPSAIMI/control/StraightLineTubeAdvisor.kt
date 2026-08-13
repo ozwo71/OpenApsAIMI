@@ -36,6 +36,33 @@ class StraightLineTubeAdvisor @Inject constructor(
         val eventualBgMgdl: Double,
     )
 
+    /**
+     * Why the cap came out the way it did.
+     *
+     * Reading the cap alone cannot tell these apart: [VETO_HYPO_FLOOR], [ZERO_ONLY_FEASIBLE] and
+     * [ZERO_BY_COST] all end at scale `0.0`, and the caller then floors the SMB ceiling at 0.05 U in
+     * all three cases. They need different fixes, so they are named and exported.
+     */
+    enum class Branch {
+        /** `minPredictedBg` was null or not finite — advisor did nothing. */
+        SKIP_NO_MIN_PRED,
+
+        /** The SMB ceiling handed in was already zero — advisor did nothing. */
+        SKIP_NO_MAX_SMB,
+
+        /** `minPredictedBg` is already below the hypo floor, so not even a zero dose clears it. */
+        VETO_HYPO_FLOOR,
+
+        /** Above the floor, but the smallest non-zero candidate would cross it. Quantisation. */
+        ZERO_ONLY_FEASIBLE,
+
+        /** Non-zero candidates were feasible; the cost function still preferred no dose. */
+        ZERO_BY_COST,
+
+        /** A non-zero scale was chosen. */
+        GRADED,
+    }
+
     data class Outcome(
         val smbCapScale: Double,
         /** Multiply `profile.current_basal` and `profile.max_daily_basal` (typically ≤ 1). */
@@ -43,6 +70,24 @@ class StraightLineTubeAdvisor @Inject constructor(
         val feasible: Boolean,
         val chosenCost: Double,
         val reason: String,
+        /** Which path produced [smbCapScale]. See [Branch]. */
+        val branch: Branch = Branch.GRADED,
+        /** The `minPredictedBg` this call actually used (mg/dL); null when it skipped. */
+        val minPredUsedMgdl: Double? = null,
+        /** Hypo floor in force for this call (mg/dL). */
+        val hypoFloorMgdl: Double = 0.0,
+        /** Assumed drop of the prediction minimum per 1 U of SMB (mg/dL/U), after DIA and margin. */
+        val kappaMgdlPerU: Double = 0.0,
+        /** SMB ceiling the scale is applied to (U), as handed in. */
+        val maxSmbU: Double = 0.0,
+        /**
+         * Largest scale whose projected minimum still clears the floor, measured continuously in
+         * `0..1`. The candidate ladder can only pick a rung at or below this, so a value under the
+         * smallest non-zero rung (0.1) means no dose was reachable however much was wanted.
+         */
+        val sMaxFeasible: Double = 0.0,
+        /** How far the eventual sits above `target + hyperBand` (mg/dL); 0 when not hyper. */
+        val hyperExcessMgdl: Double = 0.0,
     )
 
     companion object {
@@ -84,7 +129,7 @@ class StraightLineTubeAdvisor @Inject constructor(
 
         val minPred = input.minPredictedBg
         if (minPred == null || !minPred.isFinite()) {
-            return Outcome(1.0, 1.0, true, 0.0, "SKIP(no_minPred)")
+            return Outcome(1.0, 1.0, true, 0.0, "SKIP(no_minPred)", branch = Branch.SKIP_NO_MIN_PRED)
         }
         val dia = input.diaHours.coerceIn(3.0, 9.0)
         val kappa = kappaMinPredDropPerUnit(input.isfMgdlPerU) *
@@ -92,22 +137,35 @@ class StraightLineTubeAdvisor @Inject constructor(
             (1.0 + kappaMargin)
         val smbMax = input.maxSmbU.coerceAtLeast(0.0)
         if (smbMax <= 1e-6) {
-            return Outcome(1.0, 1.0, true, 0.0, "SKIP(no_maxSmb)")
+            return Outcome(
+                1.0, 1.0, true, 0.0, "SKIP(no_maxSmb)",
+                branch = Branch.SKIP_NO_MAX_SMB,
+                minPredUsedMgdl = minPred,
+                hypoFloorMgdl = hypoFloor,
+                kappaMgdlPerU = kappa,
+            )
         }
 
         val T = input.targetMgdl
         val bgErr = input.bgMgdl - T
         val evErr = input.eventualBgMgdl - T
         val hyperExcess = (input.eventualBgMgdl - (T + hyperBand)).coerceAtLeast(0.0)
+        // Continuous version of the feasibility test below, kept for the export only: the largest
+        // scale whose projected minimum still clears the floor. The ladder can only reach a rung at
+        // or under it, so `sMaxFeasible < 0.1` means the ladder had no non-zero rung to offer.
+        val sMaxFeasible = ((minPred - hypoFloor) / (smbMax * kappa)).coerceIn(0.0, 1.0)
 
         var bestS = 0.0
         var bestCost = Double.POSITIVE_INFINITY
         var anyFeasible = false
 
+        var anyPositiveFeasible = false
+
         for (s in CANDIDATES) {
             val minAfter = minPred - s * smbMax * kappa
             if (minAfter < hypoFloor) continue
             anyFeasible = true
+            if (s > 0.0) anyPositiveFeasible = true
 
             val iobStack = (input.iobU - 1.5).coerceAtLeast(0.0)
             val j = W_BG * bgErr * bgErr +
@@ -134,7 +192,14 @@ class StraightLineTubeAdvisor @Inject constructor(
                 basalCapScale = bScale,
                 feasible = false,
                 chosenCost = Double.POSITIVE_INFINITY,
-                reason = msg
+                reason = msg,
+                branch = Branch.VETO_HYPO_FLOOR,
+                minPredUsedMgdl = minPred,
+                hypoFloorMgdl = hypoFloor,
+                kappaMgdlPerU = kappa,
+                maxSmbU = smbMax,
+                sMaxFeasible = sMaxFeasible,
+                hyperExcessMgdl = hyperExcess,
             )
         }
 
@@ -151,7 +216,18 @@ class StraightLineTubeAdvisor @Inject constructor(
             basalCapScale = bScale,
             feasible = true,
             chosenCost = bestCost,
-            reason = reason
+            reason = reason,
+            branch = when {
+                bestS > 0.0 -> Branch.GRADED
+                anyPositiveFeasible -> Branch.ZERO_BY_COST
+                else -> Branch.ZERO_ONLY_FEASIBLE
+            },
+            minPredUsedMgdl = minPred,
+            hypoFloorMgdl = hypoFloor,
+            kappaMgdlPerU = kappa,
+            maxSmbU = smbMax,
+            sMaxFeasible = sMaxFeasible,
+            hyperExcessMgdl = hyperExcess,
         )
     }
 }
