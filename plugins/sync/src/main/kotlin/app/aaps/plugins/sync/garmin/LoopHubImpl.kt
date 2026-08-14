@@ -1,6 +1,7 @@
 package app.aaps.plugins.sync.garmin
 
 import androidx.annotation.VisibleForTesting
+import app.aaps.core.data.iob.InMemoryGlucoseValue
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.HR
@@ -8,6 +9,7 @@ import app.aaps.core.data.model.SC
 import app.aaps.core.data.model.RM
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.model.TT
+import app.aaps.core.data.time.T
 import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.data.ue.ValueWithUnit
@@ -39,6 +41,7 @@ import java.time.Instant
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.abs
 
 /**
  * Interface to the functionality of the looping algorithm and storage systems.
@@ -63,6 +66,11 @@ class LoopHubImpl @Inject constructor(
 
     @VisibleForTesting
     var clock: Clock = Clock.systemUTC()
+
+    // Same half-bucket threshold AutosensDataStoreObject.isAbout5minData() uses to decide whether
+    // readings are "about" 5 minutes apart. Used below because the smoothing/calibration overlay's
+    // timestamps do not always match a raw reading's own timestamp exactly (see getGlucoseValues doc).
+    private val overlayToleranceMs = T.mins(2).plus(T.secs(30)).msecs()
 
     /** Returns the active insulin profile. */
     override val currentProfile: Profile? get() = runBlocking { profileFunction.getProfile() }
@@ -144,22 +152,35 @@ class LoopHubImpl @Inject constructor(
     /**
      * Retrieves the glucose values starting at from.
      *
-     * The persisted [GV] rows hold the raw sensor value. Where a matching (same timestamp,
-     * not a filled gap) entry exists in the recent smoothing/calibration overlay
+     * The persisted [GV] rows hold the raw sensor value. Where a nearby entry (within
+     * [overlayToleranceMs], not a filled gap) exists in the recent smoothing/calibration overlay
      * ([iobCobCalculator]'s [app.aaps.core.interfaces.aps.AutosensDataStore.bucketedData]), that
      * entry's `recalculated` value (smoothed, falling back to calibrated) is used instead, so the
-     * watch shows the same number as the main app screen. Rows outside that recent window (or if
-     * no overlay is available) keep their raw value.
+     * watch shows the same number as the main app screen.
+     *
+     * An exact timestamp match cannot be assumed: when a CGM source's readings are not perfectly
+     * 5-minute-aligned, the overlay is rebuilt on a re-gridded timeline
+     * (`AutosensDataStoreObject.createBucketedDataRecalculated`) whose timestamps only
+     * coincidentally match a raw row's own timestamp, so we match to the nearest overlay entry
+     * within tolerance instead of requiring an exact key match. Rows with no overlay entry within
+     * tolerance (older backfill history, or no overlay available at all) keep their raw value.
      */
     override fun getGlucoseValues(from: Instant, ascending: Boolean): List<GV> = runBlocking {
         val raw = persistenceLayer.getBgReadingsDataFromTime(from.toEpochMilli(), ascending)
-        val overlayByTimestamp = iobCobCalculator.ads.bucketedData.orEmpty()
+        val overlay = iobCobCalculator.ads.bucketedData.orEmpty()
             .filterNot { it.filledGap }
-            .associateBy { it.timestamp }
-        raw.map { gv ->
-            val overlay = overlayByTimestamp[gv.timestamp]
-            if (overlay != null) gv.copy(value = overlay.recalculated) else gv
-        }
+            .sortedBy { it.timestamp }
+        raw.map { gv -> nearestOverlay(overlay, gv.timestamp)?.let { gv.copy(value = it.recalculated) } ?: gv }
+    }
+
+    private fun nearestOverlay(overlay: List<InMemoryGlucoseValue>, timestamp: Long): InMemoryGlucoseValue? {
+        if (overlay.isEmpty()) return null
+        val index = overlay.binarySearch { it.timestamp.compareTo(timestamp) }
+        if (index >= 0) return overlay[index]
+        val insertionPoint = -(index + 1)
+        val candidates = listOfNotNull(overlay.getOrNull(insertionPoint - 1), overlay.getOrNull(insertionPoint))
+        return candidates.minByOrNull { abs(it.timestamp - timestamp) }
+            ?.takeIf { abs(it.timestamp - timestamp) <= overlayToleranceMs }
     }
 
     /** Notifies the system that carbs were eaten and stores the value. */
