@@ -27,21 +27,20 @@ class LastBgDataImpl @Inject constructor(
 ) : LastBgData {
 
     /**
-     * Prefer in-memory bucketed (smoothed) data, but if the DB has a **newer** reading — common after the app
-     * was backgrounded while bucketed data was not rebuilt yet — use DB so overview / hybrid dashboard match
-     * treatments and loop output without requiring a manual loop run.
+     * Always prefer the in-memory bucketed (smoothed + calibrated) glucose value and only fall back to the
+     * raw database value when no bucketed value is available at all (for example right after app start,
+     * before the bucketed data has been built for the first time).
+     *
+     * We do NOT pick whichever of the two has the newer timestamp: for a few seconds after every new CGM
+     * reading, the raw DB value can be newer than the bucketed value while the bucketed pipeline is still
+     * rebuilding, but the DB value is un-smoothed and un-calibrated. Using it during that short window made
+     * this differ from the Overview screen (`OverviewDataCacheImpl`, which already prefers bucketed data),
+     * the home-screen widget, and the Garmin watch sync. Preferring bucketed data here keeps all of these
+     * showing the same BG number.
      */
-    override fun lastBg(): InMemoryGlucoseValue? {
-        val fromBucket = iobCobCalculator.ads.lastBg()
-        val fromGv = runBlocking { persistenceLayer.getLastGlucoseValue() }
-        val fromDb = fromGv?.let { InMemoryGlucoseValue.fromGv(it) }
-        return when {
-            fromBucket == null -> fromDb
-            fromDb == null -> fromBucket
-            fromDb.timestamp > fromBucket.timestamp -> fromDb
-            else -> fromBucket
-        }
-    }
+    override fun lastBg(): InMemoryGlucoseValue? =
+        iobCobCalculator.ads.lastBg()
+            ?: runBlocking { persistenceLayer.getLastGlucoseValue() }?.let { InMemoryGlucoseValue.fromGv(it) }
 
     override fun isLow(): Boolean =
         lastBg()?.let { lastBg ->

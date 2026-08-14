@@ -141,9 +141,25 @@ class LoopHubImpl @Inject constructor(
         }
     }
 
-    /** Retrieves the glucose values starting at from. */
+    /**
+     * Retrieves the glucose values starting at from.
+     *
+     * The persisted [GV] rows hold the raw sensor value. Where a matching (same timestamp,
+     * not a filled gap) entry exists in the recent smoothing/calibration overlay
+     * ([iobCobCalculator]'s [app.aaps.core.interfaces.aps.AutosensDataStore.bucketedData]), that
+     * entry's `recalculated` value (smoothed, falling back to calibrated) is used instead, so the
+     * watch shows the same number as the main app screen. Rows outside that recent window (or if
+     * no overlay is available) keep their raw value.
+     */
     override fun getGlucoseValues(from: Instant, ascending: Boolean): List<GV> = runBlocking {
-        persistenceLayer.getBgReadingsDataFromTime(from.toEpochMilli(), ascending)
+        val raw = persistenceLayer.getBgReadingsDataFromTime(from.toEpochMilli(), ascending)
+        val overlayByTimestamp = iobCobCalculator.ads.bucketedData.orEmpty()
+            .filterNot { it.filledGap }
+            .associateBy { it.timestamp }
+        raw.map { gv ->
+            val overlay = overlayByTimestamp[gv.timestamp]
+            if (overlay != null) gv.copy(value = overlay.recalculated) else gv
+        }
     }
 
     /** Notifies the system that carbs were eaten and stores the value. */
