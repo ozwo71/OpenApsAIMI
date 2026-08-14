@@ -38,6 +38,33 @@ class ControlBarrierShield @Inject constructor(
     private var lastBgVelocity: Double? = null
     private var lastVelocityObservationId: Long = 0L
 
+    /**
+     * The barrier's own arithmetic for the last [enforce] call. Diagnostic only, never dosed on.
+     *
+     * `cbf_permitted_u` records what came *out*, already bounded by what the solver asked for, so a
+     * zero there cannot say whether the barrier suspended everything or the solver asked for nothing.
+     * The terms below say which, and why. The insulin term of [lfhMgdlPerMin] is
+     * `-siMetabolic * iob * bg`; on the 2026-08-14 lunch it reached -11.2 mg/dL/min — a predicted
+     * fall of 56 mg/dL per 5 minutes against a measured 9 — which is what drove [safeU] negative and
+     * suspended the dose for the whole plateau.
+     */
+    data class Diagnostics(
+        val hMgdl: Double,
+        val lfhMgdlPerMin: Double,
+        val lghMgdlPerUPerMin: Double,
+        val insulinTermMgdlPerMin: Double,
+        val activeGamma: Double,
+        val safetyBoundary: Double,
+        val systemEvolution: Double,
+        val safeU: Double?,
+        val siMetabolic: Double,
+        val fullySuspended: Boolean,
+    )
+
+    /** Set on every [enforce] call. */
+    var lastDiagnostics: Diagnostics? = null
+        private set
+
     // Paramètres de Sécurité CBF
     private val bgDangerThreshold = 80.0 // Marge renforcée pour la limite absolue
     private val nominalGamma = 0.04       // Valeur de base (0.04 = ~1.0 mg/dL/min à h=25)
@@ -186,6 +213,20 @@ class ControlBarrierShield @Inject constructor(
             currentReason += " | [🛡️ ACCEL_GUARD]"
         }
         
+        val diagnosticSafeU = if (systemEvolution >= safetyBoundary) null else (-activeGamma * h - lfh) / lgh
+        lastDiagnostics = Diagnostics(
+            hMgdl = h,
+            lfhMgdlPerMin = lfh,
+            lghMgdlPerUPerMin = lgh,
+            insulinTermMgdlPerMin = -siMetabolic * state.iob * state.bg,
+            activeGamma = activeGamma,
+            safetyBoundary = safetyBoundary,
+            systemEvolution = systemEvolution,
+            safeU = diagnosticSafeU,
+            siMetabolic = siMetabolic,
+            fullySuspended = diagnosticSafeU != null && diagnosticSafeU <= 0.0,
+        )
+
         var (finalTbr, finalSmb) = if (systemEvolution >= safetyBoundary) {
             // 🛡️ CBF SAFE
             Pair(rawCommand.temporaryBasalRate, rawCommand.scheduledMicroBolus)

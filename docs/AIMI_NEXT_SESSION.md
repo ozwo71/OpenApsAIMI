@@ -21,8 +21,36 @@ uncommitted.** Full module suite: **1345 tests, 0 failures** (was 1332; A-quater
 
 ## Current state — read this first (updated 2026-08-14)
 
-The newest part wins; current truth is **Part A-quinquies**. Nothing below is rewritten — each part
-keeps the record of what was believed, which is how the wrong attributions were caught.
+The newest part wins; current truth is **Part A-septies** (2026-08-14, later session). Nothing below
+is rewritten — each part keeps the record of what was believed, which is how the wrong attributions
+were caught.
+
+**A-septies in one line.** The hypothesis that the ISF swing → the 39 floor → the tube veto → the
+84-minute plateau is *one* defect was tested tick by tick and **the causality is refuted**: through
+the plateau the tube was `GRADED` with full authority and `model_output_u` was 0.000, and the veto only
+starts after the peak on a falling BG. They are two defects. The plateau is the controller
+(`SAFETY_PRECAUTIONS` 29 %, throttle 14 %) and outranks the floor. Separately, `command_isf_mgdl` —
+the basis of every ISF figure in this document — is **not** the sensitivity the dose used (ratio up to
+×2.65, measured by inverting the tube's kappa on 194 ticks). The missing instruments now exist and are
+export-only. Suite **1 428 / 0**.
+
+**And the plateau now has its gate (§AQ7-7).** It is the **control barrier**: `cbf_permitted_u` falls
+1.995 → 0.150 → **0.000 at 13:52** and stays there for the rest of the meal, because the barrier's own
+`lfh` reaches −11.2 mg/dL/min — a claimed fall of **56 mg/dL per 5 min against a measured 9**. Its
+insulin term has no appearance term to oppose it, which is the *same* root defect as the 39 floor.
+`model_output_u` could never show this: it is read after the barrier, so its 0.000 means either "the
+solver wanted nothing" or "the barrier suspended everything". **§AQ6-4's "the controller is absent" is
+corrected — it was overruled.** `MPC_TAU_MIN` is measured to be a knife edge (τ 150 would permit
+5.39 U on one tick) and must not be moved on arithmetic. Also found: `AutoDriveCommand.isSafe` is
+documented as a sanity gate and is **never set false in production code**.
+
+**Route 1 was then chosen, quantified, and refused (§AQ7-8).** Giving `lfh` an observation-derived
+appearance term unsuspends 50 barrier ticks, of which **4 were followed by BG < 70 within two hours**
+— all four the 2026-08-12 excursion that ran 297 → 45. The only gate that removes that exposure
+(IOB < 8) also removes **every** plateau tick it was meant to help, and above IOB 11 no physiologically
+bounded appearance term can offset `si x iob x bg` at all. **The 08-14 plateau and the 08-12 crash
+overlap on every input the barrier has.** Nothing was changed. The real defect is the **overstated
+insulin term**, not a missing appearance term.
 **Commit status — the line above is now false.** Part A-bis → A-quinquies are committed
 (`7447c24059`, `dfc53822d6`, `bc72fe1861`, `e4e12e723d`, `f87d25e024`); tree clean at `a478cf9330`;
 **nothing is uncommitted**. Suite **1393 tests / 0 failures**, measured at `f87d25e024`, not re-run since.
@@ -58,6 +86,50 @@ times) and cannot be dosed through until trustworthy. It outranks `MPC_TAU_MIN` 
 **In flight — do not duplicate:** one agent on package `1786722482068` (today's lunch), one on
 ISF-during-rise and on making the tree and Harmonia own the dose. To continue this work, paste the
 fenced prompt at the end of this file; it supersedes Part B.
+
+### Root cause found 2026-08-14, and what shipped
+
+**`MpcController.buildDoseCandidates` stopped the sweep at 400 candidates of 0.005 U**, so the solver
+could never *evaluate* a dose above 1.995 U — whatever `maxSMBHB` was set to. Maximum observed over
+3 741 ticks: **1.9085 U**. On the 08-14 lunch the model sat at 1.845–1.852 for five consecutive ticks
+against a configured cap of 2.50.
+
+This is why the governed path never carried a meal, and why `aggressiveRiseSmbFloorU` supplied **93 %**
+of the 08-14 lunch (+10.69 U, now *measured* through `rise_floor_spent_u`, matching the
+`AUTODRIVE_FLOOR` stage to the cent) while `model_output_u` was 0.000 on 61 % of those ticks. Every
+earlier explanation — Harmonia's intent, the catalogue cap, the SMB ceiling, the ISF collapse — sat
+downstream of a controller that could not formulate the demand.
+
+**Shipped together in `e80fef409a`:** the MPC grid fix, `ISF/DynamicSensitivityPolicy`, and the
+`MealCertainty` anticipated-rise override. The recommendation had been to ship the grid alone, because
+the other two move the dose on the *same* meal ticks and the export cannot separate them.
+
+**Attribution is therefore partly lost — but not entirely.** The grid change has a signature the
+other two cannot produce: `model_output_u` **above 1.9085 U**. Any tick exceeding that came from the
+grid and nothing else. Use it as the discriminator on the next package; the residual is the combined
+effect of the sensitivity policy and the override, which stays unattributable this cycle.
+
+### Priority for the next session — this replaces the ISF-first framing
+
+**`min_pred_used_mgdl = 39.0` outranks the ISF work.** It is not a prediction: it is
+`NUMERIC_FLOOR_MGDL` (`pkpd/PkpdSoftFloorPathMin.kt:50`, `pkpd/AdvancedPredictionEngine.kt:15`). The
+tube reads that saturated floor as an imminent hypo and caps the tick at 0.05–0.16 U. Measured on the
+08-14 package: `VETO_HYPO_FLOOR` on **84/281 ticks (30 %)**, `min_pred_used_mgdl == 39.0` on **62/250**.
+It produced the 84-minute plateau at 200–220 mg/dL with 11–13 U on board that the patient reported —
+0.30 U delivered across 16 ticks.
+
+> **⚠️ CORRECTED 2026-08-14 (later session) — the last sentence is wrong. See Part A-septies.**
+> Through the plateau (13:42–14:21) the tube branch was **`GRADED` on every tick** with `max_smb_hb_u`
+> at its full 2.50, and `model_output_u` was 0.000. The veto starts at **14:26, after the peak, on a
+> falling BG**. The 39 floor and the plateau are **two separate defects**, not one.
+
+The ISF agent said so itself: the sensitivity work fixes the tail, not the meal. On 172 rising ticks
+there is no monotone relation between commanded ISF and proposed dose, and `controlCoefficient` floors
+at ISF 45 so the MPC and the barrier never saw the collapse at all.
+
+Second: **`variable_sens` — the sensitivity the dose actually uses — is exported nowhere.** Every ISF
+figure in this document describes what the *predictions* saw. Fix that before trusting any of them.
+**Done 2026-08-14 (Part A-septies), and it mattered: `command_isf_mgdl` is wrong by up to ×2.65.**
 
 ---
 
@@ -1587,3 +1659,370 @@ KNOWN-FLAKY
 passes 3/3 in isolation. Unrelated to this work. Do not chase it, and do not let it mask a real
 failure either — always list the failing test names, never just the count.
 ````
+
+---
+
+# Part A-septies — the 39 floor tested against the plateau, and the instrument (2026-08-14, later session)
+
+Written 2026-08-14 in a session that started from the hypothesis stated in Part A-sexies' closing
+priority: that the ISF swing saturates the prediction, which trips the tube veto, which produces the
+84-minute plateau — one defect seen in two places. **That chain was tested tick by tick on package
+`1786722482068` (281 decision ticks, 250 with a tube outcome). Its mechanism holds. Its causality does
+not.** Suite: **1 425 tests, 0 failures** (was 1 422; this part adds 3). All changes uncommitted, and
+all of them export-only — no dosing path was touched.
+
+## AQ7-1. What the hypothesis got right
+
+| claim | verdict | measurement |
+|---|---|---|
+| `min_pred_used_mgdl = 39.0` is `NUMERIC_FLOOR_MGDL`, not a forecast | **confirmed** | per-step `coerceIn(39.0, 401.0)` at `AdvancedPredictionEngine.kt:186–189` and `:224–225`. The clip is **absorbing**: once a step lands on it the path stays there for the rest of the horizon |
+| it is the deciding input on most vetoes | **confirmed** | `min_pred_used_mgdl == 39.0` on **53 of the 84** `VETO_HYPO_FLOOR` ticks (63 %); 62 of 250 tube ticks overall |
+| the veto is exactly "the floor is already breached" | **confirmed** | the candidate ladder ends at `s = 0.0`, where `minAfter == minPred`, so `!anyFeasible` ⇔ `minPred < hypoFloor`. `StraightLineTubeAdvisor.kt:164–166`. Confirms §AQ5-6 |
+| the saturation is driven by sensitivity | **confirmed, jointly with IOB** | `BG − IOB × ISF < 39` classifies `hit_numeric_floor` with **116 of 119** recall (3 misses), 45 false alarms of 162. The raw path min hit the floor on **119 of 281 ticks (42 %)** |
+| the ISF whipsaws across the peak | **confirmed** | `command_isf_mgdl` 11.9 at 14:21 → 14.1 at 14:26 → **48.6 at 14:36**: ×4.1 in 15 minutes, and it then pins `min_pred` at 39 for two hours |
+
+## AQ7-2. What it got wrong — the plateau is not the veto
+
+Per tick over the 2026-08-14 lunch, joining `tube_advisor`, `smb_binding_trace` and `pkpd_soft_floor`:
+
+```
+time    BG    IOB   cmdISF  rawMin  model_u  maxSMBHB  binding_stage        tube_branch
+13:42  204.0  7.95   19.3    78.9    0.000     2.50    SAFETY_PRECAUTIONS   GRADED
+13:47  217.4  8.88   16.9   101.8    0.000     2.50    SAFETY_PRECAUTIONS   GRADED
+13:52  220.4 10.19   11.6   133.3    0.000     2.50    SAFETY_PRECAUTIONS   GRADED
+14:01  206.3 11.62   15.4    39.0    0.000     1.50    PKPD_THROTTLE        GRADED
+14:12  218.3 11.79   16.9    76.8    0.000     2.50    SAFETY_PRECAUTIONS   GRADED
+14:21  219.2 13.05   11.9    79.2    0.000     0.15    SAFETY_PRECAUTIONS   GRADED
+14:26  211.7 13.04   14.1    39.0    0.000     0.05    —                    VETO_HYPO_FLOOR
+```
+
+**Through the whole plateau the tube was permissive.** `GRADED` on every tick, `max_smb_hb_u` at the
+configured 2.50 on most of them. What was zero is **`model_output_u`**, on every tick from 13:42
+onward, with the binding stage `SAFETY_PRECAUTIONS` or `PKPD_THROTTLE` — the 29 % and 14 % stages
+already measured in §AQ6-5. The 0.13–1.28 U actually delivered came from floors.
+
+**The veto window is 14:26 → 16:32, after the peak, on a falling BG**, and over it BG fell 211.7 →
+113.4 and IOB 13.0 → 3.1 with no hypoglycaemia. **The day's minimum BG was 86; zero ticks below 70.**
+
+So the two subjects are **not** one defect:
+
+- the **plateau** is the controller producing no demand while it holds full authority — §AQ6-4's grid
+  truncation and §AQ6-5's PKPD guard and throttle;
+- the **39 floor** is a forecast that saturates and a consumer that cannot tell saturation from a
+  forecast. It gates the *tail* and the *next* meal onset, not this plateau.
+
+The 84 vetoes by trend and level, which is the cost side of any relaxation:
+
+| trend | BG band | vetoes | of which `min_pred == 39` |
+|---|---|---|---|
+| falling (Δ5 ≤ −3) | 120–180 | 28 | 25 |
+| flat | 120–180 | 22 | 10 |
+| flat | < 120 | 15 | 7 |
+| falling | < 120 | 7 | 4 |
+| falling | ≥ 180 | 7 | 7 |
+| rising (Δ5 ≥ +3) | < 120 | 5 | 0 |
+
+**35 of 84 are on a hard fall**, where `AdvancedPredictionEngine`'s Guard B
+(`delta ≤ ENDO_REVERSION_FALLING_HARD_DELTA_MGDL = −3.0`) suspends the EGP reversion **by design**, so
+the insulin-only path is left free to crash to the floor. That is the gap already on file as
+"floor-39 Guard B falling uncovered", now quantified: it is 42 % of the vetoes on this package.
+
+## AQ7-3. The floor is not an ISF artefact, and cannot be fixed by fixing the ISF
+
+At 14:26 — BG 211.7, IOB 13.04, COB 0 — the path saturates for **any** sensitivity above
+`(211.7 − 39) / 13.04 = 13.2 mg/dL/U`. The measured physiological value from the 96 clean descents is
+**22.3**, so a perfectly calibrated sensitivity saturates it too.
+
+The reason is structural: **the insulin-only path has no appearance term.** It computes
+`BG − Σ activity × ISF × 5` and, on an undeclared meal, `cobG = 0`, so nothing sits on the other side
+of the subtraction. The path therefore predicts a crash whenever `IOB × ISF > BG − 39` — which is the
+normal state of a meal being corrected. **Fixing the sensitivity chain will not move this**, and
+proposing it as the fix would be the fourth mis-attribution in this document.
+
+## AQ7-4. `variable_sens`, recovered from data that already existed
+
+The instrument the brief asked for turned out to be **partly recoverable without a build**.
+`tube_advisor.kappa_mgdl_per_u` is a deterministic function of the tube's sensitivity:
+
+```
+kappa = clamp(8 + 22 x (50 / isf), 8, 45) x clamp(6 / dia, 0.82, 1.18) x (1 + margin)
+```
+
+`dia` is 300–302 min on every tick of the package (parsed from the narrative), and `margin` is the
+`key_aimi_tube_kappa_margin` preference, 0.1. So `isf` inverts. It is invertible on **194 of 281
+ticks** — the rest are where the sensitivity is at or below ~29.7 mg/dL/U and the first factor is
+pinned at its 45 clamp, which is exactly the band a rising meal sits in.
+
+| comparison | min | median | max |
+|---|---|---|---|
+| recovered `variable_sens` / `command_isf_mgdl` | 0.703 | **1.067** | **2.652** |
+| recovered `variable_sens` / narrative `ISF(fused)` | 0.909 | 1.266 | 1.962 |
+
+They agree within 1.0 mg/dL/U on **1 tick of 194**.
+
+> **`command_isf_mgdl` is not the sensitivity the dose used.** Every ISF figure in this document — in
+> Part A-bis, in A-sexies, and in the priority note at the top — describes the *prediction* side. This
+> confirms §AQ6-9 correction 3 with a number, and it means the ISF chain has never been measured where
+> it is consumed.
+
+Concretely, through the plateau the recovered `variable_sens` sat at **37.3** while `command_isf_mgdl`
+read **11.9–17.0**. **The collapse to 4.5 never reached the tube.**
+
+## AQ7-5. What shipped (export-only, no dosing path touched)
+
+| file | change |
+|---|---|
+| `pkpd/AdvancedPredictionEngine.kt` | a diagnostic mirror of the IOB path with **no clip**, plus a count of the steps the floor absorbed and the sensitivity the engine integrated. Computed before the existing `coerceIn`, which is unchanged |
+| `pkpd/AdvancedPredictionCurves.kt` | `insulinPathMinUnclippedMgdl`, `numericFloorClippedSteps`, `effectiveSensitivityUsedMgdlPerU` |
+| `pkpd/PkpdSoftFloorPathMin.kt` | carries the three into `pkpd_soft_floor`, plus a derived `floor_saturation_mgdl` = published − unclipped |
+| `control/StraightLineTubeAdvisor.kt` | `Outcome.isfUsedMgdlPerU` on all four return paths — kappa cannot stand in for it, since kappa saturates for every sensitivity ≤ ~29.7 |
+| `DetermineBasalAIMI2.kt` | `baseline_state.variable_sens_mgdl`, written in `markEstimatorDiagnosticsForExport`; `tube_advisor.isf_used_mgdl_per_u` |
+
+**Why the unclipped mirror is the load-bearing one.** A published minimum of 39 with an unclipped
+value of −274 and 40 clipped steps is a saturated arithmetic result. The same 39 with one clipped step
+and an unclipped 38 is a real forecast of hypoglycaemia. **These need opposite responses and are today
+the same number.** Three new tests pin it: the 14:26 tick reproduced, a benign tick where the two
+agree and the clip count is 0, and an assertion that no published point moved.
+
+## AQ7-6. What the next package must answer
+
+| question | field(s) | what would confirm it |
+|---|---|---|
+| How much of the 39 is saturation rather than forecast? | `pkpd_soft_floor.floor_saturation_mgdl`, `numeric_floor_clipped_steps` | on the veto ticks, a large negative unclipped value and a high clip count means the veto decided on nothing |
+| Is `command_isf_mgdl` really the wrong number? | `variable_sens_mgdl` vs `command_isf_mgdl` | settles the ×2.65 by measurement instead of by inverting kappa, and covers the 87 ticks the inversion cannot reach |
+| Which sensitivity did the tube believe on a rising meal? | `tube_advisor.isf_used_mgdl_per_u` | the band the kappa inversion is blind to |
+| Did the grid fix reach the meal? | `smb_binding_trace.model_output_u` **above 1.9085 U** | the one signature the sensitivity policy and the override cannot produce |
+
+**Open, and in this order.**
+
+1. **The plateau, which is the patient's actual complaint.** `model_output_u` = 0.000 on every tick
+   from 13:42 while the tube held full authority. That is the controller, and `SAFETY_PRECAUTIONS`
+   (29 %) and `SmbTbrThrottleLogic` (14 %) are the named stages. §AQ6-5 also records two calibration
+   defects in the throttle that are still untouched: `bgRising = bg > targetBg` is "above target", not
+   rising, and `applySafetyPrecautions` clamps to `maxSMB` rather than `maxSMBHB`.
+2. **The 39 floor**, once the new export says how much of it is saturation. The likely shape is an
+   appearance term on the insulin-only path, or a consumer that treats a saturated minimum as
+   *unknown* rather than as *39* — **not** a relaxation of the veto, which is right whenever the
+   unclipped value is genuinely near the floor.
+3. **The ISF chain**, last. It fixes the tail and the whipsaw, and §AQ6-3's measurement stands: it
+   adds no insulin to any meal.
+
+**Nothing here justifies relaxing a protective path.** On this package the day's minimum was 86 mg/dL
+with no tick below 70, so it contains no evidence either way about the descents that reached 41–76 on
+the earlier packages. The "52 of 53 vetoes correct" figure is from the 2026-08-13 package and does not
+describe this one.
+
+## AQ7-7. The plateau, traced to its actual gate — and §AQ6-4 corrected
+
+Continued the same day, on the priority set out in AQ7-2. **The plateau is the control barrier, and
+`model_output_u` was never able to say so.** Suite after this section: **1 428 tests, 0 failures**.
+
+### The export conflates two opposite failures
+
+`smb_binding_trace.model_output_u` is written at `DetermineBasalAIMI2.kt:5268` as `v3SmbModel`, and
+
+```kotlin
+val v3SmbModel = if (v3CommandSafe) adCommand!!.scheduledMicroBolus ?: 0.0 else 0.0
+```
+
+`adCommand` is the command **after** `ControlBarrierShield.enforce`. So a zero means either the
+solver wanted nothing, or the solver wanted a dose and the barrier suspended it. Those have opposite
+fixes, and nothing exported could tell them apart.
+
+> **§AQ6-4's "from 13:42 the model output is 0.000 on every remaining tick … the controller is
+> absent" is wrong.** The controller was not absent. It was overruled.
+
+Two further things found while confirming this, both worth keeping:
+
+- **`AutoDriveCommand.isSafe` is never set to `false` anywhere in production code.** It is documented
+  as "indicates if the command passed internal sanity checks"; only tests ever assign it, always
+  `true`. So `v3CommandSafe` reduces to `adCommand != null`, and the console line "🧘 [AUTODRIVE V3]
+  Command not safe" can only ever mean "the command was null". **Fourth recorded instance of failure
+  mode 1** — a constraint stated in documentation and absent from the code.
+- On the plateau `v3SmbFloor` was non-zero (0.700 U at 13:42), and the floor is computed only under
+  `if (v3CommandSafe)`. That proves the command was **not** null, so the zero came from the barrier.
+
+### The measurement
+
+`cbf_permitted_u`, already exported, settles it — and it was in the corpus all along:
+
+```
+time    BG    IOB   Ra    cbf_permitted_u   cbf_coefficient   model_output_u
+13:37  197.8  6.30  5.4         1.995           0.00500           1.845
+13:42  204.0  7.95  4.2         1.995           0.00500           0.000
+13:47  217.4  8.88  3.2         0.150           0.00500           0.000
+13:52  220.4 10.19  2.8         0.000           0.00500           0.000
+14:16  219.8 12.59  1.1         0.000           0.00500           0.000
+14:26  211.7 13.04  1.8         0.000           0.00500           0.000
+```
+
+**`cbf_permitted_u` collapses 1.995 → 0.150 → 0.000 at 13:52 and stays at zero for the rest of the
+meal.** `cbf_coefficient_used` is 0.00500 on every tick — `LEGACY_CONTROL_COEFFICIENT` is active
+throughout, so the barrier reasoned as if the ISF were 45 the whole time, exactly as Part A-bis said.
+
+### Why the barrier suspends, computed exactly
+
+`ControlBarrierShield.enforce`, with `h = bg − 80`, `p1 = 0.015`:
+
+```
+lfh  = -p1 x (bg - 100) - siMetabolic x iob x bg + Ra
+lgh  = -siMetabolic x bg
+safeU = (-gamma x h - lfh) / lgh          and safeU <= 0 -> Pair(0.0, 0.0), full suspension
+```
+
+At 13:52 (BG 220.4, IOB 10.19, Ra 2.81, si 0.005, gamma 0.054 = nominal 0.04 x the 1.35 meal-rise
+boost, under its 0.07 cap):
+
+| term | value |
+|---|---|
+| insulin term `-si x iob x bg` | **−11.23 mg/dL/min** |
+| `lfh` | −10.23 mg/dL/min |
+| safety boundary `-gamma x h` | −7.58 |
+| `safeU` | **−2.40 U → full suspension** |
+
+This replay reproduces production: zero permitted from 13:52 onward.
+
+**The insulin term claims a fall of 56 mg/dL per 5 minutes. The measured fall over that same 5
+minutes was 9** (220.4 → 211.5). The barrier's own model overstates insulin action by roughly six
+times, and — like the 39 floor and for the same reason — it has **no appearance term** to put on the
+other side during an undeclared meal.
+
+### `MPC_TAU_MIN` is a knife edge — do not move it on arithmetic
+
+Same tick, same state, only the time constant changed (the `LEGACY_CONTROL_COEFFICIENT` floor removed
+so the change can bite):
+
+| `MPC_TAU_MIN` | `safeU` at 13:52 | at 14:16 (IOB 12.59) |
+|---|---|---|
+| **75 (today)** | **−2.40 U** | −6.32 U |
+| 100 | +0.20 U | −4.23 U |
+| 150 | **+5.39 U** | −0.05 U |
+| 200 | +10.59 U | +4.13 U |
+
+`safeU` is a ratio whose numerator crosses zero right here, so it is hypersensitive: τ = 150 would
+permit **5.39 U in a single 5-minute tick** on this state. **The doc's instinct to defer this was
+right, and the reason is now measured rather than assumed.** A τ change alone is not the fix.
+
+### What shipped (again export-only, no dosing path touched)
+
+| file | change |
+|---|---|
+| `autodrive/safety/ControlBarrierShield.kt` | `Diagnostics` — `h`, `lfh`, `lgh`, the insulin term alone, `activeGamma`, the boundary, `systemEvolution`, `safeU`, `siMetabolic`, `fullySuspended`. Recorded on every `enforce` |
+| `autodrive/AutodriveEngine.kt` | `lastMpcRawSmbU` / `lastMpcRawTbrUph` — what the solver asked for **before** the barrier; `lastBarrierDiagnostics`, captured before `recordCoefficientShadow` runs `enforce` a second time and overwrites the shield's record |
+| `DetermineBasalAIMI2.kt` | new `adjustments.control_barrier` block, written in `markEstimatorDiagnosticsForExport` |
+
+Three new tests reproduce the 13:52 tick as a barrier suspension, pin the insulin term to
+`-0.005 x 10.19 x 220.4` and assert a calm tick is not reported as suspended.
+
+### The open decision, and it needs the patient
+
+The plateau needs the barrier to stop claiming a 56 mg/dL/5 min fall that is not happening. Three
+routes, and they are **not** equivalent in risk:
+
+1. **Give `lfh` an appearance term** (`+ Ra` is already there but is the *estimated* Ra, which sat at
+   1.1–2.8 while a real meal was absorbing). Most correct, least understood.
+2. **Raise `MPC_TAU_MIN` toward physiology.** Measured above: a knife edge, and it loosens the barrier
+   on *every* tick including the descents, which is where the corpus records BG 41–76.
+3. **Bound the insulin term by what is actually observed** — the barrier already has `bgVelocity`.
+   Narrowest, and it can only tighten when the observed fall is fast.
+
+**No dosing change is proposed here**, and none should be made until the next package carries
+`control_barrier`. Cost statement as required: on the 408 corpus ticks below BG 75 — the day with 45,
+57 and 63 — the delivered dose is already 0.000 U with TBR 0.00, so none of the three routes can act
+there; but routes 1 and 2 both loosen the barrier on a **fall**, which is exactly where the veto and
+the barrier are doing real work, and neither can be quantified until `safeU` is exported.
+
+## AQ7-8. Route 1 quantified, and refused — the appearance term cannot be made safe on this corpus
+
+The patient chose route 1 of AQ7-7: give `lfh` an appearance term. **It was quantified before any
+code was written, and it does not survive the quantification. No dosing change was made.** This
+section records the negative result, because the corpus is the only thing that could have produced it.
+
+### The design under test
+
+The barrier's `lfh` already carries `+ estimatedRa`; the defect is that the estimator understates it.
+The observation supplies the missing value directly, since `lfh` *is* the natural evolution and the
+observed `bgVelocity` *is* that evolution:
+
+```
+raObserved = bgVelocity + p1 x (bg - 100) + siMetabolic x iob x bg
+raEffective = min(max(estimatedRa, raObserved), CAP)        // gated, never below today's value
+```
+
+Replayed on **492 barrier ticks across 9 support packages** (every tick where `cbf_coefficient_used`
+is present, i.e. where the barrier actually ran), with γ = 0.054 and CAP = 6.0 mg/dL/min — the p95 of
+the measured Ra shadow distribution (§A-ter: p90 5.22–5.49, max 8.13).
+
+`raObserved > estimatedRa` on **311 of the 312 ticks above BG 150**, so the term is not a rare
+correction: the estimator understates appearance essentially always in that band.
+
+### The cost, measured — and it is disqualifying
+
+For each gate: how many ticks move from "barrier suspends everything" to "barrier permits a dose",
+how many of those were followed by BG < 70 within two hours, and how many of the 2026-08-14 plateau
+ticks it helps.
+
+| gate | ticks unsuspended | followed by BG < 70 within 2 h | 08-14 plateau ticks helped |
+|---|---|---|---|
+| BG ≥ 150 | 128 | **19** | 6 |
+| BG ≥ 150, vel ≥ 0 | 59 | 4 | — |
+| BG ≥ 150, vel ≥ +0.2 | 50 | **4** | 6 |
+| BG ≥ 150, vel ≥ +0.2, IOB < 10 | 45 | 4 | 4 |
+| BG ≥ 150, vel ≥ +0.2, IOB < 9 | 35 | 2 | 4 |
+| **BG ≥ 150, vel ≥ +0.2, IOB < 8** | 25 | **0** | **0** |
+| BG ≥ 150, vel ≥ +0.2, IOB < 7 | 16 | 0 | 0 |
+
+**The gate that removes all hypoglycaemia exposure also removes the entire benefit.** There is no
+setting of (BG, velocity, IOB, Ra) that keeps the plateau ticks and drops the dangerous ones.
+
+The four dangerous ticks are one episode — the 2026-08-12 excursion this document already records as
+BG 297 → 45:
+
+```
+when         BG     IOB    vel    Ra   safeU today  safeU route1   min BG within 2 h
+08-12 10:37  287.4  8.59  +0.73  3.67     -0.20         +1.43            57
+08-12 10:42  290.5  8.81  +0.62  3.59     -0.48         +1.18            53
+08-12 10:46  292.3  9.21  +0.36  3.39     -1.02         +0.77            53
+08-12 10:51  297.2  9.59  +0.98  3.14     -1.57         +0.35            45
+```
+
+The barrier suspends there today, and it is **right**: the crash came from insulin already on board.
+Route 1 would have lifted the ceiling by 0.35–1.43 U at the top of that excursion.
+
+**The 08-14 plateau and the 08-12 crash occupy the same region of the state space** — BG 200–300,
+rising slowly, IOB 8–10, estimated Ra 1.1–4.2 versus 3.1–3.7. They overlap on every input the barrier
+has. They differ only in what happens next: whether the meal keeps absorbing. **A tick-local rule
+cannot separate them.**
+
+### And route 1 cannot reach the late plateau anyway
+
+At the ticks the patient actually complained about — 14:07 to 14:26, IOB 11.6–13.1 — the insulin term
+is −14.4 mg/dL/min. The cap is 6.0. Crediting the **maximum physiological appearance ever observed in
+this corpus** still leaves `safeU` at −0.78 to −1.94, i.e. still fully suspended:
+
+```
+BG 212.6  IOB 11.57  safeU -5.39 -> -0.78
+BG 218.3  IOB 11.79  safeU -5.57 -> -1.08
+BG 219.8  IOB 12.59  safeU -6.32 -> -1.89
+BG 217.1  IOB 12.67  safeU -5.88 -> -1.94
+```
+
+**So route 1 is structurally incapable of fixing the second half of the plateau.** Above roughly
+IOB 11 at BG 220, no appearance term bounded by physiology can offset `si x iob x bg`.
+
+### What this actually proves
+
+The barrier does not have a missing-appearance problem. It has an **overstated insulin term**:
+`si x iob x bg` with `si` floored at 0.005 (ISF 45, `MPC_TAU_MIN` 75) claims −14.4 mg/dL/min at
+IOB 13, i.e. a fall of 72 mg/dL per 5 minutes, against a patient whose measured sensitivity is
+22.3 mg/dL/U. It saturates on IOB alone, which is exactly why it cannot discriminate a meal that is
+still absorbing from one that has finished.
+
+That points back at `MPC_TAU_MIN` and `LEGACY_CONTROL_COEFFICIENT` — measured in AQ7-7 to be a knife
+edge — and the knife edge is itself a symptom: `safeU` is a ratio whose numerator crosses zero in
+this regime, so every route that moves the numerator is hypersensitive here.
+
+**Nothing was changed. The instruments from AQ7-5 and AQ7-7 stand, and the next package is what
+should decide.** The specific thing to look for is `control_barrier.safe_u` alongside
+`insulin_term_mgdl_per_min` on a meal: it will show whether the term is as dominant in the wild as it
+is in this replay, on ticks where the barrier ran and the corpus could not be re-derived.

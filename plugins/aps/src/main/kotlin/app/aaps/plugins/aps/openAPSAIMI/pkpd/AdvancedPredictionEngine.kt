@@ -149,6 +149,11 @@ object AdvancedPredictionEngine {
         var rawInsulinPathMin = Double.POSITIVE_INFINITY
         var softInsulinPathMin = Double.POSITIVE_INFINITY
         var endoAppliedOnInsulin = false
+        // Diagnostic mirror of the IOB path with no clip, so the published minimum can be read as
+        // either a forecast or a saturation. See AdvancedPredictionCurves.insulinPathMinUnclippedMgdl.
+        var unclippedIob = currentBG
+        var unclippedInsulinPathMin = Double.POSITIVE_INFINITY
+        var numericFloorClippedSteps = 0
 
         // Guard A — cap the reversion anchor at the current BG so EGP never predicts a rise above
         // where the patient actually sits (still lifts the absorbing floor-39 artefact when BG > 80).
@@ -183,7 +188,14 @@ object AdvancedPredictionEngine {
                 0.0
             }
 
-            lastIob = (lastIob - insulinImpact).coerceIn(NUMERIC_FLOOR, NUMERIC_CEILING)
+            // Diagnostic only, and deliberately before the clip below: the same subtraction with no
+            // bound, so the export can say by how much the path ran past the floor.
+            unclippedIob -= insulinImpact
+            unclippedInsulinPathMin = min(unclippedInsulinPathMin, unclippedIob)
+            val iobBeforeClip = lastIob - insulinImpact
+            if (iobBeforeClip < NUMERIC_FLOOR) numericFloorClippedSteps++
+
+            lastIob = iobBeforeClip.coerceIn(NUMERIC_FLOOR, NUMERIC_CEILING)
             lastCob = (lastCob - insulinImpact + carbImpact).coerceIn(NUMERIC_FLOOR, NUMERIC_CEILING)
             lastUam = (lastUam - insulinImpact * iobDampingFactor + uamMomentum)
                 .coerceIn(NUMERIC_FLOOR, NUMERIC_CEILING)
@@ -251,6 +263,9 @@ object AdvancedPredictionEngine {
             insulinPathMinSoftMgdl = softMin,
             endogenousReversionOnInsulinCurves = endoAppliedOnInsulin,
             endogenousReversionSuppressedByTrend = endoSuppressedByFallingTrend,
+            insulinPathMinUnclippedMgdl = unclippedInsulinPathMin.takeIf { it.isFinite() },
+            numericFloorClippedSteps = numericFloorClippedSteps,
+            effectiveSensitivityUsedMgdlPerU = effectiveSensitivity.takeIf { it.isFinite() },
         )
     }
 

@@ -22,6 +22,19 @@ data class PkpdSoftFloorTelemetry(
     /** Guard B — EGP suspended this tick because BG was falling hard. */
     val suppressedByFallingTrend: Boolean,
     val reason: String,
+    /**
+     * The insulin-only path minimum with the numeric floor removed, the count of steps the floor
+     * clipped, and the sensitivity the engine integrated.
+     *
+     * These three make the published minimum interpretable. `raw_path_min_mgdl` = 39 with
+     * `unclipped_path_min_mgdl` = -274 and 40 clipped steps is a saturated arithmetic result, not a
+     * forecast of hypoglycaemia; the same 39 with 1 clipped step and an unclipped value of 38 is a
+     * real one. Everything downstream of the path minimum — the tube advisor's veto above all —
+     * currently sees only the 39 and cannot tell the two apart.
+     */
+    val unclippedPathMinMgdl: Double? = null,
+    val numericFloorClippedSteps: Int = 0,
+    val sensitivityUsedMgdlPerU: Double? = null,
 ) {
     fun toJsonObject(): JSONObject =
         JSONObject().apply {
@@ -30,6 +43,14 @@ data class PkpdSoftFloorTelemetry(
             rawPathMinMgdl?.let { put("raw_path_min_mgdl", it) }
             softPathMinMgdl?.let { put("soft_path_min_mgdl", it) }
             hybridTerminalMgdl?.let { put("hybrid_terminal_mgdl", it) }
+            unclippedPathMinMgdl?.let { put("unclipped_path_min_mgdl", it) }
+            put("numeric_floor_clipped_steps", numericFloorClippedSteps)
+            sensitivityUsedMgdlPerU?.let { put("sensitivity_used_mgdl_per_u", it) }
+            rawPathMinMgdl?.let { raw ->
+                unclippedPathMinMgdl?.let { unclipped ->
+                    put("floor_saturation_mgdl", raw - unclipped)
+                }
+            }
             put("hit_numeric_floor", hitNumericFloor)
             put("endogenous_reversion_enabled", endogenousReversionEnabled)
             put("suppressed_by_falling_trend", suppressedByFallingTrend)
@@ -103,6 +124,9 @@ object PkpdSoftFloorPathMin {
             endogenousReversionEnabled = endogenousReversionEnabled,
             suppressedByFallingTrend = suppressedByTrend,
             reason = reason,
+            unclippedPathMinMgdl = curves.insulinPathMinUnclippedMgdl,
+            numericFloorClippedSteps = curves.numericFloorClippedSteps,
+            sensitivityUsedMgdlPerU = curves.effectiveSensitivityUsedMgdlPerU,
         )
     }
 

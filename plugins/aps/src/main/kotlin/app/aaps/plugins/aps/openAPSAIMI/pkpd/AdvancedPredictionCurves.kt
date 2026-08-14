@@ -23,6 +23,24 @@ data class AdvancedPredictionCurves(
     val endogenousReversionOnInsulinCurves: Boolean = false,
     /** Guard B — true when EGP was suspended for this tick because BG was falling hard. */
     val endogenousReversionSuppressedByTrend: Boolean = false,
+    /**
+     * Minimum of the insulin-only path **with the numeric floor removed**, so a published minimum of
+     * 39 can be told apart from a genuine forecast of 39.
+     *
+     * The published paths clip every step into `[NUMERIC_FLOOR, NUMERIC_CEILING]`, and that clip is
+     * absorbing: once a step lands on the floor the path stays there for the rest of the horizon. A
+     * consumer reading the published minimum therefore cannot distinguish "this patient is predicted
+     * to reach 39" from "the arithmetic ran off the bottom of the scale and stopped". Those two need
+     * opposite responses, and the second is common during an undeclared meal, where the insulin-only
+     * path subtracts `IOB x ISF` from the current BG with no appearance term on the other side.
+     *
+     * This value is diagnostic only. Nothing doses on it.
+     */
+    val insulinPathMinUnclippedMgdl: Double? = null,
+    /** How many horizon steps were clipped at the numeric floor. 0 means the published min is real. */
+    val numericFloorClippedSteps: Int = 0,
+    /** The sensitivity (mg/dL/U) the engine actually integrated. Not always the commanded value. */
+    val effectiveSensitivityUsedMgdlPerU: Double? = null,
 ) {
     val uamTerminal: Double? get() = uam.lastOrNull()?.takeIf { it.isFinite() }
     val cobTerminal: Double? get() = cob.lastOrNull()?.takeIf { it.isFinite() }

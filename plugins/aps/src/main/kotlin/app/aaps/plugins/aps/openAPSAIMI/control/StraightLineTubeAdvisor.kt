@@ -88,6 +88,15 @@ class StraightLineTubeAdvisor @Inject constructor(
         val sMaxFeasible: Double = 0.0,
         /** How far the eventual sits above `target + hyperBand` (mg/dL); 0 when not hyper. */
         val hyperExcessMgdl: Double = 0.0,
+        /**
+         * The sensitivity this call was handed (mg/dL/U) — the dose-facing `variable_sens`, not the
+         * cached command value the export elsewhere calls `command_isf_mgdl`.
+         *
+         * [kappaMgdlPerU] is a function of it, but not an invertible one: the first factor saturates
+         * at 45, so every sensitivity at or below about 29.7 mg/dL/U produces the same kappa. That is
+         * exactly the band a rising meal sits in, so kappa alone cannot report what the tube believed.
+         */
+        val isfUsedMgdlPerU: Double = 0.0,
     )
 
     companion object {
@@ -143,6 +152,7 @@ class StraightLineTubeAdvisor @Inject constructor(
                 minPredUsedMgdl = minPred,
                 hypoFloorMgdl = hypoFloor,
                 kappaMgdlPerU = kappa,
+                isfUsedMgdlPerU = input.isfMgdlPerU,
             )
         }
 
@@ -200,6 +210,7 @@ class StraightLineTubeAdvisor @Inject constructor(
                 maxSmbU = smbMax,
                 sMaxFeasible = sMaxFeasible,
                 hyperExcessMgdl = hyperExcess,
+                isfUsedMgdlPerU = input.isfMgdlPerU,
             )
         }
 
@@ -228,6 +239,7 @@ class StraightLineTubeAdvisor @Inject constructor(
             maxSmbU = smbMax,
             sMaxFeasible = sMaxFeasible,
             hyperExcessMgdl = hyperExcess,
+            isfUsedMgdlPerU = input.isfMgdlPerU,
         )
     }
 }

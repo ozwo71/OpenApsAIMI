@@ -73,6 +73,23 @@ class AutodriveEngine @Inject constructor(
         private set
 
     /**
+     * What the solver asked for, **before** [ControlBarrierShield.enforce] saw it.
+     *
+     * The export's `model_output_u` is taken after the barrier, so a zero there means either "the
+     * solver wanted nothing" or "the solver wanted a dose and the barrier suspended it". Those have
+     * opposite fixes. On the 2026-08-14 lunch it was the second on every tick of the plateau, and
+     * nothing exported could show it.
+     */
+    var lastMpcRawSmbU: Double = 0.0
+        private set
+    var lastMpcRawTbrUph: Double = 0.0
+        private set
+
+    /** The barrier's own terms for the production call of this tick. See [ControlBarrierShield.Diagnostics]. */
+    var lastBarrierDiagnostics: ControlBarrierShield.Diagnostics? = null
+        private set
+
+    /**
      * Training row waiting to be written, for the tick currently running.
      *
      * `tick()` no longer writes to the dataset itself. It is reached from three places — the engaged
@@ -370,6 +387,8 @@ class AutodriveEngine @Inject constructor(
             estimatedState
         }
         val rawCommand = mpcController.calculateOptimalDose(mpcState, profileBasal, lgsThreshold)
+        lastMpcRawSmbU = rawCommand.scheduledMicroBolus
+        lastMpcRawTbrUph = rawCommand.temporaryBasalRate
 
         // 3. CBF (Control Barrier Shield) Safety Check.
         //
@@ -397,6 +416,9 @@ class AutodriveEngine @Inject constructor(
         val safetySi = profileAnchoredSafetySi(profileIsf, estimatedState.estimatedSI)
         lastSafetySiUsed = safetySi
         val safeCommand = safetyShield.enforce(rawCommand, estimatedState, profileBasal, safetySi, observationId)
+        // Captured here on purpose: recordCoefficientShadow below runs `enforce` a second time for the
+        // unfloored shadow, which would overwrite the shield's own record of the production call.
+        lastBarrierDiagnostics = safetyShield.lastDiagnostics
 
         recordCoefficientShadow(profileIsf, safetySi, rawCommand, estimatedState, profileBasal, observationId, safeCommand)
 

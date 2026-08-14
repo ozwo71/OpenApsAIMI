@@ -238,4 +238,96 @@ class AdvancedPredictionEngineTest {
         assertTrue(on.insulinPathMinSoftMgdl!! < 45.0)
         assertTrue(!on.endogenousReversionOnInsulinCurves)
     }
+
+    /**
+     * Reproduces the 2026-08-14 lunch at 14:26 — BG 211.7 with 13.04 U on board and no declared
+     * carbs. The published path minimum reads 39, and every consumer downstream treats that as a
+     * forecast of imminent hypoglycaemia. The unclipped mirror shows what the arithmetic really said.
+     */
+    @Test
+    fun unclippedPathMin_separates_a_saturated_floor_from_a_real_forecast() {
+        val profile = mockk<OapsProfileAimi>(relaxed = true)
+        every { profile.carb_ratio } returns 13.6
+        every { profile.peakTime } returns 54.0
+
+        val iobEntry = mockk<IobTotal>()
+        every { iobEntry.iob } returns 13.04
+        every { iobEntry.activity } returns 0.05
+        every { iobEntry.time } returns System.currentTimeMillis()
+
+        val curves = AdvancedPredictionEngine.predictCurves(
+            currentBG = 211.7,
+            iobArray = arrayOf(iobEntry),
+            finalSensitivity = 37.3,
+            cobG = 0.0,
+            profile = profile,
+            delta = -7.5,
+            horizonMinutes = 240,
+        )
+
+        // The published minimum saturates at the numeric floor and says nothing more.
+        assertEquals(39.0, curves.insulinPathMinRawMgdl!!, 1e-6)
+        // The mirror says the arithmetic ran far past it, and how many steps the clip absorbed.
+        assertTrue(curves.insulinPathMinUnclippedMgdl!! < 0.0)
+        assertTrue(curves.numericFloorClippedSteps > 0)
+        // And the sensitivity that produced it is now on the record.
+        assertEquals(37.3, curves.effectiveSensitivityUsedMgdlPerU!!, 1e-6)
+    }
+
+    @Test
+    fun unclippedPathMin_matches_the_published_min_when_the_floor_never_binds() {
+        val profile = mockk<OapsProfileAimi>(relaxed = true)
+        every { profile.carb_ratio } returns 13.6
+        every { profile.peakTime } returns 54.0
+
+        val iobEntry = mockk<IobTotal>()
+        every { iobEntry.iob } returns 1.0
+        every { iobEntry.activity } returns 0.005
+        every { iobEntry.time } returns System.currentTimeMillis()
+
+        val curves = AdvancedPredictionEngine.predictCurves(
+            currentBG = 150.0,
+            iobArray = arrayOf(iobEntry),
+            finalSensitivity = 30.0,
+            cobG = 0.0,
+            profile = profile,
+            delta = 0.0,
+            horizonMinutes = 240,
+        )
+
+        assertEquals(0, curves.numericFloorClippedSteps)
+        // No clip means the published minimum is a real forecast; the two agree.
+        assertEquals(curves.insulinPathMinRawMgdl!!, curves.insulinPathMinUnclippedMgdl!!, 1e-6)
+    }
+
+    /** The mirror is diagnostic only: adding it must not move a single published point. */
+    @Test
+    fun unclippedPathMin_does_not_change_any_published_curve() {
+        val profile = mockk<OapsProfileAimi>(relaxed = true)
+        every { profile.carb_ratio } returns 13.6
+        every { profile.peakTime } returns 54.0
+
+        val iobEntry = mockk<IobTotal>()
+        every { iobEntry.iob } returns 8.0
+        every { iobEntry.activity } returns 0.04
+        every { iobEntry.time } returns System.currentTimeMillis()
+
+        val curves = AdvancedPredictionEngine.predictCurves(
+            currentBG = 200.0,
+            iobArray = arrayOf(iobEntry),
+            finalSensitivity = 45.0,
+            cobG = 20.0,
+            profile = profile,
+            delta = 3.0,
+            horizonMinutes = 240,
+        )
+
+        // Every published point still respects the floor and the ceiling it always did.
+        assertTrue(curves.iob.all { it >= 39.0 && it <= 401.0 })
+        assertTrue(curves.cob.all { it >= 39.0 && it <= 401.0 })
+        assertTrue(curves.uam.all { it >= 39.0 && it <= 401.0 })
+        assertTrue(curves.hybrid.all { it >= 39.0 && it <= 401.0 })
+        // The mirror can sit below the floor; the published minimum never does.
+        assertTrue(curves.insulinPathMinRawMgdl!! >= 39.0)
+    }
 }
