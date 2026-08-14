@@ -191,4 +191,143 @@ class MealCertaintyBuilderTest {
         assertThat(MealCertaintyBuilder.effortSmbFactorFor(certaintyAt(MealCertaintyLevel.HIGH), 0.0))
             .isWithin(1e-9).of(0.75)
     }
+
+    // --- the anticipated-rise override of a stale effort veto (2026-08-14 lunch) ---
+
+    /**
+     * The tick the whole change is aimed at.
+     *
+     * 2026-08-14 13:16, BG 158.4 rising +27.1 mg/dL per 5 min, no carbs on board, trunk
+     * `DIGESTION_ACTIVE`, effort veto live from a walk two hours earlier. The level was `LOW`, so the
+     * tree intent stayed `PROTECTIVE`, the Harmonia lift was unreachable and the effort multiplier ran at
+     * x0.45. `HIGH` first arrived at BG 204, thirty minutes later.
+     */
+    private fun anticipatedRiseInput(
+        bgMgdl: Double,
+        deltaMgdl5m: Double,
+        shortAvgDeltaMgdl5m: Double,
+        effortLive: Boolean,
+        absorptionPhase: MealAbsorptionPhase = MealAbsorptionPhase.FIRST_WAVE,
+    ) = MealCertaintyBuilder.Input(
+        trunkState = GlobalPhysiologicalState.DIGESTION_ACTIVE,
+        mealBranchConfidence = 0.95,
+        digestionDetected = true,
+        absorptionPhase = absorptionPhase,
+        bgMgdl = bgMgdl,
+        deltaMgdl5m = deltaMgdl5m,
+        targetBgMgdl = 100.0,
+        cobG = 0.0,
+        effortVeto = true,
+        shortAvgDeltaMgdl5m = shortAvgDeltaMgdl5m,
+        effortLive = effortLive,
+    )
+
+    @Test
+    fun anticipatedRise_reachesHighBelowBg200_whenTheEffortIsOnlyAMemory() {
+        val mc = MealCertaintyBuilder.evaluate(
+            anticipatedRiseInput(bgMgdl = 158.4, deltaMgdl5m = 27.1, shortAvgDeltaMgdl5m = 14.0, effortLive = false),
+        )
+        assertThat(mc.level).isEqualTo(MealCertaintyLevel.HIGH)
+        assertThat(mc.supportsMealOverProtective).isTrue()
+        assertThat(mc.reasons).contains("level_high_digestion_anticipated_rise")
+    }
+
+    /** The term that keeps the protection: live movement is never overridden, at any rise. */
+    @Test
+    fun anticipatedRise_liveMovementKeepsTheEffortVeto() {
+        val mc = MealCertaintyBuilder.evaluate(
+            anticipatedRiseInput(bgMgdl = 158.4, deltaMgdl5m = 27.1, shortAvgDeltaMgdl5m = 14.0, effortLive = true),
+        )
+        assertThat(mc.level).isNotEqualTo(MealCertaintyLevel.HIGH)
+        assertThat(mc.supportsMealOverProtective).isFalse()
+    }
+
+    /**
+     * A genuine dawn or stress ramp must not open the meal channel. Measured over 952 pooled ticks,
+     * genuine endogenous ramps peaked at 9.1 mg/dL per 5 min; the threshold is 10.
+     */
+    @Test
+    fun anticipatedRise_aGenuineEndogenousRampStaysBelowTheThreshold() {
+        val mc = MealCertaintyBuilder.evaluate(
+            anticipatedRiseInput(bgMgdl = 165.0, deltaMgdl5m = 9.1, shortAvgDeltaMgdl5m = 7.0, effortLive = false),
+        )
+        assertThat(mc.level).isNotEqualTo(MealCertaintyLevel.HIGH)
+    }
+
+    /** A single noisy sample cannot open it — the short average has to agree. */
+    @Test
+    fun anticipatedRise_needsBothWindowsToAgree() {
+        val mc = MealCertaintyBuilder.evaluate(
+            anticipatedRiseInput(bgMgdl = 165.0, deltaMgdl5m = 27.0, shortAvgDeltaMgdl5m = 2.0, effortLive = false),
+        )
+        assertThat(mc.level).isNotEqualTo(MealCertaintyLevel.HIGH)
+    }
+
+    /** The absorption wave must be active, exactly as the BG-200 clause already required. */
+    @Test
+    fun anticipatedRise_needsAnActiveAbsorptionWave() {
+        val mc = MealCertaintyBuilder.evaluate(
+            anticipatedRiseInput(
+                bgMgdl = 165.0, deltaMgdl5m = 27.0, shortAvgDeltaMgdl5m = 14.0, effortLive = false,
+                absorptionPhase = MealAbsorptionPhase.NONE,
+            ),
+        )
+        assertThat(mc.level).isNotEqualTo(MealCertaintyLevel.HIGH)
+    }
+
+    /**
+     * The hypoglycaemia cost, asserted rather than argued.
+     *
+     * `aboveMealBand` requires BG > target + 30, so below about 130 mg/dL the override cannot fire
+     * however steep the rise. The corpus contains a day with BG 45, 57 and 63; on all 39 ticks below
+     * BG 75 the level was NONE and glucose was falling.
+     */
+    @Test
+    fun anticipatedRise_cannotFireBelowTheMealBand() {
+        for (bg in listOf(45.0, 57.0, 63.0, 95.0, 125.0)) {
+            val mc = MealCertaintyBuilder.evaluate(
+                anticipatedRiseInput(bgMgdl = bg, deltaMgdl5m = 27.0, shortAvgDeltaMgdl5m = 14.0, effortLive = false),
+            )
+            assertThat(mc.level).isNotEqualTo(MealCertaintyLevel.HIGH)
+        }
+    }
+
+    /** A hypoglycaemia conflict in the terminals still wins over everything. */
+    @Test
+    fun anticipatedRise_yieldsToAHypoTerminalConflict() {
+        val mc = MealCertaintyBuilder.evaluate(
+            anticipatedRiseInput(bgMgdl = 165.0, deltaMgdl5m = 27.0, shortAvgDeltaMgdl5m = 14.0, effortLive = false)
+                .copy(scenarioPathMinMgdl = 62.0),
+        )
+        assertThat(mc.terminalsAgree).isEqualTo(MealTerminalsAgree.HYPO_CONFLICT)
+        assertThat(mc.level).isEqualTo(MealCertaintyLevel.NONE)
+    }
+
+    /** The default input keeps the previous behaviour: an unsupplied caller cannot open the override. */
+    @Test
+    fun anticipatedRise_defaultsKeepTheOverrideShut() {
+        val mc = MealCertaintyBuilder.evaluate(
+            MealCertaintyBuilder.Input(
+                trunkState = GlobalPhysiologicalState.DIGESTION_ACTIVE,
+                mealBranchConfidence = 0.95,
+                digestionDetected = true,
+                absorptionPhase = MealAbsorptionPhase.FIRST_WAVE,
+                bgMgdl = 158.4,
+                deltaMgdl5m = 27.1,
+                targetBgMgdl = 100.0,
+                effortVeto = true,
+            ),
+        )
+        assertThat(mc.level).isNotEqualTo(MealCertaintyLevel.HIGH)
+    }
+
+    /** The existing BG-200 clause is untouched and still reaches HIGH on its own terms. */
+    @Test
+    fun anticipatedRise_theDeepHyperClauseStillWorks() {
+        val mc = MealCertaintyBuilder.evaluate(
+            anticipatedRiseInput(bgMgdl = 237.0, deltaMgdl5m = 4.5, shortAvgDeltaMgdl5m = 0.0, effortLive = true),
+        )
+        assertThat(mc.level).isEqualTo(MealCertaintyLevel.HIGH)
+        assertThat(mc.reasons).contains("level_high_digestion_overrides_effort_veto")
+    }
 }

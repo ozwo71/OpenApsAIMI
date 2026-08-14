@@ -46,13 +46,44 @@ class MpcController @Inject constructor(
         const val FINE_SEARCH_STEP_U = 0.005
         const val COARSE_SEARCH_STEP_U = 0.015
 
+        /**
+         * The doses the solver is allowed to consider, over the whole safe domain `[0, maxSafeDoseU]`.
+         *
+         * The candidate count is capped at [MAX_DOSE_CANDIDATES] for CPU. That cap used to truncate the
+         * **domain** instead of coarsening the **step**: the loop stopped after 400 entries, so at
+         * [FINE_SEARCH_STEP_U] the largest dose the solver could ever score was
+         * `399 * 0.005 = 1.995 U`, whatever `maxSafeDoseU` said.
+         *
+         * That was measurable in production. `isHyperPlateauQuiet` requires `|combinedDelta| < 1.2`, so
+         * every rising tick took the fine step and the 1.995 U ceiling, while a quiet plateau took the
+         * coarse step and a 5.985 U ceiling — the domain was widest exactly when the need was smallest.
+         * On 172 rising ticks at BG >= 140 with no carbs on board, `model_output_u` had a maximum of
+         * **1.87 U** and a p90 of 1.85, against `maxSafeDoseU` of about 2.5 U. The identity is exact:
+         * `1.995 - profileBasal * 3 / 12 = 1.995 - 0.58 / 4 = 1.850`, since the TBR share is subtracted
+         * from `bestDose` afterwards. The solver never saw the top fifth of its own authorised domain.
+         *
+         * The step is now widened so the last candidate reaches `maxSafeDoseU`. The CPU guard is
+         * unchanged — never more than [MAX_DOSE_CANDIDATES] candidates — and the resolution only
+         * coarsens above a domain of `MAX_DOSE_CANDIDATES * searchStep` (1.995 U at the fine step),
+         * where it becomes `maxSafeDoseU / 399`: 0.0063 U at a 2.5 U domain, still an order of magnitude
+         * finer than the pump's own bolus granularity.
+         *
+         * This widens the search domain only. It cannot exceed `maxSafeDoseU`, which is
+         * `min(activeMaxSmb, weight * uPerKg)` and is not touched here, and every bound downstream —
+         * `ControlBarrierShield`, the catalogue caps, `finalizeAndCapSMB`, `applySmbUnits` — still
+         * applies. It cannot add insulin on a tick whose optimum is interior to the domain, which is the
+         * case whenever the cost function is already asking for less than the ceiling.
+         */
         fun buildDoseCandidates(maxSafeDoseU: Double, searchStep: Double): List<Double> {
             if (!maxSafeDoseU.isFinite() || maxSafeDoseU <= 0.0) return listOf(0.0)
-            val step = searchStep.takeIf { it.isFinite() && it > 0.0 } ?: FINE_SEARCH_STEP_U
-            val out = ArrayList<Double>(min(MAX_DOSE_CANDIDATES, (maxSafeDoseU / step).toInt() + 1))
+            val requested = searchStep.takeIf { it.isFinite() && it > 0.0 } ?: FINE_SEARCH_STEP_U
+            // Coarsen the step rather than cut the domain: the last candidate must reach maxSafeDoseU.
+            val minStepForFullDomain = maxSafeDoseU / (MAX_DOSE_CANDIDATES - 1)
+            val step = max(requested, minStepForFullDomain)
+            val out = ArrayList<Double>(min(MAX_DOSE_CANDIDATES, (maxSafeDoseU / step).toInt() + 2))
             var dose = 0.0
             while (dose <= maxSafeDoseU + step * 0.5 && out.size < MAX_DOSE_CANDIDATES) {
-                out.add(dose)
+                out.add(min(dose, maxSafeDoseU))
                 dose += step
             }
             if (out.isEmpty()) out.add(0.0)

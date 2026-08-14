@@ -3467,6 +3467,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     cobG = cob.toDouble(),
                     mealRiseConfirmedLegacy = false,
                     effortVeto = effortSuppressesUndeclaredMeal(),
+                    shortAvgDeltaMgdl5m = this.shortAvgDelta.toDouble(),
+                    effortLive = effortIsLiveMovement(),
                     softCorroboration = MealCertaintyBuilder.softCorroborationFromPhysio(physioLive),
                     pkpdEventualMgdl = pkpdForMeal,
                     scenarioTerminalMgdl = scenarioBestForMeal?.terminalMgdl,
@@ -16174,6 +16176,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (a.confidence < EFFORT_MEAL_SUPPRESS_CONF) return false
         val declaredMeal = mealTime || bfastTime || lunchTime || dinnerTime || snackTime || highCarbTime
         return !declaredMeal && cob.toDouble() < EFFORT_MEAL_SUPPRESS_MAX_COB_G
+    }
+
+    /**
+     * Is the effort belief reporting movement **now**, rather than remembering it?
+     *
+     * `effortSuppressesUndeclaredMeal` accepts both `ACTIVE` and `RECENT_EFFORT`, so the veto it raises
+     * cannot tell a walk in progress from a two-hour-old memory of one. Measured over 24 h: the effort
+     * multiplier removed 21.71 U, and **61 of the 82 reduced ticks had `effort = 0.00`** — no live
+     * movement at all, a median of 12 steps per 15 min.
+     *
+     * `MealCertainty` uses this to decide whether the veto may be overridden by an unambiguous glucose
+     * rise. Only a memory can be overridden; live movement keeps the protection whatever glucose does.
+     *
+     * Fails safe: no assessment is treated as live, so the override stays shut.
+     *
+     * @return true when the effort state is `ACTIVE`, or when no assessment is available.
+     */
+    private fun effortIsLiveMovement(): Boolean {
+        val a = lastEffortAssessment ?: return true
+        return a.state == EffortActivityBelief.State.ACTIVE
     }
 
     /**

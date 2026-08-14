@@ -88,6 +88,7 @@ import app.aaps.plugins.aps.events.EventOpenAPSUpdateGui
 import app.aaps.plugins.aps.events.EventResetOpenAPSGui
 import app.aaps.plugins.aps.openAPS.TddStatus
 import app.aaps.plugins.aps.openAPSAIMI.ISF.DynIsfTrajectoryTuning
+import app.aaps.plugins.aps.openAPSAIMI.ISF.DynamicSensitivityPolicy
 import app.aaps.plugins.aps.openAPSAIMI.ISF.IsfAdjustmentEngine
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.EndogenousPhaseHysteresis
@@ -692,32 +693,63 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val anchored = if (tdd24 > 0.1) 1800.0 / tdd24 else profileIsf
         return anchored.coerceIn(5.0, 400.0)
     }
-    private fun dynamicDeltaCorrectionFactor(delta: Double?, predicted: Double?, bg: Double?): Double {
-        if (delta == null || predicted == null || bg == null) return 1.0
-        val combinedDelta = (delta + predicted) / 2.0
-        return when {
-            // En cas d'hypoglyc?mie (delta n?gatif), on augmente progressivement l'ISF
-            combinedDelta < 0 -> {
-                val factor = exp(0.15 * abs(combinedDelta))
-                factor.coerceAtMost(1.4)
-            }
-            // En hyperglyc?mie : si BG est > 130, on applique une r?duction progressive
-            bg > 110.0        -> {
-                // On r?duit d?un certain pourcentage (ici jusqu?? 30%) en fonction de BG
-                val bgReduction = 1.0 - ((bg - 110.0) / (200.0 - 110.0)) * 0.5
-                // On combine ce facteur avec la r?ponse exponentielle bas?e sur combinedDelta si n?cessaire
-                if (combinedDelta > 10) {
-                    // Si le delta est important, on accentue la r?duction avec une r?ponse exponentielle
-                    val expFactor = exp(-0.3 * (combinedDelta - 10))
-                    minOf(expFactor, bgReduction)
-                } else {
-                    bgReduction
-                }
-            }
-
-            else              -> 1.0
-        }
-    }
+    /**
+     * Situational multiplier on the estimated sensitivity.
+     *
+     * ## What this used to do, and why it was wrong
+     *
+     * The hyperglycaemia arm carried two terms. The linear one reduced the sensitivity by up to half
+     * between BG 110 and 200 and kept going, with no lower bound: it reaches 0.0 at BG 290 and turns
+     * **negative** above it. The second term was an exponential in the rise rate,
+     * `exp(-0.3 * (combinedDelta - 10))`, which took over whenever the rise exceeded 10 mg/dL per
+     * 5 min — so the steeper the rise, the harder the sensitivity was crushed. At a combined delta of
+     * +26 it returns **0.0073**. Measured in production on 2026-08-14 at BG 186.6 rising +26.4:
+     * `isf_dynamic_factor` was 0.01, and the commanded sensitivity fell to **4.54 mg/dL/U** against a
+     * static profile of 30 — a factor of 6.6 — held only by the `coerceIn(5.0, 300.0)` at the exit of
+     * `calculateVariableIsf`. On 2026-08-12 at BG 290 the factor was measured at **-0.00**, and at
+     * BG 297 at **-0.04**. That absolute clamp, which ADR 0008 records as never binding, is the only
+     * thing standing between the pump and a negative sensitivity.
+     *
+     * Both terms are dose policy — "correct harder" — written inside the number every prediction, the
+     * MPC and `ControlBarrierShield` read. ADR 0008 says they belong in an urgency term applied at the
+     * dose terminal, not in `S`. This is step 3 of that migration, done for the rise arm only.
+     *
+     * ## What the corpus says the BG dependence actually is
+     *
+     * Insulin sensitivity was estimated from outcomes over **96 clean descents** (>= 30 min, >= 25
+     * mg/dL fall, no carbs on board, appearance rate below 0.30, at least 0.8 U absorbed), as
+     * `-dBG / insulin absorbed`. Endogenous glucose production is ignored, so every figure is a lower
+     * bound on the true sensitivity. Median by starting glucose:
+     *
+     * | starting BG | n  | median estimate | relative |
+     * |---|---|---|---|
+     * | 70-140      | 27 | 24.3 mg/dL/U | 1.00 |
+     * | 140-200     | 45 | 22.6 mg/dL/U | 0.93 |
+     * | 200-400     | 24 | 18.7 mg/dL/U | 0.77 |
+     *
+     * So this patient really is less sensitive when high — by about **x1.3 across the whole range**.
+     * The old code applied up to x137 between a fall and a steep rise. The linear coefficient is now
+     * 0.15 instead of 0.5, which reproduces the measured 0.77 at BG 240 (0.783), and it is bounded
+     * below at 0.75 so it cannot leave the range the measurement covers.
+     *
+     * The rise-rate term is **removed**, not re-tuned: there is no support in the corpus for the
+     * sensitivity depending on how fast glucose is climbing. The aggressiveness that term was
+     * expressing is legitimate, and it belongs downstream, where it is bounded and audited.
+     *
+     * ## What is deliberately not changed
+     *
+     * The falling arm (`exp(0.15 * |combinedDelta|)`, capped at 1.4) is left exactly as it was. It
+     * raises the sensitivity on a fall, which makes the loop predict a larger effect from the insulin
+     * already on board and dose less. Lowering that cap would permit **more** insulin on a fall. That is
+     * a hypoglycaemia path and it is not touched here, even though the same 96 descents give no support
+     * for it either.
+     *
+     * @param delta the current 5-minute glucose delta, mg/dL.
+     * @param predicted the weighted mean of the recent deltas, mg/dL per 5 min.
+     * @param bg current glucose, mg/dL.
+     */
+    private fun dynamicDeltaCorrectionFactor(delta: Double?, predicted: Double?, bg: Double?): Double =
+        DynamicSensitivityPolicy.factorFor(delta = delta, predicted = predicted, bgMgdl = bg)
 
     private fun getRecentDeltas(): List<Double> {
         val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
@@ -1070,8 +1102,15 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 variableSensitivity *= physioMults.isfFactor
                 aapsLogger.debug(LTag.APS, "🏥 LOOP: DynISF modulated: $variableSensitivity (x${physioMults.isfFactor})")
             }
+            // Profile-relative lower bound, unconditional and after every multiplier — ADR 0008 step 1,
+            // lower half only. It can only raise the sensitivity, which can only tighten the barrier and
+            // make the predictions attribute more effect to the insulin already on board.
+            variableSensitivity = DynamicSensitivityPolicy.floorAgainstProfile(
+                commandedMgdlPerU = variableSensitivity,
+                profileIsfMgdlPerU = runCatching { profile.getProfileIsfMgdl() }.getOrNull(),
+            )
             variableSensitivity = variableSensitivity.coerceIn(5.0, 300.0)
-            
+
             aapsLogger.debug(LTag.APS, "Final adaptive ISF after clamping: $variableSensitivity")
 
 // ?? Cr?ation du r?sultat final (Convention: Ratio < 1 = R?sistant)
@@ -1348,7 +1387,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 max_bg = maxBg,
                 target_bg = targetBg,
                 carb_ratio = profile.getIc(),
-                sens = (profile.getIsfMgdl("OpenAPSAIMIPlugin") * physioMults.isfFactor).also { commanded ->
+                // The profile-relative lower bound is applied here too, because this is the value that
+                // becomes `profile.sens` — the number read by the predictions, the tube advisor and the
+                // hypoglycaemia guard, and exported as `command_isf_mgdl`. Without it the bound would sit
+                // before the multipliers that undo it, which is the defect ADR 0008 keeps recording: the
+                // physiological factor is applied after the `coerceIn(5.0, 300.0)` on this path, which is
+                // how a commanded sensitivity of 4.54 mg/dL/U was reached on 2026-08-14 (5.00 x 0.908).
+                sens = DynamicSensitivityPolicy.floorAgainstProfile(
+                    commandedMgdlPerU = profile.getIsfMgdl("OpenAPSAIMIPlugin") * physioMults.isfFactor,
+                    profileIsfMgdlPerU = runCatching { profile.getProfileIsfMgdl() }.getOrNull(),
+                ).also { commanded ->
                     // Shadow only — nothing reads this. Records what an **unconditional exit clamp**
                     // relative to the profile would command.
                     //

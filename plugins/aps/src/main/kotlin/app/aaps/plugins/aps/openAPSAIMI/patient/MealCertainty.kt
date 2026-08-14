@@ -94,6 +94,28 @@ object MealCertaintyBuilder {
     internal const val EFFORT_VETO_OVERRIDE_MIN_DELTA_MGDL5M = 4.0
 
     /**
+     * 5-minute rise (mg/dL) required to override a **stale** effort veto before BG reaches
+     * [EFFORT_VETO_OVERRIDE_MIN_BG_MGDL].
+     *
+     * Set from the corpus. Over 952 pooled ticks, labelling `STRESS_CORTISOL` episodes from the glucose
+     * trajectory rather than from the classifier's own opinion, genuine endogenous ramps peaked at
+     * **9.1** mg/dL per 5 min while food episodes reached 12.9 and 20.1. A threshold of 10 or above
+     * separated them with **0 false positives on 11 genuine ramps**. The same figure is used here so a
+     * dawn ramp or a stress response cannot open the meal channel.
+     */
+    internal const val EFFORT_VETO_ANTICIPATED_MIN_DELTA_MGDL5M = 10.0
+
+    /**
+     * Short-average rise (mg/dL per 5 min) that must corroborate
+     * [EFFORT_VETO_ANTICIPATED_MIN_DELTA_MGDL5M].
+     *
+     * The second, independent window. A single CGM sample can produce a large 5-minute delta from noise,
+     * a compression artefact recovering, or a sensor restart; the short average cannot. Both must hold,
+     * so the override needs a rise that two windows agree on.
+     */
+    internal const val EFFORT_VETO_ANTICIPATED_MIN_SHORT_AVG_MGDL5M = 5.0
+
+    /**
      * Lower bound on the effort SMB multiplier while the meal is certain ([MealCertaintyLevel.HIGH]).
      *
      * The effort reduction is a hypo protection and stays in force — on a certain meal it may take at
@@ -131,6 +153,22 @@ object MealCertaintyBuilder {
         val cobG: Double = 0.0,
         val mealRiseConfirmedLegacy: Boolean = false,
         val effortVeto: Boolean = false,
+        /**
+         * Short-average glucose rise, mg/dL per 5 min. Second window for the anticipated-rise override.
+         *
+         * Defaults to 0.0, so a caller that does not supply it can never open the override — the
+         * anticipated clause needs both windows.
+         */
+        val shortAvgDeltaMgdl5m: Double = 0.0,
+        /**
+         * True when the effort belief is reporting movement **now**, false when it is only a memory.
+         *
+         * The distinction is the whole safety of the anticipated-rise override: a walk in progress keeps
+         * the full effort reduction whatever glucose does, and only a stale memory can be overridden.
+         * Defaults to `true` — the conservative value — so a caller that does not supply it keeps the
+         * previous behaviour and the override stays shut.
+         */
+        val effortLive: Boolean = true,
         val softCorroboration: Boolean = false,
         val pkpdEventualMgdl: Double? = null,
         val scenarioTerminalMgdl: Double? = null,
@@ -303,14 +341,52 @@ object MealCertaintyBuilder {
                 input.bgMgdl >= EFFORT_VETO_OVERRIDE_MIN_BG_MGDL &&
                 input.deltaMgdl5m >= EFFORT_VETO_OVERRIDE_MIN_DELTA_MGDL5M
 
-        val digestionHigh = digestionRiseCore && (!effortBlocksMeal || effortVetoOverriddenByStrongMealRise)
+        // The same override, reachable **before** the excursion instead of after it.
+        //
+        // The clause above is gated on BG >= 200, and the MED arm below is closed by `effortBlocksMeal`,
+        // so while the effort veto holds, HIGH is mathematically unreachable under BG 200 and the level
+        // falls straight through to LOW. Measured over 20 rise episodes in the support-package corpus:
+        // HIGH arrives at a median of 10 minutes after onset and a median BG of 144, never at all in
+        // 8 of 20; the 0.75 effort floor it arms fires at BG 204-212 and never at all in **17 of 20**.
+        // On the 2026-08-14 lunch the level was LOW through BG 128 -> 199 rising +27 mg/dL per 5 min,
+        // with the effort multiplier at x0.45, and only reached HIGH at BG 204 — 30 minutes late.
+        //
+        // Level is the wrong evidence for "this is a meal". Rise magnitude, corroborated, is better, and
+        // it is available at the first tick. This clause substitutes for the BG floor:
+        //
+        // - **two independent rise windows must agree** ([EFFORT_VETO_ANTICIPATED_MIN_DELTA_MGDL5M] on
+        //   the 5-minute delta and [EFFORT_VETO_ANTICIPATED_MIN_SHORT_AVG_MGDL5M] on the short average),
+        //   so a single noisy sample cannot open it;
+        // - **the effort must be a memory, not live movement** (`!input.effortLive`). This is the term
+        //   that keeps the protection intact: a walk in progress still produces the full effort
+        //   reduction, at any rise. It is aimed squarely at the measured defect — 61 of 82 effort-reduced
+        //   ticks had `effort = 0.00`, no live movement at all, on a 120-minute memory of a walk to
+        //   lunch;
+        // - everything in `digestionRiseCore` still holds, including `aboveMealBand`
+        //   (BG > target + 30) and `terminals != HYPO_CONFLICT`, and the absorption phase must be active.
+        //
+        // Cost on the hypoglycaemia ticks: nil, structurally. On the 39 ticks below BG 75 in the corpus
+        // (min 45) the level was NONE on every one, glucose was falling, and `aboveMealBand` is false
+        // below about 130 mg/dL — so `digestionRiseCore` cannot hold and this clause cannot fire.
+        val effortVetoOverriddenByAnticipatedMealRise =
+            effortBlocksMeal &&
+                !input.effortLive &&
+                digestionRiseCore &&
+                phase.isActive &&
+                input.deltaMgdl5m >= EFFORT_VETO_ANTICIPATED_MIN_DELTA_MGDL5M &&
+                input.shortAvgDeltaMgdl5m >= EFFORT_VETO_ANTICIPATED_MIN_SHORT_AVG_MGDL5M
+
+        val effortVetoOverridden =
+            effortVetoOverriddenByStrongMealRise || effortVetoOverriddenByAnticipatedMealRise
+
+        val digestionHigh = digestionRiseCore && (!effortBlocksMeal || effortVetoOverridden)
 
         if (digestionHigh) {
             reasons.add(
-                if (effortVetoOverriddenByStrongMealRise) {
-                    "level_high_digestion_overrides_effort_veto"
-                } else {
-                    "level_high_digestion_rise"
+                when {
+                    effortVetoOverriddenByStrongMealRise      -> "level_high_digestion_overrides_effort_veto"
+                    effortVetoOverriddenByAnticipatedMealRise -> "level_high_digestion_anticipated_rise"
+                    else                                     -> "level_high_digestion_rise"
                 },
             )
             return MealCertaintyLevel.HIGH
