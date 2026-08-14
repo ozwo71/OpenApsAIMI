@@ -53,10 +53,17 @@ object DiaGovernor {
         val learned = pkpdLearnedDiaHours.coerceIn(diaMinBound, diaMaxBound)
         val blended = anchor * (1.0 - w) + learned * w
         val eff = blended.coerceIn(diaMinBound, diaMaxBound)
+        // Label only: compare the two parts that really build `eff`.
+        // eff = (profile + ctx) * (1 - w) + learned * w, so the context part is ctx * (1 - w)
+        // and the learned part is (learned - profile) * w. The old rule compared |ctx| with
+        // |eff - profile|, which already contains the context part, so CONTEXT was almost
+        // never reported. This does not change [DiaGovernorResult.effectiveDiaHours].
+        val contextContribution = abs(contextualDiaShiftHours * (1.0 - w))
+        val learnedContribution = abs((learned - profileDiaHours) * w)
         val dominant = when {
-            abs(contextualDiaShiftHours) > 0.15 && abs(contextualDiaShiftHours) > abs(eff - profileDiaHours) -> "CONTEXT"
-            w > 0.3 && abs(learned - profileDiaHours) > 0.15 -> "LEARNED"
-            else -> "PRIOR"
+            abs(contextualDiaShiftHours) > 0.15 && contextContribution > learnedContribution -> "CONTEXT"
+            w > 0.3 && abs(learned - profileDiaHours) > 0.15                                 -> "LEARNED"
+            else                                                                             -> "PRIOR"
         }
         val log = if (abs(eff - anchor) >= 0.05) {
             String.format(
