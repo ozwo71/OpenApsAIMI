@@ -63,6 +63,62 @@ class PkPdIntegrationTest {
         assertNotNull(result)
     }
 
+    /**
+     * The runtime must carry the learning trace exported in the intelligence snapshot, so a
+     * frozen DIA or a too short insulin tail can be seen without reading the source.
+     */
+    @Test
+    fun `runtime carries the learning trace`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        mockPkpdDefaults()
+        IsfTddProvider.set(50.0)
+
+        val trace = PkPdIntegration(preferences).computeRuntime(
+            epochMillis = 1000,
+            bg = 100.0,
+            deltaMgDlPer5 = 0.0,
+            iobU = 1.0,
+            carbsActiveG = 0.0,
+            windowMin = 60,
+            exerciseFlag = false,
+            profileIsf = 50.0,
+            tdd24h = 40.0,
+        )?.learningTrace
+
+        assertNotNull(trace)
+        // Seed DIA is 6.0 with a floor of 5.0, so the learned DIA is not on the floor.
+        assertEquals(false, trace!!.diaAtFloor)
+        // Two hours after a dose the exponential kernel still holds about a third of the insulin.
+        assertTrue(
+            trace.iobResidual120Min > 0.15 && trace.iobResidual120Min < 0.6,
+            "unexpected 2 h residual ${trace.iobResidual120Min}",
+        )
+    }
+
+    /** The floor flag must turn on when the learned DIA sits on the lower bound. */
+    @Test
+    fun `learning trace reports dia on the floor`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        mockPkpdDefaults()
+        every { preferences.get(DoubleKey.OApsAIMIPkpdStateDiaH) } returns 5.0
+        IsfTddProvider.set(50.0)
+
+        val trace = PkPdIntegration(preferences).computeRuntime(
+            epochMillis = 1000,
+            bg = 100.0,
+            deltaMgDlPer5 = 0.0,
+            iobU = 1.0,
+            carbsActiveG = 0.0,
+            windowMin = 60,
+            exerciseFlag = false,
+            profileIsf = 50.0,
+            tdd24h = 40.0,
+        )?.learningTrace
+
+        assertNotNull(trace)
+        assertEquals(true, trace!!.diaAtFloor)
+    }
+
     @Test
     fun `physio resistance lowers fused isf while preserving bounded factors`() {
         every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true

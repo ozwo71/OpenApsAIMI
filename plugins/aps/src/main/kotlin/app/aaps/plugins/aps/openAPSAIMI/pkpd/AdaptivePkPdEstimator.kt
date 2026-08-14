@@ -42,10 +42,14 @@ data class AdaptivePkPdStatusSnapshot(
     val latestReason: PkPdUpdateReason,
     val lastAcceptedUpdateAt: Long?,
     val updatedAt: Long?,
+    /** Last raw DIA learning step, in hours, before the anchor pull and before any clamp. */
+    val lastDiaLearnStepH: Double = 0.0,
+    /** Last DIA pull back toward the anchor, in hours. Negative means "pull DIA down". */
+    val lastDiaRegPullH: Double = 0.0,
 )
 
 class AdaptivePkPdEstimator(
-    private val kernel: Kernel = LogNormalKernel(),
+    private val kernel: Kernel = ExponentialKernel(),
     private val cfg: PkPdLearningConfig = PkPdLearningConfig(),
     initial: PkPdParams = PkPdParams(diaHrs = 4.0, peakMin = 75.0)
 ) {
@@ -140,7 +144,8 @@ class AdaptivePkPdEstimator(
         // Peak soft-reg weaker so sustained |peak−anchor| can reach ~±20 (was ±5 at reg=0.002).
         val peakReg = 0.001
 
-        val diaAdjReg = diaAdj - diaReg * (p0.diaHrs - cfg.anchorDiaHrs)
+        val diaRegPull = -diaReg * (p0.diaHrs - cfg.anchorDiaHrs)
+        val diaAdjReg = diaAdj + diaRegPull
         val tpAdjReg = tpAdj - peakReg * (p0.peakMin - cfg.anchorPeakMin)
 
         val now = epochMin
@@ -171,6 +176,8 @@ class AdaptivePkPdEstimator(
                 latestReason = PkPdUpdateReason.ACCEPTED,
                 lastAcceptedUpdateAt = updateAt,
                 updatedAt = updateAt,
+                lastDiaLearnStepH = diaAdj,
+                lastDiaRegPullH = diaRegPull,
             )
         )
     }
@@ -186,6 +193,8 @@ class AdaptivePkPdEstimator(
                 latestReason = reason,
                 lastAcceptedUpdateAt = previous.lastAcceptedUpdateAt,
                 updatedAt = epochMin * 60_000L,
+                lastDiaLearnStepH = previous.lastDiaLearnStepH,
+                lastDiaRegPullH = previous.lastDiaRegPullH,
             )
         )
     }

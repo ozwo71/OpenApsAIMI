@@ -96,6 +96,7 @@ object InsulinKineticsAuthority {
             activity = activityView,
             peakGovernor = peakGovernor,
             diaGovernor = diaGovernor,
+            learningTrace = runtime?.learningTrace,
             predictionUsesLearnedKinetics = input.predictionIobArray != null &&
                 input.predictionIobArray !== input.accountingIobArray,
         )

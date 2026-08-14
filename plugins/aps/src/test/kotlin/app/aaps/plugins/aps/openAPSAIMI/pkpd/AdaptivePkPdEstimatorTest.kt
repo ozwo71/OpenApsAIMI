@@ -63,6 +63,45 @@ class AdaptivePkPdEstimatorTest {
         assertEquals(2000L * 60_000L, status.lastAcceptedUpdateAt)
     }
 
+    /**
+     * The status snapshot must show the two parts of the DIA step. Without them a frozen DIA
+     * cannot be explained from a support package.
+     */
+    @Test
+    fun `status snapshot reports the two parts of the dia step`() {
+        IsfTddProvider.set(45.0)
+        val cfg = PkPdLearningConfig(
+            bounds = PkPdBounds(diaMinH = 5.0, diaMaxH = 8.0),
+            anchorDiaHrs = 5.0,
+            anchorPeakMin = 55.0,
+        )
+        val estimator = AdaptivePkPdEstimator(cfg = cfg, initial = PkPdParams(diaHrs = 7.0, peakMin = 75.0))
+        assertEquals(0.0, estimator.statusSnapshot().lastDiaRegPullH, 1e-12)
+
+        estimator.update(2000, 100.0, -2.5, 1.0, 0.0, 60, false)
+
+        val status = estimator.statusSnapshot()
+        // reg pull = -0.002 * (7.0 - 5.0)
+        assertEquals(-0.004, status.lastDiaRegPullH, 1e-9)
+        assertNotEquals(0.0, status.lastDiaLearnStepH)
+    }
+
+    /** A skipped tick must keep the last known step values instead of wiping them. */
+    @Test
+    fun `skipped update keeps the last step values`() {
+        IsfTddProvider.set(45.0)
+        val estimator = AdaptivePkPdEstimator()
+        estimator.update(2000, 100.0, -2.5, 1.0, 0.0, 60, false)
+        val accepted = estimator.statusSnapshot()
+
+        estimator.update(2005, 100.0, -2.5, 0.1, 0.0, 60, false)
+
+        val skipped = estimator.statusSnapshot()
+        assertEquals(PkPdUpdateReason.IOB_TOO_LOW, skipped.latestReason)
+        assertEquals(accepted.lastDiaLearnStepH, skipped.lastDiaLearnStepH, 1e-12)
+        assertEquals(accepted.lastDiaRegPullH, skipped.lastDiaRegPullH, 1e-12)
+    }
+
     @Test
     fun `gated updates publish truthful reason without incrementing accepted count`() {
         val estimator = AdaptivePkPdEstimator()

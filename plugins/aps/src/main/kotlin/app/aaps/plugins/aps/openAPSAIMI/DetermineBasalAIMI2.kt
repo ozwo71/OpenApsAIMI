@@ -78,6 +78,7 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.CausalKineticsModulator
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.DiaGovernor
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinKineticsAuthority
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdLearningDiagnostics
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.TapSitePeakShift
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiIntelligenceSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiIntelligenceSnapshotBuilder
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiAdaptationStatusBuilder
@@ -8895,6 +8896,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 peakGovernor = null,
                 causalPosterior = lastPatientState?.causalPosterior,
                 physioPeakShiftMinutes = physioMults.peakShiftMinutes,
+                // Site branch: the snapshot used to leave this at its 0.0 default, so the peak
+                // governor always reported site=0.0. The cannula age is already cached here.
+                sitePeakShiftMinutes = TapSitePeakShift.minutesForSiteAge(pumpAgeDaysCached()),
                 preferences = preferences,
                 iobCobCalculator = iobCobCalculator,
                 pkpdPredictionIobArray = ctx.pkpdIobDataArray,

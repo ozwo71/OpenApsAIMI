@@ -5,6 +5,7 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.DiaGovernorResult
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityState
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdParams
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdLearningDiagnostics
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdLearningTrace
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.TapPeakGovernorResult
 
 data class EffectiveKinetics(
@@ -30,6 +31,8 @@ data class InsulinKineticsView(
     val peakGovernor: TapPeakGovernorResult?,
     val diaGovernor: DiaGovernorResult?,
     val predictionUsesLearnedKinetics: Boolean,
+    /** Numbers about the DIA learning loop; null when PK/PD is off. */
+    val learningTrace: PkpdLearningTrace? = null,
 ) {
     fun effectiveDiaHours(): Double = effective.diaHours
 

@@ -52,6 +52,12 @@ object IntelligenceSnapshotJson {
                         gov.logLine?.let { put("log", it) }
                     })
                 }
+                snapshot.kinetics.learningTrace?.let { trace ->
+                    put("dia_at_floor", trace.diaAtFloor)
+                    put("dia_reg_pull_h", trace.diaRegPullH)
+                    put("dia_learn_step_h", trace.diaLearnStepH)
+                    put("iob_residual_120min", trace.iobResidual120Min)
+                }
             })
             put("isf", JSONObject().apply {
                 put("fused_mgdl_per_u", snapshot.isf.fusedMgdlPerU)

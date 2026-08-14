@@ -32,7 +32,9 @@ fun applyPkpdInsulinPreset(preferences: Preferences, preset: PkpdInsulinPreset) 
             preferences.putClamped(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax, 95.0)
             preferences.putClamped(DoubleKey.OApsAIMIPkpdInitialDiaH, 6.0)
             preferences.putClamped(DoubleKey.OApsAIMIPkpdInitialPeakMin, 55.0)
-            preferences.putClamped(DoubleKey.OApsAIMIPkpdAnchorDiaH, 4.0)
+            // Anchor = initial DIA. An anchor of 4.0 h sat below the 5.0 h floor and pulled the
+            // learned DIA onto that floor for ever.
+            preferences.putClamped(DoubleKey.OApsAIMIPkpdAnchorDiaH, 6.0)
             preferences.putClamped(DoubleKey.OApsAIMIPkpdAnchorPeakMin, 55.0)
         }
         PkpdInsulinPreset.RAPID -> {
@@ -42,7 +44,8 @@ fun applyPkpdInsulinPreset(preferences: Preferences, preset: PkpdInsulinPreset) 
             preferences.putClamped(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax, 130.0)
             preferences.putClamped(DoubleKey.OApsAIMIPkpdInitialDiaH, 6.5)
             preferences.putClamped(DoubleKey.OApsAIMIPkpdInitialPeakMin, 75.0)
-            preferences.putClamped(DoubleKey.OApsAIMIPkpdAnchorDiaH, 4.0)
+            // Anchor = initial DIA, and inside the [5, 11] bounds.
+            preferences.putClamped(DoubleKey.OApsAIMIPkpdAnchorDiaH, 6.5)
             preferences.putClamped(DoubleKey.OApsAIMIPkpdAnchorPeakMin, 75.0)
         }
         PkpdInsulinPreset.STANDARD -> {
@@ -52,7 +55,8 @@ fun applyPkpdInsulinPreset(preferences: Preferences, preset: PkpdInsulinPreset) 
             preferences.putClamped(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax, 200.0)
             preferences.putClamped(DoubleKey.OApsAIMIPkpdInitialDiaH, 8.0)
             preferences.putClamped(DoubleKey.OApsAIMIPkpdInitialPeakMin, 90.0)
-            preferences.putClamped(DoubleKey.OApsAIMIPkpdAnchorDiaH, 6.0)
+            // Anchor = initial DIA, and inside the [6, 16] bounds.
+            preferences.putClamped(DoubleKey.OApsAIMIPkpdAnchorDiaH, 8.0)
             preferences.putClamped(DoubleKey.OApsAIMIPkpdAnchorPeakMin, 90.0)
         }
         PkpdInsulinPreset.CUSTOM -> Unit

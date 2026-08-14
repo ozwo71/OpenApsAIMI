@@ -263,7 +263,22 @@ class PkPdIntegration(private val preferences: Preferences) {
             physioAbsorptionFactor = physioAbsorptionFactor,
             physioSiFactor = physioSiFactor,
             damping = damping,
-            activity = activityState
+            activity = activityState,
+            learningTrace = buildLearningTrace(estimator, structural.bounds),
+        )
+    }
+
+    /**
+     * Small read-only view of the DIA learning loop, exported in the intelligence snapshot.
+     * It makes a frozen DIA and a too short insulin tail visible without reading the source.
+     */
+    private fun buildLearningTrace(estimator: AdaptivePkPdEstimator, bounds: PkPdBounds): PkpdLearningTrace {
+        val status = estimator.statusSnapshot()
+        return PkpdLearningTrace(
+            diaAtFloor = abs(status.params.diaHrs - bounds.diaMinH) <= 0.01,
+            diaRegPullH = status.lastDiaRegPullH,
+            diaLearnStepH = status.lastDiaLearnStepH,
+            iobResidual120Min = estimator.iobResidualAt(120.0),
         )
     }
 
@@ -384,8 +399,13 @@ class PkPdIntegration(private val preferences: Preferences) {
             bounds = bounds,
             isfBounds = isfBounds,
             tailPolicy = tailPolicy,
-            anchorDiaHrs = preferences.get(DoubleKey.OApsAIMIPkpdAnchorDiaH),
-            anchorPeakMin = preferences.get(DoubleKey.OApsAIMIPkpdAnchorPeakMin),
+            // The anchor is the soft target the learner is pulled back to. An anchor outside the
+            // bounds would pull the learned value onto a bound and keep it there forever, so it is
+            // kept inside the (already normalized) bounds whatever the preset or slider wrote.
+            anchorDiaHrs = preferences.get(DoubleKey.OApsAIMIPkpdAnchorDiaH)
+                .coerceIn(bounds.diaMinH, bounds.diaMaxH),
+            anchorPeakMin = preferences.get(DoubleKey.OApsAIMIPkpdAnchorPeakMin)
+                .coerceIn(bounds.peakMinMin, bounds.peakMinMax),
         )
     }
 
@@ -412,7 +432,7 @@ class PkPdIntegration(private val preferences: Preferences) {
             val start = estimator?.params()?.let { clampParams(it, bounds) }
                 ?: lastPersisted
                 ?: readLearnedSeed(bounds)
-            estimator = AdaptivePkPdEstimator(LogNormalKernel(), learningCfg, start)
+            estimator = AdaptivePkPdEstimator(ExponentialKernel(), learningCfg, start)
             lastBounds = bounds
             lastLearningCfg = learningCfg
         }
@@ -575,6 +595,21 @@ class PkPdIntegration(private val preferences: Preferences) {
     }
 }
 
+/**
+ * Read-only numbers about the DIA learning loop, for the intelligence snapshot.
+ *
+ * @property diaAtFloor learned DIA sitting on the lower bound (within 0.01 h)
+ * @property diaRegPullH last pull back toward the anchor, in hours
+ * @property diaLearnStepH last raw learning step, in hours, before the anchor pull and any clamp
+ * @property iobResidual120Min insulin left on board 2 h after a dose, 0..1
+ */
+data class PkpdLearningTrace(
+    val diaAtFloor: Boolean,
+    val diaRegPullH: Double,
+    val diaLearnStepH: Double,
+    val iobResidual120Min: Double,
+)
+
 class PkPdRuntime(
     val params: PkPdParams,
     val tailFraction: Double,
@@ -586,7 +621,8 @@ class PkPdRuntime(
     val physioAbsorptionFactor: Double,
     val physioSiFactor: Double,
     private val damping: SmbDamping,
-    val activity: InsulinActivityState
+    val activity: InsulinActivityState,
+    val learningTrace: PkpdLearningTrace? = null,
 ) {
 
     fun dampSmbWithAudit(
