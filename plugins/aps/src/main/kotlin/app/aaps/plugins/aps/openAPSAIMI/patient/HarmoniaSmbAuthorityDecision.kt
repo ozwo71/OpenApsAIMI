@@ -28,6 +28,17 @@ enum class InsulinIntent {
 }
 
 /**
+ * Writes a number only when it is finite, and writes null otherwise.
+ *
+ * `org.json` throws on NaN and on Infinity. The decision export runs on the main route, where the
+ * call is not wrapped in a catch, so one bad number would end the tick after the dose was already
+ * decided. A missing field is much cheaper than a lost tick.
+ */
+internal fun JSONObject.putFiniteOrNull(name: String, value: Double?) {
+    put(name, if (value != null && value.isFinite()) value else JSONObject.NULL)
+}
+
+/**
  * Single SMB authority decision for one tick — produced before finalizeAndCapSMB.
  */
 data class HarmoniaSmbAuthorityDecision(
@@ -45,12 +56,14 @@ data class HarmoniaSmbAuthorityDecision(
     fun toJsonObject(): JSONObject =
         JSONObject().apply {
             put("mode", mode.name)
-            put("smb_u", smbU)
-            put("demand_before_u", demandBeforeU)
-            put("mpc_demand_u", mpcDemandU)
-            put("catalog_proposed_cap_u", catalogProposedCapU ?: JSONObject.NULL)
+            putFiniteOrNull("smb_u", smbU)
+            // The demand BEFORE this arbiter ran. The recursive resolver overwrites its own demand
+            // with the lifted value straight after, so this is the only record of the pre-lift number.
+            putFiniteOrNull("demand_before_u", demandBeforeU)
+            putFiniteOrNull("mpc_demand_u", mpcDemandU)
+            putFiniteOrNull("catalog_proposed_cap_u", catalogProposedCapU)
             put("catalog_cap_kind", catalogCapKind?.name ?: JSONObject.NULL)
-            put("envelope_max_u", envelopeMaxU)
+            putFiniteOrNull("envelope_max_u", envelopeMaxU)
             put("insulin_intent", insulinIntent.name)
             put("reasons", JSONArray(reasons))
             put("adds_smb_authority", addsSmbAuthority)

@@ -552,9 +552,16 @@ class AutodriveEngine @Inject constructor(
         }
         val anchored = (profileIsf / 10000.0).coerceIn(SAFETY_SI_MIN, SAFETY_SI_MAX)
         if (anchored > commandedSi) {
-            // Today this never fires: `AutoDriveState.createSafe` floors `estimatedSI` at 0.1 while
-            // `SAFETY_SI_MAX` is 0.04, so the commanded value always wins. The day it does fire, the
-            // units have changed and the barrier's binding rate must be re-measured before shipping.
+            // This branch can fire. The old note here said it never could, because
+            // `AutoDriveState.createSafe` floored `estimatedSI` at 0.1 against a `SAFETY_SI_MAX` of
+            // 0.04. That floor is gone: `createSafe` now bounds the value in the caller's units,
+            // between `InsulinActionModel.MIN_ISF_MGDL_PER_U` and `MAX_ISF_MGDL_PER_U` over 10000.
+            // So both sides are now real sensitivities in the same units and the larger one wins.
+            //
+            // Note this is only the *input* to the coefficient. `InsulinActionModel.controlCoefficient`
+            // then floors at `LEGACY_CONTROL_COEFFICIENT`, so on most ticks neither sensitivity
+            // reaches the barrier at all: on the 2026-08-15 package the exported `si_metabolic` sat
+            // exactly on that floor on 61 of 72 ticks.
             aapsLogger.info(
                 LTag.APS,
                 "🛡️ [CBF] Ancre profil retenue: ${anchored.format(5)} au lieu de ${commandedSi.format(5)}."

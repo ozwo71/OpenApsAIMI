@@ -35,6 +35,14 @@ internal data class SmbBindingTrace(
     val autodriveFloorU: Double?,
     val maxSmbU: Double?,
     val maxSmbHighBgU: Double?,
+    /**
+     * Which branch of the maxSMB ladder chose [maxSmbU], and the slope that branch read.
+     *
+     * The rise floor stops at [maxSmbU], so these two say whether the ladder we now obey saw the rise
+     * or missed it. A `STANDARD` tag on a tick where BG is climbing fast means the ladder saw nothing.
+     */
+    val maxSmbLadderBranch: String?,
+    val slopeFromMinDeviation: Double?,
     val iobHeadroomU: Double?,
     val rbtBeforeU: Double?,
     val rbtAfterU: Double?,
@@ -69,6 +77,8 @@ internal data class SmbBindingTrace(
             putNullable("autodrive_floor_u", autodriveFloorU)
             putNullable("max_smb_u", maxSmbU)
             putNullable("max_smb_high_bg_u", maxSmbHighBgU)
+            putNullable("max_smb_ladder_branch", maxSmbLadderBranch)
+            putNullable("slope_from_min_deviation", slopeFromMinDeviation)
             putNullable("iob_headroom_u", iobHeadroomU)
             putNullable("rbt_before_u", rbtBeforeU)
             putNullable("rbt_after_u", rbtAfterU)
@@ -118,6 +128,8 @@ internal data class SmbBindingTrace(
         val autodriveFloorU: Double? = null,
         val maxSmbU: Double? = null,
         val maxSmbHighBgU: Double? = null,
+        val maxSmbLadderBranch: String? = null,
+        val slopeFromMinDeviation: Double? = null,
         val iobHeadroomU: Double? = null,
         val rbtBeforeU: Double? = null,
         val rbtAfterU: Double? = null,
@@ -159,6 +171,9 @@ internal data class SmbBindingTrace(
                 autodriveFloorU = autodriveFloorU.finiteOrNull(),
                 maxSmbU = maxSmbU.finiteOrNull(),
                 maxSmbHighBgU = maxSmbHighBgU.finiteOrNull(),
+                maxSmbLadderBranch = maxSmbLadderBranch,
+                // NaN or Inf must never reach org.json — export null instead.
+                slopeFromMinDeviation = slopeFromMinDeviation.finiteOrNull(),
                 iobHeadroomU = iobHeadroomU.finiteOrNull(),
                 rbtBeforeU = rbtBeforeU.finiteOrNull(),
                 rbtAfterU = rbtAfterU.finiteOrNull(),

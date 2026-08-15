@@ -102,6 +102,29 @@ class AdaptivePkPdEstimatorTest {
         assertEquals(accepted.lastDiaRegPullH, skipped.lastDiaRegPullH, 1e-12)
     }
 
+    /**
+     * The staleness contract behind `kinetics.dia_accepted_updates`. A skipped tick keeps the last
+     * step values on purpose, so the counter is the only way to tell a fresh step from an old one.
+     * If this test breaks, every frozen `dia_learn_step_h` in a support package becomes unreadable.
+     */
+    @Test
+    fun `skipped update keeps the step values but does not advance the accepted counter`() {
+        IsfTddProvider.set(45.0)
+        val estimator = AdaptivePkPdEstimator()
+        estimator.update(2000, 100.0, -2.5, 1.0, 0.0, 60, false)
+        val accepted = estimator.statusSnapshot()
+        assertEquals(1L, accepted.acceptedUpdateCount)
+
+        // IOB below the learning minimum: update() returns early through recordSkipped.
+        estimator.update(2005, 100.0, -2.5, 0.1, 0.0, 60, false)
+
+        val skipped = estimator.statusSnapshot()
+        assertEquals(accepted.acceptedUpdateCount, skipped.acceptedUpdateCount)
+        assertEquals(accepted.lastDiaLearnStepH, skipped.lastDiaLearnStepH, 1e-12)
+        assertEquals(accepted.lastDiaRegPullH, skipped.lastDiaRegPullH, 1e-12)
+        assertEquals(PkPdUpdateReason.IOB_TOO_LOW, skipped.latestReason)
+    }
+
     @Test
     fun `gated updates publish truthful reason without incrementing accepted count`() {
         val estimator = AdaptivePkPdEstimator()

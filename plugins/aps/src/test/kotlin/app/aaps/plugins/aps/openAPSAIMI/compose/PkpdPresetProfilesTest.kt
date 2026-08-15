@@ -5,6 +5,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -83,5 +84,28 @@ class PkpdPresetProfilesTest {
     fun `custom preset writes nothing`() {
         apply(PkpdInsulinPreset.CUSTOM)
         assertTrue(stored.isEmpty(), "CUSTOM must not overwrite the user values")
+    }
+
+    /**
+     * Picking an insulin type must set the kinetics it is about and nothing else. These keys
+     * belong to the user: the learning pace lives on the Advanced tab, and the two prudence
+     * sliders live on the Simple tab. A preset that reset them silently took away tuning the
+     * user had chosen on purpose, and the tail damping key is a hypo guard.
+     */
+    @Test
+    fun `preset does not touch settings the user owns`() {
+        val userOwned = listOf(
+            DoubleKey.OApsAIMISmbTailDamping,
+            DoubleKey.OApsAIMIIsfFusionMinFactor,
+            DoubleKey.OApsAIMIIsfFusionMaxFactor,
+            DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH,
+            DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin,
+        )
+        for (preset in PkpdInsulinPreset.entries) {
+            apply(preset)
+            for (key in userOwned) {
+                assertFalse(stored.containsKey(key), "$preset must not write $key")
+            }
+        }
     }
 }

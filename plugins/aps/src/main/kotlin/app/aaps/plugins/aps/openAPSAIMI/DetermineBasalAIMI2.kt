@@ -214,6 +214,7 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaHarmonizer
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaProductionDecision
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaProductionMode
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSensorTelemetry
+import app.aaps.plugins.aps.openAPSAIMI.patient.putFiniteOrNull
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEnvironment
@@ -273,6 +274,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.abs
 import kotlin.math.exp
@@ -304,7 +306,19 @@ internal data class AimiDecisionContext(
         val iob_u: Double,
         /** User profile ISF block for this time of day. Static within the tick. */
         val profile_isf_static_mgdl: Double? = null,
-        /** Sensitivity the command actually used for this tick (same value as [profile_isf_mgdl]). */
+        /**
+         * `ctx.profile.sens`, read once at tick bootstrap. Same value as [profile_isf_mgdl] on every
+         * tick, because both are that one read.
+         *
+         * This is **not** the sensitivity the SMB dose used. It reaches two places only: the control
+         * barrier anchor in `AutodriveEngine.profileAnchoredSafetySi`, and the endogenous basal
+         * bridge in `EndogenousBasalBridgePolicy.computeBridgeRateUph`. The delivered SMB is sized
+         * from the fused PKPD sensitivity instead — see [variable_sens_mgdl] for where to read it.
+         *
+         * Even the barrier rarely reads it: `InsulinActionModel.LEGACY_CONTROL_COEFFICIENT` floors
+         * the coefficient at the value for 45 mg/dL/U, and on the 2026-08-15 package the exported
+         * `si_metabolic` sat exactly on that floor on 61 of 72 ticks.
+         */
         val command_isf_mgdl: Double? = null,
         /** Which source produced the dynamic value this tick. See [IsfSourceTelemetry]. */
         val isf_source: String? = null,
@@ -407,14 +421,24 @@ internal data class AimiDecisionContext(
         var rise_floor_spent_u: Double? = null,
         var rise_floor_minutes_since_contribution: Double? = null,
         /**
-         * The sensitivity the dosing path actually uses, in mg/dL/U — `rT.variable_sens`.
+         * The `variableSensitivity` member, in mg/dL/U, read late in the tick.
          *
-         * Every other ISF field here describes what the *predictions* saw. [command_isf_mgdl] carries
-         * `profile.sens`, which comes from a 30-minute bucket cache; the dosing path reads the fresh
-         * `variable_sens`, and the two are not the same number. Measured by inverting the tube
-         * advisor's exported kappa over 194 ticks of the 2026-08-14 package: the ratio spans 0.70 to
-         * 2.65 and the two agree within 0.5 mg/dL/U on 1 tick. Until this field exists, no statement
-         * about "the ISF the dose used" can be checked.
+         * This is a **post-dose** read, not the sensitivity the dose used. It is taken in
+         * `markEstimatorDiagnosticsForExport`, which runs after `applyEndoAndActivityAdjustments`
+         * and `applyIsfBoundsAndPhysioMultipliersAfterEndoActivity` have already multiplied
+         * `variableSensitivity` by the endo, activity and physiological factors, and long after the
+         * MPC and the tube advisor sized the dose.
+         *
+         * The number the delivered dose used is the fused PKPD sensitivity, exported as
+         * `adjustments.intelligence_snapshot_v1.isf.fused_mgdl_per_u`. It is what the MPC reads as
+         * `estimatedSI` and what the tube advisor reports as
+         * `adjustments.tube_advisor.isf_used_mgdl_per_u`. On the 2026-08-15 package the two agreed
+         * on 142 of 160 ticks, while this field agreed with the tube on 0 of 160.
+         *
+         * Do not compare this field with anything dose-related. An earlier note here claimed a 0.70
+         * to 2.65 ratio against [command_isf_mgdl]; that was obtained by inverting the tube's kappa,
+         * which cannot be inverted below about 29.7 mg/dL/U because the curve saturates there. The
+         * direct instruments contradict it.
          */
         var variable_sens_mgdl: Double? = null,
     )
@@ -1004,6 +1028,30 @@ private const val MEAL_ADVISOR_MIN_CARB_COVERAGE = 0.25
  * short enough that a genuinely new meal does.
  */
 private const val RISE_FLOOR_REARM_MS = 90L * 60L * 1000L
+
+/**
+ * Stable tags naming which branch of the maxSMB ladder picked the ceiling for a tick.
+ *
+ * Exported as `smb_binding_trace.max_smb_ladder_branch`. The rise floor obeys the ceiling this ladder
+ * picks, so the tag is what tells us afterwards whether the ladder saw a rise (a promoted or partial
+ * branch) or saw nothing at all (`STANDARD`). The two readings mean very different things.
+ *
+ * The `_CLAMPED` twins mean the branch fired and the BG below 120 safety clamp then pulled the
+ * ceiling back down to the standard preference. Without them the tag would report a promotion that
+ * never reached the dose. `STANDARD` has no twin: it already sets the standard preference, so the
+ * clamp cannot lower it further.
+ */
+private const val LADDER_PLATEAU_CRITICAL = "PLATEAU_CRITICAL_BG250"
+private const val LADDER_PLATEAU_CRITICAL_CLAMPED = "PLATEAU_CRITICAL_BG250_CLAMPED"
+private const val LADDER_CONFIRMED_RISE_HIGH = "CONFIRMED_RISE_HIGH"
+private const val LADDER_CONFIRMED_RISE_HIGH_CLAMPED = "CONFIRMED_RISE_HIGH_CLAMPED"
+private const val LADDER_SENSITIVE_85 = "SENSITIVE_85"
+private const val LADDER_SENSITIVE_85_CLAMPED = "SENSITIVE_85_CLAMPED"
+private const val LADDER_PLATEAU_MODERATE_75 = "PLATEAU_MODERATE_75"
+private const val LADDER_PLATEAU_MODERATE_75_CLAMPED = "PLATEAU_MODERATE_75_CLAMPED"
+private const val LADDER_FALLING_60 = "FALLING_60"
+private const val LADDER_FALLING_60_CLAMPED = "FALLING_60_CLAMPED"
+private const val LADDER_STANDARD = "STANDARD"
 
 private const val TIGHT_SPIRAL_CAP_TDD_REFERENCE_U = 55.0
 
@@ -1891,6 +1939,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastSmbCapped = 0.0
         lastSmbFinal = 0.0
         lastSmbBindingTraceDraft = SmbBindingTrace.Draft(timestampMs = ctx.currentTime)
+        // The maxSMB ladder runs later in the tick, and a tick can abort before it. Without this
+        // reset the export would stamp the previous tick's branch tag and slope onto an otherwise
+        // empty trace, and a reader could not tell. Null means "the ladder did not run this tick".
+        lastMaxSmbLadderBranch = null
+        lastSlopeFromMinDeviation = null
         // Effort reduction telemetry is per tick — a basal-only tick must export null, not the last
         // SMB tick's multiplier.
         lastEffortSmbFactorRaw = null
@@ -2151,8 +2204,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     /**
      * T9 G6 lead log, physio multipliers + trace, early PKPD + [cachedPkpdRuntime], physio/inflammation
-     * mutations, TAP-G peak governor echo (prefs), straight-line tube advisor (`effectiveDiaH` from PKPD or profile DIA).
+     * mutations, TAP-G peak governor echo (prefs).
      * Same effect order as historical inline block. **Not** BYODA combinedΔ — that is [runCombinedDeltaByodaAndDynamicPeak].
+     *
+     * This function does **not** run the straight-line tube advisor, and the `effectiveDiaH` local it
+     * computes reaches nothing: it is written and never read. The tube runs once per tick from
+     * `publishDoseTerminalAuthorityAndSnapshot`, after the gated dose terminals exist, and it takes
+     * its DIA from the `tickEffectiveDiaHours` member, not from that local. See the note above the
+     * return statement below.
      *
      * @return Pump age from [pumpAgeDaysCached] and [physioMultipliers] for the rest of the tick (trajectory / caps).
      */
@@ -2494,11 +2553,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Solution: Use maxSMBHB if EITHER:
         //   1. Active rise detected (slope >= 1.0) - Original logic
         //   2. High plateau (BG >= 250) - NEW, regardless of slope
+        // The rise floor obeys whichever ceiling this ladder picks, so remember the branch and the
+        // slope it read. Both go out in `smb_binding_trace` so the next package can say whether the
+        // ladder we now trust is reading the rise correctly.
+        this.lastSlopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation.takeIf { it.isFinite() }
         this.maxSMB = when {
             // 🚨 CRITICAL PLATEAU: BG >= 250, regardless of slope
             // Absolute emergency if BG catastrophic, even with low delta
             // Protection: Don't apply if rapid fall (delta <= -5)
             bg >= 250 && combinedDelta > -5.0 -> {
+                this.lastMaxSmbLadderBranch = LADDER_PLATEAU_CRITICAL
                 consoleLog.add("MAXSMB_PLATEAU_CRITICAL BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} slope=${String.format("%.2f", ctx.mealData.slopeFromMinDeviation)} -> maxSMBHB=${String.format("%.2f", maxSMBHB)}U (plateau)")
                 maxSMBHB
             }
@@ -2508,6 +2572,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Added combinedDelta check to confirm rise is real
             (bg >= 140 && !honeymoon && ctx.mealData.slopeFromMinDeviation >= 1.0 && combinedDelta > 0.5) ||
             (bg >= 180 && honeymoon && ctx.mealData.slopeFromMinDeviation >= 1.4 && combinedDelta > 0.5) -> {
+                this.lastMaxSmbLadderBranch = LADDER_CONFIRMED_RISE_HIGH
                 consoleLog.add("MAXSMB_SLOPE_HIGH BG=${bg.roundToInt()} slope=${String.format("%.2f", ctx.mealData.slopeFromMinDeviation)} \u0394=${String.format("%.1f", combinedDelta)} -> maxSMBHB=${String.format("%.2f", maxSMBHB)}U (confirmed rise)")
                 maxSMBHB
             }
@@ -2516,6 +2581,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // 85% maxSMBHB for extra caution close to target
             // Added combinedDelta check to confirm rise is real
             bg >= 120 && bg < 140 && !honeymoon && ctx.mealData.slopeFromMinDeviation >= 1.0 && combinedDelta > 0.5 -> {
+                this.lastMaxSmbLadderBranch = LADDER_SENSITIVE_85
                 val partial = max(maxSMB, maxSMBHB * 0.85)
                 consoleLog.add("MAXSMB_SLOPE_SENSITIVE BG=${bg.roundToInt()} slope=${String.format("%.2f", ctx.mealData.slopeFromMinDeviation)} \u0394=${String.format("%.1f", combinedDelta)} -> ${String.format("%.2f", partial)}U (85% maxSMBHB - confirmed rise)")
                 partial
@@ -2524,6 +2590,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // 🟠 MODERATE PLATEAU: BG 200-250, stable delta
             // Compromise: 75% of maxSMBHB for elevated but not critical BG
             bg >= 200 && bg < 250 && combinedDelta > -3.0 && combinedDelta < 3.0 -> {
+                this.lastMaxSmbLadderBranch = LADDER_PLATEAU_MODERATE_75
                 val partial = max(maxSMB, maxSMBHB * 0.75)
                 consoleLog.add("MAXSMB_PLATEAU_MODERATE BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} -> ${String.format("%.2f", partial)}U (75% maxSMBHB)")
                 partial
@@ -2532,6 +2599,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // 🔵 FALLING PROTECTION: BG elevated but falling moderately
             // Partial limit to avoid over-correction while still allowing some action
             bg > 180 && combinedDelta <= -3.0 && combinedDelta > -8.0 -> {
+                this.lastMaxSmbLadderBranch = LADDER_FALLING_60
                 val partial = max(maxSMB, maxSMBHB * 0.6)
                 consoleLog.add("MAXSMB_FALLING BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} -> ${String.format("%.2f", partial)}U (60% maxSMBHB)")
                 partial
@@ -2539,6 +2607,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             // ⚪ STANDARD: Normal/low BG conditions
             else -> {
+                this.lastMaxSmbLadderBranch = LADDER_STANDARD
                 consoleLog.add("MAXSMB_STANDARD BG=${bg.roundToInt()} -> ${String.format("%.2f", maxSMB)}U")
                 maxSMB
             }
@@ -2549,6 +2618,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val stdMaxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
         if (bg < 120.0 && this.maxSMB > stdMaxSMB) {
              this.maxSMB = stdMaxSMB
+             // The exported branch tag must show that the clamp won, otherwise the tag reports a
+             // promotion that never reached the dose.
+             this.lastMaxSmbLadderBranch = when (this.lastMaxSmbLadderBranch) {
+                 LADDER_PLATEAU_CRITICAL    -> LADDER_PLATEAU_CRITICAL_CLAMPED
+                 LADDER_CONFIRMED_RISE_HIGH -> LADDER_CONFIRMED_RISE_HIGH_CLAMPED
+                 LADDER_SENSITIVE_85        -> LADDER_SENSITIVE_85_CLAMPED
+                 LADDER_PLATEAU_MODERATE_75 -> LADDER_PLATEAU_MODERATE_75_CLAMPED
+                 LADDER_FALLING_60          -> LADDER_FALLING_60_CLAMPED
+                 else                       -> LADDER_STANDARD
+             }
              consoleLog.add("🔒 STRICT CLAMP: BG<120 -> Forced Standard MaxSMB (${String.format("%.2f", stdMaxSMB)}U)")
         }
         val ngrConfig = buildNightGrowthResistanceConfig(ctx.profile, ctx.autosensData, glucoseStatus, targetBg.toDouble())
@@ -5178,7 +5257,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 hints = mpcHints,
             )
             lastHtrRaFloorMgdlPerMin = mpcHints.estimatedRaFloorMgdlPerMin.takeIf { it > 0.0 }
-            markHtrRaFloorForExport(lastHtrRaFloorMgdlPerMin, estimatedRaForMpc)
 
             val adState = app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState.createSafe(
                 bg = ctx.glucoseStatus.glucose,
@@ -5245,6 +5323,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 engaged = true,
             )
 
+            // Called here, after `tick`, and not before it. The barrier fields this reads
+            // (`lastProfileIsfSeen`, `lastCbfPermittedU`, `lastBarrierDiagnostics`, the two control
+            // coefficients) are written inside `tick`. Read before the call, they still held the
+            // previous tick's values, so the whole `control_barrier` block and
+            // `cbf_profile_isf_mgdl` were exported one tick late. Measured on three support
+            // packages: `cbf_profile_isf_mgdl` matched the previous tick's `command_isf_mgdl` on
+            // 75/89, 96/105 and 116/127 ticks, and the current tick's on 13/90, 17/106 and 28/127.
+            // Both arguments are computed above and are not touched in between, so the two Ra
+            // fields keep exactly the values they had before.
+            markHtrRaFloorForExport(lastHtrRaFloorMgdlPerMin, estimatedRaForMpc)
+
             val v3CommandSafe = adCommand != null && adCommand.isSafe
             if (v3CommandSafe) {
                 val v3TbrRate = adCommand!!.temporaryBasalRate
@@ -5285,7 +5374,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             val v3SmbModel = if (v3CommandSafe) adCommand!!.scheduledMicroBolus ?: 0.0 else 0.0
             val iobHeadroomForFloor = (maxIob - iob).coerceAtLeast(0.0)
-            val smbCeilingForFloor = maxOf(maxSMB, maxSMBHB).coerceAtLeast(0.0)
+            // The maxSMB ladder above already decided whether this tick earns the high-BG ceiling.
+            // The rise floor must not overrule that decision, so it stops at the ceiling the ladder
+            // actually chose. Using `max(maxSMB, maxSMBHB)` here handed the floor the high-BG ceiling
+            // even on ticks where the ladder had refused it.
+            val smbCeilingForFloor = maxSMB.coerceAtLeast(0.0)
             val v3SmbFloor = if (v3CommandSafe) {
                 aggressiveRiseSmbFloorU(bg, combinedDelta, shortAvgDeltaAdj)
                     .coerceAtMost(minOf(smbCeilingForFloor, iobHeadroomForFloor))
@@ -9013,16 +9106,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
             decisionCtx.adjustments.recursive_belief = UnfoldExporter.toJsonObject(export)
             snap.resolutions.harmoniaSmb?.let { smb ->
-                harmoniaSmbAuthorityJson = org.json.JSONObject().apply {
-                    put("mode", smb.authorityMode ?: JSONObject.NULL)
-                    put("smb_u", smb.demandAfterU)
-                    put("demand_before_u", smb.demandBeforeU)
-                    put("max_smb_cap_u", smb.maxSmbCapU)
-                    put("adds_smb_authority", smb.addsSmbAuthority)
-                    put("insulin_intent", smb.insulinIntent ?: JSONObject.NULL)
-                    put("reason_codes", org.json.JSONArray(smb.reasonCodes))
-                    put("source", "harmonia_smb_authority_v1")
-                }
+                // Prefer the arbiter's own record. Its `demand_before_u` is the demand BEFORE the
+                // lift, and it also carries `mpc_demand_u`, `envelope_max_u`,
+                // `catalog_proposed_cap_u` and the arbiter reasons. The rebuilt record below reads
+                // `demand_before_u` AFTER the lift was already applied, so a lift always measured as
+                // zero. Fall back to it only on a tick where no arbiter ran.
+                harmoniaSmbAuthorityJson = smb.authorityDecision?.toJsonObject()
+                    ?: JSONObject().apply {
+                        put("mode", smb.authorityMode ?: JSONObject.NULL)
+                        putFiniteOrNull("smb_u", smb.demandAfterU)
+                        putFiniteOrNull("demand_before_u", smb.demandBeforeU)
+                        putFiniteOrNull("max_smb_cap_u", smb.maxSmbCapU)
+                        put("adds_smb_authority", smb.addsSmbAuthority)
+                        put("insulin_intent", smb.insulinIntent ?: JSONObject.NULL)
+                        put("reason_codes", JSONArray(smb.reasonCodes))
+                        put("source", "harmonia_smb_authority_v1")
+                    }
                 decisionCtx.adjustments.harmonia_smb_authority = harmoniaSmbAuthorityJson
             }
         }
@@ -9107,7 +9206,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             ),
         )
         val bindingFinalU = terminalSmbAmountU
-        val bindingExportDraft = lastSmbBindingTraceDraft.appendStage(
+        // Written here, after the RT is final, because this is the one point every export path goes
+        // through — the same reason `markEstimatorDiagnosticsForExport` writes its fields late. The
+        // three draft copy sites do not all run on every tick, so setting the ladder fields there
+        // would leave them null on the paths that skip that site.
+        val bindingExportDraft = lastSmbBindingTraceDraft.copy(
+            maxSmbLadderBranch = lastMaxSmbLadderBranch,
+            slopeFromMinDeviation = lastSlopeFromMinDeviation,
+        ).appendStage(
             "FINAL",
             bindingFinalU,
             bindingFinalU,
@@ -10804,6 +10910,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     /** When the floor last contributed, so a fresh rise can re-arm the budget. */
     private var lastRiseFloorContributionMs: Long = 0L
+
+    /**
+     * Which branch of the maxSMB ladder fired this tick, and the slope it read.
+     *
+     * The rise floor now obeys the ceiling this ladder picks, so we must be able to see whether the
+     * ladder is sane. Measured on 2026-08-15: on the two rises that ended below 70 mg/dL the ladder
+     * stayed on `STANDARD` while BG climbed 7 to 12 mg/dL per 5 minutes, and the only condition that
+     * can have failed there is `slopeFromMinDeviation >= 1.0`. We cannot tell from the exports alone
+     * whether the slope was right or simply blind, so both values are written out.
+     *
+     * See [SmbBindingTrace] fields `max_smb_ladder_branch` and `slope_from_min_deviation`.
+     */
+    private var lastMaxSmbLadderBranch: String? = null
+    private var lastSlopeFromMinDeviation: Double? = null
 
     /**
      * Deltas the end-of-tick safety net feeds the estimator with.

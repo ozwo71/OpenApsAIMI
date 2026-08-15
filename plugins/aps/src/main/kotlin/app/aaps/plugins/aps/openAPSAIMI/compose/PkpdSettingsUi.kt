@@ -105,6 +105,12 @@ fun PkpdSetupWizardDialog(
                 onClick = {
                     if (step == 0) {
                         applyPkpdInsulinPreset(preferences, selectedPreset)
+                        // First run only: seed the settings the preset does not own, so a new
+                        // user does not start on the raw key defaults. Both prudence sliders
+                        // start at the neutral centre; same polarity, left cautious.
+                        PkpdLearningPace.NORMAL.applyTo(preferences)
+                        PkpdCorrectionPrudence.applyLevel(preferences, 0.5)
+                        PkpdTailPrudence.applyLevel(preferences, 0.5)
                         preferences.put(BooleanKey.OApsAIMIPkpdEnabled, true)
                         step = 1
                     } else if (step == 1) {

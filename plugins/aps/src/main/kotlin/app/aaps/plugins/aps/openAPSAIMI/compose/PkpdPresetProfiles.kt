@@ -19,8 +19,14 @@ private fun Preferences.putClamped(key: DoubleKey, value: Double) {
 }
 
 /**
- * Writes initial PK/PD parameters and learning bounds, then **reclamps** learned state
- * into the new envelope (preserves learning; does not wipe to initial).
+ * Writes **insulin kinetics only**: the initial PK/PD parameters, the learning bounds and the
+ * anchors. It then **reclamps** the learned state into the new envelope (preserves learning;
+ * does not wipe to initial).
+ *
+ * It does **not** touch settings the user owns on other screens: the learning pace
+ * ([PkpdLearningPace]), the correction prudence slider ([PkpdCorrectionPrudence]) and the
+ * tail prudence slider ([PkpdTailPrudence]). Picking an insulin type must not undo choices
+ * that have nothing to do with the insulin. The first-run wizard seeds those defaults instead.
  */
 fun applyPkpdInsulinPreset(preferences: Preferences, preset: PkpdInsulinPreset) {
     if (preset == PkpdInsulinPreset.CUSTOM) return
@@ -61,10 +67,6 @@ fun applyPkpdInsulinPreset(preferences: Preferences, preset: PkpdInsulinPreset) 
         }
         PkpdInsulinPreset.CUSTOM -> Unit
     }
-    PkpdLearningPace.NORMAL.applyTo(preferences)
-    // Neutral center on both sliders — same polarity: left cautious, right more delivery.
-    PkpdCorrectionPrudence.applyLevel(preferences, 0.5)
-    PkpdTailPrudence.applyLevel(preferences, 0.5)
     reclampPkpdLearnedStateToBounds(preferences)
 }
 

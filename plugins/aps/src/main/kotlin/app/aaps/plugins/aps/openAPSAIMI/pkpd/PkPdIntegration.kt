@@ -31,6 +31,19 @@ class PkPdIntegration(private val preferences: Preferences) {
 
         /** Minimum learned peak change (minutes) before writing prefs again. */
         const val PEAK_PERSIST_MIN_DELTA_MIN = 0.05
+
+        /** [PkpdLearningTrace.diaLearnBlockedBy]: this call does not learn, it only reads. */
+        const val LEARN_BLOCKED_READ_ONLY_PATH = "read_only_path"
+
+        /** [PkpdLearningTrace.diaLearnBlockedBy]: the causal state was not clean enough to learn from. */
+        const val LEARN_BLOCKED_CAUSAL_UNCLEAN = "causal_unclean"
+
+        /**
+         * [PkpdLearningTrace.diaLearnBlockedBy]: start of the value used when
+         * [CausalKineticsModulator] refuses structural learning. The modulator's own reason is
+         * added after it, so the exported value says which causal branch closed the gate.
+         */
+        const val LEARN_BLOCKED_CAUSAL_MODULATOR_PREFIX = "causal_modulator:"
     }
 
     /**
@@ -133,7 +146,17 @@ class PkPdIntegration(private val preferences: Preferences) {
             )
         }
         val learningContextClean = causalStatePosterior?.learningContextClean() ?: true
-        val causalLearningAllowed = CausalKineticsModulator.modulate(causalStatePosterior).learningAllowed
+        val causalModulation = CausalKineticsModulator.modulate(causalStatePosterior)
+        val causalLearningAllowed = causalModulation.learningAllowed
+        // Same three booleans as the guard below, read where the guard is really taken.
+        // The snapshot used to rebuild this decision later in the tick from a newer causal state,
+        // so it could not be trusted. This value is exported as PkpdLearningTrace.diaLearnBlockedBy.
+        val learnBlockedBy: String? = when {
+            !allowLearning         -> LEARN_BLOCKED_READ_ONLY_PATH
+            !learningContextClean  -> LEARN_BLOCKED_CAUSAL_UNCLEAN
+            !causalLearningAllowed -> LEARN_BLOCKED_CAUSAL_MODULATOR_PREFIX + causalModulation.reason
+            else                   -> null
+        }
         logPkpdLearningSkipReason(
             bg = bg,
             iobU = iobU,
@@ -264,7 +287,7 @@ class PkPdIntegration(private val preferences: Preferences) {
             physioSiFactor = physioSiFactor,
             damping = damping,
             activity = activityState,
-            learningTrace = buildLearningTrace(estimator, structural.bounds),
+            learningTrace = buildLearningTrace(estimator, structural.bounds, learnBlockedBy),
         )
     }
 
@@ -272,13 +295,19 @@ class PkPdIntegration(private val preferences: Preferences) {
      * Small read-only view of the DIA learning loop, exported in the intelligence snapshot.
      * It makes a frozen DIA and a too short insulin tail visible without reading the source.
      */
-    private fun buildLearningTrace(estimator: AdaptivePkPdEstimator, bounds: PkPdBounds): PkpdLearningTrace {
+    private fun buildLearningTrace(
+        estimator: AdaptivePkPdEstimator,
+        bounds: PkPdBounds,
+        learnBlockedBy: String?,
+    ): PkpdLearningTrace {
         val status = estimator.statusSnapshot()
         return PkpdLearningTrace(
             diaAtFloor = abs(status.params.diaHrs - bounds.diaMinH) <= 0.01,
             diaRegPullH = status.lastDiaRegPullH,
             diaLearnStepH = status.lastDiaLearnStepH,
             iobResidual120Min = estimator.iobResidualAt(120.0),
+            diaAcceptedUpdates = status.acceptedUpdateCount,
+            diaLearnBlockedBy = learnBlockedBy,
         )
     }
 
@@ -602,12 +631,19 @@ class PkPdIntegration(private val preferences: Preferences) {
  * @property diaRegPullH last pull back toward the anchor, in hours
  * @property diaLearnStepH last raw learning step, in hours, before the anchor pull and any clamp
  * @property iobResidual120Min insulin left on board 2 h after a dose, 0..1
+ * @property diaAcceptedUpdates how many learning steps the estimator has accepted so far. When this
+ *   number is the same as on the tick before, [diaRegPullH] and [diaLearnStepH] were kept from an
+ *   older tick and must not be read as this tick's step.
+ * @property diaLearnBlockedBy why learning did not run on this tick, or null when it did run. Taken
+ *   in [PkPdIntegration.computeRuntime] at the line where the gate is really applied.
  */
 data class PkpdLearningTrace(
     val diaAtFloor: Boolean,
     val diaRegPullH: Double,
     val diaLearnStepH: Double,
     val iobResidual120Min: Double,
+    val diaAcceptedUpdates: Long = 0L,
+    val diaLearnBlockedBy: String? = null,
 )
 
 class PkPdRuntime(

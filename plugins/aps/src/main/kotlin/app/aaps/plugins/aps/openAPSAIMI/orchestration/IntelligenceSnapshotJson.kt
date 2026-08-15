@@ -57,6 +57,10 @@ object IntelligenceSnapshotJson {
                     put("dia_reg_pull_h", trace.diaRegPullH)
                     put("dia_learn_step_h", trace.diaLearnStepH)
                     put("iob_residual_120min", trace.iobResidual120Min)
+                    // A Long and a String, so no non-finite value can reach org.json here.
+                    // A flat counter means the two step values above were kept from an older tick.
+                    put("dia_accepted_updates", trace.diaAcceptedUpdates)
+                    put("dia_learn_blocked_by", trace.diaLearnBlockedBy)
                 }
             })
             put("isf", JSONObject().apply {

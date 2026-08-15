@@ -19,11 +19,42 @@ uncommitted.** Full module suite: **1345 tests, 0 failures** (was 1332; A-quater
 
 ---
 
-## Current state — read this first (updated 2026-08-14)
+## Current state — read this first (updated 2026-08-15)
 
-The newest part wins; current truth is **Part A-septies** (2026-08-14, later session). Nothing below
-is rewritten — each part keeps the record of what was believed, which is how the wrong attributions
-were caught.
+The newest part wins; current truth is **Part A-octies** (2026-08-15). Nothing below is rewritten —
+each part keeps the record of what was believed, which is how the wrong attributions were caught.
+
+**A-octies in one line.** Nine parts ran in parallel on package `1786797984089`. **Five independent
+routes to "dose more on a rising meal" were quantified and all five failed for the same reason** —
+the rescue and the overdose occupy the same state space and no tick-local rule separates them
+(route 3 is route 1 with the cap removed; the saturated-`min_pred` flag is `IOB ≥ 2.2 U` in disguise;
+opening Harmonia's basal-first term is worth 0.000 U on three packages; an exhaustive 499-feature
+scan finds no bound on the rise floor's own inputs). **The one change that worked stopped searching
+in that space and went one level up:** the rise floor was capped at `maxOf(maxSMB, maxSMBHB)`, so it
+overruled the ceiling the maxSMB ladder had already chosen — on 31 of 50 floor-active ticks. Both of
+this package's sub-70 excursions are ticks where the ladder refused to promote and the floor
+overrode it by 1.7× and 2.75×. Bounding it costs **−4.9 U before the 64.1, −4.8 U before the 65.7,
+−0.098 U on the 08-14 90-minute plateau and 0.000 U on the 08-12 crash ticks**.
+
+**And six exported instruments were found to be lying** (§AQ8-6): the whole `control_barrier` block
+was written one tick early, `binding_stage` is wrong on 18 of 53 ticks, `harmonia_smb_authority` was
+rebuilt from post-LIFT values so a LIFT always measured zero, `learning.gate_pass` disagrees with the
+real gate on 84 of 173 transitions, `rise_floor_spent_u` gates nothing because
+`remainingRiseFloorBudgetU` has zero call sites, and `variable_sens_mgdl` is a post-dose read that
+agrees with the tube on 0 of 160 ticks. **Several numbers in Part A-bis, A-sexies and A-septies rest
+on these.** AQ7-4's ×2.65 is dead, and RED_CARPET inflates every "units removed" figure by ~2×.
+
+**Commit status (2026-08-15).** `84035882a2` and `4056b23d06` (the DIA kernel and contextual-shift
+work) landed on the night of 08-14/08-15 and are committed. Agent CONTRACT reviewed them
+retroactively and returned **FAIL**: a dosing change shipped unquantified (the kernel swap moved SMB
+tail damping from 61.5 % to 93.7 % of ticks), two dosing changes shared one install, and
+`4056b23d06` is **inert on the dosing path** — `OpenAPSAIMIPlugin.kt` resolves kinetics with
+`causalPosterior = null`, so the contextual DIA shift is always 0 there, and the other resolve's
+`effectiveDiaH` local is never read. `dia_governor.dominant_branch` is `LEARNED` on 174/174 ticks.
+**Everything in Part A-octies is uncommitted.** Suite **BUILD SUCCESSFUL, 1460 tests, 0 failures,
+12 skipped**. (The first run of the same suite failed once on the known-flaky
+`aimiNeuralNetworkTest > test training reduces loss()`, which then passed on the re-run after the
+reset fix — recorded here so nobody reads a single green run as proof that test is stable.)
 
 **A-septies in one line.** The hypothesis that the ISF swing → the 39 floor → the tube veto → the
 84-minute plateau is *one* defect was tested tick by tick and **the causality is refuted**: through
@@ -54,6 +85,8 @@ insulin term**, not a missing appearance term.
 **Commit status — the line above is now false.** Part A-bis → A-quinquies are committed
 (`7447c24059`, `dfc53822d6`, `bc72fe1861`, `e4e12e723d`, `f87d25e024`); tree clean at `a478cf9330`;
 **nothing is uncommitted**. Suite **1393 tests / 0 failures**, measured at `f87d25e024`, not re-run since.
+*(Superseded 2026-08-15: two more commits landed after `a478cf9330`, and Part A-octies is
+uncommitted on top of them. See the commit-status paragraph at the top of "Current state".)*
 
 | what is broken right now | the measurement behind the claim | see |
 |---|---|---|
@@ -2026,3 +2059,287 @@ this regime, so every route that moves the numerator is hypersensitive here.
 should decide.** The specific thing to look for is `control_barrier.safe_u` alongside
 `insulin_term_mgdl_per_min` on a meal: it will show whether the term is as dominant in the wild as it
 is in this replay, on ticks where the barrier ran and the corpus could not be re-derived.
+
+---
+
+# Part A-octies — nine parts measured in parallel, and the one bound that survived (2026-08-15)
+
+Written 2026-08-15 from support package `1786797984089` (283 decision ticks, 08-14 14:47 → 08-15
+14:42), with cross-checks on `1786722482068` (the 08-14 plateau) and `1786605720362` (the 08-12
+crash, BG 297 → 45). Nine parts ran as separate specialists; every decisive claim below was
+re-verified in the code by the orchestrator before it was accepted. Suite after this part:
+**BUILD SUCCESSFUL, 1460 tests, 0 failures, 12 skipped**. The 12 skipped still include the two
+`@Disabled` DIA persistence tests that stayed off through the kernel rewrite. The first run of this
+suite failed once on the known-flaky `aimiNeuralNetworkTest > test training reduces loss()` and
+passed on the re-run; that test is flaky, not fixed.
+
+## AQ8-1. The day itself
+
+BG 64.1–209.3, mean 120.8, TIR 94 %, five ticks below 70. SMB 52.14 U. Today's lunch had **no
+plateau**: peak 208.7 at 13:57, then 208 → 98 in 40 minutes. Two sub-70 excursions, both after a
+meal: **64.1 at 11:51** and **65.7 at 08-14 21:56**.
+
+## AQ8-2. Five independent negative results, all on the same state space
+
+This is the finding that outranks the individual parts. Five different routes to "dose more on a
+rising meal" were quantified and **all five failed for the same reason**: the legitimate rescue and
+the dangerous overdose occupy the same region of the state space, and no tick-local rule separates
+them.
+
+| route | where it was tested | why it failed |
+|---|---|---|
+| appearance term on the barrier `lfh` (route 1) | AQ7-8, 492 ticks / 9 packages | the gate that removes all hypo exposure removes all benefit |
+| **observed-velocity bound on the insulin term (route 3)** | this part, 477 barrier ticks | it is route 1 with the cap removed — see AQ8-3 |
+| **saturated `min_pred` treated as unknown** | this part, 52 instrumented vetoes | the saturation flag is `IOB ≥ 2.2 U` in disguise — see AQ8-4 |
+| **opening Harmonia's basal-first `eligible` term** | this part, 3 packages, ~737 ticks | measured cost and benefit both **0.000 U** |
+| **a tick-local bound on the rise floor itself** | this part, exhaustive 499-feature scan | all 38 separating features are artefacts — see AQ8-5 |
+
+**The one thing that did work stopped searching in the same space and went one level up.** See AQ8-5.
+
+## AQ8-3. Route 3 is route 1 with the cap removed — refuse it harder
+
+`lfh = −p1(bg−100) − si·iob·bg + Ra` (`ControlBarrierShield.kt:133-137`). Substituting the
+observation-derived appearance `raObserved = v + p1(bg−100) + si·iob·bg` makes the first two terms
+cancel exactly:
+
+```
+lfh(Ra := raObserved) = v          max |difference| = 2.2e-15 over 323 ticks
+```
+
+So the suspension condition becomes `v ≤ −γ(bg−80)`, i.e. a required 5-minute fall of −27.0 at
+BG 180, **−37.8 at BG 220**, −59.4 at BG 300. **The fastest fall in 477 barrier ticks is −22.4.**
+The condition is physiologically unreachable above about BG 150: at the meal γ, route 3 unsuspends
+**207 of 207** ticks and never suspends again.
+
+On the 08-12 excursion it stays permissive all the way down: `safeU` +8.66 / +8.45 / +8.27 / +8.43
+at 10:37–10:51 (route 1 gave +1.43 / +1.18 / +0.77 / +0.35), and still **+5.11 and +5.46 at 11:06
+and 11:17 while BG was falling toward 45**. Permitted budget over the two hours that ended at BG 45:
+**0.59 U today → 36.54 U under route 3.**
+
+The tighten-only variant (`lfh := min(lfh, v)`) is safe and **empty**: it changes `safeU` on 3 of 477
+ticks and newly suspends none, because `lfh ≤ v` already holds on 474 of 477.
+
+## AQ8-4. The 39 floor: the instrument worked, and it proved the fix wrong
+
+The AQ7-5 unclipped mirror did its job. Splitting the 52 instrumented `VETO_HYPO_FLOOR` ticks into
+SATURATED (deep negative unclipped, high clip count) and REAL gives 42 / 10 — and the forward
+outcome is the opposite of the hypothesis:
+
+| class | n | min BG in next 2 h | followed by < 70 |
+|---|---|---|---|
+| SATURATED | 42 | **64.1** | **9** |
+| REAL | 10 | 71.7 | **0** |
+
+A single threshold, **`IOB ≥ 2.2 U`, reproduces the split on 51 of 52 ticks (98.1 %)**. The flag is
+`IOB × ISF > BG`, i.e. the high-insulin-load state, which is why it predicts subsequent lows instead
+of excluding them. On the 08-12 package, 83 % of proxy-SATURATED floor-39 ticks were followed by
+BG < 70 and 44 by BG < 55, and **all 19 ticks of the 270.8 → 45 descent are proxy-SATURATED**.
+
+Relaxing them would have added ≥ +1.81 U at IOB 9.3–10.5 inside the window of the 64.1, and
+≥ +1.68 U at IOB 18.3–19.3 inside the window of the 65.7.
+
+**Correction to AQ7-5.** Its premise sentence — "the same 39 with one clipped step and an unclipped
+38 is a real forecast" — describes a case with **zero instances** in 220 instrumented ticks. Clip
+counts are `{0}` or `{≥ 11}`, never 1–10. Do not design against that case.
+
+## AQ8-5. What actually shipped: the floor must obey the ceiling the ladder chose
+
+The rise floor is not a floor. Of 52.14 U delivered in 24 h, **35.60 U (68.3 %) came from ticks where
+`model_output_u` was 0**, and 46.57 U (89.3 %) from ticks where the floor was binding. The governed
+path delivered 5.57 U per day.
+
+The exhaustive scan over 499 exported features found **no tick-local bound on the floor's own
+inputs**. But one level up, `DetermineBasalAIMI2.kt` capped the floor at
+`maxOf(maxSMB, maxSMBHB)` — the floor **ignored which branch of the maxSMB ladder had actually
+fired**. On 31 of 50 floor-active ticks the ladder had chosen a lower ceiling and the floor overrode
+it.
+
+| episode | ladder chose | floor took | outcome |
+|---|---|---|---|
+| lunch 13:32 → 14:02 | 1.80 (promoted) | = ladder | clean, 208 → 98 |
+| **dinner 20:37 → 20:56** | 1.36 / 1.60 | = `maxSMBHB` | **1.7× override → 65.7** |
+| **10:00 meal** | 0.40 / 0.80 | = `maxSMBHB` | **2.75× override → 64.1** |
+| 08-14 plateau | promoted (BG ≥ 200) | = ladder | no override |
+| 08-12 10:37–10:51 | 2.200 (BG ≥ 250) | = ladder | no override |
+
+**Where the floor worked, the ladder had already promoted and the floor added nothing. Both hypos
+are ticks where the ladder refused and the floor overruled it.**
+
+Cost of the change, measured on all four required operating points:
+
+| operating point | now | bounded | delta |
+|---|---|---|---|
+| dinner → 65.7 | 12.545 U | 7.760 U | **−4.785 U**, IOB peak 19.32 → ~14.5 |
+| 10:00 meal → 64.1 | 7.723 U | 2.812 U | **−4.911 U**, IOB at 10:26 10.42 → ~6.2 |
+| today's lunch (the rescue) | 8.876 U | 8.536 U | −0.340 U, one tick; the 13:52–14:02 punch-through untouched |
+| 08-14 plateau, 90 min | 11.155 U | 11.056 U | **−0.098 U** |
+| 08-12 10:37–10:51 | 1.781 U | 1.781 U | **0.000 U** |
+| 24 h total | 52.14 U | 38.73 U | −13.41 U (−26 %), 19 ticks |
+
+Of the −13.41 U, 10.04 U is inside the two hypo episodes. The remaining 3.38 U sits on 8 ticks in
+four clusters, each followed to resolution: peaks 139.0, 171.7, 166.7, 142.0, each ending at 97.6 /
+128.5 / 90.6 / 97.4 **with insulin still on board**. **Added time above 180: 0 minutes. Above 200:
+0 minutes.** None of the 8 is a meal the bound would starve.
+
+**The honest reservation.** The bound defers to the ladder, and the ladder's promote branch needs
+`slopeFromMinDeviation >= 1.0`. Proved arithmetically from exported BG and delta alone: at dinner
+every other branch is excluded by its own precondition, so the ladder took `MAXSMB_STANDARD` and the
+only condition that can have failed is **the slope, during a rise of +7.2 to +12.2 mg/dL per 5 min**.
+Two readings, not separable from this corpus: either the ladder was right (six episodes out of six
+agree — every STANDARD episode crashed after a low peak, every promoted episode resolved cleanly), or
+it was blind and happened to be right. The slope instrument shipped in the same change so the next
+package can settle it.
+
+## AQ8-6. Six instruments were lying, and several earlier conclusions rest on them
+
+This is the second theme of the day and it is not smaller than the first.
+
+| instrument | what is wrong | who read it |
+|---|---|---|
+| the whole `control_barrier` block + `cbf_profile_isf_mgdl` | written **one tick early** — `markHtrRaFloorForExport` ran 52 lines before `autodriveEngine.tick`. Lag-1 agreement 75/89, 96/105, 116/127 against lag-0 13/90, 17/106, 28/127 | AQ7-7's table |
+| `smb_binding_trace.binding_stage` | names the largest reducer, not the stage that set `final_u`. Wrong on **18 of 53** ticks | AQ6-5's ranking |
+| `harmonia_smb_authority` | rebuilt from post-LIFT values, so `smb_u − demand_before_u` is 0.000 by construction; the real `toJsonObject()` was dead code | every "the LIFT only restores" claim |
+| `learning.gate_pass` | computed from `learningContextClean()` alone, omitting the modulator term the real guard also requires, and re-read from a newer posterior. **84 disagreements in 173 transitions** | any DIA learning reasoning |
+| `rise_floor_spent_u` | a free-running counter. `remainingRiseFloorBudgetU` has **zero call sites**; the reset is unreachable; `RiseFloorEpisodeBudgetTest` mirrors a ledger that does not run | anyone reading the KDoc |
+| `variable_sens_mgdl` | read after the endo/activity multipliers, i.e. **post-dose**. Agrees with the tube on **0 of 160** ticks | every ISF figure in this document |
+
+**`command_isf_mgdl` is `ctx.profile.sens` read once at bootstrap** — identical to `profile_isf_mgdl`
+on 283/283 ticks. The number the delivered dose used is
+`intelligence_snapshot_v1.isf.fused_mgdl_per_u`, which equals `tube_advisor.isf_used_mgdl_per_u` on
+142 of 160 ticks.
+
+**AQ7-4's ×2.65 is dead.** It came from inverting the tube's kappa, and
+`kappaMinPredDropPerUnit` saturates at 45 for every sensitivity ≤ 29.66 mg/dL/U — 53 of 160 ticks
+sit there, including **every delivering lunch tick**. Measured directly this package, the ratio is
+0.211–1.148 with p50 0.758, the opposite direction. Do not reuse either number.
+
+**RED_CARPET inflates every "units removed" figure by roughly 2×.** It lifted **+17.6 U on 18 ticks**
+(33.8 % of the day's SMB). Of the −29.48 U attributed to `SAFETY_PRECAUTIONS_PKPD`, only −11.74 U
+reached the pump; of the throttle's −6.00 U, only −3.07 U. Its 40 % trigger is a cliff: at lunch
+13:57 a 23 % cut got no restore, at 14:02 a 46 % cut got a full restore. **There are two live
+copies** with different guards (`DetermineBasalAIMI2.kt` ~6642-6714 and ~13247-13336).
+
+## AQ8-7. Parts that returned do-not-code, and why that is the right answer
+
+- **PART E, `SAFETY_PRECAUTIONS_PKPD`.** `bgRising = bg > targetBg` is real (it mislabels 41 % of
+  ticks) but worth **0.45 U over 24 h and 0.00 U at lunch and at both hypos**. The second claimed
+  bug — "clamps to `maxSMB` instead of `maxSMBHB`" — **does not exist**: the ladder reassigns
+  `this.maxSMB` to the context ceiling before the clamp reads it. **Fifth recorded instance of
+  failure mode 1.** Applying the "fix" would have added +1.36 U before the 64.1 (nadir → 27.9) and
+  +0.50 U before the 65.7, and **0.000 U on the plateau it was meant to help**.
+- **PART F, Harmonia.** The top blocker is a label ordering defect, not a bug and not a safety veto:
+  `eligible` already fails on `releaseAuthority == NONE`, so 56 of 78 `BASAL_FIRST_OWNER_*` ticks
+  named the wrong term. Measured cost of the change it would have justified: **0.000 U on three
+  packages**. Harmonia owning no SMB is the documented design
+  (`AIMI_ARCHITECTURE_MAP.md:138, 149-151`), not a defect. The A-quater channel fix **does** work —
+  `LIFT_WITHIN_ENVELOPE` went 1.2 % → 4.0 % → 7.6 %, and `rbt_no_harmonia_channel` fell 7.2 % → 3.8 %
+  — the label was simply unable to show it.
+- **PART A, DIA gates.** Both guards the part asked for **already exist and already fire**
+  (`PkPdIntegration.kt` skips `update()` entirely; `AdaptivePkPdEstimator.kt` already clamps to the
+  bounds). Writing them would have been a no-op that looks like a fix. The real finding: **16 of 17
+  lunch ticks re-export a value computed at another tick**, because `recordSkipped` copies the last
+  step forward. There is **no once-per-CGM-sample guard** anywhere in `update()`. And structural DIA
+  sat at 5.00 because **the anchor was equal to the floor** until 08:42 today — inverting the
+  measured pull gives anchor 5.000 before, 6.002 after. Even removing the learn step entirely, the
+  drift to 5.50 takes **5 days**; over the 5.58 h this corpus contains it is +0.032 h, i.e. 0.004 U
+  on a 13.38 U lunch. Not dose-moving inside one install cycle.
+
+## AQ8-8. The preset wiped a hypo guard, and the reselect is dated to the minute
+
+`applyPkpdInsulinPreset` wrote 15 preference keys, of which **five are not kinetics**: the learning
+pace and both prudence sliders. One of them, `OApsAIMISmbTailDamping`, is a **hypo guard** — the
+preset wrote 0.85 over the user's 0.76, moving the worst-case tail cut from −24 % to −15 %, and it
+widened the ISF fusion window. Both give more insulin.
+
+The reselect is dated **between 08:37:00 and 08:42:01 Paris on 2026-08-15**, by two independent
+signals: the anchor jump (`dia_reg_pull_h` −0.0000083 → +0.00198) and the learning-pace quantisation
+(per-tick DIA step a multiple of 1.0/1440 before, 0.5/1440 after — ratio exactly 2). It also **halved**
+the DIA rate cap.
+
+Regimes for anyone analysing this package: **B** = 00:07–08:37 (102 trace ticks, anchor 5.0, pace
+1.0) · **C** = 08:42–09:02 (5 ticks, estimator destroyed and rebuilt, all traces exactly 0.000000 —
+**exclude**) · **D** = 09:07–14:42 (67 trace ticks, anchor 6.0, pace 0.5). **Today's lunch is entirely
+inside D and internally clean.**
+
+`OApsAIMISmbTailDamping` has **seven** write paths in main, not the four previously recorded, and the
+preset was an unlisted one. That is very likely the real cause of the "second simplified slider
+resets" report: persistence was never broken, a second writer kept stamping over it.
+
+## AQ8-9. What shipped
+
+One dose-moving change, and six that cannot move a dose. Suite green apart from the known flaky test.
+
+| file | change | moves the dose |
+|---|---|---|
+| `DetermineBasalAIMI2.kt` | `smbCeilingForFloor` = `maxSMB` instead of `maxOf(maxSMB, maxSMBHB)` | **yes** |
+| `DetermineBasalAIMI2.kt`, `quality/SmbBindingTrace.kt` | 11 ladder branch tags (incl. `_CLAMPED` twins for the BG < 120 clamp) + `slope_from_min_deviation`, exported in `smb_binding_trace` | no |
+| `DetermineBasalAIMI2.kt` | `markHtrRaFloorForExport` moved after `autodriveEngine.tick` — closes the one-tick barrier lag | no |
+| `DetermineBasalAIMI2.kt`, `autodrive/AutodriveEngine.kt` | four KDoc blocks corrected (`command_isf_mgdl`, `variable_sens_mgdl`, the dead `effectiveDiaH`, the stale `createSafe` floor claim) | no |
+| `compose/PkpdPresetProfiles.kt`, `compose/PkpdSettingsUi.kt` | preset writes kinetics only; the three other writes move to the first-run wizard | no |
+| `pkpd/PkPdIntegration.kt`, `orchestration/IntelligenceSnapshotJson.kt` | `kinetics.dia_accepted_updates` and `kinetics.dia_learn_blocked_by`, taken where the gate is really applied | no |
+| `recursive/RecursiveBeliefResolver.kt`, `recursive/RecursiveBeliefModels.kt`, `DetermineBasalAIMI2.kt`, `patient/HarmoniaSmbAuthorityDecision.kt` | blocker label order; the arbiter's real record exported (pre-LIFT `demand_before_u`, `mpc_demand_u`, `envelope_max_u`, `reasons`); eight Doubles finite-guarded | no |
+| 3 test files + 1 new | `RiseFloorLadderCeilingTest` (8), preset negative assertions, the estimator staleness contract, the Harmonia label expectation | no |
+
+**A latent bug was found and fixed on the way.** `coerceAtLeast(0.0)` does **not** stop a NaN
+(`NaN < 0.0` is false), and the main-route export call is **not** wrapped in `runCatching` — only the
+early-exit and T3C routes are. A non-finite arbiter value would have thrown out of `org.json` and
+ended the tick after the dose was already decided.
+
+**And the review caught the day's own disease inside the day's own fix.** `lastMaxSmbLadderBranch`
+and `lastSlopeFromMinDeviation` were added as tick members with no per-tick reset. A tick can abort
+at `ensureWCycleAndLoadGlucoseStatusOrAbort`, which returns **before** the ladder runs but **after**
+the trace draft is reset — so the export would have stamped the previous tick's branch tag and slope
+onto an otherwise empty trace, with no way for a reader to tell. That is exactly the failure this
+part spent the day documenting six times over, reproduced in the instrument built to stop it. Fixed
+by resetting both beside `lastSmbBindingTraceDraft`, where the codebase already carries a comment
+explaining this precise class of bug for the effort telemetry. **Not measured: how often that abort
+path actually fires.** If it is common, `max_smb_ladder_branch` needs the same counter treatment
+`dia_accepted_updates` just invented — same problem, same shape.
+
+## AQ8-10. What the next package must answer
+
+| question | field | pass condition |
+|---|---|---|
+| did the bound land | `smb_binding_trace.autodrive_floor_u` vs `.max_smb_u` | `floor <= max_smb_u` on **100 %** of ticks; today violated on 31/50 |
+| is the ladder we now trust sane | `smb_binding_trace.max_smb_ladder_branch`, `.slope_from_min_deviation` | a `STANDARD` tag on a fast rise means the ladder saw nothing. **Note `slopeFromMinDeviation` defaults to 999.0, which is finite** — 999 means "no value" |
+| is the barrier lag closed | `control_barrier.h_mgdl + 80 == baseline_state.current_bg_mgdl` **same row** | today it matches the previous row on 66/72 |
+| does a Harmonia LIFT add anything | `harmonia_smb_authority.demand_before_u`, `.mpc_demand_u`, `.reasons` | `smb_u − demand_before_u > 0` on some tick, or "restore only" is confirmed in production for the first time. **The key is now `reasons`, not `reason_codes`, and `max_smb_cap_u` moved out of this block** |
+| is a DIA step fresh | `kinetics.dia_accepted_updates` | flat counter ⇒ discard `dia_learn_step_h` and `dia_reg_pull_h` for that run |
+| does DIA finally move | `kinetics.structural_dia_h` | ≈ 5.13 after 24 h, 5.24 after 48 h on the current prefs. Still 5.00–5.05 after 48 h ⇒ the pull is being cancelled |
+| hypo watch | `current_bg_mgdl < 70` | baseline 5 ticks / 25 min |
+| hyper watch | time above 200 per meal | baseline: 90 min at 197–220 on 08-14 |
+
+**Re-export after 48 h before any DIA decision.** This corpus holds 5.58 h of the anchor-6.0
+configuration and 16 accepted updates. That is not enough to conclude anything.
+
+## AQ8-11. Open, proposed, and deliberately not done
+
+**Proposed as their own parts, none opened:**
+1. **RED_CARPET** — 33.8 % of the day's SMB, a cliff trigger, two live copies. Removing the restore
+   costs **−2.767 U on the 08-14 plateau**, which is why the ceiling bound (−0.098 U) ranked ahead of
+   it. It needs its own install.
+2. **`SCENARIO_CONSENSUS` on the permissive side** — at 10:22 it published `min_pred = 154.5` while
+   the unclipped path minimum was **−57.1** with 30 clipped steps, and 2.20 U went out. That is on
+   the causal path to both of today's lows, and it is upstream in `DoseTerminalSnapshot.kt`.
+3. **`slopeFromMinDeviation` itself** — the input the shipped bound now defers to.
+
+**Debt taken on knowingly:**
+- No test covers the ladder branch tag; it is verified from the next package instead.
+- No test covers `HarmoniaSmbAuthorityDecision.toJsonObject()` — it was dead code, so the suite
+  cannot prove the new record is right.
+- G-3 (`dose_isf_mgdl_per_u`) not shipped: redundant on 142/160 ticks, non-redundant on the 18
+  `pre_v3_rbt` ticks of which 13 delivered insulin.
+- PART H's preference instrument not shipped, so a preset change still has to be dated indirectly.
+- `remainingRiseFloorBudgetU` and `RiseFloorEpisodeBudgetTest` left in place — dead code removal is
+  its own change.
+- The two `@Disabled` DIA persistence tests (`PkPdIntegrationTest`) stayed off through the kernel
+  rewrite and are still off.
+
+**One open question found while verifying, not chased:** `autodriveEngine.tick` has a **second** call
+site in `runT3cAutodriveShadowTick`, which writes the same `last*` fields the barrier export reads.
+On ticks where only that shadow branch runs, `markHtrRaFloorForExport` is never called. This may
+explain part of why `control_barrier` covers only 72 of 283 ticks. Tracing it needs a per-tick record
+of which branch ran, which does not exist.
+
+**Still closed, do not reopen:** meal-intent (AQ1), `minPredictedBg` provenance (A-septies), route 1
+(AQ7-8), route 3 (AQ8-3), `MPC_TAU_MIN` on arithmetic, `LogNormalKernel`.

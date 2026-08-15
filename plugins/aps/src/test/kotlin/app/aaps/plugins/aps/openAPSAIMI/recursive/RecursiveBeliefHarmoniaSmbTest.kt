@@ -20,8 +20,13 @@ class RecursiveBeliefHarmoniaSmbTest {
         assertThat(snapshot.resolutions.releaseAuthority).isEqualTo(ReleaseAuthority.NONE)
         assertThat(snapshot.resolutions.smbDemandU).isEqualTo(0.0)
         assertThat(snapshot.resolutions.harmoniaSmb?.eligible).isFalse()
+        // The authority is NONE here, so that is what blocks the SMB: `eligible` fails on it before
+        // the basal-first owner is ever looked at. The blocker must name the binding term. The
+        // basal-first owner is still reported, but as a reason code, not as the blocker.
         assertThat(snapshot.resolutions.harmoniaSmb?.dominantBlocker)
-            .isEqualTo("BASAL_FIRST_OWNER_HARMONIA_PRODUCTION_BASAL_FIRST")
+            .isEqualTo("NO_RBT_SMB_AUTHORITY")
+        assertThat(snapshot.resolutions.harmoniaSmb?.reasonCodes)
+            .contains("HARMONIA_SMB_BASAL_FIRST_OWNER")
     }
 
     @Test

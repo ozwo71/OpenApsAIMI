@@ -848,8 +848,14 @@ object RecursiveBeliefResolver {
             postHypoBlock -> ext.harmoniaBlockReason ?: "POST_HYPO"
             exerciseBlock -> ext.harmoniaBlockReason ?: "EXERCISE_LOCKOUT"
             mealConflict -> ext.harmoniaBlockReason ?: "MEAL_CONFLICT"
-            basalFirstChannel != BasalFirstChannel.NONE -> "BASAL_FIRST_OWNER_${basalFirstChannel.name}"
+            // Order matters, and this pair used to be the other way round. `eligible` below already
+            // fails when the RBT authority is NONE, so on those ticks the basal-first owner is not
+            // the term that blocks anything. Naming it first reported a blocker that was not the
+            // binding one: measured on the 2026-08-15 package, 56 of 78
+            // `BASAL_FIRST_OWNER_HARMONIA_PRODUCTION_BASAL_FIRST` ticks had authority NONE.
+            // This is a label only. It does not change `eligible`, the demand, or the dose.
             releaseAuthority == ReleaseAuthority.NONE -> "NO_RBT_SMB_AUTHORITY"
+            basalFirstChannel != BasalFirstChannel.NONE -> "BASAL_FIRST_OWNER_${basalFirstChannel.name}"
             active && !ext.harmoniaDecisionEligible && authorityDecision?.addsSmbAuthority != true ->
                 ext.harmoniaBlockReason ?: "SIMULATION_INELIGIBLE"
             active && !smbAction -> "NO_SMB_ACTION"
@@ -918,6 +924,7 @@ object RecursiveBeliefResolver {
             authorityMode = authorityDecision?.mode?.name,
             addsSmbAuthority = authorityDecision?.addsSmbAuthority == true,
             insulinIntent = authorityDecision?.insulinIntent?.name ?: ext.insulinIntent,
+            authorityDecision = authorityDecision,
         )
     }
 

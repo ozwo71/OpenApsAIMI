@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.recursive
 
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSmbAuthorityDecision
+
 enum class ReleaseAuthority {
     NONE,
     SOFT,
@@ -138,6 +140,14 @@ data class HarmoniaSmbResolution(
     val authorityMode: String? = null,
     val addsSmbAuthority: Boolean = false,
     val insulinIntent: String? = null,
+    /**
+     * The arbiter decision this resolution was built from, carried out unchanged so the export can
+     * write the real record instead of rebuilding one. The rebuilt record reads `demand_before_u`
+     * after the lift was already applied, so a lift always looks like zero. This field keeps the
+     * pre-lift demand, the MPC demand, the envelope and the arbiter reasons. Null when no arbiter
+     * ran on the tick. Nothing on the dose path reads it.
+     */
+    val authorityDecision: HarmoniaSmbAuthorityDecision? = null,
 )
 
 data class DoseChannelResolution(
