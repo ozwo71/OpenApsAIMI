@@ -19,10 +19,34 @@ uncommitted.** Full module suite: **1345 tests, 0 failures** (was 1332; A-quater
 
 ---
 
-## Current state — read this first (updated 2026-08-15)
+## Current state — read this first (updated 2026-08-18)
 
-The newest part wins; current truth is **Part A-octies** (2026-08-15). Nothing below is rewritten —
+The newest part wins; current truth is **Part A-nonies** (2026-08-18). Nothing below is rewritten —
 each part keeps the record of what was believed, which is how the wrong attributions were caught.
+
+**A-nonies in one line.** First package from a device carrying the A-octies instruments (present on
+231/231 ticks), and the first with a dated three-hour hike. BG reached **50.6**. Cause, traced and
+fixed: the **sport safety guard zeroed the SMB four times and `RED_CARPET` restored it every time**,
+because the sport guard never set `criticalSafetyZeroedThisTick` — the flag whose own comment says a
+vital-safety zero is never restored. One line applied, quantified afterwards on 22 packages at
+**-7.303 U**, and a **total no-op on both 08-15 and the 08-14 plateau**. Two corrections are owed to
+A-octies: its **-13.41 U is overstated by ~25 %** (it did not model the downstream re-clamp; an
+independent replay gives -10.631 U while reproducing the dinner episode exactly), and its acceptance
+test **compares two vintages of the same variable**, so the three surviving "violations" are an
+export artefact, not a dosing leak. On this day the shipped bound removed **0.494 U, not 26 %**.
+
+**And two structural findings.** The 15-minute step window carried a **day total** — the Health
+Connect sync sums whole records that merely *overlap* the window instead of aggregating, so one
+consolidated Samsung workout record of 13 218 steps was credited in full to the 5-minute window;
+nine observed values reconstruct exactly, including the recovery to 182. **That bug was protective**:
+it was the only thing holding the exercise state ACTIVE, and fixing it naively **adds about +1.1 U
+into the 85 minutes before the 50.6**, so the export must ship first and any guard must hold the last
+plausible value rather than fall back to zero. Separately, **a meal always beats exercise**:
+`exercise_afterburn_prob` reached 0.9371 and was dominant on **0 of 231 ticks**, being discounted
+x0.92 while the meal saturates at 1.000; every exercise representation is gated on current movement
+while every meal representation is gated on a glucose rise, so a post-exercise rebound reclassifies
+as a meal one tick after the patient stands still. A three-hour hike also earns exactly what a
+thirty-minute walk earns. **Everything in A-nonies is uncommitted.** Suite **1460 / 0 / 12**.
 
 **A-octies in one line.** Nine parts ran in parallel on package `1786797984089`. **Five independent
 routes to "dose more on a rising meal" were quantified and all five failed for the same reason** —
@@ -2343,3 +2367,259 @@ of which branch ran, which does not exist.
 
 **Still closed, do not reopen:** meal-intent (AQ1), `minPredictedBg` provenance (A-septies), route 1
 (AQ7-8), route 3 (AQ8-3), `MPC_TAU_MIN` on arithmetic, `LogNormalKernel`.
+
+---
+
+# Part A-nonies — the hike day, and the hypoglycaemia the safety guard could not stop (2026-08-18)
+
+Written from support package `1787084643605` (231 decision ticks, 08-17 22:27 -> 08-18 22:16 Paris),
+with cross-checks on 22 measurable older packages. **This is the first package built from a device
+carrying the Part A-octies instruments**, and all of them are present on 231/231 ticks. It is also
+the first corpus with a large, dated exercise block: the patient was in the Alps and hiked about
+three hours from 16:00. Note the window starts 08-17 22:27, so the 08-17 hike is **outside** the
+corpus: **one exercise episode, no internal replication.**
+
+Nine parts were planned; five completed before the session ran out of budget. Suite after the one
+applied change: **BUILD SUCCESSFUL, 1460 tests, 0 failures, 12 skipped.**
+
+## AQ9-1. The day, and the harm
+
+BG min **50.6**, max 233.4, mean 114.6. Five ticks below 70. SMB **18.81 U over 47 ticks**, against
+52.14 U on 08-15.
+
+```
+15h  8.88 U delivered, BG 113 -> 233.4        the meal
+16h-18h  hike, 0.00 U, BG 219.6 -> 69.5       five ticks at 69-73
+19h  3.77 U delivered, BG 98.4 -> 168.6
+20h  BG 168.8 -> 64.4
+21:12  BG 50.6, IOB still 2.92
+```
+
+Every tick below 75 delivered **0.00 U with a 0 U/h temp basal**. The loop was already at the floor
+at every one of them.
+
+## AQ9-2. What caused it: RED_CARPET undoes the sport guard
+
+Four consecutive ticks, 19:32 to 19:57, carry `Safety sport -> SMB=0` in the narrative. The sport
+guard did its job and zeroed the demand four times. Four times `RED_CARPET` put it back.
+
+| tick | BG | IOB | demand | after guard | ladder rung | maxSMBHB | RED_CARPET | delivered |
+|---|---|---|---|---|---|---|---|---|
+| 19:32 | 148.8 | **0.15** | 2.30 | **0.00** | 0.80 | 1.80 | **1.80** | 0.81 |
+| 19:37 | 159.8 | 1.10 | 2.28 | **0.00** | 0.80 | 1.80 | **1.80** | 1.35 |
+| 19:52 | 163.0 | 2.99 | 1.92 | **0.00** | 0.80 | 1.80 | **1.80** | 0.98 |
+| 19:57 | 168.6 | 4.14 | 1.96 | **0.00** | 0.80 | 1.80 | 1.12 | 0.63 |
+
+**The defect is one missing line.** `criticalSafetyZeroedThisTick` is set in exactly one place in the
+whole file, the critical-safety block in `applySafetyPrecautions`. The sport guard sits three lines
+below it and did `return 0f` **without setting the flag**, so the RED_CARPET restore condition
+(`gatedUnits < proposedUnits * 0.6f`) read the sport zero as a minor cut. RED_CARPET's own comment
+says a zero placed by a vital safety is never restored. **Seventh recorded instance of failure
+mode 1: the constraint was in the comment and absent from the code.**
+
+RED_CARPET's cap is `if (maxSMBHB > baseLimit) maxSMBHB else baseLimit`, so it also **bypasses the
+maxSMB ladder rung entirely** — the very ceiling the A-octies bound made the rise floor respect.
+
+**Applied (uncommitted):** the sport guard's zeroing branch now sets `criticalSafetyZeroedThisTick`.
+Quantified afterwards across 22 measurable packages: **8 affected ticks, -7.303 U**.
+
+| package | ticks | units removed | BG in the next 2 h |
+|---|---|---|---|
+| **08-18** | 4 | **-3.770** | the 50.6 — the benefit |
+| 08-12 | 3 | -2.822 | one to 68.6; **two to 212 then 247 — the cost** |
+| 07-27 | 1 | -0.712 | **211 -> 257 — the cost** |
+| **08-15** | **0** | **0.000 — no-op** | — |
+| **08-14 plateau** | **0** | **0.000 — no-op** | — |
+
+The two episodes most at risk are untouched, and the fields are present there, so those are real
+zeros and not missing data. The cost is named and not hidden: about 2.5 U removed ahead of two
+hyperglycaemic excursions, against 3.77 U removed ahead of a 50.6. That is a judgement, not a
+measurement.
+
+**The scaling branch of the sport guard was deliberately left alone.** It has fired **0 times in
+14 610 rows**, and structurally so: `guardScale` is 0.0 unless a meal context is active, which needs
+a manual flag or COB > 5, and **COB was 0 on all 35 sport-zero ticks in the whole corpus**. It is
+unexercised, not safe by construction — `guardScale` is bounded to [0.40, 0.85] and a cut below 0.6
+would trip the same restore. Export `guardScale` and the branch taken before deciding.
+
+**A second restore site exists** with its own preference threshold and its own copy of the ladder
+bypass. It **does** carry the flag guard, so the applied fix protects both. It was inert on the
+ticks read.
+
+## AQ9-3. Two corrections owed to Part A-octies
+
+**1. AQ8-5's -13.41 U is overstated by roughly 25 %.** An independent replay of the same corpus with
+the same method gives **-10.631 U**, while reproducing the dinner episode exactly
+(0.935+1.100+1.100+1.100+0.550 = **4.785 U**, matching AQ8-5 to three decimals). The difference is
+that AQ8-5 did not model the downstream re-clamp `clampSmbToMaxSmbAndMaxIob(smbToGive, maxSMB, ...)`
+at the end of `applySafetyPrecautions`. The bound is still monotonically more restrictive than the
+old expression and still removes 2.981 U before the 64.1 and 4.785 U before the 65.7 — but its
+published effect was too large.
+
+**2. AQ8-10's acceptance test compares two vintages of the same variable.** `autodrive_floor_u` is
+written when the floor is clamped; `max_smb_u` is **overwritten later** by `finalizeAndCapSMB` with
+the post-tube value, because the tube advisor runs a second time (`pre_v3_rbt`) between the two. The
+three surviving "violations" on this package (08-18 03:22, 06:12, 08:12) are therefore an **export
+artefact, not a dosing leak**: on all three the delivered dose was inside the ceiling
+(0.2112 <= 0.32, 0.0990 <= 0.32, 0.0448 <= 0.08), guaranteed by the hard clamp. Proof in the data:
+on the 8 floor-active ticks where the tube scale was < 1 and unchanged between the two publishes,
+the floor equals the post-tube ceiling to the last digit (0.18 = 1.8 x 0.1, 0.68 = 0.8 x 0.85,
+1.071 = 1.53 x 0.7, 0.32 = 0.8 x 0.4). The fix is to export `autodrive_floor_ceiling_u`, the ceiling
+the clamp actually read, and test against that.
+
+## AQ9-4. The shipped bound removed 0.494 U, not 26 %
+
+Daily SMB fell 52.14 -> 18.81 U. A per-tick replay substituting the old expression gives:
+
+- floor's own output: **-4.900 U**
+- **delivered insulin: -0.494 U, i.e. 1.5 % of the 33.33 U drop**
+
+On 12 of 32 floor ticks the bound bit *before* a guard that already bound (`PHYSIO_CAP`, the x0.5
+PKPD guard, `SAFETY_NET`), so delivered change was 0.000 U. On the day's only large meal the ladder
+**promoted** (`CONFIRMED_RISE_HIGH`, `maxSMB == maxSMBHB == 1.80`), so the bound had nothing to
+remove. **The remaining -32.8 U is not decomposed, and is deliberately not attributed to exercise:
+no exercise or lockout flag is exported, so it cannot be shown.**
+
+A fact that reframes the whole day: **56 of 231 ticks (24 %) had BOTH ceilings at 0.00**, including
+**28 consecutive ticks from 15:52 to 18:47**, spanning the entire fall from 232.1 to 69.5. Every
+zeroing site sets both, so the old expression would also have given a zero floor there.
+
+**The 233.4 peak is not the bound** (0.060 U on all 12 ticks above 180). What held the dose down
+during that rise: the PKPD guard cut **8.236 U** and the throttle a further **2.172 U** — 10.4 U
+removed downstream against 8.88 U delivered — plus a ladder that only promoted at BG 176.6, already
+80 mg/dL into the rise, plus a **missing tick at 15:12** across the steepest part (+40.3 mg/dL).
+
+## AQ9-5. The step window carried a day total, and the bug was protective
+
+`physiological_tree.branches.activity.reasons` carries `steps15`. On 08-18 it reads 465, 476, then
+**13218, 13249, 13249**, then **31**. The corpus maximum is 13249 and the next highest value anywhere
+is 717.
+
+**Root cause, found to the unit.** The Health Connect sync reads each window with
+`ReadRecordsRequest(...TimeRangeFilter.between(start, end))` and then `response.records.sumOf { it.count }`.
+`readRecords` returns whole records that **overlap** the range; it does not clip or apportion them.
+Samsung Health writes a finished workout to Health Connect as **one consolidated record** at save
+time, so a single 13218-step record covering 16:00-19:20 is credited **in full** to every window it
+touches, including the 5-minute one. That is why `steps15min == steps60min == 13218`. The correct
+API is `aggregate` / `aggregateGroupByDuration`, which apportions. **Not a fallback, not a unit
+mix-up, not a cumulative counter: a windowed read that does not window.**
+
+Nine observed values were reconstructed exactly from that one hypothesis, with no free parameters,
+including the recovery to **182 = 31+40+60+51** once the session left the 60-minute window.
+
+**And the corruption was protective.** At 19:22-19:32 the patient had stopped (true counts 31, 40,
+60, 51 = 6-10 steps/min). The impossible value forced `exertingNow` (883 steps/min against a 25/min
+threshold), hence `State.ACTIVE`, hence `effortIsLiveMovement()` true, hence the `!input.effortLive`
+term in `MealCertainty` kept the meal override **shut**. When the reading corrected to 31 one tick
+later, the override opened, meal certainty went HIGH, and the confirmed-meal floor raised the effort
+multiplier from **0.4728 to 0.75**, putting **+0.499 U** back. `effort_smb_floored_by_meal` is true
+on **exactly 1 tick of 231**, and it is that one.
+
+> **Fixing the step signal naively is dose-ADDING: about +1.1 U between 19:32 and 20:07, i.e. into
+> the 85 minutes before BG 50.6.** *(Inferred: closed-form arithmetic on the published
+> `EffortActivityBelief` formulas, open loop, an upper bound.)*
+
+The load-bearing half of any fix is therefore **not** the plausibility bound but the fallback:
+`HealthContextRepository` currently does `steps15Result?.steps ?: 0`. **Mapping unknown to 0 is what
+turns a rejected sample into an insulin-adding event.** A guard must hold the last plausible value,
+never zero. With hold-last-plausible the 08-18 dose delta would be **0.00 U**.
+
+**A second, independent step path is broken.** `isSportSafetyCondition()` does not read Health
+Connect at all; it reads `StepService`, where `getRecentStepCount15Min()` returns **a single
+5-minute bucket from 15 minutes ago**, not a 15-minute total, and `getRecentStepCount180Min()`
+returns **170 minutes**. Consequence: the `recentBurst` trigger needs `recentSteps10Minutes >= 800`
+on what is a 5-minute bucket, i.e. **160 steps/min — structurally unreachable**. The same map is a
+plain `LinkedHashMap` written from the sensor thread and iterated elsewhere, while its wear twin was
+fixed with `ConcurrentHashMap`. **Two different numbers with the same name, from two sources, by two
+algorithms, never exported side by side.**
+
+The corruption is **unique to 08-18** across the four packages checked; 08-15, 08-14 and 08-12 have
+plausible maxima (81-89 steps/min) and `s60 > s15` throughout.
+
+## AQ9-6. The architectural finding: a meal always beats exercise
+
+Three components can represent post-exercise recovery. All three lost, and they lost structurally.
+
+- `exercise_afterburn_prob` reached **0.9371** and was >= 0.87 on five ticks. **`EXERCISE_AFTERBURN`
+  was dominant on 0 of 231 ticks.**
+- The physiological tree carried `activity: ACTIVE, confidence 1.0` **in the same object** as a
+  `DIGESTION_ACTIVE` trunk at confidence 1.0. The trunk is what propagates.
+- The pattern catalogue emitted `EXERCISE_ACUTE` with a **HARD 0.450 U** cap at 19:27; five minutes
+  later there was no activity pattern at all and a **SOFT 1.350 U** meal cap. A 3x swing on the same
+  body in one tick.
+
+Two reasons, both in the code. First, `buildExerciseAfterburnProb` takes four inputs — user intent,
+the pattern snapshot, thermal recovery burden, a circadian term — and **`EffortActivityBelief` is not
+one of them**, so afterburn fell 0.879 -> 0.190 in the same tick where the effort belief still asked
+for x0.45. Second, afterburn is discounted **x0.92** (capped at 0.862) while the meal saturates at
+**1.000**, and the meal must only lead by 0.08. **Exercise starts 0.08 behind and loses 0.14 before
+any evidence is weighed.**
+
+> Every exercise representation is gated on current movement; every meal representation is gated on
+> a glucose rise. A post-exercise rebound is by definition a rise without movement, so it reclassifies
+> as a meal within one tick of the patient standing still — at every layer at once.
+
+And `EFFORT_MINUTES_CAP = 30.0` with the memory horizon capped at 120 minutes means **a three-hour
+hike earns exactly what a thirty-minute walk earns**, while the file's own KDoc says post-exercise
+sensitivity "lasts hours".
+
+## AQ9-7. The instruments are missing exactly where they are needed
+
+- The five `effort_smb_*` fields are written only where the multiplier is applied, so any tick that
+  returns earlier exports `null`: **44 of 231 ticks (19 %)**, including the whole 16:32-18:42 descent
+  and **all 11 ticks below BG 75 — 0 of 11 carry any activity export**.
+- `physiological_tree` is absent on **exactly the 25 hike ticks, 16:02 to 18:42**, a 100 % overlap
+  with the 25 `dia_learn_blocked_by = read_only_path` ticks.
+- **Steps and HR are not fields at all.** They appear only inside the narrative string. The cause of
+  a 50.6 hypoglycaemia had to be found by reading a log sentence.
+- `steps_last_5m` is never exported, so `exertingNow` is unverifiable from any package.
+- No `exercise_lockout_active` flag exists, so the 56 zero-ceiling ticks cannot be explained.
+- `physio_context.activity_mode` reads **`Resting` through the whole climb and all five 69-73 ticks**,
+  then `Stress/Activity` for two hours after the hike ended.
+- `basal_terminal.bg_mgdl` is **two to three ticks stale**: it reports 76.7 when BG is **50.6**, with
+  an eventual of 90.7.
+- `meal_certainty.soft_corroboration` is computed, exported and pushed into `reasons`, but the level
+  function never reads it. A decorative reason string.
+
+## AQ9-8. What shipped, and what must not ship yet
+
+**Shipped (uncommitted), one line plus comment:** the sport guard's zeroing branch sets
+`criticalSafetyZeroedThisTick`. No test covers it — the guard is private and 400 lines from
+RED_CARPET, and adding a seam would be the refactor the contract forbids in a safety patch. **Its
+only evidence is the corpus measurement in AQ9-2.**
+
+**Next, and in this order:**
+
+1. **Export only, no dose.** Fill the 25-tick hole; add `steps_5m/15m/60m`, `hr_avg_5m`,
+   `hr_resting`, `effort_state`, `steps_source_device`, `steps_window_algo`,
+   `steps_rejected_impossible`, `exercise_lockout_active`, `guardScale` and the sport branch taken,
+   and `autodrive_floor_ceiling_u`. Populate at the single point every export path crosses, **not**
+   where the multiplier is applied, or the hypo ticks stay null.
+2. **The step root fix and its fail-safe together, alone in their install.** `aggregate` instead of
+   `readRecords`, plus a plausibility bound whose fallback **holds the last plausible value**.
+   Separator: `effort_smb_factor_applied` and `effort_smb_floored_by_meal`.
+3. **The RED_CARPET ladder bound**, both call sites, alone. Measured: **-11.646 U on 08-15** and
+   **-0.000 U on the 08-14 plateau**. Separator: the sport string in `outcome.narrative` conditions
+   the first check and not this one.
+4. `StepService`'s mislabelled getters and its unsynchronised map. Separate part.
+
+**Do not ship the step fix before the export.** It adds insulin into the window that ended at 50.6,
+and the data needed to price it does not exist yet.
+
+## AQ9-9. Open, and not measured
+
+- **PARTs 4, 5, 6, 7 did not run** (session budget). Still open: is the maxSMB ladder blind — the
+  slope was **0.4298 during a +11.5 mg/dL rise at 19:32**, and the ladder promoted on the 15h meal
+  but not on the 19h rise, both with COB 0; is the DIA learner training its tail on exercise-driven
+  falls, given `dia_accepted_updates` went 19 -> 117 and `structural_dia_h` peaked at 5.1194 before
+  settling at 5.0709; does a Harmonia LIFT ever add insulin now that `mpc_demand_u` is exported on
+  181 ticks; and why `control_barrier.safe_u` covers only 15 of 231 ticks, with the shadow-mode
+  `autodriveEngine.tick` in `runT3cAutodriveShadowTick` as the untested lead.
+- **One exercise episode only.** Nothing here is confirmed twice.
+- Whether `refreshEffortActivityBelief()` ran at all on the 25 hike ticks is unknown. If it returned
+  null, note the asymmetry: `effortIsLiveMovement()` fails **closed** (returns true) while the effort
+  multiplier fails **open** (no reduction). One null shuts the meal override and removes the
+  protection at the same time.
+- The +1.1 U counterfactual is closed-form arithmetic, not a replay.
+- The 08-12 20:06/20:11 cost of the applied fix (1.832 U removed, followed by 212 then 247) has no
+  counterfactual.

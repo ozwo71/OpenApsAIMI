@@ -13842,6 +13842,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     context.getString(R.string.reason_safety_sport_meal_reduction, before, smbToGive)
                 )
             } else {
+                // Sport is a vital safety, not a minor one, so Red Carpet must not put this back.
+                // Without this flag the zero below counted as a minor cut: measured 2026-08-18, the
+                // sport guard zeroed four ticks between 19:32 and 19:57 and Red Carpet restored
+                // 6.52 U, which took BG from 168.8 down to 50.6 after a three hour hike.
+                criticalSafetyZeroedThisTick = true
                 reason?.appendLine(context.getString(R.string.safety_sport_smb_zero))
                 consoleLog.add("SMB forced to 0 by sport safety guard")
                 return 0f
