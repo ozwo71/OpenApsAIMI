@@ -65,6 +65,13 @@ When this fork includes the Dexcom ONE+ native plugin (`:plugins:dexcom_oneplus`
 
 - [ ] **Dexcom ONE+ preservation reviewed** — follow [docs/MERGE_CONSTRAINT_DEXCOM_ONEPLUS.md](MERGE_CONSTRAINT_DEXCOM_ONEPLUS.md).
 - [ ] **Smoke (scaffold / post-merge):** Config Builder lists **Dexcom ONE+**; **BYODA** (`@IntKey(440)`) still works; **Eversense** (`@IntKey(445)`) still works.
+
+### Fork merge constraint: Libre 3 native CGM
+
+When this fork includes the native Libre 3 plugin (`:plugins:libre3`, `Libre3NativePlugin` `@IntKey(447)`), every merge from upstream `dev` must **preserve** the module registration, the DI binding, `SourceSensor.LIBRE_3_NATIVE` and its DB converters both ways, `Sources.Libre3Native`, and `NotificationId.LIBRE3_DIR_ACCESS_LOST` **as the last entry** of that enum. Do not resolve conflicts "theirs only" on those paths without review. The follower Libre paths (`LIBRE_2`, `LIBRE_2_NATIVE`, `LIBRE_3`, Glimp, Tomato) must stay untouched: Libre 3 through Juggluco or xDrip is still the production path.
+
+- [ ] **Libre 3 preservation reviewed** — follow [docs/MERGE_CONSTRAINT_LIBRE3.md](MERGE_CONSTRAINT_LIBRE3.md).
+- [ ] **Smoke (scaffold / post-merge):** with `Documents/AAPS/extra/engineering_libre3` present, Config Builder lists **Libre 3**; without it the plugin is absent; xDrip (`@IntKey(400)`), BYODA (`@IntKey(440)`), Eversense (`@IntKey(445)`) and Dexcom ONE+ (`@IntKey(446)`) all still listed; `Libre3BooleanKey.UseRealSkeleton` still defaults to off.
 - [ ] Prefs open Status / Start / Warm-up without crash (Stub default; Real via eng pref).
 - [ ] Native pair / warm-up / BG — only after **user device confirmation** (do not mark “working” without that). User guide: [docs/DEXCOM_ONEPLUS_USER_GUIDE.md](DEXCOM_ONEPLUS_USER_GUIDE.md). Dev onboarding: [docs/DEXCOM_ONEPLUS_DEV_ONBOARDING.md](DEXCOM_ONEPLUS_DEV_ONBOARDING.md). Integration: [docs/DEXCOM_ONEPLUS_INTEGRATION_NOTES.md](DEXCOM_ONEPLUS_INTEGRATION_NOTES.md).
 
@@ -116,7 +123,7 @@ documentation regression even when the build is green.
       ```bash
       grep -ohE '`[A-Za-z0-9_/.:-]+\.kt`' docs/AIMI_ARCHITECTURE_MAP.md docs/AIMI_ROADMAP.md \
         docs/NON_REGRESSION_CHECKLIST.md docs/MERGE_CONSTRAINT_EVERSENSE.md \
-        docs/MERGE_CONSTRAINT_DEXCOM_ONEPLUS.md | tr -d '`' | sort -u | while read -r p; do
+        docs/MERGE_CONSTRAINT_DEXCOM_ONEPLUS.md docs/MERGE_CONSTRAINT_LIBRE3.md | tr -d '`' | sort -u | while read -r p; do
           find . -name "$(basename "$p")" -not -path '*/build/*' -not -path './.git/*' | grep -q . || echo "MISSING: $p"
         done
       ```
@@ -212,6 +219,7 @@ Pass criteria:
 - [ ] AIMI/SMB/AutoISF parity reviewed (upstream APS changes ported or explicitly declined)
 - [ ] Eversense merge constraint reviewed (if native plugin present on branch)
 - [ ] Dexcom ONE+ merge constraint reviewed (if native plugin present on branch)
+- [ ] Libre 3 native merge constraint reviewed (if native plugin present on branch)
 - [ ] Database maintenance regression gate reviewed (KeepAlive `runVacuum=false`, no auto VACUUM in `cleanupDatabase`)
 - [ ] Async/freeze checklist reviewed
 - [ ] Smoke tests passed
@@ -247,6 +255,6 @@ Release is `NO-GO` if any of the following is true:
 
 - Any checklist item above is unchecked.
 - Any OPEN freeze incident on same area/build.
-- Any known regression in AIMI, adaptive smoothie, dashboard skin switching, ML permissions, physio, hormonitor structure, Eversense native CGM, or Dexcom ONE+ native CGM integration when that integration is part of the release branch.
+- Any known regression in AIMI, adaptive smoothie, dashboard skin switching, ML permissions, physio, hormonitor structure, Eversense native CGM, Dexcom ONE+ native CGM, or Libre 3 native CGM integration when that integration is part of the release branch.
 
 Release is `GO` only when all gates are green and documented.
