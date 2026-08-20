@@ -21,6 +21,7 @@ android {
 dependencies {
     implementation(project(":plugins:eversense"))
     implementation(project(":plugins:dexcom_oneplus"))
+    implementation(project(":plugins:libre3"))
     implementation(libs.androidx.preference)
     implementation(project(":core:data"))
     implementation(project(":core:interfaces"))

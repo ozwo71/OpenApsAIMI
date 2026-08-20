@@ -9,6 +9,7 @@ import app.aaps.plugins.source.EversensePlugin
 import app.aaps.plugins.source.GlimpPlugin
 import app.aaps.plugins.source.GlunovoPlugin
 import app.aaps.plugins.source.IntelligoPlugin
+import app.aaps.plugins.source.Libre3NativePlugin
 import app.aaps.plugins.source.MM640gPlugin
 import app.aaps.plugins.source.NSClientSourcePlugin
 import app.aaps.plugins.source.NotificationReaderPlugin
@@ -79,6 +80,12 @@ abstract class SourcePluginsListModule {
     @IntoMap
     @IntKey(446)
     abstract fun bindDexcomOnePlusPlugin(plugin: DexcomOnePlusPlugin): PluginBase
+
+    @Binds
+    @AllConfigs
+    @IntoMap
+    @IntKey(447)
+    abstract fun bindLibre3NativePlugin(plugin: Libre3NativePlugin): PluginBase
 
     @Binds
     @AllConfigs

@@ -38,6 +38,15 @@
         <activity
             android:name=".activities.DexcomOnePlusWarmupActivity"
             android:exported="false" />
+        <activity
+            android:name=".activities.Libre3StatusActivity"
+            android:exported="false" />
+        <activity
+            android:name=".activities.Libre3StartActivity"
+            android:exported="false" />
+        <activity
+            android:name=".activities.Libre3WarmupActivity"
+            android:exported="false" />
     </application>
 
 </manifest>

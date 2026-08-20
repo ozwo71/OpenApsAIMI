@@ -21,6 +21,9 @@ import app.aaps.plugins.source.activities.DexcomOnePlusWarmupActivity
 import app.aaps.plugins.source.activities.EversenseCalibrationActivity
 import app.aaps.plugins.source.activities.EversensePlacementActivity
 import app.aaps.plugins.source.activities.EversenseStatusActivity
+import app.aaps.plugins.source.activities.Libre3StartActivity
+import app.aaps.plugins.source.activities.Libre3StatusActivity
+import app.aaps.plugins.source.activities.Libre3WarmupActivity
 import app.aaps.plugins.source.activities.RequestDexcomPermissionActivity
 import app.aaps.plugins.source.activities.RequestEversensePermissionActivity
 import app.aaps.plugins.source.notificationreader.NotificationCollectorService
@@ -50,6 +53,9 @@ abstract class SourceModule {
     @ContributesAndroidInjector abstract fun contributesDexcomOnePlusStatusActivity(): DexcomOnePlusStatusActivity
     @ContributesAndroidInjector abstract fun contributesDexcomOnePlusStartActivity(): DexcomOnePlusStartActivity
     @ContributesAndroidInjector abstract fun contributesDexcomOnePlusWarmupActivity(): DexcomOnePlusWarmupActivity
+    @ContributesAndroidInjector abstract fun contributesLibre3StatusActivity(): Libre3StatusActivity
+    @ContributesAndroidInjector abstract fun contributesLibre3StartActivity(): Libre3StartActivity
+    @ContributesAndroidInjector abstract fun contributesLibre3WarmupActivity(): Libre3WarmupActivity
     @ContributesAndroidInjector abstract fun contributesNotificationCollectorService(): NotificationCollectorService
 
     @Module
