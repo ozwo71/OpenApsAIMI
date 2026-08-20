@@ -5303,6 +5303,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleLog.add("🤖 SENSOR_AWARE: One+ Detected -> Fast Sensor, Real-Time Maths Engaged (no G6 lead).")
             } else if (adState.sourceSensor == SourceSensor.DEXCOM_G7_NATIVE) {
                 consoleLog.add("🤖 SENSOR_AWARE: G7 Detected -> Fast Sensor, Real-Time Maths Engaged.")
+            } else if (adState.sourceSensor == SourceSensor.LIBRE_3_NATIVE) {
+                consoleLog.add("🤖 SENSOR_AWARE: Libre 3 native Detected -> Fast Sensor, Real-Time Maths Engaged (no G6 lead).")
             }
 
             autodriveEngine.setShadowMode(false)

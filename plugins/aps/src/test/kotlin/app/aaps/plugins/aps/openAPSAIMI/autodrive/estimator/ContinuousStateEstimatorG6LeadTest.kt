@@ -51,4 +51,34 @@ class ContinuousStateEstimatorG6LeadTest {
         assertThat(raG6).isGreaterThan(raOnePlus)
         assertThat(estimator.applyG6LeadCompensation(velocity, isG6 = false)).isWithin(1e-9).of(velocity)
     }
+
+    @Test
+    fun `native Libre 3 sourceSensor does not engage G6 lead path in UKF update`() {
+        // Libre 3 is a fast sensor like ONE+ and G7. The G6 lead compensator exists to make up for
+        // the slower G6 reading, so applying it here would push the loop on a lead that is not real.
+        val velocity = 2.0
+        val libre3 = AutoDriveState.createSafe(
+            bg = 140.0,
+            bgVelocity = velocity,
+            iob = 0.5,
+            cob = 0.0,
+            estimatedSI = 0.005,
+            hour = 14,
+            steps = 0,
+            combinedDelta = 3.0,
+            uamConfidence = 0.0,
+            sourceSensor = SourceSensor.LIBRE_3_NATIVE,
+        )
+        val g6 = libre3.copy(sourceSensor = SourceSensor.DEXCOM_G6_NATIVE)
+
+        val raLibre3 = ContinuousStateEstimator(logger).apply {
+            updateAndPredict(libre3)
+        }.getLastRa()
+        val raG6 = ContinuousStateEstimator(logger).apply {
+            updateAndPredict(g6)
+        }.getLastRa()
+
+        assertThat(raG6).isGreaterThan(raLibre3)
+        assertThat(estimator.applyG6LeadCompensation(velocity, isG6 = false)).isWithin(1e-9).of(velocity)
+    }
 }

@@ -99,6 +99,30 @@ class GlucoseStatusCalculatorAimiTest {
         assertEquals(SourceSensor.DEXCOM_ONEPLUS_NATIVE, result.gs!!.sourceSensor)
     }
 
+    @Test
+    fun `compute propagates native Libre 3 sourceSensor from head GV`() {
+        val now = 1000000L
+        val records = listOf(
+            createRecord(now, 100.0, SourceSensor.LIBRE_3_NATIVE),
+            createRecord(now - 5 * 60 * 1000, 105.0, SourceSensor.LIBRE_3_NATIVE),
+        )
+        every { iobCobCalculator.ads.getBucketedDataTableCopy() } returns records.toMutableList()
+        every { deltaCalculator.calculateDeltas(any()) } returns DeltaCalculator.DeltaResult(
+            delta = -5.0,
+            shortAvgDelta = -5.0,
+            longAvgDelta = -5.0
+        )
+        every { preferences.get(DoubleKey.OApsAIMIAutodriveAcceleration) } returns 1.0
+        every { preferences.get(DoubleKey.OApsAIMIcombinedDelta) } returns 1.0
+        every { preferences.get(IntKey.OApsAIMINightGrowthAgeYears) } returns 12
+
+        val result = calculator.compute(allowOldData = true)
+        assertNotNull(result.gs)
+        // The native tag must survive all the way to the dose engine, otherwise AIMI cannot tell a
+        // Libre 3 apart from a follower reading of the same sensor.
+        assertEquals(SourceSensor.LIBRE_3_NATIVE, result.gs!!.sourceSensor)
+    }
+
     private fun createRecord(
         timestamp: Long,
         value: Double,
