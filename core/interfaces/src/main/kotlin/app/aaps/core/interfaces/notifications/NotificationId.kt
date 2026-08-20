@@ -216,7 +216,14 @@ enum class NotificationId(
      * last on purpose — the system notification id is the ordinal, so inserting mid-enum would
      * renumber every entry after it.
      */
-    DEXCOM_ONEPLUS_DIR_ACCESS_LOST(NORMAL, SYSTEM);
+    DEXCOM_ONEPLUS_DIR_ACCESS_LOST(NORMAL, SYSTEM),
+
+    /**
+     * Same case as [DEXCOM_ONEPLUS_DIR_ACCESS_LOST] but for the Libre 3 engineering marker
+     * file. It has its own id so the two plugins never clear each other's notification.
+     * Appended last on purpose, because the system notification id is the ordinal.
+     */
+    LIBRE3_DIR_ACCESS_LOST(NORMAL, SYSTEM);
 
     companion object {
 
