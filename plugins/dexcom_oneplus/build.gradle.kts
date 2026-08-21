@@ -14,4 +14,5 @@ dependencies {
     implementation(project(":core:interfaces"))
     implementation(project(":plugins:libkeks"))
     api(libs.androidx.core)
+    implementation(libs.org.slf4j.api)
 }

@@ -13,4 +13,5 @@ android {
 dependencies {
     implementation(project(":core:interfaces"))
     api(libs.androidx.core)
+    implementation(libs.org.slf4j.api)
 }

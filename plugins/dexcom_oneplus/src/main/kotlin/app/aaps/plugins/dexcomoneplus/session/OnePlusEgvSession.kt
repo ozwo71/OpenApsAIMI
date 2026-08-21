@@ -1,7 +1,7 @@
 package app.aaps.plugins.dexcomoneplus.session
 
-import android.util.Log
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseSample
+import app.aaps.plugins.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClient
@@ -68,7 +68,7 @@ class OnePlusEgvSession(
         rewriteIntervalMs: Long = DEFAULT_REWRITE_INTERVAL_MS,
     ) {
         if (!gatt.isConnected()) {
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: EGV GATT not connected")
+            OnePlusLog.e("${OnePlusLogMarkers.ERROR}: EGV GATT not connected")
             onError("ONEPLUS_EGV_NOT_CONNECTED", false)
             return
         }
@@ -105,8 +105,7 @@ class OnePlusEgvSession(
             if (!shouldContinue()) break
             if (packet == null) {
                 consecutiveTimeouts++
-                Log.i(
-                    OnePlusLogMarkers.TAG,
+                OnePlusLog.i(
                     "${OnePlusLogMarkers.SESSION}: Control notify timeout ${notifyTimeoutMs}ms " +
                         "n=$consecutiveTimeouts — re-request EGV",
                 )
@@ -116,15 +115,13 @@ class OnePlusEgvSession(
                 if (consecutiveTimeouts >= 2 && !triedIndicateFallback) {
                     triedIndicateFallback = true
                     try {
-                        Log.w(
-                            OnePlusLogMarkers.TAG,
+                        OnePlusLog.w(
                             "${OnePlusLogMarkers.SESSION}: Control quiet after INDICATE — try NOTIFY",
                         )
                         gatt.enableControlNotifications()
                         Thread.sleep(CCCD_SETTLE_MS)
                     } catch (t: Throwable) {
-                        Log.w(
-                            OnePlusLogMarkers.TAG,
+                        OnePlusLog.w(
                             "${OnePlusLogMarkers.SESSION}: Control INDICATE fallback failed: ${t.message}",
                         )
                     }
@@ -148,7 +145,7 @@ class OnePlusEgvSession(
             preferShort = true
             handleControlPacket(packet, shouldContinue)
         }
-        Log.i(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.SESSION}: Control/EGV loop exit")
+        OnePlusLog.i("${OnePlusLogMarkers.SESSION}: Control/EGV loop exit")
     }
 
     /**
@@ -158,7 +155,7 @@ class OnePlusEgvSession(
      */
     fun runInitialPoll(maxRounds: Int = 6, stepTimeoutMs: Long = 20_000L): Boolean {
         if (!gatt.isConnected()) {
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: EGV GATT not connected")
+            OnePlusLog.e("${OnePlusLogMarkers.ERROR}: EGV GATT not connected")
             return false
         }
         // Control is INDICATE on ONE+/G7 (xDrip libkeks reference); NOTIFY made the peer drop.
@@ -202,8 +199,7 @@ class OnePlusEgvSession(
     private fun applyTransmitterTime(rx: OnePlusTransmitterTimeRx) {
         lastDexTimeSeconds = rx.currentTimeSeconds
         val age = rx.sessionAgeSeconds()
-        Log.i(
-            OnePlusLogMarkers.TAG,
+        OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: TransmitterTimeRx current=${rx.currentTimeSeconds} " +
                 "sessionStart=${rx.sessionStartTimeSeconds} inProgress=${rx.sessionInProgress()} " +
                 "ageSec=$age status=0x${rx.statusByte.toString(16)}",
@@ -232,22 +228,20 @@ class OnePlusEgvSession(
         )
         try {
             gatt.writeControl(payload)
-            Log.i(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.i(
                 "${OnePlusLogMarkers.SESSION}: wrote SessionStartTx opcode=0x26 " +
                     "dexTime=$lastDexTimeSeconds reason=$reason",
             )
         } catch (t: Throwable) {
             val msg = t.message ?: "ONEPLUS_SESSION_START_WRITE_FAILED"
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: $msg", t)
+            OnePlusLog.e("${OnePlusLogMarkers.ERROR}: $msg", t)
             onError(msg, false)
             return
         }
 
         val packet = gatt.awaitControlNotify(SESSION_START_TIMEOUT_MS)
         if (packet == null) {
-            Log.w(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.w(
                 "${OnePlusLogMarkers.SESSION}: SessionStartRx timeout — continuing EGV",
             )
             return
@@ -256,8 +250,7 @@ class OnePlusEgvSession(
         val rx = OnePlusSessionStartRx.parse(packet)
         if (rx == null) {
             // Could be an EGV that arrived first — process it and continue.
-            Log.i(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.i(
                 "${OnePlusLogMarkers.SESSION}: SessionStart await got non-0x27; handling as Control",
             )
             handleControlPacket(packet, shouldContinue)
@@ -269,24 +262,20 @@ class OnePlusEgvSession(
         }
 
         when {
-            rx.isOkay() -> Log.i(
-                OnePlusLogMarkers.TAG,
+            rx.isOkay() -> OnePlusLog.i(
                 "${OnePlusLogMarkers.SESSION}: SessionStartRx OK info=${rx.info} msg=${rx.message()} " +
                     "sessionStart=${rx.sessionStartTime} txTime=${rx.transmitterTime}",
             )
-            rx.isAlreadyStarted() -> Log.i(
-                OnePlusLogMarkers.TAG,
+            rx.isAlreadyStarted() -> OnePlusLog.i(
                 "${OnePlusLogMarkers.SESSION}: SessionStartRx already started — continuing EGV",
             )
             rx.isFubar() -> {
-                Log.e(
-                    OnePlusLogMarkers.TAG,
+                OnePlusLog.e(
                     "${OnePlusLogMarkers.ERROR}: SessionStartRx fubar ${rx.message()}",
                 )
                 onError("ONEPLUS_SESSION_START_FUBAR: ${rx.message()}", false)
             }
-            else -> Log.w(
-                OnePlusLogMarkers.TAG,
+            else -> OnePlusLog.w(
                 "${OnePlusLogMarkers.SESSION}: SessionStartRx status=${rx.status} info=${rx.info} " +
                     "msg=${rx.message()} — continuing EGV",
             )
@@ -306,7 +295,7 @@ class OnePlusEgvSession(
             )
         } catch (t: Throwable) {
             val msg = t.message ?: "ONEPLUS_BACKFILL_FAILED"
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: $msg", t)
+            OnePlusLog.e("${OnePlusLogMarkers.ERROR}: $msg", t)
             onError(msg, false)
         }
     }
@@ -319,14 +308,13 @@ class OnePlusEgvSession(
         }
         try {
             gatt.writeControl(payload)
-            Log.i(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.i(
                 "${OnePlusLogMarkers.SESSION}: wrote EGlucoseTx short=$preferShort " +
                     "opcode=0x${(OnePlusEGlucoseTx.OPCODE.toInt() and 0xff).toString(16)}",
             )
         } catch (t: Throwable) {
             val msg = t.message ?: "ONEPLUS_CONTROL_WRITE_FAILED"
-            Log.e(OnePlusLogMarkers.TAG, "${OnePlusLogMarkers.ERROR}: $msg", t)
+            OnePlusLog.e("${OnePlusLogMarkers.ERROR}: $msg", t)
             onError(msg, false)
         }
     }
@@ -338,8 +326,7 @@ class OnePlusEgvSession(
         }
 
         OnePlusSessionStopRx.parse(packet)?.let { rx ->
-            Log.d(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.d(
                 "${OnePlusLogMarkers.SESSION}: late SessionStopRx status=${rx.status} ok=${rx.isOkay()}",
             )
             if (rx.transmitterTime != 0) lastDexTimeSeconds = rx.transmitterTime
@@ -347,8 +334,7 @@ class OnePlusEgvSession(
         }
 
         OnePlusSessionStartRx.parse(packet)?.let { rx ->
-            Log.d(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.d(
                 "${OnePlusLogMarkers.SESSION}: late SessionStartRx info=${rx.info} msg=${rx.message()}",
             )
             if (rx.transmitterTime != 0 && rx.transmitterTime != OnePlusSessionStartRx.INVALID_TIME) {
@@ -360,8 +346,7 @@ class OnePlusEgvSession(
         val parsed = OnePlusGlucoseParser.parseControlPacket(packet)
         if (parsed == null) {
             val op = if (packet.isNotEmpty()) packet[0].toInt() and 0xff else -1
-            Log.d(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.d(
                 "${OnePlusLogMarkers.SESSION}: Control packet ignored opcode=0x${op.toString(16)} len=${packet.size}",
             )
             return
@@ -391,16 +376,14 @@ class OnePlusEgvSession(
 
         val sample = parsed.sample
         if (parsed.usable && sample != null) {
-            Log.i(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.i(
                 "${OnePlusLogMarkers.BG}: mgdl=${sample.mgdl} ts=${sample.timestampMs} " +
                     "cal=${parsed.calibration.name} op=0x${parsed.opcode.toString(16)}",
             )
             onGlucose(sample)
             maybeBackfillAfterEgv(shouldContinue)
         } else {
-            Log.i(
-                OnePlusLogMarkers.TAG,
+            OnePlusLog.i(
                 "${OnePlusLogMarkers.WARMUP}: egv cal=${parsed.calibration.name} usable=false " +
                     "age=${parsed.ageSeconds} sessionAge=${parsed.sessionAgeSeconds}",
             )
