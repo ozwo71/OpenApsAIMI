@@ -98,6 +98,20 @@ class BasalLearner @Inject constructor(
         private const val ALPHA_MEDIUM = 0.15  // Moderate EMA
         private const val ALPHA_LONG = 0.10    // Slow EMA
 
+        /**
+         * Floor of the heuristic (H) basal multiplier. It is 0.70, and it is NOT the 0.80 of the learned
+         * (N) channel (`BasalNeuralLearner.RUNTIME_BASAL_FLOOR`). The two floors mean different things and
+         * are kept apart on purpose.
+         *
+         * Read this before trusting any "never below 0.80" claim: the blend keeps the smaller of the two
+         * channels as soon as either one is defensive, so this 0.70 can still reach the pump. A multiplier
+         * of exactly 0.70 on 100% of ticks was the field symptom on two patient devices 40 days apart, and
+         * it stayed ambiguous because several mechanisms print that same number. `n_raw` and `n_source` in
+         * the `adaptive_basal` block of AIMI_Decisions.jsonl are what separates them now.
+         *
+         * Whether H should floor at 0.80 like N is a therapy decision that needs field evidence. Do not
+         * change this value as part of a documentation or clean-up change.
+         */
         private const val CLAMP_MIN = 0.70
         private const val CLAMP_MAX = 2.0
 

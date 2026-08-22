@@ -558,7 +558,14 @@ enum class DoubleKey(
         summaryResId = R.string.pref_summary_aimi_undeclared_cob_max_g,
         dependency = BooleanKey.OApsAIMIUndeclaredCobEnabled,
     ),
-    OApsAIMIAdaptiveBasalMaxScaling("key_aimi_adaptive_basal_max_scaling", 1.0, 0.5, 2.0),
+    /**
+     * Upper bound of the Universal Adaptive Basal multiplier.
+     *
+     * The old default of 1.0 capped the learned head at neutral, so it could only ever CUT basal and
+     * never raise it. With that value the adaptive basal cannot learn a boost by construction, whatever
+     * the data says. 1.3 leaves a small, symmetric-looking room above neutral.
+     */
+    OApsAIMIAdaptiveBasalMaxScaling("key_aimi_adaptive_basal_max_scaling", 1.3, 0.5, 2.0),
 
     // --- AIMI adaptive basal governance (on-device; depends on Universal Adaptive Basal) ---
     OApsAIMIGovernanceHypoRateEnter(
@@ -603,10 +610,28 @@ enum class DoubleKey(
         dependency = BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled,
         unitType = UnitType.MGDL,
     ),
+    /**
+     * Basal scaling floor while governance holds back.
+     *
+     * The minimum is 0.80 because 0.80 is the runtime clamp of the LEARNED basal channel (N),
+     * `BasalNeuralLearner.RUNTIME_BASAL_FLOOR`. A hold floor under 0.80 was a silent no-op on that
+     * channel, and it made a held-back basal look exactly like a dead learned model.
+     *
+     * This does NOT mean the applied basal multiplier can never be under 0.80. The heuristic channel (H)
+     * still floors at 0.70 (the `hMult` clamp in `DetermineBasalaimiSMB2`, and `BasalLearner.CLAMP_MIN`),
+     * and the blend keeps the SMALLER of the two channels as soon as either one is defensive, so 0.70 can
+     * still reach the pump. Whether H should floor at 0.80 too is a therapy decision that needs field
+     * evidence, so it is not changed here.
+     *
+     * To tell those cases apart, read `n_raw` and `n_source` in the `adaptive_basal` block of
+     * AIMI_Decisions.jsonl. A multiplier of exactly 0.70 on 100% of ticks was the field symptom on two
+     * patient devices 40 days apart, and it stayed ambiguous because several mechanisms print that same
+     * number and nothing in the exported data separated them.
+     */
     OApsAIMIGovernanceHoldBasalFloorRate(
         key = "key_aimi_gov_hold_basal_floor_rate",
         defaultValue = 0.85,
-        min = 0.65,
+        min = 0.80,
         max = 0.95,
         titleResId = R.string.aimi_gov_hold_basal_floor_rate_title,
         summaryResId = R.string.aimi_gov_hold_basal_floor_rate_summary,
@@ -647,10 +672,11 @@ enum class DoubleKey(
         unitType = UnitType.DOUBLE_2,
         dependency = BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled,
     ),
+    /** Same 0.80 runtime-clamp reason as [OApsAIMIGovernanceHoldBasalFloorRate]. */
     OApsAIMIGovernanceHoldBasalFloorSevere(
         key = "key_aimi_gov_hold_basal_floor_severe",
         defaultValue = 0.88,
-        min = 0.70,
+        min = 0.80,
         max = 0.95,
         titleResId = R.string.aimi_gov_hold_basal_floor_severe_title,
         summaryResId = R.string.aimi_gov_hold_basal_floor_severe_summary,

@@ -117,7 +117,24 @@ class BasalNeuralLearner @Inject constructor(
         meanGovernanceWeight = 1.0,
     )
     private var lastGovernanceLogAt = 0L
-    
+
+    /**
+     * Neutral physiological context (backfill / when no live state is available): 4 latent + 3 mode + 3 causal = 10,
+     * reusing the SMB feature schema so the two models share one physio vocabulary.
+     *
+     * DO NOT MOVE THIS PROPERTY BELOW THE `init` BLOCK. Kotlin runs property initializers and `init`
+     * blocks in declaration order. The `init` block loads the models and probes them, the probe builds
+     * its input with [modelInput], and [modelInput] reads this vector. Declared after `init`, this
+     * property is still `null` while the probe runs, so the probe would crash (or silently probe a
+     * wrong-size input) at construction time. The order is load-bearing, not cosmetic.
+     */
+    private val neutralPhysioFeatures: FloatArray =
+        SmbRefinementFeatureSchema.latentFeatureValues(null) +
+            SmbRefinementFeatureSchema.modeFeatureValues(null) +
+            SmbRefinementFeatureSchema.causalFeatureValues(null)
+
+    // Keep `neutralPhysioFeatures` declared ABOVE this block: the health probe inside loadModels()
+    // reads it. See the KDoc of that property.
     init {
         loadModels()
     }
@@ -128,6 +145,86 @@ class BasalNeuralLearner @Inject constructor(
 
         neuralT3cNet = BasalMlModelStore.loadValid(t3cWeights, BasalMlTrainingCoordinator.INPUT_SIZE)
         neuralBasalNet = BasalMlModelStore.loadValid(basalWeights, BasalMlTrainingCoordinator.INPUT_SIZE)
+        rejectUnhealthyNets()
+    }
+
+    /**
+     * Drops a model when it does not react to blood glucose, or answers outside the range that head may
+     * ever publish. Runs for BOTH heads, on every path that assigns them (construction and
+     * [reloadModels]).
+     *
+     * A constant model is not a theory, it is a measured failure mode. A shipped
+     * `basal_adaptive_weights.json` was probed directly and returned **0.19918 for every input**
+     * (spread over BG 40..400 = 3.4e-08). The runtime clamp turned that constant into exactly 0.70 on
+     * 100 % of ticks, on two devices 40 days apart, which reads like a confident decision instead of a
+     * dead model. Without this probe nothing tells the two apart. When the probe fails the heuristic
+     * takes over, because a heuristic that moves is worth more than a number that never does.
+     *
+     * The T3C head shares the same network class, the same file format and the same trainer, so it can
+     * die in exactly the same way. It used to be loaded with no probe at all.
+     */
+    private fun rejectUnhealthyNets() {
+        neuralBasalNet = neuralBasalNet?.takeIf {
+            answersToBg(it, "basal", BASAL_PROBE_OUTPUT_MIN, BASAL_PROBE_OUTPUT_MAX)
+        }
+        neuralT3cNet = neuralT3cNet?.takeIf {
+            answersToBg(it, "T3C", T3C_PROBE_OUTPUT_MIN, T3C_PROBE_OUTPUT_MAX)
+        }
+    }
+
+    /**
+     * Sweeps [ClinicalBgAnchors.PROBE_BG_MGDL] through [net] and answers whether the model is alive.
+     *
+     * Alive means two things at once: every answer is finite and inside [outputMin] .. [outputMax]
+     * (the publish range of that head), and the answers move by at least [PROBE_MIN_SPREAD] across the
+     * anchors. A model that passes the range check with one constant value is the dead model described
+     * in [rejectUnhealthyNets]; only the spread check catches it.
+     *
+     * [label] only names the head in the log lines ("basal" / "T3C").
+     */
+    private fun answersToBg(
+        net: AimiNeuralNetwork,
+        label: String,
+        outputMin: Double,
+        outputMax: Double,
+    ): Boolean {
+        val outputs = try {
+            ClinicalBgAnchors.PROBE_BG_MGDL.map { bg ->
+                net.predict(
+                    modelInput(
+                        bg = bg,
+                        basal = BASAL_PROBE_BASAL_UPH,
+                        accel = 0.0,
+                        duraMin = BASAL_PROBE_DURA_MIN,
+                        duraAvg = BASAL_PROBE_DURA_AVG,
+                        iob = BASAL_PROBE_IOB_U,
+                        physioFeatures = neutralPhysioFeatures,
+                    )
+                )[0]
+            }
+        } catch (e: Exception) {
+            log.error(LTag.APS, "BasalNeuralLearner: $label model probe failed, using the heuristic", e)
+            return false
+        }
+
+        val bad = outputs.any { !it.isFinite() || it < outputMin || it > outputMax }
+        val spread = (outputs.maxOrNull() ?: 0.0) - (outputs.minOrNull() ?: 0.0)
+        if (!bad && spread >= PROBE_MIN_SPREAD) return true
+
+        log.warn(
+            LTag.APS,
+            String.format(
+                Locale.US,
+                "BasalNeuralLearner: %s model REJECTED (out=%s spread=%.6f range=%.2f..%.2f) — it does not answer " +
+                    "to BG, falling back to the heuristic",
+                label,
+                outputs.joinToString(",") { String.format(Locale.US, "%.5f", it) },
+                spread,
+                outputMin,
+                outputMax,
+            ),
+        )
+        return false
     }
 
     /** Reload weight files from disk after background training publishes new models. */
@@ -139,13 +236,6 @@ class BasalNeuralLearner @Inject constructor(
             "BasalNeuralLearner: models reloaded (t3c=${neuralT3cNet != null}, basal=${neuralBasalNet != null})",
         )
     }
-
-    /** Neutral physiological context (backfill / when no live state is available): 4 latent + 3 mode + 3 causal = 10,
-     *  reusing the SMB feature schema so the two models share one physio vocabulary. */
-    private val neutralPhysioFeatures: FloatArray =
-        SmbRefinementFeatureSchema.latentFeatureValues(null) +
-            SmbRefinementFeatureSchema.modeFeatureValues(null) +
-            SmbRefinementFeatureSchema.causalFeatureValues(null)
 
     /**
      * Model input = 6 glucose-dynamics base features + 10 physiological-context features (mirror of the SMB schema)
@@ -161,6 +251,33 @@ class BasalNeuralLearner @Inject constructor(
         return base + physio
     }
 
+    /** Where the T3C aggressiveness multiplier came from this tick. */
+    enum class T3cFactorSource { NEURAL, HEURISTIC }
+
+    /**
+     * Full T3C Brittle Mode answer, including the multiplier BEFORE the clamp.
+     *
+     * [rawMultiplier] is the field that matters for forensics, for the same reason as
+     * [UniversalBasalDecision.rawValue]: it separates "the model learned 0.50" from "the model answers
+     * 0.31 and the clamp reported 0.50". Without it the two print the same number.
+     */
+    data class T3cAdaptiveDecision(
+        /** Value actually applied: [baseAggressiveness] * [multiplier]. */
+        val factor: Double,
+        /** User preference part, before any learning. */
+        val baseAggressiveness: Double,
+        /** Multiplier before the clamp: neural output, or heuristic factor. */
+        val rawMultiplier: Double,
+        /** Multiplier after [floor] / [ceiling]. */
+        val multiplier: Double,
+        val source: T3cFactorSource,
+        val floor: Double,
+        val ceiling: Double,
+    ) {
+        /** True when the clamp, not the model, decided the multiplier. */
+        val clamped: Boolean get() = multiplier != rawMultiplier
+    }
+
     /**
      * Returns the aggressiveness factor for T3C Brittle Mode.
      */
@@ -172,11 +289,86 @@ class BasalNeuralLearner @Inject constructor(
         duraAvg: Double,
         iob: Double,
         physioFeatures: FloatArray = neutralPhysioFeatures,
-    ): Double {
-        val baseAggressiveness = preferences.get(DoubleKey.OApsAIMIT3cAggressiveness)
-        val neuralFactor = neuralT3cNet?.predict(modelInput(bg, basal, accel, duraMin, duraAvg, iob, physioFeatures))?.get(0)
+    ): Double = getT3cAdaptiveDecision(bg, basal, accel, duraMin, duraAvg, iob, physioFeatures).factor
 
-        return baseAggressiveness * (neuralFactor ?: internalAggressivenessFactor)
+    /**
+     * Same result as [getT3cAdaptiveFactor], plus the raw multiplier and the source.
+     *
+     * The learned multiplier is clamped to [RUNTIME_T3C_FACTOR_MIN] .. [RUNTIME_T3C_FACTOR_MAX]. Before
+     * this clamp existed the T3C head could scale the user's aggressiveness by anything its publish
+     * range allowed (0.3x .. 3.0x), with no floor, no ceiling and no liveness check.
+     */
+    fun getT3cAdaptiveDecision(
+        bg: Double,
+        basal: Double,
+        accel: Double,
+        duraMin: Double,
+        duraAvg: Double,
+        iob: Double,
+        physioFeatures: FloatArray = neutralPhysioFeatures,
+    ): T3cAdaptiveDecision {
+        val baseAggressiveness = preferences.get(DoubleKey.OApsAIMIT3cAggressiveness)
+        val neuralFactor = neuralT3cNet
+            ?.predict(modelInput(bg, basal, accel, duraMin, duraAvg, iob, physioFeatures))
+            ?.get(0)
+            ?.takeIf { it.isFinite() }
+        val raw = neuralFactor ?: internalAggressivenessFactor
+        val multiplier = raw.coerceIn(RUNTIME_T3C_FACTOR_MIN, RUNTIME_T3C_FACTOR_MAX)
+        val decision = T3cAdaptiveDecision(
+            factor = baseAggressiveness * multiplier,
+            baseAggressiveness = baseAggressiveness,
+            rawMultiplier = raw,
+            multiplier = multiplier,
+            source = if (neuralFactor != null) T3cFactorSource.NEURAL else T3cFactorSource.HEURISTIC,
+            floor = RUNTIME_T3C_FACTOR_MIN,
+            ceiling = RUNTIME_T3C_FACTOR_MAX,
+        )
+        logT3cDecision(decision)
+        return decision
+    }
+
+    /**
+     * Traces the T3C multiplier, raw value first.
+     *
+     * A clamped tick is logged at info level, because "the clamp decided this" is the event a field
+     * investigation needs to see; an unclamped tick is only debug, to keep the loop quiet.
+     */
+    private fun logT3cDecision(decision: T3cAdaptiveDecision) {
+        val line = String.format(
+            Locale.US,
+            "BasalNeuralLearner: T3C raw=%.5f applied=%.5f base=%.2f factor=%.5f src=%s clamp=%.2f..%.2f",
+            decision.rawMultiplier,
+            decision.multiplier,
+            decision.baseAggressiveness,
+            decision.factor,
+            decision.source.name,
+            decision.floor,
+            decision.ceiling,
+        )
+        if (decision.clamped) log.info(LTag.APS, line) else log.debug(LTag.APS, line)
+    }
+
+    /** Where the Universal Adaptive Basal multiplier came from this tick. */
+    enum class BasalMultiplierSource { NEURAL, HEURISTIC, DISABLED }
+
+    /**
+     * Full Universal Adaptive Basal answer, including the value BEFORE the clamp.
+     *
+     * [rawValue] is the field that matters for forensics: it separates "the model learned 0.70" from
+     * "the model answers 0.199 and the clamp reported 0.70". Without it the two look identical in the
+     * logs, which is exactly how a dead model survived 40 days in the field.
+     */
+    data class UniversalBasalDecision(
+        /** Value actually applied, after [floor] / [ceiling]. */
+        val multiplier: Double,
+        /** Value before the clamp: neural output, or heuristic factor, or 1.0 when disabled. */
+        val rawValue: Double,
+        val source: BasalMultiplierSource,
+        val floor: Double,
+        val ceiling: Double,
+    ) {
+        /** True when the clamp, not the model, decided the value. */
+        val clamped: Boolean get() = multiplier != rawValue
     }
 
     /**
@@ -190,13 +382,44 @@ class BasalNeuralLearner @Inject constructor(
         duraAvg: Double,
         iob: Double,
         physioFeatures: FloatArray = neutralPhysioFeatures,
-    ): Double {
-        if (!preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)) return 1.0
-        val maxScaling = preferences.get(DoubleKey.OApsAIMIAdaptiveBasalMaxScaling)
+    ): Double = getUniversalBasalDecision(bg, basal, accel, duraMin, duraAvg, iob, physioFeatures).multiplier
 
-        val neuralFactor = neuralBasalNet?.predict(modelInput(bg, basal, accel, duraMin, duraAvg, iob, physioFeatures))?.get(0)
+    /**
+     * Same result as [getUniversalBasalMultiplier], plus the raw value and the source, for the
+     * `adaptive_basal` block of AIMI_Decisions.jsonl.
+     */
+    fun getUniversalBasalDecision(
+        bg: Double,
+        basal: Double,
+        accel: Double,
+        duraMin: Double,
+        duraAvg: Double,
+        iob: Double,
+        physioFeatures: FloatArray = neutralPhysioFeatures,
+    ): UniversalBasalDecision {
+        val ceiling = max(1.0, preferences.get(DoubleKey.OApsAIMIAdaptiveBasalMaxScaling))
+        if (!preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)) {
+            return UniversalBasalDecision(
+                multiplier = 1.0,
+                rawValue = 1.0,
+                source = BasalMultiplierSource.DISABLED,
+                floor = RUNTIME_BASAL_FLOOR,
+                ceiling = ceiling,
+            )
+        }
 
-        return (neuralFactor ?: internalBasalScalingFactor).coerceIn(0.7, max(1.0, maxScaling))
+        val neuralFactor = neuralBasalNet
+            ?.predict(modelInput(bg, basal, accel, duraMin, duraAvg, iob, physioFeatures))
+            ?.get(0)
+            ?.takeIf { it.isFinite() }
+        val raw = neuralFactor ?: internalBasalScalingFactor
+        return UniversalBasalDecision(
+            multiplier = raw.coerceIn(RUNTIME_BASAL_FLOOR, ceiling),
+            rawValue = raw,
+            source = if (neuralFactor != null) BasalMultiplierSource.NEURAL else BasalMultiplierSource.HEURISTIC,
+            floor = RUNTIME_BASAL_FLOOR,
+            ceiling = ceiling,
+        )
     }
 
     /**
@@ -215,6 +438,13 @@ class BasalNeuralLearner @Inject constructor(
         sensorNoise: Double = 0.0,
         shortMinPredBg: Double? = null,
         physioFeatures: FloatArray = neutralPhysioFeatures,
+        /**
+         * Insulin delivered outside basal at this tick (SMB + manual bolus), in units.
+         * `NaN` means "not reported"; the trainer then falls back to an IOB-jump check.
+         */
+        bolusInsulinU: Double = Double.NaN,
+        /** Carbs on board at this tick, in grams. `NaN` means "not reported". */
+        cobGrams: Double = Double.NaN,
     ) {
         val isT3cActive = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
         val isAdaptiveBasalActive = preferences.get(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)
@@ -260,7 +490,19 @@ class BasalNeuralLearner @Inject constructor(
 
         // 4. Data logging (best-effort, feeds background training): a file error here never affects governance.
         try {
-            logRecord(bgBefore, bgAfter, basalDelivered, targetBg, accel, duraISFminutes, duraISFaverage, iob, physioFeatures)
+            logRecord(
+                bg = bgBefore,
+                eventualBg = bgAfter,
+                basal = basalDelivered,
+                target = targetBg,
+                accel = accel,
+                duraMin = duraISFminutes,
+                duraAvg = duraISFaverage,
+                iob = iob,
+                physioFeatures = physioFeatures,
+                bolusInsulinU = bolusInsulinU,
+                cobGrams = cobGrams,
+            )
         } catch (e: Exception) {
             log.error("LEARNER_LOG", "Failed to log records: ${e.message}")
         }
@@ -269,17 +511,22 @@ class BasalNeuralLearner @Inject constructor(
     @Synchronized
     fun getGovernanceSnapshot(): GovernanceSnapshot = lastGovernanceSnapshot
 
-    /** CSV header: legacy columns + the physio-context columns (mirror of the SMB schema), appended after basalScale. */
+    /**
+     * CSV header: legacy columns, then the physio-context columns (mirror of the SMB schema), then the
+     * causal columns of [BasalCsvSchema]. New columns are always appended at the end so an old row
+     * stays readable: the parser matches by name, and a name it cannot find is "unknown", not zero.
+     */
     private val basalCsvHeader: String =
         "timestamp,bg,eventualBg,basal,target,accel,duraMin,duraAvg,iob,t3cAgg,basalScale," +
             (SmbRefinementFeatureSchema.latentFeatureNames +
                 SmbRefinementFeatureSchema.modeFeatureNames +
-                SmbRefinementFeatureSchema.causalFeatureNames).joinToString(",")
+                SmbRefinementFeatureSchema.causalFeatureNames +
+                BasalCsvSchema.causalColumns).joinToString(",")
 
     /**
-     * Ensure the CSV header carries the physio columns. Fresh file → write the current header. Existing legacy file
-     * (pre-physio header) → migrate the header line in place: legacy data rows simply lack the extra columns, so the
-     * parser reads them as neutral by name-absence (schema versioning + neutral backfill). Done once.
+     * Ensure the CSV header is the current one. Fresh file → write it. Existing file with an older
+     * header → replace the header line in place. Old data rows keep their own width; the parser reads
+     * by column name, so a column they do not have is read as absent (schema versioning + backfill).
      */
     private fun ensureCsvSchema(file: File) {
         if (!file.exists()) {
@@ -287,7 +534,7 @@ class BasalNeuralLearner @Inject constructor(
             return
         }
         val firstLine = file.bufferedReader().use { it.readLine() } ?: ""
-        if (!firstLine.contains(SmbRefinementFeatureSchema.latentFeatureNames.first())) {
+        if (firstLine != basalCsvHeader) {
             val lines = file.readLines().toMutableList()
             if (lines.isEmpty()) {
                 file.writeText(basalCsvHeader + "\n")
@@ -308,13 +555,16 @@ class BasalNeuralLearner @Inject constructor(
         duraAvg: Double,
         iob: Double,
         physioFeatures: FloatArray,
+        bolusInsulinU: Double,
+        cobGrams: Double,
     ) {
         val file = storageHelper.getAimiFile("basal_adaptive_records.csv")
         ensureCsvSchema(file)
 
         val physio = if (physioFeatures.size == neutralPhysioFeatures.size) physioFeatures else neutralPhysioFeatures
         val row = "${System.currentTimeMillis()},$bg,$eventualBg,$basal,$target,$accel,$duraMin,$duraAvg,$iob," +
-            "$internalAggressivenessFactor,$internalBasalScalingFactor,${physio.joinToString(",")}\n"
+            "$internalAggressivenessFactor,$internalBasalScalingFactor,${physio.joinToString(",")}," +
+            "$bolusInsulinU,$cobGrams\n"
         file.appendText(row)
     }
 
@@ -748,7 +998,99 @@ class BasalNeuralLearner @Inject constructor(
         lastGovernanceLogAt = 0L
     }
 
-    private companion object {
+    /**
+     * The blood-glucose anchors, in mg/dL, that EVERY probe of these two heads must sweep.
+     *
+     * This is a contract between two places, not a local detail:
+     * - the runtime loader probes a model on these anchors before it is allowed to dose
+     *   (`answersToBg`, called from `rejectUnhealthyNets`);
+     * - the publish gate in the trainer must probe a candidate on the SAME anchors.
+     *
+     * If the two sweep different inputs, the system can publish a model that its own loader then
+     * refuses on the next reload. That is worse than either probe alone: training reports success, the
+     * runtime silently falls back to the heuristic, and nothing in the logs connects the two.
+     *
+     * The publish gate today samples the p10/p50/p90 of the TRAINING bg column instead, and that is the
+     * mismatch. Measured on real patient field data (24 h, n=260) the training p10..p90 window is
+     * 79.2..157.6 mg/dL = 78.4 mg/dL wide, only 0.44x of the clinical span 70..250 mg/dL, so the gate
+     * understates a model's real bg response by about 2.3x on that patient. On 10 patient-shaped seeds
+     * that cost 5 of 10 models that genuinely learned (rejected), and let 1 of 10 pure-noise models
+     * through.
+     *
+     * Why these three values: a low anchor inside the hypo band, a mid anchor near target, and a high
+     * anchor in the correction band. They are fixed on purpose. A per-patient window shrinks with a
+     * well-controlled patient, which makes the gate easiest exactly where a wrong model is hardest to
+     * notice.
+     */
+    object ClinicalBgAnchors {
+
+        /** Low / mid / high blood glucose, mg/dL. Do not narrow this without changing both probes. */
+        val PROBE_BG_MGDL: List<Double> = listOf(70.0, 140.0, 250.0)
+    }
+
+    internal companion object {
+        /**
+         * Lowest multiplier the Universal Adaptive Basal path may apply.
+         *
+         * It matches the heuristic's own decrement floor (0.80 in [updateLearning]) and it is on
+         * purpose NOT the same number as the label clamp floor (0.85) nor as `BasalLearner.CLAMP_MIN`
+         * (0.70). Three different meanings used to share the literal 0.70, so a saturated label, a
+         * clamped dead model and a legitimate strong cut all printed the same value.
+         */
+        const val RUNTIME_BASAL_FLOOR = 0.80
+
+        /**
+         * Lowest and highest multiplier the T3C Brittle Mode path may apply.
+         *
+         * Derived, not invented. The T3C head publishes with an output range of 0.3 .. 3.0, so a
+         * published head could scale the user's own aggressiveness by 0.3x .. 3.0x with nothing in
+         * between it and the pump. The clamp is tighter than that range on purpose, and every bound
+         * below already exists somewhere else in this system:
+         * - **0.50** is the floor the T3C heuristic itself never goes under (see the `max(... , 0.5)` in
+         *   [updateLearning]) and it is the trainer's own label floor (`T3C_LABEL_MIN`);
+         * - **2.00** is the trainer's label ceiling (`T3C_LABEL_MAX`) and the ceiling governance already
+         *   forces in [applyGovernanceGuardrails] on a persistent hyper pattern (2.20, same order).
+         *
+         * So the clamp is exactly the window every training label was clamped into. A model can only
+         * have LEARNED a value inside that window; an answer outside it is extrapolation, not learning.
+         * Anything the model asks for beyond it is refused here and shown as `raw` in the log line.
+         *
+         * These bounds do NOT replace the caller's own limits: `DetermineBasalAIMI2` still clamps the
+         * final aggressiveness (0.3 .. 2.0, or 3.0 in CFRD) after adding its own boosts, so the CFRD
+         * path can still reach its ceiling. This clamp only limits the LEARNED part.
+         */
+        const val RUNTIME_T3C_FACTOR_MIN = 0.5
+        const val RUNTIME_T3C_FACTOR_MAX = 2.0
+
+        const val BASAL_PROBE_BASAL_UPH = 1.0
+        const val BASAL_PROBE_DURA_MIN = 30.0
+        const val BASAL_PROBE_DURA_AVG = 45.0
+        const val BASAL_PROBE_IOB_U = 0.5
+
+        /**
+         * A model that moves less than this across [ClinicalBgAnchors.PROBE_BG_MGDL] is treated as
+         * constant. Shared by both heads: the unit is the same (a fraction of a multiplier). It is an
+         * absolute floor on "this model is not a constant", so it is relatively more permissive for the
+         * T3C head, whose label window (0.5 .. 2.0) is three times wider than the basal one
+         * (0.85 .. 1.35). That is the safe direction: it never rejects a model that really moves.
+         */
+        const val PROBE_MIN_SPREAD = 0.05
+
+        /**
+         * Accepted probe output of each head = the range that head is allowed to PUBLISH in
+         * (`BasalMlTrainingCoordinator.trainBasalHead` / `trainT3cHead`).
+         *
+         * The probe must not be tighter than the publish range, or the loader would refuse a model the
+         * trainer just published and the two sides would fight forever. Values that are in the publish
+         * range but outside the runtime clamp are accepted here and clamped later, which is why the log
+         * line prints the raw value: a model living at 0.31 and a model that learned 0.50 both apply
+         * 0.50, and only `raw` tells them apart.
+         */
+        const val BASAL_PROBE_OUTPUT_MIN = 0.5
+        const val BASAL_PROBE_OUTPUT_MAX = 2.0
+        const val T3C_PROBE_OUTPUT_MIN = 0.3
+        const val T3C_PROBE_OUTPUT_MAX = 3.0
+
         const val GOVERNANCE_WINDOW_MAX = 288 // ~24h @ 5-min cadence
         const val GOVERNANCE_MIN_SAMPLES = 36 // ~3h warmup
 
