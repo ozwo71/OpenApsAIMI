@@ -38,17 +38,17 @@ private const val RING_STROKE_FRACTION = 0.065f
  * @param content drawn in the centre, normally the mm:ss countdown.
  */
 @Composable
-fun OnePlusWarmupRing(
+fun CgmWarmupRing(
     progress: Float?,
-    state: OnePlusUiState,
+    state: CgmUiState,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
     val ringColor = when (state) {
-        OnePlusUiState.Ready   -> MaterialTheme.colorScheme.primary
-        OnePlusUiState.Failed  -> MaterialTheme.colorScheme.error
-        OnePlusUiState.Working -> MaterialTheme.colorScheme.tertiary
-        OnePlusUiState.Waiting -> MaterialTheme.colorScheme.onSurfaceVariant
+        CgmUiState.Ready   -> MaterialTheme.colorScheme.primary
+        CgmUiState.Failed  -> MaterialTheme.colorScheme.error
+        CgmUiState.Working -> MaterialTheme.colorScheme.tertiary
+        CgmUiState.Waiting -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     val trackColor = MaterialTheme.colorScheme.surfaceVariant
     BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.Center) {

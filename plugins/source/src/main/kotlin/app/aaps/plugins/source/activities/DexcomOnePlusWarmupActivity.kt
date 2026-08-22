@@ -46,18 +46,18 @@ import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
 import app.aaps.plugins.source.R
+import app.aaps.plugins.source.compose.CgmCard
+import app.aaps.plugins.source.compose.CgmCardHeader
+import app.aaps.plugins.source.compose.CgmCardTone
+import app.aaps.plugins.source.compose.CgmKeyValueRow
+import app.aaps.plugins.source.compose.CgmLazyColumn
+import app.aaps.plugins.source.compose.CgmScaffold
+import app.aaps.plugins.source.compose.CgmStateChip
+import app.aaps.plugins.source.compose.CgmUiState
+import app.aaps.plugins.source.compose.CgmWarmupRing
 import app.aaps.plugins.source.compose.DexcomOnePlusUiLabels
 import app.aaps.plugins.source.compose.DexcomOnePlusWarmupCountdown
-import app.aaps.plugins.source.compose.OnePlusCard
-import app.aaps.plugins.source.compose.OnePlusCardHeader
-import app.aaps.plugins.source.compose.OnePlusCardTone
-import app.aaps.plugins.source.compose.OnePlusKeyValueRow
-import app.aaps.plugins.source.compose.OnePlusLazyColumn
-import app.aaps.plugins.source.compose.OnePlusScaffold
-import app.aaps.plugins.source.compose.OnePlusStateChip
-import app.aaps.plugins.source.compose.OnePlusUiState
-import app.aaps.plugins.source.compose.OnePlusWarmupRing
-import app.aaps.plugins.source.compose.rememberOnePlusWindow
+import app.aaps.plugins.source.compose.rememberCgmWindow
 import app.aaps.plugins.source.compose.toUiState
 import app.aaps.plugins.source.logs.DriverLogFilter
 import dagger.hilt.android.AndroidEntryPoint
@@ -136,7 +136,7 @@ private fun DexcomOnePlusWarmupScreen(
     onOpenStatus: () -> Unit,
 ) {
     val context = LocalContext.current
-    val window = rememberOnePlusWindow()
+    val window = rememberCgmWindow()
     val driver = remember { OnePlusCgmDrivers.default() }
     // Identity is read once: it only changes when a sensor is started, which leaves this screen.
     val storedSession = remember {
@@ -185,7 +185,7 @@ private fun DexcomOnePlusWarmupScreen(
         usingLocalFallback = usingLocalFallback,
     )
 
-    OnePlusScaffold(
+    CgmScaffold(
         title = stringResource(R.string.dexcom_oneplus_warmup_title),
         onNavigate = onBack,
         actions = {
@@ -207,7 +207,7 @@ private fun DexcomOnePlusWarmupScreen(
                 horizontalArrangement = Arrangement.spacedBy(AapsSpacing.xxLarge),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                OnePlusWarmupRing(
+                CgmWarmupRing(
                     progress = ringProgress(model),
                     state = model.state.phase.toUiState(),
                     modifier = Modifier
@@ -236,7 +236,7 @@ private fun DexcomOnePlusWarmupScreen(
                 }
             }
         } else {
-            OnePlusLazyColumn {
+            CgmLazyColumn {
                 item(key = "ring") {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
@@ -246,7 +246,7 @@ private fun DexcomOnePlusWarmupScreen(
                         StateChips(model)
                         // Width only: the box wraps the ring's own height, so the ring is not
                         // parked in the middle of a full width square of empty space.
-                        OnePlusWarmupRing(
+                        CgmWarmupRing(
                             progress = ringProgress(model),
                             state = model.state.phase.toUiState(),
                             modifier = Modifier.fillMaxWidth(),
@@ -325,7 +325,7 @@ private fun RingCenter(model: WarmupUiModel) {
         )
         if (showsRemainingLabel) {
             Text(
-                text = stringResource(R.string.dexcom_oneplus_warmup_remaining_label),
+                text = stringResource(R.string.cgm_warmup_remaining_label),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -336,12 +336,12 @@ private fun RingCenter(model: WarmupUiModel) {
 @Composable
 private fun StateChips(model: WarmupUiModel) {
     Row(horizontalArrangement = Arrangement.spacedBy(AapsSpacing.medium)) {
-        OnePlusStateChip(
+        CgmStateChip(
             state = model.state.phase.toUiState(),
             label = DexcomOnePlusUiLabels.phaseLabel(model.state.phase),
         )
-        OnePlusStateChip(
-            state = if (model.sessionUp) OnePlusUiState.Ready else OnePlusUiState.Waiting,
+        CgmStateChip(
+            state = if (model.sessionUp) CgmUiState.Ready else CgmUiState.Waiting,
             label = stringResource(
                 if (model.sessionUp) R.string.dexcom_oneplus_session_up else R.string.dexcom_oneplus_session_down,
             ),
@@ -369,7 +369,7 @@ private fun ColumnScope.WarmupDetails(
     endMs?.let {
         Text(
             text = stringResource(
-                R.string.dexcom_oneplus_warmup_ends_at_short,
+                R.string.cgm_warmup_ends_at,
                 DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(it)),
             ),
             style = MaterialTheme.typography.titleMedium,
@@ -388,8 +388,8 @@ private fun ColumnScope.WarmupDetails(
         OnePlusWarmupState.Phase.FAILED -> {
             // An interrupted warm-up used to be a red line and nothing else. These are the three
             // ways out that actually exist, in the order they are worth trying.
-            OnePlusCard(tone = OnePlusCardTone.Warning) {
-                OnePlusCardHeader(stringResource(R.string.dexcom_oneplus_warmup_what_happened))
+            CgmCard(tone = CgmCardTone.Warning) {
+                CgmCardHeader(stringResource(R.string.cgm_warmup_what_happened))
                 Text(
                     text = DexcomOnePlusUiLabels.userMessage(model.state.message),
                     style = MaterialTheme.typography.bodyMedium,
@@ -436,8 +436,8 @@ private fun ColumnScope.WarmupDetails(
         )
     }
     if (model.state.staleMacSuspected) {
-        OnePlusCard(tone = OnePlusCardTone.Warning) {
-            OnePlusCardHeader(stringResource(R.string.dexcom_oneplus_notif_stale_mac_title))
+        CgmCard(tone = CgmCardTone.Warning) {
+            CgmCardHeader(stringResource(R.string.dexcom_oneplus_notif_stale_mac_title))
             Text(
                 text = stringResource(R.string.dexcom_oneplus_notif_stale_mac_text),
                 style = MaterialTheme.typography.bodyMedium,
@@ -451,13 +451,13 @@ private fun ColumnScope.WarmupDetails(
     // Which sensor this countdown belongs to — a real question once a pre-soak sensor can be
     // warming up at the same time.
     if (deviceName != null || deviceAddress != null) {
-        OnePlusCard {
-            OnePlusCardHeader(stringResource(R.string.dexcom_oneplus_sensor_heading))
+        CgmCard {
+            CgmCardHeader(stringResource(R.string.cgm_sensor_heading))
             deviceName?.let {
-                OnePlusKeyValueRow(stringResource(R.string.dexcom_oneplus_sensor_name), it)
+                CgmKeyValueRow(stringResource(R.string.cgm_sensor_name), it)
             }
             deviceAddress?.let {
-                OnePlusKeyValueRow(stringResource(R.string.dexcom_oneplus_sensor_address), it)
+                CgmKeyValueRow(stringResource(R.string.cgm_sensor_address), it)
             }
             if (model.usingLocalFallback) {
                 Text(

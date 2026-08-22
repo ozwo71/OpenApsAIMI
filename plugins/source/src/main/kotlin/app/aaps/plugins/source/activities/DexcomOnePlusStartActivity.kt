@@ -76,19 +76,19 @@ import app.aaps.plugins.dexcomoneplus.session.OnePlusSessionStart
 import app.aaps.plugins.source.DexcomOnePlusPlugin
 import app.aaps.plugins.source.OnePlusBlePermissionHelper
 import app.aaps.plugins.source.R
-import app.aaps.plugins.source.compose.OnePlusCard
-import app.aaps.plugins.source.compose.OnePlusCardHeader
-import app.aaps.plugins.source.compose.OnePlusCardTone
-import app.aaps.plugins.source.compose.OnePlusHelpCard
-import app.aaps.plugins.source.compose.OnePlusLazyColumn
-import app.aaps.plugins.source.compose.OnePlusNavIcon
-import app.aaps.plugins.source.compose.OnePlusScaffold
-import app.aaps.plugins.source.compose.OnePlusStateChip
-import app.aaps.plugins.source.compose.OnePlusStepper
-import app.aaps.plugins.source.compose.OnePlusUiState
-import app.aaps.plugins.source.compose.OnePlusWidth
-import app.aaps.plugins.source.compose.OnePlusWindow
-import app.aaps.plugins.source.compose.rememberOnePlusWindow
+import app.aaps.plugins.source.compose.CgmCard
+import app.aaps.plugins.source.compose.CgmCardHeader
+import app.aaps.plugins.source.compose.CgmCardTone
+import app.aaps.plugins.source.compose.CgmHelpCard
+import app.aaps.plugins.source.compose.CgmLazyColumn
+import app.aaps.plugins.source.compose.CgmNavIcon
+import app.aaps.plugins.source.compose.CgmScaffold
+import app.aaps.plugins.source.compose.CgmStateChip
+import app.aaps.plugins.source.compose.CgmStepper
+import app.aaps.plugins.source.compose.CgmUiState
+import app.aaps.plugins.source.compose.CgmWidth
+import app.aaps.plugins.source.compose.CgmWindow
+import app.aaps.plugins.source.compose.rememberCgmWindow
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -174,7 +174,7 @@ private fun DexcomOnePlusStartScreen(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
-    val window = rememberOnePlusWindow()
+    val window = rememberCgmWindow()
     val mainHandler = remember { HandlerCompat.createAsync(Looper.getMainLooper()) }
     // Which slot the guided flow starts. PRODUCTION keeps the existing behaviour (activates the
     // plugin + feeds the loop after warm-up). STAGING pre-soaks a second sensor collect-only — it
@@ -388,11 +388,11 @@ private fun DexcomOnePlusStartScreen(
         )
     }
 
-    OnePlusScaffold(
+    CgmScaffold(
         title = stringResource(R.string.dexcom_oneplus_start_title),
         onNavigate = onBack,
         // A screen the user either commits (Connect) or abandons — see the AapsTopAppBar convention.
-        navIcon = OnePlusNavIcon.Close,
+        navIcon = CgmNavIcon.Close,
         constrainWidth = !window.isTwoPane,
         bottomBar = {
             // In two panes the action lives at the foot of the form column, next to what it acts on.
@@ -463,7 +463,7 @@ private fun DexcomOnePlusStartScreen(
                         onStopScan = onStopScan,
                     )
                     // Its own pane, so the list gets the whole height instead of a fixed 216 dp box.
-                    OnePlusLazyColumn(
+                    CgmLazyColumn(
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(0.dp),
                     ) {
@@ -477,7 +477,7 @@ private fun DexcomOnePlusStartScreen(
                 }
             }
         } else {
-            OnePlusLazyColumn(
+            CgmLazyColumn(
                 modifier = Modifier.clearFocusOnTap(focusManager),
             ) {
                 item(key = "form") {
@@ -531,7 +531,7 @@ private fun DexcomOnePlusStartScreen(
 /** The stepper, slot choice, permission prompt, code field and help — everything but the scan. */
 @Composable
 private fun ColumnScope.FormPane(
-    window: OnePlusWindow,
+    window: CgmWindow,
     currentStep: Int,
     slot: SensorSlot,
     onSlotChange: (SensorSlot) -> Unit,
@@ -543,7 +543,7 @@ private fun ColumnScope.FormPane(
     storedMac: String?,
     onApplicatorChange: (String) -> Unit,
 ) {
-    OnePlusStepper(
+    CgmStepper(
         currentStep = currentStep,
         labels = listOf(
             stringResource(R.string.dexcom_oneplus_step_prepare),
@@ -553,7 +553,7 @@ private fun ColumnScope.FormPane(
         ),
         // Four labels never fit across a phone; the compact form shows one at a time instead of
         // truncating all of them.
-        compact = window.width == OnePlusWidth.Compact,
+        compact = window.width == CgmWidth.Compact,
     )
 
     // A real single-choice control: the selected side carries the selection state, so TalkBack
@@ -584,8 +584,8 @@ private fun ColumnScope.FormPane(
         }
     }
 
-    OnePlusCard {
-        OnePlusCardHeader(stringResource(R.string.dexcom_oneplus_section_pairing_code))
+    CgmCard {
+        CgmCardHeader(stringResource(R.string.dexcom_oneplus_section_pairing_code))
         OutlinedTextField(
             value = applicatorInput,
             onValueChange = onApplicatorChange,
@@ -627,22 +627,22 @@ private fun ColumnScope.FormPane(
  */
 @Composable
 private fun ColumnScope.HelpSection(slot: SensorSlot) {
-    OnePlusHelpCard(title = stringResource(R.string.dexcom_oneplus_help_how_to_start)) {
+    CgmHelpCard(title = stringResource(R.string.dexcom_oneplus_help_how_to_start)) {
         Text(
             text = stringResource(R.string.dexcom_oneplus_start_steps),
             style = MaterialTheme.typography.bodyMedium,
         )
     }
-    OnePlusHelpCard(
+    CgmHelpCard(
         title = stringResource(R.string.dexcom_oneplus_help_before_pairing),
-        tone = OnePlusCardTone.Warning,
+        tone = CgmCardTone.Warning,
     ) {
         Text(
             text = stringResource(R.string.dexcom_oneplus_dexcom_recovery_warning),
             style = MaterialTheme.typography.bodyMedium,
         )
     }
-    OnePlusHelpCard(title = stringResource(R.string.dexcom_oneplus_help_permissions)) {
+    CgmHelpCard(title = stringResource(R.string.dexcom_oneplus_help_permissions)) {
         Text(
             text = stringResource(R.string.dexcom_oneplus_permissions_hint),
             style = MaterialTheme.typography.bodyMedium,
@@ -652,7 +652,7 @@ private fun ColumnScope.HelpSection(slot: SensorSlot) {
             style = MaterialTheme.typography.bodyMedium,
         )
     }
-    OnePlusHelpCard(title = stringResource(R.string.dexcom_oneplus_help_slot)) {
+    CgmHelpCard(title = stringResource(R.string.dexcom_oneplus_help_slot)) {
         Text(
             text = stringResource(R.string.dexcom_oneplus_slot_hint),
             style = MaterialTheme.typography.bodyMedium,
@@ -677,9 +677,9 @@ private fun ScanHeader(
     onStopScan: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium)) {
-        OnePlusCardHeader(stringResource(R.string.dexcom_oneplus_section_sensors_nearby)) {
-            OnePlusStateChip(
-                state = if (scanning) OnePlusUiState.Working else OnePlusUiState.Waiting,
+        CgmCardHeader(stringResource(R.string.dexcom_oneplus_section_sensors_nearby)) {
+            CgmStateChip(
+                state = if (scanning) CgmUiState.Working else CgmUiState.Waiting,
                 label = if (scanning) {
                     stringResource(R.string.dexcom_oneplus_scan_scanning)
                 } else {

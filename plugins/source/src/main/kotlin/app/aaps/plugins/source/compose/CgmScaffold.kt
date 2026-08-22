@@ -31,7 +31,7 @@ import app.aaps.plugins.source.R
  * Which job the navigation icon of a ONE+ screen does — see the convention documented on
  * [app.aaps.core.ui.compose.AapsTopAppBar].
  */
-enum class OnePlusNavIcon {
+enum class CgmNavIcon {
 
     /** Pure navigation (status, warm-up, log): back arrow. */
     Back,
@@ -55,11 +55,11 @@ enum class OnePlusNavIcon {
  * - **The bar is the same everywhere**, with the navigation icon picked by screen role.
  */
 @Composable
-fun OnePlusScaffold(
+fun CgmScaffold(
     title: String,
     onNavigate: () -> Unit,
     modifier: Modifier = Modifier,
-    navIcon: OnePlusNavIcon = OnePlusNavIcon.Back,
+    navIcon: CgmNavIcon = CgmNavIcon.Back,
     actions: @Composable RowScope.() -> Unit = {},
     bottomBar: @Composable () -> Unit = {},
     constrainWidth: Boolean = true,
@@ -73,14 +73,14 @@ fun OnePlusScaffold(
                 navigationIcon = {
                     IconButton(onClick = onNavigate) {
                         when (navIcon) {
-                            OnePlusNavIcon.Back  -> Icon(
+                            CgmNavIcon.Back  -> Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = stringResource(R.string.dexcom_oneplus_nav_back),
                             )
 
-                            OnePlusNavIcon.Close -> Icon(
+                            CgmNavIcon.Close -> Icon(
                                 imageVector = Icons.Filled.Close,
-                                contentDescription = stringResource(R.string.dexcom_oneplus_nav_close),
+                                contentDescription = stringResource(R.string.cgm_nav_close),
                             )
                         }
                     }
@@ -120,7 +120,7 @@ fun OnePlusScaffold(
  * screen to 216 dp whatever the screen could offer.
  */
 @Composable
-fun OnePlusLazyColumn(
+fun CgmLazyColumn(
     modifier: Modifier = Modifier,
     state: LazyListState = rememberLazyListState(),
     contentPadding: PaddingValues = PaddingValues(AapsSpacing.extraLarge),

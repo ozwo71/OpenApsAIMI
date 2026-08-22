@@ -48,16 +48,16 @@ import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
 import app.aaps.plugins.source.DexcomOnePlusPlugin
 import app.aaps.plugins.source.DexcomOnePlusStaging
 import app.aaps.plugins.source.R
+import app.aaps.plugins.source.compose.CgmCard
+import app.aaps.plugins.source.compose.CgmCardHeader
+import app.aaps.plugins.source.compose.CgmCardTone
+import app.aaps.plugins.source.compose.CgmKeyValueRow
+import app.aaps.plugins.source.compose.CgmLazyColumn
+import app.aaps.plugins.source.compose.CgmScaffold
+import app.aaps.plugins.source.compose.CgmStateChip
+import app.aaps.plugins.source.compose.CgmStepTimeline
+import app.aaps.plugins.source.compose.CgmUiState
 import app.aaps.plugins.source.compose.DexcomOnePlusUiLabels
-import app.aaps.plugins.source.compose.OnePlusCard
-import app.aaps.plugins.source.compose.OnePlusCardHeader
-import app.aaps.plugins.source.compose.OnePlusCardTone
-import app.aaps.plugins.source.compose.OnePlusKeyValueRow
-import app.aaps.plugins.source.compose.OnePlusLazyColumn
-import app.aaps.plugins.source.compose.OnePlusScaffold
-import app.aaps.plugins.source.compose.OnePlusStagingTimeline
-import app.aaps.plugins.source.compose.OnePlusStateChip
-import app.aaps.plugins.source.compose.OnePlusUiState
 import app.aaps.plugins.source.compose.toUiState
 import app.aaps.plugins.source.logs.DriverLogFilter
 import dagger.hilt.android.AndroidEntryPoint
@@ -184,7 +184,7 @@ private fun DexcomOnePlusStatusScreen(
         }
     }
 
-    OnePlusScaffold(
+    CgmScaffold(
         title = stringResource(R.string.dexcom_oneplus_status_title),
         onNavigate = onBack,
         actions = {
@@ -196,7 +196,7 @@ private fun DexcomOnePlusStatusScreen(
             }
         },
     ) {
-        OnePlusLazyColumn {
+        CgmLazyColumn {
             item(key = "production") {
                 ProductionCard(
                     phaseLabel = DexcomOnePlusUiLabels.phaseLabel(state.phase),
@@ -214,8 +214,8 @@ private fun DexcomOnePlusStatusScreen(
             // no replacement is warming up yet.
             if (lifecycle?.endOfLife == true && stagingState == StagingState.ABSENT) {
                 item(key = "endOfLife") {
-                    OnePlusCard(tone = OnePlusCardTone.Warning) {
-                        OnePlusCardHeader(stringResource(R.string.dexcom_oneplus_end_of_life_title))
+                    CgmCard(tone = CgmCardTone.Warning) {
+                        CgmCardHeader(stringResource(R.string.dexcom_oneplus_end_of_life_title))
                         Text(
                             text = stringResource(R.string.dexcom_oneplus_end_of_life_text),
                             style = MaterialTheme.typography.bodyMedium,
@@ -254,8 +254,8 @@ private fun DexcomOnePlusStatusScreen(
                 }
             }
             item(key = "actions") {
-                OnePlusCard {
-                    OnePlusCardHeader(stringResource(R.string.dexcom_oneplus_actions_heading))
+                CgmCard {
+                    CgmCardHeader(stringResource(R.string.cgm_actions_heading))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
@@ -325,7 +325,7 @@ private fun DexcomOnePlusStatusScreen(
 @Composable
 private fun ProductionCard(
     phaseLabel: String,
-    phaseState: OnePlusUiState,
+    phaseState: CgmUiState,
     sessionUp: Boolean,
     message: String,
     lifecycle: CgmSensorLifecycle?,
@@ -334,9 +334,9 @@ private fun ProductionCard(
     formatTime: (Long) -> String,
     formatAge: (Long) -> String,
 ) {
-    OnePlusCard(accent = true) {
-        OnePlusCardHeader(stringResource(R.string.dexcom_oneplus_production_heading)) {
-            OnePlusStateChip(state = phaseState, label = phaseLabel)
+    CgmCard(accent = true) {
+        CgmCardHeader(stringResource(R.string.dexcom_oneplus_production_heading)) {
+            CgmStateChip(state = phaseState, label = phaseLabel)
         }
         // Only this driver's own readings are shown here: the newest value in the database can come
         // from another source, and labelling someone else's reading as this sensor's would be a lie.
@@ -357,8 +357,8 @@ private fun ProductionCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        OnePlusKeyValueRow(
-            label = stringResource(R.string.dexcom_oneplus_session_label),
+        CgmKeyValueRow(
+            label = stringResource(R.string.cgm_session_label),
             value = stringResource(
                 if (sessionUp) R.string.dexcom_oneplus_session_up else R.string.dexcom_oneplus_session_down,
             ),
@@ -401,9 +401,9 @@ private fun StagingCard(
         StagingState.SETTLING -> stringResource(R.string.dexcom_oneplus_staging_state_settling)
         StagingState.READY    -> stringResource(R.string.dexcom_oneplus_staging_state_ready)
     }
-    OnePlusCard {
-        OnePlusCardHeader(stringResource(R.string.dexcom_oneplus_staging_heading_short)) {
-            OnePlusStateChip(state = stagingState.toUiState(), label = stagingStateLabel)
+    CgmCard {
+        CgmCardHeader(stringResource(R.string.dexcom_oneplus_staging_heading_short)) {
+            CgmStateChip(state = stagingState.toUiState(), label = stagingStateLabel)
         }
         if (stagingState == StagingState.ABSENT) {
             // An empty state that explains what the slot is for and offers the way in, instead of
@@ -417,17 +417,29 @@ private fun StagingCard(
                 Text(stringResource(R.string.dexcom_oneplus_start_presoak))
             }
         } else {
-            OnePlusStagingTimeline(state = stagingState)
+            CgmStepTimeline(
+                labels = listOf(
+                    stringResource(R.string.dexcom_oneplus_staging_state_warmup),
+                    stringResource(R.string.dexcom_oneplus_staging_state_settling),
+                    stringResource(R.string.dexcom_oneplus_staging_state_ready),
+                ),
+                reached = when (stagingState) {
+                    StagingState.ABSENT   -> -1
+                    StagingState.WARMUP   -> 0
+                    StagingState.SETTLING -> 1
+                    StagingState.READY    -> 2
+                },
+            )
             // Evidence the staging sensor is really alive: without it the user only sees a state
             // label and cannot tell "settling with data" from "settling with a dead radio".
-            OnePlusKeyValueRow(
+            CgmKeyValueRow(
                 label = stringResource(R.string.dexcom_oneplus_staging_readings_label),
                 value = (stagingEvidence?.validCount ?: 0).toString(),
             )
             val lastValue = stagingEvidence?.lastValueMgdl
             val lastAt = stagingEvidence?.lastValueAtEpochMs
             if (lastValue != null && lastAt != null) {
-                OnePlusKeyValueRow(
+                CgmKeyValueRow(
                     label = stringResource(R.string.dexcom_oneplus_staging_last_label),
                     value = stringResource(
                         R.string.dexcom_oneplus_staging_last_reading,

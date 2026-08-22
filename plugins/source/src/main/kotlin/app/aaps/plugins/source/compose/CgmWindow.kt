@@ -7,7 +7,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import app.aaps.core.ui.compose.TABLET_MIN_SW_DP
 
 /** How much width the screen has to work with. */
-enum class OnePlusWidth {
+enum class CgmWidth {
 
     /** Phone in portrait. One column, compact controls. */
     Compact,
@@ -30,13 +30,13 @@ enum class OnePlusWidth {
  * has to be laid out sideways instead.
  */
 @Immutable
-data class OnePlusWindow(
-    val width: OnePlusWidth,
+data class CgmWindow(
+    val width: CgmWidth,
     val isShort: Boolean,
 ) {
 
     /** True when there is enough width to show two panes next to each other. */
-    val isTwoPane: Boolean get() = width == OnePlusWidth.Expanded
+    val isTwoPane: Boolean get() = width == CgmWidth.Expanded
 }
 
 /** Width in dp at which a screen may split into two panes. */
@@ -46,16 +46,16 @@ private const val EXPANDED_MIN_WIDTH_DP = 840
 private const val SHORT_MAX_HEIGHT_DP = 480
 
 @Composable
-fun rememberOnePlusWindow(): OnePlusWindow {
+fun rememberCgmWindow(): CgmWindow {
     val configuration = LocalConfiguration.current
     val widthDp = configuration.screenWidthDp
     val heightDp = configuration.screenHeightDp
     return remember(widthDp, heightDp) {
-        OnePlusWindow(
+        CgmWindow(
             width = when {
-                widthDp >= EXPANDED_MIN_WIDTH_DP -> OnePlusWidth.Expanded
-                widthDp >= TABLET_MIN_SW_DP      -> OnePlusWidth.Medium
-                else                             -> OnePlusWidth.Compact
+                widthDp >= EXPANDED_MIN_WIDTH_DP -> CgmWidth.Expanded
+                widthDp >= TABLET_MIN_SW_DP      -> CgmWidth.Medium
+                else                             -> CgmWidth.Compact
             },
             isShort = heightDp < SHORT_MAX_HEIGHT_DP,
         )

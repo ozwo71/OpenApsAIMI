@@ -34,7 +34,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.plugins.source.R
 
@@ -48,14 +47,14 @@ import app.aaps.plugins.source.R
  *   be told apart from the pre-soak sensor without reading either heading.
  */
 @Composable
-fun OnePlusCard(
+fun CgmCard(
     modifier: Modifier = Modifier,
     accent: Boolean = false,
-    tone: OnePlusCardTone = OnePlusCardTone.Neutral,
+    tone: CgmCardTone = CgmCardTone.Neutral,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val container = when {
-        tone == OnePlusCardTone.Warning -> MaterialTheme.colorScheme.errorContainer
+        tone == CgmCardTone.Warning -> MaterialTheme.colorScheme.errorContainer
         accent                          -> MaterialTheme.colorScheme.secondaryContainer
         else                            -> MaterialTheme.colorScheme.surfaceContainerLow
     }
@@ -72,13 +71,13 @@ fun OnePlusCard(
 }
 
 /** Whether a card carries ordinary information or something the user has to act on. */
-enum class OnePlusCardTone { Neutral, Warning }
+enum class CgmCardTone { Neutral, Warning }
 
 /**
  * Card heading: an uppercase label on the left, room for a state chip on the right.
  */
 @Composable
-fun OnePlusCardHeader(
+fun CgmCardHeader(
     title: String,
     modifier: Modifier = Modifier,
     trailing: @Composable RowScope.() -> Unit = {},
@@ -104,7 +103,7 @@ fun OnePlusCardHeader(
  * scannable rather than a paragraph.
  */
 @Composable
-fun OnePlusKeyValueRow(
+fun CgmKeyValueRow(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
@@ -137,19 +136,19 @@ fun OnePlusKeyValueRow(
  * closed, because an unread warning that looks like ordinary help is not a warning.
  */
 @Composable
-fun OnePlusHelpCard(
+fun CgmHelpCard(
     title: String,
     modifier: Modifier = Modifier,
-    tone: OnePlusCardTone = OnePlusCardTone.Neutral,
+    tone: CgmCardTone = CgmCardTone.Neutral,
     expandedByDefault: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     var expanded by remember { mutableStateOf(expandedByDefault) }
     val titleColor = when (tone) {
-        OnePlusCardTone.Neutral -> MaterialTheme.colorScheme.onSurface
-        OnePlusCardTone.Warning -> MaterialTheme.colorScheme.error
+        CgmCardTone.Neutral -> MaterialTheme.colorScheme.onSurface
+        CgmCardTone.Warning -> MaterialTheme.colorScheme.error
     }
-    OnePlusCard(modifier = modifier) {
+    CgmCard(modifier = modifier) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -166,7 +165,7 @@ fun OnePlusHelpCard(
             Icon(
                 imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                 contentDescription = stringResource(
-                    if (expanded) R.string.dexcom_oneplus_help_collapse else R.string.dexcom_oneplus_help_expand,
+                    if (expanded) R.string.cgm_help_collapse else R.string.cgm_help_expand,
                 ),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -181,27 +180,19 @@ fun OnePlusHelpCard(
 }
 
 /**
- * Where the pre-soak sensor is in its run: warm-up, then settling, then ready to promote.
+ * How far along a sequence of named steps something is — nodes on a line, with their labels.
  *
- * "Staging state: Settling" says where it is but not how far that is through the process, nor what
- * comes next. Three nodes on a line say both without a sentence.
+ * A state label alone ("Settling") says where a thing is but not how far through it is, nor what
+ * comes next. The nodes say both without a sentence.
+ *
+ * @param reached index of the current step; -1 when the sequence has not started.
  */
 @Composable
-fun OnePlusStagingTimeline(
-    state: StagingState,
+fun CgmStepTimeline(
+    labels: List<String>,
+    reached: Int,
     modifier: Modifier = Modifier,
 ) {
-    val reached = when (state) {
-        StagingState.ABSENT   -> -1
-        StagingState.WARMUP   -> 0
-        StagingState.SETTLING -> 1
-        StagingState.READY    -> 2
-    }
-    val labels = listOf(
-        stringResource(R.string.dexcom_oneplus_staging_state_warmup),
-        stringResource(R.string.dexcom_oneplus_staging_state_settling),
-        stringResource(R.string.dexcom_oneplus_staging_state_ready),
-    )
     val done = MaterialTheme.colorScheme.primary
     val todo = MaterialTheme.colorScheme.surfaceVariant
     Column(
@@ -277,7 +268,7 @@ private fun TimelineNode(
  * or when the theme scales type up on a tablet.
  */
 @Composable
-fun OnePlusStepper(
+fun CgmStepper(
     currentStep: Int,
     labels: List<String>,
     compact: Boolean,
@@ -294,7 +285,7 @@ fun OnePlusStepper(
             ) {
                 Text(
                     text = stringResource(
-                        R.string.dexcom_oneplus_step_counter,
+                        R.string.cgm_step_counter,
                         (currentStep + 1).coerceAtMost(labels.size),
                         labels.size,
                     ),
