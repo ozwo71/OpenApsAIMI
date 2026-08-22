@@ -5,6 +5,7 @@ import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefAnalysisReport
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefDataSufficiency
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefGlycemicPriority
+import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefPersonalSignalGate
 import app.aaps.plugins.aps.openAPSAIMI.model.*
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
 import kotlin.math.min
@@ -296,6 +297,12 @@ class PkpdAdvisor {
         }
     }
 
+    // The three gates below read three OREF inputs each. The measured outcome history and the calibrated ONNX
+    // risk are unchanged. The third one, the personal on-device signal, is read through OrefPersonalSignalGate
+    // because it is not calibrated: it reports a compressed sigmoid, never below 50 %, so on its own it would
+    // open these gates for nearly every patient. The gate holds it off until it is calibrated; the thresholds
+    // themselves are left as they are.
+
     private fun orefContradictsQuietPeriod(oref: OrefAnalysisReport?): Boolean {
         val o = oref ?: return false
         if (o.dataSufficiency == OrefDataSufficiency.INSUFFICIENT) return false
@@ -304,11 +311,11 @@ class PkpdAdvisor {
         val hypoSignal = hypoFocus &&
             ((o.actualHypo4hPct ?: 0.0) >= 12.0 ||
                 (o.meanCalHypoRiskPct ?: 0.0) >= 20.0 ||
-                (o.personalMeanHypoSignalPct ?: 0.0) >= 52.0)
+                OrefPersonalSignalGate.tripsDecision(o.personalMeanHypoSignalPct, 52.0))
         val hyperSignal = hyperFocus &&
             ((o.actualHyper4hPct ?: 0.0) >= 18.0 ||
                 (o.meanCalHyperRiskPct ?: 0.0) >= 25.0 ||
-                (o.personalMeanHyperSignalPct ?: 0.0) >= 52.0)
+                OrefPersonalSignalGate.tripsDecision(o.personalMeanHyperSignalPct, 52.0))
         return hypoSignal || hyperSignal
     }
 
@@ -321,7 +328,7 @@ class PkpdAdvisor {
         if (!hypoFocus) return false
         return (o.actualHypo4hPct ?: 0.0) >= 10.0 ||
             (o.meanCalHypoRiskPct ?: 0.0) >= 18.0 ||
-            (o.personalMeanHypoSignalPct ?: 0.0) >= 48.0
+            OrefPersonalSignalGate.tripsDecision(o.personalMeanHypoSignalPct, 48.0)
     }
 
     private fun hyperPkpdTrigger(metrics: AdvisorMetrics, oref: OrefAnalysisReport?): Boolean {
@@ -334,6 +341,6 @@ class PkpdAdvisor {
         if (!hyperFocus) return false
         return (o.actualHyper4hPct ?: 0.0) >= 18.0 ||
             (o.meanCalHyperRiskPct ?: 0.0) >= 25.0 ||
-            (o.personalMeanHyperSignalPct ?: 0.0) >= 52.0
+            OrefPersonalSignalGate.tripsDecision(o.personalMeanHyperSignalPct, 52.0)
     }
 }

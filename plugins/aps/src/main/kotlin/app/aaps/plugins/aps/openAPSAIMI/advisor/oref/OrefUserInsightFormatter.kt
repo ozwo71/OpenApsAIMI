@@ -26,11 +26,10 @@ object OrefUserInsightFormatter {
                 lines += context.getString(R.string.aimi_adv_oref_user_personal_training)
             OrefPersonalMlStatus.TRAIN_FAILED ->
                 lines += context.getString(R.string.aimi_adv_oref_user_personal_failed)
-            OrefPersonalMlStatus.TRAINED_AND_USED -> {
-                val a = o.personalMeanHypoSignalPct?.toInt() ?: 0
-                val b = o.personalMeanHyperSignalPct?.toInt() ?: 0
-                lines += context.getString(R.string.aimi_adv_oref_user_personal_ok, a, b)
-            }
+            // No number here on purpose. The personal score is not calibrated (see [OrefPersonalSignalGate]),
+            // so showing it as a percentage would read as a risk figure that it is not.
+            OrefPersonalMlStatus.TRAINED_AND_USED ->
+                lines += context.getString(R.string.aimi_adv_oref_user_personal_uncalibrated)
         }
         return lines.joinToString("\n\n")
     }

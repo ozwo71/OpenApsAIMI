@@ -51,8 +51,14 @@ data class OrefAnalysisReport(
     val mlErrorDetail: String? = null,
     val dataSufficiency: OrefDataSufficiency = OrefDataSufficiency.GOOD,
     val personalMlStatus: OrefPersonalMlStatus = OrefPersonalMlStatus.OFF,
-    /** Mean personal hypo model score (0–100%), sigmoid output averaged over aligned rows */
+    /**
+     * Mean personal hypo head output, averaged over aligned rows. **Not a probability and not calibrated**: the
+     * head is trained on 0/1 labels against its raw output and read back through a sigmoid, so the value is
+     * squashed into roughly 50..73 and never falls below 50. Informational only — decisions read it through
+     * [OrefPersonalSignalGate], and it must not be shown to the user as a percentage.
+     */
     val personalMeanHypoSignalPct: Double? = null,
+    /** Same as [personalMeanHypoSignalPct] for the hyper head: uncalibrated, informational only. */
     val personalMeanHyperSignalPct: Double? = null,
     val personalMlDetail: String? = null,
 ) {
@@ -79,8 +85,13 @@ data class OrefAnalysisReport(
         }
         meanBgChangePred?.let { append("ONNX mean predicted BG change: ${"%.2f".format(it)}\n") }
         append("Personal MLP (Advisor): ${personalMlStatus.name}\n")
-        personalMeanHypoSignalPct?.let { append("Personal hypo signal (mean): ${"%.1f".format(it)}%\n") }
-        personalMeanHyperSignalPct?.let { append("Personal hyper signal (mean): ${"%.1f".format(it)}%\n") }
+        // Kept for debugging, and labelled so it cannot be mistaken for a probability. The head trains on 0/1
+        // labels against its raw output and is read back through a sigmoid, so this number is compressed into
+        // roughly 50..73 and never drops below 50. The "%" sign is gone on purpose: it is not a percentage.
+        // This block is also shown in the technical section of the Advisor screen, so the label has to hold up
+        // both for a reader and for the AI Coach prompt.
+        personalMeanHypoSignalPct?.let { append("Personal hypo score (uncalibrated internal number, NOT a probability, do not report as a risk): ${"%.1f".format(it)}\n") }
+        personalMeanHyperSignalPct?.let { append("Personal hyper score (uncalibrated internal number, NOT a probability, do not report as a risk): ${"%.1f".format(it)}\n") }
         personalMlDetail?.let { append("Personal MLP detail: $it\n") }
         if (hints.isNotEmpty()) {
             append("Hints:\n")
@@ -109,10 +120,10 @@ data class OrefAnalysisReport(
         timeAbove180Pct?.let { append("Time above 180 mg/dL: ${"%.0f".format(it)}%.\n") }
         append("Heuristic focus: ${priority.name}.\n")
         when (personalMlStatus) {
-            OrefPersonalMlStatus.TRAINED_AND_USED -> {
-                personalMeanHypoSignalPct?.let { append("Personal on-device hypo-related signal (informational): ${"%.0f".format(it)}%.\n") }
-                personalMeanHyperSignalPct?.let { append("Personal on-device hyper-related signal (informational): ${"%.0f".format(it)}%.\n") }
-            }
+            // No number on purpose: the coach text is read by the user, and the personal score is not a
+            // calibrated risk percentage. See `OrefPersonalSignalGate`.
+            OrefPersonalMlStatus.TRAINED_AND_USED ->
+                append("Personal on-device model: trained, but its score is an uncalibrated internal number. Do not quote it and do not treat it as a risk.\n")
             OrefPersonalMlStatus.INSUFFICIENT_DATA -> append("Personal on-device model: not enough labelled history to train yet.\n")
             OrefPersonalMlStatus.TRAIN_FAILED -> append("Personal on-device model: last training or inference failed (see technical block).\n")
             OrefPersonalMlStatus.OFF -> append("Personal on-device model: disabled in settings (bundled ONNX may still run).\n")

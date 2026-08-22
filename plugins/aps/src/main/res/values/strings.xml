@@ -1412,6 +1412,7 @@
     <string name="aimi_adv_oref_user_personal_training">Personal model: training needs more labelled 4-hour outcomes in this window.</string>
     <string name="aimi_adv_oref_user_personal_failed">Personal model could not be updated; technical details are in the analysis block below.</string>
     <string name="aimi_adv_oref_user_personal_ok">Personal on-device signals (informational, not treatment advice): hypo-related ≈%1$d%%, hyper-related ≈%2$d%%. Discuss persistent issues with your care team.</string>
+    <string name="aimi_adv_oref_user_personal_uncalibrated">Personal on-device model: trained. Its score is still an internal number. It has not been checked against real outcomes, so it is not shown as a risk percentage and it does not change any suggestion. Talk to your care team about patterns that keep coming back.</string>
     <string name="aimi_adv_section_coach">COACH IA</string>
 
     <string name="aimi_adv_brain_protect">PROTECTEUR (x%1$.2f)</string>
