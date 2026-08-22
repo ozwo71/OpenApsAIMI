@@ -4,6 +4,7 @@ import android.util.Log
 import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
 import app.aaps.plugins.aps.openAPSAIMI.TrainingConfig
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorRuntimeProfile
+import app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -38,6 +39,38 @@ object AimiSmbTrainer {
     // Training rate limit
     private const val TRAIN_INTERVAL_MS  = 6 * 60 * 60 * 1000L  // 6h
     private const val MIN_NEW_ROWS_TO_RETRAIN = 200
+
+    /** Index of the bg column in the SMB feature vector (`SmbRefinementFeatureSchema` lists it first). */
+    private const val BG_FEATURE_INDEX = 0
+
+    /**
+     * Accepted output band for a published SMB model, in insulin units.
+     *
+     * The model predicts an SMB dose, not a multiplier, so the band is in units. The configured
+     * maximum SMB sits well below the upper bound, which is there to drop an absurd or negative
+     * answer rather than to shape therapy.
+     */
+    private val SMB_OUTPUT_RANGE = 0.0..5.0
+
+    /**
+     * Smallest bg response we accept from a published SMB model, in insulin units.
+     *
+     * It is set to the runtime correction clamp on purpose. `refine` only ever moves the dose by
+     * `min(0.05 U, 25 % of the dose)`, so a model whose answer moves less than 0.05 U across the bg
+     * anchors cannot change what the pump does — it can only add the same small offset to every dose.
+     * That is the failure this gate exists to catch: the basal head shipped a constant model that ran
+     * for 40 days on two devices because nothing checked whether the answer moved at all.
+     */
+    private const val SMB_MIN_OUTPUT_SPREAD = 0.05
+
+    /**
+     * A published model must beat the best constant predictor on the held-out rows by this factor.
+     *
+     * The spread probe alone cannot reject noise: over a wide bg sweep a model fitted to pure label
+     * noise moves MORE than one that found the real function. Held-out error against the best constant
+     * is what separates them.
+     */
+    private const val SMB_MAX_BASELINE_MAE_RATIO = 0.95
 
     // ---- State ---------------------------------------------------------------
     private val modelRef   = AtomicReference<AimiNeuralNetwork?>(null)
@@ -182,14 +215,27 @@ object AimiSmbTrainer {
 
         Log.i(TAG, "Training on ${inputs.size} samples…")
 
-        // Single-pass train → probe-validate → atomic publish via the shared pipeline (probe-finite only: SMB does
-        // not compare against an incumbent, so any finite candidate publishes — same as before).
+        // Single-pass train → probe-validate → atomic publish via the shared pipeline.
+        //
+        // The liveness gates below used to be off for this head, so it could publish a model that
+        // answers the same value for every input. Measured: trained on a single constant label it
+        // published, with a spread of 0.0125 U over random inputs.
+        //
+        // `requireIncumbentBeat` stays off on purpose. Comparing against the model on disk is what
+        // froze the basal head for 40 days: a dead incumbent anchored the comparison and every later
+        // candidate was dropped. The liveness probes are the safe way to keep a bad model out; a
+        // val-loss ratchet is not.
         val net = NeuralModelTrainer.trainAndPublish(
             weightsFile = AimiSmbModelStore.modelFile(dir),
             split = NeuralModelTrainer.split80_20(inputs, targets),
             config = TrainingConfig(learningRate = 0.001, epochs = 300),
             inputSize = INPUT_SIZE,
             regularizationLambda = 0.01,
+            outputRange = SMB_OUTPUT_RANGE,
+            spreadFeatureIndex = BG_FEATURE_INDEX,
+            spreadSweepValues = BasalNeuralLearner.ClinicalBgAnchors.PROBE_BG_MGDL,
+            minOutputSpread = SMB_MIN_OUTPUT_SPREAD,
+            maxBaselineMaeRatio = SMB_MAX_BASELINE_MAE_RATIO,
             log = { Log.i(TAG, it) },
         )
         if (net != null) {
