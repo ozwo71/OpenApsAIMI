@@ -149,6 +149,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentStateBuilder
 import app.aaps.plugins.aps.openAPSAIMI.physio.SleepLiveDetector
 import app.aaps.plugins.aps.openAPSAIMI.learning.BasalAdaptiveMultiplier
+import app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
 import app.aaps.plugins.aps.openAPSAIMI.physio.CircadianMealProfileStore
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisStateBuilder
@@ -507,6 +508,14 @@ internal data class AimiDecisionContext(
         var control_barrier: JSONObject? = null,
         /** Lot 2 — invariants terminaux du canal basal: taux avant/apres et invariant liant. */
         var basal_terminal: org.json.JSONObject? = null,
+        /**
+         * Universal Adaptive Basal scaling for this tick: heuristic, learned head, and the blend.
+         *
+         * Carries `n_raw`, the learned value BEFORE the runtime clamp. Only the blended result used to
+         * be exported (as free text in the narrative), so a model stuck on one constant and a model
+         * that had really learned the same number were impossible to tell apart in a log.
+         */
+        var adaptive_basal: JSONObject? = null,
         /** AIMI Harmonia simulated production branch; virtual only, never applied to the real pump. */
         var harmonia_simulation: org.json.JSONObject? = null,
         /** AIMI Harmonia production owner state; basal-first only and safety-gated. */
@@ -929,6 +938,9 @@ internal data class AimiDecisionContext(
             }
             adjustments.basal_terminal?.let { terminal ->
                 adj.put("basal_terminal", terminal)
+            }
+            adjustments.adaptive_basal?.let { adaptiveBasal ->
+                adj.put("adaptive_basal", adaptiveBasal)
             }
             adjustments.harmonia_simulation?.let { simulation ->
                 adj.put("harmonia_simulation", simulation)
@@ -1902,9 +1914,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             1.0
         }
         val maxBasalMult = preferences.get(DoubleKey.OApsAIMIMaxMultiplier).coerceIn(1.0, 2.5)
+        // H channel floor: 0.70, and on purpose NOT the 0.80 of the learned N channel
+        // (BasalNeuralLearner.RUNTIME_BASAL_FLOOR). BasalAdaptiveMultiplier.combine keeps the smaller
+        // channel as soon as either one is defensive, so an applied 0.70 can come from H alone. That is
+        // why h_mult_raw / h_mult live next to n_raw / n_source in adjustments.adaptive_basal. Raising
+        // this floor to 0.80 is a therapy decision that needs field evidence, so it stays at 0.70.
         val hMult = hMultRaw.coerceIn(0.70, maxBasalMult)
-        val nMult = if (adaptiveBasalEnabled) {
-            basalNeuralLearner.getUniversalBasalMultiplier(
+        val nDecision = if (adaptiveBasalEnabled) {
+            basalNeuralLearner.getUniversalBasalDecision(
                 bg = ctx.glucoseStatus.glucose,
                 basal = ctx.profile.current_basal,
                 accel = accel,
@@ -1913,15 +1930,50 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 iob = iobObj.iob,
                 physioFeatures = currentBasalPhysioFeatures()
             )
-        } else 1.0
+        } else null
+        val nMult = nDecision?.multiplier ?: 1.0
         adaptiveMult = BasalAdaptiveMultiplier.combine(hMult, nMult)
         if (Math.abs(adaptiveMult - 1.0) > 0.01) {
             consoleLog.add("🛡️ BASAL_UNIFIED_SCALING: H=${"%.2f".format(hMult)}x / N=${"%.2f".format(nMult)}x -> Applied=${"%.2f".format(adaptiveMult)}x")
         }
+        lastAdaptiveBasalTrace = buildAdaptiveBasalTrace(hMultRaw, hMult, nDecision, adaptiveMult)
         val isConfirmedHighRiseLocal =
             ctx.glucoseStatus.glucose > 150.0 && ctx.glucoseStatus.combinedDelta > 1.5 && (ctx.glucoseStatus.bgAcceleration ?: 0.0) > 0.4
         applyThyroidModule(ctx.profile)
         return isConfirmedHighRiseLocal
+    }
+
+    /**
+     * Builds the `adjustments.adaptive_basal` block of AIMI_Decisions.jsonl.
+     *
+     * `n_raw` is the point of this block: it is the learned value BEFORE the runtime clamp. A model
+     * that returns one constant and a model that really learned that number produce the same `n_mult`,
+     * and the JSONL used to carry only the blended result, as free text inside `outcome.narrative`.
+     *
+     * The two channels do not share a floor: N clamps at 0.80
+     * (`BasalNeuralLearner.RUNTIME_BASAL_FLOOR`) while H still clamps at 0.70, and the blend keeps the
+     * smaller one when either is defensive. So `h_mult_raw` / `h_mult` and `n_raw` / `n_source` together
+     * are what tells a saturated clamp from a model that really learned that value — the question that
+     * two field reports of "exactly 0.70 on every tick", 40 days apart, could not answer.
+     */
+    private fun buildAdaptiveBasalTrace(
+        hMultRaw: Double,
+        hMult: Double,
+        nDecision: BasalNeuralLearner.UniversalBasalDecision?,
+        combined: Double,
+    ): JSONObject = JSONObject().apply {
+        put("h_mult_raw", hMultRaw)
+        put("h_mult", hMult)
+        put("n_mult", nDecision?.multiplier ?: 1.0)
+        put("n_raw", nDecision?.rawValue ?: JSONObject.NULL)
+        put("n_source", (nDecision?.source ?: BasalNeuralLearner.BasalMultiplierSource.DISABLED).name.lowercase(Locale.US))
+        put("n_clamped", nDecision?.clamped ?: false)
+        put("n_floor", nDecision?.floor ?: JSONObject.NULL)
+        put("n_ceiling", nDecision?.ceiling ?: JSONObject.NULL)
+        put("combined", combined)
+        val gov = basalNeuralLearner.getGovernanceSnapshot()
+        put("governance_action", gov.action.name)
+        put("governance_basal_floor", gov.activeBasalFloor ?: JSONObject.NULL)
     }
 
     /**
@@ -9182,6 +9234,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.tube_advisor = lastTubeAdvisorTrace
         decisionCtx.adjustments.pkpd_soft_floor = lastPkpdSoftFloorTelemetry?.toJsonObject()
         decisionCtx.adjustments.basal_terminal = lastBasalTerminalTelemetry
+        decisionCtx.adjustments.adaptive_basal = lastAdaptiveBasalTrace
         decisionCtx.adjustments.harmonia_simulation = lastHarmoniaDecision?.toJsonObject()
         decisionCtx.adjustments.harmonia_production = lastHarmoniaProductionDecision?.toJsonObject()
         decisionCtx.adjustments.t3c_runtime_ownership = lastT3cRuntimeOwnership
@@ -10816,6 +10869,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     /** 🔒 Lot 2 — dernier verdict des invariants terminaux du tick, exporté en JSON structuré. */
     private var lastBasalTerminalTelemetry: org.json.JSONObject? = null
 
+    /** Universal Adaptive Basal scaling trace for this tick; exported as `adjustments.adaptive_basal`. */
+    private var lastAdaptiveBasalTrace: JSONObject? = null
+
+    /**
+     * Carbs on board (g) read at the start of the current tick, for the basal-learning CSV.
+     *
+     * It is reset to `NaN` on every tick on purpose. A row written before the tick has read `mealData`
+     * then says "not reported" instead of repeating the carbs of the previous tick. See
+     * [basalLearningCobGrams].
+     */
+    private var tickCobGrams: Double = Double.NaN
+
     /** 🔭 Lot 0 — `true` dès qu'une ligne `AIMI_Decisions.jsonl` a été écrite pour le tick courant. */
     private var aimiDecisionExportedThisTick: Boolean = false
 
@@ -11034,6 +11099,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // Survives instance re-creations and app restarts by combining Memory + SharedPreferences.
         companion object {
         private var lastSmbTimestampMem: Long = 0L
+
+        /**
+         * Lookback (minutes) used to report the non-basal insulin of one basal-learning row. Slightly
+         * longer than the 5-minute loop tick, so a bolus written a few seconds late is still reported.
+         * See `basalLearningBolusUnits`.
+         */
+        private const val BASAL_LEARN_BOLUS_LOOKBACK_MIN = 6L
 
         // 🩸 Limiteur de pente MONTANTE de la basale (anti-whiplash). Voir [slewLimitBasalUp].
         private const val BASAL_SLEW_UP_ABS_MIN_UPH = 1.5    // hausse mini autorisée par tick (permet de repartir de 0)
@@ -16837,6 +16909,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun runDetermineBasalTickInner(ctx: AimiTickContext): RT {
         val profile = ctx.profile
+        // Causal censoring of the basal label needs the carbs of THIS tick, and the basal-learning hook
+        // runs on paths that have no access to `ctx`. See [basalLearningCobGrams].
+        tickCobGrams = ctx.mealData.mealCOB.takeIf { it.isFinite() && it >= 0.0 } ?: Double.NaN
         val (
             originalProfile,
             isExplicitAdvisorRun,
@@ -17918,6 +17993,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     /**
      * Records one basal-neural CSV row, triggers async ML training, and logs BASAL_GOV.
      * Shared by the main post-engine path and [logDecisionFinal] early exits.
+     *
+     * The row also carries the two causal facts of the label window that opens at this tick: the
+     * non-basal insulin ([basalLearningBolusUnits]) and the carbs on board ([basalLearningCobGrams]).
+     * Without them the trainer cannot tell a basal response from a bolus or a meal, and every row is
+     * kept as "legacy, nothing proven". See [BasalNeuralLearner.updateLearning].
      */
     private fun applyBasalNeuralLearningAndTraining(
         rT: RT,
@@ -17925,6 +18005,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         govTag: String,
     ) {
         val eventual = (rT.eventualBG ?: lastEventualBgSnapshot)
+        val windowBolusU = basalLearningBolusUnits(rT)
+        val windowCobG = basalLearningCobGrams(rT)
         basalNeuralLearner.updateLearning(
             bgBefore = bg,
             bgAfter = eventual,
@@ -17938,6 +18020,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             sensorNoise = lastLoopCgmNoise,
             shortMinPredBg = minPredictedAcrossCurves(rT.predBGs),
             physioFeatures = currentBasalPhysioFeatures(),
+            bolusInsulinU = windowBolusU,
+            cobGrams = windowCobG,
         )
         triggerBasalMlTrainingIfNeeded()
         val gov = basalNeuralLearner.getGovernanceSnapshot()
@@ -17949,8 +18033,66 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 "mae=${"%.1f".format(Locale.US, gov.meanAbsTargetError)} latch=${gov.hypoHoldLatched} " +
                 "floorB=${gov.activeBasalFloor?.let { "%.2f".format(Locale.US, it) } ?: "-"} " +
                 "floorA=${gov.activeAggressivenessFloor?.let { "%.2f".format(Locale.US, it) } ?: "-"} " +
+                "wBolus=${if (windowBolusU.isFinite()) "%.2f".format(Locale.US, windowBolusU) else "?"}U " +
+                "wCob=${if (windowCobG.isFinite()) "%.0f".format(Locale.US, windowCobG) else "?"}g " +
                 "reason=${gov.reason}"
         )
+    }
+
+    /**
+     * Non-basal insulin (U) that belongs to the label window opening at this tick.
+     *
+     * The basal label reads the BG move of the next 30 minutes as basal work, so the trainer must know
+     * whether insulin outside basal entered that window. Two sources are added:
+     * - the SMB this tick asks for ([RT.units]). It is known here, synchronously, before the pump and
+     *   the database know about it.
+     * - every SMB or manual bolus already recorded in the last [BASAL_LEARN_BOLUS_LOOKBACK_MIN]
+     *   minutes. This is what catches a bolus the user gave by hand, and also the SMB of the previous
+     *   tick while the bolus cache was still catching up.
+     *
+     * The same SMB can therefore be reported on two rows in a row, and an SMB that the loop finally
+     * drops (it can be gated behind a temp-basal confirmation) is still reported. Both are on purpose:
+     * the trainer only compares this number with a small threshold, so a repeat marks one extra row as
+     * contaminated. Losing a training row costs little; teaching the model that bolus work was basal
+     * work is the failure this whole path exists to stop.
+     *
+     * `NaN` means "not reported" and sends the trainer back to its IOB-jump heuristic. It is returned
+     * when the bolus history cannot be read, because a partial sum would look like a proven clean
+     * window.
+     *
+     * PRIMING boluses are left out: that insulin never reaches the body.
+     *
+     * `internal` so the engine tests can read what the tick reports, instead of only checking that some
+     * number was written.
+     */
+    internal fun basalLearningBolusUnits(rT: RT): Double {
+        val smbNowU = (rT.units ?: 0.0).coerceAtLeast(0.0)
+        val recentU = try {
+            val since = dateUtil.now() - BASAL_LEARN_BOLUS_LOOKBACK_MIN * 60_000L
+            getBolusesFromTimeCached(since, ascending = false)
+                .filter { it.type == BS.Type.SMB || it.type == BS.Type.NORMAL }
+                .sumOf { it.amount }
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "BasalLearning: recent bolus read failed, window reported as unknown", e)
+            return Double.NaN
+        }
+        val total = smbNowU + recentU
+        return if (total.isFinite()) total else Double.NaN
+    }
+
+    /**
+     * Carbs on board (g) for the label window opening at this tick.
+     *
+     * [tickCobGrams] is the value read from `mealData` at the start of the tick, so it is present on
+     * every path, including the early exits. [RT.COB] is the fallback, since only the main path fills
+     * it. `NaN` means "not reported": a tick that ended before reading `mealData` must not claim zero
+     * carbs.
+     *
+     * `internal` for the same reason as [basalLearningBolusUnits].
+     */
+    internal fun basalLearningCobGrams(rT: RT): Double {
+        tickCobGrams.takeIf { it.isFinite() && it >= 0.0 }?.let { return it }
+        return rT.COB?.takeIf { it.isFinite() && it >= 0.0 } ?: Double.NaN
     }
 
     private fun triggerBasalMlTrainingIfNeeded() {

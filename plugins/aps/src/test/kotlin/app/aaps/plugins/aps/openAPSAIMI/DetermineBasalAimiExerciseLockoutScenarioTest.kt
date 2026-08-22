@@ -197,7 +197,7 @@ class DetermineBasalAimiExerciseLockoutScenarioTest {
         assertThat(rt).isNotNull()
         assertThat(rt.reason.toString()).contains("Sport / contexte AIMI activité")
         verify(exactly = 1) {
-            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            basalNeuralLearner.updateLearning(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 }
