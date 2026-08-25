@@ -51,6 +51,38 @@ object DeviceProfileRegistry {
         requireAdvBeforeConnect = true,
     )
 
+    /**
+     * Motorola — same failure as Samsung, and it used to land on [GenericFallback].
+     *
+     * The fallback connects on attempt 0 even when the pre-connect scan hears nothing
+     * (`requireAdvBeforeConnect` defaults to false) and only reaches for `autoConnect` from the third
+     * attempt. That is the exact combination the Samsung profile exists to avoid: a blind hard
+     * connect without a fresh advertisement fails, and the retry ladder then costs minutes. So this
+     * profile takes the two settings that fixed Samsung — wait for the ADV, and let the platform
+     * hold the connection with `autoConnect` from the first attempt — with a scan window long enough
+     * to actually hear a sensor that advertises on its own duty cycle.
+     *
+     * MTU stays at the safe 185: there is no field measurement on this stack yet, and
+     * [OemDeviceProfile.requestMtuOnConnect] is false anyway.
+     */
+    val MotorolaDefault: OemDeviceProfile = OemDeviceProfile(
+        id = OemProfileId.MOTOROLA,
+        connectTimeoutMs = 45_000L,
+        connectRetryCount = 5,
+        connectRetryDelayMs = 8_000L,
+        preferredMtu = 185,
+        useForegroundService = true,
+        aggressiveReconnect = true,
+        postCloseSettleMs = 4_000L,
+        scanHandoffMs = 500L,
+        preConnectScanMs = 8_000L,
+        requestMtuOnConnect = false,
+        useGattRefresh = true,
+        autoConnectFromAttempt = 0,
+        postDiscoverDelayMs = 1_000L,
+        requireAdvBeforeConnect = true,
+    )
+
     /** Unknown OEM — conservative timeouts, safer MTU, FGS on. */
     val GenericFallback: OemDeviceProfile = OemDeviceProfile(
         id = OemProfileId.GENERIC_FALLBACK,
@@ -72,6 +104,7 @@ object DeviceProfileRegistry {
     fun byId(id: OemProfileId): OemDeviceProfile = when (id) {
         OemProfileId.PIXEL -> PixelDefault
         OemProfileId.SAMSUNG -> SamsungDefault
+        OemProfileId.MOTOROLA -> MotorolaDefault
         OemProfileId.GENERIC_FALLBACK -> GenericFallback
     }
 
@@ -88,6 +121,7 @@ object DeviceProfileRegistry {
             override != null -> byId(override)
             isPixel(manufacturer) -> PixelDefault
             isSamsung(manufacturer) -> SamsungDefault
+            isMotorola(manufacturer) -> MotorolaDefault
             else -> GenericFallback
         }
         OnePlusLog.i(
@@ -110,5 +144,11 @@ object DeviceProfileRegistry {
     private fun isSamsung(manufacturer: String): Boolean {
         val m = manufacturer.lowercase()
         return m.contains("samsung")
+    }
+
+    /** `Build.MANUFACTURER` stays "motorola" on these phones, whoever owns the brand. */
+    private fun isMotorola(manufacturer: String): Boolean {
+        val m = manufacturer.lowercase()
+        return m.contains("motorola")
     }
 }

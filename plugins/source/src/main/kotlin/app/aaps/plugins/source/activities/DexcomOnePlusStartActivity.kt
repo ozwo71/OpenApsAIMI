@@ -299,7 +299,13 @@ private fun DexcomOnePlusStartScreen(
         connectRequested = true
         // Hand off the freshest live sighting (carries seenElapsedMs) so the driver
         // connects in-window instead of blindly re-scanning.
-        val sighting = devices.firstOrNull { it.address == address } ?: selected
+        //
+        // Only a sighting that was really heard is handed over. The pre-selection may be a stored
+        // entry the scan never confirmed; passing that pretends an advertisement arrived, which both
+        // misses the driver's fast path anyway and talks it out of requiring an ADV. null is the
+        // honest answer, and the driver then scans for the sensor itself.
+        val sighting = devices.firstOrNull { it.address == address }
+            ?: selected?.takeIf { it.seenElapsedMs > 0L }
         if (slot == SensorSlot.STAGING) {
             // Staging: collect-only. Never write the production store, never activate the
             // plugin, never switch the AAPS active BG source — just drive scan/connect on

@@ -93,6 +93,7 @@
     <string name="dexcom_oneplus_notif_title">Dexcom ONE+ / G7</string>
     <string name="dexcom_oneplus_notif_channel_name">Dexcom ONE+ / G7 status</string>
     <string name="dexcom_oneplus_notif_channel_desc">Ongoing sensor connection and warm-up status.</string>
+    <string name="dexcom_oneplus_notif_session_alive">Keeping the sensor connected</string>
     <string name="dexcom_oneplus_notif_pairing">Pairing…</string>
     <string name="dexcom_oneplus_notif_connecting">Connecting to sensor…</string>
     <string name="dexcom_oneplus_notif_reconnecting">Reconnecting…</string>

@@ -468,7 +468,13 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
         val scanMs = scanMsOverride ?: profile.preConnectScanMs
         if (scanMs <= 0L) return OnePlusConnectPrep(advFresh = false)
         // UI Connect just selected this ADV → don't hard-fail if re-scan misses briefly.
-        val uiJustSelected = !pendingDeviceName.isNullOrBlank()
+        //
+        // A name alone is not enough. The start screen may pre-select a sensor it has only ever read
+        // from the store, and that entry carries the stored ADV name with no sighting behind it. Such
+        // an entry used to claim "the UI just selected this", which switched off
+        // [OemDeviceProfile.requireAdvBeforeConnect] — the one guard that stops a blind connect. The
+        // timestamp is what separates a real sighting from a remembered name.
+        val uiJustSelected = !pendingDeviceName.isNullOrBlank() && pendingAdvSightingElapsedMs > 0L
         val hardRequireAdv =
             profile.requireAdvBeforeConnect && attempt == 0 && !uiJustSelected
         OnePlusLog.i(

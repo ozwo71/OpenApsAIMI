@@ -22,4 +22,40 @@ class DeviceProfileRegistryTest {
         assertThat(s.requireAdvBeforeConnect).isTrue()
         assertThat(s.preConnectScanMs).isAtLeast(8_000L)
     }
+
+    @Test
+    fun motorola_getsItsOwnProfileAndNotTheFallback() {
+        val resolved = DeviceProfileRegistry.resolve(manufacturer = "motorola", model = "moto g84 5G")
+        assertThat(resolved.id).isEqualTo(OemProfileId.MOTOROLA)
+        assertThat(resolved).isEqualTo(DeviceProfileRegistry.MotorolaDefault)
+    }
+
+    @Test
+    fun motorola_takesTheSamsungLessonOnBlindConnects() {
+        // A blind hard connect without a fresh ADV is what cost minutes on this stack, exactly as it
+        // did on Samsung. Wait for the advertisement, and let the platform hold the link from the
+        // first attempt.
+        val m = DeviceProfileRegistry.MotorolaDefault
+        assertThat(m.requireAdvBeforeConnect).isTrue()
+        assertThat(m.autoConnectFromAttempt).isEqualTo(0)
+        assertThat(m.preConnectScanMs).isAtLeast(8_000L)
+        assertThat(m.requestMtuOnConnect).isFalse()
+    }
+
+    @Test
+    fun motorola_isNotMistakenForPixelOrSamsung() {
+        assertThat(DeviceProfileRegistry.resolve(manufacturer = "Google", model = "Pixel 8").id)
+            .isEqualTo(OemProfileId.PIXEL)
+        assertThat(DeviceProfileRegistry.resolve(manufacturer = "samsung", model = "SM-S911B").id)
+            .isEqualTo(OemProfileId.SAMSUNG)
+        assertThat(DeviceProfileRegistry.resolve(manufacturer = "Xiaomi", model = "whatever").id)
+            .isEqualTo(OemProfileId.GENERIC_FALLBACK)
+    }
+
+    @Test
+    fun everyProfileIsReachableById() {
+        OemProfileId.entries.forEach { id ->
+            assertThat(DeviceProfileRegistry.byId(id).id).isEqualTo(id)
+        }
+    }
 }
