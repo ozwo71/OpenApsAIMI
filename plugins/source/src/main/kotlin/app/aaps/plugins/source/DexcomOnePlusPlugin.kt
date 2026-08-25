@@ -245,6 +245,9 @@ class DexcomOnePlusPlugin @Inject constructor(
         }
         DexcomOnePlusIngest.seed(sensorStore.loadLastIngestSequence(), recentTs)
         refreshProductionLifecycle()
+        // Before either slot resumes: an install that hit the cross-slot collision was left with the
+        // same MAC in both stores, and the two resumes below would recreate it on every start.
+        reconcileSlotsOnSameSensor()
         val autoResumeQueued = (driver as? OnePlusCgmDriverReal)?.resumeStoredSession() == true
         val stagingResumeQueued = resumeStagingSessionIfStored()
         warmupPhase = driver.warmupState().phase
@@ -502,7 +505,76 @@ class DexcomOnePlusPlugin @Inject constructor(
      * Start watching the STAGING sensor (collect-only, never published to the loop). The caller (Start
      * UI) then drives scan/connect on [stagingDriverForConnect]. Safe to call while production runs.
      */
-    fun beginStaging(deviceAddress: String) {
+    /**
+     * Undoes a poisoned pair of stores: the same transmitter recorded in both slots.
+     *
+     * The arbiter stops a second session being opened, but it cannot decide *which* slot was the
+     * mistake, and it would leave the loser of the race silently unable to connect for the rest of
+     * the run. So the ambiguity is resolved here, once, before anything connects.
+     *
+     * Production wins on purpose. It is the sensor the loop is dosing on, its store carries the
+     * session start the dashboard sensor age reads, and a pre-soak is by definition the disposable
+     * one. The staging slot is cleared the same way an explicit cancel clears it, so a later pre-soak
+     * starts from a genuine fresh soak clock rather than inheriting a start time it did not earn.
+     */
+    private fun reconcileSlotsOnSameSensor() {
+        val productionMac = sensorStore.load()?.lastMac ?: return
+        if (!DexcomOnePlusStaging.isSameTransmitter(stagingStore.load()?.lastMac, productionMac)) return
+        aapsLogger.info(
+            LTag.BGSOURCE,
+            "DEXCOM_ONEPLUS_STAGING: both slots hold the same sensor — clearing the pre-soak slot, " +
+                "production keeps it (cross-slot collision recovery)",
+        )
+        runCatching { stagingDriver.removeWatcher(stagingWatcher) }
+        runCatching { stagingDriver.disconnect() }
+        runCatching { stagingDriver.shutdown() }
+        runCatching { stagingStore.clearAll() }
+        stagingPresent = false
+        stagingPublishesToLoop = false
+        stagingWarmupDone = false
+        stagingValidEgvCount = 0
+        stagingLastValueMgdl = null
+        stagingLastValueAtMs = null
+        synchronized(stagingBuffer) { stagingBuffer.clear() }
+        _stagingWarmup.value = null
+        _stagingLifecycle.value = null
+        refreshStagingState()
+        refreshStagingEvidence()
+    }
+
+    /**
+     * Whether [deviceAddress] is the sensor the pre-soak slot holds.
+     *
+     * The one thing the dual-slot design cannot separate is the sensor itself. Two slots on one MAC
+     * means two KEKS handshakes over a single ACL link: both GATT clients subscribe to the same Auth
+     * and ExtraData characteristics, so each receives the other's notifications and the transmitter
+     * sees one interleaved write stream. The field log of 2026-08-25 shows both sides dying inside
+     * libkeks within 1.6 s of the second connect, on a handshake that had just reported
+     * `authenticated=1`. It is not a race that sometimes bites — it is certain.
+     */
+    fun isStagingSensor(deviceAddress: String): Boolean =
+        DexcomOnePlusStaging.isSameTransmitter(stagingStore.load()?.lastMac, deviceAddress)
+
+    /** Whether [deviceAddress] is the sensor currently feeding the loop — see [isStagingSensor]. */
+    fun isProductionSensor(deviceAddress: String): Boolean =
+        DexcomOnePlusStaging.isSameTransmitter(sensorStore.load()?.lastMac, deviceAddress)
+
+    /**
+     * Starts a pre-soak on [deviceAddress].
+     *
+     * @return false when the request was refused because that sensor already feeds the loop. The
+     *   caller must not connect the staging driver in that case. Refusing here rather than only in
+     *   the UI keeps the invariant for every future call site.
+     */
+    fun beginStaging(deviceAddress: String): Boolean {
+        if (isProductionSensor(deviceAddress)) {
+            aapsLogger.info(
+                LTag.BGSOURCE,
+                "DEXCOM_ONEPLUS_STAGING: refused — this sensor already feeds the loop, a pre-soak on it " +
+                    "would run a second KEKS handshake on the same link",
+            )
+            return false
+        }
         stagingDriver.setContext(context)
         stagingDriver.addWatcher(stagingWatcher)
         stagingPublishesToLoop = false
@@ -538,6 +610,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         refreshStagingState()
         refreshStagingEvidence()
         aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_STAGING: begin")
+        return true
     }
 
     /**

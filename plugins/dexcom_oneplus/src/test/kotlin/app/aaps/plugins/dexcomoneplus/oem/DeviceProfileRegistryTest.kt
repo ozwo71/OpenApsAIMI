@@ -58,4 +58,29 @@ class DeviceProfileRegistryTest {
             assertThat(DeviceProfileRegistry.byId(id).id).isEqualTo(id)
         }
     }
+
+    @Test
+    fun genericFallback_isTheSafestProfileNotTheBoldest() {
+        // It is where every phone that is not a Pixel or a Samsung lands, so a blind connect must not
+        // be its default. Two field logs — a Motorola and a CUBOT KING KONG MINI 3 — reached it.
+        val g = DeviceProfileRegistry.GenericFallback
+        assertThat(g.requireAdvBeforeConnect).isTrue()
+        assertThat(g.autoConnectFromAttempt).isEqualTo(0)
+        assertThat(g.preConnectScanMs).isAtLeast(8_000L)
+    }
+
+    @Test
+    fun everyProfileWaitsForTheAdvertisementExceptPixel() {
+        // Pixel is the one stack with field evidence that a direct connect works without it.
+        assertThat(DeviceProfileRegistry.SamsungDefault.requireAdvBeforeConnect).isTrue()
+        assertThat(DeviceProfileRegistry.MotorolaDefault.requireAdvBeforeConnect).isTrue()
+        assertThat(DeviceProfileRegistry.GenericFallback.requireAdvBeforeConnect).isTrue()
+    }
+
+    @Test
+    fun unknownOemFallsBackAndKeepsTheGuard() {
+        val resolved = DeviceProfileRegistry.resolve(manufacturer = "CUBOT", model = "KINGKONG MINI 3")
+        assertThat(resolved.id).isEqualTo(OemProfileId.GENERIC_FALLBACK)
+        assertThat(resolved.requireAdvBeforeConnect).isTrue()
+    }
 }

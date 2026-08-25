@@ -83,22 +83,32 @@ object DeviceProfileRegistry {
         requireAdvBeforeConnect = true,
     )
 
-    /** Unknown OEM — conservative timeouts, safer MTU, FGS on. */
+    /**
+     * Unknown OEM — conservative everywhere, including the advertisement gate.
+     *
+     * It used to be conservative on timeouts only: `requireAdvBeforeConnect` was left at its false
+     * default and `autoConnectFromAttempt` at 2, so an unknown phone connected blind on the first two
+     * attempts after a 3 s scan. That is the combination the Samsung profile exists to avoid, and two
+     * independent field logs landed on it — a Motorola and a CUBOT KING KONG MINI 3 — because this is
+     * where every phone that is not a Pixel or a Samsung ends up. Being the default, it has to be the
+     * safest of the three, not the boldest.
+     */
     val GenericFallback: OemDeviceProfile = OemDeviceProfile(
         id = OemProfileId.GENERIC_FALLBACK,
         connectTimeoutMs = 60_000L,
         connectRetryCount = 5,
-        connectRetryDelayMs = 5_000L,
+        connectRetryDelayMs = 8_000L,
         preferredMtu = 185,
         useForegroundService = true,
         aggressiveReconnect = true,
-        postCloseSettleMs = 3_000L,
+        postCloseSettleMs = 4_000L,
         scanHandoffMs = 500L,
-        preConnectScanMs = 3_000L,
+        preConnectScanMs = 8_000L,
         requestMtuOnConnect = false,
         useGattRefresh = true,
-        autoConnectFromAttempt = 2,
-        postDiscoverDelayMs = 0L,
+        autoConnectFromAttempt = 0,
+        postDiscoverDelayMs = 1_000L,
+        requireAdvBeforeConnect = true,
     )
 
     fun byId(id: OemProfileId): OemDeviceProfile = when (id) {
