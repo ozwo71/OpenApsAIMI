@@ -121,33 +121,33 @@ jobs:
             --title "AAPS Build ${{ steps.prepare_assets.outputs.tag_name }}" \
             --notes "Automatischer Build vom Branch ${{ env.BUILD_BRANCH }}"
             
-      # 2. Upload zu Nextcloud (Optionales Backup)
-      - name: Upload to Nextcloud
-        continue-on-error: true
-        run: |
-          FILE="${{ steps.prepare_assets.outputs.apk_path }}"
-          URL="${{ secrets.NEXTCLOUD_URL }}$FILE"
-
-          for i in 1 2 3 4 5; do
-            echo "Upload-Versuch $i"
-
-            if curl \
-              --fail \
-              --show-error \
-              --retry 3 \
-              --retry-all-errors \
-              --retry-delay 15 \
-              -u "${{ secrets.NEXTCLOUD_USER }}:${{ secrets.NEXTCLOUD_PASSWORD }}" \
-              -T "$FILE" "$URL"
-            then
-              echo "Upload erfolgreich"
-              exit 0
-            fi
-
-            echo "Warte 60 Sekunden wegen möglichem Nextcloud-Lock..."
-            sleep 60
-          done
-          echo "Upload nach mehreren Versuchen fehlgeschlagen"
+#      # 2. Upload zu Nextcloud (Optionales Backup)
+#      - name: Upload to Nextcloud
+#        continue-on-error: true
+#        run: |
+#          FILE="${{ steps.prepare_assets.outputs.apk_path }}"
+#          URL="${{ secrets.NEXTCLOUD_URL }}$FILE"
+#
+#          for i in 1 2 3 4 5; do
+#            echo "Upload-Versuch $i"
+#
+#            if curl \
+#              --fail \
+#              --show-error \
+#              --retry 3 \
+#              --retry-all-errors \
+#              --retry-delay 15 \
+#              -u "${{ secrets.NEXTCLOUD_USER }}:${{ secrets.NEXTCLOUD_PASSWORD }}" \
+#              -T "$FILE" "$URL"
+#            then
+#              echo "Upload erfolgreich"
+#              exit 0
+#            fi
+#
+#            echo "Warte 60 Sekunden wegen möglichem Nextcloud-Lock..."
+#            sleep 60
+#          done
+#          echo "Upload nach mehreren Versuchen fehlgeschlagen"
 
   cleanup:
     runs-on: ubuntu-latest
