@@ -2,8 +2,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'src/analysis_period.dart';
 import 'src/dashboard_controller.dart';
 import 'src/export_parser.dart';
+import 'src/label_catalog.dart';
 import 'src/models.dart';
 
 void main() {
@@ -173,7 +175,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       NavigationDestination(
                         icon: Icon(Icons.monitor_heart_outlined),
                         selectedIcon: Icon(Icons.monitor_heart),
-                        label: '24 h',
+                        label: 'Analyse',
                       ),
                       NavigationDestination(
                         icon: Icon(Icons.hub_outlined),
@@ -275,6 +277,7 @@ class _DashboardContent extends StatelessWidget {
             message: controller.errorMessage!,
             onRetry: controller.refresh,
           ),
+        _PeriodSelector(controller: controller),
         Expanded(
           child:
               data == null
@@ -288,9 +291,14 @@ class _DashboardContent extends StatelessWidget {
                       _OverviewTab(
                         data: data,
                         directory: controller.directory!,
+                        period: controller.period,
                       ),
-                      _HormonitorTab(data: data),
-                      _TimelineTab(data: data),
+                      _HormonitorTab(
+                        data: data,
+                        preference: controller.hormonePreference,
+                        onPreferenceChanged: controller.setHormonePreference,
+                      ),
+                      _TimelineTab(data: data, period: controller.period),
                       _FilesTab(
                         data: data,
                         directory: controller.directory!,
@@ -300,6 +308,98 @@ class _DashboardContent extends StatelessWidget {
                   ),
         ),
       ],
+    );
+  }
+}
+
+class _PeriodSelector extends StatelessWidget {
+  const _PeriodSelector({required this.controller});
+  final DashboardController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 9),
+      decoration: const BoxDecoration(
+        color: Color(0xFF101B24),
+        border: Border(bottom: BorderSide(color: Color(0xFF263943))),
+      ),
+      child: Column(
+        children: [
+          SegmentedButton<AnalysisPeriodKind>(
+            segments: const [
+              ButtonSegment(
+                value: AnalysisPeriodKind.day,
+                label: Text('Jour'),
+                icon: Icon(Icons.today_outlined, size: 17),
+              ),
+              ButtonSegment(
+                value: AnalysisPeriodKind.week,
+                label: Text('Semaine'),
+                icon: Icon(Icons.date_range_outlined, size: 17),
+              ),
+            ],
+            selected: <AnalysisPeriodKind>{controller.period.kind},
+            onSelectionChanged:
+                controller.busy
+                    ? null
+                    : (selection) => controller.setPeriodKind(selection.first),
+            showSelectedIcon: false,
+            style: const ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12)),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Période précédente',
+                onPressed: controller.busy ? null : controller.previousPeriod,
+                icon: const Icon(Icons.chevron_left_rounded),
+                visualDensity: VisualDensity.compact,
+              ),
+              Expanded(
+                child: TextButton.icon(
+                  onPressed:
+                      controller.busy
+                          ? null
+                          : () async {
+                            final selected = await showDatePicker(
+                              context: context,
+                              initialDate: controller.period.anchor,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime.now(),
+                              helpText: 'Choisir une date d’analyse',
+                              cancelText: 'Annuler',
+                              confirmText: 'Choisir',
+                            );
+                            if (selected != null) {
+                              await controller.selectDate(selected);
+                            }
+                          },
+                  icon: const Icon(Icons.calendar_month_outlined, size: 18),
+                  label: Text(
+                    controller.period.label,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Période suivante',
+                onPressed:
+                    controller.busy || !controller.canGoNext
+                        ? null
+                        : controller.nextPeriod,
+                icon: const Icon(Icons.chevron_right_rounded),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -339,37 +439,72 @@ class _LoadingOrEmpty extends StatelessWidget {
 }
 
 class _OverviewTab extends StatelessWidget {
-  const _OverviewTab({required this.data, required this.directory});
+  const _OverviewTab({
+    required this.data,
+    required this.directory,
+    required this.period,
+  });
   final DashboardData data;
   final DirectoryGrant directory;
+  final AnalysisPeriod period;
 
   @override
   Widget build(BuildContext context) {
+    final incompleteSources = data.sources.where(
+      (source) =>
+          source.present &&
+          !source.coverageComplete &&
+          <String>{
+            decisionsFile,
+            pkpdFile,
+            hormonitorEventsFile,
+            hormonitorDailyFile,
+          }.contains(source.name),
+    );
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       children: [
         _FolderHeader(directory: directory, refreshedAtMs: data.generatedAtMs),
         const SizedBox(height: 12),
         const _SafetyNotice(compact: true),
+        if (incompleteSources.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const _SectionCard(
+            title: 'Couverture partielle',
+            child: Text(
+              'Au moins une source ne couvre pas entièrement la période. '
+              'Les chiffres affichés décrivent uniquement les données '
+              'disponibles ; consultez l’onglet Fichiers pour le détail.',
+              style: TextStyle(
+                color: Color(0xFFFFB56B),
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 18),
         Text(
-          'Vue des dernières 24 heures',
+          period.kind == AnalysisPeriodKind.day
+              ? 'Analyse de la journée'
+              : 'Analyse de la semaine',
           style: Theme.of(
             context,
           ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
         ),
+        Text(period.label, style: const TextStyle(color: Color(0xFF9EB1BE))),
         const SizedBox(height: 12),
         if (!data.hasData) const _NoWindowData(),
-        _MetricGrid(data: data),
+        _MetricGrid(data: data, period: period),
         const SizedBox(height: 14),
         _SectionCard(
           title: 'Glycémie',
           subtitle:
-              '${data.glucose.length} points exploitables dans la fenêtre',
+              '${data.glucose.length} points exploitables dans la période',
           child:
               data.glucose.isEmpty
                   ? const _InlineEmpty(
-                    'Aucune glycémie détectée dans les exports récents.',
+                    'Aucune glycémie détectée dans la période sélectionnée.',
                   )
                   : GlucoseChart(
                     points: data.glucose,
@@ -389,18 +524,43 @@ class _OverviewTab extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         _DistributionCard(
-          title: 'Décisions AIMI',
+          title: 'Actions décidées par AIMI',
           counts: data.decisionTypes,
           color: Theme.of(context).colorScheme.secondary,
+          domain: LabelDomain.decision,
         ),
+        if (data.auditorFollowupCount > 0) ...[
+          const SizedBox(height: 14),
+          _SectionCard(
+            title: 'Suivis de l’auditeur',
+            subtitle: '${data.auditorFollowupCount} observations',
+            child: const Text(
+              'Ces observations différées servent à vérifier une décision '
+              'antérieure. Elles ne correspondent pas à une nouvelle '
+              'commande de pompe et ne sont pas incluses dans les '
+              'pourcentages des actions AIMI.',
+              style: TextStyle(
+                color: Color(0xFF9EB1BE),
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
 }
 
 class _HormonitorTab extends StatelessWidget {
-  const _HormonitorTab({required this.data});
+  const _HormonitorTab({
+    required this.data,
+    required this.preference,
+    required this.onPreferenceChanged,
+  });
   final DashboardData data;
+  final HormoneTrackingPreference preference;
+  final ValueChanged<HormoneTrackingPreference> onPreferenceChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -422,7 +582,7 @@ class _HormonitorTab extends StatelessWidget {
         const SizedBox(height: 16),
         if (!hasHormonitor)
           const _SectionCard(
-            title: 'Pas de données Hormonitor récentes',
+            title: 'Pas de données Hormonitor dans cette période',
             child: _InlineEmpty(
               'Vérifiez la présence de AIMI_HORMONITOR_event_stream_v1.jsonl dans Documents/AAPS.',
             ),
@@ -432,24 +592,39 @@ class _HormonitorTab extends StatelessWidget {
             title: 'Modes patient',
             counts: data.patientModes,
             color: const Color(0xFF48D7C2),
+            domain: LabelDomain.patientMode,
           ),
           const SizedBox(height: 14),
           _DistributionCard(
-            title: 'États physiologiques',
+            title: 'Contexte physiologique estimé',
             counts: data.physioStates,
             color: const Color(0xFF67A8FF),
+            domain: LabelDomain.physioState,
+            emptyMessage:
+                'Aucun état physiologique n’est présent dans cette période.',
           ),
           const SizedBox(height: 14),
+          const _SafetyExplanation(),
+          const SizedBox(height: 10),
           _DistributionCard(
-            title: 'Barrières de sécurité',
+            title: 'Protection préventive contre l’hypoglycémie',
             counts: data.safetyGates,
             color: const Color(0xFFFF9D6C),
+            domain: LabelDomain.safetyGate,
           ),
           const SizedBox(height: 14),
-          _DistributionCard(
-            title: 'Phases hormonales',
+          _HormoneSection(
             counts: data.cyclePhases,
-            color: const Color(0xFFD79CFF),
+            preference: preference,
+            onChanged: onPreferenceChanged,
+          ),
+        ],
+        if (!hasHormonitor) ...[
+          const SizedBox(height: 14),
+          _HormoneSection(
+            counts: data.cyclePhases,
+            preference: preference,
+            onChanged: onPreferenceChanged,
           ),
         ],
       ],
@@ -458,8 +633,9 @@ class _HormonitorTab extends StatelessWidget {
 }
 
 class _TimelineTab extends StatelessWidget {
-  const _TimelineTab({required this.data});
+  const _TimelineTab({required this.data, required this.period});
   final DashboardData data;
+  final AnalysisPeriod period;
 
   @override
   Widget build(BuildContext context) {
@@ -481,9 +657,9 @@ class _TimelineTab extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 5),
-                const Text(
-                  'Événements les plus récents en premier',
-                  style: TextStyle(color: Color(0xFF9EB1BE)),
+                Text(
+                  '${period.label} · ${data.timeline.length >= 80 ? '80 événements les plus récents' : 'événements les plus récents'} en premier',
+                  style: const TextStyle(color: Color(0xFF9EB1BE)),
                 ),
               ],
             ),
@@ -491,7 +667,7 @@ class _TimelineTab extends StatelessWidget {
         }
         if (data.timeline.isEmpty) {
           return const _InlineEmpty(
-            'Aucune décision dans la fenêtre des 24 heures.',
+            'Aucune décision dans la période sélectionnée.',
           );
         }
         return _TimelineTile(entry: data.timeline[index - 1]);
@@ -536,7 +712,7 @@ class _FilesTab extends StatelessWidget {
             label: const Text('Changer'),
           ),
           child: const Text(
-            'Les fichiers sources ne sont jamais modifiés. Une copie temporaire limitée est analysée dans le cache privé de l’application.',
+            'Les fichiers sources ne sont jamais modifiés. Android extrait uniquement la période demandée dans le cache privé ; le journal complet n’est jamais copié en entier.',
           ),
         ),
         const SizedBox(height: 14),
@@ -592,14 +768,18 @@ class _FolderHeader extends StatelessWidget {
 }
 
 class _MetricGrid extends StatelessWidget {
-  const _MetricGrid({required this.data});
+  const _MetricGrid({required this.data, required this.period});
   final DashboardData data;
+  final AnalysisPeriod period;
 
   @override
   Widget build(BuildContext context) {
+    final isCurrentPeriod = period.isCurrentAt(DateTime.now());
     final metrics = <_MetricValue>[
       _MetricValue(
-        'Dernière glycémie',
+        isCurrentPeriod
+            ? 'Dernière glycémie'
+            : 'Dernière glycémie de la période',
         _number(data.latestBgMgdl, 0),
         'mg/dL',
         Icons.water_drop_outlined,
@@ -620,7 +800,7 @@ class _MetricGrid extends StatelessWidget {
         const Color(0xFFF5B84B),
       ),
       _MetricValue(
-        'IOB récent',
+        isCurrentPeriod ? 'IOB récent' : 'Dernier IOB de la période',
         _number(data.latestIobU, 2),
         'U',
         Icons.hourglass_bottom_rounded,
@@ -634,7 +814,9 @@ class _MetricGrid extends StatelessWidget {
         const Color(0xFFD79CFF),
       ),
       _MetricValue(
-        'TDD journalier',
+        period.kind == AnalysisPeriodKind.week
+            ? 'TDD moyen / jour'
+            : 'TDD de la journée',
         _number(data.dailyTddU, 1),
         'U',
         Icons.insights_rounded,
@@ -794,10 +976,14 @@ class _DistributionCard extends StatelessWidget {
     required this.title,
     required this.counts,
     required this.color,
+    required this.domain,
+    this.emptyMessage = 'Aucune donnée structurée disponible.',
   });
   final String title;
   final Map<String, int> counts;
   final Color color;
+  final LabelDomain domain;
+  final String emptyMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -808,7 +994,7 @@ class _DistributionCard extends StatelessWidget {
       subtitle: total == 0 ? null : '$total observations',
       child:
           entries.isEmpty
-              ? const _InlineEmpty('Aucune donnée structurée disponible.')
+              ? _InlineEmpty(emptyMessage)
               : Column(
                 children:
                     entries.map((entry) {
@@ -821,7 +1007,7 @@ class _DistributionCard extends StatelessWidget {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    _humanize(entry.key),
+                                    labelFor(domain, entry.key),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(fontSize: 13),
@@ -848,6 +1034,21 @@ class _DistributionCard extends StatelessWidget {
                                 ),
                               ],
                             ),
+                            if (labelExplanation(domain, entry.key) !=
+                                null) ...[
+                              const SizedBox(height: 5),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  labelExplanation(domain, entry.key)!,
+                                  style: const TextStyle(
+                                    fontSize: 10.5,
+                                    height: 1.3,
+                                    color: Color(0xFF8FA2AE),
+                                  ),
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 6),
                             ClipRRect(
                               borderRadius: BorderRadius.circular(4),
@@ -863,6 +1064,99 @@ class _DistributionCard extends StatelessWidget {
                       );
                     }).toList(),
               ),
+    );
+  }
+}
+
+class _SafetyExplanation extends StatelessWidget {
+  const _SafetyExplanation();
+
+  @override
+  Widget build(BuildContext context) => const _InlineEmpty(
+    'État de la protection LGS évalué à chaque calcul de boucle. Les '
+    'pourcentages représentent des observations, pas une durée ni un nombre '
+    'de doses. « Aucune protection déclenchée » ne résume pas toutes les '
+    'sécurités AIMI.',
+  );
+}
+
+class _HormoneSection extends StatelessWidget {
+  const _HormoneSection({
+    required this.counts,
+    required this.preference,
+    required this.onChanged,
+  });
+
+  final Map<String, int> counts;
+  final HormoneTrackingPreference preference;
+  final ValueChanged<HormoneTrackingPreference> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPhase = counts.isNotEmpty;
+    final message = switch (preference) {
+      HormoneTrackingPreference.notApplicable when hasPhase =>
+        'Des phases sont présentes dans les exports malgré le choix local '
+            '« Non applicable ». Elles restent affichées sans modifier AAPS.',
+      HormoneTrackingPreference.notApplicable =>
+        'Suivi du cycle : non applicable. Ce choix reste uniquement sur ce téléphone.',
+      HormoneTrackingPreference.enabledInAaps when !hasPhase =>
+        'Phase indisponible : vérifiez l’activation de WCycle et le premier jour du cycle dans AAPS.',
+      HormoneTrackingPreference.unspecified when !hasPhase =>
+        'Aucune phase hormonale exploitable. Le suivi peut être désactivé, non applicable ou incomplet dans AAPS.',
+      _ => 'Phases transmises par AAPS pour la période sélectionnée.',
+    };
+    return _SectionCard(
+      title: 'Suivi du cycle',
+      subtitle: 'Préférence d’affichage locale, sans sexe, genre ni âge',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButtonFormField<HormoneTrackingPreference>(
+            initialValue: preference,
+            decoration: const InputDecoration(
+              labelText: 'Affichage du suivi du cycle',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: HormoneTrackingPreference.unspecified,
+                child: Text('Non renseigné'),
+              ),
+              DropdownMenuItem(
+                value: HormoneTrackingPreference.notApplicable,
+                child: Text('Non applicable'),
+              ),
+              DropdownMenuItem(
+                value: HormoneTrackingPreference.enabledInAaps,
+                child: Text('Suivi activé dans AAPS'),
+              ),
+            ],
+            onChanged: (value) {
+              if (value != null) onChanged(value);
+            },
+          ),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            style: const TextStyle(
+              fontSize: 12,
+              height: 1.35,
+              color: Color(0xFF9EB1BE),
+            ),
+          ),
+          if (hasPhase) ...[
+            const SizedBox(height: 14),
+            _DistributionCard(
+              title: 'Phases hormonales observées',
+              counts: counts,
+              color: const Color(0xFFD79CFF),
+              domain: LabelDomain.cyclePhase,
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -1013,7 +1307,7 @@ class _TimelineTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _humanize(entry.decision),
+                  labelFor(LabelDomain.decision, entry.decision),
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 5),
@@ -1051,9 +1345,11 @@ class _TimelineTile extends StatelessWidget {
                   const SizedBox(height: 7),
                   Text(
                     [
-                      entry.patientMode,
-                      entry.safetyGate,
-                    ].whereType<String>().map(_humanize).join(' · '),
+                      if (entry.patientMode != null)
+                        labelFor(LabelDomain.patientMode, entry.patientMode!),
+                      if (entry.safetyGate != null)
+                        labelFor(LabelDomain.safetyGate, entry.safetyGate!),
+                    ].join(' · '),
                     style: const TextStyle(
                       fontSize: 11,
                       color: Color(0xFF7F929E),
@@ -1112,13 +1408,24 @@ class _SourceTile extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   status.present
-                      ? '${_formatBytes(status.sourceSize)} · ${status.recordsInWindow} lignes/objets dans la fenêtre${status.truncated ? ' · fin du fichier analysée' : ''}'
+                      ? '${_formatBytes(status.sourceSize)} · ${status.recordsInWindow} lignes/objets dans la période'
                       : 'Non trouvé dans le dossier',
                   style: const TextStyle(
                     fontSize: 11,
                     color: Color(0xFF8FA2AE),
                   ),
                 ),
+                if (status.present)
+                  Text(
+                    _sourceCoverage(status),
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color:
+                          status.coverageComplete
+                              ? const Color(0xFF7F929E)
+                              : const Color(0xFFFFB56B),
+                    ),
+                  ),
                 if (status.malformedLines > 0)
                   Text(
                     '${status.malformedLines} lignes illisibles ignorées',
@@ -1206,7 +1513,7 @@ class _NoWindowData extends StatelessWidget {
   Widget build(BuildContext context) => const Padding(
     padding: EdgeInsets.only(bottom: 12),
     child: _InlineEmpty(
-      'Les fichiers ont été trouvés, mais aucune donnée horodatée ne se situe dans les dernières 24 heures.',
+      'Les fichiers ont été trouvés, mais aucune donnée horodatée ne se situe dans la période sélectionnée.',
     ),
   );
 }
@@ -1363,14 +1670,14 @@ class _GlucosePainter extends CustomPainter {
     );
     _paintLabel(
       canvas,
-      '−24 h',
+      _formatShortDate(startMs),
       Offset(rect.left, rect.bottom + 7),
       width: 55,
       align: TextAlign.left,
     );
     _paintLabel(
       canvas,
-      'maintenant',
+      _formatShortDate(endMs - 1),
       Offset(rect.right - 65, rect.bottom + 7),
       width: 65,
       align: TextAlign.right,
@@ -1425,18 +1732,10 @@ String _formatBytes(int bytes) {
   return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} Mo';
 }
 
-String _humanize(String value) {
-  final text = value.replaceAll('_', ' ').trim().toLowerCase();
-  if (text.isEmpty) return 'Inconnu';
-  return '${text[0].toUpperCase()}${text.substring(1)}';
-}
-
 String _sourceLabel(String name) {
   switch (name) {
-    case decisions24hFile:
-      return 'Décisions AIMI · export 24 h';
     case decisionsFile:
-      return 'Décisions AIMI · journal complet';
+      return 'Décisions AIMI';
     case pkpdFile:
       return 'Observations PK/PD';
     case hormonitorEventsFile:
@@ -1449,9 +1748,32 @@ String _sourceLabel(String name) {
       return 'Hormonitor · contributions shadow';
     case hormonitorBlackboxFile:
       return 'Hormonitor · blackbox de boucle';
-    case hormonitorStateFile:
-      return 'Hormonitor · état journalier';
     default:
       return name;
   }
+}
+
+String _formatShortDate(int timestampMs) {
+  final date = DateTime.fromMillisecondsSinceEpoch(timestampMs);
+  return '${date.day.toString().padLeft(2, '0')}/'
+      '${date.month.toString().padLeft(2, '0')}';
+}
+
+String _sourceCoverage(SourceStatus status) {
+  if (status.extractionMode == 'metadata_only') {
+    return 'présent · métadonnées uniquement, non utilisé pour les indicateurs';
+  }
+  final sourceHint =
+      status.sourceName == decisions24hSourceFile
+          ? 'repli export 24 h'
+          : status.extractionMode.replaceAll('_', ' ');
+  final start = status.coverageStartMs;
+  final end = status.coverageEndMs;
+  final range =
+      start == null || end == null
+          ? 'plage non fournie'
+          : '${_formatDateTime(start)} → ${_formatDateTime(end - 1)}';
+  final quality =
+      status.coverageComplete ? 'couverture complète' : 'couverture partielle';
+  return '$quality · $range · $sourceHint';
 }

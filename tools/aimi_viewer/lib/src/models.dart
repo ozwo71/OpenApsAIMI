@@ -10,6 +10,19 @@ class DirectoryGrant {
   );
 }
 
+enum HormoneTrackingPreference {
+  unspecified('unspecified'),
+  notApplicable('notApplicable'),
+  enabledInAaps('enabledInAaps');
+
+  const HormoneTrackingPreference(this.wireValue);
+  final String wireValue;
+
+  static HormoneTrackingPreference fromWire(Object? value) =>
+      values.where((item) => item.wireValue == value?.toString()).firstOrNull ??
+      unspecified;
+}
+
 class StagedFile {
   const StagedFile({
     required this.name,
@@ -18,6 +31,11 @@ class StagedFile {
     required this.stagedSize,
     required this.lastModifiedMs,
     required this.truncated,
+    required this.sourceName,
+    required this.coverageStartMs,
+    required this.coverageEndMs,
+    required this.coverageComplete,
+    required this.extractionMode,
   });
 
   final String name;
@@ -26,6 +44,11 @@ class StagedFile {
   final int stagedSize;
   final int lastModifiedMs;
   final bool truncated;
+  final String sourceName;
+  final int? coverageStartMs;
+  final int? coverageEndMs;
+  final bool coverageComplete;
+  final String extractionMode;
 
   factory StagedFile.fromMap(Map<Object?, Object?> map) => StagedFile(
     name: map['name']?.toString() ?? '',
@@ -34,6 +57,11 @@ class StagedFile {
     stagedSize: _asInt(map['stagedSize']) ?? 0,
     lastModifiedMs: _asInt(map['lastModifiedMs']) ?? 0,
     truncated: map['truncated'] == true,
+    sourceName: map['sourceName']?.toString() ?? map['name']?.toString() ?? '',
+    coverageStartMs: _asInt(map['coverageStartMs']),
+    coverageEndMs: _asInt(map['coverageEndMs']),
+    coverageComplete: map['coverageComplete'] == true,
+    extractionMode: map['extractionMode']?.toString() ?? 'stream',
   );
 
   Map<String, Object> toParserMap() => <String, Object>{
@@ -43,6 +71,11 @@ class StagedFile {
     'stagedSize': stagedSize,
     'lastModifiedMs': lastModifiedMs,
     'truncated': truncated,
+    'sourceName': sourceName,
+    if (coverageStartMs != null) 'coverageStartMs': coverageStartMs!,
+    if (coverageEndMs != null) 'coverageEndMs': coverageEndMs!,
+    'coverageComplete': coverageComplete,
+    'extractionMode': extractionMode,
   };
 }
 
@@ -100,6 +133,11 @@ class SourceStatus {
     required this.latestTimestampMs,
     required this.sourceSize,
     required this.truncated,
+    required this.sourceName,
+    required this.coverageStartMs,
+    required this.coverageEndMs,
+    required this.coverageComplete,
+    required this.extractionMode,
   });
 
   final String name;
@@ -109,6 +147,11 @@ class SourceStatus {
   final int? latestTimestampMs;
   final int sourceSize;
   final bool truncated;
+  final String sourceName;
+  final int? coverageStartMs;
+  final int? coverageEndMs;
+  final bool coverageComplete;
+  final String extractionMode;
 
   factory SourceStatus.fromMap(Map<Object?, Object?> map) => SourceStatus(
     name: map['name']?.toString() ?? '',
@@ -118,6 +161,11 @@ class SourceStatus {
     latestTimestampMs: _asInt(map['latestTimestampMs']),
     sourceSize: _asInt(map['sourceSize']) ?? 0,
     truncated: map['truncated'] == true,
+    sourceName: map['sourceName']?.toString() ?? map['name']?.toString() ?? '',
+    coverageStartMs: _asInt(map['coverageStartMs']),
+    coverageEndMs: _asInt(map['coverageEndMs']),
+    coverageComplete: map['coverageComplete'] == true,
+    extractionMode: map['extractionMode']?.toString() ?? 'stream',
   );
 }
 
@@ -127,6 +175,7 @@ class DashboardData {
     required this.windowStartMs,
     required this.windowEndMs,
     required this.decisionCount,
+    required this.auditorFollowupCount,
     required this.hormonitorEventCount,
     required this.latestBgMgdl,
     required this.meanBgMgdl,
@@ -139,6 +188,7 @@ class DashboardData {
     required this.meanFusedIsf,
     required this.meanProfileIsf,
     required this.dailyTddU,
+    required this.dailyTddDays,
     required this.patientStoryCoverage,
     required this.glucose,
     required this.timeline,
@@ -154,6 +204,7 @@ class DashboardData {
   final int windowStartMs;
   final int windowEndMs;
   final int decisionCount;
+  final int auditorFollowupCount;
   final int hormonitorEventCount;
   final double? latestBgMgdl;
   final double? meanBgMgdl;
@@ -166,6 +217,7 @@ class DashboardData {
   final double? meanFusedIsf;
   final double? meanProfileIsf;
   final double? dailyTddU;
+  final int dailyTddDays;
   final double? patientStoryCoverage;
   final List<GlucosePoint> glucose;
   final List<TimelineEntry> timeline;
@@ -184,6 +236,7 @@ class DashboardData {
     windowStartMs: _asInt(map['windowStartMs']) ?? 0,
     windowEndMs: _asInt(map['windowEndMs']) ?? 0,
     decisionCount: _asInt(map['decisionCount']) ?? 0,
+    auditorFollowupCount: _asInt(map['auditorFollowupCount']) ?? 0,
     hormonitorEventCount: _asInt(map['hormonitorEventCount']) ?? 0,
     latestBgMgdl: _asDouble(map['latestBgMgdl']),
     meanBgMgdl: _asDouble(map['meanBgMgdl']),
@@ -196,6 +249,7 @@ class DashboardData {
     meanFusedIsf: _asDouble(map['meanFusedIsf']),
     meanProfileIsf: _asDouble(map['meanProfileIsf']),
     dailyTddU: _asDouble(map['dailyTddU']),
+    dailyTddDays: _asInt(map['dailyTddDays']) ?? 0,
     patientStoryCoverage: _asDouble(map['patientStoryCoverage']),
     glucose: _mapList(map['glucose'], GlucosePoint.fromMap),
     timeline: _mapList(map['timeline'], TimelineEntry.fromMap),

@@ -5,238 +5,265 @@ import 'package:aimi_viewer/src/export_parser.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  late Directory directory;
+
+  setUp(() async {
+    directory = await Directory.systemTemp.createTemp('aimi_viewer_test_');
+  });
+
+  tearDown(() async {
+    await directory.delete(recursive: true);
+  });
+
+  test('respecte strictement la fenêtre civile [début, fin)', () async {
+    final start = DateTime(2026, 8, 26).millisecondsSinceEpoch;
+    final end = DateTime(2026, 8, 27).millisecondsSinceEpoch;
+    final decisions = await _writeFile(directory, decisionsFile, <String>[
+      _decision(start - 1, bg: 55, smb: 1),
+      _decision(start, bg: 110, smb: 0.1),
+      _decision(end - 1, bg: 195, smb: 0.2),
+      _decision(end, bg: 240, smb: 1),
+    ]);
+
+    final result = await _parse(start, end, <Map<String, Object>>[
+      _metadata(decisionsFile, decisions),
+    ]);
+
+    expect(result['decisionCount'], 2);
+    expect(result['latestBgMgdl'], 195);
+    expect(result['totalSmbU'], closeTo(0.3, 0.0001));
+  });
+
+  test('sépare auditor_followup et ne classe pas un outcome absent', () async {
+    final start = DateTime(2026, 8, 26).millisecondsSinceEpoch;
+    final end = DateTime(2026, 8, 27).millisecondsSinceEpoch;
+    final decisions = await _writeFile(directory, decisionsFile, <String>[
+      _decision(start + 1000, bg: 100, smb: 0.1),
+      jsonEncode(<String, Object>{
+        'record_type': 'auditor_followup',
+        'timestamp': start + 2000,
+        'parent_event_id': 'event-1',
+      }),
+      jsonEncode(<String, Object>{
+        'event_id': 'event-without-outcome',
+        'timestamp': start + 3000,
+        'baseline_state': <String, Object>{'current_bg_mgdl': 101},
+      }),
+    ]);
+
+    final result = await _parse(start, end, <Map<String, Object>>[
+      _metadata(decisionsFile, decisions),
+    ]);
+
+    expect(result['decisionCount'], 2);
+    expect(result['auditorFollowupCount'], 1);
+    expect((result['timeline'] as List), hasLength(2));
+    expect(
+      (result['decisionTypes'] as Map).values.fold<int>(
+        0,
+        (a, b) => a + b as int,
+      ),
+      1,
+    );
+  });
+
+  test('priorise la sécurité Hormonitor sans doubler les décisions', () async {
+    final start = DateTime(2026, 8, 26).millisecondsSinceEpoch;
+    final end = DateTime(2026, 8, 27).millisecondsSinceEpoch;
+    final decisions = await _writeFile(directory, decisionsFile, <String>[
+      _decision(start + 1000, bg: 100, smb: 0, safety: 'SafetyPass'),
+      _decision(start + 2000, bg: 101, smb: 0, safety: 'SafetyPass'),
+    ]);
+    final events = await _writeFile(directory, hormonitorEventsFile, <String>[
+      _hormonitor(start + 1000, safety: 'SafetyLGS_T2', cycle: 'UNKNOWN'),
+      _hormonitor(start + 2000, safety: 'SafetyLGS_T1', cycle: 'LUTEAL'),
+    ]);
+
+    final result = await _parse(start, end, <Map<String, Object>>[
+      _metadata(decisionsFile, decisions),
+      _metadata(hormonitorEventsFile, events),
+    ]);
+
+    expect(result['safetyGates'], <String, int>{
+      'SafetyLGS_T2': 1,
+      'SafetyLGS_T1': 1,
+    });
+    expect(result['physioStates'], <String, int>{'OPTIMAL': 2});
+    expect((result['cyclePhases'] as Map), <String, int>{'LUTEAL': 1});
+  });
+
+  test('conserve UNKNOWN comme état physiologique à expliquer', () async {
+    final start = DateTime(2026, 8, 26).millisecondsSinceEpoch;
+    final end = DateTime(2026, 8, 27).millisecondsSinceEpoch;
+    final events = await _writeFile(directory, hormonitorEventsFile, <String>[
+      _hormonitor(
+        start + 1000,
+        safety: 'SafetyPass',
+        cycle: 'UNKNOWN',
+        physio: 'UNKNOWN',
+      ),
+    ]);
+
+    final result = await _parse(start, end, <Map<String, Object>>[
+      _metadata(hormonitorEventsFile, events),
+    ]);
+
+    expect(result['physioStates'], <String, int>{'UNKNOWN': 1});
+    expect(result['cyclePhases'], isEmpty);
+  });
+
   test(
-    'fusionne les décisions, le PK/PD et Hormonitor sur 24 heures',
+    'garde la dernière issue par day_local et calcule la TDD moyenne',
     () async {
-      final directory = await Directory.systemTemp.createTemp(
-        'aimi_viewer_test_',
-      );
-      addTearDown(() => directory.delete(recursive: true));
+      final start = DateTime(2026, 8, 24).millisecondsSinceEpoch;
+      final end = DateTime(2026, 8, 31).millisecondsSinceEpoch;
+      final daily = await _writeFile(directory, hormonitorDailyFile, <String>[
+        _daily('2026-08-24', 20, generatedHour: 8),
+        _daily('2026-08-24', 30, generatedHour: 20),
+        _daily('2026-08-25', 40, generatedHour: 20),
+        _daily('2026-08-31', 100, generatedHour: 8),
+      ]);
 
-      final now = DateTime.utc(2026, 8, 26, 12).millisecondsSinceEpoch;
-      final t1 = now - const Duration(hours: 2).inMilliseconds;
-      final t2 = now - const Duration(hours: 1).inMilliseconds;
-      final old = now - const Duration(hours: 30).inMilliseconds;
+      final result = await _parse(start, end, <Map<String, Object>>[
+        _metadata(hormonitorDailyFile, daily),
+      ]);
 
-      final decisions = File('${directory.path}/$decisions24hFile');
-      await decisions.writeAsString(
-        <String>[
-          _decision(old, bg: 55, smb: 1),
-          _decision(t1, bg: 110, smb: 0.1, mode: 'MEAL'),
-          _decision(t2, bg: 195, smb: 0.2, mode: 'STRESS_RESISTANCE'),
-        ].join('\n'),
-      );
-
-      final pkpd = File('${directory.path}/$pkpdFile');
-      await pkpd.writeAsString(
-        <String>[
-          _pkpdRow(
-            t1,
-            bg: 110,
-            iob: 1.2,
-            fusedIsf: 42,
-            profileIsf: 48,
-            smb: 0.1,
-          ),
-          _pkpdRow(
-            t2,
-            bg: 195,
-            iob: 1.4,
-            fusedIsf: 44,
-            profileIsf: 48,
-            smb: 0.2,
-          ),
-        ].join('\n'),
-      );
-
-      final events = File('${directory.path}/$hormonitorEventsFile');
-      await events.writeAsString(
-        <String>[
-          _hormonitor(
-            t1,
-            mode: 'MEAL',
-            physio: 'RESTING',
-            safety: 'SafetyPass',
-          ),
-          _hormonitor(
-            t2,
-            mode: 'STRESS_RESISTANCE',
-            physio: 'STRESS',
-            safety: 'SafetyPass',
-          ),
-        ].join('\n'),
-      );
-
-      final daily = File('${directory.path}/$hormonitorDailyFile');
-      await daily.writeAsString(
-        jsonEncode(<String, Object>{
-          'generated_at':
-              DateTime.fromMillisecondsSinceEpoch(
-                t2,
-                isUtc: true,
-              ).toIso8601String(),
-          'day_local': '2026-08-26',
-          'tdd_24h_total_u': 31.5,
-        }),
-      );
-
-      final result = await parseExportsInBackground(<String, Object?>{
-        'nowMs': now,
-        'files': <Map<String, Object>>[
-          _metadata(decisions24hFile, decisions),
-          _metadata(pkpdFile, pkpd),
-          _metadata(hormonitorEventsFile, events),
-          _metadata(hormonitorDailyFile, daily),
-        ],
-      });
-
-      expect(result['decisionCount'], 2);
-      expect(result['hormonitorEventCount'], 2);
-      expect(result['latestBgMgdl'], 195);
-      expect(result['tirPct'], closeTo(50, 0.001));
-      expect(result['highPct'], closeTo(50, 0.001));
-      expect(result['totalSmbU'], closeTo(0.3, 0.0001));
-      // At equal timestamps the AIMI decision baseline is the canonical source,
-      // ahead of the PK/PD observation and the Hormonitor mirror.
-      expect(result['latestIobU'], 1.1);
-      expect(result['meanFusedIsf'], 43);
-      expect(result['dailyTddU'], 31.5);
-      expect(result['patientStoryCoverage'], 100);
-      expect((result['patientModes'] as Map)['MEAL'], 1);
-      expect((result['patientModes'] as Map)['STRESS_RESISTANCE'], 1);
-      expect((result['glucose'] as List), hasLength(2));
-      expect((result['timeline'] as List), hasLength(2));
-
-      final sources = (result['sources'] as List).cast<Map>();
-      final decisionSource = sources.firstWhere(
-        (source) => source['name'] == decisions24hFile,
-      );
-      expect(decisionSource['present'], isTrue);
-      expect(decisionSource['recordsInWindow'], 2);
+      expect(result['dailyTddDays'], 2);
+      expect(result['dailyTddU'], 35);
     },
   );
 
-  test(
-    'ignore une ligne JSONL malformée sans perdre les autres événements',
-    () async {
-      final directory = await Directory.systemTemp.createTemp(
-        'aimi_viewer_malformed_',
-      );
-      addTearDown(() => directory.delete(recursive: true));
-      final now = DateTime.utc(2026, 8, 26, 12).millisecondsSinceEpoch;
-      final file = File('${directory.path}/$hormonitorEventsFile');
-      await file.writeAsString(
-        '{invalide}\n${_hormonitor(now - 60000, mode: 'RESTING', physio: 'RESTING', safety: 'SafetyPass')}',
-      );
+  test('expose une seule source logique décisions et sa couverture', () async {
+    final start = DateTime(2026, 8, 26).millisecondsSinceEpoch;
+    final end = DateTime(2026, 8, 27).millisecondsSinceEpoch;
+    final fallback = await _writeFile(
+      directory,
+      decisions24hSourceFile,
+      <String>[_decision(start + 1000, bg: 100, smb: 0)],
+    );
 
-      final result = await parseExportsInBackground(<String, Object?>{
-        'nowMs': now,
-        'files': <Map<String, Object>>[_metadata(hormonitorEventsFile, file)],
-      });
-      final source = (result['sources'] as List).cast<Map>().firstWhere(
-        (entry) => entry['name'] == hormonitorEventsFile,
-      );
+    final metadata =
+        _metadata(decisionsFile, fallback)
+          ..['sourceName'] = decisions24hSourceFile
+          ..['coverageStartMs'] = start
+          ..['coverageEndMs'] = end
+          ..['coverageComplete'] = false
+          ..['extractionMode'] = 'last24h_fallback';
+    final result = await _parse(start, end, <Map<String, Object>>[metadata]);
+    final sources = (result['sources'] as List).cast<Map>();
 
-      expect(result['hormonitorEventCount'], 1);
-      expect(source['malformedLines'], 1);
-    },
-  );
+    expect(
+      sources.where((item) => item['name'] == decisionsFile),
+      hasLength(1),
+    );
+    expect(
+      sources.any((item) => item['name'] == decisions24hSourceFile),
+      isFalse,
+    );
+    expect(
+      sources.any((item) => item['name'].toString().contains('daily_state')),
+      isFalse,
+    );
+    final source = sources.firstWhere((item) => item['name'] == decisionsFile);
+    expect(source['sourceName'], decisions24hSourceFile);
+    expect(source['coverageComplete'], isFalse);
+  });
+
+  test('borne les buffers glucose à 320 et journal à 80', () async {
+    final start = DateTime(2026, 8, 26).millisecondsSinceEpoch;
+    final end = DateTime(2026, 8, 27).millisecondsSinceEpoch;
+    final lines = List<String>.generate(1000, (index) {
+      final timestamp = start + index * 60 * 1000;
+      return _decision(timestamp, bg: 80 + (index % 100).toDouble(), smb: 0);
+    });
+    final decisions = await _writeFile(directory, decisionsFile, lines);
+
+    final result = await _parse(start, end, <Map<String, Object>>[
+      _metadata(decisionsFile, decisions),
+    ]);
+
+    expect((result['glucose'] as List).length, lessThanOrEqualTo(320));
+    expect((result['timeline'] as List), hasLength(80));
+  });
 }
+
+Future<File> _writeFile(
+  Directory directory,
+  String name,
+  List<String> lines,
+) async {
+  final file = File('${directory.path}/$name');
+  await file.writeAsString(lines.join('\n'));
+  return file;
+}
+
+Future<Map<String, Object?>> _parse(
+  int start,
+  int end,
+  List<Map<String, Object>> files,
+) => parseExportsInBackground(<String, Object?>{
+  'windowStartMs': start,
+  'windowEndMs': end,
+  'files': files,
+});
 
 Map<String, Object> _metadata(String name, File file) => <String, Object>{
   'name': name,
+  'sourceName': name,
   'path': file.path,
   'sourceSize': file.lengthSync(),
   'stagedSize': file.lengthSync(),
   'lastModifiedMs': file.lastModifiedSync().millisecondsSinceEpoch,
   'truncated': false,
+  'coverageComplete': true,
+  'extractionMode': 'test',
 };
 
 String _decision(
   int timestamp, {
   required double bg,
   required double smb,
-  String mode = 'RESTING',
-}) {
-  return jsonEncode(<String, Object>{
-    'event_id': 'event-$timestamp',
-    'timestamp': timestamp,
-    'baseline_state': <String, Object>{
-      'current_bg_mgdl': bg,
-      'iob_u': 1.1,
-      'cob_g': 5,
-    },
-    'adjustments': <String, Object>{
-      'patient_mode': <String, Object>{'mode': mode},
-      'safety_risk': <String, Object>{'safety_gate': 'SafetyPass'},
-    },
-    'outcome': <String, Object>{
-      'decision': smb > 0 ? 'SMB_Delivery' : 'No_Action',
-      'amount': smb,
-    },
-  });
-}
+  String safety = 'SafetyPass',
+}) => jsonEncode(<String, Object>{
+  'event_id': 'event-$timestamp',
+  'timestamp': timestamp,
+  'baseline_state': <String, Object>{
+    'current_bg_mgdl': bg,
+    'iob_u': 1.1,
+    'cob_g': 5,
+  },
+  'adjustments': <String, Object>{
+    'patient_mode': <String, Object>{'mode': 'RESTING'},
+    'safety_risk': <String, Object>{'safety_gate': safety},
+  },
+  'outcome': <String, Object>{
+    'decision': smb > 0 ? 'SMB_Delivery' : 'No_Action',
+    'amount': smb,
+  },
+});
 
 String _hormonitor(
   int timestamp, {
-  required String mode,
-  required String physio,
   required String safety,
-}) {
-  return jsonEncode(<String, Object>{
-    'event_id': 'horm-$timestamp',
-    'timestamp': timestamp,
-    'current_bg_mgdl': 120,
-    'iob_u': 1.0,
-    'cob_g': 3,
-    'physio_state': physio,
-    'safety_gate': safety,
-    'cycle_phase': 'LUTEAL',
-    'final_loop_decision_type': 'smb',
-    'patient_story': <String, Object>{
-      'patient_mode': mode,
-      'patient_mode_confidence': 0.9,
-    },
-  });
-}
+  required String cycle,
+  String physio = 'OPTIMAL',
+}) => jsonEncode(<String, Object>{
+  'event_id': 'horm-$timestamp',
+  'timestamp': timestamp,
+  'current_bg_mgdl': 120,
+  'iob_u': 1.0,
+  'cob_g': 3,
+  'physio_state': physio,
+  'safety_gate': safety,
+  'cycle_phase': cycle,
+  'final_loop_decision_type': 'smb',
+  'patient_story': <String, Object>{'patient_mode': 'FAST_MEAL'},
+});
 
-String _pkpdRow(
-  int timestamp, {
-  required double bg,
-  required double iob,
-  required double fusedIsf,
-  required double profileIsf,
-  required double smb,
-}) {
-  final epochMin = timestamp ~/ 60000;
-  return <Object?>[
-    DateTime.fromMillisecondsSinceEpoch(
-      timestamp,
-      isUtc: true,
-    ).toIso8601String(),
-    epochMin,
-    bg,
-    1.0,
-    iob,
-    3.0,
-    60,
-    6.0,
-    75.0,
-    fusedIsf,
-    45.0,
-    profileIsf,
-    0.3,
-    smb,
-    smb,
-    1.0,
-    1.0,
-    1.0,
-    false,
-    false,
-    0.05,
-    'RISING',
-    0.0,
-    0.0,
-    0.0,
-  ].join(',');
-}
+String _daily(String day, double tdd, {required int generatedHour}) =>
+    jsonEncode(<String, Object>{
+      'day_local': day,
+      'generated_at':
+          '${day}T${generatedHour.toString().padLeft(2, '0')}:00:00Z',
+      'tdd_24h_total_u': tdd,
+    });

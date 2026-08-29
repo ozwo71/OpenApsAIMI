@@ -2,8 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-const String decisions24hFile = 'AIMI_Decisions_Last24h.jsonl';
+import 'label_catalog.dart';
+
+/// Logical decision source. Android maps the Last24h fallback to this name so
+/// the UI never reports a second, falsely missing decision export.
 const String decisionsFile = 'AIMI_Decisions.jsonl';
+const String decisions24hSourceFile = 'AIMI_Decisions_Last24h.jsonl';
 const String pkpdFile = 'oapsaimi_pkpd_records.csv';
 const String hormonitorEventsFile = 'AIMI_HORMONITOR_event_stream_v1.jsonl';
 const String hormonitorDailyFile = 'AIMI_HORMONITOR_daily_outcomes_v1.jsonl';
@@ -11,10 +15,8 @@ const String hormonitorQaFile = 'AIMI_HORMONITOR_dataset_qa_v1.jsonl';
 const String hormonitorShadowFile =
     'AIMI_HORMONITOR_shadow_contributions_v1.jsonl';
 const String hormonitorBlackboxFile = 'AIMI_HORMONITOR_loop_blackbox_v1.jsonl';
-const String hormonitorStateFile = 'AIMI_HORMONITOR_daily_state_v1.json';
 
 const List<String> expectedExportNames = <String>[
-  decisions24hFile,
   decisionsFile,
   pkpdFile,
   hormonitorEventsFile,
@@ -22,14 +24,17 @@ const List<String> expectedExportNames = <String>[
   hormonitorQaFile,
   hormonitorShadowFile,
   hormonitorBlackboxFile,
-  hormonitorStateFile,
 ];
 
 /// Top-level callback suitable for Flutter's [compute].
 Future<Map<String, Object?>> parseExportsInBackground(
   Map<String, Object?> input,
 ) async {
-  final nowMs = _asInt(input['nowMs']) ?? DateTime.now().millisecondsSinceEpoch;
+  final fallbackEnd = DateTime.now().millisecondsSinceEpoch;
+  final windowEndMs = _asInt(input['windowEndMs']) ?? fallbackEnd;
+  final windowStartMs =
+      _asInt(input['windowStartMs']) ??
+      windowEndMs - const Duration(hours: 24).inMilliseconds;
   final rawFiles = input['files'];
   final files =
       rawFiles is List
@@ -38,68 +43,81 @@ Future<Map<String, Object?>> parseExportsInBackground(
               .map((item) => Map<String, Object?>.from(item))
               .toList()
           : <Map<String, Object?>>[];
-  return _ExportParser(nowMs: nowMs, stagedFiles: files).parse();
+  return _ExportParser(
+    windowStartMs: windowStartMs,
+    windowEndMs: windowEndMs,
+    stagedFiles: files,
+  ).parse();
 }
 
 class _ExportParser {
-  _ExportParser({required this.nowMs, required this.stagedFiles})
-    : windowStartMs = nowMs - const Duration(hours: 24).inMilliseconds {
+  _ExportParser({
+    required this.windowStartMs,
+    required this.windowEndMs,
+    required List<Map<String, Object?>> stagedFiles,
+  }) {
     for (final name in expectedExportNames) {
       sources[name] = _SourceAccumulator(name: name);
     }
     for (final metadata in stagedFiles) {
-      final name = metadata['name']?.toString() ?? '';
+      final rawName = metadata['name']?.toString() ?? '';
+      final name = rawName == decisions24hSourceFile ? decisionsFile : rawName;
       if (name.isEmpty) continue;
-      filesByName[name] = metadata['path']?.toString() ?? '';
-      sources.putIfAbsent(name, () => _SourceAccumulator(name: name));
-      sources[name]!
+      final path = metadata['path']?.toString() ?? '';
+      if (path.isNotEmpty) filesByName[name] = path;
+      final source = sources.putIfAbsent(
+        name,
+        () => _SourceAccumulator(name: name),
+      );
+      source
         ..present = true
+        ..sourceName = metadata['sourceName']?.toString() ?? rawName
         ..sourceSize = _asInt(metadata['sourceSize']) ?? 0
-        ..truncated = metadata['truncated'] == true;
+        ..truncated = metadata['truncated'] == true
+        ..coverageStartMs = _asInt(metadata['coverageStartMs'])
+        ..coverageEndMs = _asInt(metadata['coverageEndMs'])
+        ..coverageComplete = metadata['coverageComplete'] == true
+        ..extractionMode = metadata['extractionMode']?.toString() ?? 'stream';
     }
   }
 
-  final int nowMs;
   final int windowStartMs;
-  final List<Map<String, Object?>> stagedFiles;
+  final int windowEndMs;
   final Map<String, String> filesByName = <String, String>{};
   final Map<String, _SourceAccumulator> sources =
       <String, _SourceAccumulator>{};
 
-  final List<Map<String, Object?>> decisionGlucose = <Map<String, Object?>>[];
-  final List<Map<String, Object?>> pkpdGlucose = <Map<String, Object?>>[];
-  final List<Map<String, Object?>> hormonitorGlucose = <Map<String, Object?>>[];
-  final List<Map<String, Object?>> decisionTimeline = <Map<String, Object?>>[];
-  final List<Map<String, Object?>> hormonitorTimeline =
-      <Map<String, Object?>>[];
+  final _PointBuffer decisionGlucose = _PointBuffer(320);
+  final _PointBuffer pkpdGlucose = _PointBuffer(320);
+  final _PointBuffer hormonitorGlucose = _PointBuffer(320);
+  final _RecentTimeline decisionTimeline = _RecentTimeline(80);
+  final _RecentTimeline hormonitorTimeline = _RecentTimeline(80);
+  final _GlucoseStats decisionGlucoseStats = _GlucoseStats();
+  final _GlucoseStats pkpdGlucoseStats = _GlucoseStats();
+  final _GlucoseStats hormonitorGlucoseStats = _GlucoseStats();
 
   final Map<String, int> decisionTypes = <String, int>{};
   final Map<String, int> decisionModes = <String, int>{};
   final Map<String, int> hormonitorModes = <String, int>{};
   final Map<String, int> physioStates = <String, int>{};
-  final Map<String, int> safetyGates = <String, int>{};
+  final Map<String, int> decisionSafetyGates = <String, int>{};
+  final Map<String, int> hormonitorSafetyGates = <String, int>{};
   final Map<String, int> cyclePhases = <String, int>{};
+  final Map<String, _DailyTdd> tddByDay = <String, _DailyTdd>{};
 
   int decisionCount = 0;
+  int auditorFollowupCount = 0;
   int hormonitorEventCount = 0;
   int patientStoryCount = 0;
   double decisionSmbTotal = 0;
   double pkpdSmbTotal = 0;
-  double? dailyTddU;
-  int dailyTddTimestamp = 0;
-  final List<double> fusedIsfValues = <double>[];
-  final List<double> profileIsfValues = <double>[];
+  final _RunningMean fusedIsf = _RunningMean();
+  final _RunningMean profileIsf = _RunningMean();
   _TimedValue? latestIob;
   _TimedValue? latestCob;
 
   Future<Map<String, Object?>> parse() async {
-    final chosenDecisions =
-        filesByName.containsKey(decisions24hFile)
-            ? decisions24hFile
-            : decisionsFile;
-    if (filesByName.containsKey(chosenDecisions)) {
-      await _parseDecisions(chosenDecisions);
-    }
+    if (filesByName.containsKey(decisionsFile)) await _parseDecisions();
     if (filesByName.containsKey(pkpdFile)) await _parsePkpd();
     if (filesByName.containsKey(hormonitorEventsFile)) {
       await _parseHormonitorEvents();
@@ -115,74 +133,63 @@ class _ExportParser {
     ]) {
       if (filesByName.containsKey(name)) await _countJsonl(name);
     }
-    if (filesByName.containsKey(hormonitorStateFile)) {
-      await _countJsonDocument(hormonitorStateFile);
-    }
 
-    final selectedGlucose =
+    final selectedPoints =
         decisionGlucose.isNotEmpty
             ? decisionGlucose
             : pkpdGlucose.isNotEmpty
             ? pkpdGlucose
             : hormonitorGlucose;
-    selectedGlucose.sort(
-      (a, b) => (_asInt(a['timestampMs']) ?? 0).compareTo(
-        _asInt(b['timestampMs']) ?? 0,
-      ),
-    );
-    final validBg =
-        selectedGlucose
-            .map((point) => _asDouble(point['valueMgdl']))
-            .whereType<double>()
-            .where((value) => value >= 20 && value <= 600)
-            .toList();
-    final low = validBg.where((value) => value < 70).length;
-    final high = validBg.where((value) => value > 180).length;
-    final inRange = validBg.length - low - high;
-
-    final timeline =
+    final selectedStats =
+        decisionGlucoseStats.count > 0
+            ? decisionGlucoseStats
+            : pkpdGlucoseStats.count > 0
+            ? pkpdGlucoseStats
+            : hormonitorGlucoseStats;
+    final selectedTimeline =
         decisionTimeline.isNotEmpty ? decisionTimeline : hormonitorTimeline;
-    timeline.sort(
-      (a, b) => (_asInt(b['timestampMs']) ?? 0).compareTo(
-        _asInt(a['timestampMs']) ?? 0,
-      ),
-    );
+    final selectedSafety =
+        hormonitorSafetyGates.isNotEmpty
+            ? hormonitorSafetyGates
+            : decisionSafetyGates;
+    final tddValues = tddByDay.values.map((item) => item.value).toList();
 
     return <String, Object?>{
       'generatedAtMs': DateTime.now().millisecondsSinceEpoch,
       'windowStartMs': windowStartMs,
-      'windowEndMs': nowMs,
+      'windowEndMs': windowEndMs,
       'decisionCount': decisionCount,
+      'auditorFollowupCount': auditorFollowupCount,
       'hormonitorEventCount': hormonitorEventCount,
-      'latestBgMgdl':
-          selectedGlucose.isEmpty ? null : selectedGlucose.last['valueMgdl'],
-      'meanBgMgdl': _mean(validBg),
-      'tirPct': _pct(inRange, validBg.length),
-      'lowPct': _pct(low, validBg.length),
-      'highPct': _pct(high, validBg.length),
+      'latestBgMgdl': selectedStats.latestValue,
+      'meanBgMgdl': selectedStats.mean,
+      'tirPct': selectedStats.inRangePct,
+      'lowPct': selectedStats.lowPct,
+      'highPct': selectedStats.highPct,
       'totalSmbU': decisionCount > 0 ? decisionSmbTotal : pkpdSmbTotal,
       'latestIobU': latestIob?.value,
       'latestCobG': latestCob?.value,
-      'meanFusedIsf': _mean(fusedIsfValues),
-      'meanProfileIsf': _mean(profileIsfValues),
-      'dailyTddU': dailyTddU,
+      'meanFusedIsf': fusedIsf.mean,
+      'meanProfileIsf': profileIsf.mean,
+      'dailyTddU': _mean(tddValues),
+      'dailyTddDays': tddValues.length,
       'patientStoryCoverage': _pct(patientStoryCount, hormonitorEventCount),
-      'glucose': _downsample(selectedGlucose, 320),
-      'timeline': timeline.take(80).toList(),
+      'glucose': selectedPoints.sorted,
+      'timeline': selectedTimeline.sortedNewestFirst,
       'decisionTypes': _sortedCounts(decisionTypes),
       'patientModes': _sortedCounts(
         hormonitorModes.isNotEmpty ? hormonitorModes : decisionModes,
       ),
       'physioStates': _sortedCounts(physioStates),
-      'safetyGates': _sortedCounts(safetyGates),
+      'safetyGates': _sortedCounts(selectedSafety),
       'cyclePhases': _sortedCounts(cyclePhases),
       'sources': sources.values.map((source) => source.toMap()).toList(),
     };
   }
 
-  Future<void> _parseDecisions(String name) async {
-    final source = sources[name]!;
-    await for (final raw in _lines(filesByName[name]!)) {
+  Future<void> _parseDecisions() async {
+    final source = sources[decisionsFile]!;
+    await for (final raw in _lines(filesByName[decisionsFile]!)) {
       final line = raw.trim();
       if (line.isEmpty) continue;
       final root = _decodeObject(line);
@@ -191,8 +198,14 @@ class _ExportParser {
         continue;
       }
       final timestamp = _timestamp(root['timestamp']);
-      source.observeTimestamp(timestamp, windowStartMs, nowMs);
+      source.observeTimestamp(timestamp, windowStartMs, windowEndMs);
       if (!_inWindow(timestamp)) continue;
+
+      // An async auditor follow-up mirrors an already committed tick.
+      if (_text(root['record_type'])?.toLowerCase() == 'auditor_followup') {
+        auditorFollowupCount++;
+        continue;
+      }
 
       decisionCount++;
       final baseline = _map(root['baseline_state']);
@@ -204,9 +217,7 @@ class _ExportParser {
       final smb =
           _asDouble(outcome?['amount']) ?? _asDouble(outcome?['dosage_u']) ?? 0;
       final decision =
-          _text(outcome?['decision']) ??
-          _text(outcome?['clinical_decision']) ??
-          'Décision AIMI';
+          _text(outcome?['decision']) ?? _text(outcome?['clinical_decision']);
       final patientMode =
           _text(_map(adjustments?['patient_mode'])?['mode']) ??
           _text(root['patient_mode']);
@@ -214,17 +225,12 @@ class _ExportParser {
         _map(adjustments?['safety_risk'])?['safety_gate'],
       );
 
-      if (bg != null && bg >= 20 && bg <= 600) {
-        decisionGlucose.add(<String, Object?>{
-          'timestampMs': timestamp!,
-          'valueMgdl': bg,
-        });
-      }
+      _observeGlucose(timestamp!, bg, decisionGlucose, decisionGlucoseStats);
       decisionSmbTotal += smb > 0 ? smb : 0;
-      _bump(decisionTypes, decision);
+      if (decision != null) _bump(decisionTypes, decision);
       if (patientMode != null) _bump(decisionModes, patientMode);
-      if (safetyGate != null) _bump(safetyGates, safetyGate);
-      _observeLatest(timestamp!, iob, isIob: true, sourcePriority: 3);
+      if (safetyGate != null) _bump(decisionSafetyGates, safetyGate);
+      _observeLatest(timestamp, iob, isIob: true, sourcePriority: 3);
       _observeLatest(timestamp, cob, isIob: false, sourcePriority: 3);
       decisionTimeline.add(<String, Object?>{
         'timestampMs': timestamp,
@@ -232,7 +238,7 @@ class _ExportParser {
         'iobU': iob,
         'cobG': cob,
         'smbU': smb,
-        'decision': decision,
+        'decision': decision ?? 'Décision non renseignée',
         'patientMode': patientMode,
         'safetyGate': safetyGate,
       });
@@ -249,30 +255,18 @@ class _ExportParser {
         source.malformedLines++;
         continue;
       }
-      // Current schema: dateStr, epochMin, bg, delta5, iob, carbsActive,
-      // windowMin, diaH, peakMin, fusedIsf, tddIsf, profileIsf, tailFrac,
-      // smbProposed, smbFinal, followed by optional audit columns.
       final epochMin = int.tryParse(columns[1].trim());
       final timestamp = epochMin == null ? null : epochMin * 60000;
-      source.observeTimestamp(timestamp, windowStartMs, nowMs);
+      source.observeTimestamp(timestamp, windowStartMs, windowEndMs);
       if (!_inWindow(timestamp)) continue;
       final bg = double.tryParse(columns[2].trim());
       final iob = double.tryParse(columns[4].trim());
-      final fusedIsf = double.tryParse(columns[9].trim());
-      final profileIsf = double.tryParse(columns[11].trim());
+      fusedIsf.add(double.tryParse(columns[9].trim()));
+      profileIsf.add(double.tryParse(columns[11].trim()));
       final smbFinal = double.tryParse(columns[14].trim()) ?? 0;
-      if (bg != null && bg >= 20 && bg <= 600) {
-        pkpdGlucose.add(<String, Object?>{
-          'timestampMs': timestamp!,
-          'valueMgdl': bg,
-        });
-      }
-      if (fusedIsf != null && fusedIsf.isFinite) fusedIsfValues.add(fusedIsf);
-      if (profileIsf != null && profileIsf.isFinite) {
-        profileIsfValues.add(profileIsf);
-      }
+      _observeGlucose(timestamp!, bg, pkpdGlucose, pkpdGlucoseStats);
       if (smbFinal > 0) pkpdSmbTotal += smbFinal;
-      _observeLatest(timestamp!, iob, isIob: true, sourcePriority: 2);
+      _observeLatest(timestamp, iob, isIob: true, sourcePriority: 2);
     }
   }
 
@@ -287,7 +281,7 @@ class _ExportParser {
         continue;
       }
       final timestamp = _timestamp(root['timestamp']);
-      source.observeTimestamp(timestamp, windowStartMs, nowMs);
+      source.observeTimestamp(timestamp, windowStartMs, windowEndMs);
       if (!_inWindow(timestamp)) continue;
 
       hormonitorEventCount++;
@@ -296,8 +290,7 @@ class _ExportParser {
       final physio = _text(root['physio_state']);
       final safety = _text(root['safety_gate']);
       final cycle = _text(root['cycle_phase']);
-      final decision =
-          _text(root['final_loop_decision_type']) ?? 'Événement Hormonitor';
+      final decision = _text(root['final_loop_decision_type']);
       final bg = _asDouble(root['current_bg_mgdl']);
       final iob = _asDouble(root['iob_u']);
       final cob = _asDouble(root['cob_g']);
@@ -305,16 +298,20 @@ class _ExportParser {
       if (story != null && story.isNotEmpty) patientStoryCount++;
       if (mode != null) _bump(hormonitorModes, mode);
       if (physio != null) _bump(physioStates, physio);
-      if (safety != null) _bump(safetyGates, safety);
-      if (cycle != null) _bump(cyclePhases, cycle);
-      if (decisionCount == 0) _bump(decisionTypes, decision);
-      if (bg != null && bg >= 20 && bg <= 600) {
-        hormonitorGlucose.add(<String, Object?>{
-          'timestampMs': timestamp!,
-          'valueMgdl': bg,
-        });
+      if (safety != null) _bump(hormonitorSafetyGates, safety);
+      if (cycle != null && isUsableCyclePhase(cycle)) {
+        _bump(cyclePhases, cycle);
       }
-      _observeLatest(timestamp!, iob, isIob: true, sourcePriority: 1);
+      if (decisionCount == 0 && decision != null) {
+        _bump(decisionTypes, decision);
+      }
+      _observeGlucose(
+        timestamp!,
+        bg,
+        hormonitorGlucose,
+        hormonitorGlucoseStats,
+      );
+      _observeLatest(timestamp, iob, isIob: true, sourcePriority: 1);
       _observeLatest(timestamp, cob, isIob: false, sourcePriority: 1);
       hormonitorTimeline.add(<String, Object?>{
         'timestampMs': timestamp,
@@ -322,7 +319,7 @@ class _ExportParser {
         'iobU': iob,
         'cobG': cob,
         'smbU': 0.0,
-        'decision': decision,
+        'decision': decision ?? 'Événement Hormonitor',
         'patientMode': mode,
         'safetyGate': safety,
       });
@@ -339,14 +336,17 @@ class _ExportParser {
         source.malformedLines++;
         continue;
       }
-      final generatedAt =
-          _timestamp(root['generated_at']) ?? _dayTimestamp(root['day_local']);
-      source.observeTimestamp(generatedAt, windowStartMs, nowMs);
-      if (!_inWindow(generatedAt)) continue;
+      final day = _text(root['day_local']);
+      final dayTimestamp = _dayTimestamp(day);
+      final generatedAt = _timestamp(root['generated_at']) ?? dayTimestamp;
+      source.observeTimestamp(dayTimestamp, windowStartMs, windowEndMs);
+      if (day == null || !_inWindow(dayTimestamp)) continue;
       final tdd = _asDouble(root['tdd_24h_total_u']);
-      if (tdd != null && generatedAt! >= dailyTddTimestamp) {
-        dailyTddU = tdd;
-        dailyTddTimestamp = generatedAt;
+      if (tdd == null || !tdd.isFinite) continue;
+      final previous = tddByDay[day];
+      final rank = generatedAt ?? 0;
+      if (previous == null || rank >= previous.generatedAtMs) {
+        tddByDay[day] = _DailyTdd(value: tdd, generatedAtMs: rank);
       }
     }
   }
@@ -363,43 +363,25 @@ class _ExportParser {
       }
       final timestamp =
           _timestamp(root['timestamp']) ?? _timestamp(root['generated_at']);
-      source.observeTimestamp(
-        timestamp,
-        windowStartMs,
-        nowMs,
-        countWithoutTimestamp: true,
-      );
-    }
-  }
-
-  Future<void> _countJsonDocument(String name) async {
-    final source = sources[name]!;
-    try {
-      final decoded = jsonDecode(await File(filesByName[name]!).readAsString());
-      if (decoded is! Map) {
-        source.malformedLines++;
-        return;
-      }
-      final root = Map<String, Object?>.from(decoded);
-      final timestamp =
-          _timestamp(root['timestamp']) ?? _timestamp(root['generated_at']);
-      source.observeTimestamp(
-        timestamp,
-        windowStartMs,
-        nowMs,
-        countWithoutTimestamp: true,
-      );
-    } on FormatException {
-      source.malformedLines++;
-    } on FileSystemException {
-      source.malformedLines++;
+      source.observeTimestamp(timestamp, windowStartMs, windowEndMs);
     }
   }
 
   bool _inWindow(int? timestamp) =>
       timestamp != null &&
       timestamp >= windowStartMs &&
-      timestamp <= nowMs + 300000;
+      timestamp < windowEndMs;
+
+  void _observeGlucose(
+    int timestamp,
+    double? value,
+    _PointBuffer buffer,
+    _GlucoseStats stats,
+  ) {
+    if (value == null || !value.isFinite || value < 20 || value > 600) return;
+    buffer.add(timestamp, value, windowStartMs, windowEndMs);
+    stats.add(timestamp, value);
+  }
 
   void _observeLatest(
     int timestamp,
@@ -428,43 +410,152 @@ class _ExportParser {
 }
 
 class _SourceAccumulator {
-  _SourceAccumulator({required this.name});
+  _SourceAccumulator({required this.name}) : sourceName = name;
 
   final String name;
   bool present = false;
+  String sourceName;
   int recordsInWindow = 0;
   int malformedLines = 0;
   int? latestTimestampMs;
   int sourceSize = 0;
   bool truncated = false;
+  int? coverageStartMs;
+  int? coverageEndMs;
+  bool coverageComplete = false;
+  String extractionMode = 'stream';
 
-  void observeTimestamp(
-    int? timestamp,
-    int startMs,
-    int endMs, {
-    bool countWithoutTimestamp = false,
-  }) {
-    if (timestamp != null) {
-      if (latestTimestampMs == null || timestamp > latestTimestampMs!) {
-        latestTimestampMs = timestamp;
-      }
-      if (timestamp >= startMs && timestamp <= endMs + 300000) {
-        recordsInWindow++;
-      }
-    } else if (countWithoutTimestamp) {
-      recordsInWindow++;
+  void observeTimestamp(int? timestamp, int startMs, int endMs) {
+    if (timestamp == null) return;
+    if (latestTimestampMs == null || timestamp > latestTimestampMs!) {
+      latestTimestampMs = timestamp;
     }
+    if (timestamp >= startMs && timestamp < endMs) recordsInWindow++;
   }
 
   Map<String, Object?> toMap() => <String, Object?>{
     'name': name,
     'present': present,
+    'sourceName': sourceName,
     'recordsInWindow': recordsInWindow,
     'malformedLines': malformedLines,
     'latestTimestampMs': latestTimestampMs,
     'sourceSize': sourceSize,
     'truncated': truncated,
+    'coverageStartMs': coverageStartMs,
+    'coverageEndMs': coverageEndMs,
+    'coverageComplete': coverageComplete,
+    'extractionMode': extractionMode,
   };
+}
+
+class _PointBuffer {
+  _PointBuffer(this.capacity);
+  final int capacity;
+  final Map<int, Map<String, Object?>> _buckets = <int, Map<String, Object?>>{};
+
+  bool get isNotEmpty => _buckets.isNotEmpty;
+
+  void add(int timestamp, double value, int startMs, int endMs) {
+    final span = endMs - startMs;
+    if (span <= 0) return;
+    final bucket = (((timestamp - startMs) * capacity) ~/ span).clamp(
+      0,
+      capacity - 1,
+    );
+    _buckets[bucket] = <String, Object?>{
+      'timestampMs': timestamp,
+      'valueMgdl': value,
+    };
+  }
+
+  List<Map<String, Object?>> get sorted {
+    final result = _buckets.values.toList();
+    result.sort(
+      (a, b) => (_asInt(a['timestampMs']) ?? 0).compareTo(
+        _asInt(b['timestampMs']) ?? 0,
+      ),
+    );
+    return result;
+  }
+}
+
+class _RecentTimeline {
+  _RecentTimeline(this.capacity);
+  final int capacity;
+  final List<Map<String, Object?>> _values = <Map<String, Object?>>[];
+
+  bool get isNotEmpty => _values.isNotEmpty;
+
+  void add(Map<String, Object?> value) {
+    _values.add(value);
+    if (_values.length <= capacity) return;
+    var oldest = 0;
+    for (var index = 1; index < _values.length; index++) {
+      if ((_asInt(_values[index]['timestampMs']) ?? 0) <
+          (_asInt(_values[oldest]['timestampMs']) ?? 0)) {
+        oldest = index;
+      }
+    }
+    _values.removeAt(oldest);
+  }
+
+  List<Map<String, Object?>> get sortedNewestFirst {
+    final result = _values.toList();
+    result.sort(
+      (a, b) => (_asInt(b['timestampMs']) ?? 0).compareTo(
+        _asInt(a['timestampMs']) ?? 0,
+      ),
+    );
+    return result;
+  }
+}
+
+class _GlucoseStats {
+  int count = 0;
+  int low = 0;
+  int high = 0;
+  double sum = 0;
+  int latestTimestamp = -1;
+  double? latestValue;
+
+  void add(int timestamp, double value) {
+    count++;
+    sum += value;
+    if (value < 70) {
+      low++;
+    } else if (value > 180) {
+      high++;
+    }
+    if (timestamp >= latestTimestamp) {
+      latestTimestamp = timestamp;
+      latestValue = value;
+    }
+  }
+
+  double? get mean => count == 0 ? null : sum / count;
+  double? get lowPct => _pct(low, count);
+  double? get highPct => _pct(high, count);
+  double? get inRangePct => _pct(count - low - high, count);
+}
+
+class _RunningMean {
+  int count = 0;
+  double sum = 0;
+
+  void add(double? value) {
+    if (value == null || !value.isFinite) return;
+    count++;
+    sum += value;
+  }
+
+  double? get mean => count == 0 ? null : sum / count;
+}
+
+class _DailyTdd {
+  const _DailyTdd({required this.value, required this.generatedAtMs});
+  final double value;
+  final int generatedAtMs;
 }
 
 class _TimedValue {
@@ -514,9 +605,10 @@ int? _timestamp(Object? value) {
 
 int? _dayTimestamp(Object? value) {
   final day = _text(value);
-  return day == null
-      ? null
-      : DateTime.tryParse('${day}T12:00:00')?.millisecondsSinceEpoch;
+  if (day == null) return null;
+  final parts = day.split('-').map(int.tryParse).toList();
+  if (parts.length != 3 || parts.any((part) => part == null)) return null;
+  return DateTime(parts[0]!, parts[1]!, parts[2]!).millisecondsSinceEpoch;
 }
 
 int? _asInt(Object? value) {
@@ -542,19 +634,6 @@ Map<String, int> _sortedCounts(Map<String, int> counts) {
   final entries =
       counts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
   return Map<String, int>.fromEntries(entries);
-}
-
-List<Map<String, Object?>> _downsample(
-  List<Map<String, Object?>> values,
-  int maxPoints,
-) {
-  if (values.length <= maxPoints) return values;
-  final step = values.length / maxPoints;
-  return List<Map<String, Object?>>.generate(maxPoints, (index) {
-    final sourceIndex =
-        (index * step).floor().clamp(0, values.length - 1).toInt();
-    return values[sourceIndex];
-  });
 }
 
 List<String> _splitCsv(String line) {
