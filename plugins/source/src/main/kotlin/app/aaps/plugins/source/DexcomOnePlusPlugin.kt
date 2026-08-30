@@ -253,9 +253,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         warmupPhase = driver.warmupState().phase
         // The privilege the OEM profiles have been asking for since they were written. Only when a
         // sensor is actually stored: no session wanted, no service, no notification.
-        if (profileWantsForegroundService() && sensorStore.load() != null) {
-            DexcomOnePlusSessionService.start(context.applicationContext)
-        }
+        refreshSessionService()
         // Reconcile a warm-up notification that survived a process restart with the driver's current
         // state — cancels it when warm-up is already READY/IDLE (otherwise nothing clears the stale
         // status-bar notification until the next onWarmup event, which may never arrive after restart).
@@ -495,6 +493,25 @@ class DexcomOnePlusPlugin @Inject constructor(
     private fun profileWantsForegroundService(): Boolean =
         DeviceProfileRegistry.resolve().useForegroundService
 
+    /**
+     * Keep the `connectedDevice` service alive while EITHER slot has a sensor stored, and give the
+     * privilege back when neither does.
+     *
+     * A pre-soak is a Bluetooth session like any other, so a phone whose only stored sensor is a
+     * pre-soak needs the service just as much. It never throws: it is called from production paths
+     * as well as from pre-soak ones.
+     */
+    private fun refreshSessionService() {
+        runCatching {
+            val wanted = profileWantsForegroundService() &&
+                (sensorStore.load() != null || stagingStore.load() != null)
+            if (wanted) DexcomOnePlusSessionService.start(context.applicationContext)
+            else DexcomOnePlusSessionService.stop(context.applicationContext)
+        }.onFailure { t ->
+            aapsLogger.error(LTag.BGSOURCE, "DEXCOM_ONEPLUS_SESSION: session service refresh failed, ${t.message}", t)
+        }
+    }
+
     override fun onError(message: String, fatal: Boolean) {
         aapsLogger.error(LTag.BGSOURCE, "DEXCOM_ONEPLUS_ERROR: fatal=$fatal $message")
     }
@@ -567,6 +584,12 @@ class DexcomOnePlusPlugin @Inject constructor(
      *   the UI keeps the invariant for every future call site.
      */
     fun beginStaging(deviceAddress: String): Boolean {
+        // Like onSensorSessionStarted, and before the early return: a pre-soak started while
+        // production is stopped is still a Bluetooth session, and without this it would run its GATT
+        // link with no foreground service at all.
+        if (profileWantsForegroundService()) {
+            DexcomOnePlusSessionService.start(context.applicationContext)
+        }
         if (isProductionSensor(deviceAddress)) {
             aapsLogger.info(
                 LTag.BGSOURCE,
@@ -694,6 +717,9 @@ class DexcomOnePlusPlugin @Inject constructor(
         _stagingLifecycle.value = null
         _stagingEvidence.value = null
         _stagingState.value = StagingState.ABSENT
+        // Cancelling the only pre-soak on a phone with no production sensor must give the privilege
+        // back, otherwise the notification would stay for ever.
+        refreshSessionService()
         aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_STAGING: cancelled")
     }
 
