@@ -43,6 +43,14 @@ interface HardLimits {
         )
 
         // Fork: inhaled insulin (e.g. Afrezza) has a much shorter DIA than injected insulin.
+        //
+        // IMPORTANT: the DIA bands must stay disjoint. LIMIT_DIA has a floor of 4.0 h for every age
+        // type and this band tops out at 4.0 h, so "dia < 4.0" means inhaled and nothing else. The
+        // fork uses that fact to recognise an Afrezza insulin whose peak the user has edited (see
+        // `ICfg.looksInhaled`, `ProfileSealed.validateSemantic`,
+        // `InsulinManagementViewModel.resolveEditorTemplate`, `DataHandlerMobile.findAfrezzaIcfg`).
+        // The PEAK bands do overlap (20..45 vs 35..120, so Lyumjev's 45 min is in both) — never
+        // decide "inhaled" from the peak alone.
         val LIMIT_DIA_INHALED = mapOf(
             AgeType.CHILD to 1.5..4.0,
             AgeType.TEENAGE to 1.5..4.0,

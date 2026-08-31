@@ -29,7 +29,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.aaps.core.ui.compose.dialogs.OkCancelDialog
@@ -71,23 +70,6 @@ fun AfrezzaDialogScreen(
         )
     }
 
-    if (uiState.showMaxBasalPrompt) {
-        OkCancelDialog(
-            title = stringResource(R.string.afrezza_max_basal_title),
-            message = stringResource(R.string.afrezza_max_basal_message, uiState.maxBasalRate),
-            onConfirm = { viewModel.acceptMaxBasalPrompt() },
-            onDismiss = { viewModel.dismissMaxBasalPrompt() }
-        )
-    }
-
-    if (uiState.showDurationSelector) {
-        DurationSelectorDialog(
-            rate = uiState.maxBasalRate,
-            onDurationSelected = { minutes -> viewModel.applyMaxBasal(minutes) },
-            onDismiss = { viewModel.dismissDurationSelector() }
-        )
-    }
-
     if (uiState.showCarbPrompt) {
         OkCancelDialog(
             title = stringResource(R.string.afrezza_carb_prompt_title),
@@ -105,13 +87,6 @@ fun AfrezzaDialogScreen(
         if (!uiState.isConfigured) {
             AfrezzaNotConfiguredContent()
         } else {
-            if (uiState.maxBasalActive) {
-                ActiveMaxBasalCard(
-                    rate = uiState.maxBasalRate,
-                    remainingMinutes = uiState.maxBasalRemainingMinutes,
-                    onCancel = { viewModel.cancelMaxBasal() }
-                )
-            }
             AfrezzaCartridgeSelector(
                 onCartridgeSelected = { units -> viewModel.selectCartridge(units) },
                 isLogging = uiState.isLogging,
@@ -194,53 +169,6 @@ private fun CartridgeButton(
 }
 
 @Composable
-private fun ActiveMaxBasalCard(
-    rate: Double,
-    remainingMinutes: Int,
-    onCancel: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 24.dp, end = 24.dp, top = 8.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = stringResource(R.string.afrezza_max_basal_active, rate),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-                Text(
-                    text = stringResource(R.string.afrezza_max_basal_remaining, remainingMinutes),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-            }
-            Button(
-                onClick = onCancel,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error,
-                    contentColor = MaterialTheme.colorScheme.onError
-                )
-            ) {
-                Text(stringResource(CoreUiR.string.cancel))
-            }
-        }
-    }
-}
-
-@Composable
 private fun AfrezzaNotConfiguredContent() {
     Card(
         modifier = Modifier
@@ -257,63 +185,6 @@ private fun AfrezzaNotConfiguredContent() {
             color = MaterialTheme.colorScheme.onErrorContainer,
             textAlign = TextAlign.Center
         )
-    }
-}
-
-@Composable
-private fun DurationSelectorDialog(
-    rate: Double,
-    onDurationSelected: (Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = stringResource(R.string.afrezza_max_basal_duration),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = stringResource(R.string.afrezza_max_basal_rate, rate),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    listOf(60, 120, 180).forEach { minutes ->
-                        Button(
-                            onClick = { onDurationSelected(minutes) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(56.dp),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                text = stringResource(CoreUiR.string.format_mins, minutes),
-                                textAlign = TextAlign.Center,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 

@@ -298,3 +298,73 @@ Références PK : Rave et al., *Diabetes Technology & Therapeutics*, 2015 ; noti
 ---
 
 *Document généré pour OpenApsAIMI — juin 2026. À mettre à jour après port effectif ou merge upstream #4877.*
+
+---
+
+## 12. Alignement sur le patch CAPTCG réécrit (2026-08-31)
+
+Référence : [CAPTCG/Afrezza-AAPS-Plugin](https://github.com/CAPTCG/Afrezza-AAPS-Plugin) @ `289c059d0c`,
+patch unique `patches/afrezza-combined.patch`, épinglé sur l'amont `283a184f60`.
+
+**Le patch amont a été entièrement réécrit, ce n'est pas une mise à jour additive.** CAPTCG a remplacé
+la détection par heuristique peak/DIA par un flag persisté `ICfg.isInhaled`, et a **supprimé** au
+passage tout le mécanisme max-basal. Le patch ne s'applique pas : les 38 fichiers modifiant du
+contenu existant échouent, parce que notre arbre contient déjà l'ancien patch CAPTCG. Port à la main.
+
+### Décisions prises (utilisateur, 2026-08-31)
+
+| Décision | Choix | Conséquence |
+|----------|-------|-------------|
+| Conversion dose cartouche → UI | **Adopter `units / 2.0`** (amont) | 4U→2.0, 8U→4.0, 12U→6.0. Voir l'avertissement de sécurité ci-dessous |
+| Fonctionnalité max-basal Afrezza | **Supprimer**, alignement amont | Les utilisateurs qui s'appuyaient sur le plancher de basale post-inhalation le perdent |
+| Refonte `ICfg.isInhaled` | **Non portée** | Nos heuristiques peak+DIA restent en place |
+
+### Modifications
+
+- `AfrezzaDialogViewModel` / `DataHandlerMobile` : `BS.amount` et la valeur `uel` sont désormais
+  divisés par 2. **L'affichage reste en unités cartouche** (boutons 4/8/12, snackbar, message montre).
+  Le divisseur est une constante nommée dans chaque module, avec un commentaire croisé : les deux
+  chemins doivent toujours rester synchronisés.
+- Note du traitement : passée d'une concaténation à la ressource `afrezza_inhaled_cartridge`.
+- Max-basal supprimé : `AfrezzaMaxBasalState.kt` et `AfrezzaMaxBasalConstraints.kt` effacés, appels
+  retirés d'`OpenAPSSMBPlugin` **et** d'`OpenAPSAIMIPlugin`, `DoubleKey.AfrezzaMaxBasalRate` et ses
+  12 chaînes retirées, champs morts nettoyés dans `AfrezzaDialogUiState` / `Screen` / `ViewModel`.
+- `ICfg.looksInhaled()` (nouveau, `:core:objects`) : corrige un bug réel — le bouton Afrezza et
+  `findAfrezzaIcfg()` ne reconnaissaient que le peak d'usine exact (40 min), donc éditer le peak
+  faisait **disparaître** le bouton. Peak **et** DIA doivent concorder ; il n'y a délibérément pas de
+  raccourci « peak exact », sinon une insuline injectée à 40 min de peak serait classée inhalée.
+- Commentaire corrigé dans `ICfg.kt` : il citait `HardLimits.MIN_DIA_INHALED`, symbole qui n'existe
+  pas. La valeur 90.0 min est inchangée (l'amont descend à 30.0 ; hors périmètre).
+- Avertissement ajouté sur `LIMIT_DIA_INHALED` : ce sont les bandes **DIA** qui sont disjointes
+  (plancher injecté 4.0 h vs sommet inhalé 4.0 h), pas les bandes de peak (20..45 chevauche 35..120,
+  donc le Lyumjev à 45 min est dans les deux). Ne jamais décider « inhalé » sur le seul peak.
+
+### Points de sécurité — relecture professionnelle requise
+
+Ce travail est un **brouillon** et doit être relu par un clinicien et un second ingénieur avant
+d'être utilisé en soin. Reprise de l'avertissement amont, sans l'adoucir :
+
+> *« This is an experimental, community-developed modification. It is not approved by any regulatory
+> body. Discuss any changes to your diabetes management with your endocrinologist before use, and
+> always keep fingerstick meter access as a backup. »*
+> *« The IOB curve uses AAPS's existing bilinear oref model with Afrezza-specific peak/DIA
+> parameters, not a distinct pharmacokinetic model. »*
+
+1. **Discontinuité d'IOB non migrée.** Les bolus Afrezza déjà en base gardent l'ancienne convention
+   et ne sont **pas** corrigés rétroactivement. À la bascule, la boucle voit deux fois moins d'IOB
+   après une inhalation qu'avant, et délivrera donc **plus** d'insuline pompe. Le facteur 2.0 repose
+   uniquement sur l'affirmation amont ; il demande une validation clinique.
+2. **Perte du plancher de basale.** La suppression du max-basal retire le seul `setIfGreater` de la
+   chaîne basale (les trois autres sont des planchers `SafetyPlugin` à 0.0). La pause « BG nul »
+   vivait à l'intérieur de cette fonctionnalité et ne protège donc plus rien une fois celle-ci
+   retirée — mais elle ne protégeait que la fonctionnalité elle-même.
+3. **Une clé de préférence orpheline** (`afrezza_max_basal_rate`) subsiste chez les utilisateurs qui
+   avaient réglé une valeur. Sans consommateur, elle est inerte.
+
+### Vérification
+
+`:app:assembleFullDebug` vert ; `InhaledInsulinExtensionTest` 6 tests, 0 échec.
+**`AfrezzaDoseMappingTest` a été écrit mais n'a jamais été exécuté** : les jeux de tests `:ui` et
+`:plugins:sync` sont cassés depuis avant ce travail (`GraphViewModelTest`,
+`RunningModeManagementViewModelTest`, `GarminPluginTest`, `LoopHubTest` — constructeurs obsolètes).
+La conversion de dose n'est donc **pas** couverte par un test exécuté. Comportement runtime non vérifié.

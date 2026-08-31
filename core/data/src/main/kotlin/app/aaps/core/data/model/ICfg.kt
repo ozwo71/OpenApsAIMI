@@ -128,11 +128,15 @@ data class ICfg(
         // (e.g. the v33 migration sentinel -1 before its repair) and are no-ops for all legitimate
         // configs; they are NOT the medical HardLimits.
         //
-        // MIN_DIA_MINUTES mirrors HardLimits.MIN_DIA_INHALED (1.5 h) rather than MIN_DIA (5 h) so
-        // that inhaled insulins like Afrezza — whose published DIA is 1.5-3 h — are modelled
-        // correctly.  The sentinel value is -1 (well below 90 min), so the corruption guard remains
-        // effective.
-        private const val MIN_DIA_MINUTES = 90.0  // 1.5 h = HardLimits.MIN_DIA_INHALED × 60
+        // 90.0 min = 1.5 h is the shortest DIA any real insulin in this fork can have: it is the
+        // bottom of `HardLimits.LIMIT_DIA_INHALED` (1.5..4.0 h for every age type), which inhaled
+        // insulins like Afrezza are validated against. A higher floor (e.g. the 5 h injected-insulin
+        // minimum) would silently stretch a legitimate Afrezza curve. The corruption sentinel is -1,
+        // far below 90, so the guard still catches it.
+        //
+        // `HardLimits` lives in :core:interfaces, which :core:data does not depend on, so the value
+        // is duplicated here on purpose and cannot be imported.
+        private const val MIN_DIA_MINUTES = 90.0  // 1.5 h — bottom of HardLimits.LIMIT_DIA_INHALED
         private const val MIN_PEAK_MINUTES = 1.0  // just keeps tp > 0; real peaks (incl. 30 min) pass through
     }
 }

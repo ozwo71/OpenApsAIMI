@@ -342,17 +342,7 @@
     <string name="afrezza_not_configured">Add Afrezza insulin in Insulin Management first</string>
     <string name="afrezza_confirm_title" comment="Dialog title when confirming an Afrezza cartridge dose">Confirm Afrezza Dose</string>
     <string name="afrezza_select_dose" comment="Title for the Afrezza cartridge picker">Select Afrezza Dose</string>
-    <string name="afrezza_max_basal_title" comment="Prompt after logging Afrezza: offer temporary elevated basal">Apply Max Basal?</string>
-    <string name="afrezza_max_basal_message" comment="%1$s=basal rate in U/h. Example: Set temporary basal rate to 2.0 U/h to counter Afrezza glucose rise?">Set temporary basal rate to %1$.1f U/h to counter Afrezza glucose rise?</string>
-    <string name="afrezza_max_basal_duration" comment="Title for duration picker after accepting max basal">Select Duration</string>
-    <string name="afrezza_max_basal_rate" comment="%1$s=basal rate in U/h. Example: Max basal: 2.0 U/h">Max basal: %1$.1f U/h</string>
-    <string name="afrezza_max_basal_set" comment="%1$s=rate U/h, %2$d=duration minutes. Example: Max basal 2.0 U/h set for 120 minutes">Max basal %1$.1f U/h set for %2$d minutes</string>
-    <string name="afrezza_max_basal_failed" comment="Shown when temp basal command fails after Afrezza dose">Failed to set max basal</string>
-    <string name="afrezza_max_basal_cancelled" comment="Shown when user cancels active Afrezza max basal">Afrezza max basal cancelled</string>
-    <string name="afrezza_max_basal_active" comment="%1$s=rate U/h. Example: Max basal active: 2.0 U/h">Max basal active: %1$.1f U/h</string>
-    <string name="afrezza_max_basal_remaining" comment="%1$d=minutes left. Example: 45 min remaining">%1$d min remaining</string>
     <string name="afrezza_carb_prompt_title" comment="After Afrezza dose flow: offer bolus wizard for carbs">Enter Carbs?</string>
     <string name="afrezza_carb_prompt_message" comment="Message for carb prompt after Afrezza logging">Open the Bolus Calculator to enter carbs for this meal?</string>
-    <string name="afrezza_no_profile" comment="Cannot set temp basal without an active profile">No active profile — cannot set temp basal</string>
 
 </resources>

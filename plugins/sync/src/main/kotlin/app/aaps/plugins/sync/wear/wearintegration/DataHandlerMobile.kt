@@ -116,10 +116,17 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
 import kotlin.math.min
+import app.aaps.core.ui.R as CoreUiR
 
 // Quiet-period that closes a Wear-event batch. Long enough to absorb a Data Layer reconnect-flush,
 // short enough that live data stays effectively real-time.
 private const val HEALTH_EVENT_QUIET_PERIOD_MS = 500L
+
+// Afrezza cartridges are labelled in inhaled units, not IU. Divide by this to get the
+// U100-equivalent IU that AAPS stores and uses for IOB: 4U -> 2.0, 8U -> 4.0, 12U -> 6.0.
+// The phone path keeps its own copy in AfrezzaDialogViewModel.AFREZZA_UNITS_PER_IU
+// (:plugins:sync does not depend on :ui). Keep BOTH copies in sync.
+private const val AFREZZA_UNITS_PER_IU = 2.0
 
 @Singleton
 class DataHandlerMobile @Inject constructor(
@@ -825,11 +832,16 @@ class DataHandlerMobile @Inject constructor(
             return
         }
         val now = dateUtil.now()
+        // Mirror the phone path (AfrezzaDialogViewModel.confirmAndLog): Afrezza inhaled cartridges
+        // are stored as U100-equivalent IU. cartridge units / 2.0  ->  4U->2.0, 8U->4.0, 12U->6.0.
+        // Keep BOTH paths in sync: if you change the divisor here, change confirmAndLog too.
+        val effectiveAmount = units.toDouble() / AFREZZA_UNITS_PER_IU
+        val logNote = rh.gs(CoreUiR.string.afrezza_inhaled_cartridge, units)
         val bolus = BS(
             timestamp = now,
-            amount = units.toDouble(),
+            amount = effectiveAmount,
             type = BS.Type.NORMAL,
-            notes = "Afrezza inhaled",
+            notes = logNote,
             iCfg = afrezzaIcfg,
             ids = IDs(pumpId = now)
         )
@@ -837,14 +849,14 @@ class DataHandlerMobile @Inject constructor(
             bolus = bolus,
             action = Action.BOLUS,
             source = Sources.Wear,
-            note = "Afrezza inhaled"
+            note = logNote
         )
         uel.log(
             action = Action.BOLUS, source = Sources.Wear,
-            "Afrezza inhaled",
-            ValueWithUnit.Insulin(units.toDouble())
+            logNote,
+            ValueWithUnit.Insulin(effectiveAmount)
         )
-        aapsLogger.info(LTag.WEAR, "Afrezza ${units}U logged via Wear with ICfg: ${afrezzaIcfg.insulinLabel}")
+        aapsLogger.info(LTag.WEAR, "Afrezza cartridge ${units}U logged via Wear as ${effectiveAmount}U with ICfg: ${afrezzaIcfg.insulinLabel}")
     }
 
     internal suspend fun handleECarbsPreCheck(command: EventData.ActionECarbsPreCheck) {

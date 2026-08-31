@@ -10,7 +10,6 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.insulin.InsulinManager
-import app.aaps.core.interfaces.insulin.InsulinType
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -25,6 +24,7 @@ import app.aaps.core.interfaces.source.DexcomBoyda
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.objects.constraints.ConstraintObject
+import app.aaps.core.objects.extensions.looksInhaled
 import app.aaps.core.objects.wizard.QuickWizard
 import app.aaps.core.objects.wizard.QuickWizardEntry
 import app.aaps.core.objects.wizard.QuickWizardMode
@@ -105,10 +105,10 @@ class TreatmentViewModel @Inject constructor(
             val showInsulin = preferences.get(BooleanKey.OverviewShowInsulinButton)
             val showCarbs = preferences.get(BooleanKey.OverviewShowCarbsButton)
             val showCalculator = preferences.get(BooleanKey.OverviewShowWizardButton)
-            // Show Afrezza button if user has configured an inhaled insulin
-            val showAfrezza = insulinManager.insulins.any {
-                InsulinType.fromPeak(it.insulinPeakTime).isInhaled
-            }
+            // Show the Afrezza button when the user has an inhaled insulin configured. Peak alone
+            // is not enough: an edited Afrezza peak no longer matches the template exactly, so use
+            // the shared peak+DIA heuristic.
+            val showAfrezza = insulinManager.insulins.any { it.looksInhaled() }
 
             val showSettingsIcon = !preferences.simpleMode
 
