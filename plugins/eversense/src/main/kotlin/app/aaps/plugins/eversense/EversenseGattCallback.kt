@@ -29,6 +29,7 @@ import app.aaps.plugins.eversense.util.EversenseLogger
 import app.aaps.plugins.eversense.util.StorageKeys
 import java.util.UUID
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.jvm.Throws
@@ -59,6 +60,14 @@ class EversenseGattCallback(
         // A value of 3 allows transient glitches to recover without internet, while still
         // falling back to full auth after sustained failures.
         private const val SHORTCUT_FAIL_THRESHOLD = 3
+
+        // Number of failed full-auth attempts (WhoAmI + DMS login + fleet cert) in a row before
+        // we try the shortcut again. Once the shortcut is turned off, every connect needs the
+        // internet. If the DMS server is unreachable, or a write in this longer sequence times
+        // out, there used to be no way back and the app retried the same broken path forever,
+        // even though the shortcut credentials were never proven bad. Letting the two paths
+        // take turns means the one that works is tried again within at most 3 attempts.
+        private const val FULL_AUTH_FAIL_THRESHOLD = 3
     }
 
     // FIX 1: Dedicated BLE executor for callbacks; separate network executor for HTTP calls
@@ -95,6 +104,15 @@ class EversenseGattCallback(
     @Volatile
     private var connected: Boolean = false
     private var transmitterReady: Boolean = false
+
+    // Set while cleanUp() runs, so a write that starts (or is already waiting) during a GATT
+    // teardown fails cleanly instead of falling through to parseResponse() on a packet that
+    // never got a real response. Mirrors the isCleaningUp guard in EversenseKit's
+    // PeripheralManager.swift (loopandlearn's reference iOS implementation), adapted because
+    // this class is long-lived and reused, so the flag is reset at the end of cleanUp()
+    // instead of being one-way.
+    @Volatile
+    private var isCleaningUp: Boolean = false
 
     // Tracks consecutive status-19 failures to detect transmitter placement issues
     @Volatile
@@ -135,6 +153,11 @@ class EversenseGattCallback(
     @Volatile
     private var shortcutFailCount: Int = 0
 
+    // Counts failed authV2flow attempts in a row while the shortcut is turned off, so every
+    // attempt needs a full WhoAmI + DMS login + fleet cert handshake. See FULL_AUTH_FAIL_THRESHOLD.
+    @Volatile
+    private var fullAuthFailCount: Int = 0
+
     fun isConnected(): Boolean = connected && transmitterReady
     fun isBleConnected(): Boolean = connected
     fun is365(): Boolean = security == EversenseSecurityType.SecureV2
@@ -142,7 +165,10 @@ class EversenseGattCallback(
     // Submit a task to the bleExecutor and return a Future so callers can block until complete.
     // This ensures calibration and other ad-hoc BLE operations are serialised with Keep Alive
     // cycles and do not race with currentPacket assignment.
-    fun submitToExecutor(task: () -> Unit): java.util.concurrent.Future<*> =
+    // NOTE: bleExecutor has a single thread. A caller that already runs on that thread must
+    // never submit a task and then wait for it — the new task cannot start until the caller
+    // returns. Such callers must do the work directly instead.
+    fun <R> submitToExecutor(task: () -> R): Future<R> =
         bleExecutor.submit(task)
 
     // FIX 4: Added disconnect() which calls both disconnect() and close() on the GATT client.
@@ -179,14 +205,23 @@ class EversenseGattCallback(
 
     @SuppressLint("MissingPermission")
     fun cleanUp() {
-        bluetoothGatt?.disconnect()
-        bluetoothGatt?.close()
-        bluetoothGatt = null
-        connected = false
-        transmitterReady = false
-        resetChunkAccumulator()
-        bleExecutor.shutdownNow()
-        bleExecutor = Executors.newSingleThreadExecutor()
+        isCleaningUp = true
+        // finally, not a plain assignment at the end: disconnect() and close() throw
+        // SecurityException if BLUETOOTH_CONNECT is revoked while the app runs. Without the
+        // finally the flag would stay true and every later writePacket would be rejected for
+        // the rest of the process life.
+        try {
+            bluetoothGatt?.disconnect()
+            bluetoothGatt?.close()
+            bluetoothGatt = null
+            connected = false
+            transmitterReady = false
+            resetChunkAccumulator()
+            bleExecutor.shutdownNow()
+            bleExecutor = Executors.newSingleThreadExecutor()
+        } finally {
+            isCleaningUp = false
+        }
         EversenseLogger.info(TAG, "GATT cleaned up before reconnect")
     }
 
@@ -591,6 +626,8 @@ class EversenseGattCallback(
     @OptIn(ExperimentalStdlibApi::class)
     @Throws(EversenseWriteException::class)
     fun <T : EversenseBasePacket.Response> writePacket(packet: EversenseBasePacket, timeoutMs: Long = WRITE_TIMEOUT_MS): T {
+        if (isCleaningUp) throw EversenseWriteException("GATT is being cleaned up — write rejected")
+
         val gatt = bluetoothGatt ?: throw EversenseWriteException("Gatt is null — not connected")
 
         val requestCharacteristic = requestCharacteristic
@@ -625,6 +662,13 @@ class EversenseGattCallback(
                 }
             } catch (e: EversenseWriteException) {
                 throw e
+            } catch (e: InterruptedException) {
+                // This only happens when cleanUp()'s bleExecutor.shutdownNow() interrupts the wait
+                // in the middle of a write. The GATT is already being torn down, so no response is
+                // coming. Reject here instead of falling through to parseResponse() on a packet
+                // that was never filled in.
+                currentPacket.set(null)
+                throw EversenseWriteException("Write interrupted — GATT is being cleaned up: $e")
             } catch (e: Exception) {
                 EversenseLogger.error(TAG, "Exception during packet wait: $e")
                 e.printStackTrace()
@@ -736,8 +780,9 @@ val authSession = networkExecutor.submit<Any?> {
             val session = writePacket<AuthStartPacket.Response>(AuthStartPacket(cryptoUtil.getStartSecret(signature)))
             cryptoUtil.generateSessionKey(session.sessionPublicKey)
 
-            // Auth succeeded — reset the shortcut fail counter
+            // Auth succeeded — reset both fail counters
             shortcutFailCount = 0
+            fullAuthFailCount = 0
 
             EversenseLogger.info(TAG, "365 auth complete — ready for full sync")
             Eversense365Communicator.fullSync(this, preferences, plugin.watchers, force = true)
@@ -756,18 +801,36 @@ EversenseLogger.info(TAG, "365 transmitter ready — notifying watchers")
             EversenseLogger.error(TAG, "[365] authV2 failed: $exception")
             exception.printStackTrace()
 
-            // After first successful auth, never call DMS server again.
-            // DMS login only happens on fresh install, app update, or phone reboot
-            // (all of which clear SharedPreferences and reset canUseShortcut to false).
-            // On shortcut failure just log and retry — do NOT fall back to DMS.
+            // Do not call the DMS server on every reconnect. One failed shortcut attempt is
+            // usually just a dropped BLE write, and the next connect will simply try the
+            // shortcut again. But if the transmitter really does not accept our stored shortcut
+            // credentials any more (seen in the field: AuthStart answered with a WhoAmI-shaped
+            // response every time), retrying the same shortcut never recovers. Only a fresh
+            // WhoAmI + DMS login + fleet certificate handshake can. Force that after
+            // SHORTCUT_FAIL_THRESHOLD failures in a row confirm it is not a one-off glitch.
             if (cryptoUtil.canUseShortcut()) {
                 shortcutFailCount++
-                EversenseLogger.warning(TAG, "Shortcut auth failed () — will retry shortcut on next connect (no DMS re-auth)")
-                // Reset counter after threshold but keep canUseShortcut=true
-                // so DMS is never called again after first successful auth
                 if (shortcutFailCount >= SHORTCUT_FAIL_THRESHOLD) {
-                    EversenseLogger.warning(TAG, "Shortcut fail threshold reached — resetting counter, keeping shortcut enabled")
+                    EversenseLogger.warning(TAG, "Shortcut fail threshold reached — forcing full re-auth (WhoAmI + DMS login) on next connect")
                     shortcutFailCount = 0
+                    cryptoUtil.disallowUseShortcut()
+                } else {
+                    EversenseLogger.warning(TAG, "Shortcut auth failed ($shortcutFailCount/$SHORTCUT_FAIL_THRESHOLD) — will retry shortcut on next connect (no DMS re-auth)")
+                }
+            } else {
+                // The shortcut is off, so this failure happened somewhere in the required
+                // WhoAmI + DMS login + fleet cert sequence. It could be the DMS server or the
+                // network (seen in the field: SocketTimeoutException again and again), or just a
+                // write that timed out. Neither says the shortcut credentials are bad. Do not
+                // stay locked to a path that needs the internet when that path is the broken
+                // one: after enough failures in a row, try the shortcut again.
+                fullAuthFailCount++
+                if (fullAuthFailCount >= FULL_AUTH_FAIL_THRESHOLD) {
+                    EversenseLogger.warning(TAG, "Full-auth fail threshold reached — re-enabling shortcut for next connect")
+                    fullAuthFailCount = 0
+                    cryptoUtil.allowUseShortcut()
+                } else {
+                    EversenseLogger.warning(TAG, "Full re-auth failed ($fullAuthFailCount/$FULL_AUTH_FAIL_THRESHOLD) — will retry full re-auth on next connect")
                 }
             }
         bluetoothGatt?.disconnect()

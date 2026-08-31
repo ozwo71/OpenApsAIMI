@@ -54,7 +54,9 @@ class GetGlucoseLogValuesPacket(
             val trend = getTrend(chunk[offsetTrend].toInt() and 0xFF)
             i += recordLength
 
-            if (glucose >= 0x03E8) {
+            // Same safety ceiling as the real-time 365 path, see GetGlucoseDataPacket.
+            // Was 0x03E8 (1000), the old EversenseKit value.
+            if (glucose >= GetGlucoseDataPacket.GLUCOSE_CEILING_MG_DL) {
                 EversenseLogger.warning("GetGlucoseLogValuesPacket", "Glucose exceeds limits: $glucose — skipping")
                 continue
             }

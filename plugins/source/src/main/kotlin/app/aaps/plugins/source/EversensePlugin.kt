@@ -391,7 +391,8 @@ class EversensePlugin @Inject constructor(
             setBatteryLowDismissed()
             notificationManager.post(
                 NotificationId.EVERSENSE_ALARM,
-                "Eversense transmitter battery low: ${state.batteryPercentage}% — please charge your transmitter.",
+                R.string.eversense_battery_low,
+                state.batteryPercentage,
                 level = NotificationLevel.NORMAL
             )
         }

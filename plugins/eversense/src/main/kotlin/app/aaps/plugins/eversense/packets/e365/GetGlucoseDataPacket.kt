@@ -50,9 +50,19 @@ class GetGlucoseDataPacket(private val sensorIdLen: Int) : EversenseBasePacket()
             .toByteArray().joinToString("") { "%02x".format(it) }
         val rawHex = receivedData.toByteArray().joinToString("") { "%02x".format(it) }
 
+        val glucoseInMgDl = receivedData.copyOfRange(20 + sensorIdLen, 22 + sensorIdLen).toInt()
+        // Drop readings we cannot trust before they reach the state. The ceiling matches
+        // EversenseKit (loopandlearn/bastiaanv), the reference iOS build this port follows,
+        // which lowered it from 1000 to 450 mg/dL. A dropped reading is never replaced by a
+        // substitute value: parseResponse returns null and the caller gets an error instead.
+        if (glucoseInMgDl >= GLUCOSE_CEILING_MG_DL) {
+            EversenseLogger.warning("GetGlucoseDataPacket", "Glucose exceeds safety limits: $glucoseInMgDl — rejecting")
+            return null
+        }
+
         return Response(
             datetime = receivedData.copyOfRange(12 + sensorIdLen, 20 + sensorIdLen).toUnix(),
-            glucoseInMgDl = receivedData.copyOfRange(20 + sensorIdLen, 22 + sensorIdLen).toInt(),
+            glucoseInMgDl = glucoseInMgDl,
             trend = getTrend(receivedData[164 + sensorIdLen].toInt()),
             signalStrength = signalRaw,
             sensorId = sensorId,
@@ -81,4 +91,11 @@ class GetGlucoseDataPacket(private val sensorIdLen: Int) : EversenseBasePacket()
         val sensorId: String = "",
         val rawResponseHex: String = ""
     ) : EversenseBasePacket.Response()
+
+    companion object {
+
+        // Safety ceiling for a 365 glucose reading, in mg/dL. Values at or above this are
+        // dropped. Matches EversenseKit, the reference iOS implementation.
+        const val GLUCOSE_CEILING_MG_DL = 450
+    }
 }

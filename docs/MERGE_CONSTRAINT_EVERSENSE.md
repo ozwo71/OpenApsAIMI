@@ -368,3 +368,49 @@ If Nightscout `dev` eventually contains Eversense:
 ## Escalation
 
 If conflicts are unsolvable without architectural change: stop merge, document file list + `git log --merge`, and decide explicitly whether to **defer** Eversense to a follow-up branch rather than shipping a broken half-merge.
+
+### CAPTCG sync 2026-08-31 (battery + BLE robustness)
+
+Reference: [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS-Eversense-) master @ `fc1ae8c8f2`.
+Merge base with this fork is upstream `7fc8205e9a`, so every Eversense difference in that range is
+CAPTCG's own work. Ported by hand — CAPTCG is Hilt-based with a non-nullable `gattCallback`, our
+`EversenseCGMPlugin` is a singleton with nullable fields, so `git apply` is not usable.
+
+**Ported:**
+
+| Change | File | Notes |
+|--------|------|--------|
+| E3 battery mapped once | `packets/e3/GetBatteryPercentagePacket.kt`, `packets/EversenseE3Communicator.kt` | **Fork bug, not an upstream feature.** Both the packet and the communicator mapped the 0–11 index to a percentage, so raw 1 became 45 % and raw 2 became 95 %. `EversensePlugin`'s `batteryPercentage in 1..10` low-battery notification was therefore unreachable. `BatteryLevel` is now the single mapping table |
+| Bad battery byte no longer reads as full | `packets/e3/GetBatteryPercentagePacket.kt` | `coerceIn(0, 11)` turned a corrupt `0xFF` into 100 %. Now reports `-1` (unknown), already handled downstream |
+| Battery / sensor-read push triggers a sync | `packets/e3/EversenseE3Packets.kt` | `TransmitterBatteryPush` (0x47) and `SensorReadAlertPush` (0x49) added to `isPushPacket`; both constants existed but were unused, so battery state waited up to 100 s for KeepAlive |
+| `isCleaningUp` guard | `EversenseGattCallback.kt` | A write racing a GATT teardown fails cleanly instead of parsing a packet that never got a response. Flag is reset in a `finally` so a revoked `BLUETOOTH_CONNECT` cannot wedge it permanently |
+| Serialized diagnostic mode / signal strength | `EversenseGattCallback.kt`, `EversenseCGMPlugin.kt` | Generic `submitToExecutor<R>`. **We do not copy CAPTCG's shape**: theirs submits to the single-thread `bleExecutor` from inside that same executor and blocks, so diagnostic mode is never re-enabled after a reconnect. Split into `writeDiagnosticMode` / `setDiagnosticModeOnExecutor` |
+| Shortcut-auth fallback | `EversenseGattCallback.kt` | Combined end state of `16146d76bd` + `355ec2b55c` only. The first commit alone deadlocks on a broken network; never port it on its own |
+| Status screen live refresh | `activities/EversenseStatusActivity.kt` | Rewrite, not a patch: ours did not implement `EversenseWatcher` at all. `onResume` / `onPause`, refreshes on `onTransmitterReady` so the screen stops showing the red cross while auth completes |
+| Eversense log in the log export | `util/EversenseLogger.kt`, `implementation/.../MaintenanceImpl.kt` | Path is ours, not CAPTCG's: their hardcoded `/sdcard/AndroidAPS/eversense` fails on Android 11+, and the old `/data/data/info.nightscout.androidaps/eversense` was wrong for the four client flavours |
+| 365 glucose ceiling 450 mg/dL | `packets/e365/GetGlucoseDataPacket.kt`, `GetGlucoseLogValuesPacket.kt` | Replaces the old 1000 ceiling; the dead `> 1000` checks in both communicators are removed. Rejection happens before the `Response` is built, so a dropped reading can never surface as a low value |
+
+**Deferred — needs a real transmitter, do not port blind:**
+
+- E3 register addresses (`EversenseE3Memory.kt`): ours `BatteryPercentage` 0x040B, CAPTCG 0x0406;
+  `CalibrationReadiness`, `MmaFeatures` and `SensorFieldCurrentRaw` also differ. **CAPTCG's table
+  contradicts CAPTCG's own doc comment**, so neither side is proven. A wrong register returns a
+  plausible wrong value, not an error. Capture `"Battery raw register value: …"` from a live E3 first.
+- `GetSignalStrengthRawPacket` threshold mapping — depends on the unresolved register above.
+- `CalibrationReadiness.from365()` forcing READY — interacts with our readiness-gated calibration
+  button; if `receivedData[3]` is non-zero in the field, 365 users may not be able to calibrate today.
+- `CalibrationPhase.fromE3` and `GetCalibrationDailyPacket` — ours are unit-test-locked, CAPTCG's
+  evidence is a decompiled APK, unreconciled.
+- DMS `dmsCode` / `buildAlertBytes` / `buildMgBytes`, Hilt DI refactor, `@IntKey(575)`, sync-days
+  spinner, `SetBloodGlucosePointPacket` (dead code, CAPTCG marks it untested), i18n string extraction.
+
+**Fork kept (verified untouched):** calibration readiness UI, `BooleanKey.EversenseCloudUploadToast`,
+`@IntKey(445)` with ONE+ @446 / Libre3 @447 / Ottai @475, `RECEIVER_NOT_EXPORTED` on the Bluetooth
+receiver, the `rawData.size < 3` chunk guard, `reconnectRunnable` + `removeCallbacks`, EU DMS
+`ousiamapialpha` endpoints, the `EversenseAbout` AppCompat dialog, notification-reader v3.
+
+**Verified:** `:app:assembleFullDebug` green; `:plugins:eversense:testFullDebugUnitTest` 66 tests,
+0 failures, including 13 new tests for the battery mapping and the push-packet set.
+**Not verified — needs hardware:** every runtime behaviour (E3 battery values, the 0x47/0x49 push
+branch, diagnostic-mode timing, 365 shortcut/full-auth alternation, status-screen refresh, the log
+file actually appearing under the external files directory, the 450 ceiling on a live 365).

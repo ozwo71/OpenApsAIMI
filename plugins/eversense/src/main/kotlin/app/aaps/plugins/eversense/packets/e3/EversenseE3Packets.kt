@@ -111,10 +111,15 @@ class EversenseE3Packets {
             // GlucoseLevelAlarmPush (0x40), GlucoseLevelAlertPush (0x41),
             // RateAndPredictiveAlertPush (0x42) are glucose push notifications
             // that the transmitter sends unsolicited after calibration or alarm events.
+            // TransmitterBatteryPush (0x47) and SensorReadAlertPush (0x49) are push packets too.
+            // Without them we would wait up to 100s for the next KeepAlive instead of reacting
+            // to the real-time push right away.
             return data == KeepAlivePush ||
                 data == GlucoseLevelAlarmPush ||
                 data == GlucoseLevelAlertPush ||
-                data == RateAndPredictiveAlertPush
+                data == RateAndPredictiveAlertPush ||
+                data == TransmitterBatteryPush ||
+                data == SensorReadAlertPush
         }
 
         fun isErrorPacket(data: Byte): Boolean {

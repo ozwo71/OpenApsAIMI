@@ -391,6 +391,7 @@
     <string name="eversense_information_title">Information</string>
     <string name="eversense_information_connected">Connected</string>
     <string name="eversense_information_battery">Battery percentage</string>
+    <string name="eversense_battery_low" comment="%1$d = transmitter battery level in percent. Example: 5">Eversense transmitter battery is low (%1$d%%). Please charge your transmitter.</string>
     <string name="eversense_information_insertion_date">Insertion date</string>
     <string name="eversense_information_last_sync">Last synchronisation</string>
     <string name="eversense_calibration_title">Calibration</string>

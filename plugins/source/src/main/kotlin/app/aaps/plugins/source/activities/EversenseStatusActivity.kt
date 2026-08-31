@@ -14,7 +14,11 @@ import dagger.hilt.android.AndroidEntryPoint
 import app.aaps.plugins.source.R
 import app.aaps.plugins.eversense.EversenseCGMPlugin
 import app.aaps.plugins.eversense.callbacks.EversenseScanCallback
+import app.aaps.plugins.eversense.callbacks.EversenseWatcher
+import app.aaps.plugins.eversense.enums.EversenseType
+import app.aaps.plugins.eversense.models.EversenseCGMResult
 import app.aaps.plugins.eversense.models.EversenseScanResult
+import app.aaps.plugins.eversense.models.EversenseState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -24,7 +28,7 @@ import java.util.Date
 import java.util.Locale
 
 @AndroidEntryPoint
-class EversenseStatusActivity : AppCompatActivity() {
+class EversenseStatusActivity : AppCompatActivity(), EversenseWatcher {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -53,6 +57,39 @@ class EversenseStatusActivity : AppCompatActivity() {
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        // Safe to call every time: addWatcher() skips a watcher that is already in the list.
+        eversense.addWatcher(this)
+        // Pick up anything that changed while this screen was not visible.
+        updateStatus()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        eversense.removeWatcher(this)
+    }
+
+    // EversenseWatcher: redraw as soon as the link, the auth handshake or the state changes.
+    override fun onConnectionChanged(connected: Boolean) {
+        mainHandler.post { updateStatus() }
+    }
+
+    override fun onStateChanged(state: EversenseState) {
+        mainHandler.post { updateStatus() }
+    }
+
+    // isConnected() is "BLE link up AND transmitter ready", two separate flags.
+    // onConnectionChanged(true) fires as soon as the raw BLE link comes up, while the auth
+    // handshake is still running, so isConnected() is still false and the screen draws the red
+    // cross. The second flag flips later, and that moment is reported through onTransmitterReady()
+    // only. Without a refresh here the screen keeps showing the red cross until it is reopened.
+    override fun onTransmitterReady() {
+        mainHandler.post { updateStatus() }
+    }
+
+    override fun onCGMRead(type: EversenseType, readings: List<EversenseCGMResult>) {}
 
     private fun updateStatus() {
         val state = eversense.getCurrentState()

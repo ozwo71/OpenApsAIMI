@@ -91,11 +91,6 @@ class EversenseE3Communicator {
                     return
                 }
 
-                if (glucoseData.glucoseInMgDl > 1000) {
-                    EversenseLogger.error(TAG, "recentGlucose exceeds range - received: ${glucoseData.glucoseInMgDl}")
-                    return
-                }
-
                 var currentGlucose = glucoseData.glucoseInMgDl
 
                 val result = mutableListOf<EversenseCGMResult>()
@@ -166,28 +161,14 @@ class EversenseE3Communicator {
                     gatt.writePacket<SetCurrentDatetimePacket.Response>(SetCurrentDatetimePacket())
                 }
 
-                // The E3 battery register returns an enum index (0-11) mapped to display percentages.
-                // Mapping sourced from official Eversense app BATTERY_LEVEL enum (fromStrength).
+                // The E3 battery register holds an index 0..11. GetBatteryPercentagePacket turns
+                // that index into a percentage (see BatteryLevel), so do not map it again here.
                 try {
                     EversenseLogger.debug(TAG, "Reading battery percentage...")
-                    val batteryRaw = gatt.writePacket<GetBatteryPercentagePacket.Response>(GetBatteryPercentagePacket())
-                    EversenseLogger.info(TAG, "Battery raw register value: ${batteryRaw.percentage}")
-                    state.batteryPercentage = when (batteryRaw.percentage) {
-                        0  -> 0
-                        1  -> 5
-                        2  -> 10
-                        3  -> 25
-                        4  -> 35
-                        5  -> 45
-                        6  -> 55
-                        7  -> 65
-                        8  -> 75
-                        9  -> 85
-                        10 -> 95
-                        11 -> 100
-                        else -> batteryRaw.percentage
-                    }
-                    EversenseLogger.info(TAG, "Battery percentage mapped: ${state.batteryPercentage}%")
+                    val battery = gatt.writePacket<GetBatteryPercentagePacket.Response>(GetBatteryPercentagePacket())
+                    EversenseLogger.info(TAG, "Battery raw register value: ${battery.rawLevel}")
+                    state.batteryPercentage = battery.percentage
+                    EversenseLogger.info(TAG, "Battery percentage: ${state.batteryPercentage}%")
                 } catch (e: Exception) {
                     EversenseLogger.warning(TAG, "Battery read failed (non-fatal): $e")
                 }
