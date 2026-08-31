@@ -1,5 +1,6 @@
 package app.aaps.implementation.alerts
 
+import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.time.T
 import app.aaps.core.data.ue.Action
@@ -9,6 +10,7 @@ import app.aaps.core.interfaces.alerts.LocalAlertUtils
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.di.ApplicationScope
+import app.aaps.core.interfaces.glucose.GlucoseCorrection
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.NotificationAction
@@ -49,6 +51,7 @@ class LocalAlertUtilsImpl @Inject constructor(
     private val persistenceLayer: PersistenceLayer,
     private val dateUtil: DateUtil,
     private val notificationManager: NotificationManager,
+    private val glucoseCorrection: GlucoseCorrection,
     @ApplicationScope private val appScope: CoroutineScope
 ) : LocalAlertUtils {
 
@@ -168,15 +171,27 @@ class LocalAlertUtilsImpl @Inject constructor(
      */
     private fun thresholdMgdl(key: UnitDoubleKey): Double = preferences.getRaw(key)
 
+    /**
+     * Value the app shows for a stored reading.
+     *
+     * MUST go through [GlucoseCorrection]: the alarms used to compare the plain sensor value from the
+     * database, while the dashboard, the widget, the watch and the loop all work on the calibrated and
+     * smoothed value. So the alarm could announce "Low glucose: 56" while the screen was showing 65.
+     * On `null` (no corrected series yet, or a correction that failed its plausibility check) the
+     * stored value is kept, so a broken correction can never silence a real alarm.
+     */
+    private fun shownValue(gv: GV): Double = glucoseCorrection.correctedMgdl(gv.timestamp, gv.value) ?: gv.value
+
     override suspend fun checkGlucoseAlerts() {
         val last = persistenceLayer.getLastGlucoseValue() ?: return
         val now = dateUtil.now()
         // Freshness guard: never alarm on stale data — the stale-data alarm owns that case.
         if (last.timestamp + missedReadingsThreshold() < now) return
 
-        checkHypoAlert(last.value, now)
-        checkHyperAlert(last.value, now)
-        checkRapidFallAlert(last.value, now)
+        val bgMgdl = shownValue(last)
+        checkHypoAlert(bgMgdl, now)
+        checkHyperAlert(bgMgdl, now)
+        checkRapidFallAlert(now)
     }
 
     private fun checkHypoAlert(bgMgdl: Double, now: Long) {
@@ -233,13 +248,16 @@ class LocalAlertUtilsImpl @Inject constructor(
         }
     }
 
-    private suspend fun checkRapidFallAlert(bgMgdl: Double, now: Long) {
+    private suspend fun checkRapidFallAlert(now: Long) {
         if (!preferences.get(BooleanKey.AlertRapidFall)) return
         val windowMinutes = preferences.get(IntKey.AlertRapidFallWindow)
         val readings = persistenceLayer.getBgReadingsDataFromTime(now - T.mins(windowMinutes.toLong()).msecs(), ascending = true)
         // Need at least two readings spanning the window; otherwise a data gap makes the slope meaningless.
+        // The gap check reads the stored readings on purpose: the corrected series fills every five
+        // minute slot, so it has no gap left to find. Only the values are taken from the corrected
+        // series, so the drop matches the curve the user sees and single noisy readings cannot fake one.
         if (readings.size < 2) return
-        val drop = readings.first().value - readings.last().value
+        val drop = shownValue(readings.first()) - shownValue(readings.last())
         val dropThreshold = thresholdMgdl(UnitDoubleKey.AlertRapidFallDrop)
         if (drop >= dropThreshold) {
             if (preferences.get(LocalAlertLongKey.NextRapidFallAlarm) < now) {

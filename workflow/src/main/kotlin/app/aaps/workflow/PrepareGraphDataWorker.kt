@@ -49,6 +49,7 @@ import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventAutosensCalculationFinished
 import app.aaps.core.interfaces.rx.events.EventBucketedDataCreated
 import app.aaps.core.interfaces.smoothing.SmoothingContext
+import app.aaps.core.interfaces.source.NSClientSource
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
@@ -176,7 +177,12 @@ class PrepareGraphDataWorker @AssistedInject constructor(
         val workingCopy: MutableList<InMemoryGlucoseValue> = synchronized(dataLock) {
             bucketedData?.map { it.copy(smoothed = null, calibrated = null) }?.toMutableList()
         } ?: return
-        val calibrated = activePlugin.activeCalibration.calibrate(workingCopy, CalibrationContext.NONE)
+        // Never calibrate glucose that arrived from Nightscout. A follower does not own the sensor, and
+        // the master already sends the corrected value, so fitting again here would correct it twice.
+        // Smoothing still runs: it is a local filter, not a per sensor correction.
+        val calibrated =
+            if (activePlugin.activeBgSource is NSClientSource) workingCopy
+            else activePlugin.activeCalibration.calibrate(workingCopy, CalibrationContext.NONE)
         val smoothed = activePlugin.activeSmoothing.smooth(calibrated, smoothingContext)
         synchronized(dataLock) {
             bucketedData = smoothed

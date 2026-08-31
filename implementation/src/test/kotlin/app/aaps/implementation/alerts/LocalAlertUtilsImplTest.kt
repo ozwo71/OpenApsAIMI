@@ -7,6 +7,7 @@ import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.glucose.GlucoseCorrection
 import app.aaps.core.interfaces.notifications.AlarmAction
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationManager
@@ -50,6 +51,7 @@ class LocalAlertUtilsImplTest : TestBase() {
     @Mock lateinit var persistenceLayer: PersistenceLayer
     @Mock lateinit var dateUtil: DateUtil
     @Mock lateinit var notificationManager: NotificationManager
+    @Mock lateinit var glucoseCorrection: GlucoseCorrection
     @Mock lateinit var pump: PumpWithConcentration
     @Mock lateinit var pumpDescription: PumpDescription
 
@@ -91,9 +93,13 @@ class LocalAlertUtilsImplTest : TestBase() {
             persistenceLayer,
             dateUtil,
             notificationManager,
+            glucoseCorrection,
             testScope
         )
         whenever(dateUtil.now()).thenReturn(now)
+        // Mockito answers 0.0 for a Double returning call, which would look like a hypo to every
+        // alarm. Default to "no corrected value available" so each test states its own correction.
+        whenever(glucoseCorrection.correctedMgdl(any(), any())).thenReturn(null)
         whenever(activePlugin.activePump).thenReturn(pump)
         whenever(pump.pumpDescription).thenReturn(pumpDescription)
         whenever(pumpDescription.hasCustomUnreachableAlertCheck).thenReturn(false)
@@ -344,6 +350,34 @@ class LocalAlertUtilsImplTest : TestBase() {
         freshLast(68.0)
         whenever(preferences.get(BooleanKey.AlertHypo)).thenReturn(true)
         whenever(preferences.getRaw(UnitDoubleKey.AlertHypoThreshold)).thenReturn(70.0)
+        whenever(preferences.get(LocalAlertLongKey.NextHypoAlarm)).thenReturn(now - 1)
+
+        localAlertUtils.checkGlucoseAlerts()
+
+        verify(preferences).put(LocalAlertLongKey.NextHypoAlarm, now + T.mins(15).msecs())
+    }
+
+    @Test // A1b — the alarm must judge the value the screen shows, not the plain sensor value
+    fun `hypo alarm uses the corrected value and not the stored sensor value`() = runTest {
+        freshLast(56.0) // sensor says 56, the screen shows 65
+        whenever(glucoseCorrection.correctedMgdl(now, 56.0)).thenReturn(65.0)
+        whenever(preferences.get(BooleanKey.AlertHypo)).thenReturn(true)
+        whenever(preferences.getRaw(UnitDoubleKey.AlertHypoThreshold)).thenReturn(60.0)
+
+        localAlertUtils.checkGlucoseAlerts()
+
+        // 65 is above threshold 60 plus the 5 hysteresis, so it counts as recovered, not as a hypo.
+        verify(preferences, never()).put(LocalAlertLongKey.NextHypoAlarm, now + T.mins(15).msecs())
+        verify(notificationManager).dismiss(NotificationId.BG_HYPO)
+        verify(preferences).put(LocalAlertLongKey.NextHypoAlarm, 0L)
+    }
+
+    @Test // A1c — no corrected value available: the stored value still has to raise the alarm
+    fun `hypo alarm falls back to the stored value when no correction is available`() = runTest {
+        freshLast(56.0)
+        whenever(glucoseCorrection.correctedMgdl(now, 56.0)).thenReturn(null)
+        whenever(preferences.get(BooleanKey.AlertHypo)).thenReturn(true)
+        whenever(preferences.getRaw(UnitDoubleKey.AlertHypoThreshold)).thenReturn(60.0)
         whenever(preferences.get(LocalAlertLongKey.NextHypoAlarm)).thenReturn(now - 1)
 
         localAlertUtils.checkGlucoseAlerts()

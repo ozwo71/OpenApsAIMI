@@ -5,6 +5,7 @@ import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.aps.AutosensData
 import app.aaps.core.interfaces.bolus.BatchExecutor
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
+import app.aaps.core.interfaces.glucose.GlucoseCorrection
 import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.insulin.InsulinManager
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
@@ -56,6 +57,7 @@ import app.aaps.implementation.androidNotification.NotificationHolderImpl
 import app.aaps.implementation.aps.DetermineBasalResult
 import app.aaps.implementation.bolus.BatchExecutorImpl
 import app.aaps.implementation.db.ProcessedTbrEbDataImpl
+import app.aaps.implementation.glucose.GlucoseCorrectionImpl
 import app.aaps.implementation.insulin.ConcentrationHelperImpl
 import app.aaps.implementation.insulin.InsulinImpl
 import app.aaps.implementation.iob.AutosensDataObject
@@ -139,6 +141,7 @@ class ImplementationModule {
         @Multibinds fun permissionProviders(): Set<PermissionProvider>
 
         @Binds fun bindLastBgData(lastBgData: LastBgDataImpl): LastBgData
+        @Binds fun bindGlucoseCorrection(glucoseCorrectionImpl: GlucoseCorrectionImpl): GlucoseCorrection
         @Binds fun bindProcessedTbrEbData(pProcessedTbrEbData: ProcessedTbrEbDataImpl): ProcessedTbrEbData
         @Binds fun bindUserEntryLogger(userEntryLoggerImpl: UserEntryLoggerImpl): UserEntryLogger
         @Binds fun bindInsulinManager(insulinImpl: InsulinImpl): InsulinManager
