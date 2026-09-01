@@ -9030,7 +9030,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val physioMults = lastFusedPhysioMultipliers ?: lastBasePhysioMultipliers
         val learningDiagnostics = PkpdLearningDiagnostics.from(
             causalStatePosterior = lastPatientState?.causalPosterior,
-            allowLearning = preferences.get(BooleanKey.OApsAIMIIntelligenceSingleLearnPath),
+            // Signal-prep is the one learning path of the tick and it always learns, so the
+            // snapshot must say so. Reading the preference here reported "read_only_path" while
+            // learning was in fact running.
+            allowLearning = true,
             exerciseFlag = sportTime,
             iobU = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
             carbsActiveG = ctx.mealData.mealCOB,
