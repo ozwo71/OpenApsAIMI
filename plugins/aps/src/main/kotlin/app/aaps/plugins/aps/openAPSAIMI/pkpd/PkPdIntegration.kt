@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.pkpd
 
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
+import app.aaps.core.keys.LongNonKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.compose.readAimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStateId
@@ -69,6 +70,14 @@ class PkPdIntegration(private val preferences: Preferences) {
     private var damping: SmbDamping? = null
     private var lastTailPolicy: TailAwareSmbPolicy? = null
     private var lastPersisted: PkPdParams? = null
+
+    /**
+     * Last generation counter this instance acted on.
+     * `null` means it was never read yet (fresh process): adopt the value without resetting,
+     * because prefs are already the seed source on the first tick. Only a *change* between two
+     * ticks means someone wrote the learned state from outside the loop.
+     */
+    private var seenLearnedStateGeneration: Long? = null
     private var recentBolusSamples: List<PkpdBolusSample> = emptyList()
 
     @Synchronized
@@ -113,6 +122,7 @@ class PkPdIntegration(private val preferences: Preferences) {
     ): PkPdRuntime? {
         val structural = readStructuralConfig()
         val previousStructural = cachedStructuralConfig
+        adoptExternalLearnedStateReset()
         if (previousStructural != null && previousStructural != structural) {
             applyStructuralConfigChange(previousStructural, structural)
         }
@@ -332,6 +342,28 @@ class PkPdIntegration(private val preferences: Preferences) {
         }
     }
 
+    /**
+     * Detects a learned-state write done outside the loop (reset button, insulin preset).
+     * Drops the in-memory learner so this tick re-seeds from prefs via [readLearnedSeed].
+     * It does not touch the fusion/damping caches on purpose: they hold no learned PK/PD state.
+     *
+     * It must run first in the tick, before the structural config is compared. An insulin preset
+     * changes the bounds and writes the learned state in one gesture, and
+     * [applyStructuralConfigChange] persists the old in-memory value when the bounds change. With
+     * the learner already dropped here, that persist is a no-op and cannot overwrite the new
+     * value. Running it while PK/PD is off is safe too: [clearAllCaches] wipes everything anyway.
+     */
+    private fun adoptExternalLearnedStateReset() {
+        val generation = preferences.get(LongNonKey.OApsAIMIPkpdLearnedStateGeneration)
+        val seen = seenLearnedStateGeneration
+        seenLearnedStateGeneration = generation
+        if (seen == null || seen == generation) return
+        estimator = null
+        lastBounds = null
+        lastLearningCfg = null
+        lastPersisted = null
+    }
+
     private fun clearAllCaches() {
         estimator = null
         fusion = null
@@ -342,6 +374,8 @@ class PkPdIntegration(private val preferences: Preferences) {
         lastLearningCfg = null
         cachedStructuralConfig = null
         lastPersisted = null
+        // seenLearnedStateGeneration is kept on purpose: turning OApsAIMIPkpdEnabled off and on
+        // again must not look like an external reset on the next tick.
     }
 
     private fun aggregateActivityState(

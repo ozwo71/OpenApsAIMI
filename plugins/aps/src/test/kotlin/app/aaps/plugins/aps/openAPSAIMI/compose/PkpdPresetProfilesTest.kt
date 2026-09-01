@@ -1,9 +1,11 @@
 package app.aaps.plugins.aps.openAPSAIMI.compose
 
 import app.aaps.core.keys.DoubleKey
+import app.aaps.core.keys.LongNonKey
 import app.aaps.core.keys.interfaces.Preferences
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -35,6 +37,41 @@ class PkpdPresetProfilesTest {
     }
 
     private fun value(key: DoubleKey): Double = stored.getValue(key)
+
+    /**
+     * A running PK/PD engine keeps the learned state in memory. Writing the state keys is not
+     * enough: the generation counter must be bumped so the engine re-seeds from prefs.
+     */
+    @Test
+    fun `resetPkpdLearnedStateToInitial bumps the generation`() {
+        stored.clear()
+        val preferences = preferences()
+        resetPkpdLearnedStateToInitial(preferences)
+        verify(exactly = 1) { preferences.inc(LongNonKey.OApsAIMIPkpdLearnedStateGeneration) }
+    }
+
+    @Test
+    fun `reclampPkpdLearnedStateToBounds bumps the generation`() {
+        stored.clear()
+        val preferences = preferences()
+        reclampPkpdLearnedStateToBounds(preferences)
+        verify(exactly = 1) { preferences.inc(LongNonKey.OApsAIMIPkpdLearnedStateGeneration) }
+    }
+
+    @Test
+    fun `applyPkpdInsulinPreset bumps the generation once`() {
+        for (preset in listOf(PkpdInsulinPreset.ULTRA_FAST, PkpdInsulinPreset.RAPID, PkpdInsulinPreset.STANDARD)) {
+            stored.clear()
+            val preferences = preferences()
+            applyPkpdInsulinPreset(preferences, preset)
+            verify(exactly = 1) { preferences.inc(LongNonKey.OApsAIMIPkpdLearnedStateGeneration) }
+        }
+        // CUSTOM writes nothing, so there is nothing for the engine to adopt.
+        stored.clear()
+        val customPreferences = preferences()
+        applyPkpdInsulinPreset(customPreferences, PkpdInsulinPreset.CUSTOM)
+        verify(exactly = 0) { customPreferences.inc(LongNonKey.OApsAIMIPkpdLearnedStateGeneration) }
+    }
 
     @Test
     fun `every preset keeps its anchors inside its own bounds`() {
