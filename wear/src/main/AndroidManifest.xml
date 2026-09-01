@@ -256,6 +256,9 @@
             </intent-filter>
 
             <meta-data
+                android:name="android.support.wearable.complications.SAFE_WATCH_FACES"
+                android:value="${applicationId}.watchfacepush.aapsv4" />
+            <meta-data
                 android:name="android.support.wearable.complications.SUPPORTED_TYPES"
                 android:value="LARGE_IMAGE,SMALL_IMAGE" />
             <meta-data
@@ -272,6 +275,9 @@
                 <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
             </intent-filter>
 
+            <meta-data
+                android:name="android.support.wearable.complications.SAFE_WATCH_FACES"
+                android:value="${applicationId}.watchfacepush.aapsv4" />
             <meta-data
                 android:name="android.support.wearable.complications.SUPPORTED_TYPES"
                 android:value="LARGE_IMAGE,SMALL_IMAGE" />
