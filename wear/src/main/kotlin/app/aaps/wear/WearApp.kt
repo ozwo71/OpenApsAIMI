@@ -1,6 +1,7 @@
 package app.aaps.wear
 
 import android.content.Intent
+import android.content.SharedPreferences
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.preference.PreferenceManager
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -29,18 +30,28 @@ class WearApp : DaggerApplication() {
     @Inject lateinit var exceptionHandlerWear: ExceptionHandlerWear
     @Inject lateinit var watchFacePushHelper: WatchFacePushHelper
 
+    /**
+     * Held in a field on purpose: `SharedPreferences` keeps its change listeners in a
+     * `WeakHashMap`, so a listener nothing else references is garbage collected and preference
+     * changes silently stop being announced from then on.
+     *
+     * The live watch faces never noticed - they redraw every second and pick preference changes up
+     * themselves - but anything that only acts when told stopped being told.
+     */
+    private val preferenceChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        key ?: return@OnSharedPreferenceChangeListener
+        // We trigger update on Complications
+        LocalBroadcastManager.getInstance(this).sendBroadcast(Intent(DataLayerListenerServiceWear.INTENT_NEW_DATA))
+        rxBus.send(EventWearPreferenceChange(key))
+    }
+
     override fun onCreate() {
         super.onCreate()
         exceptionHandlerWear.register()
         aapsLogger.debug(LTag.WEAR, "onCreate")
         // Keep an installed Watch Face Push face in sync with the app version (Wear OS 6+ only)
         CoroutineScope(Dispatchers.IO).launch { watchFacePushHelper.syncOnStartup() }
-        PreferenceManager.getDefaultSharedPreferences(this).registerOnSharedPreferenceChangeListener { _, key ->
-            key ?: return@registerOnSharedPreferenceChangeListener
-            // We trigger update on Complications
-            LocalBroadcastManager.getInstance(this).sendBroadcast(Intent(DataLayerListenerServiceWear.INTENT_NEW_DATA))
-            rxBus.send(EventWearPreferenceChange(key))
-        }
+        PreferenceManager.getDefaultSharedPreferences(this).registerOnSharedPreferenceChangeListener(preferenceChangeListener)
         startForegroundService(Intent(this, DataLayerListenerServiceWear::class.java))
     }
 

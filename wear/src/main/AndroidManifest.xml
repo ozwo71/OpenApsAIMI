@@ -37,6 +37,14 @@
         android:label="@string/app_name"
         android:theme="@android:style/Theme.DeviceDefault">
 
+        <!-- androidx.wear.watchfacepush declares the wear-sdk platform library as required, which
+             blocks install on watches older than Wear OS 4 (INSTALL_FAILED_MISSING_SHARED_LIBRARY).
+             Make it optional: all Watch Face Push usage is guarded by SDK checks (Wear OS 6+). -->
+        <uses-library
+            android:name="wear-sdk"
+            android:required="false"
+            tools:node="replace" />
+
         <meta-data
             android:name="com.google.android.wearable.standalone"
             android:value="false" />
@@ -725,6 +733,11 @@
             android:exported="true"
             android:label="@string/menu_settings"
             android:taskAffinity="" />
+        <!-- Not exported: only ever opened from the watch face's own settings screen, in-process. -->
+        <activity
+            android:name=".interaction.ComplicationTypeSettingsActivity"
+            android:exported="false"
+            android:label="@string/pref_complication_type_priority" />
         <!-- taskAffinity="": activities launched from tiles/complications (NEW_TASK) get their own
              task, so back returns to the tile/watchface instead of a lingering main menu. Launches
              from within the app (no NEW_TASK) still stack in the caller's task as before. -->
