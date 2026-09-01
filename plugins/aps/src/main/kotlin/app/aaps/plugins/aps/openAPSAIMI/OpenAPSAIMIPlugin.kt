@@ -1082,7 +1082,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 tdd24h = tdd24Hrs,
                 combinedDelta = currentDelta ?: 0.0,
                 uamConfidence = AimiUamHandler.confidenceOrZero(),
-                allowLearning = !preferences.get(BooleanKey.OApsAIMIIntelligenceSingleLearnPath),
+                // Read-only by design: signal-prep is the only learning path per tick. This call
+                // passes a fixed window and no bolus samples, so letting it learn would pollute the
+                // shared learned state.
+                allowLearning = false,
             )
             lastPkpdScale = pkpdRuntimeForActivity?.pkpdScale ?: 1.0
 

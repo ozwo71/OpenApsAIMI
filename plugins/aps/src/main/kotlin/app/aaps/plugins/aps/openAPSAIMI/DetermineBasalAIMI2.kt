@@ -2350,7 +2350,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             predictedBgMgdl = glucoseStatus.glucose,
             targetBgMgdl = ctx.profile.target_bg,
         )
-        val singleLearnPath = preferences.get(BooleanKey.OApsAIMIIntelligenceSingleLearnPath)
         this.cachedPkpdRuntime = try {
             pkpdIntegration.setRecentBolusSamples(
                 buildRecentPkpdBolusSamples(
@@ -2377,7 +2376,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 estimatedRaMgdlPerMin = continuousStateEstimator.getLastRa().takeIf { it.isFinite() && it > 0.0 },
                 causalStatePosterior = lastPatientState?.causalPosterior,
                 patientEventMemory = lastPatientState?.eventMemory,
-                allowLearning = !singleLearnPath,
+                // Read-only by design: signal-prep is the only learning path per tick. This early
+                // call uses a substitute TDD (max basal x 24), so letting it learn would pollute the
+                // shared learned state.
+                allowLearning = false,
             )
         } catch (e: Exception) {
             consoleError.add("❌ Early PKPD Runtime init failed: ${e.message}")
