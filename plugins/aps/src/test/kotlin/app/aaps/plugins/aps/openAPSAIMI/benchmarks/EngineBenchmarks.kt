@@ -22,6 +22,7 @@ import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.AutodriveEngine
 import io.mockk.coEvery
 import java.io.File
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLearnedState
 
 class EngineBenchmarks {
 
@@ -49,6 +50,7 @@ class EngineBenchmarks {
             profileUtil = mockk(relaxed = true),
             fabricPrivacy = mockk(relaxed = true),
             preferences = mockk(relaxed = true),
+            pkPdLearnedState = PkPdLearnedState(),
             gestationalAutopilot = mockk(relaxed = true),
             auditorOrchestrator = mockk(relaxed = true),
             uiInteraction = mockk(relaxed = true),

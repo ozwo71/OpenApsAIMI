@@ -25,6 +25,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import java.io.File
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLearnedState
 
 /**
  * Shared construction for moteur AIMI + persistance / stats stubs (scénarios `logDecisionFinal`).
@@ -81,6 +82,7 @@ internal class DetermineBasalAimiScenarioTestHarness(
             profileUtil = mockk(relaxed = true),
             fabricPrivacy = mockk(relaxed = true),
             preferences = preferences,
+            pkPdLearnedState = PkPdLearnedState(),
             gestationalAutopilot = mockk(relaxed = true),
             auditorOrchestrator = mockk(relaxed = true),
             uiInteraction = mockk(relaxed = true),

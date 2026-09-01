@@ -35,6 +35,7 @@ import io.mockk.verify
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.io.File
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLearnedState
 
 /**
  * Phase 2 P1 : branche `EXERCISE_LOCKOUT` (sans T3c) → [logDecisionFinal] → `updateLearning` une fois.
@@ -96,6 +97,7 @@ class DetermineBasalAimiExerciseLockoutScenarioTest {
             profileUtil = mockk(relaxed = true),
             fabricPrivacy = mockk(relaxed = true),
             preferences = preferences,
+            pkPdLearnedState = PkPdLearnedState(),
             gestationalAutopilot = mockk(relaxed = true),
             auditorOrchestrator = mockk(relaxed = true),
             uiInteraction = mockk(relaxed = true),

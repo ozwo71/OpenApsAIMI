@@ -32,6 +32,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLearnedState
 
 /**
  * Regression: per-invocation caches for TDD 1d and TIR (1d, 65–180) must not duplicate suspend/DB work.
@@ -86,6 +87,7 @@ class DetermineBasalAimiPerInvocationCacheTest {
             profileUtil = mockk(relaxed = true),
             fabricPrivacy = mockk(relaxed = true),
             preferences = mockk(relaxed = true),
+            pkPdLearnedState = PkPdLearnedState(),
             gestationalAutopilot = mockk(relaxed = true),
             auditorOrchestrator = mockk(relaxed = true),
             uiInteraction = mockk(relaxed = true),

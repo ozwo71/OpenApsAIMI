@@ -25,7 +25,7 @@ import kotlin.math.abs
 class PkPdIntegrationTest {
 
     private val preferences: Preferences = mockk(relaxed = true)
-    private val integration = PkPdIntegration(preferences)
+    private val integration = PkPdIntegration(preferences, PkPdLearnedState())
 
     @Test
     fun `test computeRuntime disabled`() {
@@ -74,7 +74,7 @@ class PkPdIntegrationTest {
         mockPkpdDefaults()
         IsfTddProvider.set(50.0)
 
-        val trace = PkPdIntegration(preferences).computeRuntime(
+        val trace = PkPdIntegration(preferences, PkPdLearnedState()).computeRuntime(
             epochMillis = 1000,
             bg = 100.0,
             deltaMgDlPer5 = 0.0,
@@ -104,7 +104,7 @@ class PkPdIntegrationTest {
         every { preferences.get(DoubleKey.OApsAIMIPkpdStateDiaH) } returns 5.0
         IsfTddProvider.set(50.0)
 
-        val trace = PkPdIntegration(preferences).computeRuntime(
+        val trace = PkPdIntegration(preferences, PkPdLearnedState()).computeRuntime(
             epochMillis = 1000,
             bg = 100.0,
             deltaMgDlPer5 = 0.0,
@@ -124,7 +124,7 @@ class PkPdIntegrationTest {
     fun `physio resistance lowers fused isf while preserving bounded factors`() {
         every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
         mockPkpdDefaults()
-        val baseline = PkPdIntegration(preferences).computeRuntime(
+        val baseline = PkPdIntegration(preferences, PkPdLearnedState()).computeRuntime(
             epochMillis = 1000,
             bg = 160.0,
             deltaMgDlPer5 = 3.5,
@@ -141,7 +141,7 @@ class PkPdIntegrationTest {
             ),
             patientWeightKg = 75.0,
         )
-        val resistant = PkPdIntegration(preferences).computeRuntime(
+        val resistant = PkPdIntegration(preferences, PkPdLearnedState()).computeRuntime(
             epochMillis = 1000,
             bg = 160.0,
             deltaMgDlPer5 = 3.5,
@@ -177,7 +177,7 @@ class PkPdIntegrationTest {
     fun `heavier weight reduces kinetic factor and pkpd scale`() {
         every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
         mockPkpdDefaults()
-        val lighter = PkPdIntegration(preferences).computeRuntime(
+        val lighter = PkPdIntegration(preferences, PkPdLearnedState()).computeRuntime(
             epochMillis = 1000,
             bg = 140.0,
             deltaMgDlPer5 = 2.0,
@@ -189,7 +189,7 @@ class PkPdIntegrationTest {
             tdd24h = 40.0,
             patientWeightKg = 60.0,
         )
-        val heavier = PkPdIntegration(preferences).computeRuntime(
+        val heavier = PkPdIntegration(preferences, PkPdLearnedState()).computeRuntime(
             epochMillis = 1000,
             bg = 140.0,
             deltaMgDlPer5 = 2.0,
@@ -236,7 +236,7 @@ class PkPdIntegrationTest {
             targetBgMgdl = 110.0,
         )
 
-        val lowProfile = PkPdIntegration(lowPhysioPrefs).computeRuntime(
+        val lowProfile = PkPdIntegration(lowPhysioPrefs, PkPdLearnedState()).computeRuntime(
             epochMillis = 1000,
             bg = 158.0,
             deltaMgDlPer5 = 3.2,
@@ -251,7 +251,7 @@ class PkPdIntegrationTest {
             physioLatentState = latent,
             estimatedRaMgdlPerMin = 3.2,
         )
-        val strongProfile = PkPdIntegration(strongPhysioPrefs).computeRuntime(
+        val strongProfile = PkPdIntegration(strongPhysioPrefs, PkPdLearnedState()).computeRuntime(
             epochMillis = 1000,
             bg = 158.0,
             deltaMgDlPer5 = 3.2,
@@ -628,8 +628,8 @@ class PkPdIntegrationTest {
         mockPkpdDefaults()
         every { preferences.get(LongNonKey.OApsAIMIPkpdLearnedStateGeneration) } returns 0L
         IsfTddProvider.set(50.0)
-        val first = PkPdIntegration(preferences)
-        val second = PkPdIntegration(preferences)
+        val first = PkPdIntegration(preferences, PkPdLearnedState())
+        val second = PkPdIntegration(preferences, PkPdLearnedState())
         tick(1, first)
         tick(1, second)
 
@@ -678,7 +678,7 @@ class PkPdIntegrationTest {
         every { statefulPreferences.get(LongNonKey.OApsAIMIPkpdLearnedStateGeneration) } returns 0L
         storePkpdDefaults(stored)
         IsfTddProvider.set(50.0)
-        val engine = PkPdIntegration(statefulPreferences)
+        val engine = PkPdIntegration(statefulPreferences, PkPdLearnedState())
 
         tick(1, engine)
         assertEquals(6.0, learnedDiaHrs(engine), 1e-9)
@@ -692,6 +692,164 @@ class PkPdIntegrationTest {
         // Without the fix the engine first persists clamp(6.0, [4.0, 5.5]) = 5.5 over the 4.5.
         assertEquals(4.5, learnedDiaHrs(engine), 1e-9)
         assertEquals(4.5, stored.getValue(DoubleKey.OApsAIMIPkpdStateDiaH), 1e-9)
+    }
+
+    /**
+     * Two consumers build their own engine but only one of them learns. The read only consumer
+     * must see the state the learner found, otherwise it keeps for ever the values read at start
+     * up and the prediction kinetics never follow the learner.
+     */
+    @Test
+    fun `read only consumer sees the state learned by the other consumer`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        mockPkpdDefaults()
+        every { preferences.get(LongNonKey.OApsAIMIPkpdLearnedStateGeneration) } returns 0L
+        IsfTddProvider.set(50.0)
+        val shared = PkPdLearnedState()
+        val reader = PkPdIntegration(preferences, shared)
+        val learner = PkPdIntegration(preferences, shared)
+
+        learningTick(1, reader, allowLearning = false)
+        assertEquals(6.0, learnedDiaHrs(reader), 1e-9)
+
+        for (index in 2L..40L) learningTick(index, learner)
+        val learned = learnedDiaHrs(learner)
+        assertTrue(learned < 6.0 - 1e-6, "the learner did not move the DIA: $learned")
+
+        val readerRuntime = learningTick(41, reader, allowLearning = false)
+        assertNotNull(readerRuntime)
+        assertEquals(learned, readerRuntime!!.params.diaHrs, 1e-9)
+    }
+
+    /**
+     * A bounds change makes the engine persist what it holds. The read only consumer must then
+     * hold the learned value, not the one it read at start up, or it writes a stale DIA over the
+     * learned one.
+     */
+    @Test
+    fun `bounds change does not persist a stale value from the read only consumer`() {
+        val stored = mutableMapOf<DoubleKey, Double>()
+        val statefulPreferences: Preferences = mockk(relaxed = true)
+        every { statefulPreferences.put(any<DoubleKey>(), any()) } answers {
+            stored[firstArg()] = secondArg()
+        }
+        every { statefulPreferences.get(any<DoubleKey>()) } answers {
+            stored[firstArg()] ?: firstArg<DoubleKey>().defaultValue
+        }
+        every { statefulPreferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        every { statefulPreferences.get(LongNonKey.OApsAIMIPkpdLearnedStateGeneration) } returns 0L
+        storePkpdDefaults(stored)
+        IsfTddProvider.set(50.0)
+        val shared = PkPdLearnedState()
+        val reader = PkPdIntegration(statefulPreferences, shared)
+        val learner = PkPdIntegration(statefulPreferences, shared)
+
+        learningTick(1, reader, allowLearning = false)
+        for (index in 2L..201L) learningTick(index, learner)
+        val learned = learnedDiaHrs(learner)
+        assertTrue(learned < 5.9, "the learner did not move the DIA far enough: $learned")
+
+        // Only the upper bound moves. No generation bump, so this is not an external reset.
+        stored[DoubleKey.OApsAIMIPkpdBoundsDiaMaxH] = 5.9
+        learningTick(202, reader, allowLearning = false)
+
+        assertEquals(learned, stored.getValue(DoubleKey.OApsAIMIPkpdStateDiaH), 0.01)
+    }
+
+    /**
+     * Sharing the learned state must not turn the read only consumer into a second learner.
+     * Its ticks must leave both the learned DIA and the accepted update count alone.
+     */
+    @Test
+    fun `read only consumer never moves the shared learned state`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        mockPkpdDefaults()
+        every { preferences.get(LongNonKey.OApsAIMIPkpdLearnedStateGeneration) } returns 0L
+        IsfTddProvider.set(50.0)
+        val shared = PkPdLearnedState()
+        val reader = PkPdIntegration(preferences, shared)
+        val learner = PkPdIntegration(preferences, shared)
+
+        learningTick(1, reader, allowLearning = false)
+        for (index in 2L..40L) learningTick(index, learner)
+        val learned = learnedDiaHrs(learner)
+        val acceptedUpdates = acceptedUpdateCount(learner)
+        assertTrue(acceptedUpdates > 0L, "the learner accepted no update")
+
+        for (index in 41L..60L) learningTick(index, reader, allowLearning = false)
+
+        assertEquals(learned, learnedDiaHrs(learner), 1e-9)
+        assertEquals(acceptedUpdates, acceptedUpdateCount(learner))
+    }
+
+    /**
+     * Only the learned state is shared. The ISF fusion holds a per call slew limiter, so each
+     * consumer must keep its own. A shared limiter would let the dosing ISF move much faster.
+     */
+    @Test
+    fun `shared learned state keeps isf fusion slew per consumer`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        mockPkpdDefaults()
+        every { preferences.get(LongNonKey.OApsAIMIPkpdLearnedStateGeneration) } returns 0L
+        IsfTddProvider.set(50.0)
+        val shared = PkPdLearnedState()
+        val reader = PkPdIntegration(preferences, shared)
+        val learner = PkPdIntegration(preferences, shared)
+
+        // The learner builds a fusion history around a high profile ISF.
+        for (index in 1L..3L) isfTick(index, learner, profileIsf = 50.0)
+
+        // Same tick and same learned state, but a much lower profile ISF.
+        val learnerIsf = isfTick(4, learner, profileIsf = 10.0)?.fusedIsf
+        val readerIsf = isfTick(4, reader, profileIsf = 10.0, allowLearning = false)?.fusedIsf
+
+        assertNotNull(learnerIsf)
+        assertNotNull(readerIsf)
+        // The learner is held back by its own slew limiter, the reader has no history of its own.
+        assertTrue(learnerIsf!! > readerIsf!! + 5.0, "learner=$learnerIsf reader=$readerIsf")
+    }
+
+    /** The reset button writes prefs and bumps the counter. Both consumers must re-seed from it. */
+    @Test
+    fun `external reset reaches both consumers through the shared state`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        mockPkpdDefaults()
+        every { preferences.get(LongNonKey.OApsAIMIPkpdLearnedStateGeneration) } returns 0L
+        IsfTddProvider.set(50.0)
+        val shared = PkPdLearnedState()
+        val first = PkPdIntegration(preferences, shared)
+        val second = PkPdIntegration(preferences, shared)
+        tick(1, first)
+        tick(1, second)
+
+        every { preferences.get(DoubleKey.OApsAIMIPkpdStateDiaH) } returns 7.5
+        every { preferences.get(LongNonKey.OApsAIMIPkpdLearnedStateGeneration) } returns 1L
+        tick(2, first)
+        tick(2, second)
+
+        assertEquals(7.5, learnedDiaHrs(first), 0.1)
+        assertEquals(7.5, learnedDiaHrs(second), 0.1)
+    }
+
+    /**
+     * The recent bolus samples change `pkpdScale`, so they change the ISF that doses. They must
+     * stay private to each consumer even when the learned state is shared.
+     */
+    @Test
+    fun `recent bolus samples stay private to each consumer`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        mockPkpdDefaults()
+        every { preferences.get(LongNonKey.OApsAIMIPkpdLearnedStateGeneration) } returns 0L
+        IsfTddProvider.set(50.0)
+        val shared = PkPdLearnedState()
+        val reader = PkPdIntegration(preferences, shared)
+        val learner = PkPdIntegration(preferences, shared)
+        learner.setRecentBolusSamples(listOf(PkpdBolusSample(ageMin = 20.0, units = 2.0)))
+
+        learningTick(1, reader, allowLearning = false)
+
+        assertTrue(learner.reconstructedIobUnits() > 0.0)
+        assertEquals(0.0, reader.reconstructedIobUnits(), 1e-9)
     }
 
     /** Same values as [mockPkpdDefaults], but written into a map instead of a stub. */
@@ -729,6 +887,40 @@ class PkPdIntegrationTest {
             profileIsf = 50.0,
             tdd24h = 40.0,
         )
+    }
+
+    /** One tick the learner can actually learn from: IOB above the floor, slow fall, no carbs. */
+    private fun learningTick(index: Long, target: PkPdIntegration, allowLearning: Boolean = true) = target.computeRuntime(
+        epochMillis = index * 5L * 60L * 1000L,
+        bg = 120.0,
+        deltaMgDlPer5 = -0.5,
+        iobU = 2.5,
+        carbsActiveG = 0.0,
+        windowMin = 60,
+        exerciseFlag = false,
+        profileIsf = 50.0,
+        tdd24h = 40.0,
+        allowLearning = allowLearning,
+    )
+
+    /** One tick with a chosen profile ISF, to exercise the ISF fusion slew limiter. */
+    private fun isfTick(index: Long, target: PkPdIntegration, profileIsf: Double, allowLearning: Boolean = true) = target.computeRuntime(
+        epochMillis = index * 5L * 60L * 1000L,
+        bg = 120.0,
+        deltaMgDlPer5 = -0.5,
+        iobU = 2.5,
+        carbsActiveG = 0.0,
+        windowMin = 60,
+        exerciseFlag = false,
+        profileIsf = profileIsf,
+        tdd24h = 40.0,
+        allowLearning = allowLearning,
+    )
+
+    private fun acceptedUpdateCount(target: PkPdIntegration): Long {
+        val snapshot = target.learningStatusSnapshot()
+        assertNotNull(snapshot, "the estimator was not built")
+        return snapshot!!.acceptedUpdateCount
     }
 
     private fun learnedDiaHrs(target: PkPdIntegration = integration): Double {

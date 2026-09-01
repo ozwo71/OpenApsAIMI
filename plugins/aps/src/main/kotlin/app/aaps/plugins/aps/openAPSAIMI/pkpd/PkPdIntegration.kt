@@ -24,7 +24,10 @@ data class PkpdBolusSample(
     val units: Double
 )
 
-class PkPdIntegration(private val preferences: Preferences) {
+class PkPdIntegration(
+    private val preferences: Preferences,
+    private val learnedState: PkPdLearnedState,
+) {
 
     companion object {
         /** Minimum learned DIA change (hours) before writing prefs again. */
@@ -62,14 +65,34 @@ class PkPdIntegration(private val preferences: Preferences) {
     )
 
     private var cachedStructuralConfig: StructuralConfig? = null
-    private var estimator: AdaptivePkPdEstimator? = null
-    private var lastBounds: PkPdBounds? = null
-    private var lastLearningCfg: PkPdLearningConfig? = null
     private var fusion: IsfFusion? = null
     private var lastFusionBounds: IsfFusionBounds? = null
     private var damping: SmbDamping? = null
     private var lastTailPolicy: TailAwareSmbPolicy? = null
-    private var lastPersisted: PkPdParams? = null
+    private var recentBolusSamples: List<PkpdBolusSample> = emptyList()
+
+    // The learned state lives in [PkPdLearnedState], so both consumers read one single value.
+    // These are views on the holder, not fields: the rest of the class does not change.
+    private var estimator: AdaptivePkPdEstimator?
+        get() = learnedState.estimator
+        set(value) {
+            learnedState.estimator = value
+        }
+    private var lastBounds: PkPdBounds?
+        get() = learnedState.lastBounds
+        set(value) {
+            learnedState.lastBounds = value
+        }
+    private var lastLearningCfg: PkPdLearningConfig?
+        get() = learnedState.lastLearningCfg
+        set(value) {
+            learnedState.lastLearningCfg = value
+        }
+    private var lastPersisted: PkPdParams?
+        get() = learnedState.lastPersisted
+        set(value) {
+            learnedState.lastPersisted = value
+        }
 
     /**
      * Last generation counter this instance acted on.
@@ -77,8 +100,11 @@ class PkPdIntegration(private val preferences: Preferences) {
      * because prefs are already the seed source on the first tick. Only a *change* between two
      * ticks means someone wrote the learned state from outside the loop.
      */
-    private var seenLearnedStateGeneration: Long? = null
-    private var recentBolusSamples: List<PkpdBolusSample> = emptyList()
+    private var seenLearnedStateGeneration: Long?
+        get() = learnedState.seenLearnedStateGeneration
+        set(value) {
+            learnedState.seenLearnedStateGeneration = value
+        }
 
     @Synchronized
     fun setRecentBolusSamples(samples: List<PkpdBolusSample>) {
@@ -365,15 +391,12 @@ class PkPdIntegration(private val preferences: Preferences) {
     }
 
     private fun clearAllCaches() {
-        estimator = null
+        learnedState.clearLearned()
         fusion = null
         damping = null
-        lastBounds = null
         lastFusionBounds = null
         lastTailPolicy = null
-        lastLearningCfg = null
         cachedStructuralConfig = null
-        lastPersisted = null
         // seenLearnedStateGeneration is kept on purpose: turning OApsAIMIPkpdEnabled off and on
         // again must not look like an external reset on the next tick.
     }
