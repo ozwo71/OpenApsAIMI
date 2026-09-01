@@ -2,16 +2,15 @@
 
 > **Note for this repository — read first**
 >
-> This document describes **exploratory work (a proof of concept)**. The Watch Face Format (WFF)
-> code is **not** ported into this repository. Only the "complications in the Custom Watchface"
-> block was ported here, which is the code-based watch face drawn on a Canvas.
+> The Watch Face Format (WFF) code described here is now ported into this repository.
 >
-> The document is kept as a design note and as a record of the known blockers. The main blocker is
-> that the Watch Face Push validator cannot run on Android: it needs `java.awt.image.BufferedImage`
-> and `javax.imageio`, which do not exist on Android, and `java.*` is a protected namespace. So the
-> token that Watch Face Push requires cannot be produced on the phone or on the watch.
+> It is still exploratory work (a proof of concept) with known limits. The main limit is that the
+> Watch Face Push validator cannot run on Android: it needs `java.awt` and `javax.imageio`, which
+> Android does not have and an app cannot provide. So the token that Watch Face Push requires is
+> produced **at build time**, never at run time.
 >
-> Read the rest of this file as background, not as a description of the code in this repository.
+> The previous AAPS V4 watch face design was replaced by the new image based one. A copy of the old
+> design is kept in `_docs/watchface_aapsv4_previous.xml`.
 
 Living document for the topic **"Custom Watchface in WFF"**. Same role for this topic as
 `CWF_ComplicationSlotsPrompt.md` has for the complication-slots topic.
