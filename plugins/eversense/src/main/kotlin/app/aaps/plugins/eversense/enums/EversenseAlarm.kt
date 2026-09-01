@@ -17,8 +17,13 @@ enum class EversenseAlarm(val code: Int) {
     TRANSMITTER_EOL_330(55), TRANSMITTER_EOL_395(56), ONE_CAL(57),
     CALIBRATION_SUSPICIOUS_2(59), BATTERY_STATUS(60), SENSOR_CONNECTION(62),
     EARLY_SENSOR_RETIREMENT(64), GENERAL_GLUCOSE_SUSPENDED(65),
-    SENSOR_GRACE(66), SENSOR_SYNC_CONFIRMED(67), TX_DOCKED(68),
-    TX_UNDOCKED(69), TWO_CAL(90), UNKNOWN(255);
+    SENSOR_GRACE(66), SENSOR_SYNC_CONFIRMED(67),
+    // Codes 68 and 69 (TxDocked / TxUndocked) are on purpose not mapped here. They are not real
+    // device alarm codes — the same two were removed upstream in iOS EversenseKit as "custom error
+    // codes in the Eversense app". from(code) below returns UNKNOWN for them, and UNKNOWN is filtered
+    // out at both alarm entry points: Eversense365Communicator.fullSync for the active-alarm list,
+    // and EversenseGattCallback's push-alarm handling.
+    TWO_CAL(90), UNKNOWN(255);
 
     val title: String get() = when (this) {
         CRITICAL_FAULT -> "Transmitter Error"
@@ -60,8 +65,6 @@ enum class EversenseAlarm(val code: Int) {
         EARLY_SENSOR_RETIREMENT -> "Sensor Retirement Area"
         GENERAL_GLUCOSE_SUSPENDED -> "Glucose Suspend"
         SENSOR_SYNC_CONFIRMED -> "Sensor Sync Confirmed"
-        TX_DOCKED -> "Transmitter Inactive"
-        TX_UNDOCKED -> "Transmitter Active"
         SENSOR_STABILITY -> "Sensor Stability"
         UNKNOWN -> "Unknown Error"
     }

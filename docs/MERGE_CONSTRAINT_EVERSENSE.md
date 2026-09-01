@@ -468,3 +468,64 @@ and no Eversense log exists anywhere on the maintainer's machine as of 2026-09-0
   One that stays 0x00 through that window is not the readiness register.
 - Signal: read as 2-byte LE while lifting the transmitter off the implant and putting it back. The
   real one swings by hundreds.
+
+### CAPTCG sync 2026-09-01 (EU region, 365 duplicates, alarms)
+
+Reference: [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS-Eversense-) branch
+**`european-region-support`** @ `ef079b8482` — 15 commits ahead of `master`, which has NOT moved since
+the 2026-08-31 sync. Watch that branch, not only `master`. A new orphan `docs` branch also exists
+(single README, end-user docs); it is deliberately not mirrored here, see below.
+
+**Ported (hand port, never cherry-pick — CAPTCG is Hilt with a non-nullable `gattCallback`):**
+
+| Change | File | Notes |
+|--------|------|--------|
+| 365 backfill duplicate readings | `packets/Eversense365Communicator.kt` | Both bounds were strict with zero tolerance, so the same physical measurement was inserted twice — the history log and the live characteristic timestamp it seconds apart. Now a symmetric 90 s tolerance via `isBackfillCandidate()`. **Two GVs about 1 s apart is the pattern that can drive the loop into LGS / max IOB 0**; our `GlucoseDeduplicator` does NOT cover this path (it is notification-reader only) |
+| Wrong log TAG | `packets/Eversense365Communicator.kt` | The 365 file logged as `"EversenseE3Communicator"` |
+| E3 glucose ceiling 600 → 450 | `packets/e3/GetCurrentGlucosePacket.kt` | Completes the tightening we did on the 365 side on 2026-08-31. Reuses `GetGlucoseDataPacket.GLUCOSE_CEILING_MG_DL`. **Deliberate divergence: CAPTCG uses `> 450`, we use `>= 450`** to match our own 365 path — do not "fix" this back on a future sync |
+| Alarm cleanup (one unit) | `enums/EversenseAlarm.kt`, `EversenseGattCallback.kt`, `packets/Eversense365Communicator.kt` | Removed `TX_DOCKED` (68) / `TX_UNDOCKED` (69), which are not real device codes, AND added UNKNOWN filtering at both entry points. **Never split these two**: removing 68/69 alone makes them fall through to UNKNOWN and surface as "Unknown Error" instead of "Transmitter Inactive" |
+| EU / OUS region for the 365 | `core/keys/BooleanKey.kt` + strings, `models/EversenseSecureState.kt`, `util/EversenseHttp365Util.kt`, `EversenseGattCallback.kt`, `plugins/source/EversensePlugin.kt` | New `BooleanKey.EversenseEuropeanRegion`, default **false**. Per-call host selection for token / upload / care / vault. Token cache is cleared on a region flip in both credential-sync sites |
+| E3 `nextCalibrationDate` derived | `packets/EversenseE3Communicator.kt`, **deletes** `packets/e3/GetNextCalibrationDatePacket.kt` + `GetNextCalibrationTimePacket.kt` | Now `lastCalibrationDate + 24 h` instead of two transmitter registers whose values proved unreliable and could be subtly wrong yet inside the plausibility guard. This agrees with what our own `EversenseCGMPlugin` already writes after a local calibration, and it **removes two reads of the deferred registers** |
+
+**EU host matrix (365).** Never introduce `ousiamapi` — that was CAPTCG's own wrong guess in
+`572805bfed`, reverted three commits later; a real EU user got a bare IIS 404 from it.
+
+| Purpose | US | EU / OUS |
+|---------|----|----------|
+| token | `usiamapi` | `ousiamapialpha` |
+| upload | `usmobileappmsprod` | `ousmobileappmsprod` |
+| care | `usapialpha` | `ousalphaapiservices` |
+| vault / fleet cert | `deviceauthorization` | `ousdeviceauthorization` |
+
+**Our E3 EU endpoints were validated, not corrected.** `d55c6ee43e` says so in its own body: the right
+answer was already in `EversenseHttpE3Util.kt`'s header comment. CAPTCG converged its 365 hosts onto
+the two hosts our E3 util already shipped. Do not let a future bulk port overwrite that file.
+
+**Deliberately NOT ported (we already solved these, better):**
+
+- `d9929a133c` setDiagnosticMode deadlock — our `writeDiagnosticMode` / `setDiagnosticModeOnExecutor`
+  split from 2026-08-31 also handles our nullable `gattCallback`; theirs relies on Hilt non-null.
+- `fe9a0321cb` log directory — ours is declarative through logback (`${EXT_DIR:-/sdcard}`). Theirs uses
+  a `configure()` call that is a no-op once the singleton is touched, so any early log call can pin the
+  broken `/sdcard` fallback for the whole process.
+- `668d150f6f` log export — equivalent; only the subdirectory name differs and both our halves agree.
+- `ef079b8482` Documentation link, `ce405150d2` their README, `bb6891a824` Jacoco annotation — not applicable.
+- Calibration countdown banner (`ba990d7615`, `f982ea77e7`, `652e18aed4`) — a re-implementation, not a
+  cherry-pick: it refactors `OverviewScreen`, which we have diverged from heavily, and our dashboard
+  skin bypasses `OverviewScreen` entirely so the banner would not even show. Their layout is still
+  settling (two fix-ups in three commits).
+- The `docs` branch README — end-user docs written for their layout. Its Afrezza section states peak
+  10–30 min / DIA 1.0–3.0 h (ours is 20–45 / 1.5–4.0), documents a European Region toggle we did not
+  have until now, and never mentions that our stored Afrezza bolus is half the cartridge label.
+  Copying it would mislead our users on a safety-relevant point.
+
+**Known latent defect, neither side has fixed it:** `EversenseHttpE3Util` hardcodes the EU hosts with
+no US path, so a US **E3** user silently uploads to the EU DMS. Best-effort upload only, so no glucose
+is lost, but it is real. Not addressed by any of the 15 commits.
+
+**Verified:** `:app:assembleFullDebug` green; `:plugins:eversense:testFullDebugUnitTest` 74 tests,
+0 failures, including 8 new boundary tests for the backfill filter; `:core:keys` tests green.
+**Not verified — needs hardware:** that the EU hosts accept a real EU login and complete 365 pairing;
+that the E3 calibration cadence really is a fixed 24 h (CAPTCG's and iOS's assertion, not checked
+against Senseonics documentation); that the 90 s dedup window never drops a genuine reading in a
+denser-than-5-minute logging phase; and that codes 68/69 are truly not device alarms.

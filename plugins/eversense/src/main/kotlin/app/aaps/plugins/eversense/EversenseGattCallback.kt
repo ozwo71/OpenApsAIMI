@@ -11,8 +11,10 @@ import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.edit
+import app.aaps.plugins.eversense.enums.EversenseAlarm
 import app.aaps.plugins.eversense.enums.EversenseSecurityType
 import app.aaps.plugins.eversense.exceptions.EversenseWriteException
+import app.aaps.plugins.eversense.models.ActiveAlarm
 import app.aaps.plugins.eversense.packets.Eversense365Communicator
 import app.aaps.plugins.eversense.packets.EversenseBasePacket
 import app.aaps.plugins.eversense.packets.EversenseE3Communicator
@@ -561,8 +563,15 @@ class EversenseGattCallback(
         } else if (data.size >= 4 && data[0] == Eversense365Packets.NotificationResponseId && data[1] == 0x03.toByte()) {
             // Push alarm notification
             val alarmCode = data[2].toInt() and 0xFF
-            val alarm = app.aaps.plugins.eversense.models.ActiveAlarm(
-                code = app.aaps.plugins.eversense.enums.EversenseAlarm.from(alarmCode),
+            val alarmType = EversenseAlarm.from(alarmCode)
+            if (alarmType == EversenseAlarm.UNKNOWN) {
+                // Codes we do not recognise (for example the removed 68 / 69) must not reach the
+                // user as a real alarm. Matches the upstream iOS EversenseKit fix.
+                EversenseLogger.warning(TAG, "Received unknown push alarm code: $alarmCode")
+                return
+            }
+            val alarm = ActiveAlarm(
+                code = alarmType,
                 codeRaw = alarmCode,
                 flag = 0,
                 priority = 0
@@ -748,6 +757,7 @@ val authSession = networkExecutor.submit<Any?> {
 
                 val fleet = networkExecutor.submit<Any?> {
                     EversenseHttp365Util.getFleetSecretV2(
+                        preferences = preferences,
                         accessToken = authSession.access_token,
                         serialNumber = whoAmI.serialNumber,
                         nonce = whoAmI.nonce,

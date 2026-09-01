@@ -5,6 +5,7 @@ import app.aaps.plugins.eversense.enums.EversenseTrendArrow
 import app.aaps.plugins.eversense.packets.EversenseBasePacket
 import app.aaps.plugins.eversense.packets.EversensePacket
 import app.aaps.plugins.eversense.packets.e3.util.EversenseE3Parser
+import app.aaps.plugins.eversense.packets.e365.GetGlucoseDataPacket.Companion.GLUCOSE_CEILING_MG_DL
 
 @EversensePacket(
     requestId = EversenseE3Packets.ReadSensorGlucoseCommandId,
@@ -27,8 +28,10 @@ class GetCurrentGlucosePacket : EversenseBasePacket() {
         val glucoseInMgDl = EversenseE3Parser.readGlucose(receivedData, 9)
         // Reject implausible glucose values — the transmitter occasionally sends
         // unsolicited 0x88 packets after calibration with different byte layout
-        // that produce out-of-range values when parsed at offset 9.
-        if (glucoseInMgDl < 20 || glucoseInMgDl > 600) {
+        // that produce out-of-range values when parsed at offset 9. The ceiling is
+        // the same one the 365 uses, and matches EversenseKit, the reference iOS
+        // build this port follows, which lowered E3 from 1000 to 450 mg/dL.
+        if (glucoseInMgDl < GLUCOSE_FLOOR_MG_DL || glucoseInMgDl >= GLUCOSE_CEILING_MG_DL) {
             return null
         }
         return Response(
@@ -51,4 +54,10 @@ class GetCurrentGlucosePacket : EversenseBasePacket() {
     }
 
     data class Response(val datetime: Long, val glucoseInMgDl: Int, val trend: EversenseTrendArrow, val rawResponseHex: String = "") : EversenseBasePacket.Response()
+
+    companion object {
+
+        // Lowest glucose value, in mg/dL, we accept from the transmitter.
+        private const val GLUCOSE_FLOOR_MG_DL = 20
+    }
 }

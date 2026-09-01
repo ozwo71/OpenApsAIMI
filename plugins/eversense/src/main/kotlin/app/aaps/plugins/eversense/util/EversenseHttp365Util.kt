@@ -31,10 +31,32 @@ class EversenseHttp365Util {
         private val CLIENT_NO = 2
         private val CLIENT_TYPE = 128
 
-        // Overridable for unit tests
+        // US hosts. Overridable for unit tests.
         internal var tokenBaseUrl = "https://usiamapi.eversensedms.com/"
         internal var uploadBaseUrl = "https://usmobileappmsprod.eversensedms.com/"
         internal var careBaseUrl = "https://usapialpha.eversensedms.com/"
+        internal var vaultBaseUrl = "https://deviceauthorization.eversensedms.com/"
+
+        // EU / OUS hosts, chosen per call when EversenseSecureState.isEuropeanRegion is true.
+        // euTokenBaseUrl is the exact host EversenseHttpE3Util already uses for E3 in production
+        // for real EU transmitters. An earlier guess of "ousiamapi.eversensedms.com" (a plain
+        // "us" -> "ous" swap without "alpha") was wrong: it is real infrastructure but not this
+        // API, and every login attempt from a real EU user came back as a bare IIS 404, while
+        // the working US host and this one both answer the same bare request with a
+        // Cloudflare-fronted IdentityServer4 400.
+        private const val euTokenBaseUrl = "https://ousiamapialpha.eversensedms.com/"
+        private const val euUploadBaseUrl = "https://ousmobileappmsprod.eversensedms.com/"
+        private const val euCareBaseUrl = "https://ousalphaapiservices.eversensedms.com/"
+
+        // The vault host was first left unrouted, on the idea that fleet certificate issuing is
+        // shared infrastructure. A real EU user's log proved that wrong: getFleetSecretV2 still
+        // returned 404 against the US host after login() had started working.
+        private const val euVaultBaseUrl = "https://ousdeviceauthorization.eversensedms.com/"
+
+        private fun effectiveTokenBaseUrl(state: EversenseSecureState) = if (state.isEuropeanRegion) euTokenBaseUrl else tokenBaseUrl
+        private fun effectiveUploadBaseUrl(state: EversenseSecureState) = if (state.isEuropeanRegion) euUploadBaseUrl else uploadBaseUrl
+        private fun effectiveCareBaseUrl(state: EversenseSecureState) = if (state.isEuropeanRegion) euCareBaseUrl else careBaseUrl
+        private fun effectiveVaultBaseUrl(state: EversenseSecureState) = if (state.isEuropeanRegion) euVaultBaseUrl else vaultBaseUrl
 
         fun login(preference: SharedPreferences): LoginResponseModel? {
             val state = getState(preference)
@@ -47,7 +69,7 @@ class EversenseHttp365Util {
                     "password=${URLEncoder.encode(state.password, "UTF-8")}"
                 ).joinToString("&")
 
-                val url = URL("${tokenBaseUrl}connect/token")
+                val url = URL("${effectiveTokenBaseUrl(state)}connect/token")
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.doOutput = true
@@ -87,7 +109,7 @@ class EversenseHttp365Util {
             }
         }
 
-        fun getFleetSecretV2(accessToken: String, serialNumber: ByteArray, nonce: ByteArray, flags: Boolean, publicKey: ByteArray): FleetSecretV2ResponseModel? {
+        fun getFleetSecretV2(preferences: SharedPreferences, accessToken: String, serialNumber: ByteArray, nonce: ByteArray, flags: Boolean, publicKey: ByteArray): FleetSecretV2ResponseModel? {
             try {
                 val publicKeyStr = Base64.getUrlEncoder().withoutPadding()
                     .encodeToString(publicKey.copyOfRange(27, publicKey.count()))
@@ -104,7 +126,7 @@ class EversenseHttp365Util {
                 ).joinToString("&")
 
                 val url =
-                    URL("https://deviceauthorization.eversensedms.com/api/vault/GetTxCertificate?$query")
+                    URL("${effectiveVaultBaseUrl(getState(preferences))}api/vault/GetTxCertificate?$query")
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "GET"
                 conn.setRequestProperty("Authorization", "Bearer $accessToken")
@@ -205,7 +227,7 @@ class EversenseHttp365Util {
                     """{"SensorId":"$portalSensorId","TransmitterId":"$transmitterSerialNumber","Timestamp":"$ts","CurrentGlucoseValue":${r.glucoseInMgDl},"CurrentGlucoseDateTime":"$ts","FWVersion":"$firmwareVersion","EssentialLog":"$essentialLog"}"""
                 }
 
-                val url = URL("${uploadBaseUrl}api/v1.0/DiagnosticLog/PostEssentialLogs")
+                val url = URL("${effectiveUploadBaseUrl(getState(preferences))}api/v1.0/DiagnosticLog/PostEssentialLogs")
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.connectTimeout = 30_000
@@ -257,7 +279,7 @@ class EversenseHttp365Util {
                 val ts = dateFormatter.get().format(Date(timestamp))
                 val jsonBody = """{"CurrentGlucose":$glucose,"CGTime":"$ts","GlucoseTrend":${EversenseDmsBinaryCodec.trendOrdinal(trend)},"SignalStrength":${EversenseDmsBinaryCodec.signalStrengthOrdinal(signalStrength)},"BatteryStrength":${batteryPercentage.coerceAtLeast(0)},"IsTransmitterConnected":1}"""
 
-                val url = URL("${careBaseUrl}api/care/PutCurrentValues")
+                val url = URL("${effectiveCareBaseUrl(getState(preferences))}api/care/PutCurrentValues")
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.connectTimeout = 30_000
@@ -316,7 +338,7 @@ class EversenseHttp365Util {
 
                 val jsonBody = """{"deviceType":"SMSIMeter","deviceName":"Smart Transmitter (Android)","deviceID":"$transmitterSerialNumber","offsetBytes":"$offsetBytes","sgBytes":"$sgBytes","mgBytes":"$mgBytes","patientBytes":"$patientBytes","alertBytes":"$alertBytes","algorithmVersion":"10"}"""
 
-                val url = URL("${careBaseUrl}api/care/PutDeviceEvents")
+                val url = URL("${effectiveCareBaseUrl(getState(preferences))}api/care/PutDeviceEvents")
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.connectTimeout = 30_000

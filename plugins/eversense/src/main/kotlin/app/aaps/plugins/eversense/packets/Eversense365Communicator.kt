@@ -6,6 +6,7 @@ import android.os.Looper
 import androidx.core.content.edit
 import app.aaps.plugins.eversense.EversenseGattCallback
 import app.aaps.plugins.eversense.callbacks.EversenseWatcher
+import app.aaps.plugins.eversense.enums.EversenseAlarm
 import app.aaps.plugins.eversense.enums.EversenseType
 import app.aaps.plugins.eversense.models.EversenseCGMResult
 import app.aaps.plugins.eversense.models.EversenseState
@@ -47,11 +48,30 @@ import kotlin.math.abs
 
 class Eversense365Communicator {
     companion object {
-        private const val TAG = "EversenseE3Communicator"
+        private const val TAG = "Eversense365Communicator"
         private val JSON = Json { ignoreUnknownKeys = true }
         private val handler = Handler(Looper.getMainLooper())
 
         private var sensorIdLength = 10
+
+        // The transmitter's history log and its "current glucose" characteristic timestamp the same
+        // physical measurement a few seconds apart (log entry first, live characteristic a moment
+        // later). On a fast keep-alive round trip that gap is usually too small for the log to have
+        // caught up, but after a full reconnect (BLE connect + service discovery + auth) there is
+        // enough elapsed time for the log to already hold it. The same slip happens at the other end:
+        // the log can timestamp a reading we already stored last cycle slightly later than the live
+        // characteristic did back then, so a bare ">" re-backfills it as new. Apply the tolerance on
+        // both ends. 90 s is well under the ~5 minute reading cadence, so a real gap still backfills.
+        internal val BACKFILL_DEDUP_TOLERANCE_MS = TimeUnit.SECONDS.toMillis(90)
+
+        /**
+         * True when a history entry is a genuinely new reading that should be backfilled.
+         * Entries within [BACKFILL_DEDUP_TOLERANCE_MS] of either bound are the same physical
+         * measurement as the reading already stored, or as the live reading just taken.
+         */
+        internal fun isBackfillCandidate(datetime: Long, previousGlucoseDatetime: Long, liveGlucoseDatetime: Long): Boolean =
+            datetime > previousGlucoseDatetime + BACKFILL_DEDUP_TOLERANCE_MS &&
+                datetime < liveGlucoseDatetime - BACKFILL_DEDUP_TOLERANCE_MS
 
         fun readGlucose(gatt: EversenseGattCallback, preferences: SharedPreferences, watchers: List<EversenseWatcher>) {
             val stateJson = preferences.getString(StorageKeys.STATE, null) ?: "{}"
@@ -110,7 +130,7 @@ class Eversense365Communicator {
                     GetGlucoseLogValuesPacket(from = range.from, to = range.to, sensorIdLength = sensorIdLength)
                 )
                 val backfill = history.glucoseHistory
-                    .filter { it.datetime > previousGlucoseDatetime && it.datetime < glucoseData.datetime }
+                    .filter { isBackfillCandidate(it.datetime, previousGlucoseDatetime, glucoseData.datetime) }
                     .map { item -> EversenseCGMResult(glucoseInMgDl = item.valueInMgDl, datetime = item.datetime, trend = item.trend, rawResponseHex = item.rawResponseHex) }
                 if (backfill.isNotEmpty()) {
                     result.addAll(0, backfill)
@@ -195,8 +215,11 @@ class Eversense365Communicator {
                 // Read active alarms
                 try {
                     val activeAlarms = gatt.writePacket<GetActiveAlarmsPacket.Response>(GetActiveAlarmsPacket())
-                    state.activeAlarms = activeAlarms.alarms
-                    EversenseLogger.info(TAG, "Active alarms: ${activeAlarms.alarms.map { it.code.title }}")
+                    // Drop codes we do not recognise (for example the removed 68 / 69) so they cannot
+                    // look like a real ongoing alarm. Matches the upstream iOS EversenseKit fix.
+                    val filteredAlarms = activeAlarms.alarms.filter { it.code != EversenseAlarm.UNKNOWN }
+                    state.activeAlarms = filteredAlarms
+                    EversenseLogger.info(TAG, "Active alarms: ${filteredAlarms.map { it.code.title }}")
                 } catch (e: Exception) {
                     EversenseLogger.warning(TAG, "Could not read active alarms: $e")
                 }
