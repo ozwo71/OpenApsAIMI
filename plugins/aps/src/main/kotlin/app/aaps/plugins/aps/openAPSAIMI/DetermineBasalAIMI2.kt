@@ -2380,6 +2380,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 // call uses a substitute TDD (max basal x 24), so letting it learn would pollute the
                 // shared learned state.
                 allowLearning = false,
+                // Substitute TDD (max basal x 24): read-only for the slew limiter too, otherwise
+                // this call would pin the whole tick on a lower-quality input.
+                isfRateLimitAuthority = false,
             )
         } catch (e: Exception) {
             consoleError.add("❌ Early PKPD Runtime init failed: ${e.message}")
@@ -9828,6 +9831,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 estimatedRaMgdlPerMin = continuousStateEstimator.getLastRa().takeIf { it.isFinite() && it > 0.0 },
                 causalStatePosterior = lastPatientState?.causalPosterior,
                 patientEventMemory = lastPatientState?.eventMemory,
+                // Signal-prep is the one dosing call per tick: it owns both learning and the ISF
+                // slew anchor (isfRateLimitAuthority defaults to allowLearning).
                 allowLearning = true,
             )
         } catch (e: Exception) {

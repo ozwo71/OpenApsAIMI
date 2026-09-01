@@ -14,7 +14,7 @@ class IsfFusionRobustnessTest {
         assertEquals(0.77, min, 0.01)
         assertEquals(1.22, max, 0.01)
         val fusion = IsfFusion(IsfFusionBounds(minFactor = min, maxFactor = max, maxChangePer5Min = 0.4))
-        val result = fusion.fused(profileIsf = 50.0, tddIsf = 45.0, pkpdScale = 1.1, isRising = true)
+        val result = fusion.fused(profileIsf = 50.0, tddIsf = 45.0, pkpdScale = 1.1, nowMs = 0L, authoritative = true, isRising = true)
         assertTrue(result.isFinite())
         assertTrue(result >= 1.0)
     }
@@ -22,7 +22,7 @@ class IsfFusionRobustnessTest {
     @Test
     fun `inverted ISF bounds are normalized without throw`() {
         val fusion = IsfFusion(IsfFusionBounds(minFactor = 0.95, maxFactor = 0.8, maxChangePer5Min = 0.9))
-        val result = fusion.fused(80.0, 60.0, 1.0)
+        val result = fusion.fused(80.0, 60.0, 1.0, nowMs = 0L, authoritative = true)
         assertTrue(result.isFinite())
     }
 

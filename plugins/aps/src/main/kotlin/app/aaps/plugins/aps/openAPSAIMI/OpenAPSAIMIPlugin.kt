@@ -806,7 +806,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val profileIsf = profileFunction.getProfile()?.getProfileIsfMgdl() ?: 20.0
         val tddIsf = tddIsf24hOr(profileIsf)
         val fusedSlowIsf = fusedSlowIsfOverride?.takeIf { it.isFinite() && it > 0.0 }
-            ?: isfFusion().fused(profileIsf, tddIsf, pkpdScaleForTick)
+            // isfFusion() builds a throwaway instance, so its slew limiter is inert anyway:
+            // there is no anchor to carry over between ticks. Downstream smoothing is done by
+            // isfBlender.
+            ?: isfFusion().fused(
+                profileIsf = profileIsf,
+                tddIsf = tddIsf,
+                pkpdScale = pkpdScaleForTick,
+                nowMs = timestamp,
+                authoritative = true
+            )
         aapsLogger.debug(LTag.APS, "Fused slow ISF: $fusedSlowIsf (profile=$profileIsf, tddIsf=$tddIsf, pkpdScale=$pkpdScaleForTick)")
 
         // 5) EMA TDD (stabilise l?ajustement AF)
@@ -1086,6 +1095,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 // passes a fixed window and no bolus samples, so letting it learn would pollute the
                 // shared learned state.
                 allowLearning = false,
+                // Distinct PkPdIntegration instance: this is its ONLY fused() call per tick, so it must
+                // own the slew anchor or the limiter stays inert.
+                isfRateLimitAuthority = true,
             )
             lastPkpdScale = pkpdRuntimeForActivity?.pkpdScale ?: 1.0
 
