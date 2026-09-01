@@ -160,10 +160,20 @@ class WatchFacePushHelper @Inject constructor(
     private fun createManager(): WatchFacePushManager =
         WatchFacePushManagerFactory.createWatchFacePushManager(context)
 
-    private suspend fun installedFaceSlotId(manager: WatchFacePushManager): String? =
-        manager.listWatchFaces().installedWatchFaceDetails
+    private suspend fun installedFaceSlotId(manager: WatchFacePushManager): String? {
+        val response = manager.listWatchFaces()
+        // How many faces one app may push is not stated in the API documentation - only that the
+        // number is limited - so it is logged here, where the response is already in hand. It decides
+        // whether AAPS can offer a second face alongside this one, or would have to replace it.
+        aapsLogger.debug(
+            LTag.WEAR,
+            "WatchFacePush: slots used=${response.installedWatchFaceDetails.size} remaining=${response.remainingSlotCount}" +
+                " packages=${response.installedWatchFaceDetails.joinToString { it.packageName }}"
+        )
+        return response.installedWatchFaceDetails
             .firstOrNull { it.packageName == facePackageName }
             ?.slotId
+    }
 
     private suspend fun setActive(manager: WatchFacePushManager, slotId: String) {
         try {

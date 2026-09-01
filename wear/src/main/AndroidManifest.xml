@@ -223,6 +223,62 @@
                 android:value="${applicationId}.watchfacepush.aapsv4" />
         </service>
 
+        <!-- Publishes the whole Custom watch face as a full-screen image, for Watch Face Format
+             faces on watches that can no longer run a code-based watch face.
+             LARGE_IMAGE is the manifest tag for ComplicationType.PHOTO_IMAGE. -->
+        <service
+            android:name=".complications.CwfImageComplication"
+            android:exported="true"
+            android:icon="@drawable/watchface_custom"
+            android:label="@string/complication_cwf_image"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.support.wearable.complications.SUPPORTED_TYPES"
+                android:value="LARGE_IMAGE,SMALL_IMAGE" />
+            <meta-data
+                android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
+                android:value="60" />
+        </service>
+        <!-- The two halves of the Custom watch face, used by the pushed WFF document: the lower one
+             refreshes at data rate, the upper one keeps up with the clock. -->
+        <service
+            android:name=".complications.CwfLowerComplication"
+            android:exported="true"
+            android:icon="@drawable/watchface_custom"
+            android:label="@string/complication_cwf_lower"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.support.wearable.complications.SUPPORTED_TYPES"
+                android:value="LARGE_IMAGE,SMALL_IMAGE" />
+            <meta-data
+                android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
+                android:value="60" />
+        </service>
+        <service
+            android:name=".complications.CwfUpperComplication"
+            android:exported="true"
+            android:icon="@drawable/watchface_custom"
+            android:label="@string/complication_cwf_upper"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.support.wearable.complications.SUPPORTED_TYPES"
+                android:value="LARGE_IMAGE,SMALL_IMAGE" />
+            <meta-data
+                android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
+                android:value="60" />
+        </service>
         <service
             android:name=".complications.BgGraphComplication"
             android:exported="true"
@@ -777,6 +833,13 @@
             android:theme="@style/WearAppCompatDark" />
         <activity
             android:name=".interaction.activities.BgGraphActivity"
+            android:exported="true"
+            android:taskAffinity=""
+            android:theme="@style/WearAppCompatDark" />
+        <!-- Proof of concept for the WFF port, deliberately not in any menu: renders the Custom
+             watch face into a bitmap and shows it. Started with adb, see the class KDoc. -->
+        <activity
+            android:name=".interaction.activities.CwfRenderPreviewActivity"
             android:exported="true"
             android:taskAffinity=""
             android:theme="@style/WearAppCompatDark" />

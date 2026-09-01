@@ -2,6 +2,7 @@ package app.aaps.wear.watchfaces
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorFilter
@@ -17,7 +18,6 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
-import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
@@ -155,6 +155,20 @@ class CustomWatchface : BaseWatchFace() {
 
     // internal, not public: [complicationSlots] hands out an internal type.
     internal companion object : WatchFaceComplicationSlots, WatchFaceSettings {
+
+        /**
+         * The instance that last initialised the shared enum state - see the note in
+         * [setWatchfaceStyle].
+         *
+         * Deliberately process-wide, because the state it guards is: `ViewMap`, `FontMap`,
+         * `TrendArrowMap` and `DynProvider` all hang their per-view state off enum entries, which are
+         * singletons for the whole process even though several `CustomWatchface` instances can exist
+         * at once.
+         *
+         * Only ever compared by identity, never dereferenced, so it keeps a dead instance
+         * recognisable without keeping it usable.
+         */
+        private var styleOwner: CustomWatchface? = null
 
         /**
          * This watch face's half of the [WatchFaceComplicationSlots] contract: one data source picker
@@ -548,8 +562,13 @@ class CustomWatchface : BaseWatchFace() {
     }
 
     override fun inflateLayout(inflater: LayoutInflater): ViewBinding {
-        sp.putInt(R.string.key_last_selected_watchface, SelectedWatchFace.CUSTOM.ordinal)
-        rxBus.send(EventUpdateSelectedWatchface())
+        // Only a real watch face may claim to be the selected one. A render-only instance draws the
+        // same layout into a Bitmap for an image complication, so recording it as the user's
+        // selection - or telling the rest of the app that the selection changed - would be a lie.
+        if (!isRenderOnly) {
+            sp.putInt(R.string.key_last_selected_watchface, SelectedWatchFace.CUSTOM.ordinal)
+            rxBus.send(EventUpdateSelectedWatchface())
+        }
         binding = ActivityCustomBinding.inflate(inflater)
         // Resolved from the ViewMap entries that declare a slot id, so a new slot needs no change
         // here - only its entry and the matching FrameLayout in activity_custom.xml.
@@ -557,16 +576,19 @@ class CustomWatchface : BaseWatchFace() {
             .mapNotNull { view -> view.complication?.let { slot -> binding.root.findViewById<FrameLayout>(view.id)?.let { slot.id to it } } }
             .toMap()
         setDefaultColors()
-        runBlocking {
-            complicationDataRepository.storeCustomWatchface(
-                customWatchface = defaultWatchface(false).customWatchfaceData,
-                customWatchfaceFull = defaultWatchface(true).customWatchfaceData,
-                isDefault = true
-            )
-        }
-        val windowManager = context.getSystemService(WINDOW_SERVICE) as WindowManager
-        val displayWidth = windowManager.currentWindowMetrics.bounds.width()
-        zoomFactor = displayWidth.toDouble() / TEMPLE_RESOLUTION.toDouble()
+        // Publishing the built-in default watch face is the live watch face's job. A render-only
+        // instance would rewrite the same defaults on every render for no gain.
+        if (!isRenderOnly)
+            runBlocking {
+                complicationDataRepository.storeCustomWatchface(
+                    customWatchface = defaultWatchface(false).customWatchfaceData,
+                    customWatchfaceFull = defaultWatchface(true).customWatchfaceData,
+                    isDefault = true
+                )
+            }
+        // The surface being drawn, not the screen: identical for a live watch face, but a render
+        // may target a bitmap of a different size and must scale to that instead.
+        zoomFactor = canvasWidth.toDouble() / TEMPLE_RESOLUTION.toDouble()
         return binding
     }
 
@@ -577,6 +599,51 @@ class CustomWatchface : BaseWatchFace() {
     // behind cover_chart and the analog hands instead of on top of them. background is not part of
     // mainLayout at all (see resolveBackgroundDrawable()/onDraw()), so it paints first.
     override fun deferMainLayoutDraw(): Boolean = true
+
+    /**
+     * The two halves of a split render, cut at [ViewMap.TIME] - a boundary in `ViewKeys` paint order,
+     * so stacking [LOWER] under [UPPER] reproduces the watch face's own z-order exactly.
+     *
+     * The point of the split is cost, not layout: [LOWER] holds the background and the chart, which
+     * are expensive and change slowly, while [UPPER] holds the clock, the date fields and the hands,
+     * which must keep up with the second. Drawn separately they can be refreshed at different rates.
+     */
+    enum class RenderBlock { ALL, LOWER, UPPER }
+
+    /** [ViewMap.TIME] to the end, in paint order - the views [RenderBlock.UPPER] draws. */
+    private val upperBlockViews by lazy { ViewMap.entries.dropWhile { it != ViewMap.TIME } }
+
+    /** Set only for the duration of one [RenderBlock.UPPER] draw; see [onDraw]. */
+    private var renderSkipBackground = false
+
+    /**
+     * Draws one [block] at [width] x [height].
+     *
+     * Only views that are currently `VISIBLE` are hidden, and they are hidden with `INVISIBLE` rather
+     * than `GONE`: `GONE` would change the layout of everything around them, while `INVISIBLE` only
+     * skips the draw, so geometry stays exactly as the other block laid it out.
+     *
+     * [RenderBlock.UPPER] also skips the background, which is drawn outside `mainLayout`, so its
+     * bitmap stays transparent wherever its own views do not paint and the lower block shows through.
+     */
+    fun renderBlock(width: Int, height: Int, block: RenderBlock): Bitmap {
+        if (block == RenderBlock.ALL) return renderToBitmap(width, height)
+        // The first render inflates the layout; a block render needs the views to exist already
+        if (!::binding.isInitialized) renderToBitmap(width, height)
+
+        val toHide = if (block == RenderBlock.UPPER) ViewMap.entries - upperBlockViews.toSet() else upperBlockViews
+        val hidden = toHide.mapNotNull { view ->
+            binding.root.findViewById<View>(view.id)?.takeIf { it.visibility == View.VISIBLE }
+        }
+        hidden.forEach { it.visibility = View.INVISIBLE }
+        renderSkipBackground = block == RenderBlock.UPPER
+        try {
+            return renderToBitmap(width, height)
+        } finally {
+            renderSkipBackground = false
+            hidden.forEach { it.visibility = View.VISIBLE }
+        }
+    }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
@@ -591,9 +658,12 @@ class CustomWatchface : BaseWatchFace() {
         // about the pivot a parent would have used - View defaults pivotX/pivotY to its centre -
         // otherwise the json's ROTATION and DynProvider's rotationOffset are silently dropped for
         // background alone, while working on every other view.
-        canvas.withRotation(backgroundView.rotation, backgroundView.pivotX, backgroundView.pivotY) {
-            backgroundView.draw(this)
-        }
+        // Skipped entirely for the upper half of a split render, which must stay transparent behind
+        // its own views so the lower half shows through - see [renderBlock].
+        if (!renderSkipBackground)
+            canvas.withRotation(backgroundView.rotation, backgroundView.pivotX, backgroundView.pivotY) {
+                backgroundView.draw(this)
+            }
         // super.onDraw() has just laid out mainLayout, so the placeholders hold this frame's geometry
         // and the slots' declared bounds can follow it. Not in complicationRender(): that runs per
         // slot, while one pushed option covers every slot at once.
@@ -721,6 +791,21 @@ class CustomWatchface : BaseWatchFace() {
             updatePref(it.metadata)
             try {
                 json = JSONObject(it.json)
+                // ViewMap, FontMap, TrendArrowMap and DynProvider keep their state on enum entries,
+                // which are process-wide, while several CustomWatchface instances can exist at once -
+                // the live watch face, the editor's headless instance, and the one a complication
+                // provider keeps warm to draw into a bitmap. Whoever initialised that state last owns
+                // it, and it reflects *their* preferences: a render-only instance reports complication
+                // slots as off (see prefBoolean), a live one does not.
+                //
+                // So an instance that finds it is not the owner cannot trust the cached state, however
+                // unchanged its own json looks. Clearing jsonString forces the full re-init below.
+                // Without this, switching between the code-based watch face and a WFF face leaves
+                // whichever renders next drawing with the other one's configuration.
+                if (styleOwner !== this) {
+                    jsonString = ""
+                    styleOwner = this
+                }
                 if (!resDataMap.isEquals(it.resData) || jsonString != it.json) {
                     resDataMap = it.resData
                     jsonString = it.json
@@ -897,6 +982,27 @@ class CustomWatchface : BaseWatchFace() {
         reservoirUrgentColor = ContextCompat.getColor(this, R.color.dark_alarm)
         gridColor = Color.WHITE
     }
+
+    /**
+     * Reads a boolean watch preference, with one deliberate exception: a **render-only** instance
+     * always reports the "Show complication N" toggles as **off**.
+     *
+     * A render-only instance draws into a Bitmap for an image complication and therefore has no
+     * complication slots at all - the system only creates and feeds slots for a watch face it has
+     * bound (see `_docs/CWF_WFF_Prompt.md`, section 7f). Reporting the toggles as off is simply
+     * true for that instance, not a workaround.
+     *
+     * It matters far beyond hiding an empty box. The `complicationN` views in `activity_custom.xml`
+     * are empty placeholders whose **visibility is the bridge** into the CWF design: a watch face
+     * can use `dynPref` to show other views in the same place when a complication is switched off.
+     * So this must be the single answer every reader gets, or the two halves disagree - the box
+     * would vanish while its replacements stayed hidden, or the replacements would appear behind a
+     * box that is still there. The three readers are [ViewMap.prefVisibility], [buildDynPrefs] and
+     * [checkPref].
+     */
+    private fun prefBoolean(prefMap: PrefMap): Boolean =
+        if (isRenderOnly && ComplicationMap.entries.any { it.showPref == prefMap }) false
+        else sp.getBoolean(prefMap.prefKey, prefMap.defaultValue as Boolean)
 
     private fun setVisibility(visibility: String, pref: Boolean = true): Int = when (visibility) {
         JsonKeyValues.VISIBLE.key -> pref.toVisibility()
@@ -1235,7 +1341,7 @@ class CustomWatchface : BaseWatchFace() {
          */
         val visibilityPref: PrefMap? get() = pref ?: complication?.showPref
 
-        fun prefVisibility(cwf: CustomWatchface): Boolean = visibilityPref?.let { cwf.sp.getBoolean(it.prefKey, it.defaultValue as Boolean) } != false
+        fun prefVisibility(cwf: CustomWatchface): Boolean = visibilityPref?.let { cwf.prefBoolean(it) } != false
 
         fun textDrawable(cwf: CustomWatchface): Drawable? = textDrawable
             ?: cwf.resDataMap[viewJson?.optString(JsonKeys.BACKGROUND.key)]?.toDrawable(cwf.resources, width, height)?.also { textDrawable = it }
@@ -1887,7 +1993,7 @@ class CustomWatchface : BaseWatchFace() {
         val prefKey = json.optString(JsonKeys.PREFKEY.key)
         PrefMap.fromKey(prefKey)?.let { prefMap ->
             val value = valPref[prefMap.key]
-                ?: (if (prefMap.typeBool) sp.getBoolean(prefMap.prefKey, prefMap.defaultValue as Boolean).toString() else sp.getString(prefMap.prefKey, prefMap.defaultValue as String)).also {
+                ?: (if (prefMap.typeBool) prefBoolean(prefMap).toString() else sp.getString(prefMap.prefKey, prefMap.defaultValue as String)).also {
                     valPref[prefMap.key] = it
                 }
             json.optJSONObject(value)?.let { nextJson ->
@@ -1915,6 +2021,6 @@ class CustomWatchface : BaseWatchFace() {
     }
 
     private fun checkPref() = valPref.any { (prefMap, s) ->
-        s != PrefMap.fromKey(prefMap)?.let { if (it.typeBool) sp.getBoolean(it.prefKey, it.defaultValue as Boolean).toString() else sp.getString(it.prefKey, it.defaultValue as String) }
+        s != PrefMap.fromKey(prefMap)?.let { if (it.typeBool) prefBoolean(it).toString() else sp.getString(it.prefKey, it.defaultValue as String) }
     }
 }
