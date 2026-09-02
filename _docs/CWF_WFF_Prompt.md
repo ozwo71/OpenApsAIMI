@@ -1480,6 +1480,72 @@ is a dead end.
 observed directly. A way to confirm would be to change something else visible in the image at a known
 moment while in ambient and time how long it takes to appear.
 
+## 7t. The app cannot update the picture in ambient at all - so §7j is mandatory
+
+**Observed 2026-09-01:** in ambient the face stayed frozen for about two minutes across 15:30-15:31,
+then jumped straight to 15:33.
+
+That is not a repaint-phase problem. `dumpsys display` reports **`DOZE_SUSPEND`** in ambient: the
+display refreshes itself while the CPU sleeps, and the app process is frozen. A coroutine `delay()`
+does not fire while the process is suspended, so the per-minute clock loop simply does not run - and
+when the process is later unfrozen it catches up in a jump, which is exactly the behaviour seen.
+adb over Wi-Fi dies with the process too, which is why the repaint phase could not be sampled.
+
+**Consequence: no app-driven refresh can keep the time right in ambient.** Push delivery is instant
+while awake (15-115 ms, §7l) and irrelevant while asleep, because nothing of ours is running to issue
+it. Pushing harder, aligning phases, or rendering ahead cannot fix a process that is not executing.
+
+**So the layered ambient design of §7j stops being one option among several and becomes the only one
+that can work.** The WFF runtime keeps drawing while our process sleeps, so in ambient the time has to
+come from the document:
+
+- **active**: the image carries the user's whole design, hands and seconds included - unchanged, and
+  the zip still owns the clock;
+- **ambient**: the image is hidden or dimmed, and a minimal **native** WFF clock beneath it shows the
+  time, updated by the runtime with no app involvement.
+
+This does not contradict the §7h rule that the zip owns its clock design. That rule governs the
+active face. In ambient the choice is between a native clock and a **wrong** one, and the maintainer
+already proposed the native layer for exactly this case.
+
+**What this retires:**
+
+- the ambient refresh-rate logic in `CwfComplicationUpdater` becomes pointless for correctness - it
+  can stay to refresh opportunistically when the process happens to be awake, but nothing should
+  depend on it;
+- rendering the *upcoming* minute to beat the repaint boundary is moot;
+- `setRenderAmbient()` remains useful for a different reason: whatever image is last delivered before
+  dozing should already have its seconds hidden, since it may be on screen for minutes.
+
+## 7u. Tap routing across stacked slots - the full-screen images must keep the lowest ids
+
+Raised by the maintainer from the code-based CWF work: with two complications in the same place,
+**painting** priority goes to the later one but **tap** priority goes to the earlier one. That is not
+a CWF quirk, it is androidx's rule, and it matters as soon as the document stacks slots.
+
+`ComplicationSlotsManager.getComplicationSlotAt` (see `Complication_Libraries.md`, "Tap routing -
+reads cached bounds only") resolves a tap with
+`findLowestIdMatchingComplicationOrNull { it.enabled && it.tapFilter.hitTest(...) }`. Two
+consequences:
+
+- **by lowest slot id**, regardless of where anything is painted;
+- filtered only on `enabled` - **`alpha` is never consulted**, so a slot made invisible with
+  `alpha="0"` or an AMBIENT `Variant` **stays tappable**.
+
+*Inference, flagged as such:* this is androidx's own code and the WFF runtime is an androidx watch
+face (its dump prints androidx `ComplicationSlotsManager` blocks), so the rule should hold - but
+`Complication_Libraries.md` warns against assuming WFF matches androidx for **rendering**, and this
+has not been tested on the WFF runtime. **Verify on device** once ambient slots exist.
+
+**Rule for this document, to be kept deliberately rather than by luck:** the two full-screen image
+slots keep the **lowest** ids (0 = lower, 1 = upper). They then capture every tap anywhere on the
+face, and any ambient-only text slot added later can never receive one - which is what we want, since
+those are invisible while the watch is awake. Both image slots carry the same `MENU` action, so it
+does not matter which of the two wins.
+
+Numbering an ambient slot 0 or 1 would send taps to invisible text. Anyone adding slots must keep the
+images lowest.
+
 ## 7q. Two open UX gaps on the pushed face (observed 2026-09-01, not yet addressed)
 
 Both raised by the maintainer while testing POC 3. Recorded with what is already known about the
@@ -1515,11 +1581,26 @@ would still need a re-tokenised APK - but it is a separate, lesser problem.
 
 ### Long-press -> preferences does nothing
 
-**Likely cause, and it is self-inflicted:** the document we now push declares **both** slots
-`isCustomizable="FALSE"` (§7b Q1, to stop a user breaking the layout) and contains no
-`ListConfiguration` or `BooleanConfiguration`. So there is genuinely nothing for the system editor to
-offer, and it shows nothing. `watch_face_info.xml` still says `<Editable value="true" />`, which is
-now a claim the document cannot honour.
+**Cause confirmed 2026-09-01: the Samsung editor crashes.** It is not showing an empty screen, it is
+dying:
+
+```
+Process: com.samsung.wear.watchface.runtime
+java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0
+  at java.util.ArrayList.get
+  at com.samsung.wear.watchface.runtime.editor.C.q
+  at com.samsung.wear.watchface.runtime.editor.C.onViewCreated
+```
+
+Our document declares **both** slots `isCustomizable="FALSE"` (§7b Q1, to stop a user breaking the
+layout) and contains no `ListConfiguration` or `BooleanConfiguration`, so the editor's list of
+editable items is empty - and it indexes element 0 of it without checking. `watch_face_info.xml`
+still says `<Editable value="true" />`, which is a claim the document can no longer honour.
+
+**So this is a defect in the Samsung editor, triggered by a legitimate document.** Two ways out:
+declare something editable (which the ambient toggle of §7i would do anyway, so it may fix this as a
+side effect), or set `<Editable value="false" />` so the editor is never opened. The second is
+honest but loses the entry point entirely.
 
 **Context that shapes the fix** (maintainer): AAPS watch face preferences live in two places today -
 the shared ones in the AAPS application preference menu, used by the remaining code-based faces
@@ -1539,6 +1620,136 @@ so a zip with no complication slots hides the complication entries entirely.
 Direction 2 preserves the dynamic behaviour and does not fight the format; direction 1 is more
 native but strictly less capable. Related: §1 already records that on GW7+ the whole CWF
 configuration path is dead because it assumes the system treats `CustomWatchface` as selectable.
+
+## 7s. Branch strategy, and who is reviewing
+
+`wear/cwf_wff` is built on **`wear/CWF_Complication`**, not on `dev`, deliberately (maintainer,
+2026-09-01):
+
+- `CWF_Complication` is the maintainer's own latest CustomWatchface work and is expected to merge -
+  so basing on it is not a risk.
+- It keeps the WFF work continuously exercised **against the complication feature**, so a regression
+  in one shows up while working on the other. That is how the shared-enum state corruption (§7d,
+  fixed in the ownership marker) and the background rotation bug were both caught.
+- It avoids merge conflicts between two parallel branches touching the same files.
+
+**Shared for feedback 2026-09-01** with two other developers: the author of the WFF AAPS V4 face, and
+an owner of a **GW7 Ultra on current firmware**, which can no longer run the code-based CustomWatchface.
+
+The GW7 test is the one that matters most: **everything so far has been measured on a GW4**, the one
+watch that cannot exhibit the problem this topic exists to solve. Constructing a `CustomWatchface` on
+firmware that refuses to *bind* one is reasoned-safe (§7d - construction is inert, and
+`BgGraphComplication` already renders on GW7/8/9) but has never been tested.
+
+**Reusing the AAPS V4 slot is agreed, not merely assumed.** Its author (Olorin) built that face to
+test the graph complication, and agreed with the maintainer *before this development started* that it
+could be reused for the Custom watch face if this turned out to work. So replacing the document is
+the intended outcome, not a decision needing defence.
+
+The alternative remains costed in §7o should it ever be wanted - a user-facing choice of which face
+holds the single slot - but nothing is asking for it.
+
+## 7v. Colouring the ambient glucose value - not possible today, and the route that would work
+
+The ambient readouts are grey. Colouring the glucose by level, as the code-based face does, is not
+available and the reason is worth recording so it is not re-attempted the wrong way.
+
+**A provider cannot colour text.** `ShortTextComplicationData` carries `text`, `title`,
+`monochromaticImage`, `smallImage` and a content description - **no colour field**
+(watchface-complications-data 1.3.0, `Data.kt`). So "let the complication colour it" is not
+expressible for SHORT_TEXT, even with a complication rewrite.
+
+**A document cannot compute it either.** `Font`'s `color` is `colorAttributeType`, whose pattern is
+`\[[A-Z0-9]+([._]\w+)*\]|#hex` (`common/simpleTypes/colorType.xsd:45-55`) - a hex value **or a
+single data-source reference**. No expressions, no conditionals. And a SHORT_TEXT complication
+exposes no numeric value to compare against anyway.
+
+**The route that would work, and it keeps the colour with AAPS.** `RangedValueComplicationData` has
+`colorRamp: ColorRamp?` (`Data.kt:1213`), where `ColorRamp(colors: IntArray, interpolated: Boolean)`
+takes up to 7 colours, and with **`interpolated = false`** they render as *"equal sized regions of
+solid colour"* (1098-1106) - discrete bands rather than a gradient. WFF exposes
+**`[COMPLICATION.RANGED_VALUE_COLOR_INTERPOLATE]`** as a colour data source, which matches
+`colorAttributeType`, so it can be used directly as `<Font color="...">`.
+
+The bands are **equally sized**, so thresholds are set by choosing the range rather than stated
+directly. For 70 and 180 with three colours: `min = -40`, `max = 290`, giving `-40..70`, `70..180`,
+`180..290`. Contrived, but it puts the boundaries exactly where AAPS wants them, and **AAPS supplies
+the colours**.
+
+**What it costs:** a glucose provider serving `RANGED_VALUE` rather than `SHORT_TEXT`
+(`SgvComplication` is SHORT_TEXT only today), and the document rendering the value from
+`[COMPLICATION.RANGED_VALUE]` instead of `[COMPLICATION.TEXT]`. Also **unverified**: whether the WFF
+runtime honours `interpolated = false` as bands, and whether that data source is usable for text
+colour at all rather than only for a progress ring.
+
+Not scheduled. Grey is legible and honest in the meantime.
+
+## 7w. The wear process is being killed and restarted every few seconds - URGENT, cause unknown
+
+**Observed 2026-09-01 18:40-18:45, watch idle and on charge.** The AAPS wear process is killed and
+relaunched continuously:
+
+```
+Process info.nightscout.androidaps (pid 7585) has died: psvc PER (82,307)
+  Scheduling restart of ... WatchFaceControlService in 19800000ms for connection
+  Scheduling restart of ... DataLayerListenerServiceWear in 1000ms for start-requested
+Process info.nightscout.androidaps (pid 7657) has died: psvc PER (73,307)
+Process info.nightscout.androidaps (pid 7708) has died: psvc PER (69,309)
+Process info.nightscout.androidaps (pid 7776) has died: psvc PER (65,311)
+```
+
+**23 process launches** were counted in the log window, with a new pid each time, roughly every 5-8
+seconds. `DataLayerListenerServiceWear` is restarted after 1 s each time, which relaunches the
+process, which dies again - a loop. `WatchFaceControlService`'s restart backoff climbs
+(19800000 -> 21600000 -> 23400000 -> 25200000 ms), so the system is treating these as repeated
+crashes.
+
+**Why this matters more than anything else currently open.** It quietly invalidates several things:
+
+- **The warm instance is fiction.** It is discarded on every kill, so renders keep paying full
+  construction - which is very likely the real source of the unexplained 1-9 s "stalls" recorded in
+  §7l and §7p. Those were probably cold starts, not mysterious scheduling.
+- **`showsSeconds()` reads false** after each restart until something has been drawn, so the clock
+  rate keeps falling back to the slow path.
+- The repeated `ambient=true` log lines with no `false` between them are explained the same way: a
+  new updater each time, each logging its first observation.
+- Battery: relaunching a process every few seconds is expensive.
+
+**CAUSE FOUND AND FIXED (2026-09-01 19:08): we were shipping raw bitmaps across Binder.**
+
+`Icon.createWithBitmap` carries uncompressed pixels: a 450x450 ARGB image is **791 kB**, and two of
+them travelled to the system on every refresh - up to once a second. Roughly 1.6 MB/s of Binder
+traffic, against a transaction limit of about 1 MB. Switching to `Icon.createWithData` with a PNG:
+
+```
+UPPER image   8-9 kB compressed, was 791 kB raw     (~88x smaller)
+LOWER image     54 kB compressed, was 791 kB raw    (~15x smaller)
+```
+
+**Result: the kill loop stopped dead.** Before the change, 23 process launches in one window and the
+last kill at 18:47:25. After installing at 19:08:40: **zero kills**, one process start, still running
+at 19:10.
+
+**What this retroactively explains** - three things previously filed as unexplained:
+
+- the **1-9 s render "stalls"** of §7l and §7p were cold starts after a kill, not scheduling oddities;
+- the **warm instance** looked ineffective because it was being destroyed every few seconds;
+- the erratic cadence, the repeated `ambient=true` logs, and `secondsShown` falling back to false all
+  followed from the same restarts.
+
+It also means the measurements in §7l and §7p understate what the design can do, since most of them
+were taken while this was happening. Worth re-taking.
+
+**Superseded hypothesis, kept for the record:** memory pressure - the warm `CustomWatchface` holds a
+whole view hierarchy plus the zip's decoded images, and renders allocate a 450x450 bitmap up to once
+a second. `dumpsys meminfo` could not be read before the watch went offline.
+
+- the process was killed while **visible and holding a foreground service**, which ordinary trimming
+  does not do;
+- **only our app** was killed - 60 kills in one window, no other process - so it was never
+  device-wide pressure;
+- `dumpsys meminfo` showed 62 MB PSS against 244 MB available, which was the clue that memory was not
+  the problem and something else about our behaviour was.
 
 ## 8. Decisions log
 
@@ -1583,3 +1794,37 @@ configuration path is dead because it assumes the system treats `CustomWatchface
 §7a/§7e and the `Complication_Libraries.md` entries are read from library sources and the WFF
 schema, and POC 1 (Phase 2) is verified on a device. Anything else is analysis and should be
 treated as such.*
+
+## §7x - Ambient style and charging view: what the user can choose, and where
+
+Raised by the user 2026-09-01: should there be a preference for "dimmed CWF" versus "simplified
+watch face" in ambient, and a charging view? Recorded here because §7i/§7j analysed the ambient
+options but no plan item ever came out of it.
+
+**Charging is the easy half.** The schema exposes `BATTERY_CHARGING_STATUS` (see
+`Complication_Libraries.md`, "WFF knows the battery and the charger"), so a charging layout is a
+`Condition` inside the document. That matters more than convenience: on a charger the watch dozes and
+our process is frozen, so a charging view that depended on us pushing images would freeze with it. A
+condition the runtime evaluates does not.
+
+**Ambient style is the hard half, and the difficulty is not technical.** Both looks are buildable.
+The question is where the switch lives:
+
+| Where | How | What it costs |
+|---|---|---|
+| Watch face editor | `BooleanConfiguration` / `ListConfiguration` in the document | A second place to configure, unrelated to AAPS settings. AAPS cannot read or set it (§7b/§7f). Validates against the schema; **runtime unverified**. |
+| AAPS preferences | We already own the ambient rendering, so AAPS decides what it draws | Consistent with `key_simplify_ui` (`off`/`ambient`/`charging`/`ambient_charging`, read by `SimpleUi.isEnabled`), which users already know - but only works for what **we** draw, not for the document's own layers |
+
+The constraint that shapes it: **the app is frozen in ambient**, so an ambient view made of our images
+goes stale, which is why the current design hides the image and shows a native clock plus text slots.
+A "dimmed CWF" ambient therefore means showing a *stale picture*, dimmed - acceptable for a design
+without seconds, misleading with one.
+
+**Not started. Open questions before any code:**
+
+- [ ] **S13** Does `[CONFIGURATION.*]` actually work at runtime on a pushed face, or only validate?
+- [ ] **S14** Simple mode parity: `key_simplify_ui` has four values and the WFF face honours none of
+      them. Charging in particular is not handled at all today.
+- [ ] **S15** If the ambient style setting lives in AAPS, what exactly does "dimmed CWF" draw when
+      the design has seconds, given the picture cannot update while dozing?
+

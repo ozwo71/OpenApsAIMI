@@ -1800,6 +1800,53 @@ shortcut enumeration (`ALARM`, `BATTERY_STATUS`, `CALENDAR`, `MESSAGE`, `MUSIC_P
 (`groupElement.xsd:50`, `maxOccurs="1"`), so tap regions unrelated to complications are declared by
 wrapping content in a `Group`.
 
+### WFF tap routing does NOT follow androidx's lowest-id rule — measured, and it contradicts the entry above
+
+"Tap routing — reads cached bounds only" records androidx's rule: `getComplicationSlotAt` resolves a
+tap with `findLowestIdMatchingComplicationOrNull { it.enabled && it.tapFilter.hitTest(...) }`, so the
+**lowest slot id** wins and `alpha` is never consulted. It was reasonable to expect the WFF runtime to
+behave the same, since it is an androidx watch face.
+
+**It does not.** Measured on a GW4 (One UI 8.0) with a document containing two full-screen
+`SMALL_IMAGE` slots at ids **0** and **1**, and a smaller text slot at id **2** rendered with
+`alpha="0"` while the watch is awake:
+
+- tapping inside the invisible id-2 slot's area triggered **that** complication's tap action (the
+  glucose provider's `LOOP_STATUS` screen), not the id-0 slot's action.
+
+So on the WFF runtime a **higher-id, invisible** slot took the tap in preference to a lower-id,
+visible, full-screen one. Whether it resolves by document order, by topmost, or by smallest area is
+not established - only that "lowest id wins" is wrong here. `alpha="0"` does **not** make a slot
+untappable, which both implementations agree on.
+
+**The lever that does work is the format's own separation of geometry from hit area.** A
+`ComplicationSlot` carries its render rectangle in `x`/`y`/`width`/`height` and its hit area in a
+**separate, required `BoundingShape`** child (see "`ComplicationSlot` in WFF" above). They are
+independent, so a slot can be drawn full size and be given a hit area of a single pixel in a corner:
+
+```xml
+<ComplicationSlot x="0" y="0" width="450" height="450" …>
+  <BoundingBox x="0" y="0" width="1" height="1" />
+```
+
+That is how to make a decorative or mode-only slot effectively untappable while leaving another slot
+to own the taps. Applied but not yet re-verified on device.
+
+### `Complication` children, and where they are positioned
+
+`5/complication/complicationElement.xsd`: `<Complication type="…">` accepts **unbounded** children
+from `PartElementGroup`, `Group` and `Condition` — so several sibling `PartText`s in one
+`Complication` are legal, and both a value and a title can be laid out without wrapping them.
+
+**Unresolved, with a symptom worth knowing:** whether those children are positioned relative to the
+**slot** or to the **screen**. A slot declared at `x=75 y=55 width=300 height=95` with a child
+`PartText` at `y=0` rendered **nothing visible**, while its sibling at `y=60` appeared near the top of
+the screen — consistent with screen-absolute placement putting the first child off the top edge and
+under the bezel, and inconsistent with slot-relative placement. Not conclusive.
+
+**Robust workaround:** declare the slot **full screen** and place its children at the coordinates they
+should occupy. Relative and absolute then coincide, so the layout is correct either way.
+
 ### Watch Face Push gives one app exactly ONE slot (measured)
 
 `WatchFacePush.ListWatchFacesResponse` exposes `remainingSlotCount`
@@ -1929,6 +1976,50 @@ device question.
 
 ---
 
+## Colour in complication data — what a provider can and cannot control
+
+watchface-complications-data 1.3.0, `Data.kt`.
+
+- **`ShortTextComplicationData` has no colour field**: `text`, `title`, `monochromaticImage`,
+  `smallImage`, content description. A provider therefore **cannot** colour its text, whatever the
+  watch face does. `MonochromaticImage` is tinted by the *face*, not the provider.
+- **`RangedValueComplicationData.colorRamp: ColorRamp?`** (1213) is the exception - *"Optional hint to
+  render the value with the specified `ColorRamp`"*. `ColorRamp(colors: IntArray, interpolated:
+  Boolean)` (1104-1110) takes **at most 7** colours; with `interpolated = false` they render as
+  *"equal sized regions of solid colour"* (1098-1101), i.e. discrete bands rather than a gradient.
+- WFF exposes **`[COMPLICATION.RANGED_VALUE_COLOR_INTERPOLATE]`** as a colour data source, and
+  `Font`'s `color` is `colorAttributeType`, whose pattern is `\[[A-Z0-9]+([._]\w+)*\]|#hex`
+  (`common/simpleTypes/colorType.xsd:45-55`) - a hex literal **or a single data-source reference**,
+  never an expression. So a document cannot compute a colour, but it can consume one the provider
+  supplied.
+
+**Consequence:** the only way for a provider to control the colour of a value it publishes is to send
+it as `RANGED_VALUE` with a `colorRamp`, and have the document use that ramp's data source. Bands are
+equal-width, so thresholds are placed by choosing `min`/`max` rather than stated directly.
+
+## `Icon.createWithBitmap` sends the raw pixels
+
+An `Icon` built with `createWithBitmap` carries the uncompressed bitmap across Binder: a 450x450
+ARGB_8888 image is **810 kB**, against a Binder transaction limit of roughly 1 MB. Two such
+complications refreshed once a second is on the order of 1.6 MB/s of Binder traffic.
+
+`Icon.createWithData(bytes, offset, length)` takes **encoded** image data instead, so a PNG of a watch
+face travels at a small fraction of that and is decoded by the consumer.
+
+**This is not a micro-optimisation - it decides whether the app survives.** Measured on a GW4
+(One UI 8.0): an app publishing two 450x450 image complications at up to 1 Hz with
+`createWithBitmap` was killed by the system every 5-8 seconds - 23 process launches in one window,
+60 kills in another - **while visible and holding a foreground service**, which ordinary memory
+trimming does not do. Only that app was killed; no other process was. Its PSS was 62 MB against
+244 MB available, so it was not memory pressure.
+
+Switching the same complications to `createWithData` with PNG took them to **8-9 kB and 54 kB** (from
+791 kB) and the kills **stopped completely** - zero in the following period, against a kill every few
+seconds before.
+
+So: **never publish a large image complication as a raw bitmap, and never at any frequency.**
+Compress it. See `CWF_WFF_Prompt.md` §7w for the full trail.
+
 ## Other reusable facts
 
 - `ComplicationData.tapAction: PendingIntent?` is public — `watchface-complications-data`
@@ -1966,3 +2057,33 @@ device question.
 *Draft — pending review. Contents are observations from published library sources at the versions
 listed above; verify against the sources for the version you are building against before relying
 on any specific line reference.*
+
+## DefaultProviderPolicy only binds a slot once
+
+In a Watch Face Format document, `DefaultProviderPolicy` names the provider a `ComplicationSlot`
+should start with. It applies **only to a slot the runtime has never bound before**. Changing
+`primaryProvider` on a `slotId` that is already bound does nothing: measured on a Galaxy Watch 4, the
+slot stayed connected to the previous provider across a re-push and a reinstall, and the newly named
+provider was **never asked for data once**. The binding survives because the runtime stores it per
+watch face id and slot id, and the watch face id does not change when the document is updated.
+
+**To move a slot to a different provider, give it a new `slotId`.** The fresh id has no stored
+binding, so the policy is applied. The abandoned id simply stops being referenced.
+
+Worth knowing because the failure is silent - the document validates, the face renders, and the only
+symptom is that taps and data keep coming from the provider you thought you had replaced.
+
+## WFF knows the battery and the charger
+
+The Watch Face Format schema (v1, `common/` data sources) exposes the charger and battery to the
+document itself, with no help from the app:
+
+- `BATTERY_CHARGING_STATUS` - whether the watch is on the charger
+- `BATTERY_PERCENT`, `BATTERY_IS_LOW`, `BATTERY_STATUS`
+- `BATTERY_TEMPERATURE_CELSIUS` / `BATTERY_TEMPERATURE_FAHRENHEIT`
+
+Useful because it means a "charging" layout - the bedside-clock case - can be a `Condition` in the
+document rather than a state the app has to detect, render and push. The app is frozen while the
+watch dozes on a charger, so anything that depends on us refreshing would be stale; a condition
+evaluated by the runtime is not.
+
