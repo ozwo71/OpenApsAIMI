@@ -56,4 +56,90 @@ class KalmanFilterTest {
         assertTrue(isf > 15.0)
         assertTrue(isf < 40.0)
     }
+
+    /**
+     * B1: at high glucose the raw formula falls under MIN_ISF and the result saturates on the
+     * absolute clamp. 5.0 mg/dL/U is four times below the lowest value ever measured for this
+     * patient (18.7, see `ISF/DynamicSensitivityPolicy`), so it is a clamp artefact, not a
+     * sensitivity.
+     */
+    @Test
+    fun `ISF at high glucose stays above the physiological floor instead of saturating on 5`() {
+        val tddCalculator = mockk<TddCalculator>(relaxed = true)
+        val preferences = mockk<Preferences>(relaxed = true)
+        val logger = mockk<AAPSLogger>(relaxed = true)
+        every { preferences.get(DoubleKey.OApsAIMITDD7) } returns 55.0
+
+        val calculator = KalmanISFCalculator(tddCalculator, preferences, logger)
+
+        // Raw = (1800 / (55 * ln(250/75 + 1))) * 0.2 = 4.46, below MIN_ISF, so today it clamps to 5.0.
+        val isf = calculator.calculateISF(250.0, 0.0, 0.0)
+
+        assertTrue(isf >= 16.0, "ISF was $isf, which is below the physiological floor")
+    }
+
+    /**
+     * B2: when the caller knows the profile ISF, the floor follows it.
+     * min(30, 1800/55) * 0.5 = 15.0.
+     */
+    @Test
+    fun `the floor is relative to the profile when the profile is known`() {
+        val tddCalculator = mockk<TddCalculator>(relaxed = true)
+        val preferences = mockk<Preferences>(relaxed = true)
+        val logger = mockk<AAPSLogger>(relaxed = true)
+        every { preferences.get(DoubleKey.OApsAIMITDD7) } returns 55.0
+
+        val calculator = KalmanISFCalculator(tddCalculator, preferences, logger)
+
+        val isf = calculator.calculateISF(250.0, 0.0, 0.0, profileIsfMgdl = 30.0)
+
+        assertEquals(15.0, isf, 0.2)
+    }
+
+    /**
+     * B3: safety invariant. The floor must stay under what the `IsfAdjustmentEngine` blend produces
+     * before its rate limiter (at least 0.58 x profile ISF), so in steady state
+     * `max(kalmanFastIsf, isfAdj)` in the plugin keeps discarding the Kalman value. It is only a
+     * steady-state property: the engine rate-limits against its own previous anchor, so just after
+     * the profile ISF steps up at a block boundary `isfAdj` can sit below the floor for about an
+     * hour and a half. At BG 250 the raw value is far under the floor, so the returned value is the
+     * floor itself.
+     */
+    @Test
+    fun `the floor stays under the IsfAdjustmentEngine blend in steady state`() {
+        val tddCalculator = mockk<TddCalculator>(relaxed = true)
+        val preferences = mockk<Preferences>(relaxed = true)
+        val logger = mockk<AAPSLogger>(relaxed = true)
+        every { preferences.get(DoubleKey.OApsAIMITDD7) } returns 55.0
+        val profileIsf = 30.0
+
+        val calculator = KalmanISFCalculator(tddCalculator, preferences, logger)
+
+        val floorAtSaturation = calculator.calculateISF(250.0, 0.0, 0.0, profileIsfMgdl = profileIsf)
+
+        assertTrue(floorAtSaturation <= 0.5 * profileIsf, "floor was $floorAtSaturation")
+        assertTrue(floorAtSaturation < 0.58 * profileIsf, "floor was $floorAtSaturation")
+    }
+
+    /**
+     * B4: an unusable TDD falls back to the absolute floor, so nothing changes for that case.
+     * Without the guard, 1800 / 0.0 would be infinite and the floor would push every value to
+     * MAX_ISF = 300.
+     */
+    @Test
+    fun `an unusable TDD falls back to the absolute floor`() {
+        val tddCalculator = mockk<TddCalculator>(relaxed = true)
+        val preferences = mockk<Preferences>(relaxed = true)
+        val logger = mockk<AAPSLogger>(relaxed = true)
+        every { preferences.get(DoubleKey.OApsAIMITDD7) } returns 0.0
+
+        val calculator = KalmanISFCalculator(tddCalculator, preferences, logger)
+
+        // safeTDD falls back to 1.0, so raw = (1800 / ln(250/75 + 1)) * 0.2 = 245.5, and the filter
+        // moves from 15.0 to about 223.3. The floor of 5.0 does not bind, as before the change.
+        val isf = calculator.calculateISF(250.0, 0.0, 0.0)
+
+        assertEquals(223.3, isf, 1.0)
+        assertTrue(isf < 300.0, "the floor must not have been pushed to MAX_ISF, isf was $isf")
+    }
 }

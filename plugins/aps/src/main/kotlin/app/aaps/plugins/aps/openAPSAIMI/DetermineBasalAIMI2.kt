@@ -326,10 +326,14 @@ internal data class AimiDecisionContext(
         val isf_source: String? = null,
         /** Age (ms) of the cached dynamic entry that was used, when one was used. */
         val isf_age_ms: Long? = null,
-        /** Key of the cached entry used. Distinguishes two entries sharing a 30-minute bucket. */
+        /** Exact time the cached entry that was used had been written. */
         val isf_cache_key: Long? = null,
-        /** Glucose the cached value was computed for (the key's within-bucket remainder). */
+        /** Glucose the cached value was computed for. */
         val isf_cache_glucose_mgdl: Long? = null,
+        /** Exit path of the last sensitivity pass: `OFF`, `DB`, `GLUC` or `CALC`. */
+        val isf_calc_path: String? = null,
+        /** How many samples the dynamic ISF store held at the end of that pass. */
+        val isf_cache_size: Int? = null,
         /** Fast estimator 1: Kalman-filtered raw ISF. */
         val isf_kalman_fast_mgdl: Double? = null,
         /** Fast estimator 2: IsfAdjustmentEngine output. */
@@ -696,6 +700,8 @@ internal data class AimiDecisionContext(
             base.put("isf_age_ms", baseline_state.isf_age_ms ?: org.json.JSONObject.NULL)
             base.put("isf_cache_key", baseline_state.isf_cache_key ?: org.json.JSONObject.NULL)
             base.put("isf_cache_glucose_mgdl", baseline_state.isf_cache_glucose_mgdl ?: org.json.JSONObject.NULL)
+            base.put("isf_calc_path", baseline_state.isf_calc_path ?: org.json.JSONObject.NULL)
+            base.put("isf_cache_size", baseline_state.isf_cache_size ?: org.json.JSONObject.NULL)
             base.put("isf_kalman_fast_mgdl", baseline_state.isf_kalman_fast_mgdl ?: org.json.JSONObject.NULL)
             base.put("isf_adj_engine_mgdl", baseline_state.isf_adj_engine_mgdl ?: org.json.JSONObject.NULL)
             base.put("isf_fused_slow_mgdl", baseline_state.isf_fused_slow_mgdl ?: org.json.JSONObject.NULL)
@@ -2082,6 +2088,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 isf_age_ms = IsfSourceTelemetry.lastAgeMs,
                 isf_cache_key = IsfSourceTelemetry.lastCacheKey,
                 isf_cache_glucose_mgdl = IsfSourceTelemetry.lastCacheGlucoseMgdl,
+                isf_calc_path = IsfSourceTelemetry.lastCalcPath,
+                isf_cache_size = IsfSourceTelemetry.lastCacheSize,
                 isf_kalman_fast_mgdl = IsfSourceTelemetry.lastKalmanFastIsf,
                 isf_adj_engine_mgdl = IsfSourceTelemetry.lastIsfAdjEngine,
                 isf_fused_slow_mgdl = IsfSourceTelemetry.lastFusedSlowIsf,

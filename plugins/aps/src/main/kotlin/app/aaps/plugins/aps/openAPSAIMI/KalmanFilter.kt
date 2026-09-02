@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Classe de filtre de Kalman simple permettant de lisser les mesures d'ISF.
@@ -58,6 +59,39 @@ class KalmanISFCalculator(
         private const val MAX_ISF = 300.0
         private const val BASE_CONSTANT = 75.0
         private const val SCALING_FACTOR = 1800.0
+
+        /**
+         * Physiological floor, as a fraction of the smaller of the profile ISF and the TDD-implied
+         * ISF.
+         *
+         * `computeRawISF` multiplies by a `bgFactor` of 0.2 above BG 180, so at a TDD of 55 U/day
+         * the raw value drops under [MIN_ISF] from about BG 200 on and the result saturates on the
+         * absolute clamp of 5.0 mg/dL/U. The outcome corpus in `ISF/DynamicSensitivityPolicy`
+         * measures this patient between 18.7 and 24.3 mg/dL/U, so 5.0 is four times below the
+         * lowest sensitivity ever observed. It is an artefact of the clamp, not a sensitivity.
+         *
+         * 0.5 is set well under the corpus on purpose. The floor is relative to the patient, never
+         * an absolute number: it follows the profile ISF and the TDD, so it moves with them.
+         *
+         * It can only raise the fast estimate. A higher ISF makes the loop assume insulin acts more
+         * strongly, so it doses less. The floor can therefore only make a dose smaller, never
+         * larger.
+         *
+         * In steady state it decides nothing. `OpenAPSAIMIPlugin` takes `max(kalmanFastIsf, isfAdj)`
+         * and the blend inside `IsfAdjustmentEngine` cannot fall below 0.58 times the profile ISF
+         * before its rate limiter: its weight on the bounded AF term is at most 0.6, and that term
+         * is itself bounded below at 0.3 times the profile ISF, so 0.6 * 0.3 + 0.4 = 0.58. At 0.5
+         * the floor stays under that, so the `max` keeps discarding this value.
+         *
+         * That does not hold during a transition. `IsfAdjustmentEngine` rate-limits against its own
+         * previous anchor, not against the current profile ISF, and the budget is 1.67 % per
+         * 5-minute cycle. When the profile ISF steps up at a block boundary - this patient goes from
+         * 30 to 70 mg/dL/U at midnight, so it happens every day - the anchor stays near the old low
+         * value and needs about 1.5 hours to climb back above 0.58 times the new profile ISF. In
+         * that window `isfAdj` is below the floor, and the floor is what decides the value. The
+         * effect there is a smaller dose.
+         */
+        private const val PHYSIO_FLOOR_FACTOR = 0.5
     }
 
     // Augmente la variance de processus pour plus de réactivité
@@ -101,8 +135,22 @@ class KalmanISFCalculator(
         }
     }
 
-    private fun computeRawISF(glucose: Double): Double {
-        val effectiveTDD = computeEffectiveTDD()
+    /**
+     * Lowest sensitivity this calculator is allowed to report.
+     *
+     * Falls back to the absolute [MIN_ISF] when the TDD is unusable, so the behaviour is unchanged
+     * in that case. Without the guard, `SCALING_FACTOR / 0.0` would be infinite and every value
+     * would be pushed to [MAX_ISF].
+     */
+    private fun physiologicalFloor(effectiveTdd: Double, profileIsfMgdl: Double?): Double {
+        if (!effectiveTdd.isFinite() || effectiveTdd < 1.0) return MIN_ISF
+        val tddIsf = SCALING_FACTOR / effectiveTdd
+        val profile = profileIsfMgdl?.takeIf { it.isFinite() && it > 0.0 }
+        val base = if (profile != null) min(profile, tddIsf) else tddIsf
+        return (base * PHYSIO_FLOOR_FACTOR).coerceIn(MIN_ISF, MAX_ISF)
+    }
+
+    private fun computeRawISF(glucose: Double, effectiveTDD: Double, floorIsf: Double): Double {
         val safeTDD = if (effectiveTDD < 1.0) 1.0 else effectiveTDD
 
         // Apply a progressive reduction in ISF based on increasing glucose levels
@@ -117,11 +165,24 @@ class KalmanISFCalculator(
         }
 
         val rawISF = (SCALING_FACTOR / (safeTDD * ln(glucose / BASE_CONSTANT + 1))) * bgFactor
-        return rawISF.coerceIn(MIN_ISF, MAX_ISF)
+        return rawISF.coerceIn(floorIsf, MAX_ISF)
     }
 
-    fun calculateISF(glucose: Double, currentDelta: Double?, predictedDelta: Double?): Double {
-        val rawISF = computeRawISF(glucose)
+    /**
+     * @param profileIsfMgdl the static profile ISF for the current time of day, when the caller has
+     *   it. It only lowers the floor, never raises it.
+     */
+    fun calculateISF(
+        glucose: Double,
+        currentDelta: Double?,
+        predictedDelta: Double?,
+        profileIsfMgdl: Double? = null
+    ): Double {
+        // Computed once: it drives both the raw value and the floor, and it must be the same number
+        // in both.
+        val effectiveTDD = computeEffectiveTDD()
+        val floorIsf = physiologicalFloor(effectiveTDD, profileIsfMgdl)
+        val rawISF = computeRawISF(glucose, effectiveTDD, floorIsf)
         logger.debug(LTag.APS, "Raw ISF calculé : $rawISF pour BG = $glucose")
 
         // Calculate the combined influence of current and predicted deltas
@@ -149,7 +210,13 @@ class KalmanISFCalculator(
 
         kalmanFilter.measurementVariance = newMeasurementVariance
 
-        val filteredISF = kalmanFilter.update(rawISF).coerceIn(MIN_ISF, MAX_ISF)
+        // The floor is applied twice on purpose.
+        // On the measurement, so the filter's internal state never learns a non-physiological value
+        // during a high plateau and then carries it through the fall back down.
+        // On the output, because stateEstimate starts at 15.0, which can be below the floor: the
+        // first call of the process would otherwise return a value under the floor even though the
+        // measurement was already bounded.
+        val filteredISF = kalmanFilter.update(rawISF).coerceIn(floorIsf, MAX_ISF)
         logger.debug(LTag.APS, "ISF filtré par Kalman : $filteredISF (variance de mesure = ${kalmanFilter.measurementVariance})")
         return filteredISF
     }

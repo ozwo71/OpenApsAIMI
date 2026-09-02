@@ -1,6 +1,6 @@
 # ADR 0003 — Fix the dynamic ISF cache read path
 
-**Status:** proposed
+**Status:** accepted (partial: decisions 1, 2, 5)
 **Depends on:** [0001](0001-replay-harness.md)
 **Implemented before:** [0002](0002-sensitivity-three-levels.md)
 **Behaviour change:** yes
@@ -88,6 +88,27 @@ because nothing forced a refresh, and nothing flagged the value as old.
 
 Computing synchronously on the APS path is out of scope here — the async design exists to keep the
 UI thread free. The fix is to make staleness visible and bounded, not to remove the cache.
+
+## What was implemented, and what was deliberately held back
+
+Decisions **1**, **2** and **5** are implemented. The store is now `DynIsfCache`, keyed on time
+alone, so the newest entry is really the most recent one; the sample carries its own write time, so
+`isf_age_ms` is exact; and the wholesale `clear()` is replaced by eviction of anything older than
+24 hours, so the store never empties. Two new fields, `isf_calc_path` and `isf_cache_size`, make it
+visible whether the cache is being written at all.
+
+Decision **4** — treat a value older than the window as absent — is **postponed on purpose**.
+
+A 24-hour support package of 1412 cycles showed the store was almost never written: the loop took
+the database short cut on nearly every cycle, so `isf_source` was `DYNAMIC_STALE` on **93.9 %** of
+them, median age **45.7 min**, p95 **128.8 min**, maximum **241.9 min**. Applying decision 4 on its
+own, against a cache in that state, would have turned roughly 94 % of the cycles into a static
+profile fallback. The profile ISF is lower than the dynamic value here, and a lower ISF means the
+loop assumes insulin acts less strongly, so it would have commanded **more** insulin — the opposite
+of what this ADR is for.
+
+The order therefore is: first make the cache actually be written, then bound the staleness.
+Decision 4 can be applied once a support package shows `isf_age_ms` with a p95 **below 5 minutes**.
 
 ## Acceptance criteria
 
