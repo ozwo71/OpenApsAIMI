@@ -11,6 +11,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.widget.Toolbar
 import app.aaps.core.interfaces.profile.ProfileUtil
+import app.aaps.core.interfaces.source.EversenseCalibrationSource
 import androidx.appcompat.app.AppCompatActivity
 import dagger.hilt.android.AndroidEntryPoint
 import app.aaps.plugins.source.R
@@ -23,6 +24,8 @@ import app.aaps.plugins.eversense.models.EversenseCGMResult
 import app.aaps.plugins.eversense.models.EversenseState
 import app.aaps.plugins.eversense.util.EversenseLogger
 import javax.inject.Inject
+import kotlin.math.roundToInt
+import app.aaps.core.ui.R as CoreUiR
 
 @AndroidEntryPoint
 class EversenseCalibrationActivity : AppCompatActivity() {
@@ -96,10 +99,22 @@ class EversenseCalibrationActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            val bgMgDl = if (profileUtil.units.asText == "mmol") {
-                (bgValue * 18.0182).toInt()
-            } else {
-                bgValue.toInt()
+            // roundToInt, not toInt: truncating would turn the displayed low bound of 2.2 mmol/L
+            // (39.6 mg/dL) into 39 and reject it. Rounding also keeps every other mmol entry as
+            // close as possible to what the user typed.
+            val bgMgDl = profileUtil.convertToMgdl(bgValue, profileUtil.units).roundToInt()
+            if (bgMgDl < EversenseCalibrationSource.MIN_CALIBRATION_MGDL || bgMgDl > EversenseCalibrationSource.MAX_CALIBRATION_MGDL) {
+                EversenseLogger.warning(TAG, "Calibration value out of range — bgMgDl: $bgMgDl")
+                Toast.makeText(
+                    this,
+                    getString(
+                        CoreUiR.string.eversense_calibration_value_out_of_range,
+                        profileUtil.fromMgdlToStringWithUnits(EversenseCalibrationSource.MIN_CALIBRATION_MGDL.toDouble()),
+                        profileUtil.fromMgdlToStringWithUnits(EversenseCalibrationSource.MAX_CALIBRATION_MGDL.toDouble())
+                    ),
+                    Toast.LENGTH_LONG
+                ).show()
+                return@setOnClickListener
             }
             EversenseLogger.info(TAG, "Calibration submitting — bgValue: $bgValue, bgMgDl: $bgMgDl")
 

@@ -5,6 +5,7 @@ import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.source.DexcomBoyda
+import app.aaps.core.interfaces.source.EversenseCalibrationSource
 import app.aaps.core.interfaces.source.XDripSource
 import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.shared.tests.TestBase
@@ -21,19 +22,21 @@ import org.mockito.kotlin.whenever
  *  - CGM_XDRIP → only when XDrip source plugin is enabled
  *  - CGM_DEX   → only when Dexcom/BYODA source plugin is enabled
  *  - CALIBRATION → when XDrip is enabled OR a non-default calibration override plugin is active
+ *  - EVERSENSE_CALIBRATION → only when the Eversense source plugin is enabled
  *  - everything else → always available
  */
 class ElementAvailabilityTest : TestBase() {
 
     @Mock lateinit var xDripSource: XDripSource
     @Mock lateinit var dexcomBoyda: DexcomBoyda
+    @Mock lateinit var eversenseCalibrationSource: EversenseCalibrationSource
     @Mock lateinit var activePlugin: ActivePlugin
 
     private lateinit var elementAvailability: ElementAvailability
 
     @BeforeEach
     fun setUp() {
-        elementAvailability = ElementAvailability(xDripSource, dexcomBoyda, activePlugin)
+        elementAvailability = ElementAvailability(xDripSource, dexcomBoyda, eversenseCalibrationSource, activePlugin)
     }
 
     // -------- CGM_XDRIP --------

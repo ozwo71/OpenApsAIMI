@@ -84,6 +84,7 @@ sealed class QuickLaunchAction {
         val Afrezza = StaticAction(ElementType.AFREZZA)
         val Cgm = StaticAction(ElementType.CGM_XDRIP)
         val Calibration = StaticAction(ElementType.CALIBRATION)
+        val EversenseCalibration = StaticAction(ElementType.EVERSENSE_CALIBRATION)
         val InsulinManagement = StaticAction(ElementType.INSULIN_MANAGEMENT)
         val ProfileSwitch = StaticAction(ElementType.PROFILE_MANAGEMENT)
         val BgCheck = StaticAction(ElementType.BG_CHECK)
@@ -100,7 +101,7 @@ sealed class QuickLaunchAction {
 
         /** All static actions available for the configuration screen (excluding QuickLaunchConfig) */
         val staticActions: List<QuickLaunchAction> = listOf(
-            Insulin, InsulinManagement, Afrezza, Carbs, Wizard, Treatment, Cgm, Calibration,
+            Insulin, InsulinManagement, Afrezza, Carbs, Wizard, Treatment, Cgm, Calibration, EversenseCalibration,
             BgCheck, Note, Exercise, Question, Announcement,
             SensorInsert, BatteryChange, CannulaChange, Fill, SiteRotation
         )

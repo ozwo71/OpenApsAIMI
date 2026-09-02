@@ -192,7 +192,9 @@
     <string name="addnew_above">Add new above</string>
     <string name="wrong_pump_data">Data is coming from different pump. Change pump driver to reset pump state.</string>
     <string name="bg_label">BG</string>
+    <string name="eversense_calibration_value_out_of_range" comment="%1$s=lowest accepted value with unit, for example 40 mg/dL or 2.2 mmol/L; %2$s=highest accepted value with unit, for example 400 mg/dL or 22.2 mmol/L">Enter a blood glucose value between %1$s and %2$s.</string>
     <string name="calibration">Calibration</string>
+    <string name="eversense_calibration_label">Eversense calibration</string>
     <string name="cgm">CGM</string>
     <string name="alarminxmin">Run alarm in %1$d min</string>
     <string name="treatmentdeliveryerror">Bolus reported an error. Manually check real delivered insulin and carb amount</string>
@@ -519,6 +521,7 @@
     <string name="treatment_question_desc">Log a question for your care team</string>
     <string name="treatment_cgm_desc">Open CGM app</string>
     <string name="treatment_calibration_desc">Calibrate CGM sensor</string>
+    <string name="treatment_eversense_calibration_desc">Send a finger-prick reading straight to the Eversense transmitter</string>
     <string name="treatment_bg_check_desc">Record blood glucose check</string>
     <string name="treatment_exercise_desc">Log exercise activity</string>
     <string name="treatment_announcement_desc">Post announcement</string>

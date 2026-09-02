@@ -529,3 +529,51 @@ is lost, but it is real. Not addressed by any of the 15 commits.
 that the E3 calibration cadence really is a fixed 24 h (CAPTCG's and iOS's assertion, not checked
 against Senseonics documentation); that the 90 s dedup window never drops a genuine reading in a
 denser-than-5-minute logging phase; and that codes 68/69 are truly not device alarms.
+
+### CAPTCG sync 2026-09-02 (calibration bound, toast default, quick launch)
+
+Reference: [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS-Eversense-) branch
+`european-region-support` @ **88e60751da** (6 commits past the `ef079b8482` we ported on 2026-09-01).
+
+**Watch two repositories now.** The same Eversense work also lives on
+`CAPTCG/AndroidAPS` branch `pr/eversense-clean` @ `ffbd93ff27`, which is a **parallel rewrite of the
+same history for an upstream PR**: identical commit messages, different shas. Do not port from it.
+It additionally carries items we deliberately defer (the E3 register change `0x0874 -> 0x049D`, DMS
+alert-byte work), all self-labelled UNVERIFIED by their author.
+
+**Ported:**
+
+| Change | File | Notes |
+|--------|------|--------|
+| Cloud-upload toast default off | `core/keys/BooleanKey.kt` | Upstream `88e60751da`. Their key is dead code on their side; **ours reads it** (`EversensePlugin.cloudUploadToastEnabled()`), so this was a real toast on every CGM read cycle — about 288 per day, `LENGTH_LONG`, on success **and** failure |
+| Toast preference actually exposed | `plugins/source/EversensePlugin.kt`, `core/keys` strings | **Fork addition, not upstream.** The key was in no preference screen, so the user could neither turn the toast off nor, after the default flip, turn it back on. Now sits next to `EversenseCloudUploadEnabled` |
+| Calibration bounded to 40–400 mg/dL | `plugins/source/activities/EversenseCalibrationActivity.kt` | **We were worse than CAPTCG here.** Ours checked only `bgValue <= 0` — no `maxLength` in the layout, no guard in `sendCalibration`, the communicator or the packet (16-bit mask only). A user could send 12 or 1200 mg/dL, which becomes the transmitter's reference and shifts **every later reading**. Enforced after conversion, so it holds in mmol/L too (2.2–22.2) |
+| mmol conversion uses the project constant | same file | Replaced a hardcoded `18.0182` and an `asText == "mmol"` string compare with `profileUtil.convertToMgdl`, which uses `Constants.MMOLL_TO_MGDL = 18.01559`. **`roundToInt`, not `toInt`** — truncating turns 2.2 mmol/L into 39 mg/dL and rejects the advertised low bound |
+| Quick-launch buttons no longer silently deleted | `ui/compose/quickLaunch/QuickLaunchResolver.kt` | Upstream `37ee19314b`. `isValid()` conflated "valid" with "usable right now"; `MainViewModel.refreshQuickLaunch` reads "not valid" as "delete from the saved toolbar". A `StaticAction` wraps a fixed `ElementType` and can never go stale, so it is now always valid |
+| Unusable buttons grey out instead of vanishing | same file | **Fork divergence: CAPTCG deletes the `elementAvailability` parameter, we keep it** and feed `resolveItem`'s `enabled` from it. `QuickLaunchConfigScreen` ignores that flag, so the picker stays usable. **Behaviour change beyond the port:** buttons whose plugin is currently inactive now render greyed on the toolbar, where before every button rendered enabled |
+| Quick-launch "Eversense Calibration" button | `ElementType`, `ElementTypeStyle`, `ElementAvailability`, `QuickLaunchAction`, `AppRoute`, `AppNavGraph`, `ComposeMainActivity`, new `core/interfaces/source/EversenseCalibrationSource.kt`, new `ui/compose/eversenseCalibrationDialog/` | Upstream `a80dd7ed5c`, **reimplemented banner-free**. Wired through our own `QuickLaunchAction.Afrezza` chain. Three deliberate improvements over CAPTCG: the 40–400 bound, a `CalibrationReadiness.READY` gate (their dialog bypasses the readiness UI this doc lists as a fork advantage), and a confirm step |
+
+**Ordering constraint, do not reverse it:** the quick-launch delete fix MUST land before the new
+button. `EVERSENSE_CALIBRATION` availability follows `EversensePlugin.isEnabled()`, and for an
+Eversense user the older `CALIBRATION` availability is always false because our plugin is a `BgSource`,
+not a calibration plugin. Added before the fix, the new button would have been the third silently
+deleted case.
+
+**Not applicable:** `e611a6ad41` (their README) and `b68d37cd46` (a doc comment on the calibration
+countdown banner, which we deliberately did not port — our dashboard skin bypasses the screen it
+lives on).
+
+**Correction to the 2026-09-01 entry:** the two-timestamp E3 calibration command, listed there among
+the deferred items, is in fact already ours (`SendCalibrationPacket.kt`, command `0x3C`, byte
+`[14] = 0x55`). `EversenseE3Memory.kt` remains untouched and its register addresses remain deferred.
+
+**Also noted, not fixed:** `EversensePlugin.kt` around the toast call site uses two fully-qualified
+inline names (`app.aaps.plugins.eversense.util.EversenseHttp365Util` and `android.widget.Toast`),
+against the project's explicit-import rule. Pre-existing; left alone to keep this diff reviewable.
+
+**Verified:** `:app:assembleFullDebug` green; `:plugins:eversense` and `:core:keys` unit tests green.
+**Not verified:** the 10 new `:ui` test cases COMPILE but were never RUN — the `:ui` test source set
+is blocked by pre-existing breakage (`GraphViewModelTest`, `RunningModeManagementViewModelTest`).
+All runtime behaviour needs hardware: a real calibration reaching an E3 or 365, the toast suppression,
+and the quick-launch grey-out. The 40–400 range itself is CAPTCG's assertion, not a Senseonics
+document — inference, in the conservative direction.

@@ -4,6 +4,7 @@ import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.source.DexcomBoyda
+import app.aaps.core.interfaces.source.EversenseCalibrationSource
 import app.aaps.core.interfaces.source.XDripSource
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -20,15 +21,17 @@ import javax.inject.Singleton
 class ElementAvailability @Inject constructor(
     private val xDripSource: XDripSource,
     private val dexcomBoyda: DexcomBoyda,
+    private val eversenseCalibrationSource: EversenseCalibrationSource,
     private val activePlugin: ActivePlugin
 ) {
 
     fun isAvailable(elementType: ElementType): Boolean = when (elementType) {
-        ElementType.CALIBRATION -> xDripSource.isEnabled() || isCalibrationOverrideActive()
-        ElementType.CGM_XDRIP   -> xDripSource.isEnabled()
-        ElementType.CGM_DEX     -> dexcomBoyda.isEnabled()
+        ElementType.CALIBRATION           -> xDripSource.isEnabled() || isCalibrationOverrideActive()
+        ElementType.CGM_XDRIP             -> xDripSource.isEnabled()
+        ElementType.CGM_DEX               -> dexcomBoyda.isEnabled()
+        ElementType.EVERSENSE_CALIBRATION -> eversenseCalibrationSource.isEnabled()
 
-        else                    -> true
+        else                              -> true
     }
 
     /**

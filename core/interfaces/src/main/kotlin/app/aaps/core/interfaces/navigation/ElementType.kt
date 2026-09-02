@@ -38,6 +38,12 @@ enum class ElementType(
     // DB write, and a client has no CGM source to calibrate — so it stays local/master-only (see Track B calibration notes).
     CALIBRATION(category = ElementCategory.CGM, searchable = true),
 
+    // Eversense's own calibration: writes a fingerstick value straight to the transmitter over
+    // Bluetooth, not through the activeCalibration / xDrip broadcast that CALIBRATION above uses.
+    // A client has no Bluetooth link to the transmitter, so like CALIBRATION this stays local to
+    // the master and is not gated on client pairing.
+    EVERSENSE_CALIBRATION(category = ElementCategory.CGM, searchable = true),
+
     // Profile & Targets — minimum level is BOLUS; screen mode (PLAY/EDIT) determined by granted auth level.
     // Mutating editors whose writes ride Client-Control → CLIENT_PAIRED (hidden on an unpaired client).
     // PROFILE_MANAGEMENT is the exception and stays visible: profiles are state an unpaired client still

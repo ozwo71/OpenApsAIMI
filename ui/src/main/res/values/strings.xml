@@ -345,4 +345,8 @@
     <string name="afrezza_carb_prompt_title" comment="After Afrezza dose flow: offer bolus wizard for carbs">Enter Carbs?</string>
     <string name="afrezza_carb_prompt_message" comment="Message for carb prompt after Afrezza logging">Open the Bolus Calculator to enter carbs for this meal?</string>
 
+    <!-- Eversense calibration dialog (quick launch) -->
+    <string name="eversense_calibration_dialog_reconnect_hint">Not connected to the transmitter. AAPS will connect first, so this may take up to 30 seconds.</string>
+    <string name="eversense_calibration_send_failed">Could not send the calibration. Check that the transmitter is nearby and try again.</string>
+
 </resources>

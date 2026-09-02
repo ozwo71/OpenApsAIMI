@@ -60,6 +60,14 @@ import kotlin.math.roundToInt
  * @param decimalPlaces Number of decimal places for value display (0 = integer, default). Ignored if valueFormat is set.
  * @param enabled Whether the input is interactive
  * @param modifier Modifier for the root Column container
+ * @param onErrorChange Called with true while the typed text is not a number, or is outside
+ *   [valueRange], and with false once it is good again. Such text is deliberately NOT published
+ *   through [onValueChange], so without this callback the caller keeps the last good value while the
+ *   field shows an error - and a submit button driven only by that value stays enabled. Any screen
+ *   whose submit button acts on the value (sends a dose, writes a calibration) should keep this flag
+ *   in its state and add `&& !inputError` to its submit condition. It is also called with false when
+ *   the field leaves the screen, so a field that is hidden while in error cannot block the caller for
+ *   good.
  *
  * @see NumberInputRowBasicPreview
  * @see NumberInputRowWithUnitPreview
@@ -84,6 +92,7 @@ fun NumberInputRow(
     enabled: Boolean = true,
     compact: Boolean = false,
     displayValue: String? = null,
+    onErrorChange: (Boolean) -> Unit = {},
 ) {
     val effectiveValueFormat = valueFormat ?: remember(decimalPlaces) {
         NumberFormat.withDecimals(decimalPlaces)
@@ -97,6 +106,11 @@ fun NumberInputRow(
     }
     var isError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
+
+    // Text that does not parse, or falls outside valueRange, is never published through
+    // onValueChange. So this is the only way the caller can learn that what the user sees is not
+    // what the caller holds.
+    LaunchedEffect(isError) { onErrorChange(isError) }
 
     // Sync text field when value changes externally (e.g., +/- buttons, quick-add buttons,
     // ViewModel updates). Skip only when the field's current text already parses to `value` —
@@ -154,9 +168,14 @@ fun NumberInputRow(
     // tapping Done or shifting focus first — onFocusChanged might never fire).
     val latestTextProvider by rememberUpdatedState({ textFieldValue.text })
     val latestIsFocused by rememberUpdatedState(isFocused)
+    val latestOnErrorChange by rememberUpdatedState(onErrorChange)
     DisposableEffect(Unit) {
         onDispose {
             if (latestIsFocused) validateAndCommit(latestTextProvider())
+            // The field is going away, so it must not leave the caller stuck on an error. This
+            // matters for fields that are shown conditionally: hiding one while it held bad text
+            // would otherwise keep the caller's submit button disabled for good.
+            latestOnErrorChange(false)
         }
     }
 

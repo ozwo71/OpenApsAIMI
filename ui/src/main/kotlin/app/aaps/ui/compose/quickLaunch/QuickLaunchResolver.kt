@@ -58,7 +58,10 @@ class QuickLaunchResolver @Inject constructor(
             action = action,
             label = resolveLabel(action),
             icon = icon,
-            enabled = true,
+            // Availability, not validity: a button whose plugin is not active right now is greyed
+            // out on the toolbar but stays in the saved config. QuickLaunchConfigScreen ignores this
+            // flag, so such a button can still be added and reordered.
+            enabled = action.elementType?.let { elementAvailability.isAvailable(it) } ?: true,
             description = resolveDescription(action)
         )
     }
@@ -116,7 +119,14 @@ class QuickLaunchResolver @Inject constructor(
             plugin != null && plugin.isEnabled(plugin.pluginDescription.mainType) && plugin.hasComposeContent()
         }
 
-        else                                   -> action.elementType?.let { elementAvailability.isAvailable(it) } ?: true
+        // A StaticAction (and anything else without its own branch above) wraps a fixed ElementType
+        // constant, which can never go stale the way a deleted automation, profile, scene or preset
+        // can — so it is always valid here. Whether it can be used right now (for example Eversense
+        // is not the active BG source) is a separate, passing question, answered by the `enabled`
+        // flag in resolveItem below. isValid()'s caller, MainViewModel.refreshQuickLaunch, reads
+        // "not valid" as "delete from the saved toolbar", so a button must not be dropped just
+        // because its plugin happens to be inactive at that moment.
+        else                                   -> true
     }
 
     fun resolveLabel(action: QuickLaunchAction): String = when (action) {

@@ -423,6 +423,7 @@
     <string name="eversense_calibration_bg_hint">Enter BG value</string>
     <string name="eversense_calibration_submit">Submit calibration</string>
     <string name="eversense_calibration_invalid_value">Please enter a valid blood glucose value</string>
+    <string name="eversense_calibration_not_ready">The transmitter is not ready for a calibration yet. Open Settings, Eversense, Calibration to see why.</string>
     <string name="eversense_calibration_not_supported">Calibration submission is not yet supported by the Eversense SDK</string>
     <string name="eversense_calibration_not_supported_notice">Note: Calibration submission requires a future SDK update. The UI is ready but the submit action is not yet functional.</string>
     <string name="eversense_calibration_success">Calibration submitted successfully</string>
