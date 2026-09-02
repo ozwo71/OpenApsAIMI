@@ -16,8 +16,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -72,6 +75,41 @@ class CwfComplicationUpdater @Inject constructor(
          * them was measured producing ten renders in two seconds.
          */
         private const val COALESCE_MS = 1_000L
+
+        /**
+         * The quiet gap asked of a data change, longer than [COALESCE_MS].
+         *
+         * The phone writes four times per sync - status, glucose, graph and treatments - and the
+         * writes land about a second apart, which is just far enough apart to clear a one second
+         * gap one after another. Measured: 13 refreshes in under 3 minutes, each redrawing both
+         * halves, for data that arrives roughly once a minute.
+         *
+         * Waiting a few seconds collapses a sync into a single refresh. The delay costs nothing
+         * visible: glucose arrives every 5 minutes, so a picture that appears a few seconds later
+         * is still the same picture.
+         */
+        private const val DATA_COALESCE_MS = 5_000L
+
+        /**
+         * How often the debounce above is checked.
+         *
+         * [COALESCE_MS] is a **trailing** debounce - the refresh waits for that much quiet - not a
+         * tumbling window. A fixed window only rate-limits: three arrivals a second apart were
+         * measured producing three full refreshes, each redrawing both halves, because each landed
+         * in a window of its own. Polling has to be well below the debounce so waiting for quiet
+         * does not add a visible delay of its own.
+         */
+        private const val COALESCE_POLL_MS = 200L
+
+        /**
+         * How recently the clock half must have been asked for before a clock tick skips itself.
+         *
+         * A data change redraws both halves, and the clock loop does not know it happened - so when
+         * the two land in the same second the upper half was rendered and encoded twice, about
+         * 380 ms of work thrown away, once per sync. Short enough that a genuine tick is never
+         * dropped: ticks are a second apart and this is a fraction of that.
+         */
+        private const val UPPER_DEDUPE_MS = 500L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -83,22 +121,47 @@ class CwfComplicationUpdater @Inject constructor(
     private val upper by lazy { requester(CwfUpperComplication::class.java) }
     private val whole by lazy { requester(CwfImageComplication::class.java) }
 
-    /** Refreshes everything - both halves and the whole-face variant, for whoever is using which. */
+    /** When the clock half was last asked for, by any path, so a tick can skip a fresh redraw. */
+    private val lastUpperRequest = AtomicLong(0)
+
+    private fun requestUpper() {
+        lastUpperRequest.set(System.currentTimeMillis())
+        upper.requestUpdateAll()
+        whole.requestUpdateAll()
+    }
+
+    /**
+     * Refreshes everything - both halves and the whole-face variant, for whoever is using which.
+     *
+     * Both halves together on purpose: one data change can drive `DynData` on views in either half,
+     * so redrawing only one could leave the two disagreeing - a lower half in red beside an upper
+     * half in green.
+     */
     private fun refreshAll(reason: String) {
         aapsLogger.debug(LTag.WEAR, "CwfComplicationUpdater: refresh all ($reason)")
         lower.requestUpdateAll()
-        upper.requestUpdateAll()
-        whole.requestUpdateAll()
+        requestUpper()
     }
 
-    /** Refreshes only what carries the clock. The lower half does not change with the time. */
+    /**
+     * Refreshes only what carries the clock. The lower half does not change with the time.
+     *
+     * Skips itself when the clock half was drawn a moment ago for another reason - see
+     * [UPPER_DEDUPE_MS].
+     */
     private fun refreshClock() {
-        upper.requestUpdateAll()
-        whole.requestUpdateAll()
+        if (System.currentTimeMillis() - lastUpperRequest.get() < UPPER_DEDUPE_MS) return
+        requestUpper()
     }
+
+    /** A refresh waiting to be issued: why it was asked for, and how much quiet it wants first. */
+    private data class Pending(val reason: String, val quietMs: Long)
 
     /** Set by any trigger; the coalescing loop turns a burst of them into one refresh. */
-    private val pending = AtomicReference<String?>(null)
+    private val pending = AtomicReference<Pending?>(null)
+
+    /** When the most recent trigger arrived, so the loop can wait for a quiet gap after it. */
+    private val lastTrigger = AtomicLong(0)
 
     /**
      * Refreshes as soon as the watch enters or leaves ambient.
@@ -135,7 +198,19 @@ class CwfComplicationUpdater @Inject constructor(
         }
     }
 
-    private fun requestRefresh(reason: String) = pending.set(reason)
+    /**
+     * Asks for a refresh once things have been quiet for [quietMs].
+     *
+     * When triggers of different kinds overlap the shortest wait wins: a preference change while
+     * data is arriving means the user is looking at the watch, and should not wait out the longer
+     * data gap.
+     */
+    private fun requestRefresh(reason: String, quietMs: Long) {
+        pending.getAndUpdate { current ->
+            if (current == null || quietMs < current.quietMs) Pending(reason, quietMs) else current
+        }
+        lastTrigger.set(System.currentTimeMillis())
+    }
 
     private var clockJob: Job? = null
 
@@ -165,17 +240,27 @@ class CwfComplicationUpdater @Inject constructor(
     fun start() {
         // A preference can change the layout itself, and the user is watching when they change one
         rxBus.toObservable(EventWearPreferenceChange::class.java)
-            .subscribe({ requestRefresh("preference changed") }, { aapsLogger.error(LTag.WEAR, "CwfComplicationUpdater: preference stream failed", it) })
+            .subscribe({ requestRefresh("preference changed", COALESCE_MS) }, { aapsLogger.error(LTag.WEAR, "CwfComplicationUpdater: preference stream failed", it) })
 
         // New data from the phone, or a newly sent watch face. drop(1) skips the value the flow
         // replays on subscription, which is not a change and would refresh for nothing at startup.
+        // drop(1) skips the value the flow replays on subscription, which is not a change and would
+        // refresh for nothing at startup. The timestamp is dropped from the comparison because every
+        // write stamps it with the current time, so two otherwise identical writes never compare
+        // equal - it is only removed from the *comparison*, the render reloads the real data itself.
         scope.launch {
-            complicationDataRepository.complicationData.drop(1).collect { requestRefresh("data changed") }
+            complicationDataRepository.complicationData
+                .map { it.copy(lastUpdateTimestamp = 0L) }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { requestRefresh("data changed", DATA_COALESCE_MS) }
         }
         scope.launch {
             while (true) {
-                delay(COALESCE_MS)
-                pending.getAndSet(null)?.let { refreshAll(it) }
+                delay(COALESCE_POLL_MS)
+                val waiting = pending.get() ?: continue
+                if (System.currentTimeMillis() - lastTrigger.get() >= waiting.quietMs)
+                    pending.getAndSet(null)?.let { refreshAll(it.reason) }
             }
         }
 

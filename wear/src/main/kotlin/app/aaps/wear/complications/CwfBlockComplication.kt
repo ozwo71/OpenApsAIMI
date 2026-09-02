@@ -1,6 +1,7 @@
 package app.aaps.wear.complications
 
 import android.app.PendingIntent
+import android.content.ComponentName
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.drawable.Icon
@@ -14,9 +15,16 @@ import androidx.wear.watchface.complications.data.PlainComplicationText
 import androidx.wear.watchface.complications.data.SmallImage
 import androidx.wear.watchface.complications.data.SmallImageComplicationData
 import androidx.wear.watchface.complications.data.SmallImageType
+import androidx.wear.watchface.complications.datasource.ComplicationRequest
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.wear.R
 import app.aaps.wear.watchfaces.CustomWatchface
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import app.aaps.wear.data.ComplicationData as ComplicationStore
 
 /**
@@ -57,6 +65,17 @@ abstract class CwfBlockComplication : ModernBaseComplicationProviderService() {
         private var warmWatchFace: CustomWatchface? = null
 
         /**
+         * The loaded zip's own picture, cached from the last render.
+         *
+         * Refreshed on every render, so it follows a newly sent zip, and read on the binder thread by
+         * [getPreviewData] - which must not touch the repository or build a watch face.
+         */
+        @Volatile private var previewBytes: ByteArray? = null
+
+        /** Starting size for the compression buffer - only avoids a few reallocations. */
+        private const val BITMAP_COMPRESS_HINT_BYTES = 64 * 1024
+
+        /**
          * Whether the face currently being drawn shows seconds at all.
          *
          * Both the zip and the user have a say - `enableSecond` is the json's `enableSecond` **and**
@@ -81,6 +100,9 @@ abstract class CwfBlockComplication : ModernBaseComplicationProviderService() {
                 ?: Display.STATE_ON) != Display.STATE_ON
     }
 
+    /** Runs the request. Main by default because [render] must own the view hierarchy. */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
     /** Which half of the face this provider draws. */
     protected abstract val block: CustomWatchface.RenderBlock
 
@@ -92,23 +114,25 @@ abstract class CwfBlockComplication : ModernBaseComplicationProviderService() {
         type: ComplicationType,
         data: ComplicationStore,
         complicationPendingIntent: PendingIntent
-    ): ComplicationData? {
+    ): ComplicationData? = buildFromIcon(type, encode(render()), complicationPendingIntent)
+
+    /** Wraps an already rendered frame in the complication type the slot asked for. */
+    private fun buildFromIcon(type: ComplicationType, icon: Icon, tapIntent: PendingIntent): ComplicationData? {
         val contentDescription = PlainComplicationText.Builder(text = getString(label)).build()
-        val icon = Icon.createWithBitmap(render())
 
         return when (type) {
             ComplicationType.PHOTO_IMAGE -> PhotoImageComplicationData.Builder(
                 photoImage = icon,
                 contentDescription = contentDescription
             )
-                .setTapAction(complicationPendingIntent)
+                .setTapAction(tapIntent)
                 .build()
 
             ComplicationType.SMALL_IMAGE -> SmallImageComplicationData.Builder(
                 smallImage = SmallImage.Builder(image = icon, type = SmallImageType.PHOTO).build(),
                 contentDescription = contentDescription
             )
-                .setTapAction(complicationPendingIntent)
+                .setTapAction(tapIntent)
                 .build()
 
             else                         -> {
@@ -134,6 +158,84 @@ abstract class CwfBlockComplication : ModernBaseComplicationProviderService() {
      * and reaches the watch face's own re-read of its description, so a newly sent zip is picked up
      * without discarding anything.
      */
+    /**
+     * Answers a request with the render on the main thread and the encode off it.
+     *
+     * The base class does the whole of this inside `Dispatchers.Main.immediate`, which is right for
+     * a text complication but expensive here: measured on a Galaxy Watch 4, the render takes about
+     * 225 ms and the PNG encode a further 120 to 150 ms, and the upper half runs **every second**
+     * while seconds are shown. Leaving both on the main thread spent roughly a third of every second
+     * there, which showed up as a watch that felt saturated and a second hand that lost its grid
+     * whenever a tick overran.
+     *
+     * The render has to stay on the main thread - it inflates and draws a view hierarchy, and the
+     * same thread must own those views every time - but the encode only reads pixels, so it moves to
+     * a background dispatcher.
+     *
+     * Overriding the whole request also skips the base class's `DataStore` read, which this path
+     * never used: the watch face reloads its own data in `refreshRenderData()`.
+     */
+    override fun onComplicationRequest(request: ComplicationRequest, listener: ComplicationRequestListener) {
+        val tapIntent = ComplicationTapActivity.getTapActionIntent(
+            context = this,
+            provider = ComponentName(this, getProviderCanonicalName()),
+            complicationId = request.complicationInstanceId,
+            action = getComplicationAction()
+        )
+        scope.launch {
+            val data = try {
+                val bitmap = render()
+                val icon = withContext(Dispatchers.Default) { encode(bitmap) }
+                buildFromIcon(request.complicationType, icon, tapIntent)
+            } catch (t: Throwable) {
+                // Throwable, not Exception, on purpose. This draws through androidx.wear.watchface,
+                // and the manifest declares `wear-sdk` as an optional shared library. On a watch
+                // where it is missing, touching a class that needs it raises NoClassDefFoundError -
+                // an Error, which a `catch (e: Exception)` lets straight through. The coroutine
+                // would then die without ever answering the listener, the slot would stay empty for
+                // good, and nothing would be logged: a black watch face with no clue why. Reported
+                // from a Galaxy Watch 7, the hardware none of the developers can test on.
+                //
+                // The class name is logged because that is what names the missing piece.
+                aapsLogger.error(
+                    LTag.WEAR,
+                    "${javaClass.simpleName}: render failed (${t.javaClass.simpleName}: ${t.message})",
+                    t
+                )
+                null
+            }
+            listener.onComplicationData(data)
+        }
+    }
+
+    /**
+     * Compresses the rendered frame.
+     *
+     * A raw 450x450 bitmap is about 791 kB, and two of them travel to the system for every refresh.
+     * That approaches the Binder transaction limit on each call, and the wear process was measured
+     * being killed every few seconds while visible and holding a foreground service until this was
+     * added; see `_docs/CWF_WFF_Prompt.md` §7w.
+     *
+     * Lossless on purpose: the picture is flat colour, text and thin hands, which a lossy codec
+     * would smear at exactly the sizes that matter.
+     *
+     * Safe off the main thread - it only reads pixels - and that is where [onComplicationRequest]
+     * runs it.
+     */
+    private fun encode(bitmap: Bitmap): Icon {
+        val started = System.currentTimeMillis()
+        val stream = ByteArrayOutputStream(BITMAP_COMPRESS_HINT_BYTES)
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+        val bytes = stream.toByteArray()
+        aapsLogger.debug(
+            LTag.WEAR,
+            "${javaClass.simpleName}: $block image ${bytes.size / 1024} kB compressed in ${System.currentTimeMillis() - started} ms," +
+                " was ${bitmap.byteCount / 1024} kB raw"
+        )
+        bitmap.recycle()
+        return Icon.createWithData(bytes, 0, bytes.size)
+    }
+
     private fun render(): Bitmap {
         val metrics = resources.displayMetrics
         val started = System.currentTimeMillis()
@@ -146,28 +248,36 @@ abstract class CwfBlockComplication : ModernBaseComplicationProviderService() {
         watchFace.setRenderAmbient(isAmbient(this))
         watchFace.refreshRenderData()
         val bitmap = watchFace.renderBlock(metrics.widthPixels, metrics.heightPixels, block)
+        // Captured here, on the main thread, so the preview path never has to load anything
+        previewBytes = watchFace.previewImageBytes()
         aapsLogger.debug(
             LTag.WEAR,
-            "${javaClass.simpleName}: rendered $block ${bitmap.width}x${bitmap.height} in ${System.currentTimeMillis() - started} ms"
+            "${javaClass.simpleName}: rendered $block ${bitmap.width}x${bitmap.height} in ${System.currentTimeMillis() - started} ms" +
+                " (ambient=${isAmbient(this)} enableSecond=${watchFace.enableSecond})"
         )
         return bitmap
     }
 
     /**
-     * A **static** picture of the default Custom watch face, never a live render.
+     * A **still** picture of the watch face, never a live render.
      *
-     * Two reasons, either sufficient. The base class builds preview data on the binder thread, and
-     * inflating a view hierarchy off the main thread is not allowed. And a preview is requested
-     * whenever anyone browses a complication picker - on a watch still running the code-based Custom
-     * watch face, rendering there would build a second `CustomWatchface` beside the live one, and the
-     * two share process-wide state.
+     * Two reasons the render path cannot be used, either sufficient. The base class builds preview
+     * data on the binder thread, and inflating a view hierarchy off the main thread is not allowed.
+     * And a preview is requested whenever anyone browses a complication picker - on a watch still
+     * running the code-based Custom watch face, rendering there would build a second
+     * `CustomWatchface` beside the live one, and the two share process-wide state.
      *
      * The androidx contract asks for a fixed preview anyway: `getPreviewData` should show
      * representative content, not live data.
+     *
+     * It uses **the loaded zip's own picture** rather than the built-in default, because this is what
+     * the watch face editor renders when the user long-presses the face - showing an unrelated design
+     * there is confusing. Falls back to the built-in image when no zip has been drawn yet.
      */
     override fun getPreviewData(type: ComplicationType): ComplicationData? {
         val contentDescription = PlainComplicationText.Builder(text = getString(label)).build()
-        val icon = Icon.createWithResource(this, R.drawable.watchface_custom)
+        val icon = previewBytes?.let { Icon.createWithData(it, 0, it.size) }
+            ?: Icon.createWithResource(this, R.drawable.watchface_custom)
 
         return when (type) {
             ComplicationType.PHOTO_IMAGE -> PhotoImageComplicationData.Builder(
