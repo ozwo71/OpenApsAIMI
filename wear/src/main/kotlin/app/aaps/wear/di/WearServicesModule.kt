@@ -2,6 +2,8 @@ package app.aaps.wear.di
 
 import app.aaps.wear.comm.DataLayerListenerServiceWear
 import app.aaps.wear.complications.BgGraphComplication
+import app.aaps.wear.complications.CwfAmbientBgComplication
+import app.aaps.wear.complications.CwfAmbientStatusComplication
 import app.aaps.wear.complications.CwfImageComplication
 import app.aaps.wear.complications.CwfLowerComplication
 import app.aaps.wear.complications.CwfUpperComplication
@@ -70,6 +72,8 @@ abstract class WearServicesModule {
     @ContributesAndroidInjector abstract fun contributesLongStatusComplication(): LongStatusComplication
     @ContributesAndroidInjector abstract fun contributesLongStatusFlippedComplication(): LongStatusFlippedComplication
     @ContributesAndroidInjector abstract fun contributesSgvComplication(): SgvComplication
+    @ContributesAndroidInjector abstract fun contributesCwfAmbientBgComplication(): CwfAmbientBgComplication
+    @ContributesAndroidInjector abstract fun contributesCwfAmbientStatusComplication(): CwfAmbientStatusComplication
     @ContributesAndroidInjector abstract fun contributesSgvComplicationExt1(): SgvComplicationExt1
     @ContributesAndroidInjector abstract fun contributesSgvComplicationExt2(): SgvComplicationExt2
     @ContributesAndroidInjector abstract fun contributesSgvLargeComplication(): SgvLargeComplication

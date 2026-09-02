@@ -223,6 +223,51 @@
                 android:value="${applicationId}.watchfacepush.aapsv4" />
         </service>
 
+        <!-- Same reading as SgvComplication, but a tap opens the menu. Used only by the ambient
+             layer of the pushed Watch Face Format face, whose slots are invisible while the watch
+             is awake yet still answer taps - see CwfAmbientBgComplication. -->
+        <service
+            android:name=".complications.CwfAmbientBgComplication"
+            android:exported="true"
+            android:icon="@drawable/ic_sgv"
+            android:label="@string/complication_cwf_ambient_bg"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.support.wearable.complications.SUPPORTED_TYPES"
+                android:value="SHORT_TEXT" />
+            <meta-data
+                android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
+                android:value="300" />
+            <meta-data
+                android:name="android.support.wearable.complications.SAFE_WATCH_FACES"
+                android:value="${applicationId}.watchfacepush.aapsv4" />
+        </service>
+
+        <service
+            android:name=".complications.CwfAmbientStatusComplication"
+            android:exported="true"
+            android:icon="@drawable/ic_ins"
+            android:label="@string/complication_cwf_ambient_status"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.support.wearable.complications.SUPPORTED_TYPES"
+                android:value="SHORT_TEXT" />
+            <meta-data
+                android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
+                android:value="300" />
+            <meta-data
+                android:name="android.support.wearable.complications.SAFE_WATCH_FACES"
+                android:value="${applicationId}.watchfacepush.aapsv4" />
+        </service>
+
         <!-- Publishes the whole Custom watch face as a full-screen image, for Watch Face Format
              faces on watches that can no longer run a code-based watch face.
              LARGE_IMAGE is the manifest tag for ComplicationType.PHOTO_IMAGE. -->

@@ -576,9 +576,19 @@ class CustomWatchface : BaseWatchFace() {
             .mapNotNull { view -> view.complication?.let { slot -> binding.root.findViewById<FrameLayout>(view.id)?.let { slot.id to it } } }
             .toMap()
         setDefaultColors()
-        // Publishing the built-in default watch face is the live watch face's job. A render-only
-        // instance would rewrite the same defaults on every render for no gain.
-        if (!isRenderOnly)
+        // The built-in default watch face has to be stored, or there is nothing to draw: the style
+        // pass reads it back and a missing one leaves every view at its raw layout value - no zoom,
+        // no colours from the zip, and a second hand shown even when seconds are switched off.
+        //
+        // This used to be left to the live watch face, on the assumption that it always runs first.
+        // That assumption fails exactly where this code matters: on Galaxy Watch 7 and later the
+        // code-based watch face cannot run at all, so nobody would ever store it. Reproduced on a
+        // Wear OS 6 emulator, where the face drew as an unstyled layout.
+        //
+        // A render-only instance still avoids rewriting the same values on every render - it only
+        // steps in when nothing is stored yet.
+        val defaultsMissing = runBlocking { complicationDataRepository.getCustomWatchface(true) } == null
+        if (!isRenderOnly || defaultsMissing)
             runBlocking {
                 complicationDataRepository.storeCustomWatchface(
                     customWatchface = defaultWatchface(false).customWatchfaceData,
@@ -783,8 +793,17 @@ class CustomWatchface : BaseWatchFace() {
         var customWatchfaceData = runBlocking {
             complicationDataRepository.getCustomWatchface() ?: complicationDataRepository.getCustomWatchface(true)
         }
-        if (customWatchfaceData == null) { // if neither CWF nor Default CWF is found, then force reload of default Layout
-            super.onCreate()
+        if (customWatchfaceData == null) {
+            // Neither the user's watch face nor the default was stored yet, so store the default and
+            // read it back. This used to call super.onCreate(), which never did that job: onCreate
+            // re-runs injection and re-subscribes, and nothing in it writes a watch face. It was
+            // also fatal here - onCreate calls AndroidInjection.inject(this), which needs a started
+            // Service, and this class is also built as a plain object to render images for the Watch
+            // Face Format face. In that mode there is no application attached, so it threw a
+            // NullPointerException, the render never produced a frame, and the face stayed black for
+            // good. Reproduced on a Wear OS 6 emulator on a fresh install, where no watch face has
+            // been stored yet - the same state a new user is in.
+            runBlocking { complicationDataRepository.setDefaultWatchface() }
             customWatchfaceData = runBlocking { complicationDataRepository.getCustomWatchface(true) }
         }
         customWatchfaceData?.let {
@@ -1000,6 +1019,19 @@ class CustomWatchface : BaseWatchFace() {
      * box that is still there. The three readers are [ViewMap.prefVisibility], [buildDynPrefs] and
      * [checkPref].
      */
+    /**
+     * The zip's own picture of itself, as stored bytes, or null if none is loaded yet.
+     *
+     * Every valid zip has one: `ZipWatchfaceFormat.loadCustomWatchface` rejects a zip whose
+     * resources lack [ResFileMap.CUSTOM_WATCHFACE], because that is the image the phone's watch face
+     * list shows. It is therefore the natural preview for anything that needs to depict this watch
+     * face without drawing it - a complication picker, for instance, which must not trigger a render.
+     *
+     * Returned as encoded bytes rather than a decoded bitmap so the caller can hand them straight to
+     * `Icon.createWithData` and skip decoding entirely.
+     */
+    fun previewImageBytes(): ByteArray? = resDataMap[ResFileMap.CUSTOM_WATCHFACE.fileName]?.value
+
     private fun prefBoolean(prefMap: PrefMap): Boolean =
         if (isRenderOnly && ComplicationMap.entries.any { it.showPref == prefMap }) false
         else sp.getBoolean(prefMap.prefKey, prefMap.defaultValue as Boolean)
