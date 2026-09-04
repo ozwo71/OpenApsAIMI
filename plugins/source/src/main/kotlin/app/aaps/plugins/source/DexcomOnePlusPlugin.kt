@@ -2,6 +2,7 @@ package app.aaps.plugins.source
 
 import android.content.Context
 import app.aaps.core.data.model.SourceSensor
+import app.aaps.core.data.model.TE
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.ble.BleRadioPriority
@@ -389,9 +390,15 @@ class DexcomOnePlusPlugin @Inject constructor(
                 "DEXCOM_ONEPLUS_BG: insert complete — inserted: ${result.inserted.size}, updated: ${result.updated.size}",
             )
             // Persist the ingest high-water mark so a restart/update can't re-insert this reading,
-            // and anchor the production sensor's lifecycle (session start) on first reading.
+            // and anchor the production sensor's lifecycle (session start) on first reading — unless
+            // the user already logged the real insertion time by hand (see DexcomOnePlusSensorChangeAnchor).
             store.saveLastIngest(sample.sequence, sample.timestampMs)
-            store.saveSessionStartIfAbsent(sample.timestampMs)
+            val anchoredStartMs = DexcomOnePlusSensorChangeAnchor.resolve(
+                autoStartMs = sample.timestampMs,
+                lastSensorChangeMs = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.timestamp,
+                now = System.currentTimeMillis(),
+            )
+            store.saveSessionStartIfAbsent(anchoredStartMs)
             refreshProductionLifecycle()
         }
     }
@@ -420,9 +427,19 @@ class DexcomOnePlusPlugin @Inject constructor(
         if (profileWantsForegroundService()) {
             DexcomOnePlusSessionService.start(context.applicationContext)
         }
-        if (!sensorStore.startSessionForSensor(deviceAddress, startMs, previousMac)) return
-        refreshProductionLifecycle()
-        logSensorChange(startMs)
+        ioScope.launch {
+            // If the user already logged the real insertion time by hand (e.g. in Careportal, right
+            // after physically inserting the sensor and before pairing it here), honor that instead of
+            // stamping "now" — see DexcomOnePlusSensorChangeAnchor.
+            val anchoredStartMs = DexcomOnePlusSensorChangeAnchor.resolve(
+                autoStartMs = startMs,
+                lastSensorChangeMs = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.timestamp,
+                now = System.currentTimeMillis(),
+            )
+            if (!sensorStore.startSessionForSensor(deviceAddress, anchoredStartMs, previousMac)) return@launch
+            refreshProductionLifecycle()
+            logSensorChange(anchoredStartMs)
+        }
     }
 
     /**
