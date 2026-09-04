@@ -773,6 +773,11 @@ class DexcomOnePlusPlugin @Inject constructor(
         logSensorChange(startMs)
         // 4) In-session: the already-connected staging driver now feeds the loop (no gap).
         stagingPublishesToLoop = true
+        // The production status (_warmup) was last set by the OLD production driver and nothing
+        // else pushes to it here: a steady-state promoted driver emits no new phase-change event, so
+        // without this the Status screen keeps showing whatever phase production had before the
+        // promotion (e.g. stuck at IDLE) until the app restarts and onStart() re-polls the driver.
+        onWarmup(stagingDriver.warmupState())
         stagingPresent = false
         stagingWarming = false
         stagingWarmupDone = false
