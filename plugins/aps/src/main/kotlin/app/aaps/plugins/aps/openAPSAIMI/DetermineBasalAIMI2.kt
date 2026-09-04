@@ -373,6 +373,16 @@ internal data class AimiDecisionContext(
         var isf_obs_last_window_drop_mgdl: Double? = null,
         /** Insulin credited to that window, U. */
         var isf_obs_last_window_absorbed_u: Double? = null,
+        /**
+         * Shadow late fat damping window: the late part of an absorption episode while a large
+         * insulin stack is already working. Strictly passive — nothing in the dosing chain reads it.
+         * It exists to be compared with [late_fat_rise_flag] before any wiring is decided.
+         */
+        var late_fat_damping_window: Boolean? = null,
+        /** The old `isLateFatProteinRise` predicate for the same tick, to measure the divergence. */
+        var late_fat_rise_flag: Boolean? = null,
+        /** Minutes since the absorption episode started, `null` when there is no episode. */
+        var late_fat_onset_age_min: Int? = null,
         /** Fast estimator 1: Kalman-filtered raw ISF. */
         val isf_kalman_fast_mgdl: Double? = null,
         /** Fast estimator 2: IsfAdjustmentEngine output. */
@@ -751,6 +761,9 @@ internal data class AimiDecisionContext(
             base.put("isf_obs_last_window_mgdl", baseline_state.isf_obs_last_window_mgdl ?: org.json.JSONObject.NULL)
             base.put("isf_obs_last_window_drop_mgdl", baseline_state.isf_obs_last_window_drop_mgdl ?: org.json.JSONObject.NULL)
             base.put("isf_obs_last_window_absorbed_u", baseline_state.isf_obs_last_window_absorbed_u ?: org.json.JSONObject.NULL)
+            base.put("late_fat_damping_window", baseline_state.late_fat_damping_window ?: org.json.JSONObject.NULL)
+            base.put("late_fat_rise_flag", baseline_state.late_fat_rise_flag ?: org.json.JSONObject.NULL)
+            base.put("late_fat_onset_age_min", baseline_state.late_fat_onset_age_min ?: org.json.JSONObject.NULL)
             base.put("isf_kalman_fast_mgdl", baseline_state.isf_kalman_fast_mgdl ?: org.json.JSONObject.NULL)
             base.put("isf_adj_engine_mgdl", baseline_state.isf_adj_engine_mgdl ?: org.json.JSONObject.NULL)
             base.put("isf_fused_slow_mgdl", baseline_state.isf_fused_slow_mgdl ?: org.json.JSONObject.NULL)
@@ -1878,6 +1891,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
     private var lateFatRiseFlag: Boolean = false
+
+    /**
+     * Last value the `isLateFatProteinRise` predicate produced this tick, kept only so the export
+     * can compare it with the shadow damping window. Never read by the dosing chain.
+     */
+    private var lateFatRiseFlagForExport: Boolean = false
     // — Hystérèse anti-pompage —
     private val HYPO_RELEASE_MARGIN   = 5.0      // mg/dL au-dessus du seuil
     private val HYPO_RELEASE_HOLD_MIN = 5        // minutes à rester > seuil+margin
@@ -9216,6 +9235,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             decisionCtx.baseline_state.isf_obs_last_window_absorbed_u = observed.lastWindow?.absorbedU
         }
 
+        // Shadow only — measurement of the late fat damping window against the old rise predicate.
+        // Nothing downstream reads these three fields; they exist to size the divergence on a real
+        // support package before any wiring is decided.
+        runCatching {
+            decisionCtx.baseline_state.late_fat_damping_window = isLateFatDampingWindow(decisionCtx.timestamp)
+            decisionCtx.baseline_state.late_fat_rise_flag = lateFatRiseFlagForExport
+            decisionCtx.baseline_state.late_fat_onset_age_min =
+                MealAbsorptionMemory.onsetAgeMin(decisionCtx.timestamp)?.roundToInt()
+        }
+
         decisionCtx.adjustments.dynamic_isf = AimiDecisionContext.DynamicIsf(
             final_value_mgdl = snapshotFusedIsf,
             modifiers = mutableListOf<AimiDecisionContext.Modifier>().apply {
@@ -9881,6 +9910,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             lastBolusTimeMs = lastBolusTimeMs,
             mealFlags = mealFlags
         )
+        lateFatRiseFlagForExport = lateFatRiseFlag
         val tdd24hStateForPkpd = determineBasalInvocationCaches.getTdd24hTotalAmountState(tddCalculator)
         logInvocationCacheState("TDD24H_PKPD", tdd24hStateForPkpd)
         var tdd24Hrs = tdd24hStateForPkpd.valueOrNull()?.toFloat() ?: 0.0f
@@ -15140,6 +15170,30 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val noMeal  = !(mealFlags.mealTime || mealFlags.bfastTime || mealFlags.lunchTime
             || mealFlags.dinnerTime || mealFlags.highCarbTime)
         return noMeal && hoursSinceBolus in 2.0..7.0 && rising && highish && lowIOB && cob <= 1.0
+    }
+
+    /**
+     * Damping-only sibling of `isLateFatProteinRise`. SHADOW for now: computed and exported, not
+     * wired into any dose. It is deliberately NOT fed to the meal absorption phase engine nor to any
+     * belief layer, because that predicate also drives an SMB floor whose IOB requirement is the
+     * opposite of this one.
+     *
+     * It looks for the late part of an absorption episode while a large insulin stack is already
+     * working, which is where extra SMB overshoots.
+     */
+    private fun isLateFatDampingWindow(nowMs: Long = dateUtil.now()): Boolean {
+        val ageMin = MealAbsorptionMemory.onsetAgeMin(nowMs) ?: return false
+        if (ageMin !in 120.0..420.0) return false
+        if (cob > 1.0f) return false
+        if (mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime) return false
+        val rising = delta >= 1.0f && (shortAvgDelta >= 0.5f || longAvgDelta >= 0.3f)
+        val highish = bg > 130.0 || predictedBg > 140.0f
+        // The stack floor is a STOCK, homogeneous with IOB. maxSMB is a per bolus cap and was the
+        // wrong scale: during the incident IOB was 6 to 10 U against a maxSMB of 0.05 to 1.5.
+        // There is no 24h TDD field on this class, only the hourly rate, so rebuild the stock.
+        val tdd24hU = tdd24HrsPerHour.toDouble() * 24.0
+        val stackFloorU = maxOf(2.0 * basalaimi.toDouble(), 0.15 * tdd24hU, 1.0)
+        return rising && highish && iob >= stackFloorU
     }
 
 

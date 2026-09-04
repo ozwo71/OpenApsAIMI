@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.pkpd
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class SmbDampingTest {
@@ -122,5 +123,25 @@ class SmbDampingTest {
             bypassDamping = false, activity = createActivity(), elapsedSinceMealMin = 90.0
         )
         assertEquals(audited.out, direct, 1e-9)
+    }
+
+    // The preference range of `OApsAIMISmbLateFatDamping` starts at 0.0. Taken as is, that would
+    // zero every SMB for up to four hours, so the multiplier is floored at 0.5.
+    @Test
+    fun `late fat damping never zeroes the smb even at the lowest preference`() {
+        val zeroPolicy = SmbDamping(
+            TailAwareSmbPolicy(
+                tailIobHigh = 0.25,
+                smbDampingAtTail = 0.5,
+                postExerciseDamping = 0.6,
+                lateFattyMealDamping = 0.0
+            )
+        )
+        val audit = zeroPolicy.dampWithAudit(
+            1.0, 0.0, exercise = false, suspectedLateFatMeal = true,
+            bypassDamping = false, activity = createActivity(), elapsedSinceMealMin = 0.0
+        )
+        assertTrue(audit.lateFatMult >= 0.5, "lateFatMult was ${audit.lateFatMult}")
+        assertTrue(audit.out >= 0.5, "out was ${audit.out}")
     }
 }
