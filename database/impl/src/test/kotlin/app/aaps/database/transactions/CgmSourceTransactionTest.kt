@@ -64,6 +64,37 @@ class CgmSourceTransactionTest {
     }
 
     @Test
+    fun `does not let an NS round-trip overwrite the locally stored value`() = runTest {
+        val staleEchoFromNs = createGlucoseValue(timestamp = 1000L, value = 110.0)
+        val existing = createGlucoseValue(timestamp = 1000L, value = 160.0)
+
+        whenever(glucoseValueDao.findByTimestampAndSensor(1000L, GlucoseValue.SourceSensor.DEXCOM_G6_NATIVE)).thenReturn(existing)
+
+        val transaction = CgmSourceTransaction(listOf(staleEchoFromNs), emptyList(), null, fromNsClient = true)
+        transaction.database = database
+        val result = transaction.run()
+
+        assertThat(result.updated).isEmpty()
+        assertThat(existing.value).isEqualTo(160.0)
+    }
+
+    @Test
+    fun `NS round-trip still links a missing nsId without touching value`() = runTest {
+        val staleEchoFromNs = createGlucoseValue(timestamp = 1000L, value = 110.0, nsId = "ns-123")
+        val existing = createGlucoseValue(timestamp = 1000L, value = 160.0, nsId = null)
+
+        whenever(glucoseValueDao.findByTimestampAndSensor(1000L, GlucoseValue.SourceSensor.DEXCOM_G6_NATIVE)).thenReturn(existing)
+
+        val transaction = CgmSourceTransaction(listOf(staleEchoFromNs), emptyList(), null, fromNsClient = true)
+        transaction.database = database
+        val result = transaction.run()
+
+        assertThat(result.updatedNsId).hasSize(1)
+        assertThat(existing.interfaceIDs.nightscoutId).isEqualTo("ns-123")
+        assertThat(existing.value).isEqualTo(160.0)
+    }
+
+    @Test
     fun `updates nsId when provided but not present in existing`() = runTest {
         val gv = createGlucoseValue(timestamp = 1000L, value = 120.0, nsId = "ns-123")
         val existing = createGlucoseValue(timestamp = 1000L, value = 120.0, nsId = null)
