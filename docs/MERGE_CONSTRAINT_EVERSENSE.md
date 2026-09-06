@@ -119,6 +119,19 @@ Reference: [CAPTCG/AndroidAPS-Eversense-](https://github.com/CAPTCG/AndroidAPS-E
   `KeepAliveWorker runVacuum=false`, notification-reader v3).
 - Log: [MERGE_DEV_2026-08-08.md](MERGE_DEV_2026-08-08.md).
 
+### Merge `dev` → `dev_OAPSAIMI` (2026-09-06)
+
+- Upstream `dev` at `283a184f60` (22 commits since `7fc8205e9a`): dependency bumps only (Gradle wrapper
+  9.7.1, AGP 9.3.2, compose-bom 2026.08.00, **Vico 3.3.0**, okhttp 5.5.0, appcompat 1.8.0, firebase-bom
+  34.18.0, java-otp 1.0.0, junit 6.1.3) plus the Wear OS 3 `wear-sdk` optional-library install fix.
+- **Zero conflicts.** Upstream diff is 6 files, none of them Eversense, AIMI, SMB, AutoISF, smoothing,
+  dashboard, `SourceSensor`, DI, DB or storage — constraint satisfied without re-application. Nothing to
+  port into AIMI.
+- Both auto-merged files reviewed by hand (`libs.versions.toml` = bumps only; `wear/AndroidManifest.xml`
+  delta empty, fork already had the fix, `BgGraphComplication` still declared once).
+- **Fork preserved:** verified by identical invariant baseline before/after + clean duplicate scan.
+- Log: [MERGE_DEV_2026-09-06.md](MERGE_DEV_2026-09-06.md).
+
 ### Merge `dev` → `feature/dexcom-oneplus-native` (2026-08-03)
 
 - Upstream `dev` at `fa2d2c78a5` (45 commits since `88d31b816d`: alarms refactor — `USE_FULL_SCREEN_INTENT`
