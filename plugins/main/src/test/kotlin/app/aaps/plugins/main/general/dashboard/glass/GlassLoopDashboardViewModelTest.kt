@@ -92,7 +92,7 @@ class GlassLoopDashboardViewModelTest {
         whenever(glucoseStatusCalculatorAimi.getAimiFeatures(true)).thenReturn(null)
         runBlocking {
             whenever(persistenceLayer.getLastStepsCountFromTimeToTime(any(), any())).thenReturn(null)
-            whenever(tddCalculator.calculateDaily(-168L, 0L)).thenReturn(null)
+            whenever(tddCalculator.calculate(7L, allowMissingDays = true)).thenReturn(null)
         }
 
         viewModel = GlassLoopDashboardViewModel(

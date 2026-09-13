@@ -111,11 +111,16 @@ class GlassLoopDashboardViewModel @Inject constructor(
 
                 val stableMinutes = glucoseStatusCalculatorAimi.getAimiFeatures(allowOldData = true)?.stable5pctMinutes ?: 0.0
 
-                // TddCalculator.calculateDaily's params are HOUR offsets, not days (see its KDoc) — a real 7-day
-                // window is -168..0 hours, not -7..0 (which would be the last 7 hours). Divide by the same
-                // 168-hour window to get the hourly rate averaged across the whole week.
-                val tdd7 = tddCalculator.calculateDaily(-7L * 24L, 0L)
-                val tdd7PerHour = (tdd7?.totalAmount ?: 0.0) / (7.0 * 24.0)
+                // calculateDaily(-168, 0) would recompute a raw, UNCACHED 2016-bucket (7 days at 5-minute
+                // steps) loop every time this screen opens — each bucket does a profile lookup, a basal-data
+                // computation, and (unless the pump fakes temps via extended boluses) its own suspend DB
+                // round-trip for an extended-bolus lookup. calculate(7, ...) instead serves past days from
+                // TddCalculator's per-midnight cache (see TddCalculatorImpl.calculate) and only runs that
+                // expensive loop once, for today's still-in-progress partial day — the same pattern every
+                // other 7-day TDD consumer in the app already uses (StatsViewModel, KalmanFilter, etc.).
+                // averageTDD's totalAmount is already a PER-DAY average, so divide by 24 (not 7*24) for U/h.
+                val tdd7 = tddCalculator.averageTDD(tddCalculator.calculate(7L, allowMissingDays = true))
+                val tdd7PerHour = (tdd7?.data?.totalAmount ?: 0.0) / 24.0
 
                 val tirLow1h = tirCalculator.averageTIR(tirCalculator.calculateHour(70.0, 180.0)).belowPct() ?: 0.0
                 val tirLow24h = tirCalculator.averageTIR(tirCalculator.calculateDaily(70.0, 180.0)).belowPct() ?: 0.0
