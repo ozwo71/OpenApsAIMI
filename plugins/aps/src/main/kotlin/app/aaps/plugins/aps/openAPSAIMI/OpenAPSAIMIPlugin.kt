@@ -2381,7 +2381,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 add(BooleanKey.OApsAIMIautodriveAggressiveSmbFloor)
                 add(BooleanKey.OApsAIMIStressIsfFloor)
                 add(BooleanKey.OApsAIMIEffortActivityProtection)
-                add(BooleanKey.OApsAIMIDescentRedoseGuard)
+                add(BooleanKey.OApsAIMIRiseCeilingGuard)
                 add(DoubleKey.OApsAIMIautodrivesmallPrebolus)
                 add(DoubleKey.OApsAIMIautodrivePrebolus)
                 add(
