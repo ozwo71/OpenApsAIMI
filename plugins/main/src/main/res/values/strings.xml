@@ -263,7 +263,6 @@
     <string name="dashboard_glass_loop_hour_badge" comment="%1$s=2-digit hour e.g. 14, %2$s=Weekday or Weekend">%1$sh • %2$s</string>
     <string name="dashboard_glass_loop_ml_training_title">ML Training</string>
     <string name="dashboard_glass_loop_ml_last_trained_label">Last trained</string>
-    <string name="dashboard_glass_loop_ml_last_trained_value" comment="%1$s=relative time e.g. 5m, 2h">%1$s ago</string>
     <string name="dashboard_glass_loop_ml_samples_label">Samples</string>
     <string name="dashboard_glass_loop_ml_circuit_open">Training paused (cooling down after recent failures)</string>
     <string name="dashboard_glass_loop_ml_circuit_closed">Training active</string>

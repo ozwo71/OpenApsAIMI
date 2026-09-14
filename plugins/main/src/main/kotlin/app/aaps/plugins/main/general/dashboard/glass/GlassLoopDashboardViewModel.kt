@@ -157,8 +157,11 @@ class GlassLoopDashboardViewModel @Inject constructor(
                 val trainingCoordinator = BasalMlTrainingCoordinator.instance
                 val hasMlTraining = trainingCoordinator != null
                 val lastTrainedMs = trainingCoordinator?.lastTrainedAtMs() ?: 0L
+                // minAgoShort is a compact countdown badge format ("(+15)"/"(-5)"), not an "ago" phrase, and
+                // returns "" past ~7 days old — wrapped in the "%1$s ago" template that produced a bare
+                // " ago". minAgoLong already returns a complete "N minutes ago" phrase; use it directly.
                 val mlLastTrainedText = if (lastTrainedMs > 0L)
-                    resourceHelper.gs(R.string.dashboard_glass_loop_ml_last_trained_value, dateUtil.minAgoShort(lastTrainedMs))
+                    dateUtil.minAgoLong(resourceHelper, lastTrainedMs)
                 else
                     resourceHelper.gs(R.string.dashboard_glass_loop_ml_never_trained)
                 val mlSampleCountText = basalNeuralLearner.getGovernanceSnapshot().sampleCount.toString()
