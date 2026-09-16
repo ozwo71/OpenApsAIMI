@@ -27,6 +27,7 @@ user's main complaint.
 | I | TPO rewrites preferences from the loop | **export added 2026-09-16**, cause of the change still unknown (section 12) |
 | J | Does the prediction layer stabilise? | **answered 2026-09-16** — the wiring is right, the slope is not (section 14) |
 | K | Declared-meal anticipation | **built disarmed 2026-09-16** (section 16) |
+| L | The tail latch was a regression | **fixed 2026-09-16** (section 17) |
 
 Working tree is clean except this file. Everything else below is committed.
 
@@ -1226,3 +1227,139 @@ carb-derived version remains the better answer if the fixed one proves awkward.
 Tests: `AnticipationBasalFloorTest` 14, `TherapyAnticipationDetectionTest` 6, both 0 failures.
 Whole run: `:plugins:aps` 296 classes, **1813 tests, 0 failures, 0 errors**; `:core:keys` 8 tests, 0
 failures.
+
+---
+
+## 17. The tail latch was a regression, and it is mine
+
+Two field reports from Thomas Willems on HEAD `f3de6740ee`, both verified line by line here. One of
+them is about the latch section 11.4 introduced the same day.
+
+### 17.1 What the report said, and it is right
+
+`MealConfirmedEarlyReleaseLatch` tripped on **any** falling tick while MCER was merely enabled:
+
+```kotlin
+tailTripped = tailByPhase || tailByFall      // DecisionPredictionAuthority.kt:201
+```
+
+No check that MCER had armed, and none that there had been a peak. On 2026-09-16 the reporter's
+glucose drifted down from a morning high — a shallow insulin-driven descent at low insulin on board
+— which is exactly `tailByFall`, so the latch set with `iobAtTripU` at the bottom of that descent,
+1.71 U. Then lunch started from 126 and neither way out was reachable: glucose never came back under
+`target + 20` = 120, and insulin on board only grew. The latch held **MCER off for the whole meal**,
+`OFF(tail_latched)` on all 17 rise ticks.
+
+Their measured consequence: the bolus channel graded down to 0.10–0.50 U caps against MPC requests of
+up to 1.81 U — about 92 % closed at the moment the loop wanted it most — and the correction moved
+into the basal channel, 6.3 U above profile through a 5.0 U/h block. Half the insulin of the day
+before, a lower peak, and a **deeper** low: 44.5.
+
+Every claim checked: the unconditional trip (confirmed, line 201), both release conditions
+unreachable during a rise (confirmed in `releases()`), and **no path resets the latch** — it appears
+only at lines 11081, 11086 and 11511, so it persists across meals for the life of the object.
+
+### 17.2 Replayed on this device's own corpus
+
+The latch is pure by design, so it replays. Over 14755 ticks, 09-02 → 09-16, with `tailTripped`
+approximated by `tailByFall` alone (the absorption phase is not in this export, so trips are
+**under**-counted):
+
+| | old latch |
+|---|---|
+| ticks latched | **5321 / 14755 (36.1 %)** |
+| episodes | 3193 — it flickered on every falling tick |
+| longest episode | **165 min** (09-12 15:10 → 17:55) |
+| episodes ≥ 45 min | 15 |
+| ticks blocking an otherwise-armable MCER | **215 (1.5 %)** |
+
+And the reporter's exact trap appears twice here: **09-14 09:39 → 11:07, 88 min, `iobAtTrip` 1.79** —
+a release needing insulin on board ≤ 0.90 U — and 09-15 09:50 → 10:42, 52 min, 1.88 → 0.94 U.
+
+Two corrections to the record. **The report's mechanism detail is slightly off and its conclusion is
+right:** the code latches on the **first** falling tick, not the last, but over a long descent it
+latches, releases, and re-latches, ending up latched at the **lowest** insulin of the descent — which
+produces exactly the pathology described. And **the first measurement made here was circular**: a
+"meal start" was detected as a crossing of `target + 20` from below, which *is* the release condition,
+so it trivially found the latch clear on 9 of 9. The honest metric is the 215 blocked ticks.
+
+### 17.3 The fix
+
+The first version replaced a stateless breaker with **state that had no episode**. The latch is now
+bound to one:
+
+- `State` gains `armedSeen`. Nothing can latch before MCER has armed — a fall with no earlier arm is
+  not a post-peak tail, because there was no peak.
+- `next()` gains `armedThisTick`, fed from a new `DecisionPredictionAuthority.mcerArmed`. The two can
+  never both be true: MCER's `armed` requires `!tailBreaker`, and the breaker holds both tail tests.
+- A release ends the episode and forgets both facts, so the next excursion starts clean.
+- The remembered stack is floored at `MIN_TRIP_IOB_U` **3.0**, so the insulin way out stays reachable:
+  a trip at 1.7 U used to set the threshold at 0.86 U, below what any meal correction immediately
+  creates.
+
+Replayed against the old one on the same corpus:
+
+| | old | fixed |
+|---|---|---|
+| ticks latched | 36.1 % | **13.6 %** |
+| episodes | 3193 | **96** |
+| episodes > 60 min | 10 | 8 |
+| longest | 165 min | 165 min |
+| blocking an armable MCER | 215 | **183** |
+
+**What the fix does not do, stated plainly.** The long episodes remain, because a 165-minute hold
+inside an episode where MCER really armed, with glucose still above `target + 20` and insulin still
+above half the trip stack, is the gesture working as designed. The reporter's fix 2 — also release on
+`rising && aboveTarget && iob <= 3 U` — would shorten them. It was **not** implemented: the
+`MIN_TRIP_IOB_U` floor already makes the insulin release reachable at ≥ 1.5 U, so a new meal starting
+at a low stack releases on its own, and fix 2 adds a threshold that has not been measured. Their fix 5
+(export `latched` and `iobAtTripU` in `smb_binding_trace`) is also still open and is the cheap one:
+this hour was spent reading `reason` strings.
+
+Four existing tests changed their expectations, each because the old expectation encoded the bug: a
+trip now needs an arm first, and an unreadable or negative stack falls back to the floored value
+instead of 0 (which used to close the insulin way out entirely). `MealConfirmedEarlyReleaseLatchTest`
+**17 tests, 0 failures**; whole run `:plugins:aps` 296 classes, **1818 tests, 0 failures, 0 errors**.
+
+### 17.4 The second report — verified, not mine, and not touched
+
+`PR_BasalEngine_LevelOnlyHyperFactor_OverridesZero_PastPeak.md`. Every code claim confirmed at the
+character level:
+
+- `interpolateBasal(bg, combinedDelta)` declares `combinedDelta` and **never reads it**; above 180 the
+  factor is ×5 whatever the direction.
+- `BasalDecisionEngine.kt:517` — `input.bg > 150 && input.delta in -5.0..1.0`, and the reason string is
+  `bg_over_180_stable_basal_factor`: the string says stable, the window is the falling side.
+- `:393` — `combinedDelta in -2.0..15.0 && bgAcceleration > 0.0`.
+- `CorrectionAggressionBasalCap.mergeEngineAndRtRates` returns `maxOf(engine, rt)` when
+  `allowRocketBasalScale`, so a zero written earlier on a low prediction is **discarded**; and
+  `Tier.FULL` sets `allowRocketBasalScale = true` **unconditionally** with `maxBasalScaleCap = 10.0`.
+  MODERATE makes it conditional, REBOUND_GUARD forbids it. This is the most serious finding of the two
+  reports on the merits.
+- `PEAK_CORRECTION` is in the meal-absorption boost's eligible phases; `adjustBasalForMealHyper` uses
+  `risingOrFlat = delta >= 0.3 || shortAvgDelta >= 0.2` with a factor of 8 or 10 and
+  `minutesSinceMealStart in 0..120` as its only time bound.
+
+One doubt raised here **resolved against the doubter**: `adjustBasalForMealHyper` takes
+`isMealModeActive`, and the report says COB = 0 with no note — but the parameter is passed **`true`
+hardcoded** at both call sites (7262 and 7316), so the guard reduces to the time bound and the branch
+runs on the detected absorption phase alone, with no meal note. The report is strengthened.
+
+**Scale on this device is much smaller than on the reporter's**, and worth recording so nobody
+over-reads it:
+
+| situation | n | basal median | × profile | ≥ 4× profile |
+|---|---|---|---|---|
+| BG > 150, rising (Δ > +1) | 1216 | 5.28 | **8.8×** | 99 % |
+| BG > 150, falling in −5..1 | 754 | 0.53 | 1.0× | 27 % |
+| BG > 180, falling in −5..1 | 201 | 1.45 | 2.7× | 37 % |
+| falling faster than −5 | 346 | 0.00 | 0 | 0 % |
+
+Insulin above profile while above 150 **and falling** in −5..1: **11.7 U over 15 days, 0.78 U/day**.
+Ticks at ≥ 4× profile in that state are followed by a reading under 70 on **34.0 %** against a 27.7 %
+base rate, under 60 on 13.9 % against 10.6 % — real but weak. The reporter sees far more because
+their three caps are all 5.0 against a 0.66–0.75 profile, so the same ×8 saturates at 7.6× profile
+instead of being absorbed.
+
+Nothing in that report was changed: it is pre-existing code, it did not get worse, and the `max()`
+merge deserves its own measured pass.

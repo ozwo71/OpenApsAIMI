@@ -11085,6 +11085,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // reports the trip; it can only keep an opt-in escalation off, never raise a dose.
         mcerTailLatch = MealConfirmedEarlyReleaseLatch.next(
             previous = mcerTailLatch,
+            armedThisTick = decisionPrediction.mcerArmed,
             tailTripped = decisionPrediction.mcerTailTripped,
             bgMgdl = bg.toDouble(),
             targetBgMgdl = targetBgMgdl,
