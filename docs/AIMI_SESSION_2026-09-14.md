@@ -26,6 +26,7 @@ user's main complaint.
 | H | MCER read the display path-min | **fixed 2026-09-16** (section 11) |
 | I | TPO rewrites preferences from the loop | **export added 2026-09-16**, cause of the change still unknown (section 12) |
 | J | Does the prediction layer stabilise? | **answered 2026-09-16** — the wiring is right, the slope is not (section 14) |
+| K | Declared-meal anticipation | **built disarmed 2026-09-16** (section 16) |
 
 Working tree is clean except this file. Everything else below is committed.
 
@@ -1108,3 +1109,120 @@ failures.
 - **`SCENARIO_TRAJECTORY_UPLIFT`** fired on **0 of 1431** ticks. Its guard needs four conditions at
   once (`!falseMealSuppression && strongRiseProjection && trajectorySupportsUplift && scenarioLead >=
   20.0`). It is an *uplift*, so a dead branch here withholds nothing; worth diagnosing, not urgent.
+
+---
+
+## 16. The declared-meal button: what already existed, and what was built
+
+The user asked for a button meaning "I am eating", so the loop stops waiting for the rise to confirm
+a meal. Three rounds of design, and most of the answer was already in the code.
+
+### 16.1 What already existed
+
+`DetermineBasalAIMI2.kt:7240`, label **"Meal Boost 30min (Force MaxBasal)"**:
+
+```kotlin
+(mealTime || lunchTime || dinnerTime || highCarbTime || bfastTime) && (max runtime) in 0..30 -> {
+    val safeMax = if (mealModesMaxBasal > 0.1) mealModesMaxBasal else profileCurrentBasal * 5.0
+    ... setTempBasal(boostedRate, 30, ..., overrideSafetyLimits = true, ...)
+}
+```
+
+A declared meal forces the basal to `meal_modes_max_basal` — **10.0 U/h on this device** — for 30
+minutes, with `overrideSafetyLimits = true` so it passes the 7 U/h `openapsma_max_basal`. That is
+5 U, exactly what the user proposed. `capBasalRateForCorrectionAggression` only caps it under a
+rebound guard or an exercise lockout, so at rest nothing holds it back.
+
+The window and the cancel were already primitives too. `therapy.kt` matches a NOTE event whose text
+holds a keyword **while `now <= event.timestamp + event.duration`** — the window lives in the note, so
+it survives ticks and restarts — and `deleteLastEventMatchingKeyword(...)` at line 126 is the cancel.
+
+**And it has never been used**: `meal_mode_active = true` on **0 of 6973 ticks** over the five most
+recent packages.
+
+### 16.2 Why it is not what he wanted
+
+The meal modes fire a prebolus: `setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIMealPrebolus), "MEAL_P1", mealruntime)`.
+
+| key | default | **minimum** |
+|---|---|---|
+| `OApsAIMIMealPrebolus` | 2.0 U | **0.1** |
+| `OApsAIMILunchPrebolus` | 2.5 U | **0.1** |
+
+Neither is set on the device, so both are at their defaults, and **the minimum is 0.1 — it cannot be
+switched off**. Pressing Lunch would give 2.5 U of prebolus *plus* 5 U of floor: 7.5 U in 30 minutes.
+His objection was right and the separate mode is the correct answer.
+
+### 16.3 Why the temp-target half was dropped
+
+He proposed carrying the state on a temp target at 80 and gating the forced basal on "note AND temp
+target" — a dead-man's switch, which is sound thinking. Two measured reasons not to:
+
+**The loop already targets lower than 80 at lunch.** Every branch of the target `when` is guarded by
+`!profile.temptargetSet`, and the rise branch computes
+`max(baseTarget, profile.target_bg - (bg - target)/3)` with `baseTarget` 70 outside the hours
+0–11/15–19/≥22. On 14755 ticks, the target the loop chose **by itself** on a rising tick
+(delta ≥ +3, BG ≥ 120):
+
+| hour | n | median | min | already under 80 |
+|---|---|---|---|---|
+| 00–11 | 764 | 90 | 90 | 0 % |
+| **11–15** | 573 | **76** | **70** | **61 %** |
+| 15–19 | 299 | 90 | 90 | 0 % |
+| 19–24 | 587 | 90 | 70 | 29 % |
+
+A flat 80 would be **less** aggressive on 61 % of rising lunch ticks — exactly where his worst
+episodes are (nadirs 58, 57, 64) — and it loses the tracking, since the computed target descends as
+glucose climbs.
+
+**And it disables the protective branch.** `!profile.temptargetSet && combinedDelta <= 0 && predictedBg < 120 -> targetBg = min(hypoTarget, 166)`. Pinned at 80, the loop could no longer raise its
+target to 110–166 during the 30 minutes right after 5 U went in. The target cannot be used as a flag
+because `temptargetSet` is itself a control input.
+
+The note's own duration gives the window, and deleting the note gives the cancel, with none of that.
+
+### 16.4 What was built — TDD, both effects disarmed
+
+The user chose: two separate keys, and a fixed unit budget.
+
+**Keyword `anticip`.** Deliberately not a word containing "meal": `findActiveMealEvents` matches any
+note holding "meal", so `premeal` would switch the meal mode on **and fire its 2.0 U prebolus** — the
+one thing this mode exists to avoid. Checked against every keyword the parser matches (bfast,
+breakfast, delete, dinner, fasting, high carb, highcarb, lowcarb, lunch, marche, meal, sleep, snack,
+sport, stop, walk): `anticip` collides with none, `premeal` collides with `meal`. Two tests pin it.
+
+- **`basal/AnticipationBasalFloor.kt`** — pure, no clock, no state. The budget is spread **evenly**
+  over `WINDOW_MINUTES` 30, so the rate does not change as the window runs down and the whole window
+  delivers exactly the budget above profile: nothing accumulates, nothing is left to spend, and it is
+  a front-loaded anticipation rather than a chase. Returns a **floor**; the caller takes the larger of
+  its own rate and this one. Stands down under `MIN_GLUCOSE_MGDL` 80, at a fall of
+  `MAX_FALL_MGDL_PER_5MIN` −3 or faster, past the window, on a clock that moved back, on a zero
+  budget, and on any input that is not a usable number. Both interlocks are judgement, not
+  measurement, and say so in the KDoc — this is the **only gesture in the project that raises a
+  dose**, so a conservative interlock costs little.
+- **`therapy.kt`** — `anticipTime` flag, `findActiveAnticipEvents`, snapshot field, reset, and an
+  entry in `clearActiveEventsOnStop`. Eight edits, mirroring `mealTime` exactly.
+- **Call site** applied **after** the slew limiter, because a floor the limiter can clamp away is not
+  a floor. Ceiling is `max(profile.max_basal, meal_modes_MaxBasal)`, so a declaration can never reach
+  higher than a meal mode already can.
+- **`DecisionPredictionAuthorityResolver.resolve(declaredMeal = ...)`** joins `treeMealEvidence`.
+  With the key off it is `false`, and `false || X == X`, so the tick is bit-identical.
+
+Keys, both **default false**: `OApsAIMIAnticipBasalFloor`, `OApsAIMIAnticipMealEvidence`, plus
+`OApsAIMIAnticipBudgetU` (default 2.0, **min 0.0** unlike the prebolus keys, so a zero budget disarms
+the gesture even with its key on).
+
+**Two keys on purpose.** Tree meal evidence is one of the disjuncts of `strongMealConfirmed`, which
+gates MCER — the gesture section 11 was spent fixing. Switching it on arms that release on demand, a
+far wider effect than the basal floor, so the two must be measurable apart.
+
+### 16.5 The sizing, which is still the weak point
+
+A fixed budget is what the user chose, and it is the honest limitation to record: 5 U is **−250 mg/dL**
+of potential after 11:00 (ISF 50) and **−600 mg/dL** before it (ISF 120), and with IC 8 it covers 40 g.
+One number cannot serve both windows or every meal size. The budget preference is his to set, and the
+carb-derived version remains the better answer if the fixed one proves awkward.
+
+Tests: `AnticipationBasalFloorTest` 14, `TherapyAnticipationDetectionTest` 6, both 0 failures.
+Whole run: `:plugins:aps` 296 classes, **1813 tests, 0 failures, 0 errors**; `:core:keys` 8 tests, 0
+failures.
