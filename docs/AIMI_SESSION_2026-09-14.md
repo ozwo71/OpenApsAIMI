@@ -1615,3 +1615,132 @@ insulin therapy has a real daily total under 1 U, so below that it is missing da
 
 Whole run after all of section 18: `:plugins:aps` 298 classes, **1854 tests, 0 failures, 0 errors**;
 `:core:keys` 8 tests, 0 failures.
+
+## 19. The FCL mode — 2026-09-17
+
+### 19.1 Why the first attempt did nothing
+
+On 2026-09-17 the person ate at 13:00 with an "FCL" scenario running. Only the temp target 80
+reached the loop. The reason is one line long: **"fcl" was not a keyword.** The parser in
+[therapy.kt](../plugins/aps/src/main/kotlin/app/aaps/plugins/aps/openAPSAIMI/therapy.kt) recognised
+`anticip bfast breakfast delete dinner fasting high carb highcarb lowcarb lunch marche meal sleep
+snack sport stop walk` and nothing else, so no mode flag was set. No flag means:
+
+- no prebolus — `setLegacyPrebolusUnits(...)` is keyed on `mealruntime` / `lunchruntime` / …;
+- no max-basal boost — that branch needs `mealTime || lunchTime || dinnerTime || highCarbTime || bfastTime`;
+- not even the declared-meal anticipation floor, which needs a note holding "anticip".
+
+The temp target worked because it never touches the note parser: `OpenAPSAIMIPlugin` reads
+`persistenceLayer.getTemporaryTargetActiveAt(now)` straight from the database.
+
+### 19.2 What FCL now is
+
+`FclMealBasal` — an "fcl" note **plus** a low temp target ask for the meal basal ceiling, and nothing
+else. No prebolus, because the prebolus path is keyed on the meal-mode keywords and "fcl" is not one
+of them.
+
+**The temp target is the leash.** It is what ends the mode, which is deliberate: a note window needs
+a duration, and a scenario that writes a note with no duration would arm nothing — exactly the
+2026-09-17 failure. Binding the mode to the temp target means the mode lasts as long as the target
+the person can see in the app, and cancelling the target cancels the mode at once. It also makes the
+gate two independent manual acts, so neither a stale note nor a temp target set for another reason
+can force the ceiling alone.
+
+The note therefore only has to be recent: `Therapy.FCL_MIN_WINDOW_MS` is one hour, the same lookback
+`getTimeElapsedSinceLastEvent` already uses, and a note carrying a longer duration of its own keeps
+it.
+
+Stand-downs, all judgement and not measurement, all in the direction of less insulin:
+
+| test | value | why |
+|---|---|---|
+| temp target set | required | `profile.temptargetSet` |
+| temp target value | ≤ 85 mg/dL | over that it is an eat-soon or exercise target, which must never get the meal ceiling. 85 lets 80 mg/dL and its mmol/L neighbours (4.4 = 79, 4.5 = 81, 4.6 = 83) through, but not a plain 90 |
+| glucose | ≥ 80 mg/dL | same rule and same reason as `AnticipationBasalFloor` |
+| fall | slower than −3 mg/dL/5 min | the meal is not arriving as declared |
+| sport note | must be absent | two manual notes that disagree are not a tie; the one that withholds insulin wins |
+
+The raw `profile.target_bg` is read, **not** the working target the boost function receives: the raw
+one carries the temp target the person set, the working one has already been reshaped by the engine's
+own targeting.
+
+### 19.3 Where it is applied, and why not as a mode branch
+
+The first attempt put FCL in `resolveMealHyperBasalBoostOutcome`, the same branch the declared meal
+modes use. That branch returns `CompleteWithTempBasal`, and that return (`:18201`) **ends the tick**
+while the bolus stage is at `:18317` — so the meal modes run on basal alone for their window, after
+sending their prebolus early in the tick (`applyLegacyMealModes` at `:3108`). SMB must stay active
+during FCL, so that shape was wrong.
+
+FCL is therefore applied as a **floor at the terminal basal apply-point**, beside
+`AnticipationBasalFloor`, inside `runPostBasalEngineLearnersRtInstrumentationAndAuditorStage`
+(called at `:18381`). Two properties come from that position:
+
+- it is the **last** point where the rate can still be raised, so the slew limiter, the Harmonia
+  harmonizer and the effort damp cannot clamp it away afterwards;
+- it runs **after** the bolus stage, so the bolus channel is untouched.
+
+The price is that the two channels do not talk to each other inside one tick: the bolus is decided
+before the floor is applied, so it cannot know the basal is about to be raised. The coupling is real
+but late — the insulin the floor delivers becomes insulin on board on the next tick, which the bolus
+gate does read. **With a low temp target, SMB live and the basal at its ceiling, this is the most
+insulin the engine can be asked for, and nothing subtracts one channel from the other.**
+
+### 19.3.1 What actually reaches the pump
+
+Everything downstream of the floor still applies, in this order inside `setTempBasal`:
+
+1. the LGS block can zero it;
+2. `DynamicBasalController` multiplies by 0…10, and hard-brakes to 0 when glucose is under target and
+   falling faster than −1, or at or under 90 and falling faster than −2;
+3. the clamp: `maxSafe` normally, `profile.max_basal` when the safety bypass is on.
+
+For this person's settings:
+
+| setting | value |
+|---|---|
+| `meal_modes_max_basal` | 10.0 U/h — what FCL asks for |
+| `openapsma_max_basal` | 7.0 U/h — the hard cap, bypass included |
+| basal profile | 0.50 U/h then 0.60 U/h from 11:00 |
+| `max_daily_safety_multiplier` | 10.0 |
+| `current_basal_safety_multiplier` | 10.0 |
+| ⇒ `maxSafe` at lunch | min(7.0, 10 × 0.60, 10 × 0.60) = **6.0 U/h** |
+
+So the floor sets `finalOverrideSafetyLimits = true`, but **only on the ticks where it actually raises
+the rate**. That lifts one clamp — the daily-safety one, 6.0 — up to `max_basal`, 7.0, which is the
+same bypass the declared meal modes already use. Without it FCL would deliver 6.0 while a `lunch`
+note delivers 7.0, and FCL is meant to be *lunch minus the prebolus*, not a weaker version of it.
+
+**So on a rising meal the pump receives 7.0 U/h, not the 10 that was asked for.** That is not new to
+FCL: `meal_modes_MaxBasal` = 10 has never been reachable with `max_basal` = 7, for any meal mode.
+
+Two things deliberately left alone:
+
+- **`BasalTerminalInvariants` still applies to FCL** — it exempts `isMealMode`, which FCL is not part
+  of. Its three rules (glucose *and* prediction under target, post-hypo authority live, negative IOB
+  with no rise) are all cases where the meal ceiling should not fire either. The key is off by default
+  and is not in this person's settings.
+- **`isMealMode` inside `setTempBasal` was not widened** to include FCL: it also feeds
+  `MealSafetyContext`, which loosens an LGS guard. FCL must not buy a weaker hypo interlock.
+
+### 19.4 Tests
+
+| file | tests |
+|---|---|
+| `FclMealBasalTest` | 15 |
+| `TherapyFclDetectionTest` | 8 |
+
+Watched RED first on both (`Unresolved reference 'FclMealBasal'`, then `Unresolved reference
+'fclTime'`). Full module suite after the change: 300 classes, 1881 tests, 0 failures, 0 errors. The
+six existing `TherapyAnticipationDetectionTest` cases still pass, so the keyword parser did not move.
+
+### 19.5 Still open
+
+- `profile.max_basal` is 7 while `meal_modes_MaxBasal` is 10. Raising the first is the only way to
+  reach 10 U/h, and it raises the ceiling for **every** other path too.
+- SMB and the forced basal are **additive within a tick**, and with a temp target at 80 that is the
+  most aggressive combination available. It was asked for explicitly. The stand-downs in 19.2 are the
+  only things holding it, and they are judgement, not measurement — the first real window should be
+  watched, not trusted.
+- Nothing has been measured on real data yet: no replay, no discrimination test. FCL is a manual
+  gesture behind two manual acts, so the corpus has no episodes to replay it over.

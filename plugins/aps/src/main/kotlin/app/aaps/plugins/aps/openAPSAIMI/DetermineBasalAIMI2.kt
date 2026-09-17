@@ -46,6 +46,7 @@ import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalTerminalInvariants
 import app.aaps.plugins.aps.openAPSAIMI.basal.AnticipationBasalFloor
+import app.aaps.plugins.aps.openAPSAIMI.basal.FclMealBasal
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAnticipation
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAutodriveBasalBridge
@@ -3004,6 +3005,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.highCarbTime = therapy.highCarbTime
         this.mealTime = therapy.mealTime
         this.anticipTime = therapy.anticipTime
+        this.fclTime = therapy.fclTime
         this.bfastTime = therapy.bfastTime
         this.lunchTime = therapy.lunchTime
         this.dinnerTime = therapy.dinnerTime
@@ -3011,6 +3013,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.stopTime = therapy.stopTime
         this.mealruntime = therapy.getTimeElapsedSinceLastEvent("meal")
         this.anticipruntime = therapy.getTimeElapsedSinceLastEvent("anticip")
+        this.fclruntime = therapy.getTimeElapsedSinceLastEvent("fcl")
         this.bfastruntime = therapy.getTimeElapsedSinceLastEvent("bfast")
         this.lunchruntime = therapy.getTimeElapsedSinceLastEvent("lunch")
         this.dinnerruntime = therapy.getTimeElapsedSinceLastEvent("dinner")
@@ -9082,6 +9085,40 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
 
+        // 🍽️ FCL declared meal — see [FclMealBasal]. Applied here, beside the declared-meal floor and
+        // for the same two reasons: this is the last point where the rate can still be raised, and the
+        // SMB stage has already run by now, so the bolus channel stays alive. An early return from the
+        // meal-boost stage would have skipped it, which is how the declared meal modes behave and is
+        // not what was asked for here.
+        FclMealBasal.rateUph(
+            fclNoteActive = fclTime,
+            sportNoteActive = sportTime,
+            tempTargetSet = b.profile.temptargetSet,
+            // The raw profile target on purpose: it carries the temp target the person set, while the
+            // engine's own working target has already been reshaped by this point.
+            targetBgMgdl = b.profile.target_bg,
+            mealModesMaxBasalUph = preferences.get(DoubleKey.meal_modes_MaxBasal),
+            profileMaxBasalUph = b.profile.max_basal,
+            profileBasalUph = b.profile.current_basal,
+            bgMgdl = bg.toDouble(),
+            deltaMgdl5m = delta.toDouble(),
+        )?.let { floorUph ->
+            if (floorUph > finalProposedRate) {
+                consoleLog.add(
+                    "🍽️ FCL_MEAL_BASAL: %.2f→%.2f U/h (temp target %.0f mg/dL, note %d min ago)".format(
+                        Locale.US, finalProposedRate, floorUph, b.profile.target_bg, fclruntime,
+                    )
+                )
+                b.rT.reason.append("; 🍽️FCL ${"%.2f".format(Locale.US, floorUph)}U/h")
+                finalProposedRate = floorUph
+                // The same bypass the declared meal modes already use, so FCL is "lunch without the
+                // prebolus" and not a weaker version of it. It lifts one clamp only — the daily-safety
+                // one — up to max_basal. The LGS block, the DynamicBasalController brake and the
+                // max_basal hard cap inside setTempBasal all still apply.
+                finalOverrideSafetyLimits = true
+            }
+        }
+
         val finalResult = setTempBasal(
             _rate = finalProposedRate,
             duration = finalDuration,
@@ -11323,6 +11360,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     /** Minutes since that declaration. Same type as [mealruntime], which this mirrors. */
     private var anticipruntime: Long = 0
+
+    /**
+     * The FCL mode: a declared meal that forces the meal basal ceiling while a low temp target runs,
+     * and sends no prebolus. See [FclMealBasal].
+     */
+    private var fclTime = false
+
+    /** Minutes since that declaration. Logging only: the temp target is what ends the mode. */
+    private var fclruntime: Long = 0
     private var bfastTime = false
     private var lunchTime = false
     private var dinnerTime = false
