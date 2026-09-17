@@ -1711,8 +1711,16 @@ the rate**. That lifts one clamp — the daily-safety one, 6.0 — up to `max_ba
 same bypass the declared meal modes already use. Without it FCL would deliver 6.0 while a `lunch`
 note delivers 7.0, and FCL is meant to be *lunch minus the prebolus*, not a weaker version of it.
 
-**So on a rising meal the pump receives 7.0 U/h, not the 10 that was asked for.** That is not new to
-FCL: `meal_modes_MaxBasal` = 10 has never been reachable with `max_basal` = 7, for any meal mode.
+**So on a rising meal the FCL floor puts 7.0 U/h on the pump, not the 10 it asks for.**
+
+⚠️ **Correction to an earlier claim in this document.** "10 has never been reachable for any meal
+mode" was wrong. The declared meal modes do not go through the floor at all: `applyLegacyMealModes`
+→ `manualMealModeTbr` → `setTempBasal(..., forceExact = true)`, and the `forceExact` path *posts the
+requested rate exactly* — no `DynamicBasalController`, no `maxSafe`, no `max_basal` cap, no terminal
+invariants. A `lunch` note therefore delivers exactly `meal_modes_MaxBasal` = **10 U/h** for its first
+30 minutes. Only the FCL floor is capped at 7, because it deliberately keeps the PD brake that cuts
+the rate when glucose is under target and falling. Raising `max_basal` is the honest lever if 10 is
+wanted on the floor path too.
 
 Two things deliberately left alone:
 
@@ -1829,3 +1837,109 @@ inert; they are live on every tick.
 There is **no unit test** asserting the absent key: the only seam is a private `JSONObject` inside a
 20 000-line injected class, and the scenario harness cannot observe the export without widening
 `pendingDecisionCtxForExport` to `internal`. Adding that seam was not done unasked.
+
+
+## 21. FCL, second pass: the basal was pinned to the profile and no SMB was sent — 2026-09-17
+
+Field report: during a meal with FCL active and the temp target at 80, the basal stayed at the
+profile rate, and no Autodrive prebolus or SMB was sent. Three independent causes, all three found in
+the code, one of them measured in the export.
+
+### 21.1 The basal: the terminal invariants were pulling it back
+
+`BasalTerminalInvariants` runs **inside `setTempBasal`, therefore after** the FCL floor, and it
+received `mealModeActive = isMealMode` — snack / highCarb / meal / lunch / dinner / bfast, **FCL
+absent**. All three of its invariants return *exactly* `profile.current_basal`. So the floor raised the
+rate to the meal ceiling and the invariant pulled it straight back a few lines later: the reported
+symptom, word for word.
+
+This contradicted the module's own contract: *"Modes repas exclus. Quand un mode manuel est déclaré,
+l'utilisateur a demandé que la basale du mode s'applique sur toute sa durée ; les invariants
+s'effacent."* FCL **is** a manually declared mode. Leaving it out was the error.
+
+Which rule bound? In the 24 h export only two of the three ever did: `post_hypo` 7.9 % and
+`below_target` 2.3 %; the negative-IOB rule never bound once. With this person's frequency of lows,
+`post_hypo` can cover a whole meal window.
+
+**Fix.** `mealModeActive = isMealMode || fclDeclaredThisTick(profile)`. `isMealMode` itself is still
+not widened — it also builds `MealSafetyContext`, which loosens an LGS guard, and FCL must not buy a
+weaker hypo interlock.
+
+### 21.2 The Autodrive gate never opened its meal channel
+
+`AutoDriveGater.shouldEngageV3` was called with
+`explicitMealMode = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime` —
+FCL absent again. At COB 0 with no recent estimate, `implicitMealContext` is false, so
+`isMealRising` (`implicitMealContext && combinedDelta > 0.25`) is dead and the gate falls back to the
+glycaemic thresholds. Under 120 mg/dL those need **`combinedDelta > 2.0` AND
+`minBgLookback75m >= 75`**. Eating at ~100 with the target at 80, neither holds — and a low in the
+previous 75 minutes keeps the second false long afterwards.
+
+**Measured: `GateKind.MEAL_AWARE_RISE` fired 0 times in 1443 ticks.** The gate was RISE_TOO_WEAK
+47.6 %, STRONG_RISE 19.1 %, HIGH_PLATEAU 12.2 %. The meal channel has never opened on this install.
+
+**Fix.** FCL added to `explicitMealMode` at that call site only. The same expression appears at three
+other places (T3C, `classifyPostHypoState`, one estimate path); they were left alone, they were not
+part of what was analysed.
+
+### 21.3 The Autodrive prebolus is locked under 120 mg/dL
+
+`aggressiveRiseSmbFloorU`: `if (bgMgdl < 120.0) return 0.0`, then Large needs
+`riseSignal >= 5 && shortAvgDelta >= 3`, Small needs `riseSignal >= 2`. The key is on
+(`key_aimi_autodrive_aggressive_smb_floor: true`) and the amounts are at their defaults, **1.0 U and
+0.1 U**. At the moment a prebolus is wanted, neither the glucose nor the rise condition holds. That
+mechanism can only fire once the rise is well under way, which is a late correction, not a prebolus.
+
+**Fix — and why not simply opening that floor.** It has **no per-episode budget by design**: the
+budget was removed on 2026-08-10 because with it the peak went 225 → 268.7. The documented
+consequence of letting it run free is the bolus storm — pinned at the max-SMB cap every 3 minutes on
+the rise, 19.4 U of IOB in 56 minutes, low at 48. Gating it on FCL would fire it on **every tick** of
+the temp-target window.
+
+So FCL gets a **one-shot prebolus** instead, reusing the proven legacy machinery rather than a new
+mechanism:
+
+| mechanism | role for FCL |
+|---|---|
+| `fclruntime in 0..7` | the same P1 window every other mode uses |
+| `legacyPrebolusFiredAtMem` + `legacyPrebolusLatchBlocks` | one fire per activation, window `runtime + 90 s` |
+| the latch checked **in the branch condition** | without it the branch's own `return` would end the tick on all eight minutes and kill SMB |
+| `pendingLegacyPrebolusUnit` + `LEGACY_PREBOLUS_DELIVERY_TTL_MS` | delivery guarantee: FCL added to the carry-forward `when` |
+| `CARRY_RETRY_COOLDOWN_MS` | no double send while the first reaches the database |
+| **absence** from `legacyMealMaint` | that block ends the tick for 30 min on a bare TBR; FCL must leave the bolus channel alive |
+
+The amount is `DoubleKey.OApsAIMIautodrivePrebolus` — the Autodrive prebolus the person already set,
+so there is nothing new to configure.
+
+**On the carry-forward and SMB.** While a requested prebolus is unconfirmed the tick returns early,
+so no SMB that tick. That is not a regression, it is the anti-redundancy requirement: no insulin has
+landed yet, so the same amount is re-proposed rather than an SMB being stacked on an unknown outcome.
+Worst case if a bolus is never enacted: 30 minutes (`LEGACY_PREBOLUS_DELIVERY_TTL_MS`).
+
+### 21.4 What FCL now does, end to end
+
+1. note `fcl` + temp target ≤ 85 mg/dL, no `sport` note → declared (`FclMealBasal.declared`, the one
+   gate all four callers share);
+2. minutes 0–7, once: prebolus = Autodrive prebolus amount, and that tick's TBR is posted **exactly**
+   at `meal_modes_MaxBasal` (the `forceExact` path) = 10 U/h;
+3. every tick after that: the FCL basal floor (capped at `max_basal` = 7 U/h, PD brake kept), **SMB
+   alive**, and the Autodrive meal channel open on delta > 0.25;
+4. stand-downs throughout: glucose < 80, fall ≤ −3 mg/dL/5 min, a live `sport` note;
+5. the temp target expiring ends all of it.
+
+### 21.5 Tests and what is still unverified
+
+`FclMealBasalTest` 15 → **23** (8 new for `declared`, RED watched on `Unresolved reference
+'declared'`). `rateUph` now routes through `declared`, and the 15 original cases still pass, which is
+the regression guard on that refactor. Full module suite: 300 classes, **1889 tests, 0 failures, 0
+errors**. No compiler warning on any new line.
+
+**Not verified by data.** No export covers the FCL meal: the newest ends 09-17 08:06 and the FCL code
+landed at 16:01. Cause 21.1 is therefore the best-supported hypothesis, not a measurement. What to
+look for in the next export: the console line `🍽️ FCL_MEAL_BASAL` (the floor fired) and
+`basal_terminal.bound_by` on those ticks (which rule cut it). Causes 21.2 and 21.3 are read directly
+from the code and 21.2 is confirmed by the 0/1443 MEAL_AWARE_RISE count.
+
+The three wirings are call-site changes in a 20 000-line injected class and have **no unit test of
+their own**; only the pure `declared` gate is tested. That is the project's established pure-object
+pattern, and it is a real limit, not a claim of coverage.
