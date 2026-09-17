@@ -28,6 +28,8 @@ user's main complaint.
 | J | Does the prediction layer stabilise? | **answered 2026-09-16** — the wiring is right, the slope is not (section 14) |
 | K | Declared-meal anticipation | **built disarmed 2026-09-16** (section 16) |
 | L | The tail latch was a regression | **fixed 2026-09-16** (section 17) |
+| M | Heart rate during an undeclared meal rise | **fixed 2026-09-17** (section 18) |
+| N | The rise ceiling guard's 18.55 was wrong | **correction 2026-09-17** — real value 1.11 / 0.45 (section 18.5) |
 
 Working tree is clean except this file. Everything else below is committed.
 
@@ -1363,3 +1365,253 @@ instead of being absorbed.
 
 Nothing in that report was changed: it is pre-existing code, it did not get worse, and the `max()`
 merge deserves its own measured pass.
+
+---
+
+## 18. Heart rate and the undeclared meal rise — 2026-09-17
+
+The user got about 8 U at 01:00 on a rise he did not eat for. Three analyst agents ran in parallel on
+the three questions the main session was least sure of. Their reports changed two conclusions written
+earlier in this document.
+
+### 18.1 What actually happened, minute by minute
+
+Package `1789632360901`, 2026-09-16 10:06 → 2026-09-17 10:06.
+
+```
+00:25-00:41  ISF floor ACTIVE   commanded ISF 120 (= profile)   heart rate 88 then 62
+00:36        heart rate 88 -> 62 in one exported minute
+00:42        ISF floor OFF      commanded ISF 120 -> 67.4       MCER ARMED   bolus 1.80 (its ceiling)
+00:42-00:59  bolus at the 1.80 ceiling ELEVEN times in 18 min   IOB 0.47 -> 8.52
+00:54        heart rate -> 100, but re-entering needs 10 unbroken minutes
+01:05        ISF floor ACTIVE again, commanded ISF back to 120 — the insulin is already in
+01:03-01:31  glucose 186 -> 56, bottom 54.4 at 01:29
+```
+
+Excursion **+112 mg/dL**. At the profile ISF 120 that needs **0.93 U**; at the commanded 67.4,
+**1.66 U**. Delivered: **8.05 U** — 8.6× and 4.8×. The analyst pinned the delivery independently:
+**5 boluses, +7.11 U, on a 6-minute pump cadence**, and confirmed that summing `final_u` overcounts
+**4.4×** (1.80 logged on 11 ticks, 4-5 boluses actually landed). "8 U" is right to about 10 %.
+
+**This was not a cortisol shape**, by the project's own measured criteria: the excursion is 4.3× the
+26 mg/dL cortisol envelope and the rise reached 2.9× the 11.0 escape threshold. And the heart rate was
+**62 — resting + 12, below what `isStressCortisol` requires** — through the whole dosing window. The
+heart rate did not lead the rise: 88 before, 62 during, 100 after.
+
+### 18.2 The heart rate is not a per-minute measurement
+
+Measured over **11,644 logged minutes, 12 days** (agent 1):
+
+- It is a **staircase**, refreshed about every 9 minutes (median 9, 45.5 % exactly 9, 18.7 % at 5).
+  Over 2 hours of the incident: 118 ticks, **15 distinct values**, in blocks of 9 identical minutes.
+- **`hr_now_bpm` equals `hr_avg_15m_bpm` on 11,618 of 11,618 valid ticks.** The "15-minute average"
+  is the same held number. Confirmed independently by agent 2 from the code:
+  `HealthContextRepository.kt:186` is literally `hrAvg15m = currentHR`.
+- So a "one-minute change" is never a one-minute physiological change. Rated per sample interval,
+  88 → 62 is −2.9 bpm/min.
+
+**And the 62 was the trustworthy reading; the 88 was the outlier.** 41.8 % of this person's nocturnal
+minutes are ≤ 62 and 44.3 % fall in 60-66, while only **2.0 % reach 88**. Steps corroborate the fall
+(182 → 95 → 36 → 8 → 0). The unsupported readings are the **100 and 109** of 00:54-01:03: above the
+nocturnal 95th centile of 83, with zero steps either side, and the +36 at 00:54 is the largest rise in
+the whole dataset.
+
+### 18.3 The exit grace was structurally unusable — measured
+
+Of 42 floor releases, 22 came from a non-grace state and **20 were grace-driven. All 20 had exactly
+one distinct heart-rate value across the entire grace window; none had two.** The reason is
+arithmetic: the grace is 5 minutes, the refresh cadence is 9, and **66.7 % of hold blocks last ≥ 6
+minutes**. The grace always expires on the very reading that broke the signature, having never seen a
+second one. Rate ≈ 3.6 grace-driven releases a day; consequential on about 15 % of them, which needs a
+rising glucose at the same time.
+
+`stress_isf_floor_active` is null before 2026-09-12, so this covers ~5.5 days.
+
+### 18.4 The three fixes, TDD
+
+**A — the heart rate may not remove the floor during a fast rise.** New `REASON_RISE_HOLD` in
+`ISF/StressIsfFloor.kt`: an active floor whose signature breaks while the rise is at or above
+`RISE_HOLD_MGDL_PER_5MIN` **11.0** keeps its state. The threshold is not invented here — it is the
+value `PhysiologicalPhaseClassifier` already measured as "too steep to be cortisol alone". Same
+reasoning in both places: a rise that fast is not hormonal, so a heart rate says nothing about its
+cause. Three guards, each tested: the freeze **holds** a state and never **creates** one (a rise can
+never switch an inactive floor on, which would withhold insulin from a real meal on no evidence); a
+data gap still drops the floor; a missing heart rate still drops it.
+
+Replayed on the real night with the true per-tick heart rate, steps and delta: floor active
+**17/40 → 40/40** ticks over 00:30-01:10, holding by `rise_hold` from 00:40 to 00:53 and returning to
+`active` at 00:54. Over the whole 24 h, 67.3 % → **68.9 %** — **+23 ticks of 1436**. The gesture does
+not become permanent.
+
+**B — the release waits for a fresh sample.** `EXIT_GRACE_MAX_MINUTES` **20.0** (covering the 90th
+centile of the observed refresh interval) and a new `Verdict.breakHrBpm`: the floor may not be
+released while the heart rate still reads the same value that broke the signature. Restricted to
+breaks **caused by the heart rate** — if the step count broke it, steps refresh on their own clock and
+the heart rate's freshness is irrelevant, so the plain grace governs there. That restriction was found
+by a pre-existing test going red, which is what tests are for.
+
+**C — the one heart-rate path that raises a dose now has a gate.** It had none:
+
+```kotlin
+val heartRateTrend = averageBeatsPerMinute10 / averageBeatsPerMinute60
+if (recentSteps10Minutes < 100 && heartRateTrend > 1.1 && bg > 110) {
+    this.variableSensitivity *= 0.9f      // lower ISF number = stronger insulin
+}
+```
+
+No carbs test, no delta test, no meal phase. Extracted to `ISF/HeartRateTrendIsf.kt` and it now stands
+down above `RISE_SUSPEND_MGDL_PER_5MIN` 11.0 — during such a rise the heart-rate elevation is a
+**consequence** of the rise, so adding insulin for it counts the same event twice — and on a
+**baseline that was not measured**: when the one-hour window is empty the engine substitutes 80 bpm,
+and for this person a real ten-minute average over 88 would trip the 1.1 ratio on that substitute
+alone. A new `heartRateBaselineIsReal` flag carries the difference; the shared 80 fallback stays
+because `ActivityManager`'s `avgHrResting` depends on a non-zero number.
+
+On the episode the gate removes the strengthening at 00:54 (Δ +11.9) but not at 01:00 or 01:03, where
+the rise had slowed under 11. It is narrow. (The `hr60` values in that check are estimates — the field
+is not exported — so it is illustrative, not measured.)
+
+`HeartRateTrendIsfTest` 11 tests, `StressIsfFloorTest` 19 → **30** tests. Whole run: `:plugins:aps`
+297 classes, **1840 tests, 0 failures, 0 errors**; `:core:keys` 8 tests, 0 failures.
+
+### 18.5 CORRECTION — the 18.55 that justified the rise ceiling guard was wrong
+
+Section 10.2 recorded a discrimination ratio of **18.55** for the rise ceiling guard. **That number is
+not reproducible.** An analyst replayed the **actual shipped code** — found in the repo, called at
+`DetermineBasalAIMI2.kt:14187`, and cross-checked against production's own exported verdict on
+**594 of 596 ticks (99.7 %)** — over essentially the same window (12,511 ticks against the 12,451
+claimed) and got **0.68 at line 70 and 0.28 at line 60, with a cost of 233.80 U, not 3.8 U. The cost
+is 60× larger.**
+
+The error is mine and it is identifiable: the replay behind 18.55 had the ceilings **hardcoded** as
+`{2.0, 1.25, 0.8}`, while the code reads `max_smb_u` and `max_smb_high_bg_u` **per tick**. The real
+ceilings on this device run 1.80, 1.40, 1.70, 0.05, 0… so the hardcoded set flagged mostly the storm
+ticks and inflated the gain side.
+
+On the full corpus (15,957 ticks, 2026-09-01 → 2026-09-17) the shipped rule scores **1.11 @70 and
+0.45 @60**, against a random-placement expectation of 0.40 and 0.13. The signal is real — about 2.8×
+chance — but it does **not** clear the bar:
+
+- removing **2026-09-15 alone** takes it to **0.74 @70** and **0.23 @60**; that one day carries 33.8 %
+  of all gain, the top two days 50.8 %;
+- requiring the low to be **sustained** (≥ 5 follow-up readings under the line, so a single dip cannot
+  manufacture gain) takes it to **0.96**, and every variant to 0.86-0.91.
+
+**The key was ARMED on the user's device** (`key_aimi_rise_ceiling_guard: true`). Recommendation on
+record: disarm it until it is re-measured. Not done here — it is the user's key.
+
+**And the proposed fix to it is rejected.** Replacing exact equality with "at or above a fraction of
+the ceiling" scores at or below the incumbent at **every** fraction and both lines; the marginal return
+is 0.2-0.56 U of bad-episode per U newly withheld; and the fraction low enough to make the 09-17 burst
+contiguous is **0.80** (1.50/1.80 = 0.833), which is the **weakest** variant at line 70 (0.96). The
+discrimination lives in the **rise threshold**, not in the ceiling test: the incumbent goes 0.88 →
+1.11 → 1.27 as delta goes 6 → 8 → 10, identically for every variant.
+
+Methodological note worth keeping: "a fraction of the ceiling" is **ambiguous**, and the two readings
+are not nested. Generalising `isAtCeiling` fires *more* than the shipped rule (a superset); taking the
+ratio to the **highest** ceiling in force fires *less*, because it loses the 215 ticks sitting exactly
+on the **lower** of two positive ceilings.
+
+### 18.6 CORRECTION — heart rate IS used as evidence for a meal
+
+Section 16 and the 2026-09-17 reply both stated that heart rate is nowhere a meal signal. **Wrong, in
+two places:**
+
+- `patient/MealCertainty.kt:252-262` — `softCorroborationFromPhysio`: `idle && stepsLow && hr >= rhr + 12`.
+  **Inert for dosing**: never referenced in `resolveLevel`; its only uses are the reason string, the
+  stored field and the JSON export.
+- `physio/MealAbsorptionPhaseEngine.kt:175-182` — **live**: `hrDelta in 5..18 && delta >= 1.5` adds
+  **+0.35** to `physioScore`, carried at weight 0.10 into the phase belief, which drives
+  `usesMealHtrPolicy`, `bypassesIobSurveillance` and `mealDeliveryPriority`. Contribution about
+  ±0.035, decisive only at a threshold boundary. The same function *subtracts* 0.20 when
+  `hrDelta > 18 && delta >= 4.0`.
+
+### 18.7 Two heart-rate gates left alone on purpose
+
+Both exist **only** on the undeclared-meal path — exactly what the user asked to remove — but both
+**reduce** insulin, so removing the heart rate from them would make the loop more aggressive on
+undeclared meals, against everything measured in sections 9 and 10:
+
+- `autodrive/controller/MpcController.kt:128-134` — `hour in 4..10 && steps < 200 && hr > rhr + 5 && cob < 0.1`
+  halves the MPC bolus cap and sets `activeRInsulin = 100.0`. It sits in an `else if` chain **above**
+  the branch whose own comment reads "Unannounced Meal Crushing", so **a heart rate 5 bpm over resting
+  in the morning makes that branch unreachable**. Declaring carbs removes the guard entirely.
+- `UndeclaredCobEstimator.kt:95` — `if (input.hrInflammationElevated) return Result.gated("hr_inflammation")`
+  at `hrElevation >= 15`, and the enclosing function only runs when carbs are zero. **A postprandial
+  heart-rate rise of 15 bpm zeroes the virtual COB** — the estimator written to find undeclared meals
+  is disabled by the rise the meal itself causes. Self-defeating, and still protective in direction.
+
+Same shape at `physio/PhysiologicalPhaseClassifier.kt:343-348`: the looser morning prior
+(`hr > rhr + 8`, delta ≥ 2.5, hours 5-10) runs at `:117-124`, **before** `isMealLikeRise` at
+`:125-136`, and pre-empts `MEAL_UNDECLARED`. The policy difference is large — `STRESS_CORTISOL` gives
+`smbFloorCapU 0.75`, `maxHtrTier EMERGING`, `mpcInsulinCostMultiplier 2.5`; `MEAL_UNDECLARED` gives
+`+INFINITY`, `DEEP`, `1.0` — and protective. Only `isTooSteepForCortisolAlone` escapes it.
+
+### 18.8 The heart-rate pipeline is unreliable by construction — open
+
+All from agent 2, each a file:line it read:
+
+- **Stale carry-forward with a refreshed timestamp.** `HealthContextRepository.kt:201-218`: when the
+  new snapshot is invalid and the previous one was valid, it returns `lastSnapshot.copy(... timestamp = snapshot.timestamp)`.
+  **An arbitrarily old heart rate is re-dated as current. There is no maximum age.** This is the worst
+  of the list: any heart-rate decision can rest on hours-old data presented as fresh.
+- `unifiedProvider.getLatestHeartRate(15 * 60 * 1000)` — a reading up to **15 minutes** old is
+  presented as "now".
+- **`rhrResting` falls back to a fabricated 60** (`:116-120`, `else -> 60` over the 7-day morning
+  minimum). Every consumer guarding on `rhrResting > 0` passes, **including `StressIsfFloor`'s own
+  missing-data check** (`:187-196`), which is the one place that handles absence correctly.
+- `averageBeatsPerMinute60` and `180` fall back to a fabricated **80.0**, and all four do on any
+  exception. Fixed for the one consumer that strengthens a dose (18.4 C); the others still read it.
+- `isValid = confidence > 0.3` while `currentHR > 0` contributes exactly **0.3** — so the heart rate
+  alone can never make a snapshot valid; it needs HRV or sleep data.
+- Under `MODE_PREFER_WEAR` the provider takes the newest *wear* record even when a newer Health
+  Connect record exists, so `hrNow` can be older than the best available sample.
+- No field anywhere carries the HR **acquisition time**; `snapshot_age_ms` has a median of 18 ms and
+  refers to the snapshot object, not the sample. So staleness cannot be measured from the export at
+  all — only inferred from the staircase.
+
+### 18.9 The stale carry-forward — fixed, TDD
+
+The worst item of 18.8. `HealthContextRepository` carried the previous heart rate into a new snapshot
+and stamped it `timestamp = snapshot.timestamp`, then stored that snapshot as the new previous one.
+**The re-dating compounded**: the same reading was presented as current on every tick indefinitely,
+with nothing anywhere recording when it had actually been measured — and the export carried no
+acquisition time either, so the only visible clue was the staircase shape of the series.
+
+New pure object `physio/HeartRateCarryForward.kt`: a reading keeps **its own** age. A fresh sample
+resets it, a carried one does not, and past `MAX_AGE_MS` the reading is dropped to **0** rather than
+carried — the value every consumer already treats as missing, including `StressIsfFloor`'s
+`hrNowBpm <= 0` check, the one place in the engine that handles absence correctly.
+
+`MAX_AGE_MS` is **15 minutes**, and it is not invented: it is the provider's own lookback
+(`getLatestHeartRate(15 * 60 * 1000)`), so carrying a reading past it adds nothing the provider would
+not have returned by itself. A test pins that equality so the two cannot drift apart.
+
+`HealthContextSnapshot` gains `hrMeasuredAtMs`, kept **apart from** `timestamp` on purpose, and
+`PhysioLiveDigest` exports `hr_sample_age_ms` — distinct from `snapshot_age_ms`, which has a median of
+18 ms and refers to the snapshot object. Staleness is now measurable from a support package.
+
+`HeartRateCarryForwardTest`: 10 tests, including the compounding case (carry the same reading a minute
+at a time for 30 minutes and it must still expire on its real age), a clock that moved back, and the
+exact-limit boundary.
+
+### 18.10 A flaky test, and the production defect behind it
+
+Adding the new test class made `KalmanFilterTest.the floor is relative to the profile when the profile is known`
+fail once with **223.29 mg/dL/U where 15.0 was expected** — a sensitivity out by more than a factor of
+ten. It did **not** reproduce: two further full-suite runs were clean, and a run with every production
+change in place but the new test class moved aside was clean too (1840 tests, 0 failures). So the
+failure was not caused by the change.
+
+The mechanism it exposed is real, though. `KalmanISFCalculator.refreshTddAsync()` launches a coroutine
+on `Dispatchers.IO` and writes `averageTDD(...)?.data?.totalAmount` straight into its cache. That
+returns **0.0** when there is no history — and a relaxed test double returns 0.0 too. The effective
+dose then becomes `0.2*0 + 0.4*0 + 0.4*0 = 0`, and it scales the whole sensitivity estimate.
+
+Fixed with `isUsableTdd` / `MIN_USABLE_TDD_U` 1.0 in the companion object: only a measurement is
+cached, and a refused value leaves the previous cache or the preference fallback in place. Nobody on
+insulin therapy has a real daily total under 1 U, so below that it is missing data, not a small dose.
+4 tests.
+
+Whole run after all of section 18: `:plugins:aps` 298 classes, **1854 tests, 0 failures, 0 errors**;
+`:core:keys` 8 tests, 0 failures.
