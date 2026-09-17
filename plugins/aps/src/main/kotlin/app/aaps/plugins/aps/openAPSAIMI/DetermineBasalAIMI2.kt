@@ -2280,6 +2280,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // sur les deux qui appellent explicitement le stage. On repart d'un état non exporté à chaque tick.
         aimiDecisionExportedThisTick = false
         pendingDecisionCtxForExport = null
+        // The terminal-invariants block belongs to this tick only. It is written at ONE place, the very
+        // end of setTempBasal, and setTempBasal has four early returns before it — two of which set the
+        // rate to 0 (the forceExact hypo floor and the LGS block). Without this reset the member kept
+        // the last tick that did reach the end, and the export republished it as if it described this
+        // one. Measured on the 2026-09-16/17 export: 310 of 1443 ticks (21.5%) carried a block
+        // byte-identical to the previous tick, and on 310 of 310 the rate that reached the pump was 0 —
+        // so every one of them was a tick where setTempBasal returned early. `adjustments.basal_terminal`
+        // is read with `?.let`, so a null simply leaves the key out, which is the honest answer.
+        lastBasalTerminalTelemetry = null
         val decisionCtx = AimiDecisionContext(
             event_id = "evt_${ctx.currentTime}".also { currentTickDecisionEventId = it },
             timestamp = ctx.currentTime,

@@ -1718,8 +1718,16 @@ Two things deliberately left alone:
 
 - **`BasalTerminalInvariants` still applies to FCL** — it exempts `isMealMode`, which FCL is not part
   of. Its three rules (glucose *and* prediction under target, post-hypo authority live, negative IOB
-  with no rise) are all cases where the meal ceiling should not fire either. The key is off by default
-  and is not in this person's settings.
+  with no rise) are all cases where the meal ceiling should not fire either.
+
+  ⚠️ **It is ON, not off.** `BooleanKey.OApsAIMIBasalTerminalInvariants` defaults to `true`
+  (`BooleanKey.kt:678`), and the KDoc of `BasalTerminalInvariants` claiming "défaut `false` →
+  comportement historique" is **wrong** — an uncorrected doc defect. The 2026-09-16/17 export confirms
+  it live: `enabled` is true on all 1436 ticks. Counting only the ticks whose block was actually
+  computed (see 20.2 — the field was stale on 310 of them), it lowered the rate on **115 of 1126
+  ticks (10.2%)**, mean 2.48 → 0.51 U/h, **3.77 U withheld over 24 h**; `post_hypo` binds 7.9% and
+  `below_target` 2.3%. So FCL will be cut to the profile basal on roughly one tick in ten. That is
+  wanted, but it was described here as inert and it is not.
 - **`isMealMode` inside `setTempBasal` was not widened** to include FCL: it also feeds
   `MealSafetyContext`, which loosens an LGS guard. FCL must not buy a weaker hypo interlock.
 
@@ -1744,3 +1752,80 @@ six existing `TherapyAnticipationDetectionTest` cases still pass, so the keyword
   watched, not trusted.
 - Nothing has been measured on real data yet: no replay, no discrimination test. FCL is a manual
   gesture behind two manual acts, so the corpus has no episodes to replay it over.
+
+
+## 20. What the basal channel actually does, and a telemetry lie — 2026-09-17
+
+### 20.1 The most-used basal value is zero
+
+Measured on `AIMI_Decisions_Last24h.jsonl`, field `outcome.target_basal_rate_uph`, 1436 ticks from
+09-16 08:06 to 09-17 08:06. Median gap 1.00 min and the gaps sum to 24.0 h exactly, so the per-tick
+histogram and the time-weighted one are the same thing.
+
+| band | time | share |
+|---|---|---|
+| **0 (suspended)** | **770 min** | **53.5 %** |
+| under profile | 208 min | 14.4 % |
+| **at profile** | **76 min** | **5.3 %** |
+| 1–2× profile | 44 min | 3.1 % |
+| 2–4× profile | 42 min | 2.9 % |
+| **over 4× profile** | **300 min** | **20.8 %** |
+
+Single most-used value: **0.00 U/h, 53.5 %**. The most-used non-zero value is 0.50 U/h at 2.9 %,
+across 203 distinct values — so outside zero there is no usual rate at all.
+
+Mean commanded 1.232 U/h against a profile mean of 0.551 → **2.23×**: 29.56 U of basal commanded over
+the day where the profile alone would have given 13.23 U.
+
+**The channel is bimodal.** It is either off or far above profile, and it sits at the profile 5.3 % of
+the time. 41 zero episodes, median 4 min but a long tail: 150, 81, 80, 74, 58, 47 min. The longest
+(09-17 00:01 → 02:31, glucose 113 → 80 with a low of 58) is the aftermath of the 01:00 episode in
+section 18. While suspended the median glucose is 95 and 28.7 % of ticks are under 80, so those zeros
+are mostly the protection working — but it works that hard partly because the other end of the
+distribution spends 20.8 % of the day over 4× profile.
+
+### 20.2 `adjustments.basal_terminal` was republishing the previous tick — fixed
+
+**Symptom.** On 122 ticks the export showed `basal_terminal.rate_out_uph` > 0 while
+`outcome.target_basal_rate_uph` was 0, decision `Basal_Modulation`.
+
+**Root cause, from the code.** `lastBasalTerminalTelemetry` is a `private var … = null` member written
+at exactly **one** place — the very end of `setTempBasal`, after every multiplier — and read into the
+decision context. `setTempBasal` has **four early returns before it**, two of which set the rate to 0
+(the `forceExact` hypo floor and the LGS block). The member was never cleared between ticks, so on
+every tick that returned early the export republished the last tick that did reach the end, as if it
+described this one.
+
+The per-tick reset cluster right above the `AimiDecisionContext` constructor already does exactly this
+for its neighbours (`aimiDecisionExportedThisTick = false`, `pendingDecisionCtxForExport = null`, with
+a comment saying the export must happen on every exit path of the tick). This member had escaped it.
+
+**Confirmation in the data.** 310 of 1443 ticks (21.5 %) carried a `basal_terminal` block
+byte-identical to the previous tick's, and on **310 of 310** the rate that reached the pump was 0 —
+a 100 % correlation with the early-return signature. The 122 were only the subset whose stale value
+happened to be above zero.
+
+**Fix.** One line, `lastBasalTerminalTelemetry = null`, in the per-tick reset cluster. Not at the top
+of `setTempBasal`: the export runs on every exit path of the tick, including paths that never call
+`setTempBasal` at all, so only a tick-level reset covers it. `adjustments.basal_terminal` is read with
+`?.let`, so a null simply leaves the key out — which is the honest answer for a tick where the
+terminal invariants never ran.
+
+**Not a dosing defect.** The 0 U/h was correct; what lied was the record of why.
+
+**Scope checked, and it is only this one.** Three other export members looked like the same shape at
+first (`lastPredDivergenceExport`, `lastTubeAdvisorTrace`, `lastAdaptiveBasalTrace`) and all three are
+false positives: the first two are reset to null (lines 2082 and 2094), the third is rebuilt
+unconditionally every tick (line 2169). `adaptive_basal` does show 822 duplicate blocks (57.2 %), but
+they split 55.6 / 44.4 between zero and non-zero rate against a 54.2 % base rate — no correlation, so
+that block is simply slow-moving, not stale.
+
+**Also fixed: a wrong default in a KDoc.** `BasalTerminalInvariants` documented
+`OApsAIMIBasalTerminalInvariants` as "défaut `false` → comportement historique". The key defaults to
+**`true`** (`BooleanKey.kt:678`). That wrong line is what made this session report the invariants as
+inert; they are live on every tick.
+
+**Verification.** Full module suite after both fixes: 300 classes, 1881 tests, 0 failures, 0 errors.
+There is **no unit test** asserting the absent key: the only seam is a private `JSONObject` inside a
+20 000-line injected class, and the scenario harness cannot observe the export without widening
+`pendingDecisionCtxForExport` to `internal`. Adding that seam was not done unasked.
