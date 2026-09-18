@@ -15,6 +15,8 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.rx.events.EventRefreshOverview
 import app.aaps.core.interfaces.source.BgSource
 import app.aaps.core.interfaces.source.CgmSensorLifecycle
 import app.aaps.core.interfaces.source.CgmSensorStatusProvider
@@ -76,6 +78,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     private val availabilityProvider: DexcomOnePlusAvailabilityProvider,
     private val bleRadioPriority: BleRadioPriority,
     private val activePlugin: ActivePlugin,
+    private val rxBus: RxBus,
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -491,18 +494,6 @@ class DexcomOnePlusPlugin @Inject constructor(
             )
             return verdict
         }
-        // With sensor-change events switched off there is nothing in the database to keep in step,
-        // and removing events this source never wrote would be destroying the user's own entries.
-        if (!preferences.get(BooleanKey.BgSourceCreateSensorChange)) {
-            sensorStore.overwriteSessionStart(newStartMs)
-            refreshProductionLifecycle()
-            aapsLogger.info(
-                LTag.BGSOURCE,
-                "DEXCOM_ONEPLUS_SESSION: insertion date corrected from=$currentStartMs to=$newStartMs " +
-                    "(store only — sensor change events are off)",
-            )
-            return verdict
-        }
         val from = DexcomOnePlusSensorStartCorrection.cleanupFrom(newStartMs, currentStartMs)
         val stale = persistenceLayer.getTherapyEventDataFromToTime(from, now)
             .filter { it.type == TE.Type.SENSOR_CHANGE }
@@ -519,12 +510,22 @@ class DexcomOnePlusPlugin @Inject constructor(
             )
         }
         sensorStore.overwriteSessionStart(newStartMs)
+        // Written even when `BgSourceCreateSensorChange` is off. That preference governs what this
+        // source logs BY ITSELF; this is the user saying "the sensor went in at this time", and the
+        // dashboard age, the status line and the calibration session all read the therapy event. A
+        // correction that moved only the driver's own clock left the two disagreeing, which is the
+        // bug this whole action exists to end.
         writeSensorChange(newStartMs)
         refreshProductionLifecycle()
+        // Nothing else tells the dashboard: it refreshes on glucose and on this event, and a sensor
+        // whose link is down sends neither — so the corrected age would have stayed invisible until
+        // the next reading, which is exactly when the user is looking at it.
+        rxBus.send(EventRefreshOverview(from = "DexcomOnePlus insertion date"))
+        val nowShowing = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.timestamp
         aapsLogger.info(
             LTag.BGSOURCE,
             "DEXCOM_ONEPLUS_SESSION: insertion date corrected from=$currentStartMs to=$newStartMs " +
-                "removedSensorChanges=${stale.size}",
+                "removedSensorChanges=${stale.size} lastSensorChangeNow=$nowShowing",
         )
         return verdict
     }

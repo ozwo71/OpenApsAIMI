@@ -77,7 +77,7 @@ class DexcomOnePlusPromotionStoreBindingTest : TestBase() {
         whenever(persistenceLayer.insertCgmSourceData(any(), any(), any(), anyOrNull()))
             .thenReturn(PersistenceLayer.TransactionResult())
         plugin = DexcomOnePlusPlugin(
-            rh, aapsLogger, preferences, config, context, persistenceLayer, warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin,
+            rh, aapsLogger, preferences, config, context, persistenceLayer, warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus,
         )
     }
 
@@ -201,8 +201,13 @@ class DexcomOnePlusPromotionStoreBindingTest : TestBase() {
     }
 
     @Test
-    fun `with sensor change events off only the driver clock is corrected`() = runTest {
+    fun `the sensor change is written even when automatic logging is off`() = runTest {
+        // That preference governs what this source logs BY ITSELF. Correcting the date is the user
+        // saying when the sensor went in, and the dashboard age reads the therapy event — a
+        // correction that moved only the driver's clock left the two disagreeing, which is the bug
+        // this action exists to end (field report 2026-09: plugin said 20 h, dashboard said 12 d).
         whenever(preferences.get(BooleanKey.BgSourceCreateSensorChange)).thenReturn(false)
+        whenever(persistenceLayer.getTherapyEventDataFromToTime(any(), any())).thenReturn(emptyList())
         val pairedAt = System.currentTimeMillis() - 2 * HOUR_MS
         val reallyInsertedAt = pairedAt - 3 * HOUR_MS
         OnePlusSensorStore(context, null).startSessionForSensor("AA:BB:CC:DD:EE:08", pairedAt, null)
@@ -211,8 +216,7 @@ class DexcomOnePlusPromotionStoreBindingTest : TestBase() {
             .isEqualTo(DexcomOnePlusSensorStartCorrection.Verdict.Accepted)
 
         assertThat(productionPrefs.getLong(KEY_SESSION_START, 0L)).isEqualTo(reallyInsertedAt)
-        // The user's own entries are not this source's to remove.
-        verify(persistenceLayer, never()).invalidateTherapyEvent(any(), any(), any(), anyOrNull(), any())
+        verify(persistenceLayer).insertCgmSourceData(any(), any(), any(), eq(reallyInsertedAt))
     }
 
     companion object {
