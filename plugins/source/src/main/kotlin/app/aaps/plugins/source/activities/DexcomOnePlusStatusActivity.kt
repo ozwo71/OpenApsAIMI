@@ -44,8 +44,11 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalPreferences
+import app.aaps.core.ui.compose.dialogs.DatePickerModal
+import app.aaps.core.ui.compose.dialogs.TimePickerModal
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
 import app.aaps.plugins.source.DexcomOnePlusPlugin
+import app.aaps.plugins.source.DexcomOnePlusSensorStartCorrection
 import app.aaps.plugins.source.DexcomOnePlusStaging
 import app.aaps.plugins.source.R
 import app.aaps.plugins.source.compose.CgmCard
@@ -61,10 +64,13 @@ import app.aaps.plugins.source.compose.DexcomOnePlusUiLabels
 import app.aaps.plugins.source.compose.toUiState
 import app.aaps.plugins.source.logs.DriverLogFilter
 import dagger.hilt.android.AndroidEntryPoint
+import java.util.Calendar
+import java.util.TimeZone
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import app.aaps.core.ui.R as CoreUiR
 
 /**
  * Daily status of the native Dexcom ONE+ / G7 source.
@@ -114,6 +120,7 @@ class DexcomOnePlusStatusActivity : AppCompatActivity() {
                         lastGlucose = { persistenceLayer.getLastGlucoseValue() },
                         onCancelStaging = { dexcomOnePlusPlugin.cancelStaging() },
                         onPromote = { allowEarly -> dexcomOnePlusPlugin.promoteStagingToProduction(allowEarly) },
+                        onCorrectSensorStart = { startMs -> dexcomOnePlusPlugin.correctProductionSensorStart(startMs) },
                     )
                 }
             }
@@ -139,6 +146,7 @@ private fun DexcomOnePlusStatusScreen(
     lastGlucose: suspend () -> GV?,
     onCancelStaging: () -> Unit,
     onPromote: suspend (Boolean) -> PromotionResult,
+    onCorrectSensorStart: suspend (Long) -> DexcomOnePlusSensorStartCorrection.Verdict,
 ) {
     // Not `remember`-ed: a promotion swaps which driver instance `default()` hands out (see
     // OnePlusCgmDrivers.promoteStagingInstance), and a `remember`-ed reference kept polling the
@@ -212,6 +220,7 @@ private fun DexcomOnePlusStatusScreen(
                     formatGlucose = formatGlucose,
                     formatTime = formatTime,
                     formatAge = formatAge,
+                    onCorrectSensorStart = onCorrectSensorStart,
                 )
             }
             // Prompt for a pre-soak exactly when it is useful: the sensor in use is near its end and
@@ -337,6 +346,7 @@ private fun ProductionCard(
     formatGlucose: (Double) -> String,
     formatTime: (Long) -> String,
     formatAge: (Long) -> String,
+    onCorrectSensorStart: suspend (Long) -> DexcomOnePlusSensorStartCorrection.Verdict,
 ) {
     CgmCard(accent = true) {
         CgmCardHeader(stringResource(R.string.dexcom_oneplus_production_heading)) {
@@ -378,6 +388,89 @@ private fun ProductionCard(
             text = message,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        // Offered only for a sensor that has a stored session: with no session there is no age to
+        // correct, and the correction would have nothing to attach itself to.
+        lifecycle?.startedAtEpochMs?.let { startedAt ->
+            CorrectInsertionDateAction(
+                currentStartMs = startedAt,
+                formatTime = formatTime,
+                onCorrectSensorStart = onCorrectSensorStart,
+            )
+        }
+    }
+}
+
+/**
+ * "The sensor went in earlier than the app thinks."
+ *
+ * This source stamps the sensor age when the sensor is paired, not when it is inserted, and that
+ * clock lives in the driver's own store — a `SENSOR_CHANGE` added by hand in Care never reached it,
+ * and an earlier one was not even the newest event any more, so nothing the user could do moved the
+ * age. See `DexcomOnePlusSensorStartCorrection`.
+ */
+@Composable
+private fun CorrectInsertionDateAction(
+    currentStartMs: Long,
+    formatTime: (Long) -> String,
+    onCorrectSensorStart: suspend (Long) -> DexcomOnePlusSensorStartCorrection.Verdict,
+) {
+    val scope = rememberCoroutineScope()
+    var showDatePicker by remember { mutableStateOf(false) }
+    var pickedDateMs by remember { mutableStateOf<Long?>(null) }
+    var refusal by remember { mutableStateOf<DexcomOnePlusSensorStartCorrection.Verdict?>(null) }
+
+    OutlinedButton(onClick = { showDatePicker = true }) {
+        Text(stringResource(R.string.dexcom_oneplus_correct_insertion_date))
+    }
+
+    if (showDatePicker) {
+        DatePickerModal(
+            initialDateMillis = currentStartMs,
+            onDateSelected = { pickedDateMs = it },
+            onDismiss = { showDatePicker = false },
+        )
+    }
+    // The date picker hands back midnight UTC of the chosen day; the time picker then puts the hour
+    // and the minute on it, in the phone's own time zone, which is where the user read the clock.
+    pickedDateMs?.let { dayMs ->
+        val current = remember(currentStartMs) { Calendar.getInstance().apply { timeInMillis = currentStartMs } }
+        TimePickerModal(
+            initialHour = current.get(Calendar.HOUR_OF_DAY),
+            initialMinute = current.get(Calendar.MINUTE),
+            onTimeSelected = { hour, minute ->
+                val day = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = dayMs }
+                val chosen = Calendar.getInstance().apply {
+                    set(day.get(Calendar.YEAR), day.get(Calendar.MONTH), day.get(Calendar.DAY_OF_MONTH), hour, minute, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                scope.launch {
+                    val verdict = onCorrectSensorStart(chosen.timeInMillis)
+                    if (verdict != DexcomOnePlusSensorStartCorrection.Verdict.Accepted) refusal = verdict
+                }
+            },
+            onDismiss = { pickedDateMs = null },
+        )
+    }
+    refusal?.let { verdict ->
+        AlertDialog(
+            onDismissRequest = { refusal = null },
+            title = { Text(stringResource(R.string.dexcom_oneplus_correct_insertion_date)) },
+            text = {
+                Text(
+                    stringResource(
+                        when (verdict) {
+                            DexcomOnePlusSensorStartCorrection.Verdict.InFuture  -> R.string.dexcom_oneplus_insertion_date_future
+                            DexcomOnePlusSensorStartCorrection.Verdict.TooOld    -> R.string.dexcom_oneplus_insertion_date_too_old
+                            else                                                -> R.string.dexcom_oneplus_insertion_date_no_session
+                        },
+                        formatTime(currentStartMs),
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { refusal = null }) { Text(stringResource(CoreUiR.string.ok)) }
+            },
         )
     }
 }
