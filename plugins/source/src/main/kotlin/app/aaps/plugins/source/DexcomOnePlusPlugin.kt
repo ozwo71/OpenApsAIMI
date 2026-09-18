@@ -454,18 +454,20 @@ class DexcomOnePlusPlugin @Inject constructor(
         ioScope.launch { writeSensorChange(startMs) }
     }
 
-    private suspend fun writeSensorChange(startMs: Long) {
+    /** @return true when a sensor change was really written (the DB refuses a duplicate timestamp). */
+    private suspend fun writeSensorChange(startMs: Long): Boolean {
         val result = persistenceLayer.insertCgmSourceData(
             Sources.DexcomOnePlus,
             emptyList(),
             emptyList(),
             sensorInsertionTime = startMs,
         )
+        val inserted = result.sensorInsertionsInserted.isNotEmpty()
         aapsLogger.info(
             LTag.BGSOURCE,
-            "DEXCOM_ONEPLUS_SESSION: sensor change logged startMs=$startMs " +
-                "inserted=${result.sensorInsertionsInserted.size}",
+            "DEXCOM_ONEPLUS_SESSION: sensor change logged startMs=$startMs inserted=$inserted",
         )
+        return inserted
     }
 
     /**
@@ -495,6 +497,13 @@ class DexcomOnePlusPlugin @Inject constructor(
             return verdict
         }
         val from = DexcomOnePlusSensorStartCorrection.cleanupFrom(newStartMs, currentStartMs)
+        // Invalid ones count here: the database looks for a duplicate timestamp WITHOUT checking
+        // validity, so an event invalidated just below still blocks the new one. See freeTimestamp.
+        val taken = persistenceLayer.getTherapyEventDataIncludingInvalidFromTime(from, true)
+            .filter { it.type == TE.Type.SENSOR_CHANGE }
+            .map { it.timestamp }
+            .toSet()
+        val stampMs = DexcomOnePlusSensorStartCorrection.freeTimestamp(newStartMs, taken)
         val stale = persistenceLayer.getTherapyEventDataFromToTime(from, now)
             .filter { it.type == TE.Type.SENSOR_CHANGE }
         stale.forEach { event ->
@@ -509,13 +518,15 @@ class DexcomOnePlusPlugin @Inject constructor(
                 ),
             )
         }
-        sensorStore.overwriteSessionStart(newStartMs)
+        // Both clocks get the SAME moment, so the plugin screen and the dashboard cannot drift apart
+        // by the second this may have moved.
+        sensorStore.overwriteSessionStart(stampMs)
         // Written even when `BgSourceCreateSensorChange` is off. That preference governs what this
         // source logs BY ITSELF; this is the user saying "the sensor went in at this time", and the
         // dashboard age, the status line and the calibration session all read the therapy event. A
         // correction that moved only the driver's own clock left the two disagreeing, which is the
         // bug this whole action exists to end.
-        writeSensorChange(newStartMs)
+        val written = writeSensorChange(stampMs)
         refreshProductionLifecycle()
         // Nothing else tells the dashboard: it refreshes on glucose and on this event, and a sensor
         // whose link is down sends neither — so the corrected age would have stayed invisible until
@@ -524,8 +535,9 @@ class DexcomOnePlusPlugin @Inject constructor(
         val nowShowing = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.timestamp
         aapsLogger.info(
             LTag.BGSOURCE,
-            "DEXCOM_ONEPLUS_SESSION: insertion date corrected from=$currentStartMs to=$newStartMs " +
-                "removedSensorChanges=${stale.size} lastSensorChangeNow=$nowShowing",
+            "DEXCOM_ONEPLUS_SESSION: insertion date corrected from=$currentStartMs to=$stampMs " +
+                "asked=$newStartMs removedSensorChanges=${stale.size} written=$written " +
+                "lastSensorChangeNow=$nowShowing",
         )
         return verdict
     }

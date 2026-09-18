@@ -82,6 +82,19 @@ class DexcomOnePlusSensorStartCorrectionTest {
     }
 
     @Test
+    fun `a moment another sensor change already holds is stepped over`() {
+        // The database refuses a duplicate timestamp and does not care whether the row it finds is
+        // still valid — so the event this correction just invalidated would block the new one, and
+        // the display would be left with no valid sensor change at all.
+        val taken = setOf(now, now + 1_000L)
+
+        assertThat(DexcomOnePlusSensorStartCorrection.freeTimestamp(now, taken)).isEqualTo(now + 2_000L)
+        assertThat(DexcomOnePlusSensorStartCorrection.freeTimestamp(now, emptySet())).isEqualTo(now)
+        // One second is invisible in an age shown in hours.
+        assertThat(DexcomOnePlusSensorStartCorrection.freeTimestamp(now, setOf(now)) - now).isAtMost(1_000L)
+    }
+
+    @Test
     fun `the clean-up reaches back to whichever date is older`() {
         // Moving the date earlier: the plugin's own later event must go, or it stays the "last
         // sensor change" the dashboard reads and the correction is invisible.

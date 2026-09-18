@@ -54,4 +54,31 @@ object DexcomOnePlusSensorStartCorrection {
      * moving it **later** has to reach back to the old one.
      */
     fun cleanupFrom(newStartMs: Long, currentStartMs: Long): Long = minOf(newStartMs, currentStartMs)
+
+    /** Steps used to walk away from an occupied moment, and how far the walk may go. */
+    private const val FREE_STEP_MS = 1_000L
+    private const val FREE_MAX_STEPS = 60
+
+    /**
+     * A moment no `SENSOR_CHANGE` occupies yet, at or just after [desiredMs].
+     *
+     * The database refuses a second sensor change at a timestamp it already holds — and it looks for
+     * that duplicate **without checking whether the existing row is still valid**. So the event this
+     * correction had just invalidated one line earlier still blocked the new one: nothing was
+     * inserted, the refusal was silent, and the display was left with no valid sensor change at all,
+     * falling back to the previous sensor or to nothing. The user then saw the corrected date on the
+     * plugin screen and the old one everywhere else.
+     *
+     * Moving by one second is invisible in an age shown in hours, and it is the only thing that has
+     * to give. The picker zeroes seconds and milliseconds, so two corrections to the same minute
+     * collide exactly; without this they would collide for good.
+     */
+    fun freeTimestamp(desiredMs: Long, takenMs: Set<Long>): Long {
+        var candidate = desiredMs
+        repeat(FREE_MAX_STEPS) {
+            if (candidate !in takenMs) return candidate
+            candidate += FREE_STEP_MS
+        }
+        return candidate
+    }
 }

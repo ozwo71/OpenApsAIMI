@@ -76,6 +76,7 @@ class DexcomOnePlusPromotionStoreBindingTest : TestBase() {
         whenever(context.getSystemService(Context.POWER_SERVICE)).thenReturn(mock<PowerManager>())
         whenever(persistenceLayer.insertCgmSourceData(any(), any(), any(), anyOrNull()))
             .thenReturn(PersistenceLayer.TransactionResult())
+        whenever(persistenceLayer.getTherapyEventDataIncludingInvalidFromTime(any(), any())).thenReturn(emptyList())
         plugin = DexcomOnePlusPlugin(
             rh, aapsLogger, preferences, config, context, persistenceLayer, warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus,
         )
@@ -198,6 +199,28 @@ class DexcomOnePlusPromotionStoreBindingTest : TestBase() {
         assertThat(verdict).isEqualTo(DexcomOnePlusSensorStartCorrection.Verdict.InFuture)
         assertThat(productionPrefs.getLong(KEY_SESSION_START, 0L)).isEqualTo(pairedAt)
         verify(persistenceLayer, never()).invalidateTherapyEvent(any(), any(), any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `a corrected date landing on an existing sensor change is stepped over, not lost`() = runTest {
+        // The database refuses a duplicate timestamp whether or not the row it finds is still valid,
+        // so writing at the exact moment of the event just invalidated inserted nothing at all and
+        // left the dashboard with no valid sensor change — the plugin screen showed the new date and
+        // everything else showed the old one (field report 2026-09-18).
+        whenever(preferences.get(BooleanKey.BgSourceCreateSensorChange)).thenReturn(true)
+        val pairedAt = System.currentTimeMillis() - 2 * HOUR_MS
+        val reallyInsertedAt = pairedAt - 6 * HOUR_MS
+        OnePlusSensorStore(context, null).startSessionForSensor("AA:BB:CC:DD:EE:09", pairedAt, null)
+        val occupied = TE(id = 7L, timestamp = reallyInsertedAt, type = TE.Type.SENSOR_CHANGE, glucoseUnit = GlucoseUnit.MGDL)
+        whenever(persistenceLayer.getTherapyEventDataIncludingInvalidFromTime(any(), any())).thenReturn(listOf(occupied))
+        whenever(persistenceLayer.getTherapyEventDataFromToTime(any(), any())).thenReturn(listOf(occupied))
+
+        assertThat(plugin.correctProductionSensorStart(reallyInsertedAt))
+            .isEqualTo(DexcomOnePlusSensorStartCorrection.Verdict.Accepted)
+
+        verify(persistenceLayer).insertCgmSourceData(any(), any(), any(), eq(reallyInsertedAt + 1_000L))
+        // Both clocks land on the same moment, so the two displays cannot disagree.
+        assertThat(productionPrefs.getLong(KEY_SESSION_START, 0L)).isEqualTo(reallyInsertedAt + 1_000L)
     }
 
     @Test
