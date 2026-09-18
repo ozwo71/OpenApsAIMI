@@ -197,7 +197,14 @@ object MealAbsorptionPhaseEngine {
             input.shortAvgDeltaMgdlPer5 >= FAST_RISE_SHORT ||
             input.combinedDeltaMgdlPer5 >= FAST_RISE_COMBINED
 
-    /** Mirrors [InsulinStackingStance.iobFloorU] — kept local to avoid physio→safety coupling. */
+    /**
+     * Insulin on board above which a very high glucose counts as the PEAK_CORRECTION phase.
+     *
+     * It used to mirror `InsulinStackingStance.iobFloorU`, and it deliberately does **not** any more.
+     * There the number means "enough insulin on board to start watching for stacking", so lowering
+     * it adds protection; here it is one of the conditions of a phase that **switches that watching
+     * off**, so lowering it would remove protection. Same number, opposite meaning — keep them apart.
+     */
     internal fun iobFloorU(maxIob: Double): Double {
         val maxIobSafe = maxIob.coerceAtLeast(0.5)
         return max(3.2, maxIobSafe * 0.26)
