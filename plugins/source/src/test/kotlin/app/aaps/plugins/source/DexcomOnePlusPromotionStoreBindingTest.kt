@@ -33,7 +33,9 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.after
 import org.mockito.kotlin.never
+import org.mockito.kotlin.timeout
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
@@ -87,6 +89,13 @@ class DexcomOnePlusPromotionStoreBindingTest : TestBase() {
     fun tearDownDrivers() {
         runCatching { OnePlusCgmDrivers.select(useReal = false) }
         OnePlusMacArbiter.reset()
+    }
+
+    /** The refresh that runs at every reading — the place the sensor-age repair hangs from. */
+    private fun refreshLifecycle() {
+        DexcomOnePlusPlugin::class.java.getDeclaredMethod("refreshProductionLifecycle")
+            .apply { isAccessible = true }
+            .invoke(plugin)
     }
 
     /** Pokes state a real staging session reaches only through BLE, which this test does not run. */
@@ -240,6 +249,42 @@ class DexcomOnePlusPromotionStoreBindingTest : TestBase() {
 
         assertThat(productionPrefs.getLong(KEY_SESSION_START, 0L)).isEqualTo(reallyInsertedAt)
         verify(persistenceLayer).insertCgmSourceData(any(), any(), any(), eq(reallyInsertedAt))
+    }
+
+    @Test
+    fun `a sensor whose therapy event is missing gets its age put back by itself`() = runTest {
+        // What the user saw: the plugin screen said the sensor was one day old, the dashboard said
+        // 13 days — an age a ONE+ cannot even have — because no valid sensor change covered this
+        // session any more. Nothing repaired that; only a manual correction could, and it had to
+        // succeed. Now the refresh that runs at every reading puts the event back.
+        whenever(preferences.get(BooleanKey.BgSourceCreateSensorChange)).thenReturn(true)
+        val startedAt = System.currentTimeMillis() - 26 * HOUR_MS
+        OnePlusSensorStore(context, null).startSessionForSensor("AA:BB:CC:DD:EE:10", startedAt, null)
+        // The only sensor change left belongs to the sensor before this one.
+        val oldOne = TE(
+            id = 11L,
+            timestamp = System.currentTimeMillis() - 13 * 24 * HOUR_MS,
+            type = TE.Type.SENSOR_CHANGE,
+            glucoseUnit = GlucoseUnit.MGDL,
+        )
+        whenever(persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)).thenReturn(oldOne)
+
+        refreshLifecycle()
+
+        verify(persistenceLayer, timeout(2_000L)).insertCgmSourceData(any(), any(), any(), eq(startedAt))
+    }
+
+    @Test
+    fun `an age that already matches is left alone`() = runTest {
+        whenever(preferences.get(BooleanKey.BgSourceCreateSensorChange)).thenReturn(true)
+        val startedAt = System.currentTimeMillis() - 26 * HOUR_MS
+        OnePlusSensorStore(context, null).startSessionForSensor("AA:BB:CC:DD:EE:11", startedAt, null)
+        val current = TE(id = 12L, timestamp = startedAt, type = TE.Type.SENSOR_CHANGE, glucoseUnit = GlucoseUnit.MGDL)
+        whenever(persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)).thenReturn(current)
+
+        refreshLifecycle()
+
+        verify(persistenceLayer, after(500L).never()).insertCgmSourceData(any(), any(), any(), anyOrNull())
     }
 
     companion object {

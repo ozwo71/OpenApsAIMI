@@ -153,6 +153,10 @@ class DexcomOnePlusPlugin @Inject constructor(
     /** Collector that drives the safety basal guard from the warm-up state (cancelled in onStop). */
     private var warmupGuardJob: Job? = null
 
+    /** Session start already checked by [healMissingSensorChange], so a deletion is not undone twice. */
+    @Volatile
+    private var healedSensorChangeStartMs: Long = 0L
+
     // ---- Dual-sensor (staging / pre-soak) state — see docs/DEXCOM_ONEPLUS_DUAL_SENSOR_STAGING_PLAN.md ----
 
     private val _lifecycle = MutableStateFlow<CgmSensorLifecycle?>(null)
@@ -527,6 +531,8 @@ class DexcomOnePlusPlugin @Inject constructor(
         // correction that moved only the driver's own clock left the two disagreeing, which is the
         // bug this whole action exists to end.
         val written = writeSensorChange(stampMs)
+        // This session is settled: the repair net must not write a second event behind this one.
+        healedSensorChangeStartMs = stampMs
         refreshProductionLifecycle()
         // Nothing else tells the dashboard: it refreshes on glucose and on this event, and a sensor
         // whose link is down sends neither — so the corrected age would have stayed invisible until
@@ -997,8 +1003,60 @@ class DexcomOnePlusPlugin @Inject constructor(
     }
 
     private fun refreshProductionLifecycle() {
+        val startMs = sensorStore.loadSessionStart()
         _lifecycle.value =
-            DexcomOnePlusStaging.computeLifecycle(SensorSlot.PRODUCTION, sensorStore.loadSessionStart(), System.currentTimeMillis())
+            DexcomOnePlusStaging.computeLifecycle(SensorSlot.PRODUCTION, startMs, System.currentTimeMillis())
+        if (startMs > 0L) ioScope.launch { healMissingSensorChange(startMs) }
+    }
+
+    /**
+     * Put back the `SENSOR_CHANGE` of the running sensor when the database has none.
+     *
+     * The driver knows when its sensor started; the dashboard, the Glass skin, the status line and
+     * the calibration session all read a therapy event instead. When that event is missing, every one
+     * of them falls back to the previous sensor — a user saw "13 d 0 h" on a sensor the plugin itself
+     * reported as one day old, which is not even a possible age for a ONE+.
+     *
+     * The event can go missing in more than one way: a write refused as a duplicate, a deletion in
+     * Care, a Nightscout round trip. Rather than depend on one write succeeding once, the age is
+     * repaired here, on the refresh that already runs at every reading.
+     *
+     * Healed once per session start: if the user deliberately deletes the event again, it is not
+     * resurrected on the next reading.
+     */
+    private suspend fun healMissingSensorChange(startMs: Long) {
+        if (healedSensorChangeStartMs == startMs) return
+        if (!preferences.get(BooleanKey.BgSourceCreateSensorChange)) {
+            // Said once per session, because it explains an age that can never be right: with this
+            // setting off nothing writes a sensor change, so every screen that reads the therapy
+            // event keeps showing the sensor before this one.
+            healedSensorChangeStartMs = startMs
+            aapsLogger.info(
+                LTag.BGSOURCE,
+                "DEXCOM_ONEPLUS_SESSION: sensor age not repaired — 'create sensor change' is off " +
+                    "(driver start $startMs)",
+            )
+            return
+        }
+        val last = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.timestamp
+        // A valid event at or after this session's start means the age is already right.
+        if (last != null && last >= startMs - SENSOR_CHANGE_MATCH_TOLERANCE_MS) {
+            healedSensorChangeStartMs = startMs
+            return
+        }
+        healedSensorChangeStartMs = startMs
+        val taken = persistenceLayer.getTherapyEventDataIncludingInvalidFromTime(startMs - SENSOR_CHANGE_MATCH_TOLERANCE_MS, true)
+            .filter { it.type == TE.Type.SENSOR_CHANGE }
+            .map { it.timestamp }
+            .toSet()
+        val stampMs = DexcomOnePlusSensorStartCorrection.freeTimestamp(startMs, taken)
+        val written = writeSensorChange(stampMs)
+        aapsLogger.info(
+            LTag.BGSOURCE,
+            "DEXCOM_ONEPLUS_SESSION: sensor age had no therapy event — rewritten at $stampMs " +
+                "(driver start $startMs, previous last=$last, written=$written)",
+        )
+        if (written) rxBus.send(EventRefreshOverview(from = "DexcomOnePlus sensor age repair"))
     }
 
     private fun refreshStagingLifecycle() {
@@ -1033,6 +1091,14 @@ class DexcomOnePlusPlugin @Inject constructor(
     }
 
     companion object {
+
+        /**
+         * How far before the driver's own session start a therapy event may sit and still count as
+         * this sensor's. Covers the second the correction may have shifted, and a manual entry made
+         * a few minutes before the sensor was paired.
+         */
+        private const val SENSOR_CHANGE_MATCH_TOLERANCE_MS = 15L * 60L * 1000L
+
 
         /** How far back to seed the ingest dedup from the DB on start — wide enough to cover any
          *  plausible on-reconnect backfill, capped downstream by [DexcomOnePlusIngest] RECENT_CAP. */
