@@ -1,8 +1,15 @@
 # Dexcom ONE+ — sending a calibration to the sensor (0x34)
 
-Study, 2026-09-18. **Nothing of this is implemented.** This note says what it would take, what it
-would buy us, and what could go wrong. Read it together with the software calibration we have today
-(`plugins/calibration`, `LinearCalibrationPlugin`).
+Study, 2026-09-18. Updated 2026-09-19, when this was built. Read it together with the software
+calibration (`plugins/calibration`, `LinearCalibrationPlugin`).
+
+**Status: built, switched off by default.** The whole path exists — packet, queue, BLE write, reply,
+preference, routing from the calibration dialog. It does nothing until the user turns on
+`DexcomOnePlusBooleanKey.SendCalibrationToSensor`, which is engineering-only.
+
+**The one thing that did not survive contact with the evidence:** a Dexcom ONE+ does **not** answer
+`0x35`. See §2c. The app therefore cannot tell a user whether their fingerstick was taken, and says
+so rather than guessing.
 
 ## 1. The question
 
@@ -62,14 +69,51 @@ is exactly the design this note proposes.
 - Proven: xDrip sends `0x34` to G7-family transmitters, with no G7 exclusion anywhere on that path
   (see above). Our own driver is a port of those same sources, and it already speaks the other
   Control opcodes of that family (`0x26`, `0x4e`, `0x59`) successfully.
-- **Still not proven, and this is now a narrow gap: that a Dexcom ONE+ specifically answers `0x35`
-  with an acceptance.** Nobody in this project has a ONE+ capture, and I found no xDrip user report
-  for a ONE+ as opposed to a G7. The risk is not "the opcode is invented" — it is "this firmware may
-  refuse it, and it is the same characteristic that starts and stops a session".
+- **Settled 2026-09-19, and settled against the assumption: a Dexcom ONE+ does not answer `0x35`.**
+  See §2c. The narrow gap named here is closed; what replaced it is a different and smaller one.
 - One design gap on our side, unrelated to the protocol: our EGV loop is a blocking cycle with no
   general pending-command slot. It has exactly one, the boolean `requestNewSensorStart` used for
   `0x26`. A calibration would need a real small queue (value + time + "answer to report back"), or it
   would only ever be sendable at the start of a cycle.
+
+
+## 2c. What a ONE+ actually answers (2026-09-19)
+
+The only public capture of a ONE+ being calibrated (xDrip discussion #4034) shows the sensor
+answering with **four bytes that echo the request opcode**, not the five-byte `0x35` of the G5/G6
+family:
+
+```
+Queuing Calibration for transmitter: 7.4 mmol/l   ->   Got unknown packet rx: 34000100
+Queuing Calibration for transmitter: 6.3 mmol/l   ->   Got unknown packet rx: 34000200
+```
+
+Checked here: none of `crc(34)`, `crc(34 00)`, `crc(34 00 01)` matches the trailer of those packets,
+so they do not carry this family's CRC either. xDrip's own `CalibrateRxMessage` rejects them, which
+is why xDrip never logs "calibration accepted" on a ONE+ — the maintainer confirms as much.
+
+Two readings of the third byte are possible and nothing published chooses between them:
+
+- a private status from a sensor that took the value; or
+- the firmware refusing an opcode it does not support, echoing it back.
+
+The second is not far-fetched: every other Control command this driver uses answers with **opcode+1**
+(`0x24`→`0x25`, `0x26`→`0x27`, `0x28`→`0x29`), never an echo. Against it: on a G7 the observed effect
+of a calibration is real ("the next reading snaps to very near the value you send").
+
+**What we do about it.** `OnePlusCalibrateRx` reads both shapes and reports the echo as
+`Outcome.UNKNOWN`, never as an acceptance, carrying the raw bytes into the message so a field report
+can quote them. Telling a user their calibration was taken, on a guess, would be worse than telling
+them we cannot say — the sensor keeps what it accepts, for good.
+
+## 2d. A second ceiling, on the sensor side
+
+xDrip's maintainer reports that a ONE+ **ignores corrections larger than about 20 %** of the reading,
+and one field report has three calibrations over 24 h leaving a 2 mmol/L gap untouched. This is not
+compatible with the 60 → 150 case in §2b, and one of the two is mis-characterised; both are
+second-hand. It matters because the case that motivated this work — blood 209 against a sensor
+reading 309 — is a **32 %** correction, above that reported ceiling. The sensor route may simply not
+answer this user's problem, which is why the software route was fixed in the same pass.
 
 ## 2b. Field evidence, 2026-09: sensor 60, fingerstick 150
 

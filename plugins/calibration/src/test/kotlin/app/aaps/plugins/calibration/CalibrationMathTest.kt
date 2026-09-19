@@ -132,13 +132,14 @@ class CalibrationMathTest {
 
     @Test
     fun calibrationFit_steepSlopeWithLargeOffset_clampedByCorrectionNotOffset() {
-        // Old clamp on offset would reject offset = −270 instantly; new clamp on
-        // correction-at-center sees correction = (2.87 − 1)·100 + (−270) = −83, still rejected
-        // because slope is also out of range — but the rejection reason is now meaningful.
+        // Old clamp on offset would reject offset = −270 instantly; the clamp on
+        // correction-at-center sees correction = (2.87 − 1)·100 + (−270) = −83.
+        // The centre no longer refuses a drop — the low end does, and so does the slope.
         val fit = CalibrationFit(slope = 2.87, offset = -270.0)
         assertThat(fit.slopeInRange).isFalse()
-        assertThat(fit.correctionInRange).isFalse()
         assertThat(fit.correctionAtCenter).isWithin(0.5).of(-83.0)
+        assertThat(fit.lowEndSafe).isFalse()
+        assertThat(fit.isApplicable).isFalse()
     }
 
     @Test
@@ -377,6 +378,41 @@ class CalibrationMathTest {
         val fit = CalibrationFit(slope = 1.5, offset = -54.0)
 
         assertThat(fit.correctionAtLow).isLessThan(0.0)
+        assertThat(fit.lowEndSafe).isTrue()
+        assertThat(fit.isApplicable).isTrue()
+    }
+
+    @Test
+    fun `a sensor that reads a third too high can be corrected`() {
+        // Field case: blood 209 while the sensor said 309. The loop dosing for 309 is the harm.
+        // A multiplicative fit takes 32 mg/dL off at the centre, which the old two-sided centre
+        // bound refused by 2.4 mg/dL, and it stays small at the low end, so it is allowed now.
+        val fit = CalibrationFit(slope = 209.0 / 309.0, offset = 0.0)
+
+        assertThat(fit.correctionAtCenter).isLessThan(-30.0)
+        assertThat(fit.correctionAtLow).isWithin(0.1).of(-12.96)
+        assertThat(fit.isApplicable).isTrue()
+        assertThat(fit.slope * 309.0 + fit.offset).isWithin(0.5).of(209.0)
+    }
+
+    @Test
+    fun `a flat drop big enough to pin the reading at the floor is not applicable`() {
+        // Two fingersticks 100 mg/dL below the sensor give slope 1, offset −100. That line turns a
+        // reading of 60 into −40: the loop would see the floor for ever and stop dosing.
+        val fit = CalibrationFit(slope = 1.0, offset = -100.0)
+
+        assertThat(fit.slopeInRange).isTrue()
+        assertThat(fit.correctionInRange).isTrue() // the centre does not catch it any more
+        assertThat(fit.lowEndSafe).isFalse()       // the low end does
+        assertThat(fit.isApplicable).isFalse()
+    }
+
+    @Test
+    fun `the steepest accepted compression fit still passes the low end`() {
+        // The Syai-style clamped fit must not become collateral damage of the new low-end floor.
+        val fit = CalibrationFit(slope = SLOPE_MAX, offset = -55.44)
+
+        assertThat(fit.correctionAtLow).isWithin(0.1).of(-31.44)
         assertThat(fit.lowEndSafe).isTrue()
         assertThat(fit.isApplicable).isTrue()
     }

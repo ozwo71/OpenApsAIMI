@@ -162,7 +162,7 @@ class LinearCalibrationPlugin @Inject constructor(
         if (!fit.correctionInRange) {
             aapsLogger.warn(
                 LTag.GLUCOSE,
-                "LinearCalibration: mid-range correction ${fit.correctionAtCenter} mg/dL outside [$CORRECTION_AT_CENTER_MIN, $CORRECTION_AT_CENTER_MAX], identity"
+                "LinearCalibration: mid-range lift ${fit.correctionAtCenter} mg/dL above $CORRECTION_AT_CENTER_MAX, identity"
             )
             return data
         }
@@ -170,10 +170,13 @@ class LinearCalibrationPlugin @Inject constructor(
         // a 55 into the normal range (hypo hidden from the loop AND from the alarms) or turn a 300
         // into a 450. See the constants in CalibrationMath for the numbers.
         if (!fit.lowEndSafe) {
+            val why =
+                if (fit.correctionAtLow > CORRECTION_AT_LOW_MAX) "would hide a hypo"
+                else "flat drop, would pin the reading at the floor"
             aapsLogger.warn(
                 LTag.GLUCOSE,
-                "LinearCalibration: low-end lift ${fit.correctionAtLow} mg/dL at $LOW_MGDL " +
-                    "above $CORRECTION_AT_LOW_MAX (would hide a hypo), identity"
+                "LinearCalibration: low-end correction ${fit.correctionAtLow} mg/dL at $LOW_MGDL " +
+                    "outside [$CORRECTION_AT_LOW_MIN, $CORRECTION_AT_LOW_MAX] ($why), identity"
             )
             return data
         }

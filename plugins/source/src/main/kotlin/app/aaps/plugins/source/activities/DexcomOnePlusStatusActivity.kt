@@ -46,7 +46,9 @@ import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.core.ui.compose.dialogs.DatePickerModal
 import app.aaps.core.ui.compose.dialogs.TimePickerModal
+import app.aaps.plugins.dexcomoneplus.OnePlusCalibrationOutcome
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
+import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrationState
 import app.aaps.plugins.source.DexcomOnePlusPlugin
 import app.aaps.plugins.source.DexcomOnePlusSensorStartCorrection
 import app.aaps.plugins.source.DexcomOnePlusStaging
@@ -62,6 +64,7 @@ import app.aaps.plugins.source.compose.CgmStepTimeline
 import app.aaps.plugins.source.compose.CgmUiState
 import app.aaps.plugins.source.compose.DexcomOnePlusUiLabels
 import app.aaps.plugins.source.compose.toUiState
+import app.aaps.plugins.source.keys.DexcomOnePlusBooleanKey
 import app.aaps.plugins.source.logs.DriverLogFilter
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.Calendar
@@ -155,6 +158,14 @@ private fun DexcomOnePlusStatusScreen(
     var state by remember { mutableStateOf(OnePlusCgmDrivers.default().warmupState()) }
     var sessionUp by remember { mutableStateOf(OnePlusCgmDrivers.default().isSessionUp()) }
     var newestGlucose by remember { mutableStateOf<GV?>(null) }
+    var calibrationOutcome by remember { mutableStateOf<OnePlusCalibrationOutcome?>(null) }
+    var calibrationWaiting by remember { mutableStateOf(false) }
+    // The card exists only for the people who send values to the sensor itself. With the setting
+    // off the value never leaves the phone, so there would be nothing to report.
+    val preferences = LocalPreferences.current
+    val sendCalibrationToSensor = remember(preferences) {
+        preferences.get(DexcomOnePlusBooleanKey.SendCalibrationToSensor)
+    }
     val stagingState by stagingStateFlow.collectAsState()
     val stagingEvidence by stagingEvidenceFlow.collectAsState()
     val lifecycle by lifecycleFlow.collectAsState()
@@ -183,6 +194,10 @@ private fun DexcomOnePlusStatusScreen(
             val driver = OnePlusCgmDrivers.default()
             state = driver.warmupState()
             sessionUp = driver.isSessionUp()
+            // The sensor answers by radio, minutes after the dialog said "sent", so the answer can
+            // only be picked up by polling like the rest of this screen.
+            calibrationOutcome = driver.lastCalibrationOutcome()
+            calibrationWaiting = driver.calibrationPending()
             now = System.currentTimeMillis()
             delay(1_000L)
         }
@@ -222,6 +237,15 @@ private fun DexcomOnePlusStatusScreen(
                     formatAge = formatAge,
                     onCorrectSensorStart = onCorrectSensorStart,
                 )
+            }
+            if (sendCalibrationToSensor) {
+                item(key = "sensorCalibration") {
+                    SensorCalibrationCard(
+                        outcome = calibrationOutcome,
+                        waiting = calibrationWaiting,
+                        driverMessage = state.message,
+                    )
+                }
             }
             // Prompt for a pre-soak exactly when it is useful: the sensor in use is near its end and
             // no replacement is warming up yet.
@@ -398,6 +422,92 @@ private fun ProductionCard(
                 onCorrectSensorStart = onCorrectSensorStart,
             )
         }
+    }
+}
+
+/**
+ * What became of a finger prick value handed to the sensor itself.
+ *
+ * The calibration dialog can only say "sent": the write leaves the phone one duty cycle later and
+ * the sensor answers by radio after that, so the real result has no place to appear unless a screen
+ * polls for it. On screen only while the value is sent to the sensor at all — see
+ * [DexcomOnePlusBooleanKey.SendCalibrationToSensor].
+ *
+ * [OnePlusCalibrationOutcome.Unknown] is deliberately not softened: a Dexcom ONE+ answers with four
+ * bytes nobody has decoded (docs/DEXCOM_ONEPLUS_CALIBRATION_TO_SENSOR.md §2c), so it is neither a
+ * failure of the app nor a success, and a sensor keeps a calibration it took for good.
+ */
+@Composable
+private fun SensorCalibrationCard(
+    outcome: OnePlusCalibrationOutcome?,
+    waiting: Boolean,
+    driverMessage: String?,
+) {
+    // A refusal is the one case where something is plainly not in the sensor, so it is the one case
+    // that carries the warning surface.
+    val tone = if (outcome is OnePlusCalibrationOutcome.Refused) CgmCardTone.Warning else CgmCardTone.Neutral
+    CgmCard(tone = tone) {
+        CgmCardHeader(stringResource(R.string.dexcom_oneplus_calibration_heading))
+        sensorCalibrationRequest(driverMessage)?.let { request ->
+            Text(
+                text = request,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        Text(
+            text = when {
+                waiting || outcome is OnePlusCalibrationOutcome.Pending ->
+                    stringResource(R.string.dexcom_oneplus_calibration_waiting)
+
+                outcome is OnePlusCalibrationOutcome.Accepted           ->
+                    stringResource(R.string.dexcom_oneplus_calibration_accepted)
+
+                outcome is OnePlusCalibrationOutcome.Refused            ->
+                    stringResource(R.string.dexcom_oneplus_calibration_refused)
+
+                outcome is OnePlusCalibrationOutcome.Unknown            ->
+                    stringResource(R.string.dexcom_oneplus_calibration_unknown)
+
+                else                                                   ->
+                    stringResource(R.string.dexcom_oneplus_calibration_none)
+            },
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        // The raw bytes are worth keeping on screen: they are what a bug report needs, and they are
+        // the only evidence the user has of what the sensor really said.
+        val detail = when (outcome) {
+            is OnePlusCalibrationOutcome.Accepted -> outcome.detail
+            is OnePlusCalibrationOutcome.Refused  -> outcome.detail
+            is OnePlusCalibrationOutcome.Unknown  -> outcome.detail
+            else                                  -> null
+        }
+        detail?.takeIf { it.isNotBlank() }?.let { text ->
+            Text(
+                text = stringResource(R.string.dexcom_oneplus_calibration_detail, text),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
+ * What the sensor itself is asking for, read back out of the driver status line.
+ *
+ * Every reading carries a state byte that `OnePlusCalibrationState` already decodes, and the driver
+ * passes its name on as [app.aaps.plugins.dexcomoneplus.OnePlusWarmupState.message]. Nothing showed
+ * the four calibration states until now. Null when the line is about something else, which it is
+ * most of the time — that keeps this reading of a shared field honest instead of guessing.
+ */
+@Composable
+private fun sensorCalibrationRequest(driverMessage: String?): String? {
+    val state = OnePlusCalibrationState.entries.firstOrNull { it.name == driverMessage } ?: return null
+    return when (state) {
+        OnePlusCalibrationState.NeedsCalibration       -> stringResource(R.string.dexcom_oneplus_calibration_state_needs)
+        OnePlusCalibrationState.NeedsFirstCalibration  -> stringResource(R.string.dexcom_oneplus_calibration_state_needs_first)
+        OnePlusCalibrationState.NeedsSecondCalibration -> stringResource(R.string.dexcom_oneplus_calibration_state_needs_second)
+        OnePlusCalibrationState.CalibrationSent        -> stringResource(R.string.dexcom_oneplus_calibration_state_sent)
+        else                                           -> null
     }
 }
 
