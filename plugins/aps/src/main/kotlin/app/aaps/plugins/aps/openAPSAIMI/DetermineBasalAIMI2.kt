@@ -309,6 +309,57 @@ import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
+/**
+ * The value for a JSON number field, or `JSONObject.NULL` when there is none or it is not finite.
+ *
+ * `JSONObject.put(String, double)` throws on NaN and infinity. In [AimiDecisionContext.toMedicalJson]
+ * one such value would replace the whole tick record with the error string of its catch block, which
+ * loses the forensics exactly on the ticks that went wrong.
+ */
+internal fun Double?.finiteOrJsonNull(): Any = this?.takeIf { it.isFinite() } ?: JSONObject.NULL
+
+/**
+ * One reading of `CorrectionAggressionBasalCap.mergeEngineAndRtRates`, for the export only.
+ *
+ * The merge keeps the smaller of the basal engine's own rate and `rT.rate` outside tier `FULL`, and the
+ * larger inside it. Every 0.0 the engine returns is a safety decision, so inside `FULL` a boost on
+ * `rT.rate` can win over one. Nothing today exports the engine's own rate, so that cannot be counted.
+ * This record carries the two inputs, which side of the merge ran, and which input the merged rate came
+ * from. It is never read back into a decision.
+ */
+internal data class AimiBasalMergeRecord(
+    val engineRateUph: Double,
+    val rtRateUph: Double?,
+    val mergeMode: String,
+    val mergeWinner: String,
+)
+
+/**
+ * Copies the two passive basal records of a tick into the exported baseline state.
+ *
+ * A `null` record leaves its fields alone. Both records are cleared at the start of every tick, so a
+ * tick that did not reach the meal-absorption boost branch, or did not reach the merge, exports nothing
+ * for it instead of repeating the previous tick's numbers.
+ */
+internal fun AimiDecisionContext.BaselineState.applyBasalShadowRecords(
+    mealBoost: CorrectionAggressionBasalCap.MealBoostCapRecord?,
+    merge: AimiBasalMergeRecord?,
+) {
+    mealBoost?.let { record ->
+        meal_boost_requested_uph = record.requestedUph
+        meal_boost_cap_tier = record.tier?.name
+        meal_boost_cap_max_uph = record.maxAllowedUph
+        meal_boost_capped_uph = record.cappedUph
+        meal_boost_cap_would_bind = record.wouldBind
+    }
+    merge?.let { record ->
+        engine_rate_uph = record.engineRateUph
+        rt_rate_uph = record.rtRateUph
+        merge_mode = record.mergeMode
+        merge_winner = record.mergeWinner
+    }
+}
+
 internal data class AimiDecisionContext(
     val event_id: String,
     val timestamp: Long,
@@ -652,6 +703,54 @@ internal data class AimiDecisionContext(
          * direct instruments contradict it.
          */
         var variable_sens_mgdl: Double? = null,
+        /**
+         * Where the meal-absorption basal boost stands against the correction-aggression tier ceiling, at
+         * the moment the branch asks for it. Written on every tick where that branch produced a rate,
+         * `null` otherwise.
+         *
+         * **Measurement only. These five fields say nothing about the delivered rate.** Nothing applies
+         * the ceiling here, and nothing needs to: the merged rate meets the same ceiling, with the same
+         * gate, at `FINAL_BASAL_MERGE`. The branch rate can also be dropped before it ever gets there —
+         * the `min` merge can pick the engine rate, T3C or Harmonia can replace the whole plan, an LGS
+         * halt can zero it, and three early returns skip the merge altogether. So a bound ceiling here is
+         * not a dose that was cut; it is one branch asking above its tier.
+         *
+         * The base is `profile.current_basal`, the same one `FINAL_BASAL_MERGE` uses, so the two ceilings
+         * are the same number. The exercise ceiling in `capBasalRateForCorrectionAggression` is not part
+         * of this measurement.
+         */
+        var meal_boost_requested_uph: Double? = null,
+        /** Correction-aggression tier of the tick: `FULL`, `MODERATE` or `REBOUND_GUARD`. */
+        var meal_boost_cap_tier: String? = null,
+        /**
+         * Tier ceiling in U/h. `null` whenever no ceiling was computed: tier `FULL` always waives it,
+         * `MODERATE` waives it too on a fast rise, there may be no gate decision yet, and a requested
+         * rate that is zero, negative or non-finite is returned before the ceiling is worked out.
+         */
+        var meal_boost_cap_max_uph: Double? = null,
+        /** The requested rate after the tier ceiling. Never above `meal_boost_requested_uph`. */
+        var meal_boost_capped_uph: Double? = null,
+        /**
+         * True when the tier ceiling is below the rate this branch asked for, i.e. the branch asked for
+         * more than its tier allows. This is the 87 % against 1 % figure to watch. It does **not** mean a
+         * dose was or would be changed.
+         */
+        var meal_boost_cap_would_bind: Boolean? = null,
+        /**
+         * The engine / rT basal merge, as `CorrectionAggressionBasalCap.mergeEngineAndRtRates` saw it.
+         *
+         * Strictly passive, no key, no behaviour attached. The merge takes the smaller of the two rates
+         * outside tier `FULL` and the larger inside it, so a rate the basal engine set to 0.0 for a hypo
+         * reason can lose to a boost. Today no exported field carries the engine's own rate, so the
+         * question "how often does a safety zero lose" cannot be answered. These four fields carry it.
+         */
+        var engine_rate_uph: Double? = null,
+        /** `rT.rate` at the merge, `null` when nothing earlier in the tick wrote it. */
+        var rt_rate_uph: Double? = null,
+        /** `min` or `max`: which side of the merge ran, i.e. whether `allowRocketBasalScale` was set. */
+        var merge_mode: String? = null,
+        /** `engine`, `rt` or `equal`: which input the merged rate came from. */
+        var merge_winner: String? = null,
     )
     data class Adjustments(
         var dynamic_isf: DynamicIsf? = null,
@@ -998,6 +1097,19 @@ internal data class AimiDecisionContext(
                 "rise_floor_minutes_since_contribution",
                 baseline_state.rise_floor_minutes_since_contribution ?: org.json.JSONObject.NULL,
             )
+            // JSONObject.put(String, double) throws on NaN and infinity, and the whole tick record would
+            // then be replaced by the "JSON Generation Failed" string of the catch below. engine_rate_uph
+            // is the raw basal engine output, taken before setTempBasal hardens non-finite rates, so it is
+            // the one that can really arrive non-finite. Write JSON null instead of losing the record.
+            base.put("meal_boost_requested_uph", baseline_state.meal_boost_requested_uph.finiteOrJsonNull())
+            base.put("meal_boost_cap_tier", baseline_state.meal_boost_cap_tier ?: JSONObject.NULL)
+            base.put("meal_boost_cap_max_uph", baseline_state.meal_boost_cap_max_uph.finiteOrJsonNull())
+            base.put("meal_boost_capped_uph", baseline_state.meal_boost_capped_uph.finiteOrJsonNull())
+            base.put("meal_boost_cap_would_bind", baseline_state.meal_boost_cap_would_bind ?: JSONObject.NULL)
+            base.put("engine_rate_uph", baseline_state.engine_rate_uph.finiteOrJsonNull())
+            base.put("rt_rate_uph", baseline_state.rt_rate_uph.finiteOrJsonNull())
+            base.put("merge_mode", baseline_state.merge_mode ?: JSONObject.NULL)
+            base.put("merge_winner", baseline_state.merge_winner ?: JSONObject.NULL)
             json.put("baseline_state", base)
 
             val adj = org.json.JSONObject()
@@ -7658,6 +7770,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 } else {
                     null
                 }
+                // Measurement only — see `CorrectionAggressionBasalCap.MealBoostCapRecord`. This branch
+                // does not apply the tier ceiling itself, and it does not need to: the merged rate meets
+                // the same ceiling, with the same gate, at `FINAL_BASAL_MERGE`. The record counts how
+                // often the branch asks for more than its tier allows at the moment it asks. It is read
+                // only by the export and never by a dose. The base is `profile.current_basal`, the same
+                // one `FINAL_BASAL_MERGE` uses, so the two ceilings are comparable.
+                optionalRate?.let { requested ->
+                    mealBoostCapRecord = CorrectionAggressionBasalCap.evaluateMealBoostCap(
+                        requestedRateUph = requested,
+                        profileBasalUph = profile.current_basal,
+                        gate = aggressionDecision,
+                    )
+                }
                 consoleLog.add(
                     "🍽️ MEAL_ABSORPTION_BASAL: phase=${lastMealAbsorptionOutput?.phase?.name} " +
                         "rate=${optionalRate?.let { r -> "%.2f".format(r) } ?: "skip"}",
@@ -9248,6 +9373,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rtRateUph = b.rT.rate,
             gate = correctionAggressionDecision,
         )
+        // Telemetry only — see [AimiBasalMergeRecord]. Reads what the merge just did, changes nothing.
+        basalMergeRecord = AimiBasalMergeRecord(
+            engineRateUph = engineRate,
+            rtRateUph = b.rT.rate,
+            mergeMode = CorrectionAggressionBasalCap.mergeMode(correctionAggressionDecision),
+            mergeWinner = CorrectionAggressionBasalCap.mergeWinner(engineRate, b.rT.rate, mergedRate),
+        )
         var finalProposedRate = capBasalRateForCorrectionAggression(
             requestedRateUph = mergedRate,
             profileBasalUph = b.profile.current_basal,
@@ -9831,6 +9963,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             decisionCtx.baseline_state.late_fat_rise_flag = lateFatRiseFlagForExport
             decisionCtx.baseline_state.late_fat_onset_age_min =
                 MealAbsorptionMemory.onsetAgeMin(decisionCtx.timestamp)?.roundToInt()
+        }
+
+        // Measurement only — the meal-absorption boost against its tier ceiling, and the engine / rT
+        // basal merge. Nothing downstream reads these nine fields and nothing applies them.
+        runCatching {
+            decisionCtx.baseline_state.applyBasalShadowRecords(mealBoostCapRecord, basalMergeRecord)
         }
 
         // Observation only — the Harmonia counterfactual. It answers two questions and changes
@@ -11801,6 +11939,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      */
     private var tickCobGrams: Double = Double.NaN
 
+    /**
+     * Tier ceiling record of the meal-absorption basal boost for the current tick, `null` when that
+     * branch did not produce a rate. Reset at the start of every tick, so a tick without the branch
+     * never repeats the previous tick's numbers. Exported to `baseline_state.meal_boost_*`.
+     */
+    private var mealBoostCapRecord: CorrectionAggressionBasalCap.MealBoostCapRecord? = null
+
+    /**
+     * What the engine / rT basal merge saw this tick. Telemetry only, nothing reads it back.
+     * Exported to `baseline_state.engine_rate_uph`, `rt_rate_uph`, `merge_mode` and `merge_winner`.
+     */
+    private var basalMergeRecord: AimiBasalMergeRecord? = null
+
     /** 🔭 Lot 0 — `true` dès qu'une ligne `AIMI_Decisions.jsonl` a été écrite pour le tick courant. */
     private var aimiDecisionExportedThisTick: Boolean = false
 
@@ -13271,9 +13422,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         if (!risingOrFlat || !moderatelyHigh) return suggestedBasalUph
 
+        // These are multipliers on the profile basal, not percentages: 10x and 8x. In practice the number
+        // that binds is almost always [mealMaxBasalUph] below, because 8x profile basal is above it on
+        // most profiles. The multipliers themselves are being measured separately; do not change them here.
         val boostFactor = when {
-            veryHigh -> 10    // ex : 250+ → +50 %
-            else -> 8       // ex : 180–250 → +25 %
+            veryHigh -> 10  // 10x profile basal, e.g. target 100 and BG above 190
+            else -> 8       // 8x profile basal, e.g. target 100 and BG 130 to 190
         }
 
         val boosted = suggestedBasalUph * boostFactor
@@ -18078,6 +18232,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Causal censoring of the basal label needs the carbs of THIS tick, and the basal-learning hook
         // runs on paths that have no access to `ctx`. See [basalLearningCobGrams].
         tickCobGrams = ctx.mealData.mealCOB.takeIf { it.isFinite() && it >= 0.0 } ?: Double.NaN
+        // Shadow records of this tick only. Cleared here so a tick that does not reach the meal boost
+        // branch or the basal merge exports nothing instead of the previous tick's numbers.
+        mealBoostCapRecord = null
+        basalMergeRecord = null
         val (
             originalProfile,
             isExplicitAdvisorRun,
