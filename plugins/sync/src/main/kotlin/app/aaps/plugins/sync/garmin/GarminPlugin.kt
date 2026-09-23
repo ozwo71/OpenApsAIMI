@@ -83,7 +83,7 @@ class GarminPlugin @Inject constructor(
 
         /** Keywords accepted from Garmin /mode (must match therapy.kt detection). */
         private val ALLOWED_THERAPY_MODES = setOf(
-            "bfast", "lunch", "dinner", "highcarb", "fcl", "stop", "meal", "snack"
+            "bfast", "lunch", "dinner", "highcarb", "fcl", "sport", "stop", "meal", "snack"
         )
 
         private val DEFAULT_MODE_DURATIONS_MIN = mapOf(
@@ -92,10 +92,15 @@ class GarminPlugin @Inject constructor(
             "dinner" to 60,
             "highcarb" to 90,
             "fcl" to 30,
+            "sport" to 120,
             "meal" to 60,
             "snack" to 30,
             "stop" to 1,
         )
+
+        /** FCL companion temporary target (mg/dL) — ends FCL meal basal with the TT. */
+        private const val FCL_TEMP_TARGET_MGDL = 80.0
+        private const val FCL_TEMP_TARGET_DURATION_MIN = 30
     }
 
     @VisibleForTesting
@@ -743,7 +748,9 @@ class GarminPlugin @Inject constructor(
     }
 
     /**
-     * Activates an AIMI mode from the watch (NOTE keyword detected by therapy.kt).
+     * Activates an AIMI mode from the watch.
+     * NOTE text = keyword only; duration query sets TherapyEvent.duration.
+     * FCL also starts a temporary target 80 mg/dL for 30 minutes.
      * Query: /mode?mode=lunch&duration=60&key=...
      */
     @VisibleForTesting
@@ -756,6 +763,9 @@ class GarminPlugin @Inject constructor(
         val defaultDuration = DEFAULT_MODE_DURATIONS_MIN[rawMode] ?: 60
         val duration = getQueryParameter(uri, "duration", defaultDuration).coerceIn(0, 480)
         loopHub.postTherapyMode(rawMode, duration)
+        if (rawMode == "fcl") {
+            loopHub.postTempTarget(FCL_TEMP_TARGET_MGDL, FCL_TEMP_TARGET_DURATION_MIN)
+        }
         return """{"ok":true,"mode":"$rawMode","duration":$duration}"""
     }
     // end mod

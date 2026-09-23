@@ -277,7 +277,8 @@ class LoopHubImpl @Inject constructor(
 
     /**
      * ⚠️ ASYNC IMPACT: inserts TherapyEvent on [appScope] (same pattern as postTempTarget).
-     * Note format matches RemoteControl CarePortal notes so [Therapy] detects the mode.
+     * NOTE text is the keyword only (e.g. "lunch"); duration goes on TE.duration so [Therapy]
+     * windows correctly without embedding minutes in the note string.
      */
     override fun postTherapyMode(keyword: String, durationMin: Int) {
         val normalized = keyword.trim().lowercase()
@@ -289,11 +290,7 @@ class LoopHubImpl @Inject constructor(
             normalized == "stop" -> durationMin.coerceAtLeast(1)
             else -> durationMin.coerceIn(1, 480)
         }
-        val note = if (normalized == "stop") {
-            "stop"
-        } else {
-            "$normalized $safeDurationMin"
-        }
+        val note = normalized
         val durationMs = TimeUnit.MINUTES.toMillis(safeDurationMin.toLong())
         aapsLogger.info(LTag.GARMIN, "postTherapyMode note='$note' durationMin=$safeDurationMin")
         userEntryLogger.log(
@@ -312,7 +309,7 @@ class LoopHubImpl @Inject constructor(
         appScope.launch {
             try {
                 persistenceLayer.insertOrUpdateTherapyEvent(te)
-                aapsLogger.info(LTag.GARMIN, "Therapy mode stored: $note")
+                aapsLogger.info(LTag.GARMIN, "Therapy mode stored: $note (${safeDurationMin} min)")
             } catch (error: Exception) {
                 aapsLogger.error(LTag.GARMIN, "Failed to store therapy mode: ${error.message}")
             }

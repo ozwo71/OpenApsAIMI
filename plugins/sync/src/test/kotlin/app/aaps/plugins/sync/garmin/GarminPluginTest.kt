@@ -479,6 +479,7 @@ class GarminPluginTest : TestBaseWithProfile() {
         val uri = createUri(mapOf("mode" to "lunch", "duration" to "60"))
         assertEquals("""{"ok":true,"mode":"lunch","duration":60}""", gp.onPostMode(uri))
         verify(loopHub).postTherapyMode("lunch", 60)
+        verify(loopHub, times(0)).postTempTarget(any(), any())
     }
 
     @Test
@@ -486,6 +487,15 @@ class GarminPluginTest : TestBaseWithProfile() {
         val uri = createUri(mapOf("mode" to "FCL"))
         assertEquals("""{"ok":true,"mode":"fcl","duration":30}""", gp.onPostMode(uri))
         verify(loopHub).postTherapyMode("fcl", 30)
+        verify(loopHub).postTempTarget(80.0, 30)
+    }
+
+    @Test
+    fun testOnPostMode_Sport() {
+        val uri = createUri(mapOf("mode" to "sport", "duration" to "120"))
+        assertEquals("""{"ok":true,"mode":"sport","duration":120}""", gp.onPostMode(uri))
+        verify(loopHub).postTherapyMode("sport", 120)
+        verify(loopHub, times(0)).postTempTarget(any(), any())
     }
 
     @Test
