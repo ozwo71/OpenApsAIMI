@@ -275,6 +275,50 @@ class LoopHubImpl @Inject constructor(
     }
     // end mod
 
+    /**
+     * ⚠️ ASYNC IMPACT: inserts TherapyEvent on [appScope] (same pattern as postTempTarget).
+     * Note format matches RemoteControl CarePortal notes so [Therapy] detects the mode.
+     */
+    override fun postTherapyMode(keyword: String, durationMin: Int) {
+        val normalized = keyword.trim().lowercase()
+        if (normalized.isEmpty()) {
+            aapsLogger.warn(LTag.GARMIN, "postTherapyMode ignored: empty keyword")
+            return
+        }
+        val safeDurationMin = when {
+            normalized == "stop" -> durationMin.coerceAtLeast(1)
+            else -> durationMin.coerceIn(1, 480)
+        }
+        val note = if (normalized == "stop") {
+            "stop"
+        } else {
+            "$normalized $safeDurationMin"
+        }
+        val durationMs = TimeUnit.MINUTES.toMillis(safeDurationMin.toLong())
+        aapsLogger.info(LTag.GARMIN, "postTherapyMode note='$note' durationMin=$safeDurationMin")
+        userEntryLogger.log(
+            action = Action.CAREPORTAL,
+            source = Sources.Garmin,
+            note = note,
+        )
+        val te = TE(
+            timestamp = dateUtil.now(),
+            type = TE.Type.NOTE,
+            glucoseUnit = GlucoseUnit.MGDL,
+            note = note,
+            duration = durationMs,
+            enteredBy = "Garmin Widget",
+        )
+        appScope.launch {
+            try {
+                persistenceLayer.insertOrUpdateTherapyEvent(te)
+                aapsLogger.info(LTag.GARMIN, "Therapy mode stored: $note")
+            } catch (error: Exception) {
+                aapsLogger.error(LTag.GARMIN, "Failed to store therapy mode: ${error.message}")
+            }
+        }
+    }
+
     /** Stores hear rate readings that a taken and averaged of the given interval. */
     override fun storeHeartRate(
         samplingStart: Instant, samplingEnd: Instant,

@@ -80,6 +80,22 @@ class GarminPlugin @Inject constructor(
     companion object {
         private const val PREF_GARMIN_LAST_STEPS = "garmin_http_last_steps"
         private const val PREF_GARMIN_LAST_TS = "garmin_http_last_steps_ts"
+
+        /** Keywords accepted from Garmin /mode (must match therapy.kt detection). */
+        private val ALLOWED_THERAPY_MODES = setOf(
+            "bfast", "lunch", "dinner", "highcarb", "fcl", "stop", "meal", "snack"
+        )
+
+        private val DEFAULT_MODE_DURATIONS_MIN = mapOf(
+            "bfast" to 60,
+            "lunch" to 60,
+            "dinner" to 60,
+            "highcarb" to 90,
+            "fcl" to 30,
+            "meal" to 60,
+            "snack" to 30,
+            "stop" to 1,
+        )
     }
 
     @VisibleForTesting
@@ -171,6 +187,7 @@ class GarminPlugin @Inject constructor(
                 registerEndpoint("/carbs", requestHandler(::onPostCarbs))
                 registerEndpoint("/bolus", requestHandler(::onPostBolus))
                 registerEndpoint("/temptarget", requestHandler(::onPostTempTarget))
+                registerEndpoint("/mode", requestHandler(::onPostMode))
                 registerEndpoint("/connect", requestHandler(::onConnectPump))
                 registerEndpoint("/sgv.json", requestHandler(::onSgv))
                 awaitReady(wait)
@@ -723,6 +740,23 @@ class GarminPlugin @Inject constructor(
         val duration: Int = getQueryParameter(uri, "duration", 0)
         loopHub.postTempTarget(target, duration)
         return ""
+    }
+
+    /**
+     * Activates an AIMI mode from the watch (NOTE keyword detected by therapy.kt).
+     * Query: /mode?mode=lunch&duration=60&key=...
+     */
+    @VisibleForTesting
+    fun onPostMode(uri: URI): CharSequence {
+        val rawMode = getQueryParameter(uri, "mode")?.trim()?.lowercase().orEmpty()
+        if (rawMode.isEmpty() || rawMode !in ALLOWED_THERAPY_MODES) {
+            aapsLogger.warn(LTag.GARMIN, "Rejected therapy mode '$rawMode'")
+            return """{"ok":false,"error":"invalid_mode"}"""
+        }
+        val defaultDuration = DEFAULT_MODE_DURATIONS_MIN[rawMode] ?: 60
+        val duration = getQueryParameter(uri, "duration", defaultDuration).coerceIn(0, 480)
+        loopHub.postTherapyMode(rawMode, duration)
+        return """{"ok":true,"mode":"$rawMode","duration":$duration}"""
     }
     // end mod
 

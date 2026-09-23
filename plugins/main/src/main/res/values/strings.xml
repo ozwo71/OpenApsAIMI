@@ -268,6 +268,19 @@
     <string name="dashboard_glass_loop_ml_circuit_closed">Training active</string>
     <string name="dashboard_glass_loop_ml_never_trained">Never trained yet</string>
     <string name="dashboard_glass_loop_ml_training_stale">Training subsystem not started yet</string>
+    <string name="dashboard_glass_loop_ml_smb_label">SMB training</string>
+    <string name="dashboard_glass_loop_ml_smb_status_value" comment="%1$s=what happened, already translated, e.g. Trained; %2$s=relative time e.g. 5 minutes ago">%1$s (%2$s)</string>
+    <string name="dashboard_glass_loop_ml_smb_never_attempted">Never attempted yet</string>
+    <string name="dashboard_glass_loop_ml_smb_outcome_trained">Trained</string>
+    <string name="dashboard_glass_loop_ml_smb_outcome_no_csv">No data file yet</string>
+    <string name="dashboard_glass_loop_ml_smb_outcome_refused_header">Data file refused: wrong columns</string>
+    <string name="dashboard_glass_loop_ml_smb_outcome_too_few_samples">Not enough usable rows</string>
+    <string name="dashboard_glass_loop_ml_smb_outcome_rejected">Model rejected by a quality check</string>
+    <string name="dashboard_glass_loop_ml_smb_outcome_error">Training failed with an error</string>
+    <string name="dashboard_glass_loop_ml_smb_detail_label">SMB training detail</string>
+    <string name="dashboard_glass_loop_ml_smb_rows" comment="%1$d=rows kept by the quality filter, %2$d=rows dropped by it. Example: 260 rows kept, 1740 dropped">%1$d rows kept, %2$d dropped</string>
+    <string name="dashboard_glass_loop_ml_smb_waiting_not_due">Waiting: next attempt not due yet</string>
+    <string name="dashboard_glass_loop_ml_smb_waiting_circuit_open">Waiting: training paused after repeated failures</string>
     <string name="dashboard_glass_loop_ml_files_title">Model Files</string>
     <string name="dashboard_glass_loop_ml_file_basal_label">Basal model</string>
     <string name="dashboard_glass_loop_ml_file_smb_label">SMB model</string>

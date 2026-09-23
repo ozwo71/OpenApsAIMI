@@ -62,6 +62,12 @@ interface LoopHub {
     fun postTempTarget(target: Double, duration: Int)
     // end mod
 
+    /**
+     * Activates an AIMI therapy mode via CarePortal NOTE (e.g. "lunch 60", "fcl 30", "stop").
+     * Keywords are detected by openAPSAIMI [Therapy] (`therapy.kt`).
+     */
+    fun postTherapyMode(keyword: String, durationMin: Int)
+
     /** Stores hear rate readings that a taken and averaged of the given interval. */
     fun storeHeartRate(
         samplingStart: Instant, samplingEnd: Instant,

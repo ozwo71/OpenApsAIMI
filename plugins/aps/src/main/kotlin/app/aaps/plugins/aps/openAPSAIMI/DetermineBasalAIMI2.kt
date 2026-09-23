@@ -57,6 +57,7 @@ import app.aaps.plugins.aps.openAPSAIMI.ISF.HeartRateTrendIsf
 import app.aaps.plugins.aps.openAPSAIMI.ISF.CommandedIsf
 import app.aaps.plugins.aps.openAPSAIMI.ISF.ObservedSensitivityMeter
 import app.aaps.plugins.aps.openAPSAIMI.ISF.SensitivityRatioEstimator
+import app.aaps.plugins.aps.openAPSAIMI.ISF.WorkingIsf
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaCounterfactual
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSafetyVerdict
 import app.aaps.plugins.aps.openAPSAIMI.quality.InsulinOriginMeter
@@ -480,12 +481,33 @@ internal data class AimiDecisionContext(
         val stress_isf_floor_active: Boolean? = null,
         val stress_isf_floor_reason: String? = null,
         /**
-         * Sensitivity that would be commanded with the floor at 1.0 x profile, mg/dL per U.
+         * Sensitivity commanded with the floor at 1.0 x profile, mg/dL per U.
          *
-         * Present only when the signature is active and the floor would really change the value.
-         * Absent otherwise — absent means "nothing to see", not zero.
+         * Present whenever the signature is active, armed or not. Absent means "the signature does
+         * not hold", not zero.
          */
         val stress_isf_floor_isf_mgdl: Double? = null,
+        /**
+         * Awake resting heart rate the signature was measured against, bpm.
+         *
+         * Absent means the gesture stood down for want of data. It is not the same quantity as the
+         * exported `rhr_resting_bpm`, which is the lowest SLEEPING value of the last seven days and
+         * was pinned at 50 on every tick of three packages. See `AwakeRestingHeartRate`.
+         */
+        val stress_floor_awake_resting_bpm: Int? = null,
+        /**
+         * Dose-facing sensitivity before the stress floor, mg/dL per U.
+         *
+         * `var`, and set late: the value only exists once the working sensitivity is finalised,
+         * thousands of lines after this object is built at tick bootstrap. Without these three fields
+         * no support package can say whether the wiring works — `variable_sens_mgdl` is read after
+         * every multiplier and cannot show what the floor moved.
+         */
+        var stress_floor_isf_before_mgdl: Double? = null,
+        /** Dose-facing sensitivity after the stress floor, mg/dL per U. */
+        var stress_floor_isf_after_mgdl: Double? = null,
+        /** True when the floor really raised the dose-facing sensitivity this tick. */
+        var stress_floor_raised_isf: Boolean? = null,
         /** Shadow: sensitivity an unconditional exit clamp relative to the profile would command. */
         val isf_profile_relative_shadow_mgdl: Double? = null,
         /** Shadow: true when that clamp would have changed the value. */
@@ -921,6 +943,10 @@ internal data class AimiDecisionContext(
             base.put("stress_isf_floor_active", baseline_state.stress_isf_floor_active ?: org.json.JSONObject.NULL)
             base.put("stress_isf_floor_reason", baseline_state.stress_isf_floor_reason ?: org.json.JSONObject.NULL)
             base.put("stress_isf_floor_isf_mgdl", baseline_state.stress_isf_floor_isf_mgdl ?: org.json.JSONObject.NULL)
+            base.put("stress_floor_awake_resting_bpm", baseline_state.stress_floor_awake_resting_bpm ?: JSONObject.NULL)
+            base.put("stress_floor_isf_before_mgdl", baseline_state.stress_floor_isf_before_mgdl ?: JSONObject.NULL)
+            base.put("stress_floor_isf_after_mgdl", baseline_state.stress_floor_isf_after_mgdl ?: JSONObject.NULL)
+            base.put("stress_floor_raised_isf", baseline_state.stress_floor_raised_isf ?: JSONObject.NULL)
             base.put("isf_profile_relative_shadow_mgdl", baseline_state.isf_profile_relative_shadow_mgdl ?: org.json.JSONObject.NULL)
             base.put("isf_profile_relative_bound_hit", baseline_state.isf_profile_relative_bound_hit ?: org.json.JSONObject.NULL)
             base.put("sensitivity_ratio_r", baseline_state.sensitivity_ratio_r ?: org.json.JSONObject.NULL)
@@ -2289,6 +2315,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // so every one of them was a tick where setTempBasal returned early. `adjustments.basal_terminal`
         // is read with `?.let`, so a null simply leaves the key out, which is the honest answer.
         lastBasalTerminalTelemetry = null
+        // Same reason as the block above: what the stress floor did belongs to this tick only. A tick
+        // that returns before the working sensitivity is finalised must export nothing rather than
+        // the previous tick's numbers.
+        WorkingIsf.resetLastApplied()
         val decisionCtx = AimiDecisionContext(
             event_id = "evt_${ctx.currentTime}".also { currentTickDecisionEventId = it },
             timestamp = ctx.currentTime,
@@ -2340,6 +2370,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 stress_isf_floor_active = IsfSourceTelemetry.lastStressIsfFloorActive,
                 stress_isf_floor_reason = IsfSourceTelemetry.lastStressIsfFloorReason,
                 stress_isf_floor_isf_mgdl = IsfSourceTelemetry.lastStressIsfFloorIsfMgdl,
+                stress_floor_awake_resting_bpm = IsfSourceTelemetry.lastStressIsfFloorAwakeRestingBpm,
                 isf_profile_relative_shadow_mgdl = IsfSourceTelemetry.lastProfileRelativeShadowMgdl,
                 isf_profile_relative_bound_hit = IsfSourceTelemetry.lastProfileRelativeBoundHit,
                 sensitivity_ratio_r = runCatching { sensitivityRatioEstimator.ratio }.getOrNull(),
@@ -5355,6 +5386,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 b.effort_smb_floored_by_meal = lastEffortSmbFlooredByMeal
                 b.effort_smb_armed = lastEffortSmbArmed
                 b.variable_sens_mgdl = variableSensitivity.toDouble().takeIf { it.isFinite() && it > 0.0 }
+                // Written here for the same reason as the block above: this is the one point every
+                // export path goes through, and the floor is applied thousands of lines after the
+                // decision context is built.
+                WorkingIsf.lastApplied?.let { applied ->
+                    b.stress_floor_isf_before_mgdl = applied.beforeMgdlPerU.takeIf { it.isFinite() }
+                    b.stress_floor_isf_after_mgdl = applied.afterMgdlPerU.takeIf { it.isFinite() }
+                    b.stress_floor_raised_isf = applied.raised
+                }
+                // The before/after pair above measures the late application only. A tick can be
+                // floored early — the call that guards the AutodriveV3 fallback — and never reach
+                // the late one, so without this the export would say the floor changed nothing on
+                // exactly the ticks where it changed a bolus.
+                if (WorkingIsf.raisedEarly) b.stress_floor_raised_isf = true
                 b.rise_floor_spent_u = riseFloorSpentU
                 b.rise_floor_minutes_since_contribution =
                     lastRiseFloorContributionMs
@@ -6435,17 +6479,39 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     /**
-     * Immediately after [applyEndoAndActivityAdjustments]: clamp [variableSensitivity], then physio ISF/basal/SMB factors.
+     * Immediately after [applyEndoAndActivityAdjustments]: clamp [variableSensitivity], then physio ISF/basal/SMB factors,
+     * then the stress ISF floor.
      * Mutates [variableSensitivity], [profile.max_daily_basal], [maxSMB] / [maxSMBHB] (lockout). Returns the same value
      * historically assigned to local `sens` via `variableSensitivity.toDouble()`.
+     *
+     * This is the LAST place in a tick where [variableSensitivity] changes, which is why the stress
+     * floor is applied here rather than where the value is assembled: `HeartRateTrendIsf` multiplies
+     * the same member by 0.9 on nearly the same signature, and it runs earlier (the assembly in
+     * [runTddRatesAndIsfFusionAfterContext], then the trend, then the endocrine and activity factors,
+     * then this function). The protective gesture has to win when the two fire together. The three
+     * steps live in `WorkingIsf` so a test can hold that order in place.
+     *
+     * With `BooleanKey.OApsAIMIStressIsfFloor` off, `profile.stress_floor_isf_mgdl` is null and this
+     * function is bit-for-bit what it was before.
      */
     private fun applyIsfBoundsAndPhysioMultipliersAfterEndoActivity(
         profile: OapsProfileAimi,
         physioMultipliers: PhysioMultipliersMTR,
         exerciseInsulinLockoutActive: Boolean,
     ): Double {
-        this.variableSensitivity = this.variableSensitivity.coerceIn(5.0f, 300.0f)
-        this.variableSensitivity = (this.variableSensitivity * physioMultipliers.isfFactor).toFloat()
+        this.variableSensitivity = WorkingIsf.finalize(
+            workingIsfMgdlPerU = this.variableSensitivity.toDouble(),
+            physioIsfFactor = physioMultipliers.isfFactor,
+            stressFloorIsfMgdlPerU = profile.stress_floor_isf_mgdl,
+        ).toFloat()
+        WorkingIsf.lastApplied?.let { applied ->
+            val floorMgdl = applied.floorMgdlPerU ?: return@let
+            consoleLog.add(
+                "🧷 STRESS_ISF_FLOOR %.1f -> %.1f (floor %.1f)".format(
+                    Locale.US, applied.beforeMgdlPerU, applied.afterMgdlPerU, floorMgdl,
+                )
+            )
+        }
         profile.max_daily_basal = profile.max_daily_basal * physioMultipliers.basalFactor
         if (exerciseInsulinLockoutActive) {
             this.maxSMB = 0.0
@@ -8224,6 +8290,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             tdd7Days = bundle.tdd7Days,
             variableSensitivity = bundle.variableSensitivity,
             profileSens = bundle.profile.sens,
+            // Carried on the profile of THIS tick, never read from a diagnostic global: `profile.sens`
+            // is the commanded value and carries both floors, and a process-global would hand this
+            // basal a value captured at another time of day.
+            preFloorCommandedSens = bundle.profile.pre_floor_isf_mgdl,
             predictedBg = bundle.predictedBg,
             targetBg = bundle.targetBg,
             minBg = bundle.profile.min_bg,
@@ -10186,6 +10256,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      *
      * @return `sens` (Double) pour [applyAdvancedPredictions] et le reste du tick ; peut être réassigné plus bas
      *         (ex. [applyIsfBoundsAndPhysioMultipliersAfterEndoActivity]).
+     *
+     * The stress ISF floor is applied here, on the assembled value, and **again** at the end of
+     * [applyIsfBoundsAndPhysioMultipliersAfterEndoActivity]. Both are needed and neither is enough:
+     * - here, because the AutodriveV3 stage runs between the two and falls back to
+     *   [variableSensitivity] when the PKPD runtime is missing or failed to build;
+     * - there, because `HeartRateTrendIsf` multiplies the same member by 0.9 after this point, on
+     *   nearly the same signature, and the protective gesture has to win.
+     *
+     * The floor is a `max` against a number that does not change inside a tick, so applying it twice
+     * gives exactly what applying it once gives. See `WorkingIsf.raiseToStressFloor`.
      */
     private fun runTddRatesAndIsfFusionAfterContext(
         profile: OapsProfileAimi,
@@ -10214,6 +10294,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             else -> min(fusedSensitivity, dynSensitivity)
         }
         if (sens <= 0.0) sens = baseSensitivity
+        // First of the two applications of the stress floor — see this function's KDoc. Idempotent,
+        // and inert when the key is off (`stress_floor_isf_mgdl` is null then).
+        sens = WorkingIsf.raiseToStressFloor(sens, profile.stress_floor_isf_mgdl)
         variableSensitivity = sens.toFloat()
 
         if (fusedSensitivity != null) {
