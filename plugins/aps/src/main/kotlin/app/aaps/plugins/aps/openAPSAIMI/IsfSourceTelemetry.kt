@@ -120,6 +120,22 @@ object IsfSourceTelemetry {
     }
 
     /**
+     * The floor used on the commanded sensitivity this tick, as a fraction of the profile ISF.
+     *
+     * 0.5 (`DynamicSensitivityPolicy.PROFILE_RELATIVE_FLOOR`) on a normal tick, and 1.0
+     * (`StressIsfFloor.ARMED_FLOOR_MULTIPLIER`) while the stress signature holds and its key is
+     * armed. Observation only: it says which bound the commanded value was held against, so a
+     * reader can tell a floor from a choice. Never read by a dose calculation.
+     */
+    @Volatile
+    var lastCommandFloorMultiplier: Double? = null
+        private set
+
+    fun recordCommandFloorMultiplier(floorMultiplier: Double?) {
+        lastCommandFloorMultiplier = floorMultiplier?.takeIf { it.isFinite() }
+    }
+
+    /**
      * Intermediate terms of one `calculateVariableIsf` pass.
      *
      * Production data showed that the BG-dependent terms of the formula explain only 18 % of the
@@ -260,5 +276,6 @@ object IsfSourceTelemetry {
         lastCacheGlucoseMgdl = null
         lastProfileStaticMgdl = null
         lastPhysioIsfFactor = null
+        lastCommandFloorMultiplier = null
     }
 }
