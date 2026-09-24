@@ -1835,21 +1835,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             try {
                 val tir1Day = tirCalculator.calculate(1, 65.0, 180.0)
                 determineBasalInvocationCaches.storeTir65180FromWarmup(tir1Day)
+                // Each calculate* call reads the BG table again: compute each window once, then read all its percentages.
+                val tir1DayAvg = tirCalculator.averageTIR(tir1Day)
+                val tirToday = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0))
+                val tirBasal3 = tirCalculator.averageTIR(tirCalculator.calculate(3, 65.0, 120.0))
                 tirWarmupSnapshotRef.set(
                     TirWarmupSnapshot(
-                        tir1DayAbove = tirCalculator.averageTIR(tir1Day).abovePct() ?: 0.0,
-                        tir1DayInRange = tirCalculator.averageTIR(tir1Day).inRangePct() ?: 0.0,
-                        currentTirLow = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0)).belowPct() ?: 0.0,
-                        currentTirRange = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0)).inRangePct() ?: 0.0,
-                        currentTirAbove = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0)).abovePct() ?: 0.0,
+                        tir1DayAbove = tir1DayAvg.abovePct() ?: 0.0,
+                        tir1DayInRange = tir1DayAvg.inRangePct() ?: 0.0,
+                        currentTirLow = tirToday.belowPct() ?: 0.0,
+                        currentTirRange = tirToday.inRangePct() ?: 0.0,
+                        currentTirAbove = tirToday.abovePct() ?: 0.0,
                         lastHourTirLow = tirCalculator.averageTIR(tirCalculator.calculateHour(80.0, 140.0)).belowPct() ?: 0.0,
                         lastHourTirAbove = tirCalculator.averageTIR(tirCalculator.calculateHour(72.0, 140.0)).abovePct(),
                         lastHourTirLow100 = tirCalculator.averageTIR(tirCalculator.calculateHour(100.0, 140.0)).belowPct() ?: 0.0,
                         lastHourTirAbove170 = tirCalculator.averageTIR(tirCalculator.calculateHour(100.0, 170.0)).abovePct() ?: 0.0,
                         lastHourTirAbove120 = tirCalculator.averageTIR(tirCalculator.calculateHour(100.0, 120.0)).abovePct() ?: 0.0,
-                        tirBasal3InRange = tirCalculator.averageTIR(tirCalculator.calculate(3, 65.0, 120.0)).inRangePct(),
-                        tirBasal3Below = tirCalculator.averageTIR(tirCalculator.calculate(3, 65.0, 120.0)).belowPct(),
-                        tirBasal3Above = tirCalculator.averageTIR(tirCalculator.calculate(3, 65.0, 120.0)).abovePct(),
+                        tirBasal3InRange = tirBasal3.inRangePct(),
+                        tirBasal3Below = tirBasal3.belowPct(),
+                        tirBasal3Above = tirBasal3.abovePct(),
                         tirBasalHourAbove = tirCalculator.averageTIR(tirCalculator.calculateHour(65.0, 100.0)).abovePct(),
                     )
                 )

@@ -206,6 +206,10 @@
     <string name="glass_skin_description">GLASS</string>
     <string name="dashboard_v2_reservoir">Reservoir</string>
     <string name="dashboard_v2_battery">Battery</string>
+    <string name="dashboard_glass_tir_empty" comment="TIR = time in range. Shown early in the day, when there is not enough data yet.">TIR --</string>
+    <string name="dashboard_glass_tir_value" comment="TIR = time in range today. %1$s=percent. Example: TIR 78%">TIR %1$s</string>
+    <string name="dashboard_glass_tir_up" comment="TIR = time in range today, better than yesterday. %1$s=percent today, %2$d=points gained vs yesterday. Example: TIR 78% ↑6">TIR %1$s ↑%2$d</string>
+    <string name="dashboard_glass_tir_down" comment="TIR = time in range today, worse than yesterday. %1$s=percent today, %2$d=points lost vs yesterday. Example: TIR 72% ↓4">TIR %1$s ↓%2$d</string>
     <string name="dashboard_glass_loop_label">Loop</string>
     <string name="dashboard_glass_iob_label">IOB</string>
     <string name="dashboard_glass_target_label">Target</string>
