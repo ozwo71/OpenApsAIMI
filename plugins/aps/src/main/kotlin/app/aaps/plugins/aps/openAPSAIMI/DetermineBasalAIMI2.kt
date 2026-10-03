@@ -186,6 +186,8 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnaps
 import app.aaps.plugins.aps.openAPSAIMI.safety.EffectiveIobReleaseAuthority
 import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoAggressiveRiseExit
 import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoDeliveryAuthority
+import app.aaps.plugins.aps.openAPSAIMI.safety.TrajBridgeSurvival
+import app.aaps.plugins.aps.openAPSAIMI.safety.TubeFloorArtefactRule
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionBasalCap
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoGuard
@@ -817,6 +819,14 @@ internal data class AimiDecisionContext(
         var control_barrier: JSONObject? = null,
         /** Lot 2 — invariants terminaux du canal basal: taux avant/apres et invariant liant. */
         var basal_terminal: org.json.JSONObject? = null,
+        /**
+         * What the Traj-Bridge asked for, and what the opt-in re-apply would do about it.
+         *
+         * Written on every tick, key on or off. With the key off `traj_bridge_survived` is always
+         * false and no dose reads this block; it exists so the frequency and the size of the
+         * reduction can be counted before the key is armed.
+         */
+        var traj_bridge: JSONObject? = null,
         /**
          * Universal Adaptive Basal scaling for this tick: heuristic, learned head, and the blend.
          *
@@ -2435,6 +2445,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // holdTicks every loop and made 15–20 min holds dead on arrival. reset() belongs in
         // tests / plugin restart only.
         pendingTrajSpiralBasal = null
+        // What the Traj-Bridge asked for belongs to this tick only. A null here is the honest answer
+        // for a tick where the bridge never fired, and it is what keeps the opt-in re-apply in
+        // setTempBasal inert on such a tick.
+        lastTrajBridgeRequest = null
+        trajBridgeSurvivedThisTick = false
+        trajBridgeWouldReduceToUph = null
+        // Same reason: a floor-artefact verdict belongs to the tick that produced it. Without this a
+        // tick whose tube advisor never ran would export the previous tick's answer.
+        lastTubeFloorArtefactStrict = false
+        lastTubeFloorArtefactWide = false
         // 🔭 Lot 0 — l'export JSONL doit avoir lieu sur TOUS les chemins de sortie du tick, pas seulement
         // sur les deux qui appellent explicitement le stage. On repart d'un état non exporté à chaque tick.
         aimiDecisionExportedThisTick = false
@@ -5247,6 +5267,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         val tbrFrac = lastRecursiveBeliefSnapshot?.resolutions?.tbrDemandFraction ?: 1.0
         rT.rate = pending.proactiveBasalUph * tbrFrac
+        // Keep the request for the end of setTempBasal, where the basal schedule can no longer write
+        // over it. Only a finite request is kept: a broken number must never reach a rate decision.
+        lastTrajBridgeRequest = rT.rate?.takeIf { it.isFinite() && it >= 0.0 }?.let { requested ->
+            TrajBridgeRequest(requestedUph = requested, tag = pending.tag, durationMin = pending.durationMin)
+        }
         rT.duration = pending.durationMin
         rT.reason.append(" | 🌀 Traj-Bridge: ${pending.reason}")
         lastSafetySource = pending.safetyTierLabel
@@ -10155,6 +10180,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.tube_advisor = lastTubeAdvisorTrace
         decisionCtx.adjustments.pkpd_soft_floor = lastPkpdSoftFloorTelemetry?.toJsonObject()
         decisionCtx.adjustments.basal_terminal = lastBasalTerminalTelemetry
+        decisionCtx.adjustments.traj_bridge = buildTrajBridgeTelemetry()
         decisionCtx.adjustments.adaptive_basal = lastAdaptiveBasalTrace
         decisionCtx.adjustments.harmonia_simulation = lastHarmoniaDecision?.toJsonObject()
         decisionCtx.adjustments.harmonia_production = lastHarmoniaProductionDecision?.toJsonObject()
@@ -10615,6 +10641,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         val proactiveBasal = profile.current_basal * effectiveFraction
         val cgateNote = if (cgateAmplified) " [CGate ISF↑ → amplification]" else ""
+        val spiralTag = when {
+            hyperTrajectorySpiral -> "HTR_HYPER_SPIRAL"
+            mealPriorityAlign -> "MEAL_PRIORITY_RELAX"
+            stackingSpiral -> "STACKING_SPIRAL"
+            else -> ""
+        }
         val spiralNote = when {
             hyperTrajectorySpiral -> " [HTR_HYPER_SPIRAL tier=${bridgeHyperTier.name}]"
             mealPriorityAlign -> " [MEAL_PRIORITY_RELAX]"
@@ -10630,6 +10662,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             durationMin = if (energy > 3.5) 30 else 15,
             reason = reason,
             safetyTierLabel = "TrajBridge_Tier${when { energy > 3.5 -> 1; energy > 2.5 -> 2; else -> 3 }}",
+            tag = spiralTag,
         )
         applyTrajectoryTightSpiralStandardSmbCapIfNeeded(
             energy = energy,
@@ -11526,7 +11559,43 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     eventualBgMgdl = snap.eventualMgdl,
                 ),
             )
-            if (!tubeOut.feasible) {
+            // 📐 Is this veto resting on a railed prediction?
+            //
+            // The advisor refuses every rung when `minPredictedBg` sits under the hypo floor. That
+            // number comes from curves clamped at `DoseTerminalSnapshot.NUMERIC_FLOOR_MGDL` (39), so a
+            // railed curve reads as "a low is coming" when it only means "the curve hit its floor".
+            // Measured 2026-10-02 21:09-21:19: BG 142/140/144 and flat, min-pred 40.97/40.22/39.00,
+            // and the SMB channel was held at 0.05 U for fifteen minutes.
+            //
+            // `strict` uses the conditions `DoseTerminalSnapshot.shouldLiftPlateauFloorArtefact`
+            // already encodes, including its 160 mg/dL plateau band. `wide` is the same test WITHOUT
+            // that band — it is never applied, only exported, because the ticks above sat at 142 and
+            // the band would have refused them. Measure first, decide later.
+            val tubeFloorArtefact = tubeVetoFloorArtefact(tubeOut, snap)
+            lastTubeFloorArtefactStrict = tubeFloorArtefact.strict
+            lastTubeFloorArtefactWide = tubeFloorArtefact.wide
+            val liftTubeVeto = tubeFloorArtefact.strict &&
+                preferences.get(BooleanKey.OApsAIMITubeVetoIgnoreFloorArtefact)
+            if (!tubeOut.feasible && liftTubeVeto) {
+                // The SMB cap is released because the prediction behind it is an artefact. The basal
+                // trim the advisor asked for is KEPT: it is protective, and releasing it as well would
+                // turn one lifted veto into two raised channels.
+                //
+                // "Released" means back to the pre-advisor baseline, not to a smaller graded cap: this
+                // veto only fires when even a dose of zero is infeasible, so the advisor never computed
+                // a graded answer there is anything to fall back on. `clampSmbToMaxSmbAndMaxIob` still
+                // bounds the result, exactly as it bounds every other branch.
+                if (tubeOut.basalCapScale < 0.999) {
+                    profile.current_basal = baseline.currentBasal * tubeOut.basalCapScale
+                    profile.max_daily_basal = baseline.maxDailyBasal * tubeOut.basalCapScale
+                }
+                consoleLog.add(
+                    "📐 TUBE-LINE-D4[$stageTag]: veto lifted, min-pred %.1f is a floor artefact".format(
+                        Locale.US, tubeFloorArtefact.minPredUsedMgdl,
+                    )
+                )
+                noteTubeAdvisorTrace(tubeOut, snap, stageTag, baseline)
+            } else if (!tubeOut.feasible) {
                 this.maxSMB = 0.05
                 this.maxSMBHB = 0.05
                 lastTubeAdvisorSmbCapScale = 0.0
@@ -11589,6 +11658,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             outcome.minPredUsedMgdl?.let { put("min_pred_used_mgdl", it) }
             put("eventual_used_mgdl", snapshot.eventualMgdl)
             put("snapshot_source_used", snapshot.source)
+            // Was this veto resting on a prediction that hit its own 39 mg/dL floor? `_strict` keeps
+            // the 160 mg/dL plateau band and is the only one the opt-in key can act on; `_wide` drops
+            // that band and is exported only, so the ticks below it can be counted before anyone
+            // decides to widen the band. See `OApsAIMITubeVetoIgnoreFloorArtefact`.
+            put("veto_on_floor_artefact_strict", lastTubeFloorArtefactStrict)
+            put("veto_on_floor_artefact_wide", lastTubeFloorArtefactWide)
+            put("veto_lift_key_armed", preferences.get(BooleanKey.OApsAIMITubeVetoIgnoreFloorArtefact))
             put("hypo_floor_mgdl", outcome.hypoFloorMgdl)
             put("kappa_mgdl_per_u", outcome.kappaMgdlPerU)
             // The dose-facing sensitivity the tube reasoned with. kappa cannot stand in for it: the
@@ -11803,7 +11879,73 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val durationMin: Int,
         val reason: String,
         val safetyTierLabel: String,
+        /** Short name of the branch that sized the request, for the JSONL (`traj_bridge_tag`). */
+        val tag: String,
     )
+
+    /**
+     * What the Traj-Bridge asked for on this tick, after the TBR demand fraction.
+     *
+     * Written only when [applyPendingTrajSpiralBasalIfNotSuppressed] really applied the request, so
+     * a suppressed bridge and a bridge that never fired both leave it null. Read once, at the end of
+     * `setTempBasal`, where the opt-in re-apply can still lower the rate.
+     */
+    private data class TrajBridgeRequest(
+        val requestedUph: Double,
+        val tag: String,
+        val durationMin: Int,
+    )
+
+    private var lastTrajBridgeRequest: TrajBridgeRequest? = null
+
+    /** True when the opt-in re-apply really lowered the delivered rate on this tick. */
+    private var trajBridgeSurvivedThisTick: Boolean = false
+
+    /** The rate the re-apply would have produced, whether or not the key let it through. */
+    private var trajBridgeWouldReduceToUph: Double? = null
+
+    /** True when the tube veto fired on a railed min-pred AND the plateau band accepted the tick. */
+    private var lastTubeFloorArtefactStrict: Boolean = false
+
+    /** Same test without the 160 mg/dL plateau band. Exported only, never applied. */
+    private var lastTubeFloorArtefactWide: Boolean = false
+
+    /** Reads the tick's own numbers into the pure `TubeFloorArtefactRule`. */
+    private fun tubeVetoFloorArtefact(
+        tubeOut: StraightLineTubeAdvisor.Outcome,
+        snap: DoseTerminalSnapshot,
+    ): TubeFloorArtefactRule.Verdict = TubeFloorArtefactRule.evaluate(
+        feasible = tubeOut.feasible,
+        minPredUsedMgdl = tubeOut.minPredUsedMgdl ?: snap.minPredMgdl,
+        bgMgdl = bg.toDouble(),
+        deltaMgdl5m = delta.toDouble(),
+        sportActive = sportTime,
+        postHypoActive = lastPostHypoDeliveryAuthority.active,
+    )
+
+    /**
+     * The `adjustments.traj_bridge` block, written on every tick whether the key is armed or not.
+     *
+     * `would_reduce_to_uph` is the number the re-apply would have produced, so the frequency and the
+     * size of the reduction can be counted from a support package before the key is ever armed.
+     * `survived` is true only when the re-apply really lowered the delivered rate on this tick, so a
+     * shadow tick and an armed tick can never be mistaken for one another.
+     *
+     * Every number is guarded: a non-finite value becomes JSON null instead of making
+     * `toMedicalJson` throw and turning the whole tick record into an error object.
+     */
+    private fun buildTrajBridgeTelemetry(): JSONObject? {
+        val request = lastTrajBridgeRequest
+        if (request == null && trajBridgeWouldReduceToUph == null) return null
+        return JSONObject().apply {
+            put("requested_uph", request?.requestedUph?.takeIf { it.isFinite() } ?: JSONObject.NULL)
+            put("tag", request?.tag?.takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
+            put("duration_min", request?.durationMin ?: JSONObject.NULL)
+            put("would_reduce_to_uph", trajBridgeWouldReduceToUph?.takeIf { it.isFinite() } ?: JSONObject.NULL)
+            put("survived", trajBridgeSurvivedThisTick)
+            put("key_armed", preferences.get(BooleanKey.OApsAIMITrajBridgeBasalSurvives))
+        }
+    }
     private var tags60to120minAgo = ""
     private var tags120to180minAgo = ""
     private var tags180to240minAgo = ""
@@ -13909,6 +14051,30 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             lastWCycleBelief = lastWCycleBelief?.copy(
                 dosePathOwner = EndocrineDosePathOwner.HARMONIA_PRODUCTION_BASAL_FIRST,
             )
+        }
+
+        // 🌀 Traj-Bridge survival — the bridge wrote its rate before the basal schedule ran, so the
+        // schedule overwrote it (measured: asked 0.13 U/h, pump got 4.84 U/h). Re-apply the request
+        // here, where nothing else can raise the rate again. Reduction only, and only on a tick where
+        // the bridge really fired. Off by default; the shadow below is written in both states.
+        lastTrajBridgeRequest?.let { bridge ->
+            val survival = TrajBridgeSurvival.resolve(
+                scheduledUph = rate,
+                requestedUph = bridge.requestedUph,
+                keyArmed = preferences.get(BooleanKey.OApsAIMITrajBridgeBasalSurvives),
+            )
+            trajBridgeWouldReduceToUph = survival.wouldReduceToUph
+            trajBridgeSurvivedThisTick = survival.survived
+            if (survival.survived) {
+                consoleLog.add(
+                    "🌀 TRAJ_BRIDGE_SURVIVES[${bridge.tag}] " +
+                        "${"%.2f".format(rate)}→${"%.2f".format(survival.rateUph)}U/h",
+                )
+                rT.reason.append(
+                    " [TRAJ_BRIDGE:${bridge.tag} ${"%.2f".format(rate)}→${"%.2f".format(survival.rateUph)}U/h]",
+                )
+                rate = survival.rateUph
+            }
         }
 
         // 🔒 Lot 2 — invariants terminaux : dernier point où le taux peut encore être borné. Tout ce qui
