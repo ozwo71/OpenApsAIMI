@@ -1318,6 +1318,13 @@ internal data class AimiDecisionContext(
             adjustments.control_barrier?.let { cb ->
                 adj.put("control_barrier", cb)
             }
+            // Written on every tick the bridge is reached, key armed or not: this block is the only
+            // way to count how often the basal schedule overwrites the bridge's reduction, and that
+            // count is what the decision to arm `OApsAIMITrajBridgeBasalSurvives` rests on. It was
+            // built and then never serialised, so the counter could not reach a support package.
+            adjustments.traj_bridge?.let { bridge ->
+                adj.put("traj_bridge", bridge)
+            }
             adjustments.tube_advisor?.let { tube ->
                 adj.put("tube_advisor", tube)
             }
@@ -7314,6 +7321,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         assignLocalBasalFromExecution: (Double) -> Unit,
     ): Float {
         predictedSMB = smbExecution.predictedSmb
+        // Both branches above converge here, including the Autodrive-authoritative one that skips
+        // the executor, so this is the one place that sees the model output on every dosing tick.
+        predictedSmbForTrainingThisTick = smbExecution.predictedSmb
         assignLocalBasalFromExecution(smbExecution.basal)
         highBgOverrideUsed = smbExecution.highBgOverrideUsed
         smbExecution.newSmbInterval?.let { intervalsmb = it }
@@ -12305,6 +12315,30 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * would not match.
      */
     private var smbTrainingRowTickKey: Long = 0L
+
+    /** True once this tick has staged its training row, so the tick tail does not stage a second one. */
+    private var smbTrainingRowEnqueuedThisTick: Boolean = false
+
+    /**
+     * The model output of this tick, or `null` when the SMB stage never ran.
+     *
+     * Not read from [predictedSMB]: that field keeps the previous tick's value on a tick that
+     * returns early, and writing a stale model output next to a fresh label would be worse than
+     * writing a zero.
+     */
+    private var predictedSmbForTrainingThisTick: Float? = null
+
+    /** Header of the training CSV, kept from the last row built so the tail can flush without rebuilding it. */
+    private var trainingCsvHeaderRow: String? = null
+
+    /**
+     * Name of the file whose presence says the censored corpus has already been moved aside.
+     *
+     * A marker file rather than a preference: the thing it guards is a file, it must survive a
+     * preference reset, and it is visible to anyone looking at the folder.
+     */
+    private val trainingCorpusRestartMarker: String = "oapsaimiML2_corpus_restart_v1"
+
     /** Cross-tick effort-load memory for [EffortActivityBelief]; intentionally NOT reset per tick. */
     private var lastEffortMemory = EffortActivityBelief.Memory()
     private var lastEffortAssessment: EffortActivityBelief.Assessment? = null
@@ -14160,7 +14194,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
 
-    private fun logDataMLToCsv(predictedSMB: Float, smbToGive: Float) {
+    /**
+     * Stages this tick's SMB training row.
+     *
+     * The label is NOT passed in. It is stamped at the end of the tick by
+     * [SmbTrainingRowBuffer.stampDeliveredUnits], because the dose is only final after
+     * `finalizeAndCapSMB`, and this function used to run well before that.
+     */
+    private fun logDataMLToCsv(predictedSMB: Float) {
         val usFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm")
         val dateStr = dateUtil.dateAndTimeString(dateUtil.now()).format(usFormatter)
         val latentFeatures = SmbRefinementFeatureSchema.latentFeatureValues(lastPhysioLatentState)
@@ -14182,22 +14223,102 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             "${behaviorProfile.protectionLevel},${behaviorProfile.mealCaptureLevel},${behaviorProfile.stabilityLevel}," +
             "${behaviorProfile.physioLevel},${behaviorProfile.autonomyLevel}," +
             "${eventMemory.postHyperExhaustionScore},${eventMemory.correctionFragilityScore},$decisionConflictFlags," +
-            "$predictedSMB,$smbToGive," +
-            "$peakintermediaire,$latestAdjustedDia"
-        // The row is queued, not written. Its four origin fields are only complete at the end of the
-        // tick, and its realised glucose only about half an hour later, so it leaves the queue once
-        // its outcome window has closed. This delays when a row appears in the CSV; it does not
-        // change the row itself, the label, or anything the pump is asked to do.
+            "$predictedSMB"
+        val valuesTail = "$peakintermediaire,$latestAdjustedDia"
+        // The row is queued, not written. Its label is only final at the end of the tick, its four
+        // origin fields likewise, and its realised glucose only about half an hour later, so it
+        // leaves the queue once its outcome window has closed. This delays when a row appears in the
+        // CSV; it does not change the row itself or anything the pump is asked to do.
         val nowMs = smbTrainingRowTickKey.takeIf { it > 0L } ?: dateUtil.now()
         smbTrainingRowBuffer.fillRealisedOutcomes(nowMs = nowMs, observedBg = bg)
-        smbTrainingRowBuffer.enqueue(timestampMs = nowMs, valuesPrefix = valuesToRecord)
-        smbTrainingRowBuffer.drainWritableRows(nowMs).forEach { readyRow ->
+        smbTrainingRowBuffer.enqueue(timestampMs = nowMs, valuesHead = valuesToRecord, valuesTail = valuesTail)
+        smbTrainingRowEnqueuedThisTick = true
+        trainingCsvHeaderRow = headerRow
+    }
+
+    /**
+     * One training row per tick, labelled with the dose that was really delivered, then flushed.
+     *
+     * This is the catch-all the CSV never had. The file has a single writer, reachable only through
+     * the SMB executor, and two kinds of tick walk past it: the Autodrive-authoritative branch,
+     * which builds its result by hand when V3 has already delivered, and the early returns that dose
+     * and leave before the SMB stage (the manual meal modes with the FCL prebolus, and the Meal
+     * Advisor). Both are the big-dose paths, so the exclusion rule for the corpus was, in effect,
+     * "a bolus was given" — measured on a real 24h package, not one of the 21 ticks that delivered
+     * 0.3 U or more had a row. The JSONL export was given exactly this kind of catch-all for exactly
+     * this reason; the CSV never was.
+     *
+     * A row staged here carries empty origin columns, because [SmbTrainingRowBuffer.stampOrigin]
+     * already ran earlier in the tick and found nothing to stamp. An empty cell is the honest answer
+     * and the trainer drops it; inventing an origin would be worse.
+     *
+     * Observation only: it stages, labels and writes a file. It asks nothing of the pump.
+     */
+    private fun stageAndFlushSmbTrainingRow(ctx: AimiTickContext, finalResult: RT?) {
+        // A tick that aborted before reading glucose has no features worth keeping.
+        if (!smbTrainingRowEnqueuedThisTick && bg > 0.0) {
+            logDataMLToCsv(predictedSmbForTrainingThisTick ?: 0f)
+        }
+        smbTrainingRowBuffer.stampDeliveredUnits(
+            tickKey = smbTrainingRowTickKey,
+            deliveredUnits = finalResult?.units,
+        )
+        flushWritableTrainingRows(ctx.currentTime)
+    }
+
+    /**
+     * Writes out every staged row whose outcome window has closed. Called once per tick from the
+     * tick tail.
+     *
+     * It used to be called from inside [logDataMLToCsv], which meant a run of ticks that staged no
+     * row also flushed nothing: during the heaviest dosing episodes the queue simply froze. Draining
+     * from the tail makes the flush independent of whether this tick had a row of its own.
+     */
+    private fun flushWritableTrainingRows(nowMs: Long) {
+        val rows = smbTrainingRowBuffer.drainWritableRows(nowMs)
+        if (rows.isEmpty()) return
+        val headerRow = trainingCsvHeaderRow ?: (SmbRefinementFeatureSchema.trainingCsvHeaderLine() + "\n")
+        archiveCensoredTrainingCorpusOnce()
+        rows.forEach { readyRow ->
             appendCsvSafely(
                 primaryFile = csvfile,
                 fallbackFileName = "oapsaimiML2_records.csv",
                 headerRow = headerRow,
                 valuesRow = readyRow,
             )
+        }
+    }
+
+    /**
+     * Moves the pre-fix training corpus aside, once, and lets collection restart on a clean file.
+     *
+     * Every row collected before this build is unusable as a label set: the only writer of the file
+     * was skipped on exactly the ticks that delivered a bolus, so the corpus holds almost nothing but
+     * ticks where nothing was given, and the few labels it does hold were read before capping. A
+     * model trained on it learns to ask for zero.
+     *
+     * The old file is RENAMED, never deleted — it is still a valid feature history, and it is the
+     * evidence for the defect. A marker file next to it makes this a one-time move: once the marker
+     * exists, this returns immediately.
+     */
+    private fun archiveCensoredTrainingCorpusOnce() {
+        runCatching {
+            val marker = File(csvfile.parentFile, trainingCorpusRestartMarker)
+            if (marker.exists()) return@runCatching
+            val stamp = dateUtil.now()
+            // Both files, not just the primary: when shared storage is denied the rows go to the
+            // app-scoped fallback instead, and that copy carries the same censored history.
+            listOf(csvfile, File(appExternalFallbackDir, "oapsaimiML2_records.csv")).forEach { old ->
+                if (!old.exists() || old.length() <= 0L) return@forEach
+                val archived = File(old.parentFile, "oapsaimiML2_records_archive_$stamp.csv")
+                if (old.renameTo(archived)) {
+                    consoleLog.add("SMB corpus archived to ${archived.name}; collection restarts clean")
+                    aapsLogger.info(LTag.APS, "SMB training corpus archived to ${archived.name}")
+                }
+            }
+            marker.writeText(trainingCorpusRestartMarker)
+        }.onFailure { e ->
+            aapsLogger.error(LTag.APS, "SMB training corpus archive failed", e)
         }
     }
 
@@ -17328,7 +17449,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 isBelowHypo = { bgNow, predictedValue, eventualValue, hypo, deltaValue ->
                     HypoGuard.isBelowHypoThreshold(bgNow, predictedValue, eventualValue, hypo, deltaValue)
                 },
-                logDataMl = { predicted, given -> logDataMLToCsv(predicted, given) },
+                // Only the model output: the label is stamped at the end of the tick, where the
+                // dose is final. See `logDataMLToCsv`.
+                logDataMl = { predicted -> logDataMLToCsv(predicted) },
                 logData = { predicted, given -> logDataToCsv(predicted, given) },
                 roundBasal = { value -> roundBasal(value) },
                 roundDouble = { value, digits -> round(value, digits) }
@@ -18344,8 +18467,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         raNetCombinedDelta = shortAvgDelta
         raNetShortAvgDeltaAdj = shortAvgDelta
         smbTrainingRowTickKey = ctx.currentTime
+        smbTrainingRowEnqueuedThisTick = false
+        predictedSmbForTrainingThisTick = null
+        var innerResult: RT? = null
         val result = try {
             val inner = runDetermineBasalTickInner(ctx)
+            innerResult = inner
             observeRaIfNotAlreadyRun(
                 ctx = ctx,
                 combinedDelta = raNetCombinedDelta,
@@ -18368,6 +18495,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // `observeRaIfNotAlreadyRun` returns early on exactly those ticks — flushing from inside
             // it would drop every engaged row.
             runCatching { autodriveEngine.flushTickRow(ctx.currentTime) }
+            runCatching { stageAndFlushSmbTrainingRow(ctx, innerResult) }
         }
         exportAimiDecisionIfNotYetExported(ctx, result)
         return result
