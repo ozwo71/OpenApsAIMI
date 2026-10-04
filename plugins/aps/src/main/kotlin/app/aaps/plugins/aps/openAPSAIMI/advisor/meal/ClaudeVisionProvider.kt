@@ -5,13 +5,14 @@ import android.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
+import app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
 class ClaudeVisionProvider : AIVisionProvider {
-    override val displayName = "Claude (3.5 Sonnet)"
+    override val displayName = "Claude (model chosen in settings)"
     override val providerId = "CLAUDE"
     
     override suspend fun estimateFromImage(bitmap: Bitmap, userDescription: String, apiKey: String): EstimationResult = withContext(Dispatchers.IO) {
@@ -44,8 +45,8 @@ class ClaudeVisionProvider : AIVisionProvider {
         val userPrompt = MealVisionUserPrompt.buildAnalysisUserPrompt(userDescription)
 
         val jsonBody = JSONObject().apply {
-            put("model", app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver.current())
-            put("max_tokens", 2048)
+            put("model", ClaudeModelResolver.current())
+            put("max_tokens", 8192) // thinking tokens count in this limit on newer Claude models
             put("system", FoodAnalysisPrompt.SYSTEM_PROMPT)
             put("messages", JSONArray().apply {
                 put(JSONObject().apply {
@@ -81,7 +82,7 @@ class ClaudeVisionProvider : AIVisionProvider {
     
     private fun parseResponse(jsonStr: String): EstimationResult {
         val root = JSONObject(jsonStr)
-        val content = app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver.extractText(root)
+        val content = ClaudeModelResolver.extractText(root)
         return MealVisionJsonParser.parseModelContentToEstimation(content)
     }
 }

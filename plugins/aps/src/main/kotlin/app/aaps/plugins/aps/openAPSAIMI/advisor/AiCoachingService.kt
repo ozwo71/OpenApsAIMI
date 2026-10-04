@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor
 
 import android.content.Context
 import org.json.JSONArray
+import app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -453,8 +454,8 @@ class AiCoachingService @Inject constructor() {
         val connection = url.openConnection() as HttpURLConnection
 
         val jsonBody = JSONObject()
-        jsonBody.put("model", app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver.current())
-        jsonBody.put("max_tokens", 4096)
+        jsonBody.put("model", ClaudeModelResolver.current())
+        jsonBody.put("max_tokens", 8192) // thinking tokens count in this limit on newer Claude models
 
         // Claude expects messages array with role/content
         val messages = JSONArray()
@@ -471,7 +472,7 @@ class AiCoachingService @Inject constructor() {
             setRequestProperty("anthropic-version", "2023-06-01")
             doOutput = true
             connectTimeout = 15000
-            readTimeout = 120000 // Sonnet 5.5 / Fable 5.1 can take >60 s on long coaching prompts
+            readTimeout = 120000 // Sonnet 5 / Fable 5.1 can take more than 60 s on long coaching prompts
         }
 
         val writer = OutputStreamWriter(connection.outputStream)
@@ -501,9 +502,9 @@ class AiCoachingService @Inject constructor() {
     private fun parseClaudeResponse(jsonStr: String): String {
         return try {
             val root = JSONObject(jsonStr)
-            app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver.extractText(root)
+            ClaudeModelResolver.extractText(root)
         } catch (e: Exception) {
-            "Erreur lecture Claude: ${e.message} | ${jsonStr.take(300)}"
+            "Erreur lecture Claude."
         }
     }
 }
