@@ -572,6 +572,7 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(StringKey.AimiAdvisorGeminiKey, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, setOf(AimiSettingsWriter.USER)),
         AimiSettingEntry(StringKey.AimiAdvisorDeepSeekKey, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, setOf(AimiSettingsWriter.USER)),
         AimiSettingEntry(StringKey.AimiAdvisorClaudeKey, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, setOf(AimiSettingsWriter.USER)),
+        AimiSettingEntry(AimiStringKey.AimiAdvisorClaudeModel, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         // Secret: a personal phone number, not a dosing value. See `AimiSettingEntry.secret`.
         AimiSettingEntry(StringKey.AimiEmergencySosPhone, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Protection, setOf(AimiSettingsWriter.USER), declaredSecret = true),
         AimiSettingEntry(StringKey.AimiEmergencySosPhone2, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Protection, setOf(AimiSettingsWriter.USER), declaredSecret = true),

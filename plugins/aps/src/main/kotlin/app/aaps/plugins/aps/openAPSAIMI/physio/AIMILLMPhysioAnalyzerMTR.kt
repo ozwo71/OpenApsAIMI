@@ -272,7 +272,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         val prompt = buildPrompt(features, baseline, context)
         
         val requestBody = JSONObject().apply {
-            put("model", "claude-3-5-sonnet-20241022")
+            put("model", app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver.current())
             put("max_tokens", 150)
             put("messages", org.json.JSONArray().apply {
                 put(JSONObject().apply {
@@ -294,10 +294,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     private fun parseClaudeResponse(response: String): String {
         return try {
             val json = JSONObject(response)
-            json.getJSONArray("content")
-                .getJSONObject(0)
-                .getString("text")
-                .trim()
+            app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver.extractText(json)
         } catch (e: Exception) {
             aapsLogger.warn(LTag.APS, "[$TAG] Failed to parse Claude response", e)
             ""

@@ -39,14 +39,13 @@ class ClaudeVisionProvider : AIVisionProvider {
         connection.setRequestProperty("anthropic-version", "2023-06-01")
         connection.doOutput = true
         connection.connectTimeout = 30000
-        connection.readTimeout = 45000
+        connection.readTimeout = 90000
         
         val userPrompt = MealVisionUserPrompt.buildAnalysisUserPrompt(userDescription)
 
         val jsonBody = JSONObject().apply {
-            put("model", "claude-3-5-sonnet-20240620")
+            put("model", app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver.current())
             put("max_tokens", 2048)
-            put("temperature", 0.0)
             put("system", FoodAnalysisPrompt.SYSTEM_PROMPT)
             put("messages", JSONArray().apply {
                 put(JSONObject().apply {
@@ -82,9 +81,7 @@ class ClaudeVisionProvider : AIVisionProvider {
     
     private fun parseResponse(jsonStr: String): EstimationResult {
         val root = JSONObject(jsonStr)
-        val content = root.getJSONArray("content")
-            .getJSONObject(0)
-            .getString("text")
+        val content = app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver.extractText(root)
         return MealVisionJsonParser.parseModelContentToEstimation(content)
     }
 }

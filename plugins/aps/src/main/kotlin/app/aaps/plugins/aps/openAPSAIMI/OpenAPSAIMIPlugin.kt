@@ -249,6 +249,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         EndogenousPhaseHysteresis.reset()
         InsulinSlopePreserveHysteresis.reset()
         migrateClassicAutodriveToV3()
+        app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver.bind(preferences)
         preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey::class.java)
         preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey::class.java)
 
@@ -1972,6 +1973,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     StringKey.AimiAdvisorGeminiKey,
                     StringKey.AimiAdvisorDeepSeekKey,
                     StringKey.AimiAdvisorClaudeKey,
+                    AimiStringKey.AimiAdvisorClaudeModel,
                     BooleanKey.OApsAIMIAdvisorPersonalOrefMl,
                     BooleanKey.OApsAIMIAdvisorLlmRichOref,
                 ),

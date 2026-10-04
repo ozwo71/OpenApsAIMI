@@ -46,6 +46,21 @@ enum class AimiStringKey(
         exportable = false,
     ),
 
+    /** Claude model used by all AIMI LLM paths when Advisor provider = CLAUDE. See [app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver]. */
+    AimiAdvisorClaudeModel(
+        key = "aimi_advisor_claude_model",
+        defaultValue = "claude-sonnet-5-5",
+        titleResId = R.string.aimi_prefs_claude_model_title,
+        summaryResId = R.string.aimi_prefs_claude_model_summary,
+        preferenceType = PreferenceType.LIST,
+        entries = mapOf(
+            "claude-sonnet-5-5" to R.string.aimi_prefs_claude_model_sonnet55,
+            "claude-fable-5-1" to R.string.aimi_prefs_claude_model_fable51,
+            "claude-opus-5-5" to R.string.aimi_prefs_claude_model_opus55,
+            "claude-haiku-4-5-20251001" to R.string.aimi_prefs_claude_model_haiku45,
+        ),
+    ),
+
     /** Steps & heart-rate source (same key as [UnifiedActivityProviderMTR.PREF_KEY_SOURCE_MODE]). */
     ActivitySourceMode(
         key = UnifiedActivityProviderMTR.PREF_KEY_SOURCE_MODE,

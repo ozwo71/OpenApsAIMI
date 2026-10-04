@@ -519,6 +519,7 @@ internal object AimiSettingsScreens {
                 StringKey.AimiAdvisorGeminiKey,
                 StringKey.AimiAdvisorDeepSeekKey,
                 StringKey.AimiAdvisorClaudeKey,
+                AimiStringKey.AimiAdvisorClaudeModel,
             ),
         ),
         AimiSettingsSection(
