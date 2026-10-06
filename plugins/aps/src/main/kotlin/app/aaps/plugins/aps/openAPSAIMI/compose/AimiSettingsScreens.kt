@@ -900,6 +900,7 @@ internal object AimiSettingsScreens {
                 BooleanKey.OApsAIMITrajectoryGuardEnabled,
                 BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled,
                 BooleanKey.OApsAIMITubeVetoIgnoreFloorArtefact,
+                BooleanKey.OApsAIMITubeHyperClampPhysicalBound,
             ),
         ),
         AimiSettingsSection(

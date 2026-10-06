@@ -755,6 +755,15 @@ enum class BooleanKey(
         titleResId = R.string.pref_title_aimi_tube_veto_ignore_floor_artefact,
         summaryResId = R.string.pref_summary_aimi_tube_veto_ignore_floor_artefact,
     ),
+    /** 📐 Tube: replace the hyper-reversion clamp (min-pred exactly 80 at BG ≥ 160) by `BG − IOB × ISF`.
+     *  The clamp ignores insulin on board: too strict on a low-IOB meal rise, too permissive with a big
+     *  stack (VETO ↔ GRADED flips on BG 159.9 ↔ 160.4 at 9–11 U). ON by default; the bound and what it
+     *  changed are exported in `tube_advisor.hyper_clamp_*` for review. See `HyperClampTubeBound`. */
+    OApsAIMITubeHyperClampPhysicalBound(
+        "key_aimi_tube_hyper_clamp_physical_bound", true,
+        titleResId = R.string.pref_title_aimi_tube_hyper_clamp_physical_bound,
+        summaryResId = R.string.pref_summary_aimi_tube_hyper_clamp_physical_bound,
+    ),
     // 🩸 pkpd predictions: shape the insulin-activity curves on the LEARNED DIA/peak, not the static profile
     OApsAIMIPkpdPredictionKinetics(
         "key_aimi_pkpd_prediction_kinetics", true,

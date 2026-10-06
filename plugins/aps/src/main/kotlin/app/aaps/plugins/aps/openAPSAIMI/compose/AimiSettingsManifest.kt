@@ -350,6 +350,7 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(BooleanKey.OApsAIMIBasalTerminalInvariants, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Protection, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMITrajBridgeBasalSurvives, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Protection, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMITubeVetoIgnoreFloorArtefact, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
+        AimiSettingEntry(BooleanKey.OApsAIMITubeHyperClampPhysicalBound, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIPkpdPredictionKinetics, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIContextLLMEnabled, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIT3cBrittleMode, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),

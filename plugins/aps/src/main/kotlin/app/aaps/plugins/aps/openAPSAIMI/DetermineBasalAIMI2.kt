@@ -187,6 +187,7 @@ import app.aaps.plugins.aps.openAPSAIMI.safety.EffectiveIobReleaseAuthority
 import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoAggressiveRiseExit
 import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoDeliveryAuthority
 import app.aaps.plugins.aps.openAPSAIMI.safety.TrajBridgeSurvival
+import app.aaps.plugins.aps.openAPSAIMI.safety.HyperClampTubeBound
 import app.aaps.plugins.aps.openAPSAIMI.safety.TubeFloorArtefactRule
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionBasalCap
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
@@ -2462,6 +2463,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // tick whose tube advisor never ran would export the previous tick's answer.
         lastTubeFloorArtefactStrict = false
         lastTubeFloorArtefactWide = false
+        lastHyperClampVerdict = null
         // 🔭 Lot 0 — l'export JSONL doit avoir lieu sur TOUS les chemins de sortie du tick, pas seulement
         // sur les deux qui appellent explicitement le stage. On repart d'un état non exporté à chaque tick.
         aimiDecisionExportedThisTick = false
@@ -11555,6 +11557,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         profile.max_daily_basal = baseline.maxDailyBasal
         lastTubeAdvisorSmbCapScale = null
         try {
+            // 📐 In clear hyper the min-pred can be the PK/PD clamp value (80), which ignores insulin on
+            // board. Swap it for BG − IOB × ISF so the tube sees the real room. See HyperClampTubeBound.
+            val hyperClamp = HyperClampTubeBound.evaluate(
+                minPredMgdl = snap.minPredMgdl,
+                bgMgdl = bg,
+                iobU = iob.toDouble(),
+                tubeIsfMgdlPerU = isf,
+                doseIsfMgdlPerU = cachedPkpdRuntime?.fusedIsf,
+                hypoFloorMgdl = preferences.get(DoubleKey.AimiTubeHypoFloorMgdl),
+                clampPossible = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion) &&
+                    preferences.get(BooleanKey.OApsAIMIPkpdHyperReversion),
+                armed = preferences.get(BooleanKey.OApsAIMITubeHyperClampPhysicalBound),
+            )
+            lastHyperClampVerdict = hyperClamp
             val tubeOut = straightLineTubeAdvisor.advise(
                 StraightLineTubeAdvisor.Input(
                     bgMgdl = bg,
@@ -11565,7 +11581,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     diaHours = dia,
                     targetMgdl = targetBgMgdl,
                     maxSmbU = this.maxSMB,
-                    minPredictedBg = snap.minPredMgdl,
+                    minPredictedBg = hyperClamp.minPredForTubeMgdl,
                     eventualBgMgdl = snap.eventualMgdl,
                 ),
             )
@@ -11584,7 +11600,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val tubeFloorArtefact = tubeVetoFloorArtefact(tubeOut, snap)
             lastTubeFloorArtefactStrict = tubeFloorArtefact.strict
             lastTubeFloorArtefactWide = tubeFloorArtefact.wide
+            // A veto built on the hyper-clamp bound is not a railed curve: the insulin on board can
+            // really reach the floor. The floor-artefact lift must never undo it.
             val liftTubeVeto = tubeFloorArtefact.strict &&
+                !hyperClamp.applied &&
                 preferences.get(BooleanKey.OApsAIMITubeVetoIgnoreFloorArtefact)
             if (!tubeOut.feasible && liftTubeVeto) {
                 // The SMB cap is released because the prediction behind it is an artefact. The basal
@@ -11675,6 +11694,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             put("veto_on_floor_artefact_strict", lastTubeFloorArtefactStrict)
             put("veto_on_floor_artefact_wide", lastTubeFloorArtefactWide)
             put("veto_lift_key_armed", preferences.get(BooleanKey.OApsAIMITubeVetoIgnoreFloorArtefact))
+            // Hyper-clamp bound (HyperClampTubeBound). Written on every tube tick so it can be reviewed:
+            // `_detected` = the snapshot min-pred was the 80 clamp, `_applied` = the tube used the bound.
+            // Compare `snapshot_min_pred_mgdl` with `min_pred_used_mgdl` to see what it changed.
+            lastHyperClampVerdict?.let { v ->
+                put("snapshot_min_pred_mgdl", snapshot.minPredMgdl)
+                put("hyper_clamp_detected", v.clampDetected)
+                put("hyper_clamp_applied", v.applied)
+                put("hyper_clamp_key_armed", preferences.get(BooleanKey.OApsAIMITubeHyperClampPhysicalBound))
+                v.physicalMinMgdl?.let { put("hyper_clamp_physical_min_mgdl", it) }
+                v.isfUsedMgdlPerU?.let { put("hyper_clamp_isf_mgdl_per_u", it) }
+                v.stackCanBreachFloor?.let { put("hyper_clamp_stack_can_breach", it) }
+                v.physicalMinDoseIsfMgdl?.let { put("hyper_clamp_physical_min_dose_isf_mgdl", it) }
+            }
             put("hypo_floor_mgdl", outcome.hypoFloorMgdl)
             put("kappa_mgdl_per_u", outcome.kappaMgdlPerU)
             // The dose-facing sensitivity the tube reasoned with. kappa cannot stand in for it: the
@@ -11919,6 +11951,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     /** Same test without the 160 mg/dL plateau band. Exported only, never applied. */
     private var lastTubeFloorArtefactWide: Boolean = false
+
+    /** This tick's [HyperClampTubeBound] verdict, exported in `tube_advisor`. Reset at tick start. */
+    private var lastHyperClampVerdict: HyperClampTubeBound.Verdict? = null
 
     /** Reads the tick's own numbers into the pure `TubeFloorArtefactRule`. */
     private fun tubeVetoFloorArtefact(
@@ -14259,9 +14294,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (!smbTrainingRowEnqueuedThisTick && bg > 0.0) {
             logDataMLToCsv(predictedSmbForTrainingThisTick ?: 0f)
         }
+        // `RT.units` is null both when the tick gave no SMB and when the tick produced no result at
+        // all, and those two are not the same fact. A tick that ran and chose to give nothing is
+        // labelled 0, because "here nothing was needed" is half of what the model has to learn. Only
+        // a tick that never returned a result stays unlabelled.
         smbTrainingRowBuffer.stampDeliveredUnits(
             tickKey = smbTrainingRowTickKey,
-            deliveredUnits = finalResult?.units,
+            deliveredUnits = finalResult?.let { it.units ?: 0.0 },
         )
         flushWritableTrainingRows(ctx.currentTime)
     }
