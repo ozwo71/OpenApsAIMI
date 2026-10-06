@@ -61,6 +61,10 @@ object IntelligenceSnapshotJson {
                     // A flat counter means the two step values above were kept from an older tick.
                     put("dia_accepted_updates", trace.diaAcceptedUpdates)
                     put("dia_learn_blocked_by", trace.diaLearnBlockedBy)
+                    put("dia_curve_gate_armed", trace.curveGateArmed)
+                    // Shadow when not armed: what the curve gate would have refused, null = would pass.
+                    put("dia_curve_gate_would_block", trace.curveGateWouldBlock)
+                    trace.curveGateMaxRecentDeltaMgdl?.let { put("dia_curve_gate_max_recent_delta", it) }
                 }
             })
             put("isf", JSONObject().apply {

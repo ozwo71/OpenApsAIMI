@@ -72,6 +72,7 @@ internal enum class AimiSettingsSectionId {
     PkpdAdvancedStartingKinetics,
     PkpdAdvancedCustomBounds,
     PkpdAdvancedStackAwareGuardB,
+    PkpdAdvancedCurveLearningGate,
     PkpdExpertPeakGovernor,
     PkpdExpertIsfFusionBounds,
     PkpdExpertIsfFusionSlope,
@@ -327,6 +328,15 @@ internal object AimiSettingsScreens {
             kind = AimiSettingsSectionKind.FIELDS,
             keys = listOf(
                 BooleanKey.OApsAIMIPkpdStackAwareGuardB,
+            ),
+        ),
+        AimiSettingsSection(
+            id = AimiSettingsSectionId.PkpdAdvancedCurveLearningGate,
+            content = AimiSettingsContentId.PkpdAdvanced,
+            level = AimiSettingsLevel.EXPERT,
+            kind = AimiSettingsSectionKind.FIELDS,
+            keys = listOf(
+                BooleanKey.OApsAIMIPkpdCurveLearningGate,
             ),
         ),
         AimiSettingsSection(
