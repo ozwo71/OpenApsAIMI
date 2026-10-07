@@ -45,7 +45,7 @@ jobs:
         run: |
           curl -s "https://get.sdkman.io" | bash
           source "$HOME/.sdkman/bin/sdkman-init.sh"
-          JBR_VER=$(sdk list java | grep -oE '21\.[0-9.]+-jbr' | sort -V | tail -1)
+          JBR_VER=$(sdk list java | grep -oE '21\.[0-9.+]+-jbr' | sort -V | tail -1)
           echo "Using SDKMAN Java identifier: $JBR_VER"
           test -n "$JBR_VER" || { echo "No JBR 21 found via SDKMAN" >&2; exit 1; }
           sdk install java "$JBR_VER"
