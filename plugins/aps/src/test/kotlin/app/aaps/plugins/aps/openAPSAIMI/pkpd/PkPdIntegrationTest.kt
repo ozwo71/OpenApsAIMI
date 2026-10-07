@@ -1007,6 +1007,32 @@ class PkPdIntegrationTest {
         assertEquals(PkPdIntegration.LEARN_BLOCKED_CAUSAL_UNCLEAN, legacy!!.diaLearnBlockedBy)
     }
 
+    /** A declared meal reaches the gate and is exported, armed or not. */
+    @Test
+    fun `declared meal blocks learning and is exported`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        every { preferences.get(BooleanKey.OApsAIMIPkpdCurveLearningGate) } returns true
+        mockPkpdDefaults()
+        IsfTddProvider.set(50.0)
+
+        val trace = PkPdIntegration(preferences, PkPdLearnedState()).computeRuntime(
+            epochMillis = 1_000L * 60_000L,
+            bg = 140.0,
+            deltaMgDlPer5 = 0.0,
+            iobU = 2.0,
+            carbsActiveG = 0.0,
+            windowMin = 60,
+            exerciseFlag = false,
+            profileIsf = 50.0,
+            tdd24h = 40.0,
+            causalStatePosterior = CausalStatePosterior(learningQuality = 0.9),
+            declaredMealAgeMin = 7L,
+        )?.learningTrace
+
+        assertEquals(PkPdIntegration.LEARN_BLOCKED_CURVE_PREFIX + PkpdLearningWindowGate.BLOCK_DECLARED_MEAL, trace!!.diaLearnBlockedBy)
+        assertEquals(7L, trace.curveGateDeclaredMealAgeMin)
+    }
+
     /** A read-only call must not feed the history nor report a verdict. */
     @Test
     fun `read only call leaves the curve gate alone`() {

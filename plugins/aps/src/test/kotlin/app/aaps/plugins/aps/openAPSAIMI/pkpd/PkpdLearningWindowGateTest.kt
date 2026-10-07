@@ -94,6 +94,66 @@ class PkpdLearningWindowGateTest {
         assertTrue(gate.evaluate(70, 0.0, 0.0).pass)
     }
 
+    /** 2026-10-06: two learning ticks 2 and 7 min after an FCL prebolus, glucose still flat. */
+    @Test
+    fun declaredMealBlocksThreeHoursEvenOnAFlatCurve() {
+        val gate = PkpdLearningWindowGate()
+        gate.fill(0, 65) { 0.0 }
+        assertEquals(PkpdLearningWindowGate.BLOCK_DECLARED_MEAL, gate.evaluate(65, 0.0, 0.0, declaredMealAgeMin = 2).blockedBy)
+        assertEquals(PkpdLearningWindowGate.BLOCK_DECLARED_MEAL, gate.evaluate(65, 0.0, 0.0, declaredMealAgeMin = 179).blockedBy)
+        assertTrue(gate.evaluate(65, 0.0, 0.0, declaredMealAgeMin = 180).pass)
+    }
+
+    @Test
+    fun highCarbMealBlocksLonger() {
+        val gate = PkpdLearningWindowGate()
+        gate.fill(0, 65) { 0.0 }
+        val verdict = gate.evaluate(65, 0.0, 0.0, declaredMealAgeMin = 200, declaredMealHighCarb = true)
+        assertEquals(PkpdLearningWindowGate.BLOCK_DECLARED_MEAL, verdict.blockedBy)
+        assertEquals(200L, verdict.declaredMealAgeMin)
+        assertTrue(gate.evaluate(65, 0.0, 0.0, declaredMealAgeMin = 240, declaredMealHighCarb = true).pass)
+    }
+
+    /** UAM: a +30 mg/dL rise in 30 min opens a meal episode; its slow tail must not train DIA. */
+    @Test
+    fun detectedRiseBlocksTheTailThenExpires() {
+        val gate = PkpdLearningWindowGate()
+        // Rise 100 -> 140 between minute 0 and 30, then a long flat plateau at 140.
+        var t = 0L
+        while (t <= 400) {
+            val bg = if (t <= 30) 100.0 + t * 40.0 / 30.0 else 140.0
+            gate.record(t, if (t <= 30) 6.0 else 0.0, bg)
+            t += 5
+        }
+        // 150 min after the start: the curve is quiet, but the episode is not over.
+        val fresh = PkpdLearningWindowGate()
+        t = 0L
+        while (t < 180) {
+            val bg = if (t <= 30) 100.0 + t * 40.0 / 30.0 else 140.0
+            fresh.record(t, if (t <= 30) 6.0 else 0.0, bg)
+            t += 5
+        }
+        val inTail = fresh.evaluate(180, 0.0, 0.0)
+        assertEquals(PkpdLearningWindowGate.BLOCK_DETECTED_RISE, inTail.blockedBy)
+        assertTrue(inTail.detectedRiseAgeMin!! < PkpdLearningWindowGate.DETECTED_RISE_BLOCK_MIN)
+        // Long after: free again.
+        assertTrue(gate.evaluate(405, 0.0, 0.0).pass)
+    }
+
+    @Test
+    fun aSlowDriftIsNotAMeal() {
+        val gate = PkpdLearningWindowGate()
+        // +1 mg/dL per 5 min = +6 in 30 min: under the meal-size threshold.
+        var t = 0L
+        while (t < 65) {
+            gate.record(t, 1.0, 100.0 + t / 5.0)
+            t += 5
+        }
+        val verdict = gate.evaluate(65, 0.0, 0.0)
+        assertTrue(verdict.pass)
+        assertNull(verdict.detectedRiseAgeMin)
+    }
+
     @Test
     fun clockGoingBackRestartsHistory() {
         val gate = PkpdLearningWindowGate()

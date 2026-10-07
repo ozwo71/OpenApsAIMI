@@ -3245,6 +3245,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         this.dinnerruntime = therapy.getTimeElapsedSinceLastEvent("dinner")
         this.highCarbrunTime = therapy.getTimeElapsedSinceLastEvent("highcarb")
         this.snackrunTime = therapy.getTimeElapsedSinceLastEvent("snack")
+        // The *runtime fields above stop at 60 min; the PK/PD learning gate needs the whole meal.
+        this.lastDeclaredMeal = therapy.lastDeclaredMeal(ctx.currentTime)
         observeCircadianMealProfile(ctx.currentTime)
         this.iscalibration = therapy.calibrationTime
         this.acceleratingUp = if (delta > 2 && delta - longAvgDelta > 2) 1 else 0
@@ -10861,6 +10863,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 // Signal-prep is the one dosing call per tick: it owns both learning and the ISF
                 // slew anchor (isfRateLimitAuthority defaults to allowLearning).
                 allowLearning = true,
+                declaredMealAgeMin = lastDeclaredMeal?.ageMin,
+                declaredMealHighCarb = lastDeclaredMeal?.highCarb == true,
             )
         } catch (e: Exception) {
             consoleError.add("❌ PKPD runtime failed: ${e.message}")
@@ -12097,6 +12101,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var dinnerruntime: Long = 0
     private var highCarbrunTime: Long = 0
     private var snackrunTime: Long = 0
+
+    /** Last declared meal note within 5 h, for the PK/PD learning gate. Refreshed with the runtimes above. */
+    private var lastDeclaredMeal: Therapy.DeclaredMeal? = null
     private var intervalsmb = 1
     private var peakintermediaire = 0.0
     private var latestAdjustedDia: Double = 0.0 // Captured for logging
@@ -15948,7 +15955,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     )
 
     private fun isMealContextActive(mealData: MealData): Boolean {
-        val manualFlags = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime
+        // fclTime: an FCL meal is declared without carbs, so cobActive cannot see it either.
+        val manualFlags = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime || fclTime
         val cobActive = mealData.mealCOB > 5.0
         return manualFlags || cobActive
     }

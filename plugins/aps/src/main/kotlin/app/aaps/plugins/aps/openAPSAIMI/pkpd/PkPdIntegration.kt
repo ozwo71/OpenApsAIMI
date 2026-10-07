@@ -160,6 +160,10 @@ class PkPdIntegration(
          */
         isfRateLimitAuthority: Boolean = allowLearning,
         patientEventMemory: PatientEventMemory? = null,
+        /** Minutes since the last declared meal note (FCL, lunch, …), `null` when none. Learning gate only. */
+        declaredMealAgeMin: Long? = null,
+        /** That declared meal was high-carb. Learning gate only. */
+        declaredMealHighCarb: Boolean = false,
     ): PkPdRuntime? {
         val structural = readStructuralConfig()
         val previousStructural = cachedStructuralConfig
@@ -200,8 +204,13 @@ class PkPdIntegration(
         // what the gate would do before anyone turns it on. Read-only calls never touch the history.
         val curveGateArmed = preferences.get(BooleanKey.OApsAIMIPkpdCurveLearningGate)
         val curveVerdict = if (allowLearning) {
-            learningWindowGate.evaluate(epochMin, deltaMgDlPer5, causalStatePosterior?.mealConfidence)
-                .also { learningWindowGate.record(epochMin, deltaMgDlPer5) }
+            learningWindowGate.evaluate(
+                epochMin = epochMin,
+                deltaMgDlPer5 = deltaMgDlPer5,
+                mealConfidence = causalStatePosterior?.mealConfidence,
+                declaredMealAgeMin = declaredMealAgeMin,
+                declaredMealHighCarb = declaredMealHighCarb,
+            ).also { learningWindowGate.record(epochMin, deltaMgDlPer5, bg) }
         } else {
             null
         }
@@ -387,6 +396,8 @@ class PkPdIntegration(
             curveGateArmed = curveGateArmed,
             curveGateWouldBlock = curveVerdict?.blockedBy,
             curveGateMaxRecentDeltaMgdl = curveVerdict?.maxRecentDeltaMgdl,
+            curveGateDeclaredMealAgeMin = curveVerdict?.declaredMealAgeMin,
+            curveGateDetectedRiseAgeMin = curveVerdict?.detectedRiseAgeMin,
         )
     }
 
@@ -751,6 +762,10 @@ data class PkpdLearningTrace(
     val curveGateWouldBlock: String? = null,
     /** Largest 5-min delta in the gate's 60-min window, `null` with no history. */
     val curveGateMaxRecentDeltaMgdl: Double? = null,
+    /** Minutes since the last declared meal the gate saw, `null` when none. */
+    val curveGateDeclaredMealAgeMin: Long? = null,
+    /** Minutes since the last meal-sized rise the gate detected, `null` when none. */
+    val curveGateDetectedRiseAgeMin: Long? = null,
 )
 
 class PkPdRuntime(

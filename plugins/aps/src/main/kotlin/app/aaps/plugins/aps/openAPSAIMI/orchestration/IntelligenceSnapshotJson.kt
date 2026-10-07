@@ -65,6 +65,8 @@ object IntelligenceSnapshotJson {
                     // Shadow when not armed: what the curve gate would have refused, null = would pass.
                     put("dia_curve_gate_would_block", trace.curveGateWouldBlock)
                     trace.curveGateMaxRecentDeltaMgdl?.let { put("dia_curve_gate_max_recent_delta", it) }
+                    trace.curveGateDeclaredMealAgeMin?.let { put("dia_curve_gate_declared_meal_age_min", it) }
+                    trace.curveGateDetectedRiseAgeMin?.let { put("dia_curve_gate_detected_rise_age_min", it) }
                 }
             })
             put("isf", JSONObject().apply {
