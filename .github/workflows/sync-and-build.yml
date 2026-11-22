@@ -108,25 +108,66 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
+      # Signiert die APK selbst, falls das Build-Skript des Branches
+      # keine Signing-Konfiguration enthält (z. B. kmp-aimi-migration-study).
+      - name: Sign APK if needed
+        id: sign
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          APK_DIR="app/build/outputs/apk"
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+          echo "Verwende Build-Tools: $BUILD_TOOLS"
+
+          SIGNED_APK=$(find "$APK_DIR" -type f -name '*release.apk' ! -name '*unsigned*' | head -n 1)
+          UNSIGNED_APK=$(find "$APK_DIR" -type f -name '*release-unsigned.apk' | head -n 1)
+
+          if [ -n "$SIGNED_APK" ]; then
+            echo "Bereits von Gradle signierte APK gefunden: $SIGNED_APK"
+            FINAL_APK="$SIGNED_APK"
+          elif [ -n "$UNSIGNED_APK" ]; then
+            echo "Unsignierte APK gefunden: $UNSIGNED_APK – signiere selbst..."
+            ALIGNED_APK="${RUNNER_TEMP}/aligned.apk"
+            FINAL_APK="${RUNNER_TEMP}/signed.apk"
+
+            "$BUILD_TOOLS/zipalign" -p -f 4 "$UNSIGNED_APK" "$ALIGNED_APK"
+
+            "$BUILD_TOOLS/apksigner" sign \
+              --ks monkeystore.jks \
+              --ks-pass env:KEYSTORE_PASSWORD \
+              --ks-key-alias "$KEY_ALIAS" \
+              --key-pass env:KEY_PASSWORD \
+              --out "$FINAL_APK" \
+              "$ALIGNED_APK"
+          else
+            echo "Fehler: Keine Release-APK gefunden."
+            find app/build/outputs -type f -name '*.apk' || true
+            exit 1
+          fi
+
+          # Abbruch, falls die APK nicht gültig signiert ist
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$FINAL_APK"
+
+          echo "apk_file=$FINAL_APK" >> $GITHUB_OUTPUT
+
       - name: Rename APK & Generate Tag Info
         id: prepare_assets
         run: |
-          # APK suchen statt festen Pfad zu erwarten (Pfad kann sich je Branch unterscheiden)
-          SRC_FILE=$(find app/build/outputs/apk -type f -name '*release*.apk' | head -n 1)
+          SRC_FILE="${{ steps.sign.outputs.apk_file }}"
           # Zeitstempel für Dateiname und Tag
           TIMESTAMP=$(date +'%Y-%m-%d_%H-%M')
           NEW_NAME="AAPS_Release_${TIMESTAMP}.apk"
           TAG_NAME="build-${TIMESTAMP}"
 
-          if [ -n "$SRC_FILE" ] && [ -f "$SRC_FILE" ]; then
-            echo "Gefundene APK: $SRC_FILE"
+          if [ -f "$SRC_FILE" ]; then
             mv "$SRC_FILE" "$NEW_NAME"
             echo "apk_path=$NEW_NAME" >> $GITHUB_OUTPUT
             echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
             echo "commit_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           else
-            echo "Fehler: APK wurde nicht erstellt."
-            find app/build/outputs -type f -name '*.apk' || true
+            echo "Fehler: Signierte APK nicht gefunden."
             exit 1
           fi
 
