@@ -2,13 +2,13 @@ name: Sync, Build, Release & Upload
 
 on:
   schedule:
-    - cron: '0 6,18 * * *' # 06:00 und 18:00 Uhr
+    - cron: '0 6,18 * * *' # 06:00 und 18:00 UTC (= 07:00/19:00 MEZ, 08:00/20:00 MESZ)
   workflow_dispatch:
     inputs:
       branch_name:
         description: 'Branch'
         required: true
-        default: 'dev_OAPSAIMI'
+        default: 'kmp-aimi-migration-study'
         type: string
 
 permissions:
@@ -16,7 +16,8 @@ permissions:
   actions: write  # Für das Löschen alter Runs
 
 env:
-  BUILD_BRANCH: ${{ inputs.branch_name || 'dev_OAPSAIMI' }}
+  BUILD_BRANCH: ${{ inputs.branch_name || 'kmp-aimi-migration-study' }}
+  UPSTREAM_REPO: https://github.com/MTR93600/OpenApsAIMI.git
 
 jobs:
   sync:
@@ -24,40 +25,55 @@ jobs:
     outputs:
       has_changes: ${{ steps.sync.outputs.has_changes }}
     steps:
+      # Checkout des Default-Branches, damit der Job auch dann läuft,
+      # wenn BUILD_BRANCH im Fork noch nicht existiert.
       - name: Checkout Code
         uses: actions/checkout@v5
         with:
-          ref: ${{ env.BUILD_BRANCH }}
           fetch-depth: 0
           token: ${{ secrets.GH_PAT }} # Dein PAT für Git-Operationen
 
       - name: Sync with Upstream
         id: sync
         run: |
-          if [ "${{ env.BUILD_BRANCH }}" != "dev_OAPSAIMI" ]; then
-            echo "Custom Branch. Kein Sync."
+          BRANCH="${{ env.BUILD_BRANCH }}"
+
+          git config --global user.name 'GitHub Action'
+          git config --global user.email 'action@github.com'
+          git remote add upstream "${{ env.UPSTREAM_REPO }}"
+          git fetch upstream
+
+          # Branch gibt es upstream nicht -> eigener Branch, kein Sync
+          if ! git ls-remote --exit-code --heads upstream "$BRANCH" > /dev/null; then
+            echo "Branch '$BRANCH' existiert upstream nicht. Kein Sync."
             echo "has_changes=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
-          git config --global user.name 'GitHub Action'
-          git config --global user.email 'action@github.com'
-          git remote add upstream https://github.com/MTR93600/OpenApsAIMI.git
-          git fetch upstream
-          
-          UPSTREAM_COMMIT=$(git rev-parse upstream/dev_OAPSAIMI)
-          LOCAL_COMMIT=$(git rev-parse HEAD)
-          
-          if [ "$UPSTREAM_COMMIT" != "$LOCAL_COMMIT" ]; then
-            echo "Updates found. Merging..."
-            git merge upstream/dev_OAPSAIMI --allow-unrelated-histories
-            git push origin dev_OAPSAIMI
+
+          # Branch gibt es im Fork noch nicht -> aus Upstream anlegen
+          if ! git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; then
+            echo "Branch '$BRANCH' fehlt im Fork. Lege ihn aus Upstream an..."
+            git checkout -B "$BRANCH" "upstream/$BRANCH"
+            git push origin "$BRANCH"
             echo "has_changes=true" >> $GITHUB_OUTPUT
-          else
+            exit 0
+          fi
+
+          git checkout -B "$BRANCH" "origin/$BRANCH"
+
+          # Prüft, ob der Upstream-Stand bereits enthalten ist.
+          # Robuster als ein reiner SHA-Vergleich, falls der Fork-Branch
+          # eigene Commits (z. B. Merge-Commits) enthält.
+          if git merge-base --is-ancestor "upstream/$BRANCH" HEAD; then
             echo "No updates."
             echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Updates found. Merging..."
+            git merge "upstream/$BRANCH" --no-edit --allow-unrelated-histories
+            git push origin "$BRANCH"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
           fi
-          
+
   build-release-upload:
     needs: sync
     # Baut wenn: Änderungen da sind ODER manuell gestartet wurde
@@ -95,18 +111,22 @@ jobs:
       - name: Rename APK & Generate Tag Info
         id: prepare_assets
         run: |
-          SRC_FILE="app/build/outputs/apk/full/release/app-full-release.apk"
+          # APK suchen statt festen Pfad zu erwarten (Pfad kann sich je Branch unterscheiden)
+          SRC_FILE=$(find app/build/outputs/apk -type f -name '*release*.apk' | head -n 1)
           # Zeitstempel für Dateiname und Tag
           TIMESTAMP=$(date +'%Y-%m-%d_%H-%M')
           NEW_NAME="AAPS_Release_${TIMESTAMP}.apk"
           TAG_NAME="build-${TIMESTAMP}"
-          
-          if [ -f "$SRC_FILE" ]; then
+
+          if [ -n "$SRC_FILE" ] && [ -f "$SRC_FILE" ]; then
+            echo "Gefundene APK: $SRC_FILE"
             mv "$SRC_FILE" "$NEW_NAME"
             echo "apk_path=$NEW_NAME" >> $GITHUB_OUTPUT
             echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+            echo "commit_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           else
             echo "Fehler: APK wurde nicht erstellt."
+            find app/build/outputs -type f -name '*.apk' || true
             exit 1
           fi
 
@@ -118,9 +138,10 @@ jobs:
           gh release create \
             "${{ steps.prepare_assets.outputs.tag_name }}" \
             "${{ steps.prepare_assets.outputs.apk_path }}" \
+            --target "${{ env.BUILD_BRANCH }}" \
             --title "AAPS Build ${{ steps.prepare_assets.outputs.tag_name }}" \
-            --notes "Automatischer Build vom Branch ${{ env.BUILD_BRANCH }}"
-            
+            --notes "Automatischer Build vom Branch ${{ env.BUILD_BRANCH }} (Commit ${{ steps.prepare_assets.outputs.commit_sha }})"
+
 #      # 2. Upload zu Nextcloud (Optionales Backup)
 #      - name: Upload to Nextcloud
 #        continue-on-error: true
@@ -177,7 +198,7 @@ jobs:
                 -X DELETE \
                 "repos/${REPO}/actions/runs/${RUNID}"
             done
-            
+
       # 2. Alte Releases (APKs) löschen
       - name: Delete Older Releases
         env:
